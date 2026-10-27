@@ -87,6 +87,9 @@ export declare namespace Aggregate {
 }
 /** A consistency boundary that decides commands. See {@link AggregateModule.make}. */
 export const Aggregate = AggregateModule.make;
+/** A command with this id already ran, so it can't be scheduled or cancelled. */
+export const AlreadyExecuted = AggregateModule.AlreadyExecuted;
+export type AlreadyExecuted = AggregateModule.AlreadyExecuted;
 
 export declare namespace View {
   /** Any View class. */

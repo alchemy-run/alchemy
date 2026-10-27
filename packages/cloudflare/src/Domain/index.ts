@@ -336,92 +336,137 @@ const aggregateObject = (kit: AggregateKit) =>
         state.storage
           .list<StoredEvent>({ prefix: "event:", start: `event:${pad(after + 1)}` })
           .pipe(Effect.map((rows) => [...rows.values()]));
-      const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
+      // Callers run it `exclusively`.
+      const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
         Effect.gen(function* () {
-          const { sent, kick } = yield* exclusively(
+          const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
+          if (duplicate) return { sent: duplicate, kick: false };
+          const current = (yield* state.storage.get<{
+            state: Json | null;
+            version: number;
+          }>("meta")) ?? {
+            state: null,
+            version: 0,
+          };
+          const result = yield* kit.handle({
+            id,
+            state: current.state,
+            version: current.version,
+            command,
+            commandId: meta.commandId,
+            context: meta.context,
+            now: yield* Effect.sync(() => Date.now()),
+            correlationId: meta.correlationId,
+            trace: meta.trace,
+            link: meta.link,
+          });
+          if (result._tag === "Rejected") return { sent: result as SendResult, kick: false };
+          const sent: SendResult = {
+            _tag: "Accepted",
+            receipt: {
+              stream: `${kit.name}/${id}`,
+              version: result.version,
+              events: result.events.map((e) => e.event),
+              reply: result.reply,
+            },
+          };
+          yield* state.storage.transaction(
             Effect.gen(function* () {
-              const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
-              if (duplicate) return { sent: duplicate, kick: false };
-              const current = (yield* state.storage.get<{
-                state: Json | null;
-                version: number;
-              }>("meta")) ?? {
-                state: null,
-                version: 0,
-              };
-              const result = yield* kit.handle({
-                id,
-                state: current.state,
-                version: current.version,
-                command,
-                commandId: meta.commandId,
-                context: meta.context,
-                now: yield* Effect.sync(() => Date.now()),
-                correlationId: meta.correlationId,
-                trace: meta.trace,
-                link: meta.link,
+              const events: Record<string, StoredEvent> = {};
+              for (const event of result.events) events[`event:${pad(event.envelope.seq)}`] = event;
+              yield* state.storage.put(events);
+              yield* state.storage.put("meta", {
+                state: result.state,
+                version: result.version,
               });
-              if (result._tag === "Rejected") return { sent: result as SendResult, kick: false };
-              const sent: SendResult = {
-                _tag: "Accepted",
-                receipt: {
-                  stream: `${kit.name}/${id}`,
-                  version: result.version,
-                  events: result.events.map((e) => e.event),
-                  reply: result.reply,
-                },
-              };
-              yield* state.storage.transaction(
-                Effect.gen(function* () {
-                  const events: Record<string, StoredEvent> = {};
-                  for (const event of result.events)
-                    events[`event:${pad(event.envelope.seq)}`] = event;
-                  yield* state.storage.put(events);
-                  yield* state.storage.put("meta", {
-                    state: result.state,
-                    version: result.version,
-                  });
-                  yield* state.storage.put(`receipt:${meta.commandId}`, sent);
-                  yield* outbox.stage(result.deliveries);
-                }),
-              );
-              const committed = { state: result.state, version: result.version };
-              yield* broadcast(({ key, subscription }) =>
-                Effect.gen(function* () {
-                  // A subscriber behind this commit's first event reads the gap from storage.
-                  const first = result.events[0]?.envelope.seq ?? Infinity;
-                  const events =
-                    subscription.mode === "events" && subscription.cursor < first - 1
-                      ? yield* eventsAfter(subscription.cursor)
-                      : result.events;
-                  return yield* kit.push(key, subscription, committed, events);
-                }),
-              );
-              return { sent, kick: result.deliveries.length > 0 };
+              yield* state.storage.put(`receipt:${meta.commandId}`, sent);
+              yield* outbox.stage(result.deliveries);
             }),
           );
+          const committed = { state: result.state, version: result.version };
+          yield* broadcast(({ key, subscription }) =>
+            Effect.gen(function* () {
+              // A subscriber behind this commit's first event reads the gap from storage.
+              const first = result.events[0]?.envelope.seq ?? Infinity;
+              const events =
+                subscription.mode === "events" && subscription.cursor < first - 1
+                  ? yield* eventsAfter(subscription.cursor)
+                  : result.events;
+              return yield* kit.push(key, subscription, committed, events);
+            }),
+          );
+          return { sent, kick: result.deliveries.length > 0 };
+        });
+      const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
+        Effect.gen(function* () {
+          const { sent, kick } = yield* exclusively(commit(id, command, meta));
           if (kick) yield* outbox.kick;
           return sent;
         });
-      // Scheduled commands: one durable callback job per command id, run here when due.
+      const executed = (commandId: string) =>
+        state.storage
+          .get<SendResult>(`receipt:${commandId}`)
+          .pipe(Effect.map((receipt) => receipt !== undefined));
+      // Scheduled commands: one durable callback job per command id, run here
+      // when due. `scheduled:<commandId>` holds the token of the job that may
+      // run, so a job cancelled or replaced after the alarm claimed it does
+      // nothing. It is cleared after the commit, so a retried job still runs.
       const timers = yield* makeCallback(
         "domain:schedule",
-        (job: { readonly id: string; readonly command: Json; readonly meta: Aggregate.SendMeta }) =>
-          send(job.id, job.command, job.meta),
+        (job: {
+          readonly id: string;
+          readonly command: Json;
+          readonly meta: Aggregate.SendMeta;
+          readonly token?: string;
+        }) =>
+          Effect.gen(function* () {
+            const key = `scheduled:${job.meta.commandId}`;
+            const kick = yield* exclusively(
+              Effect.gen(function* () {
+                // A job scheduled before tokens existed has none, and runs.
+                if (
+                  job.token !== undefined &&
+                  (yield* state.storage.get<string>(key)) !== job.token
+                )
+                  return false;
+                const { kick } = yield* commit(job.id, job.command, job.meta);
+                yield* state.storage.delete(key);
+                return kick;
+              }),
+            );
+            if (kick) yield* outbox.kick;
+          }),
       );
       return {
         send: (id: string, command: Json, meta: Aggregate.SendMeta) =>
           reportDefects(send(id, command, meta)),
         schedule: (id: string, command: Json, meta: Aggregate.SendMeta, due: Aggregate.Due) =>
           reportDefects(
-            timers.schedule(
-              meta.commandId,
-              "at" in due
-                ? { at: due.at, payload: { id, command, meta } }
-                : { after: due.afterMillis, payload: { id, command, meta } },
+            exclusively(
+              Effect.gen(function* () {
+                if (yield* executed(meta.commandId)) return "AlreadyExecuted" as const;
+                const token = yield* Effect.sync(() => crypto.randomUUID());
+                yield* state.storage.put(`scheduled:${meta.commandId}`, token);
+                const payload = { id, command, meta, token };
+                yield* timers.schedule(
+                  meta.commandId,
+                  "at" in due ? { at: due.at, payload } : { after: due.afterMillis, payload },
+                );
+                return "Ok" as const;
+              }),
             ),
           ),
-        unschedule: (commandId: string) => reportDefects(timers.cancel(commandId)),
+        unschedule: (commandId: string) =>
+          reportDefects(
+            exclusively(
+              Effect.gen(function* () {
+                if (yield* executed(commandId)) return "AlreadyExecuted" as const;
+                yield* state.storage.delete(`scheduled:${commandId}`);
+                yield* timers.cancel(commandId);
+                return "Ok" as const;
+              }),
+            ),
+          ),
         state: () => reportDefects(currentMeta),
         after: (after: number) => reportDefects(eventsAfter(after)),
         // A live read of this instance: accept its WebSocket, then push on every commit.

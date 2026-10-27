@@ -1,5 +1,6 @@
 import { CurrentActivity } from "alchemy/WorkflowEncoding";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import type * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -168,6 +169,17 @@ export interface SendOptions {
 }
 
 /**
+ * The instance already handled a command with this id, so it can no longer
+ * be scheduled or cancelled: a deadline that fired before it was cancelled,
+ * or a command id that was already sent.
+ */
+export class AlreadyExecuted extends Data.TaggedError("AlreadyExecuted")<{
+  readonly aggregate: string;
+  readonly id: string;
+  readonly commandId: string;
+}> {}
+
+/**
  * Options for {@link Client.schedule}: when to send, absolutely or after a delay.
  */
 export type ScheduleOptions = SendOptions &
@@ -263,18 +275,24 @@ export interface Client<Def extends AnyDefinition> {
    * rejection when it fires; such a command reports a fact ("the approval
    * window closed") and records nothing when it no longer applies.
    * Scheduling again with the same command id replaces the earlier one.
+   * Fails with `AlreadyExecuted` when the instance already handled a command
+   * with that id.
    */
   readonly schedule: <Cmd extends Inst<Schedulable<Def>>>(
     target: Target<Def>,
     command: Cmd,
     options: ScheduleOptions,
-  ) => Effect.Effect<void, never, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
+  ) => Effect.Effect<void, AlreadyExecuted, Command.ContextOf<CommandClassOf<Def, Cmd>>>;
   /**
    * Cancel a pending scheduled command by the command id it was scheduled
-   * with. Does nothing when no such command is pending (it already fired, or
-   * was never scheduled), so it is safe to call again.
+   * with. Once it succeeds, the command never runs. Fails with
+   * `AlreadyExecuted` when the command ran first; does nothing when none is
+   * pending, so it is safe to call again.
    */
-  readonly unschedule: (target: Target<Def>, commandId: string) => Effect.Effect<void>;
+  readonly unschedule: (
+    target: Target<Def>,
+    commandId: string,
+  ) => Effect.Effect<void, AlreadyExecuted>;
   /** Read the current state of an instance. */
   readonly state: (target: Target<Def>) => Effect.Effect<Def["state"]["Type"]>;
 }
@@ -300,8 +318,8 @@ export interface ClientImpl {
     target: unknown,
     command: { readonly _tag: string },
     options: ScheduleOptions,
-  ) => Effect.Effect<void>;
-  readonly unschedule: (target: unknown, commandId: string) => Effect.Effect<void>;
+  ) => Effect.Effect<void, AlreadyExecuted>;
+  readonly unschedule: (target: unknown, commandId: string) => Effect.Effect<void, AlreadyExecuted>;
   readonly state: (target: unknown) => Effect.Effect<unknown>;
 }
 

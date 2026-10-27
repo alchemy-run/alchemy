@@ -57,12 +57,15 @@ const HoldDeadlineLive = HoldDeadline.toLayer(
     const holds = yield* Hold;
     return Effect.fn(function* ({ source, event }) {
       if (event._tag === "HoldPlaced") {
-        yield* holds.schedule(source, new ExpireHold(), {
-          after: "1 hour",
-          commandId: expiryOf(source.id),
-        });
+        yield* holds
+          .schedule(source, new ExpireHold(), { after: "1 hour", commandId: expiryOf(source.id) })
+          // a redelivery after the expiry ran: nothing to arm
+          .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
       } else {
-        yield* holds.unschedule(source, expiryOf(source.id));
+        yield* holds
+          .unschedule(source, expiryOf(source.id))
+          // the hold expired first; the release is recorded after it
+          .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
       }
     });
   }),
@@ -74,6 +77,7 @@ class Holds extends Domain.Model("Holds", {
 }) {}
 
 const story = Story.make(Holds, { layer: HoldDeadlineLive });
+const HoldsLive = Holds.layer(HoldDeadlineLive).pipe(Layer.provide(InMemory));
 const h1 = Hold.ref("h-1");
 const h2 = Hold.ref("h-2");
 
@@ -114,7 +118,7 @@ describe("Domain schedule", () => {
     ),
   );
 
-  it.effect("unscheduling after the command fired does nothing", () =>
+  it.effect("a release after the command fired is still recorded", () =>
     story(
       Story.clock("2026-01-01T00:00:00Z"),
       Story.when(h1, new PlaceHold()),
@@ -134,6 +138,39 @@ describe("Domain schedule", () => {
       yield* Effect.sleep("100 millis");
       expect((yield* holds.state("h-3")).status).toBe("none");
       expect((yield* holds.state("h-4")).status).toBe("expired");
-    }).pipe(Effect.provide(Holds.layer(HoldDeadlineLive).pipe(Layer.provide(InMemory)))),
+    }).pipe(Effect.provide(HoldsLive)),
+  );
+
+  it.live("unscheduling a command that ran fails with AlreadyExecuted", () =>
+    Effect.gen(function* () {
+      const holds = yield* Hold;
+      yield* holds.schedule("h-5", new ExpireHold(), { after: "20 millis", commandId: "x" });
+      yield* Effect.sleep("100 millis");
+      const error = yield* Effect.flip(holds.unschedule("h-5", "x"));
+      expect(error).toEqual(
+        new Domain.AlreadyExecuted({ aggregate: "Hold", id: "h-5", commandId: "x" }),
+      );
+    }).pipe(Effect.provide(HoldsLive)),
+  );
+
+  it.live("scheduling a command id that was already sent fails with AlreadyExecuted", () =>
+    Effect.gen(function* () {
+      const holds = yield* Hold;
+      yield* holds.send("h-6", new PlaceHold(), { commandId: "x" });
+      const error = yield* Effect.flip(
+        holds.schedule("h-6", new ExpireHold(), { after: "1 hour", commandId: "x" }),
+      );
+      expect(error._tag).toBe("AlreadyExecuted");
+    }).pipe(Effect.provide(HoldsLive)),
+  );
+
+  it.live("unscheduling twice, or something never scheduled, succeeds", () =>
+    Effect.gen(function* () {
+      const holds = yield* Hold;
+      yield* holds.schedule("h-7", new ExpireHold(), { after: "1 hour", commandId: "x" });
+      yield* holds.unschedule("h-7", "x");
+      yield* holds.unschedule("h-7", "x");
+      yield* holds.unschedule("h-8", "never");
+    }).pipe(Effect.provide(HoldsLive)),
   );
 });

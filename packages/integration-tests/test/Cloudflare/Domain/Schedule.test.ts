@@ -23,7 +23,7 @@ class HoldRequestFailed extends Data.TaggedError("HoldRequestFailed")<{
 }> {}
 
 /** Call a hold route; right after a deploy, retry until the Worker serves it. */
-const hold = (url: string, action: "place" | "release" | "state", id: string) =>
+const call = (url: string, action: "place" | "release" | "state" | "cancel", id: string) =>
   requestWorker(
     (action === "state" ? HttpClientRequest.get : HttpClientRequest.post)(
       `${url}/${action}/${id}`,
@@ -34,12 +34,21 @@ const hold = (url: string, action: "place" | "release" | "state", id: string) =>
       (res) => new HoldRequestFailed({ status: res.status }),
     ),
     Effect.flatMap((res) => res.json),
-    Effect.map((body) => (body as { readonly status: Status }).status),
     Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
   );
 
+/** Send a hold command, or read it; answers the hold's status. */
+const hold = (url: string, action: "place" | "release" | "state", id: string) =>
+  call(url, action, id).pipe(Effect.map((body) => (body as { readonly status: Status }).status));
+
+/** Cancel a hold's expiry directly, past the policy. */
+const cancel = (url: string, id: string) =>
+  call(url, "cancel", id).pipe(
+    Effect.map((body) => (body as { readonly cancel: "Ok" | "AlreadyExecuted" }).cancel),
+  );
+
 test(
-  "an unscheduled command never fires on Durable Objects",
+  "an unscheduled command never fires on Durable Objects, and cancelling one that ran fails",
   Effect.gen(function* () {
     const { url } = yield* stack;
     const base = url.replace(/\/+$/, "");
@@ -65,6 +74,11 @@ test(
     yield* Effect.sleep("3 seconds");
     expect(yield* hold(base, "state", kept)).toBe("expired");
     expect(yield* hold(base, "state", released)).toBe("released");
+
+    // cancelling the expiry that ran reports it; cancelling one that was
+    // already cancelled does nothing
+    expect(yield* cancel(base, kept)).toBe("AlreadyExecuted");
+    expect(yield* cancel(base, released)).toBe("Ok");
   }),
   { timeout: 180_000 },
 );

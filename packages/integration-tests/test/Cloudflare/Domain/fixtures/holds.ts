@@ -5,6 +5,9 @@ import * as Schema from "effect/Schema";
 /** How long a hold lasts before it expires, unless it is released first. */
 export const HOLD_WINDOW = "15 seconds";
 
+/** The command id a hold's expiry is scheduled under. */
+export const EXPIRY = "expire";
+
 export class HoldPlaced extends Domain.Event("HoldPlaced") {}
 export class HoldReleased extends Domain.Event("HoldReleased") {}
 export class HoldExpired extends Domain.Event("HoldExpired") {}
@@ -54,12 +57,15 @@ export const HoldDeadlineLive = HoldDeadline.toLayer(
     const holds = yield* Hold;
     return Effect.fn(function* ({ source, event }) {
       if (event._tag === "HoldPlaced") {
-        yield* holds.schedule(source, new ExpireHold(), {
-          after: HOLD_WINDOW,
-          commandId: "expire",
-        });
+        yield* holds
+          .schedule(source, new ExpireHold(), { after: HOLD_WINDOW, commandId: EXPIRY })
+          // a redelivery after the expiry ran: nothing to arm
+          .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
       } else {
-        yield* holds.unschedule(source, "expire");
+        yield* holds
+          .unschedule(source, EXPIRY)
+          // the hold expired first; the release is recorded after it
+          .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
       }
     });
   }),
