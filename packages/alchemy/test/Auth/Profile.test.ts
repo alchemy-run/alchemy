@@ -1,11 +1,14 @@
 import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import path from "pathe";
 import {
@@ -91,58 +94,78 @@ const ROTATING_PROVIDER = "FakeRotatingAuthProvider";
  * Refresh tokens are single-use, as with Cloudflare OAuth: refreshing
  * persists a new token, and presenting a spent one revokes the grant.
  */
-const rotation = { refreshes: 0, spent: new Set<string>() };
+type RotationState = { readonly refreshes: number; readonly spent: ReadonlySet<string> };
+
+class Rotation extends Context.Service<Rotation, Ref.Ref<RotationState>>()("Test/Rotation") {}
+
+const RotationLive = Layer.effect(
+  Rotation,
+  Ref.make<RotationState>({ refreshes: 0, spent: new Set() }),
+);
 
 type RotatingConfig = { method: "oauth"; refresh: string; expires: number };
 
-const rotate = (
-  profileName: string,
-  config: RotatingConfig,
-  updateConfig?: (config: RotatingConfig) => Effect.Effect<void, AuthError>,
-) =>
+const FakeRotatingAuth = AuthProviderLayer<RotatingConfig, string>()(
+  ROTATING_PROVIDER,
   Effect.gen(function* () {
-    if (config.expires > Date.now()) return config.refresh;
-    if (rotation.spent.has(config.refresh)) {
-      return yield* NeedsReauth.make({
-        provider: ROTATING_PROVIDER,
-        profile: profileName,
-        message: `refresh token ${config.refresh} was already used`,
-      });
-    }
-    rotation.spent.add(config.refresh);
-    rotation.refreshes += 1;
-    const refreshed = {
-      method: "oauth" as const,
-      refresh: `r${rotation.refreshes}`,
-      expires: Date.now() + 3_600_000,
+    const rotation = yield* Rotation;
+    const rotate = Effect.fn(function* (
+      profileName: string,
+      config: RotatingConfig,
+      updateConfig?: (config: RotatingConfig) => Effect.Effect<void, AuthError>,
+    ) {
+      const now = yield* Clock.currentTimeMillis;
+      if (config.expires > now) return config.refresh;
+      const next = yield* Ref.modify(rotation, (state) =>
+        state.spent.has(config.refresh)
+          ? [undefined, state]
+          : [
+              `r${state.refreshes + 1}`,
+              { refreshes: state.refreshes + 1, spent: new Set([...state.spent, config.refresh]) },
+            ],
+      );
+      if (next === undefined) {
+        return yield* NeedsReauth.make({
+          provider: ROTATING_PROVIDER,
+          profile: profileName,
+          message: `refresh token ${config.refresh} was already used`,
+        });
+      }
+      yield* (
+        updateConfig?.({ method: "oauth", refresh: next, expires: now + 3_600_000 }) ?? Effect.void
+      );
+      return next;
+    });
+    return {
+      configSchema: Schema.Struct({
+        method: Schema.Literal("oauth"),
+        refresh: Schema.String,
+        expires: Schema.Number,
+      }),
+      configure: () => Effect.succeed({ method: "oauth" as const, refresh: "r0", expires: 0 }),
+      login: (
+        _profileName: string,
+        config: RotatingConfig,
+        _updateConfig?: (config: RotatingConfig) => Effect.Effect<void, AuthError>,
+        reload?: Effect.Effect<RotatingConfig, AuthError>,
+      ) => Effect.map(reload ?? Effect.succeed(config), (current) => ({ ...current, expires: 1 })),
+      logout: () => Effect.void,
+      details: (
+        profileName: string,
+        config: RotatingConfig,
+        updateConfig?: (config: RotatingConfig) => Effect.Effect<void, AuthError>,
+      ) =>
+        Effect.map(rotate(profileName, config, updateConfig), (token) => ({
+          lines: [{ key: "token", value: token }],
+        })),
+      read: rotate,
     };
-    yield* updateConfig?.(refreshed) ?? Effect.void;
-    return refreshed.refresh;
-  });
-
-const FakeRotatingAuth = AuthProviderLayer<RotatingConfig, string>()(ROTATING_PROVIDER, {
-  configSchema: Schema.Struct({
-    method: Schema.Literal("oauth"),
-    refresh: Schema.String,
-    expires: Schema.Number,
   }),
-  configure: () => Effect.succeed({ method: "oauth" as const, refresh: "r0", expires: 0 }),
-  login: (
-    _profileName: string,
-    config: RotatingConfig,
-    _updateConfig?: (config: RotatingConfig) => Effect.Effect<void, AuthError>,
-    reload?: Effect.Effect<RotatingConfig, AuthError>,
-  ) => Effect.map(reload ?? Effect.succeed(config), (current) => ({ ...current, expires: 1 })),
-  logout: () => Effect.void,
-  details: (profileName, config, updateConfig) =>
-    Effect.map(rotate(profileName, config, updateConfig), (token) => ({
-      lines: [{ key: "token", value: token }],
-    })),
-  read: rotate,
-});
+);
 
 const makeTestLayer = (config: Record<string, unknown> = {}) =>
   Layer.mergeAll(ProfileStoreLive, FakeAuth, FakeEnvAuth, FakeRotatingAuth).pipe(
+    Layer.provideMerge(RotationLive),
     Layer.provideMerge(
       Layer.mergeAll(
         Layer.succeed(AuthProviders, {}),
@@ -668,8 +691,6 @@ it.live(
   () =>
     withTempHome(
       Effect.gen(function* () {
-        rotation.refreshes = 0;
-        rotation.spent.clear();
         const profile = yield* ProfileStore;
         yield* profile.setProviderConfig("default", ROTATING_PROVIDER, {
           method: "oauth",
@@ -686,10 +707,10 @@ it.live(
         });
 
         expect(tokens).toEqual(["r1", "r1"]);
-        expect(rotation.refreshes).toBe(1);
+        expect((yield* Ref.get(yield* Rotation)).refreshes).toBe(1);
         // A later resolve in the same process reads the rotated token too.
         expect(yield* first.resolve).toBe("r1");
-        expect(rotation.refreshes).toBe(1);
+        expect((yield* Ref.get(yield* Rotation)).refreshes).toBe(1);
       }),
     ),
   { tags: ["unit", "local"], exclusive: true },
@@ -700,8 +721,6 @@ it.live(
   () =>
     withTempHome(
       Effect.gen(function* () {
-        rotation.refreshes = 0;
-        rotation.spent.clear();
         const profile = yield* ProfileStore;
         const registered = yield* AuthProviders;
         const stale = { method: "oauth", refresh: "r0", expires: 0 };
@@ -718,7 +737,7 @@ it.live(
         }).pipe(Effect.provide(Interaction.layerNonInteractive()));
 
         expect(connections.map((c) => c.status)).toEqual(["connected", "connected"]);
-        expect(rotation.refreshes).toBe(1);
+        expect((yield* Ref.get(yield* Rotation)).refreshes).toBe(1);
       }),
     ),
   { tags: ["unit", "local"], exclusive: true },
