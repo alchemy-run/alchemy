@@ -8,8 +8,14 @@ running a container image. Use it when you already have an image.
 
 ## Launch a Machine
 
-The parent is an App. Pin a [region](/fly/compute/regions), an
-image, and a guest:
+A Machine runs in a [`Fly.App`](/fly/compute/apps) you declare:
+
+```typescript
+// src/app.ts
+export const Site = Fly.App("Site");
+```
+
+Pin a [region](/fly/compute/regions), an image, and a guest:
 
 ```typescript
 const web = yield* Fly.Machine("Web", {
@@ -36,8 +42,35 @@ defaults to shared-cpu 1× / 256 MB. Port 443 with `tls` is what
 makes `https://{app}.fly.dev` answer. Omit `services` (or pass
 `[]`) for a worker that should not be reachable from the internet.
 
-`{app}.fly.dev` over IPv4 still needs an
-[`IpAssignment`](/fly/networking) on the parent App.
+The App needs an
+[`IpAssignment`](/fly/networking#addresses-for-a-shared-app) before
+`{app}.fly.dev` answers over IPv4. For a public endpoint without
+managing Apps and addresses, use a [Service](/fly/compute/services).
+
+## Run named containers
+
+Use `containers` for a group that shares one Machine. Each named container has its own image and can set `cmd`, `entrypoint`, `env`, startup `dependsOn`, and Pilot `healthChecks`. Use `cmd` and `entrypoint` to override startup; container `exec` overrides are not supported. Existing single-image `init.exec` is unchanged. Check intervals and timeouts are numeric seconds. A dependency condition can be `started`, `healthy`, or `exited_successfully`.
+
+```typescript
+const preview = yield* Fly.Machine("Preview", {
+  app: Site,
+  region: "iad",
+  guest: { cpus: 1, memoryMb: 1024 },
+  containers: [
+    { name: "api", image: apiImage, healthChecks: [{ http: { port: 3000, path: "/health" } }] },
+    { name: "worker", image: workerImage, dependsOn: [{ name: "api", condition: "healthy" }] },
+  ],
+});
+```
+
+`count` duplicates the entire group. A rolling change to one container can restart the whole group; attached volumes stay with their Machine. Machine `env` and bindings remain shared, while container `env` is passed to Fly as a per-container override. Configure Machine or service readiness checks for every critical component before treating a deploy as ready: Pilot container checks and dependencies control startup, not Alchemy's rollout readiness. Blue/green also supports named containers when every image is an immutable
+`repository@sha256:` digest and no volumes are attached. It replaces the
+whole group and can overlap old and new workers during promotion.
+
+If a rolling update is interrupted, Fly may have accepted the update even
+though the CLI reported a failure. Wait for the in-progress Machine update to
+settle, then rerun the same desired deployment. Reconciliation reuses the
+owned Machine and its attached volumes.
 
 ## Scale up
 
@@ -191,14 +224,15 @@ than silently switching to rolling. Stop and suspend are supported through the
 
 Prefer a [`Service`](/fly/compute/services) when the program is
 Effect. A Service is effectful, supports bindings, and scales with
-`count`. Alchemy builds and pushes the image. Prefer a
+`count`. It owns its App and addresses, and `api.url` is its public
+endpoint. Alchemy builds and pushes the image. Prefer a
 [`Sprite`](/fly/compute/sprites) when the sandbox can hibernate —
-no parent App, no Docker image.
+no App, no Docker image.
 
 ```typescript
 export default class Api extends Fly.Service<Api>()(
   "Api",
-  { app: Site, main: import.meta.url, region: "iad", count: 3, port: 3000 },
+  { main: import.meta.url, region: "iad", count: 3, port: 3000 },
   Effect.gen(function* () {
     return {
       fetch: Effect.succeed(HttpServerResponse.text("hello")),
