@@ -1,4 +1,5 @@
 import { expect, it } from "@effect/vitest";
+import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -101,6 +102,7 @@ const watched = Foldkit.watchView(CounterApi, "Total", {
   isEnabled: (model) => model.online,
   toMessage: (snapshot) => ({ _tag: "ReceivedTotal", snapshot }),
   onFailure: () => ({ _tag: "ReceivedTotal", snapshot: { state: Option.none(), cursor: 0 } }),
+  onDefect: () => ({ _tag: "ReceivedTotal", snapshot: { state: Option.none(), cursor: 0 } }),
 });
 
 it.live("watches absent state as None and preserves the cursor", () =>
@@ -163,6 +165,7 @@ const feed = Foldkit.viewEvents(CounterApi, "Total", {
   onEntry: (entry) => `entry:${entry.envelope.seq}:${entry.envelope.commandId}`,
   onCaughtUp: (cursor) => `caught:${cursor}`,
   onFailure: (error) => `failed:${error._tag}`,
+  onDefect: () => "defect",
 });
 const dependencies = { key: target, cursor: Option.none<number>(), isEnabled: true };
 
@@ -245,6 +248,7 @@ it.live("turns a mid-stream validate refusal into an app Message", () =>
       key: () => target,
       toMessage: (snapshot) => `snapshot:${snapshot.cursor}`,
       onFailure: (error) => `failed:${error._tag}`,
+      onDefect: () => "defect",
     });
     const watch = yield* read.dependenciesToStream({ key: target, isEnabled: true }).pipe(
       Stream.tap(() => Deferred.succeed(started, undefined)),
@@ -259,4 +263,53 @@ it.live("turns a mid-stream validate refusal into an app Message", () =>
       .pipe(Stream.runCollect);
     expect(messages).toEqual(["failed:Limit"]);
   }).pipe(Effect.scoped, Effect.provide(Client)),
+);
+
+it.live("maps command defects to Unknown and preserves interruption", () =>
+  Effect.gen(function* () {
+    const client = yield* CounterApi.Client;
+    for (const failure of [Effect.die("storage failed"), Effect.interrupt]) {
+      const source = Layer.succeed(CounterApi.Client, { ...client, Increment: () => failure });
+      const exit = yield* Counter.Increment({
+        target,
+        input: { amount: 1 },
+        commandId: "page:die",
+      }).effect.pipe(Effect.provide(source), Effect.exit);
+      if (exit._tag === "Success") {
+        expect(exit.value).toMatchObject({ _tag: "FailedIncrement", failure: { _tag: "Unknown" } });
+      } else {
+        expect(Cause.hasInterrupts(exit.cause)).toBe(true);
+      }
+    }
+  }).pipe(Effect.provide(Client)),
+);
+
+it.live("turns watch and event defects into Messages", () =>
+  Effect.gen(function* () {
+    const client = yield* CounterApi.Client;
+    const source = Layer.succeed(CounterApi.Client, {
+      ...client,
+      Total: {
+        ...client.Total,
+        watch: () => Stream.die("watch failed"),
+        events: () => Stream.die("events failed"),
+      },
+    });
+    const read = Foldkit.watchView(CounterApi, "Total", {
+      key: () => target,
+      toMessage: () => "snapshot",
+      onFailure: () => "failure",
+      onDefect: () => "defect",
+    });
+    expect(
+      yield* read
+        .dependenciesToStream({ key: target, isEnabled: true })
+        .pipe(Stream.runCollect, Effect.provide(source)),
+    ).toEqual(["defect"]);
+    expect(
+      yield* feed
+        .dependenciesToStream(dependencies, () => dependencies)
+        .pipe(Stream.runCollect, Effect.provide(source)),
+    ).toEqual(["defect"]);
+  }).pipe(Effect.provide(Client)),
 );

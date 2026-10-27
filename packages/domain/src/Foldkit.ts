@@ -1,8 +1,8 @@
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Headers from "effect/http/Headers";
 import * as Option from "effect/Option";
-import * as Predicate from "effect/Predicate";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -107,18 +107,10 @@ export function commands(api: Api.Any): unknown {
   const definitions: Record<string, unknown> = { Message };
   for (const command of api.commands) {
     const { payloadSchema } = command.rpc as Rpc.AnyWithProps;
-    if (
-      !("fields" in payloadSchema) ||
-      !Predicate.isObject(payloadSchema.fields) ||
-      !("input" in payloadSchema.fields) ||
-      !Schema.isSchema(payloadSchema.fields.input)
-    ) {
-      continue;
-    }
     definitions[command.tag] = Command.define(command.tag, {
       args: {
         target: Schema.toType(command.target),
-        input: Schema.toType(payloadSchema.fields.input),
+        input: Schema.toType((payloadSchema as Schema.Struct<{ input: Schema.Top }>).fields.input),
         commandId: Schema.String,
       },
       messages: [Message],
@@ -144,12 +136,19 @@ export function commands(api: Api.Any): unknown {
               reply,
               receipt: { stream, version },
             })),
-            Effect.catch((error) =>
-              Effect.succeed({
-                _tag: `Failed${command.tag}`,
-                commandId,
-                failure: classifyFailure(command, error),
-              }),
+            Effect.catchCause((cause) =>
+              !Cause.hasFails(cause) && !Cause.hasDies(cause)
+                ? Effect.failCause(cause)
+                : Effect.succeed({
+                    _tag: `Failed${command.tag}`,
+                    commandId,
+                    failure: Cause.hasDies(cause)
+                      ? { _tag: "Unknown" }
+                      : classifyFailure(
+                          command,
+                          Option.getOrUndefined(Cause.findErrorOption(cause)),
+                        ),
+                  }),
             ),
           );
         }),
@@ -187,6 +186,8 @@ export interface WatchOptions<Model, Message, V extends View.Any> {
   readonly isEnabled?: (model: Model) => boolean;
   readonly toMessage: (snapshot: Snapshot<View.StateOf<V>>) => Message;
   readonly onFailure: (error: Api.ReadError<V["definition"]>) => Message;
+  /** Handle unexpected read defects. Interruption does not call this callback. */
+  readonly onDefect: (cause: Cause.Cause<never>) => Message;
 }
 
 /** Follow a View's state and cursor. Pass the result as an entry to Subscription.make. */
@@ -227,7 +228,15 @@ export function watchView(
             Stream.map(({ state, cursor }) =>
               options.toMessage({ state: Option.fromNullishOr(state), cursor }),
             ),
-            Stream.catch((error) => Stream.succeed(options.onFailure(error))),
+            Stream.catchCause((cause) => {
+              if (Cause.hasDies(cause)) {
+                return Stream.succeed(options.onDefect(Cause.die(Cause.squash(cause))));
+              }
+              const error = Cause.findErrorOption(cause);
+              return Option.isSome(error)
+                ? Stream.succeed(options.onFailure(error.value))
+                : Stream.failCause(cause);
+            }),
           )
         : Stream.empty,
   };
@@ -242,6 +251,8 @@ export interface EventsOptions<Model, Message, V extends View.Any> {
   readonly onEntry: (entry: View.Entry<View.StateOf<V>, View.EventOf<V>, ViewKey<V>>) => Message;
   readonly onCaughtUp: (cursor: number) => Message;
   readonly onFailure: (error: Api.ReadError<V["definition"]>) => Message;
+  /** Handle unexpected read defects. Interruption does not call this callback. */
+  readonly onDefect: (cause: Cause.Cause<never>) => Message;
 }
 
 /** Follow View output entries after the Model's cursor, without counting sequence gaps. */
@@ -352,7 +363,15 @@ export function viewEvents(
           Stream.map((frame) =>
             Read.isCaughtUp(frame) ? options.onCaughtUp(frame.cursor) : options.onEntry(frame),
           ),
-          Stream.catch((error) => Stream.succeed(options.onFailure(error))),
+          Stream.catchCause((cause) => {
+            if (Cause.hasDies(cause)) {
+              return Stream.succeed(options.onDefect(Cause.die(Cause.squash(cause))));
+            }
+            const error = Cause.findErrorOption(cause);
+            return Option.isSome(error)
+              ? Stream.succeed(options.onFailure(error.value))
+              : Stream.failCause(cause);
+          }),
         );
       }),
   };

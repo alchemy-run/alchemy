@@ -78,6 +78,8 @@ Handle `ReceivedBankResult` through `Bank.Message.match`. The matcher preserves 
 | `Denied { error }` | Middleware refused the command. | Request authentication or MFA. |
 | `Unknown` | The reply did not establish the outcome. | Retry with the same `commandId`. |
 
+A Command defect produces `Unknown`. Read defects call `onDefect` with their Cause. Typed read failures call `onFailure`. Interruption ends the operation without a Message.
+
 A lost reply can follow a committed write. Do not turn `Unknown` into a business Rejection.
 
 ## Follow a View's state
@@ -101,6 +103,7 @@ const subscriptions = Subscription.make<
     key: (model: Model) => model.accountId,
     toMessage: (snapshot): typeof SummaryMessage.Type => SummaryMessage.ReceivedSummary(snapshot),
     onFailure: (error): typeof SummaryMessage.Type => SummaryMessage.FailedWatchSummary({ reason: error._tag }),
+    onDefect: (): typeof SummaryMessage.Type => SummaryMessage.FailedWatchSummary({ reason: "Read defect" }),
   }),
 }));
 

@@ -91,6 +91,7 @@ const subscriptions = Subscription.make<Model, typeof Message.Type, typeof Custo
     }),
     onCaughtUp: (cursor): typeof Message.Type => Message.CaughtUpStatement({ cursor }),
     onFailure: (error): typeof Message.Type => Message.FailedReadStatement({ reason: error._tag }),
+    onDefect: (): typeof Message.Type => Message.FailedReadStatement({ reason: "Read defect" }),
   }),
 }));
 ```

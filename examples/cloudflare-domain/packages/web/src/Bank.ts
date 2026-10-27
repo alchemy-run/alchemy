@@ -389,6 +389,7 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
     toMessage: ({ state, cursor }): Message =>
       Message.ReceivedBalance({ balance: Option.map(state, (summary) => summary.balance), cursor }),
     onFailure: (error): Message => Message.FailedWatchSummary({ reason: error._tag }),
+    onDefect: (): Message => Message.FailedWatchSummary({ reason: "Read defect" }),
   }),
   statement: DomainFoldkit.viewEvents(CustomerApi, "Statement", {
     key: (model: Model) => model.accountId,
@@ -399,6 +400,7 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
       Message.ReceivedLine({ commandId: envelope.commandId, line: event, cursor: envelope.seq }),
     onCaughtUp: (cursor): Message => Message.CaughtUpStatement({ cursor }),
     onFailure: (error): Message => Message.FailedReadStatement({ reason: error._tag }),
+    onDefect: (): Message => Message.FailedReadStatement({ reason: "Read defect" }),
   }),
 }));
 
