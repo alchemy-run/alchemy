@@ -913,7 +913,10 @@ export default defineConfig({
             },
             {
               label: "Security & secrets",
-              items: [{ label: "Secrets & env", link: "/aws/security/secrets-env" }],
+              items: [
+                { label: "Secrets & env", link: "/aws/security/secrets-env" },
+                { label: "Federated identity", link: "/aws/security/federated-identity" },
+              ],
             },
             {
               label: "Observability",
