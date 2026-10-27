@@ -12,6 +12,7 @@ import * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
+import type * as Key from "./Key.ts";
 import {
   type Accepted,
   type AggregateStore,
@@ -52,9 +53,9 @@ export class Internals extends Context.Service<
     /** The client of the aggregate that handles each command, by command tag. */
     readonly commands: ReadonlyMap<string, Aggregate.ClientImpl>;
     /** Each view's read API, by view name. */
-    readonly viewHosts: ReadonlyMap<string, View.Host<unknown, Aggregate.Any, unknown>>;
+    readonly viewHosts: ReadonlyMap<string, View.Host<unknown, Key.Any, unknown>>;
     /** Each stream's API, by stream name. */
-    readonly streamHosts: ReadonlyMap<string, DomainStream.Host<Aggregate.Any, unknown>>;
+    readonly streamHosts: ReadonlyMap<string, DomainStream.Host<Key.Any, unknown>>;
   }
 >()("alchemy/Domain/ModelInternals") {}
 
@@ -332,13 +333,13 @@ const build = <A, E, R>(
       hosts = Context.add(hosts, aggregate, client);
       for (const command of aggregate.definition.commands) commands.set(command.tag, client);
     }
-    const viewHosts = new Map<string, View.Host<unknown, Aggregate.Any, unknown>>();
+    const viewHosts = new Map<string, View.Host<unknown, Key.Any, unknown>>();
     for (const view of definitions.views) {
       const host = viewHost(kernel, view, viewStores.get(view.viewName)!);
       viewHosts.set(view.viewName, host);
       hosts = Context.add(hosts, view, host);
     }
-    const streamHosts = new Map<string, DomainStream.Host<Aggregate.Any, unknown>>();
+    const streamHosts = new Map<string, DomainStream.Host<Key.Any, unknown>>();
     for (const stream of definitions.streams) {
       const host = streamHost(kernel, stream, streamStores.get(stream.streamName)!);
       streamHosts.set(stream.streamName, host);
@@ -528,9 +529,9 @@ const viewHost = (
   kernel: Kernel.Kernel,
   view: View.Any,
   store: ViewStore,
-): View.Host<unknown, Aggregate.Any, unknown> => {
-  const watch = (key: Aggregate.Ref, options?: View.WatchOptions<unknown>) =>
-    store.changes(key.id).pipe(
+): View.Host<unknown, Key.Any, unknown> => {
+  const watch = (key: Key.RefOf<Key.Any>, options?: View.WatchOptions<unknown>) =>
+    store.changes(Aggregate.targetId(key)).pipe(
       Stream.map((snapshot) =>
         Option.filter(decodeSnapshot(kernel, view, snapshot), (state) =>
           matches(options?.where, state),
@@ -544,12 +545,12 @@ const viewHost = (
     );
   const watchEach = <P, E, R>(
     parent: Stream.Stream<P, E, R>,
-    keysOf: (parent: P) => ReadonlyArray<Aggregate.Ref>,
+    keysOf: (parent: P) => ReadonlyArray<Key.RefOf<Key.Any>>,
     options?: View.WatchOptions<unknown>,
-  ): Stream.Stream<readonly [P, ReadonlyArray<readonly [Aggregate.Ref, unknown]>], E, R> =>
+  ): Stream.Stream<readonly [P, ReadonlyArray<readonly [Key.RefOf<Key.Any>, unknown]>], E, R> =>
     parent.pipe(
       Stream.switchMap(
-        (p): Stream.Stream<readonly [P, ReadonlyArray<readonly [Aggregate.Ref, unknown]>]> => {
+        (p): Stream.Stream<readonly [P, ReadonlyArray<readonly [Key.RefOf<Key.Any>, unknown]>]> => {
           const keys = keysOf(p);
           if (keys.length === 0) return Stream.succeed([p, []]);
           return Stream.zipLatestAll(
@@ -570,13 +571,13 @@ const viewHost = (
     );
   /** The stored snapshot of a key, once it has applied `atLeast` (if given). */
   const readAtLeast = (
-    key: Aggregate.Ref,
+    id: string,
     options?: {
       readonly atLeast?: { readonly stream: string; readonly version: number };
       readonly timeout?: Duration.Input;
     },
   ) => {
-    const read = store.read(key.id);
+    const read = store.read(id);
     const atLeast = options?.atLeast;
     if (!atLeast) return read;
     return read.pipe(
@@ -595,7 +596,7 @@ const viewHost = (
         () =>
           new View.ConsistencyTimeout({
             view: view.viewName,
-            key: key.id,
+            key: id,
             stream: atLeast.stream,
             version: atLeast.version,
           }),
@@ -604,12 +605,12 @@ const viewHost = (
   };
   return {
     query: (key, options) =>
-      readAtLeast(key, options).pipe(
+      readAtLeast(Aggregate.targetId(key), options).pipe(
         Effect.map((snapshot) => decodeSnapshot(kernel, view, snapshot)),
       ),
     // State and seq come from one stored snapshot, so the cursor matches the state.
     snapshot: (key, options) =>
-      readAtLeast(key, options).pipe(
+      readAtLeast(Aggregate.targetId(key), options).pipe(
         Effect.map((snapshot) => ({
           state: Option.getOrNull(decodeSnapshot(kernel, view, snapshot)),
           cursor: String(snapshot.seq),
@@ -624,18 +625,20 @@ const viewHost = (
         Effect.flatMap((result) =>
           Option.isSome(result) && Option.isSome(result.value)
             ? Effect.succeed(result.value.value)
-            : Effect.fail(new View.WaitTimeout({ view: view.viewName, key: key.id })),
+            : Effect.fail(
+                new View.WaitTimeout({ view: view.viewName, key: Aggregate.targetId(key) }),
+              ),
         ),
       ),
     watch,
     watchEach,
     events: (key, options) =>
-      store.tail(key.id, options?.after ? Number(options.after) : 0).pipe(
+      store.tail(Aggregate.targetId(key), options?.after ? Number(options.after) : 0).pipe(
         Stream.map((entry) => kernel.decodeViewEntry(view, entry)),
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
-      store.list(key.id).pipe(
+      store.list(Aggregate.targetId(key)).pipe(
         Effect.map((stored) => {
           const desc = options?.order === "desc";
           const after = options?.after === undefined ? undefined : Number(options.after);
@@ -673,7 +676,7 @@ const streamHost = (
   kernel: Kernel.Kernel,
   stream: DomainStream.Any,
   store: StreamStore,
-): DomainStream.Host<Aggregate.Any, unknown> => {
+): DomainStream.Host<Key.Any, unknown> => {
   const decode = (entry: StreamEntry) => kernel.decodeStreamEntry(entry);
   const latest = (key: string, meta: StreamMeta) =>
     meta.seq === 0
@@ -687,7 +690,7 @@ const streamHost = (
       const read = atLeast
         ? waitUntil(
             store
-              .read(key.id)
+              .read(Aggregate.targetId(key))
               .pipe(
                 Effect.flatMap((meta) =>
                   (meta.checkpoints[atLeast.stream] ?? 0) >= atLeast.version
@@ -699,26 +702,26 @@ const streamHost = (
             () =>
               new View.ConsistencyTimeout({
                 view: stream.streamName,
-                key: key.id,
+                key: Aggregate.targetId(key),
                 stream: atLeast.stream,
                 version: atLeast.version,
               }),
           )
-        : store.read(key.id);
-      return read.pipe(Effect.flatMap((meta) => latest(key.id, meta)));
+        : store.read(Aggregate.targetId(key));
+      return read.pipe(Effect.flatMap((meta) => latest(Aggregate.targetId(key), meta)));
     },
     watch: (key) =>
-      store.changes(key.id).pipe(
+      store.changes(Aggregate.targetId(key)).pipe(
         Stream.changesWith((a, b) => a.seq === b.seq),
-        Stream.mapEffect((meta) => latest(key.id, meta)),
+        Stream.mapEffect((meta) => latest(Aggregate.targetId(key), meta)),
       ),
     events: (key, options) =>
-      store.tail(key.id, options?.after ?? 0).pipe(
+      store.tail(Aggregate.targetId(key), options?.after ?? 0).pipe(
         Stream.map(decode),
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
-      store.list(key.id).pipe(
+      store.list(Aggregate.targetId(key)).pipe(
         Effect.map((stored) => {
           const desc = options?.order === "desc";
           const after = options?.after === undefined ? undefined : Number(options.after);

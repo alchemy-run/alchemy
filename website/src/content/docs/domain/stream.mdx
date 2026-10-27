@@ -32,6 +32,8 @@ export class AccountCard extends Domain.Stream("AccountCard", {
 
 Add it to the model's `streams`.
 
+A stream can also be keyed by a string Schema, like an org id, with one log per value. Its writer is then keyed by the same Schema, and reads take the value: `bank.OrgFeed.peek(orgId)`. See [Key a view by a value](/domain/view#key-a-view-by-a-value).
+
 ## Write it from a projection
 
 A stream has exactly one writer: a projection that lists it in `writes`, keyed by the same aggregate. `AccountCards` reads the account summary, whose events arrive with the summary's state after each one, and appends a card for every change.

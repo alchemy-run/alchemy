@@ -13,6 +13,7 @@ import type { DurableDeferred, WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
+import type * as Key from "./Key.ts";
 import * as Model from "./Model.ts";
 import type * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -85,23 +86,26 @@ export type Step =
     }
   | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
   | { readonly _tag: "Replied"; readonly reply: unknown }
-  | { readonly _tag: "State"; readonly ref: Aggregate.Ref; readonly assert: (state: any) => void }
+  | { readonly _tag: "State"; readonly ref: Aggregate.Ref; readonly expected: unknown }
   | {
       readonly _tag: "View";
       readonly view: View.Any;
-      readonly key: Aggregate.Ref;
+      /** A ref, or the value of a Schema key. */
+      readonly key: Key.RefOf<Key.Any>;
       readonly expected: unknown;
     }
   | {
       readonly _tag: "Emitted";
       readonly view: View.Any;
-      readonly key: Aggregate.Ref;
+      /** A ref, or the value of a Schema key. */
+      readonly key: Key.RefOf<Key.Any>;
       readonly expected: unknown;
     }
   | {
       readonly _tag: "Streamed";
       readonly stream: DomainStream.Any;
-      readonly key: Aggregate.Ref;
+      /** A ref, or the value of a Schema key. */
+      readonly key: Key.RefOf<Key.Any>;
       readonly events: ReadonlyArray<{ readonly _tag: string }>;
     }
   | {
@@ -186,20 +190,16 @@ const rejected = (rejection: { readonly _tag: string }): Step => ({
 /** The last command's reply. */
 const replied = (reply: unknown): Step => ({ _tag: "Replied", reply });
 
-/** Assert on an aggregate instance's current state. */
+/** Assert on an aggregate instance's current state: an expected (partial) state, or a function. */
 const state = <A extends Aggregate.Any>(
   ref: Aggregate.Ref<A>,
-  assert: (state: Aggregate.StateOf<A>) => void,
-): Step => ({
-  _tag: "State",
-  ref,
-  assert,
-});
+  expected: Partial<Aggregate.StateOf<A>> | ((state: Aggregate.StateOf<A>) => void),
+): Step => ({ _tag: "State", ref, expected });
 
 /** Assert on a view key: an expected (partial) state, a function, or {@link none}. */
 const view = <V extends View.Any>(
   view: V,
-  key: Aggregate.Ref<View.KeyOf<V>>,
+  key: Key.RefOf<View.KeyOf<V>>,
   expected: Partial<View.StateOf<V>> | ((state: View.StateOf<V>) => void) | typeof none,
 ): Step => ({ _tag: "View", view, key, expected });
 
@@ -209,7 +209,7 @@ const view = <V extends View.Any>(
  */
 const emitted = <V extends View.Any>(
   view: V,
-  key: Aggregate.Ref<View.KeyOf<V>>,
+  key: Key.RefOf<View.KeyOf<V>>,
   expected:
     | ReadonlyArray<Partial<View.EventOf<V>>>
     | ((entries: ReadonlyArray<View.Entry<View.StateOf<V>, View.EventOf<V>>>) => void),
@@ -221,7 +221,7 @@ const emitted = <V extends View.Any>(
  */
 const streamed = <S extends DomainStream.Any>(
   stream: S,
-  key: Aggregate.Ref<DomainStream.KeyOf<S>>,
+  key: Key.RefOf<DomainStream.KeyOf<S>>,
   ...events: ReadonlyArray<DomainStream.EventOf<S>>
 ): Step => ({
   _tag: "Streamed",
@@ -436,13 +436,13 @@ const describeStep = (s: Step): string => {
     case "Replied":
       return summarize(s.reply);
     case "State":
-      return refName(s.ref);
+      return `${refName(s.ref)}${typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
     case "View":
-      return `${s.view.viewName}(${s.key.id})${s.expected === none ? ": none" : typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
+      return `${s.view.viewName}(${Aggregate.targetId(s.key)})${s.expected === none ? ": none" : typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
     case "Emitted":
-      return `${s.view.viewName}(${s.key.id})${typeof s.expected === "function" ? "" : `: ${summarizeAll(s.expected as ReadonlyArray<unknown>)}`}`;
+      return `${s.view.viewName}(${Aggregate.targetId(s.key)})${typeof s.expected === "function" ? "" : `: ${summarizeAll(s.expected as ReadonlyArray<unknown>)}`}`;
     case "Streamed":
-      return `${s.stream.streamName}/${s.key.id}: ${summarizeAll(s.events)}`;
+      return `${s.stream.streamName}/${Aggregate.targetId(s.key)}: ${summarizeAll(s.events)}`;
     case "Call":
       return `${callName(s.tag, s.op)} ${summarize(s.args)}`;
     case "Answer":
@@ -882,28 +882,37 @@ const make =
                 Aggregate.ClientImpl
               >;
               const current = yield* client.state(s.ref);
-              yield* Effect.try({ try: () => s.assert(current), catch: (e) => fail(String(e)) });
+              if (typeof s.expected === "function") {
+                const assert = s.expected as (state: unknown) => void;
+                yield* Effect.try({ try: () => assert(current), catch: (e) => fail(String(e)) });
+              } else if (!partial(s.expected, current)) {
+                const label = refName(s.ref);
+                return yield* fail(
+                  `${label}\n  expected ${show(s.expected)}\n  actual   ${show(current)}`,
+                  { label, expected: summarize(s.expected), actual: summarize(current) },
+                );
+              }
               break;
             }
             case "View": {
               const host = yield* s.view as unknown as Context.Key<
                 never,
-                View.Host<unknown, Aggregate.Any, unknown>
+                View.Host<unknown, Key.Any, unknown>
               >;
               const current = yield* host.query(s.key).pipe(Effect.orDie);
               if (s.expected === none) {
                 if (Option.isSome(current))
                   return yield* fail(
-                    `expected ${s.view.viewName}(${s.key.id}) to not exist, got ${show(current.value)}`,
+                    `expected ${s.view.viewName}(${Aggregate.targetId(s.key)}) to not exist, got ${show(current.value)}`,
                     {
-                      label: `${s.view.viewName}(${s.key.id})`,
+                      label: `${s.view.viewName}(${Aggregate.targetId(s.key)})`,
                       expected: "none",
                       actual: summarize(current.value),
                     },
                   );
                 break;
               }
-              const viewLabel = `${s.view.viewName}(${s.key.id})`;
+              const viewLabel = `${s.view.viewName}(${Aggregate.targetId(s.key)})`;
               if (Option.isNone(current))
                 return yield* fail(`${viewLabel} does not exist`, {
                   label: viewLabel,
@@ -931,7 +940,7 @@ const make =
             case "Emitted": {
               const host = yield* s.view as unknown as Context.Key<
                 never,
-                View.Host<unknown, Aggregate.Any, unknown>
+                View.Host<unknown, Key.Any, unknown>
               >;
               const { entries } = yield* host.list(s.key);
               if (typeof s.expected === "function") {
@@ -945,15 +954,16 @@ const make =
                   expected.every((e, i) => partial(e, events[i]));
                 if (!ok)
                   return yield* fail(
-                    `${s.view.viewName}(${s.key.id})\n  expected ${show(expected)}\n  actual   ${show(events)}`,
+                    `${s.view.viewName}(${Aggregate.targetId(s.key)})\n  expected ${show(expected)}\n  actual   ${show(events)}`,
                   );
               }
               break;
             }
             case "Streamed": {
               const store = internals.streams.get(s.stream.streamName)!;
-              const id = `${s.stream.streamName}/${s.key.id}`;
-              const entries = yield* store.list(s.key.id as string);
+              const key = Aggregate.targetId(s.key);
+              const id = `${s.stream.streamName}/${key}`;
+              const entries = yield* store.list(key);
               const from = cursors.get(id) ?? 0;
               const actual = entries.slice(from).map((e) => e.event);
               const expected = s.events.map(encodeInstance);

@@ -33,6 +33,7 @@ import type * as Event from "./Event.ts";
 import { type Filter, matches } from "./Filter.ts";
 import { captureContext } from "./internal.ts";
 import { decodeEnvelope } from "./Kernel.ts";
+import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
 import * as Model from "./Model.ts";
 import type { AggregateStore, StreamStore, Subscription, ViewStore } from "./Platform.ts";
@@ -74,7 +75,7 @@ interface CallOptions {
 export interface ViewClient<V extends View.Any> {
   /** The key's current state (`null` if it does not exist or the filter excludes it). */
   readonly get: (
-    key: Aggregate.IdOf<View.KeyOf<V>>,
+    key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
       /** Wait until the view has applied this write (a command's `stream` and `version`). */
       readonly atLeast?: { readonly stream: string; readonly version: number };
@@ -83,23 +84,23 @@ export interface ViewClient<V extends View.Any> {
   ) => Effect.Effect<View.StateOf<V> | null, ReadError<V["definition"]> | View.ConsistencyTimeout>;
   /** The key's state, then every change. Ends with a rejection when `validate` stops allowing it. */
   readonly watch: (
-    key: Aggregate.IdOf<View.KeyOf<V>>,
+    key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & { readonly where?: Filter<View.StateOf<V>> },
   ) => Stream.Stream<View.StateOf<V> | null, ReadError<V["definition"]>>;
   /** The events the key emitted, each with the state after it: history, then live. */
   readonly events: (
-    key: Aggregate.IdOf<View.KeyOf<V>>,
+    key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
       readonly after?: string;
       readonly where?: Filter<View.EventOf<V>>;
     },
   ) => Stream.Stream<
-    View.Entry<View.StateOf<V>, View.EventOf<V>, Aggregate.IdOf<View.KeyOf<V>>>,
+    View.Entry<View.StateOf<V>, View.EventOf<V>, Key.IdOf<View.KeyOf<V>>>,
     ReadError<V["definition"]>
   >;
   /** A page of the key's emitted events. */
   readonly list: (
-    key: Aggregate.IdOf<View.KeyOf<V>>,
+    key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
       /** Wait until the view has applied this write (a command's `stream` and `version`). */
       readonly atLeast?: { readonly stream: string; readonly version: number };
@@ -109,7 +110,7 @@ export interface ViewClient<V extends View.Any> {
       readonly after?: string;
     },
   ) => Effect.Effect<
-    View.Page<View.Entry<View.StateOf<V>, View.EventOf<V>, Aggregate.IdOf<View.KeyOf<V>>>>,
+    View.Page<View.Entry<View.StateOf<V>, View.EventOf<V>, Key.IdOf<View.KeyOf<V>>>>,
     ReadError<V["definition"]> | View.ConsistencyTimeout
   >;
   /**
@@ -118,7 +119,7 @@ export interface ViewClient<V extends View.Any> {
    * arrives once, and none is missed.
    */
   readonly snapshot: (
-    key: Aggregate.IdOf<View.KeyOf<V>>,
+    key: Key.IdOf<View.KeyOf<V>>,
     options?: CallOptions & {
       /** Wait until the view has applied this write (a command's `stream` and `version`). */
       readonly atLeast?: { readonly stream: string; readonly version: number };
@@ -134,37 +135,37 @@ export interface ViewClient<V extends View.Any> {
 export interface StreamClient<S extends DomainStream.Any> {
   /** The key's latest entry, or `null` if nothing was appended. */
   readonly peek: (
-    key: Aggregate.IdOf<DomainStream.KeyOf<S>>,
+    key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions & {
       /** Wait until the stream's writer has handled this write (a command's `stream` and `version`). */
       readonly atLeast?: { readonly stream: string; readonly version: number };
     },
   ) => Effect.Effect<
-    DomainStream.Entry<DomainStream.EventOf<S>, Aggregate.IdOf<DomainStream.KeyOf<S>>> | null,
+    DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>> | null,
     ReadError<S["definition"]> | View.ConsistencyTimeout
   >;
   /** The key's latest entry, then each new one. Ends with a rejection when `validate` stops allowing it. */
   readonly watch: (
-    key: Aggregate.IdOf<DomainStream.KeyOf<S>>,
+    key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions,
   ) => Stream.Stream<
-    DomainStream.Entry<DomainStream.EventOf<S>, Aggregate.IdOf<DomainStream.KeyOf<S>>> | null,
+    DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>> | null,
     ReadError<S["definition"]>
   >;
   /** The key's entries from `after` (an entry `seq`), then live ones. */
   readonly events: (
-    key: Aggregate.IdOf<DomainStream.KeyOf<S>>,
+    key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions & {
       readonly after?: number;
       readonly where?: Filter<DomainStream.EventOf<S>>;
     },
   ) => Stream.Stream<
-    DomainStream.Entry<DomainStream.EventOf<S>, Aggregate.IdOf<DomainStream.KeyOf<S>>>,
+    DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>>,
     ReadError<S["definition"]>
   >;
   /** A page of the key's entries. */
   readonly list: (
-    key: Aggregate.IdOf<DomainStream.KeyOf<S>>,
+    key: Key.IdOf<DomainStream.KeyOf<S>>,
     options?: CallOptions & {
       readonly where?: Filter<DomainStream.EventOf<S>>;
       readonly order?: "asc" | "desc";
@@ -172,7 +173,7 @@ export interface StreamClient<S extends DomainStream.Any> {
       readonly after?: string;
     },
   ) => Effect.Effect<
-    View.Page<DomainStream.Entry<DomainStream.EventOf<S>, Aggregate.IdOf<DomainStream.KeyOf<S>>>>,
+    View.Page<DomainStream.Entry<DomainStream.EventOf<S>, Key.IdOf<DomainStream.KeyOf<S>>>>,
     ReadError<S["definition"]>
   >;
 }
@@ -245,6 +246,14 @@ export interface ApiClass<
   readonly apiName: Name;
   /** The commands, views and aggregates this Api exposes. */
   readonly entries: Entries;
+  /** The command classes this Api exposes, in the order it lists them. */
+  readonly commands: ReadonlyArray<Commands<Entries[number]>>;
+  /**
+   * One Schema for every rejection this Api's commands declare: a union of the
+   * rejection classes, each once, decoding to class instances as the client
+   * fails with them. `Schema.Never` when no command rejects.
+   */
+  readonly rejections: RejectionUnion<Commands<Entries[number]>["rejects"][number]>;
   /** The underlying Effect RPC group. */
   readonly group: RpcGroup.RpcGroup<Rpc.Any>;
   /**
@@ -401,7 +410,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
       if (entry.kind === "Stream") {
         const host = internals.streamHosts.get(name)!;
         const key = entry.definition.key;
-        const refOf = (id: string) => ({ aggregate: key.aggregateName, id }) as Aggregate.Ref;
+        const refOf = (id: string) => Key.refOf(key, id);
         const latest = (id: string) =>
           host.peek(refOf(id)).pipe(Effect.orDie, Effect.map(Option.getOrNull));
         handlers[`${name}.peek`] = effect(rpcs.get, ({ key: id, atLeast }) =>
@@ -450,7 +459,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
       if (entry.kind === "View") {
         const host = internals.viewHosts.get(name)!;
         const key = entry.definition.key;
-        const refOf = (id: string) => ({ aggregate: key.aggregateName, id }) as Aggregate.Ref;
+        const refOf = (id: string) => Key.refOf(key, id);
         const visible = (state: unknown, where: unknown) =>
           state !== null && matches(where as Filter<unknown> | undefined, state) ? state : null;
         handlers[`${name}.get`] = effect(rpcs.get, ({ key: id, atLeast, where }) =>
@@ -723,6 +732,9 @@ const build = (
     Effect.map((flat) => nest(entries, flat as unknown as Flat)),
   );
   const Client = Context.Service<ClientKey<string>, unknown>()(`alchemy/Domain/Api/${name}/Client`);
+  const commands = entries.filter((entry): entry is Command.Any => entry.kind === "Command");
+  const rejectionClasses = [...new Set(commands.flatMap((command) => command.rejects))];
+  const rejections = rejectionClasses.length === 0 ? Schema.Never : Schema.Union(rejectionClasses);
   // Serve the Api over HTTP (Effect RPC, NDJSON), with live reads over WebSockets.
   const serve = Effect.gen(function* () {
     const handlers = yield* handlersOf(entries);
@@ -750,6 +762,8 @@ const build = (
       kind: "Api" as const,
       apiName: name,
       entries,
+      commands,
+      rejections,
       group,
       middleware: (middleware: RpcMiddleware.AnyService) =>
         build(name, entries, group.middleware(middleware) as unknown as RpcGroup.RpcGroup<Rpc.Any>),
@@ -985,3 +999,46 @@ export const protocolWebSocket = (
       });
     }),
   );
+
+// ---------------------------------------------------------------- generic helpers
+
+/** The Schema of a union of rejection classes; `Schema.Never` when there are none. */
+type RejectionUnion<R> = [R] extends [never]
+  ? typeof Schema.Never
+  : Schema.Codec<Aggregate.InstanceOf<R>, Schema.Codec.Encoded<R>>;
+
+/**
+ * Any Api class. Use it to write code that works with every Api, such as a
+ * helper that turns each command of an Api into a UI action. `ApiClass` does
+ * not fit there: its client type is exact, so a concrete Api is not an
+ * `ApiClass<string, ReadonlyArray<Entry>>`.
+ *
+ * **Example:** A helper for any Api
+ * ```typescript
+ * const tagsOf = <A extends Domain.Api.Any>(api: A): ReadonlyArray<Domain.Api.CommandsOf<A>["tag"]> =>
+ *   api.commands.map((command) => command.tag);
+ *
+ * tagsOf(CustomerApi); // ["DepositMoney", "WithdrawMoney"]
+ * ```
+ */
+export interface Any {
+  readonly kind: "Api";
+  readonly apiName: string;
+  /** The commands, views and aggregates the Api exposes. */
+  readonly entries: ReadonlyArray<Entry>;
+  /** The command classes the Api exposes, in order. */
+  readonly commands: ReadonlyArray<Command.Any>;
+  /** One Schema for every rejection the Api's commands declare. */
+  readonly rejections: Schema.Top;
+  /** The Api's client service. */
+  readonly Client: Context.Key<ClientKey<string>, unknown>;
+}
+
+/** The command classes an Api exposes. */
+export type CommandsOf<A extends Any> = A["commands"][number];
+
+/** The rejection classes the commands of an Api declare. */
+export type RejectionsOf<A extends Any> = CommandsOf<A>["rejects"][number];
+
+/** The client an Api's `Client` service gives (`yield* MyApi.Client`). */
+export type ClientOf<A extends Any> = A["Client"]["Service"];
