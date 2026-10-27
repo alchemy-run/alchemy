@@ -5,12 +5,18 @@ import { CurrentRuntimeContext, type RuntimeContext, sanitizeKey } from "alchemy
 import { isYieldableEffectLike } from "alchemy/Util/effect";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type * as HttpApi from "effect/http-api/HttpApi";
+import type * as HttpApiClient from "effect/http-api/HttpApiClient";
+import type * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import * as HttpClient from "effect/http/HttpClient";
 import type * as HttpClientError from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import type { Rpc as EffectRpc, RpcClient, RpcGroup } from "effect/rpc";
+import type * as RpcClientError from "effect/rpc/RpcClientError";
 import type { GcpHostBinding } from "../Host.ts";
 import type { Container } from "./Container.ts";
+import { makeHttpApiClient, makeRpcGroupClient } from "./EffectApis.ts";
 
 /** The bound container has no port, or the caller was deployed before the binding existed. */
 export class BoundContainerUnavailable extends Data.TaggedError(
@@ -204,10 +210,40 @@ const bindSidecar = <Shape, Req>(
  * @binding
  * @product Run
  */
-export const bindContainer = <Shape = {}, Req = never>(
+/** `fetch` and `httpClient` of a bound container, alongside a typed client. */
+export type ContainerTransport = Pick<ContainerClient<{}>, "fetch" | "httpClient">;
+
+/** Options for {@link bindContainer}: the API the container serves, if typed. */
+export type BindContainerOptions<
+  Rpcs extends EffectRpc.Any,
+  Groups extends HttpApiGroup.Constraint,
+> = { schema: RpcGroup.RpcGroup<Rpcs> } | { api: HttpApi.HttpApi<string, Groups> };
+
+export function bindContainer<Shape = {}, Req = never>(
   target: Bindable<Shape, Req>,
-): Effect.Effect<ContainerClient<Shape>, never, Req | HttpClient.HttpClient> =>
-  Effect.gen(function* () {
+): Effect.Effect<ContainerClient<Shape>, never, Req | HttpClient.HttpClient>;
+export function bindContainer<Rpcs extends EffectRpc.Any, Req = never>(
+  target: Bindable<unknown, Req>,
+  options: { schema: RpcGroup.RpcGroup<Rpcs> },
+): Effect.Effect<
+  RpcClient.RpcClient<Rpcs, RpcClientError.RpcClientError> & ContainerTransport,
+  never,
+  Req | HttpClient.HttpClient
+>;
+export function bindContainer<Groups extends HttpApiGroup.Constraint, Req = never>(
+  target: Bindable<unknown, Req>,
+  options: { api: HttpApi.HttpApi<string, Groups> },
+): Effect.Effect<
+  HttpApiClient.Client<Groups, HttpClientError.HttpClientError | BoundContainerUnavailable> &
+    ContainerTransport,
+  never,
+  Req | HttpClient.HttpClient
+>;
+export function bindContainer(
+  target: Bindable<unknown, unknown>,
+  options?: BindContainerOptions<any, any>,
+): Effect.Effect<unknown, never, any> {
+  return Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const bound = yield* bindSidecar(target);
     const httpClient = HttpClient.mapRequestEffect(http, (request) =>
@@ -218,15 +254,26 @@ export const bindContainer = <Shape = {}, Req = never>(
       ),
     );
     const send = (request: HttpClientRequest.HttpClientRequest) => httpClient.execute(request);
-    return makeFetchRpcStub<ContainerClient<Shape>>({
+    const transport = { fetch: send, httpClient };
+    if (options !== undefined && "schema" in options) {
+      return Object.assign(
+        makeRpcGroupClient(options.schema, httpClient as unknown as HttpClient.HttpClient),
+        transport,
+      );
+    }
+    if (options !== undefined && "api" in options) {
+      return Object.assign(yield* makeHttpApiClient(options.api, httpClient), transport);
+    }
+    return makeFetchRpcStub<ContainerClient<{}>>({
       // Relative RPC paths, resolved against the container's localhost port.
       baseUrl: "",
       fetch: send as (
         request: HttpClientRequest.HttpClientRequest,
       ) => Effect.Effect<HttpClientResponse.HttpClientResponse, unknown>,
-      base: { fetch: send, httpClient },
+      base: transport,
     });
   });
+}
 
 /**
  * Run a {@link Container} as a sidecar and reach one of its ports

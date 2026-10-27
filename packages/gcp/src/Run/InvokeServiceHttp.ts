@@ -10,9 +10,11 @@ import * as Ref from "effect/Ref";
 import * as Semaphore from "effect/Semaphore";
 import * as GCPBindings from "../GCPBindings.ts";
 import { grantFor } from "../HttpBinding.ts";
+import { makeHttpApiClient, makeRpcGroupClient } from "./EffectApis.ts";
 import {
   InvokeService,
   type InvokeServiceClient,
+  type InvokeServiceOptions,
   InvokeServiceError,
   type InvokeServiceRequestInit,
   type InvokeServiceResponse,
@@ -119,7 +121,7 @@ export const InvokeServiceHttp: Layer.Layer<InvokeService, never, HttpClient.Htt
     Effect.gen(function* () {
       const bind = yield* GCPBindings.Bind;
       const http = yield* HttpClient.HttpClient;
-      return Effect.fn(function* <T extends Service>(service: T) {
+      return Effect.fn(function* <T extends Service>(service: T, options?: InvokeServiceOptions) {
         yield* GCPBindings.requireServiceAccountHost("GCP.Run.InvokeService");
         if (!globalThis.__ALCHEMY_RUNTIME__) {
           yield* bind`GCP.Run.InvokeService(${service})`({
@@ -209,6 +211,19 @@ export const InvokeServiceHttp: Layer.Layer<InvokeService, never, HttpClient.Htt
         // RPC methods post to `/__rpc__/<name>` on the service with the
         // same ID token; the service serves them only behind its IAM
         // invoker check.
+        const transport = { fetch, httpClient };
+        if (options !== undefined && "schema" in options) {
+          return Object.assign(
+            makeRpcGroupClient(options.schema, httpClient as unknown as HttpClient.HttpClient),
+            transport,
+          ) as unknown as InvokeServiceClient;
+        }
+        if (options !== undefined && "api" in options) {
+          return Object.assign(
+            yield* makeHttpApiClient(options.api, httpClient),
+            transport,
+          ) as unknown as InvokeServiceClient;
+        }
         return makeFetchRpcStub<InvokeServiceClient>({
           baseUrl: "",
           fetch: (request) =>
@@ -216,7 +231,7 @@ export const InvokeServiceHttp: Layer.Layer<InvokeService, never, HttpClient.Htt
               HttpClientResponse.HttpClientResponse,
               unknown
             >,
-          base: { fetch, httpClient },
+          base: transport,
         });
       });
     }),
