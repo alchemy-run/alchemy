@@ -1,15 +1,17 @@
 import { expect, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as RpcClientError from "effect/rpc/RpcClientError";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import * as Foldkit from "../src/Foldkit.ts";
 import { Client, CounterApi, CounterId } from "./Counter.ts";
 
 const Counter = Foldkit.commands(CounterApi);
 const target = CounterId.make("one");
 
-it.effect("keeps reply, receipt and the caller's id on success", () =>
+it.live("keeps reply, receipt and the caller's id on success", () =>
   Effect.gen(function* () {
     const result = yield* Counter.Increment({ target, input: { amount: 2 }, commandId: "page:0" })
       .effect;
@@ -26,7 +28,7 @@ it.effect("keeps reply, receipt and the caller's id on success", () =>
   }).pipe(Effect.provide(Client)),
 );
 
-it.effect("keeps declared rejection fields", () =>
+it.live("keeps declared rejection fields", () =>
   Effect.gen(function* () {
     const result = yield* Counter.Increment({ target, input: { amount: 11 }, commandId: "page:1" })
       .effect;
@@ -38,7 +40,7 @@ it.effect("keeps declared rejection fields", () =>
   }).pipe(Effect.provide(Client)),
 );
 
-it.effect("classifies a middleware refusal as Denied", () =>
+it.live("classifies a middleware refusal as Denied", () =>
   Effect.gen(function* () {
     const result = yield* Counter.Reset({ target, input: {}, commandId: "page:2" }).effect;
     expect(result).toMatchObject({
@@ -48,7 +50,7 @@ it.effect("classifies a middleware refusal as Denied", () =>
   }).pipe(Effect.provide(Client)),
 );
 
-it.effect("keeps transport uncertainty and reads headers only during execution", () =>
+it.live("keeps transport uncertainty and reads headers only during execution", () =>
   Effect.gen(function* () {
     const client = yield* CounterApi.Client;
     let calls = 0;
@@ -90,3 +92,62 @@ it("allocates ids without changing the prior state", () => {
   });
   expect(ids.sent).toBe(0);
 });
+
+const watched = Foldkit.watchView(CounterApi, "Total", {
+  key: (model: { id: typeof CounterId.Type; cursor: number; online: boolean }) => model.id,
+  isEnabled: (model) => model.online,
+  toMessage: (snapshot) => ({ _tag: "ReceivedTotal", snapshot }),
+  onFailure: () => ({ _tag: "ReceivedTotal", snapshot: { state: Option.none(), cursor: 0 } }),
+});
+
+it.live("watches absent state as None and preserves the cursor", () =>
+  watched.dependenciesToStream({ key: target, isEnabled: true }).pipe(
+    Stream.take(1),
+    Stream.runCollect,
+    Effect.tap((messages) =>
+      Effect.sync(() =>
+        expect(messages).toEqual([
+          { _tag: "ReceivedTotal", snapshot: { state: Option.none(), cursor: 0 } },
+        ]),
+      ),
+    ),
+    Effect.asVoid,
+    Effect.provide(Client),
+  ),
+);
+
+it.live("watches a fresh state and cursor after a write", () =>
+  Effect.gen(function* () {
+    const reply = yield* Counter.Increment({ target, input: { amount: 2 }, commandId: "page:0" })
+      .effect;
+    if (reply._tag === "SucceededIncrement") {
+      const client = yield* CounterApi.Client;
+      yield* client.Total.snapshot(target, { atLeast: reply.receipt });
+    }
+    const messages = yield* watched
+      .dependenciesToStream({ key: target, isEnabled: true })
+      .pipe(Stream.take(1), Stream.runCollect);
+    expect(messages).toEqual([
+      { _tag: "ReceivedTotal", snapshot: { state: Option.some({ total: 2 }), cursor: 1 } },
+    ]);
+  }).pipe(Effect.provide(Client)),
+);
+
+it("restarts for key or enabled changes and ignores Model cursor changes", () => {
+  const model = { id: target, cursor: 0, online: true };
+  expect(watched.modelToDependencies(model)).toEqual(
+    watched.modelToDependencies({ ...model, cursor: 4 }),
+  );
+  expect(watched.modelToDependencies(model)).not.toEqual(
+    watched.modelToDependencies({ ...model, id: CounterId.make("two") }),
+  );
+});
+
+it.live("does not open a disabled watch", () =>
+  watched.dependenciesToStream({ key: target, isEnabled: false }).pipe(
+    Stream.runCollect,
+    Effect.tap((messages) => Effect.sync(() => expect(messages).toEqual([]))),
+    Effect.asVoid,
+    Effect.provide(Client),
+  ),
+);

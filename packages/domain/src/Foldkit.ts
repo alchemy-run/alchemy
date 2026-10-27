@@ -1,13 +1,17 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type * as Headers from "effect/http/Headers";
+import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import type * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
-import { Command } from "foldkit";
+import * as Stream from "effect/Stream";
+import { Command, type Subscription } from "foldkit";
 import { defineMessageUnion, type MessageUnion } from "foldkit/message";
 import type * as Api from "./Api.ts";
 import type * as DomainCommand from "./Command.ts";
+import * as Key from "./Key.ts";
+import type * as View from "./View.ts";
 
 /** Per-call headers, resolved at execution time and excluded from replayable args. */
 export class CommandHeaders extends Context.Service<
@@ -162,3 +166,68 @@ const classifyFailure = (command: DomainCommand.Any, error: unknown) => {
   }
   return { _tag: "Unknown" };
 };
+
+type Views<A extends Api.Any> = Extract<A["entries"][number], View.Any>;
+type ViewNamed<A extends Api.Any, Name extends Views<A>["viewName"]> = Extract<
+  Views<A>,
+  { readonly viewName: Name }
+>;
+type ViewKey<V extends View.Any> = Key.IdOf<View.KeyOf<V>>;
+
+/** A watch Snapshot with explicit absence for Foldkit Models. */
+export type Snapshot<State> = Readonly<{
+  state: Option.Option<NonNullable<State>>;
+  cursor: number;
+}>;
+
+/** Callbacks for a View's live state. Cursor changes do not restart the watch. */
+export interface WatchOptions<Model, Message, V extends View.Any> {
+  readonly key: (model: Model) => ViewKey<V>;
+  readonly isEnabled?: (model: Model) => boolean;
+  readonly toMessage: (snapshot: Snapshot<View.StateOf<V>>) => Message;
+  readonly onFailure: (error: Api.ReadError<V["definition"]>) => Message;
+}
+
+/** Follow a View's state and cursor. Pass the result as an entry to Subscription.make. */
+export function watchView<A extends Api.Any, Name extends Views<A>["viewName"], Model, Message>(
+  api: A,
+  name: Name,
+  options: WatchOptions<Model, Message, ViewNamed<A, Name>>,
+): Subscription.EntryWithoutKeepAlive<
+  Model,
+  Message,
+  { key: ViewKey<ViewNamed<A, Name>>; isEnabled: boolean },
+  A["Client"]["Identifier"]
+>;
+export function watchView(
+  api: Api.Any,
+  name: string,
+  options: WatchOptions<unknown, unknown, View.Any>,
+): unknown {
+  const view = api.entries.find(
+    (entry): entry is View.Any => entry.kind === "View" && entry.viewName === name,
+  )!;
+  return {
+    dependenciesSchema: Schema.Struct({
+      key: Schema.toType(Key.idSchemaOf(view.definition.key)),
+      isEnabled: Schema.Boolean,
+    }),
+    modelToDependencies: (model: unknown) => ({
+      key: options.key(model),
+      isEnabled: options.isEnabled?.(model) ?? true,
+    }),
+    dependenciesToStream: ({ key, isEnabled }: { key: string; isEnabled: boolean }) =>
+      isEnabled
+        ? Stream.unwrap(
+            Effect.map(Effect.service(api.Client), (client) =>
+              (client as Record<string, Api.ViewClient<View.Any>>)[name].watch(key),
+            ),
+          ).pipe(
+            Stream.map(({ state, cursor }) =>
+              options.toMessage({ state: Option.fromNullishOr(state), cursor }),
+            ),
+            Stream.catch((error) => Stream.succeed(options.onFailure(error))),
+          )
+        : Stream.empty,
+  };
+}
