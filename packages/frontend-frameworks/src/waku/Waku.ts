@@ -7,7 +7,6 @@ import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import type * as ViteModule from "vite";
 import type { Config as WakuConfig } from "waku/config";
-import type * as WakuInternals from "waku/internals";
 import type * as WakuVitePlugins from "waku/vite-plugins";
 import * as FrameworkCore from "../core/index.ts";
 import type {
@@ -19,9 +18,8 @@ import type {
   DeployTargetServices,
 } from "../core/index.ts";
 
-type WakuInternalsModule = typeof WakuInternals;
 type WakuVitePluginsModule = typeof WakuVitePlugins;
-type ResolvedWakuConfig = ReturnType<WakuInternalsModule["unstable_resolveConfig"]>;
+type ResolvedWakuConfig = ReturnType<WakuVitePluginsModule["unstable_resolveConfig"]>;
 
 /**
  * Waku's rsc-environment worker entry, relative to the installed `waku`
@@ -497,7 +495,6 @@ const clearPreviewServerGlobal = (): void => {
 
 interface ProjectModules {
   readonly vite: typeof ViteModule;
-  readonly internals: WakuInternalsModule;
   readonly vitePlugins: WakuVitePluginsModule;
   readonly wakuDirectory: string;
 }
@@ -578,13 +575,10 @@ export const make = (
     ) => Effect.Effect<ProjectModules, FrameworkCore.FrameworkError> = Effect.fn(function* (
       root: string,
     ) {
-      const [vite, internals, vitePlugins, wakuDirectory] = yield* Effect.all(
+      const [vite, vitePlugins, wakuDirectory] = yield* Effect.all(
         [
           FrameworkCore.loadProjectModule<typeof ViteModule>(root, "vite").pipe(
             Effect.mapError(fail("Failed to load the project's vite")),
-          ),
-          FrameworkCore.loadProjectModule<WakuInternalsModule>(root, "waku/internals").pipe(
-            Effect.mapError(fail("Failed to load the project's waku/internals")),
           ),
           FrameworkCore.loadProjectModule<WakuVitePluginsModule>(root, "waku/vite-plugins").pipe(
             Effect.mapError(fail("Failed to load the project's waku/vite-plugins")),
@@ -595,7 +589,7 @@ export const make = (
         ],
         { concurrency: "unbounded" },
       );
-      return { vite, internals, vitePlugins, wakuDirectory };
+      return { vite, vitePlugins, wakuDirectory };
     });
 
     /**
@@ -672,7 +666,7 @@ export const make = (
             "deploy target to the integration instead.",
         )(undefined);
       }
-      return project.internals.unstable_resolveConfig(
+      return project.vitePlugins.unstable_resolveConfig(
         makeWakuConfigInput({
           adapterPath: inputs.adapterPath,
           // The server-entry resolver goes first so

@@ -10704,7 +10704,8 @@ describe("incomplete interrupted-create checkpoints", { tags: ["unit", "local"] 
   // A fake cloud keyed by `<namespace>/<name>`; each entry records its owning logical id.
   interface Scoped extends Resource<
     "Test.Scoped",
-    { name: string; namespace?: string; version?: number },
+    // `wiring` stands in for runtime-only Effect props (e.g. a handler).
+    { name: string; namespace?: string; version?: number; wiring?: Effect.Effect<void> },
     { key: string },
     { self: string }
   > {}
@@ -10901,6 +10902,38 @@ describe("incomplete interrupted-create checkpoints", { tags: ["unit", "local"] 
       cloud.events.length = 0;
       yield* stack.destroy();
       expect(cloud.events).toEqual(["read tenant/api", "delete tenant/api"]);
+      expect(cloud.owners.get("account/api")).toBe("Subject");
+    }),
+  );
+
+  test.provider("an Effect-valued prop does not hide a resolved create from recovery", (stack) =>
+    Effect.gen(function* () {
+      const cloud = yield* reset(stack);
+      cloud.crash.add("tenant/api");
+      // `Tenant` is created in the same deploy, so `Subject`'s namespace only
+      // resolves during apply; its `wiring` Effect never resolves at all.
+      yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const tenant = yield* TestResource("Tenant", { string: "tenant" });
+            return yield* Scoped("Subject", {
+              name: "api",
+              namespace: tenant.string,
+              wiring: Effect.void,
+            });
+          }),
+        )
+        .pipe(Effect.catchTag("ResourceFailure", () => Effect.void));
+      expect(cloud.events).toEqual(["read tenant/api", "reconcile tenant/api"]);
+      const checkpoint = yield* getState("Subject");
+      expect(checkpoint.status).toBe("creating");
+      expect(checkpoint.attr).toBeUndefined();
+      expect(checkpoint.props).toEqual({ name: "api", namespace: "tenant" });
+      expect(checkpoint.propsIncomplete).toBeUndefined();
+      cloud.events.length = 0;
+      yield* stack.destroy();
+      expect(cloud.events).toEqual(["read tenant/api", "delete tenant/api"]);
+      expect(cloud.owners.has("tenant/api")).toBe(false);
       expect(cloud.owners.get("account/api")).toBe("Subject");
     }),
   );

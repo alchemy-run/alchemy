@@ -278,7 +278,7 @@ Two customers who ask for `sam` at the same moment both send `ClaimUsername` to 
 
 A process that takes time, like a transfer that may wait a day for approval, has state of its own: requested, awaiting approval, completed, failed. Rules apply to that state too. An approval that arrives after the deadline must be refused, and an expiry that arrives after an approval must do nothing.
 
-Those rules make the process an aggregate. The bank's `Transfer` holds where each transfer stands, and both `ApproveTransfer` and `ExpireTransfer` go through it, so whichever arrives first wins:
+Those rules make the process an aggregate. In the example bank, `Transfer` holds where each transfer stands, and both `ApproveTransfer` and `ExpireTransfer` go through it, so whichever arrives first wins:
 
 ```typescript title="packages/domain/src/Transfer/Transfer.aggregate.ts"
 ExpireTransfer: (s, _, { id }) =>
