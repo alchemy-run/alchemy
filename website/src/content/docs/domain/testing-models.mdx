@@ -66,7 +66,7 @@ Run stories with Vitest and `@effect/vitest`: each story is an Effect, so `it.ef
 
 ## Check every outcome
 
-The test above uses most of the checks. `then` checks the next events recorded on an instance; with no events, it checks that nothing new was recorded. `replied` checks the last command's reply, and `rejected` checks that it was refused with exactly this rejection. `state` checks an instance's current state directly.
+The test above uses most of the checks. `then` checks the next events recorded on an instance; with no events, it checks that nothing new was recorded. `replied` checks the last command's reply, and `rejected` checks that it was refused with exactly this rejection. `state` checks an instance's current state directly, or part of it.
 
 Views and streams are checked as a client would read them. `view` checks a view key's state, or part of it, and `emitted` checks every event a view key has emitted. `streamed` checks the next entries a projection appended to a stream key.
 
@@ -141,6 +141,8 @@ Story.call(Payments.refund, { settlementId: "st_1" }),
 Story.fail(Payments.refund, new RefundDeclined({ reason: "card-closed" })),
 ```
 
+When the operation declares several errors, `fail` takes any one of them, so a story can test each branch.
+
 `Story.die` fails a call with a defect instead, as when the connection to the vendor breaks:
 
 ```typescript
@@ -171,7 +173,7 @@ The story records every real call. `call` checks what a call was sent, and `retu
 
 ## Move the clock
 
-A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to an ISO string, epoch milliseconds or a `DateTime`. The clock only moves forward. A `clock` step with only `provide` steps before it may set any time; after that, a time earlier than the current one fails the story. Commands are stamped with it, so time-based rules like a daily limit are easy to test, and scheduled commands fire when it passes their time. See [Deadlines](/domain/deadlines).
+A story's clock starts at `2026-01-01T00:00:00Z`, and `Story.clock` moves it to an ISO string, epoch milliseconds or a `DateTime`. The clock only moves forward. A `clock` step with only `provide` steps before it may set any time; after that, a time earlier than the current one fails the story. `Story.advance("1 day")` moves it forward by a duration instead of to a time. Commands are stamped with it, so time-based rules like a daily limit are easy to test, and scheduled commands fire when it passes their time. See [Deadlines](/domain/deadlines).
 
 ## Trust a passing story
 

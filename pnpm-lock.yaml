@@ -300,12 +300,6 @@ catalogs:
     '@octanejs/vite-plugin':
       specifier: 0.1.22
       version: 0.1.22
-    '@octokit/rest':
-      specifier: ^22.0.1
-      version: 22.0.1
-    '@octokit/webhooks':
-      specifier: ^14.2.0
-      version: 14.2.0
     '@opennextjs/aws':
       specifier: 4.1.9
       version: 4.1.9
@@ -9540,12 +9534,12 @@ importers:
 
   packages/github:
     dependencies:
-      '@octokit/rest':
-        specifier: 'catalog:'
-        version: 22.0.1
-      '@octokit/webhooks':
-        specifier: 'catalog:'
-        version: 14.2.0
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/github':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/github
       libsodium-wrappers:
         specifier: 'catalog:'
         version: 0.8.4
@@ -9714,6 +9708,9 @@ importers:
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
+      '@distilled.cloud/github':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/github
       '@distilled.cloud/hetzner':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/hetzner
@@ -9771,9 +9768,6 @@ importers:
       '@octanejs/vite-plugin':
         specifier: 'catalog:'
         version: 0.1.22(octane@0.1.22(react-dom@19.3.0(react@19.3.0))(react@19.3.0)(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))(vite@8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
-      '@octokit/rest':
-        specifier: 'catalog:'
-        version: 22.0.1
       '@opennextjs/aws':
         specifier: 'catalog:'
         version: 4.1.9(next@16.2.10(@babel/core@7.29.7(supports-color@10.2.2))(@playwright/test@1.64.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(supports-color@10.2.2)
@@ -38819,7 +38813,7 @@ snapshots:
 
   '@types/sax@1.2.7':
     dependencies:
-      '@types/node': 24.13.3
+      '@types/node': 26.6.5
 
   '@types/unist@2.0.11': {}
 

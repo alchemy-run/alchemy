@@ -3,6 +3,7 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -14,6 +15,7 @@ import * as Aggregate from "./Aggregate.ts";
 import type * as Command from "./Command.ts";
 import * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
+import type * as Key from "./Key.ts";
 import * as Model from "./Model.ts";
 import type * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -86,23 +88,26 @@ export type Step =
     }
   | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
   | { readonly _tag: "Replied"; readonly reply: unknown }
-  | { readonly _tag: "State"; readonly ref: Aggregate.Ref; readonly assert: (state: any) => void }
+  | { readonly _tag: "State"; readonly ref: Aggregate.Ref; readonly expected: unknown }
   | {
       readonly _tag: "View";
       readonly view: View.Any;
-      readonly key: Aggregate.Ref;
+      /** A ref, or the value of a Schema key. */
+      readonly key: Key.RefOf<Key.Any>;
       readonly expected: unknown;
     }
   | {
       readonly _tag: "Emitted";
       readonly view: View.Any;
-      readonly key: Aggregate.Ref;
+      /** A ref, or the value of a Schema key. */
+      readonly key: Key.RefOf<Key.Any>;
       readonly expected: unknown;
     }
   | {
       readonly _tag: "Streamed";
       readonly stream: DomainStream.Any;
-      readonly key: Aggregate.Ref;
+      /** A ref, or the value of a Schema key. */
+      readonly key: Key.RefOf<Key.Any>;
       readonly events: ReadonlyArray<{ readonly _tag: string }>;
     }
   | {
@@ -127,6 +132,7 @@ export type Step =
         | { readonly _tag: "Died" };
     }
   | { readonly _tag: "Clock"; readonly at: string | number | DateTime.DateTime }
+  | { readonly _tag: "Advance"; readonly by: Duration.Input }
   | {
       readonly _tag: "Signal";
       readonly saga: Saga.Any;
@@ -176,7 +182,7 @@ type CommandClassOf<A extends Aggregate.Any, Cmd> = Extract<
   A["definition"]["commands"][number],
   { readonly tag: Cmd extends { readonly _tag: infer T } ? T : never }
 >;
-type RejectionOf<C extends Command.Any> = Aggregate.Inst<C["rejects"][number]>;
+type RejectionOf<C extends Command.Any> = Aggregate.InstanceOf<C["rejects"][number]>;
 type ReplyOf<C extends Command.Any> = C["reply"] extends Schema.Top ? C["reply"]["Type"] : void;
 type NameOf<X, Key extends string, Fallback extends string> = X extends {
   readonly [K in Key]: infer N extends string;
@@ -279,20 +285,16 @@ const rejected = <R extends { readonly _tag: string }>(rejection: R): RejectedSt
 /** The last command's reply, of the type the last `when` command declares. */
 const replied = <A>(reply: A): RepliedStep<A> => ({ _tag: "Replied", reply });
 
-/** Assert on an aggregate instance's current state. */
+/** Assert on an aggregate instance's current state: an expected (partial) state, or a function. */
 const state = <A extends Aggregate.Any>(
   ref: Aggregate.Ref<A>,
-  assert: (state: Aggregate.StateOf<A>) => void,
-): StepOf<"State"> => ({
-  _tag: "State",
-  ref,
-  assert,
-});
+  expected: Partial<Aggregate.StateOf<A>> | ((state: Aggregate.StateOf<A>) => void),
+): StepOf<"State"> => ({ _tag: "State", ref, expected });
 
 /** Assert on a view key: an expected (partial) state, a function, or {@link none}. */
 const view = <V extends View.Any>(
   view: V,
-  key: Aggregate.Ref<View.KeyOf<V>>,
+  key: Key.RefOf<View.KeyOf<V>>,
   expected: Partial<View.StateOf<V>> | ((state: View.StateOf<V>) => void) | typeof none,
 ): StepOf<"View"> => ({ _tag: "View", view, key, expected });
 
@@ -302,7 +304,7 @@ const view = <V extends View.Any>(
  */
 const emitted = <V extends View.Any>(
   view: V,
-  key: Aggregate.Ref<View.KeyOf<V>>,
+  key: Key.RefOf<View.KeyOf<V>>,
   expected:
     | ReadonlyArray<Partial<View.EventOf<V>>>
     | ((entries: ReadonlyArray<View.Entry<View.StateOf<V>, View.EventOf<V>>>) => void),
@@ -314,7 +316,7 @@ const emitted = <V extends View.Any>(
  */
 const streamed = <S extends DomainStream.Any>(
   stream: S,
-  key: Aggregate.Ref<DomainStream.KeyOf<S>>,
+  key: Key.RefOf<DomainStream.KeyOf<S>>,
   ...events: ReadonlyArray<DomainStream.EventOf<S>>
 ): StepOf<"Streamed"> => ({
   _tag: "Streamed",
@@ -420,6 +422,9 @@ const died: {
 /** Move the clock: later commands are stamped with it, and scheduled commands now due fire. */
 const clock = (at: string | number | DateTime.DateTime): StepOf<"Clock"> => ({ _tag: "Clock", at });
 
+/** Move the clock forward by a duration, like `"1 day"`: the same as `clock` at the current time plus `by`. */
+const advance = (by: Duration.Input): StepOf<"Advance"> => ({ _tag: "Advance", by });
+
 type SagaClientOf<S> = S extends Context.Key<any, infer C> ? C : never;
 type SagaKeyOf<S> =
   SagaClientOf<S> extends Saga.Client<infer K, any, any, any> ? K | { readonly id: K } : never;
@@ -523,9 +528,18 @@ const clockMillis = (at: string | number | DateTime.DateTime) =>
       ? Date.parse(at)
       : DateTime.toEpochMillis(at);
 
+/** An `advance` step's duration; `undefined` for an input that is not a finite duration. */
+const advanceDuration = (by: Duration.Input) =>
+  Option.getOrUndefined(Option.filter(Duration.fromInput(by), Duration.isFinite));
+
 /** A one-line summary of a step, before it runs. */
 const describeStep = (s: Step): string => {
   switch (s._tag) {
+    case "Advance": {
+      const by = advanceDuration(s.by);
+      if (by === undefined) return String(s.by);
+      return `${Duration.isNegative(by) ? "" : "+"}${Duration.format(by)}`;
+    }
     case "Clock": {
       const at = clockMillis(s.at);
       return Number.isNaN(at) ? String(s.at) : new Date(at).toISOString();
@@ -542,13 +556,13 @@ const describeStep = (s: Step): string => {
     case "Replied":
       return summarize(s.reply);
     case "State":
-      return refName(s.ref);
+      return `${refName(s.ref)}${typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
     case "View":
-      return `${s.view.viewName}(${s.key.id})${s.expected === none ? ": none" : typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
+      return `${s.view.viewName}(${Aggregate.targetId(s.key)})${s.expected === none ? ": none" : typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
     case "Emitted":
-      return `${s.view.viewName}(${s.key.id})${typeof s.expected === "function" ? "" : `: ${summarizeAll(s.expected as ReadonlyArray<unknown>)}`}`;
+      return `${s.view.viewName}(${Aggregate.targetId(s.key)})${typeof s.expected === "function" ? "" : `: ${summarizeAll(s.expected as ReadonlyArray<unknown>)}`}`;
     case "Streamed":
-      return `${s.stream.streamName}/${s.key.id}: ${summarizeAll(s.events)}`;
+      return `${s.stream.streamName}/${Aggregate.targetId(s.key)}: ${summarizeAll(s.events)}`;
     case "Call":
       return `${callName(s.tag, s.op)} ${summarize(s.args)}`;
     case "Answer":
@@ -887,6 +901,16 @@ const make =
               yield* settle(step);
               break;
             }
+            case "Advance": {
+              const by = advanceDuration(s.by);
+              if (by === undefined) return yield* fail(`${String(s.by)} is not a duration`);
+              if (Duration.isNegative(by)) {
+                return yield* fail(`the clock only moves forward, not by ${Duration.format(by)}`);
+              }
+              clockState.now += Duration.toMillis(by);
+              yield* settle(step);
+              break;
+            }
             case "Provide": {
               provided = Context.add(provided, s.service, s.value);
               break;
@@ -988,28 +1012,37 @@ const make =
                 Aggregate.ClientImpl
               >;
               const current = yield* client.state(s.ref);
-              yield* Effect.try({ try: () => s.assert(current), catch: (e) => fail(String(e)) });
+              if (typeof s.expected === "function") {
+                const assert = s.expected as (state: unknown) => void;
+                yield* Effect.try({ try: () => assert(current), catch: (e) => fail(String(e)) });
+              } else if (!partial(s.expected, current)) {
+                const label = refName(s.ref);
+                return yield* fail(
+                  `${label}\n  expected ${show(s.expected)}\n  actual   ${show(current)}`,
+                  { label, expected: summarize(s.expected), actual: summarize(current) },
+                );
+              }
               break;
             }
             case "View": {
               const host = yield* s.view as unknown as Context.Key<
                 never,
-                View.Host<unknown, Aggregate.Any, unknown>
+                View.Host<unknown, Key.Any, unknown>
               >;
               const current = yield* host.query(s.key).pipe(Effect.orDie);
               if (s.expected === none) {
                 if (Option.isSome(current))
                   return yield* fail(
-                    `expected ${s.view.viewName}(${s.key.id}) to not exist, got ${show(current.value)}`,
+                    `expected ${s.view.viewName}(${Aggregate.targetId(s.key)}) to not exist, got ${show(current.value)}`,
                     {
-                      label: `${s.view.viewName}(${s.key.id})`,
+                      label: `${s.view.viewName}(${Aggregate.targetId(s.key)})`,
                       expected: "none",
                       actual: summarize(current.value),
                     },
                   );
                 break;
               }
-              const viewLabel = `${s.view.viewName}(${s.key.id})`;
+              const viewLabel = `${s.view.viewName}(${Aggregate.targetId(s.key)})`;
               if (Option.isNone(current))
                 return yield* fail(`${viewLabel} does not exist`, {
                   label: viewLabel,
@@ -1037,7 +1070,7 @@ const make =
             case "Emitted": {
               const host = yield* s.view as unknown as Context.Key<
                 never,
-                View.Host<unknown, Aggregate.Any, unknown>
+                View.Host<unknown, Key.Any, unknown>
               >;
               const { entries } = yield* host.list(s.key);
               if (typeof s.expected === "function") {
@@ -1051,15 +1084,16 @@ const make =
                   expected.every((e, i) => partial(e, events[i]));
                 if (!ok)
                   return yield* fail(
-                    `${s.view.viewName}(${s.key.id})\n  expected ${show(expected)}\n  actual   ${show(events)}`,
+                    `${s.view.viewName}(${Aggregate.targetId(s.key)})\n  expected ${show(expected)}\n  actual   ${show(events)}`,
                   );
               }
               break;
             }
             case "Streamed": {
               const store = internals.streams.get(s.stream.streamName)!;
-              const id = `${s.stream.streamName}/${s.key.id}`;
-              const entries = yield* store.list(s.key.id as string);
+              const key = Aggregate.targetId(s.key);
+              const id = `${s.stream.streamName}/${key}`;
+              const entries = yield* store.list(key);
               const from = cursors.get(id) ?? 0;
               const actual = entries.slice(from).map((e) => e.event);
               const expected = s.events.map(encodeInstance);
@@ -1342,6 +1376,7 @@ const make =
  * Story.call(FraudCheck.score, { accountId: account.id, amount: 60_000 }),
  * Story.succeed(FraudCheck.score, { risk: 0.95 }),
  * Story.clock("2026-01-02T09:00:00Z"),
+ * Story.advance("1 day"),
  * ```
  *
  * **Example:** Name calls when several are waiting
@@ -1403,6 +1438,7 @@ export const Story = {
   failed,
   died,
   clock,
+  advance,
   provide,
   signal,
   saga,

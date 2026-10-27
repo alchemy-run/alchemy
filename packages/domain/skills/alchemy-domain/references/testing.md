@@ -53,6 +53,7 @@ The steps:
 - `view(View, ref, partial | fn | Story.none)` asserts view state. `emitted(View, ref, [...])` asserts a view's emitted events, and `streamed(Stream, ref, ...)` a stream's entries.
 - `provide(Service, value)` stands in for middleware on the commands that follow.
 - `clock("2026-01-02T09:00:00Z")` moves time: commands are stamped with it, and scheduled commands and saga sleeps that are now due fire. It also takes epoch milliseconds or a `DateTime`. It only moves forward: a time before the current one fails the story, unless only `provide` steps ran before it.
+- `advance("1 day")` moves the clock forward by a duration (any `Duration.Input`) instead of to a time.
 
 The steps type-check against the last `when`: `rejected` takes only a rejection its command declares in `rejects`, and `replied` only its reply type. A `when` type-checks only after a `provide` for every service its command's middleware provides. A helper typed as plain `Step` turns these checks off until the next `when`, so let helpers infer their return type.
 
@@ -74,7 +75,7 @@ Story.succeed("a-1", FraudCheck.score, { risk: 0.95 }),
 
 Every call needs a `call` step before it's answered; each one matches a single call, earliest first. An untagged `succeed` with several calls waiting fails the story, and so does a call left unanswered at the end.
 
-`fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `succeed` does, untagged or by tag, and only a declared error type-checks:
+`fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `succeed` does, untagged or by tag, and only a declared error type-checks (any one of them, when the operation lists several):
 
 ```ts
 Story.call(Payments.refund, { settlementId: "st_1" }),
@@ -133,7 +134,7 @@ const BankInMemory = Bank.layer(BankHandlers).pipe(Layer.provide(Layer.mergeAll(
 const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(Layer.provideMerge(BankInMemory));
 
 const asCustomer = (id: string) =>
-  CustomerApi.testClient.pipe(Effect.provide(sessionClient(`customer:${id}`)));
+  CustomerApi.clientInProcess.pipe(Effect.provide(sessionClient(`customer:${id}`)));
 
 it.live("only the owner may withdraw", () =>
   Effect.gen(function* () {
@@ -147,7 +148,7 @@ it.live("only the owner may withdraw", () =>
 );
 ```
 
-`testClient` talks to the in-memory host directly. Use `Domain.protocolHttp` with a local HTTP server to cover the wire too.
+`clientInProcess` talks to the in-memory host directly. Use `Domain.protocolHttp` with a local HTTP server to cover the wire too.
 
 ## Integration: the deployed stack
 

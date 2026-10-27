@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import { makeObjectMedia } from "@alchemy.run/gcp/Storage/ObjectMedia";
 import { expect } from "@alchemy.run/test";
@@ -14,15 +13,7 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
-
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "Eventarc routes Storage finalize events to an effect-native Function",
   (stack) =>
     Effect.gen(function* () {
