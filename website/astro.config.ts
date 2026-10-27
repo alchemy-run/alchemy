@@ -1015,6 +1015,7 @@ export default defineConfig({
               items: [
                 { label: "IAM & bindings", link: "/gcp/security/iam" },
                 { label: "Secret Manager & KMS", link: "/gcp/security/secrets-kms" },
+                { label: "Federated identity", link: "/gcp/security/federated-identity" },
               ],
             },
             {
