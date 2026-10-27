@@ -39,6 +39,13 @@ export type ContainerClient<Shape> = Omit<Shape, "fetch" | "run"> & {
     HttpClientError.HttpClientError | BoundContainerUnavailable,
     RuntimeContext
   >;
+  /**
+   * An `HttpClient` whose relative requests go to the container, for an
+   * Effect RPC or HttpApi client.
+   */
+  httpClient: HttpClient.HttpClient.With<
+    HttpClientError.HttpClientError | BoundContainerUnavailable
+  >;
 };
 
 /** A port of a container bound with {@link bindPort}. */
@@ -203,20 +210,21 @@ export const bindContainer = <Shape = {}, Req = never>(
   Effect.gen(function* () {
     const http = yield* HttpClient.HttpClient;
     const bound = yield* bindSidecar(target);
-    const send = (request: HttpClientRequest.HttpClientRequest) =>
-      Effect.gen(function* () {
-        const port = yield* bound.port;
-        return yield* http.execute(
+    const httpClient = HttpClient.mapRequestEffect(http, (request) =>
+      bound.port.pipe(
+        Effect.map((port) =>
           HttpClientRequest.setUrl(request, withBase(`http://localhost:${port}`, request.url)),
-        );
-      });
+        ),
+      ),
+    );
+    const send = (request: HttpClientRequest.HttpClientRequest) => httpClient.execute(request);
     return makeFetchRpcStub<ContainerClient<Shape>>({
       // Relative RPC paths, resolved against the container's localhost port.
       baseUrl: "",
       fetch: send as (
         request: HttpClientRequest.HttpClientRequest,
       ) => Effect.Effect<HttpClientResponse.HttpClientResponse, unknown>,
-      base: { fetch: send },
+      base: { fetch: send, httpClient },
     });
   });
 
