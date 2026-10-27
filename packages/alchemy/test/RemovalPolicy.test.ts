@@ -28,6 +28,18 @@ describe("RemovalPolicy", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  it.effect("retain() and destroy() keep errors from a wrapped Config", () =>
+    Effect.gen(function* () {
+      const config = Config.String("MISSING");
+      const expected = yield* config.pipe(Effect.flip, withEnv({}));
+
+      for (const policy of [RemovalPolicy.retain, RemovalPolicy.destroy]) {
+        const error = yield* config.pipe(policy(), Effect.flip, withEnv({}));
+        expect(error).toEqual(expected);
+      }
+    }),
+  );
+
   it.effect("enabled may be a fallible Effect such as a Config", () =>
     Effect.gen(function* () {
       const policy = yield* failWithPolicy.pipe(
