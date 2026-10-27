@@ -44,7 +44,7 @@ test.provider(
           Effect.gen(function* () {
             const fn = yield* TestFunction;
             yield* fn.bind`ReadinessMarker`({
-              env: { READINESS_MARKER: marker },
+              env: { READINESS_MARKER: marker, CONFIG_FLAG: "true", CONFIG_PORT: "3000" },
             });
             return fn;
           }).pipe(Effect.provide(TestFunctionLive)),
@@ -52,6 +52,8 @@ test.provider(
 
       const { functionName, functionUrl, roleName } = yield* deploy("created");
       yield* assertFunctionReady(functionName, "created");
+      // `Config.Boolean`/`Config.Number` decode JSON-looking env strings at runtime.
+      expect(yield* invokeHttpFunction(functionName, "/config")).toBe("true 3000");
 
       const updated = yield* deploy("updated");
       expect(updated.functionName).toBe(functionName);

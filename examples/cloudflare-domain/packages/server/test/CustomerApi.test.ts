@@ -28,9 +28,9 @@ const BankInMemory = Bank.layer(BankHandlers).pipe(
 const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(Layer.provideMerge(BankInMemory));
 
 const asCustomer = (id: string) =>
-  CustomerApi.testClient.pipe(Effect.provide(sessionClient(`customer:${id}`)));
+  CustomerApi.clientInProcess.pipe(Effect.provide(sessionClient(`customer:${id}`)));
 const asAgent = (id: string) =>
-  SupportApi.testClient.pipe(Effect.provide(sessionClient(`agent:${id}`)));
+  SupportApi.clientInProcess.pipe(Effect.provide(sessionClient(`agent:${id}`)));
 
 /** Each test gets a fresh bank. */
 const inBank = <A, E>(effect: Effect.Effect<A, E, Scope.Scope | Layer.Success<typeof World>>) =>
@@ -49,6 +49,7 @@ it.live("register, then the live dashboard shows the main account", () =>
         version: 2,
       });
       const dashboard = yield* sam.CustomerDashboard.watch(CustomerId.make("c-1")).pipe(
+        Stream.map(({ state }) => state),
         Stream.filter((d) => d !== null && CustomerDashboard.computed.totalBalance(d) === 250),
         Stream.runHead,
       );
@@ -111,7 +112,11 @@ it.live("a customer watches their account's own events; others are rejected", ()
       const accountId = yield* register(sam, "c-1", "sam");
       yield* sam.DepositMoney({ target: accountId, amount: 70 });
 
-      const events = yield* sam.Account.events(accountId).pipe(Stream.take(2), Stream.runCollect);
+      const events = yield* sam.Account.events(accountId).pipe(
+        Stream.filter(Domain.Read.isEvent),
+        Stream.take(2),
+        Stream.runCollect,
+      );
       expect(events.map((e) => e.event._tag)).toEqual(["AccountOpened", "MoneyDeposited"]);
       expect((yield* sam.Account.get(accountId))._tag).toBe("Open");
       expect((yield* alex.Account.get(accountId).pipe(Effect.flip))._tag).toBe("NotOwner");
@@ -138,7 +143,9 @@ it.live("a customer can only register themselves", () =>
 it.live("a request without a session is unauthorized", () =>
   inBank(
     Effect.gen(function* () {
-      const anonymous = yield* CustomerApi.testClient.pipe(Effect.provide(sessionClient("nobody")));
+      const anonymous = yield* CustomerApi.clientInProcess.pipe(
+        Effect.provide(sessionClient("nobody")),
+      );
       const error = yield* anonymous
         .RegisterCustomer({
           target: CustomerId.make("c-1"),
@@ -196,7 +203,7 @@ it.live("a watch ends with NotOwner when support reassigns the account", () =>
       yield* support.ChangeOwner({ target: accountId, customerId: CustomerId.make("c-2") });
 
       const [first, second] = yield* Fiber.join(updates);
-      expect(first).toMatchObject({ _tag: "Success", success: { balance: 0 } });
+      expect(first).toMatchObject({ _tag: "Success", success: { state: { balance: 0 } } });
       expect(second).toMatchObject({ _tag: "Failure", failure: { _tag: "NotOwner" } });
     }),
   ),

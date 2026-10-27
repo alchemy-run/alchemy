@@ -68,6 +68,24 @@ class Received extends Domain.View("Received", {
   state: Schema.Struct({ total: Schema.Number }),
   evolve: { Sent: (s, e) => ({ total: (s?.total ?? 0) + e.amount }) },
 }) {}
+// Keyed by a branch id rather than an aggregate: a wallet's events name no branch.
+const BranchId = Schema.String.pipe(Schema.brand("BranchId"));
+class BranchTotals extends Domain.View("BranchTotals", {
+  from: [Wallet],
+  key: BranchId,
+  state: Schema.Struct({ total: Schema.Number }),
+  initial: { total: 0 },
+  evolve: { Deposited: (s, e) => ({ total: s.total + e.amount }) },
+}) {}
+// Keyed by branch id, so it cannot write a stream keyed by wallet.
+class BranchCard extends Domain.Stream("BranchCard", { key: Wallet, entries: [Card] }) {}
+class BranchCards extends Domain.Projection("BranchCards", {
+  from: [Wallet],
+  key: BranchId,
+  keyOf: { Deposited: () => BranchId.make("main") },
+  on: [Deposited],
+  writes: [BranchCard],
+}) {}
 class AlsoCards extends Domain.Projection("AlsoCards", {
   from: [Wallet],
   key: Wallet,
@@ -76,9 +94,9 @@ class AlsoCards extends Domain.Projection("AlsoCards", {
 }) {}
 class Broken extends Domain.Model("Broken", {
   aggregates: [Wallet, Payment],
-  views: [Received],
-  projections: [WalletCards, AlsoCards],
-  streams: [WalletCard],
+  views: [Received, BranchTotals],
+  projections: [WalletCards, AlsoCards, BranchCards],
+  streams: [WalletCard, BranchCard],
 }) {}
 
 // Notify listens for an event its source never emits, and Audit reads a view
@@ -98,6 +116,18 @@ class AlsoBroken extends Domain.Model("AlsoBroken", {
   policies: [Notify, Audit],
 }) {}
 
+const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
+const CustomerId = Schema.String.pipe(Schema.brand("CustomerId"));
+class Opened extends Domain.Event("Opened") {}
+class OpenAccount extends Domain.Command("OpenAccount", { target: AccountId, events: [Opened] }) {}
+// Addresses a customer, so it does not belong on Account.
+class OpenForCustomer extends Domain.Command("OpenForCustomer", {
+  target: CustomerId,
+  events: [Opened],
+}) {}
+// A plain string target accepts ids that are not an AccountId.
+class OpenAny extends Domain.Command("OpenAny", { target: Schema.String, events: [Opened] }) {}
+
 describe("Domain verify", () => {
   it("finds no problem in a correct model", () => {
     expect(Domain.verify(Bank)).toEqual([]);
@@ -107,7 +137,9 @@ describe("Domain verify", () => {
     expect(Domain.verify(Broken).map((problem) => problem.message)).toEqual([
       "Received declares state without initial",
       "Received consumes 'Sent' from Payment, which is not keyed by Wallet: add keyOf.Sent",
+      "BranchTotals consumes 'Deposited' from Wallet, which is not keyed by its key schema: add keyOf.Deposited",
       "WalletCard has two writers, WalletCards and AlsoCards: a stream key has exactly one",
+      "Projection BranchCards is keyed by a key schema, so it cannot write BranchCard, keyed by Wallet",
     ]);
   });
 
@@ -127,6 +159,7 @@ describe("Domain verify", () => {
           Layer.mergeAll(
             WalletCards.toLayer(Effect.succeed(() => Effect.void)),
             AlsoCards.toLayer(Effect.succeed(() => Effect.void)),
+            BranchCards.toLayer(Effect.succeed(() => Effect.void)),
           ),
         ),
       ).pipe(Effect.scoped, Effect.provide(InMemory)) as Effect.Effect<unknown>,
@@ -134,6 +167,49 @@ describe("Domain verify", () => {
     expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
       _tag: "DefinitionError",
       message: first!.message,
+    });
+  });
+
+  describe("command target", () => {
+    it("a command addresses its aggregate's id", () => {
+      class Account extends Domain.Aggregate("Account", {
+        id: AccountId,
+        state: Schema.Struct({}),
+        initial: {},
+        commands: [OpenAccount],
+        decide: { OpenAccount: () => [new Opened()] },
+        evolve: { Opened: (s) => s },
+      }) {}
+      expect(Account.ref("a-1").id).toBe("a-1");
+    });
+
+    it("a command whose target is another id schema is a type error", () => {
+      class Account extends Domain.Aggregate("Account", {
+        id: AccountId,
+        state: Schema.Struct({}),
+        initial: {},
+        commands: [
+          OpenAccount,
+          // @ts-expect-error OpenForCustomer's target must be this aggregate's id schema
+          OpenForCustomer,
+        ],
+        decide: { OpenAccount: () => [new Opened()], OpenForCustomer: () => [new Opened()] },
+        evolve: { Opened: (s) => s },
+      }) {}
+      expect(Account.aggregateName).toBe("Account");
+    });
+
+    it("a command whose target is wider than the id is a type error", () => {
+      class Account extends Domain.Aggregate("Account", {
+        id: AccountId,
+        state: Schema.Struct({}),
+        initial: {},
+        // @ts-expect-error OpenAny's target must be this aggregate's id schema
+        commands: [OpenAny],
+        decide: { OpenAny: () => [new Opened()] },
+        evolve: { Opened: (s) => s },
+      }) {}
+      expect(Account.aggregateName).toBe("Account");
     });
   });
 });

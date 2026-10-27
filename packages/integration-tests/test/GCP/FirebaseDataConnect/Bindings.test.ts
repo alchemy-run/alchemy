@@ -6,7 +6,7 @@ import * as firebasedataconnect from "@distilled.cloud/gcp/firebasedataconnect_v
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { callProbe, dockerAvailable, type ProbeOutcome } from "../bindingHost.ts";
+import { callProbe, type ProbeOutcome } from "../bindingHost.ts";
 import DataConnectBindingsHost, { App, Queries } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -63,7 +63,7 @@ const expectAuthorized = (outcome: ProbeOutcome<unknown>) => {
   return outcome.error._tag;
 };
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "FirebaseDataConnect Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:firebasedataconnect", "provider:gcp:run", "live"],

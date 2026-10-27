@@ -5,7 +5,7 @@ import type * as recommendationengine from "@distilled.cloud/gcp/recommendatione
 import * as Test from "alchemy/Test/Alchemy";
 import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import { currentProject, entitled } from "./common.ts";
 import RecommendationEngineBindingsHost, { Shirt, TITLE } from "./fixtures/bindings-host.ts";
 
@@ -19,7 +19,7 @@ let itemId: string;
 
 // Recommendations AI (Beta) is not enabled in the testing project; see
 // common.ts (GCP_TEST_RECOMMENDATION_ENGINE=1).
-describe.skipIf(!dockerAvailable || !entitled || !!process.env.FAST)(
+describe.skipIf(!entitled || !!process.env.FAST)(
   "RecommendationEngine Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:recommendationengine", "provider:gcp:run", "live"],

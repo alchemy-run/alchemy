@@ -14,7 +14,8 @@ export const pkgs = `alchemy@latest @alchemy.run/gcp@latest effect @effect/platf
 ## What you need
 
 - **A GCP project** and its id.
-- **A service-account key** with enough IAM to create what you deploy.
+- **Credentials** with enough IAM to create what you deploy: your own
+  Google account through `gcloud`, or a service-account key.
   A working starting point is Cloud Run Admin, Storage Admin, Pub/Sub
   Admin, Service Account Admin (Alchemy creates an `alch-*` service
   account for each runtime), and Project IAM Admin (it grants roles to that
@@ -37,9 +38,23 @@ gcloud services enable run.googleapis.com artifactregistry.googleapis.com \
 
 ## Credentials
 
-Run `alchemy profile edit --add GCP`, choose **Service account JSON**,
-and point at the key file. Alchemy stores it under
-`~/.alchemy/credentials/<profile>/`.
+Run `alchemy profile edit --add GCP` and choose **gcloud login**. Alchemy
+runs `gcloud auth application-default login`, opens Google's sign-in page,
+and asks which project to deploy into. It refreshes the access token from
+that login on every run, so nothing is copied into the profile.
+
+```sh
+alchemy profile edit --add GCP
+# when the login expires or is revoked:
+alchemy profile refresh --provider GCP
+```
+
+This needs the [Google Cloud CLI](https://cloud.google.com/sdk/docs/install).
+Creating projects without an organization or folder also needs it: Google
+only lets user accounts do that.
+
+To deploy as a service account instead, choose **Service account JSON**
+and point at the key file. Alchemy stores the path in the profile.
 
 In CI (`CI=true`), Alchemy skips profiles and reads the environment:
 
