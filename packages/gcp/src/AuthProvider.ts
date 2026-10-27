@@ -1,7 +1,9 @@
+import * as NodeOs from "node:os";
 import {
   AuthError,
   AuthProviderLayer,
   NeedsReauth,
+  reconfigureHint,
   refreshHint,
   type ConfigureField,
   type ConfigureMethod,
@@ -10,19 +12,31 @@ import {
 import { CredentialsStore, displayRedacted } from "alchemy/Auth/Credentials";
 import { getEnv, getEnvRedacted, mapPromptCancellation } from "alchemy/Auth/Env";
 import * as Interaction from "alchemy/Interaction";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Match from "effect/Match";
+import * as Path from "effect/Path";
+import { ChildProcess } from "effect/process";
 import * as Redacted from "effect/Redacted";
 import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
-import { mintAccessToken, parseServiceAccountKey, type ServiceAccountKey } from "./Token.ts";
+import * as Stream from "effect/Stream";
+import {
+  mintAccessToken,
+  parseServiceAccountKey,
+  refreshUserAccessToken,
+  type ServiceAccountKey,
+} from "./Token.ts";
 
 export const GCP_AUTH_PROVIDER_NAME = "GCP";
 export const GOOGLE_ACCESS_TOKEN_ENV = "GOOGLE_ACCESS_TOKEN";
 export const GOOGLE_PROJECT_ID_ENV = "GOOGLE_PROJECT_ID";
 export const GOOGLE_CLOUD_PROJECT_ENV = "GOOGLE_CLOUD_PROJECT";
 export const GOOGLE_APPLICATION_CREDENTIALS_ENV = "GOOGLE_APPLICATION_CREDENTIALS";
+/** Overrides gcloud's configuration directory (default `~/.config/gcloud`). */
+export const CLOUDSDK_CONFIG_ENV = "CLOUDSDK_CONFIG";
 /** Region when neither the environment nor the profile names one. */
 export const DEFAULT_GCP_REGION = "us-central1";
 
@@ -33,6 +47,12 @@ export const DEFAULT_GCP_REGION = "us-central1";
 const region = Schema.optionalKey(Schema.String);
 
 export const GcpAuthConfigSchema = Schema.Union([
+  Schema.Struct({
+    method: Schema.Literal("gcloud"),
+    /** Project to deploy into; defaults to the credential's quota project. */
+    project: Schema.optionalKey(Schema.String),
+    region,
+  }),
   Schema.Struct({ method: Schema.Literal("env"), region }),
   Schema.Struct({
     method: Schema.Literal("serviceAccount"),
@@ -63,6 +83,8 @@ export type GcpResolvedCredentials = {
   project: string;
   /** Default region: env override, else the profile, else `us-central1`. */
   region: string;
+  /** Epoch millis when a minted service-account token expires; absent for supplied tokens. */
+  expiresAt?: number;
   source: { type: GcpAuthConfig["method"] | "env"; details?: string };
 };
 
@@ -71,6 +93,11 @@ const options: Array<{
   label: string;
   description?: string;
 }> = [
+  {
+    value: "gcloud",
+    label: "gcloud login",
+    description: "your Google account, via gcloud auth application-default login",
+  },
   {
     value: "env",
     label: "Environment Variables",
@@ -88,17 +115,12 @@ const options: Array<{
   },
 ];
 
-const REFRESH_WINDOW_MS = 5 * 60 * 1000;
-
 export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>()(
   GCP_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
     const store = yield* CredentialsStore;
     const fs = yield* FileSystem.FileSystem;
-    const tokenCache = yield* Ref.make<
-      { accessToken: string; expirationMs: number; project: string } | undefined
-    >(undefined);
-
+    const path = yield* Path.Path;
     const readKeyFile = (path: string): Effect.Effect<ServiceAccountKey, AuthError> =>
       fs.readFileString(path).pipe(
         Effect.flatMap(parseServiceAccountKey),
@@ -110,40 +132,24 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
         ),
       );
 
-    const mintCached = (
+    // Minted tokens are cached by the `Credentials` layer until shortly
+    // before `expiresAt` (see `lazyCredentials`), not here.
+    const mint = (
       sa: ServiceAccountKey,
       project: string,
     ): Effect.Effect<Omit<GcpResolvedCredentials, "region">, AuthError> =>
-      Effect.gen(function* () {
-        const now = yield* Effect.sync(() => Date.now());
-        const cached = yield* Ref.get(tokenCache);
-        if (cached && cached.project === project && cached.expirationMs - now > REFRESH_WINDOW_MS) {
-          return {
-            type: "token" as const,
-            accessToken: Redacted.make(cached.accessToken),
-            project,
-            source: {
-              type: "serviceAccount" as const,
-              details: sa.client_email,
-            },
-          };
-        }
-        const minted = yield* mintAccessToken(sa);
-        yield* Ref.set(tokenCache, {
-          accessToken: Redacted.value(minted.accessToken),
-          expirationMs: minted.expirationMs,
-          project,
-        });
-        return {
+      mintAccessToken(sa).pipe(
+        Effect.map((minted) => ({
           type: "token" as const,
           accessToken: minted.accessToken,
           project,
+          expiresAt: minted.expirationMs,
           source: {
             type: "serviceAccount" as const,
             details: sa.client_email,
           },
-        };
-      });
+        })),
+      );
 
     const resolveFromServiceAccount = (
       sa: ServiceAccountKey,
@@ -157,8 +163,87 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
           }),
         );
       }
-      return mintCached(sa, project);
+      return mint(sa, project);
     };
+
+    const adcPath = Effect.gen(function* () {
+      const configDir = yield* getEnv(CLOUDSDK_CONFIG_ENV);
+      if (configDir) return path.join(configDir, ADC_FILE);
+      const platform = yield* Effect.sync(() => process.platform);
+      const appData = platform === "win32" ? yield* getEnv("APPDATA") : undefined;
+      if (appData) return path.join(appData, "gcloud", ADC_FILE);
+      const home = yield* Effect.sync(() => NodeOs.homedir());
+      return path.join(home, ".config", "gcloud", ADC_FILE);
+    });
+
+    /** The credential `gcloud auth application-default login` wrote, if any. */
+    const readAdc = Effect.gen(function* () {
+      const file = yield* adcPath;
+      const exists = yield* fs.exists(file).pipe(Effect.orElseSucceed(() => false));
+      if (!exists) return undefined;
+      const raw = yield* fs
+        .readFileString(file)
+        .pipe(
+          Effect.mapError((cause) =>
+            AuthError.make({ message: `Failed to read gcloud credentials at ${file}`, cause }),
+          ),
+        );
+      const adc = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(AdcFile))(raw).pipe(
+        Effect.mapError((cause) =>
+          AuthError.make({
+            message: `Unsupported gcloud credentials at ${file}: expected a user login (authorized_user) or a service-account key.`,
+            cause,
+          }),
+        ),
+      );
+      return { file, raw, adc };
+    });
+
+    const resolveFromGcloud = (
+      profileName: string,
+      config: Extract<GcpAuthConfig, { method: "gcloud" }>,
+    ): Effect.Effect<Omit<GcpResolvedCredentials, "region">, AuthError | NeedsReauth> =>
+      Effect.gen(function* () {
+        const reauth = refreshHint(GCP_AUTH_PROVIDER_NAME, profileName);
+        const found = yield* readAdc;
+        if (found === undefined) {
+          return yield* NeedsReauth.make({
+            provider: GCP_AUTH_PROVIDER_NAME,
+            profile: profileName,
+            message: `GCP: no gcloud application-default login found. ${reauth}`,
+          });
+        }
+        const { file, raw, adc } = found;
+        if (adc.type === "service_account") {
+          const sa = yield* parseServiceAccountKey(raw);
+          return yield* resolveFromServiceAccount(sa, config.project);
+        }
+        const project = config.project ?? adc.quota_project_id;
+        if (!project) {
+          return yield* AuthError.make({
+            message: `GCP: the gcloud login has no quota project. Set the profile's project. ${reconfigureHint(GCP_AUTH_PROVIDER_NAME, profileName)}`,
+          });
+        }
+        const minted = yield* refreshUserAccessToken(adc).pipe(
+          Effect.catchTag("GCP::InvalidGrant", (cause) =>
+            Effect.fail(
+              NeedsReauth.make({
+                provider: GCP_AUTH_PROVIDER_NAME,
+                profile: profileName,
+                message: `GCP gcloud credentials need to be refreshed. ${reauth}`,
+                cause,
+              }),
+            ),
+          ),
+        );
+        return {
+          type: "token" as const,
+          accessToken: minted.accessToken,
+          project,
+          expiresAt: minted.expirationMs,
+          source: { type: "gcloud" as const, details: file },
+        };
+      });
 
     const loginStored = Effect.fn(function* (profileName: string) {
       const kind = yield* Interaction.select({
@@ -208,6 +293,23 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
       return { method: "stored" as const };
     });
 
+    /** Sign in with gcloud, then ask which project to deploy into. */
+    const configureGcloud = Effect.gen(function* () {
+      yield* loginGcloud;
+      const quotaProject = yield* readAdc.pipe(
+        Effect.map((found) =>
+          found?.adc.type === "authorized_user" ? found.adc.quota_project_id : undefined,
+        ),
+      );
+      const project = yield* Interaction.text({
+        message: "GCP project id",
+        ...(quotaProject ? { placeholder: quotaProject, defaultValue: quotaProject } : {}),
+        validate: (v) => (v.length === 0 && !quotaProject ? "Required" : undefined),
+      }).pipe(mapPromptCancellation);
+      const trimmed = (project ?? "").trim() || quotaProject;
+      return { method: "gcloud" as const, ...(trimmed ? { project: trimmed } : {}) };
+    });
+
     const configureInteractive = (profileName: string) =>
       Interaction.select({
         message: "GCP authentication method",
@@ -216,6 +318,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
         mapPromptCancellation,
         Effect.flatMap((method) =>
           Match.value(method).pipe(
+            Match.when("gcloud", () => configureGcloud),
             Match.when("env", () => Effect.succeed({ method: "env" as const })),
             Match.when("serviceAccount", () =>
               Interaction.text({
@@ -275,7 +378,13 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
       regionField,
     ];
 
+    const gcloudFields: ReadonlyArray<ConfigureField> = [
+      { name: "project", label: "GCP project id", optional: true },
+      regionField,
+    ];
+
     const configureMethods: ReadonlyArray<ConfigureMethod> = [
+      { method: "gcloud", fields: gcloudFields },
       { method: "env", fields: [regionField] },
       { method: "serviceAccount", fields: serviceAccountFields },
     ];
@@ -292,6 +401,16 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
         readonly values: Record<string, string>;
       },
     ): Effect.Effect<GcpAuthConfig, AuthError> => {
+      if (input.method === "gcloud") {
+        // `gcloud auth application-default login` is interactive, so it is
+        // NOT run here; the user runs `alchemy profile refresh` afterwards.
+        const project = (input.values.project ?? "").trim();
+        return Effect.succeed({
+          method: "gcloud" as const,
+          ...(project.length > 0 ? { project } : {}),
+          ...regionOf(input.values),
+        });
+      }
       if (input.method === "env") {
         return Effect.succeed({
           method: "env" as const,
@@ -308,7 +427,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
       }
       return Effect.fail(
         AuthError.make({
-          message: `GCP: unknown method '${input.method}'. Valid methods: env, serviceAccount. (stored is interactive-only.)`,
+          message: `GCP: unknown method '${input.method}'. Valid methods: gcloud, env, serviceAccount. (stored is interactive-only.)`,
         }),
       );
     };
@@ -391,6 +510,8 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
       config: GcpAuthConfig,
     ): Effect.Effect<Omit<GcpResolvedCredentials, "region">, AuthError | NeedsReauth> => {
       switch (config.method) {
+        case "gcloud":
+          return resolveFromGcloud(profileName, config);
         case "env":
           return resolveFromEnv();
         case "serviceAccount":
@@ -414,6 +535,12 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
 
     const logout = (profileName: string, config: GcpAuthConfig) =>
       Match.value(config).pipe(
+        // The login belongs to gcloud and other tools share it.
+        Match.when({ method: "gcloud" }, () =>
+          Interaction.info(
+            "GCP: run `gcloud auth application-default revoke` to sign out of gcloud.",
+          ),
+        ),
         Match.when({ method: "env" }, () => Effect.void),
         Match.when({ method: "serviceAccount" }, () => Effect.void),
         Match.when({ method: "stored" }, () =>
@@ -426,6 +553,9 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
 
     const login = (profileName: string, config: GcpAuthConfig) =>
       Match.value(config).pipe(
+        Match.when({ method: "gcloud" }, (cfg) =>
+          loginGcloud.pipe(Effect.andThen(resolveFromGcloud(profileName, cfg)), Effect.as(cfg)),
+        ),
         Match.when({ method: "env" }, () => resolveFromEnv().pipe(Effect.as(config))),
         Match.when({ method: "serviceAccount" }, (cfg) =>
           resolveFromServiceAccountFile(cfg.credentialsFile).pipe(Effect.as(cfg)),
@@ -444,7 +574,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
             ),
         ),
         Match.exhaustive,
-        Effect.mapError((e) => AuthError.make({ message: "login failed", cause: e })),
+        Effect.mapError((e) => AuthError.make({ message: `login failed: ${e.message}`, cause: e })),
       );
 
     const details = (
@@ -504,5 +634,102 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
         },
       ],
     };
+  }),
+);
+
+const ADC_FILE = "application_default_credentials.json";
+
+/** The credential types `gcloud auth application-default login` writes. */
+const AdcFile = Schema.Union([
+  Schema.Struct({
+    type: Schema.Literal("authorized_user"),
+    client_id: Schema.String,
+    client_secret: Schema.String,
+    refresh_token: Schema.String,
+    quota_project_id: Schema.optionalKey(Schema.String),
+  }),
+  Schema.Struct({
+    type: Schema.Literal("service_account"),
+    client_email: Schema.String,
+    private_key: Schema.String,
+  }),
+]);
+
+/** The authorization URL in gcloud's login prompt. */
+export const parseGcloudLoginOutput = (output: string): string | undefined =>
+  output.match(/https:\/\/accounts\.google\.com\/[^\s]+/)?.[0];
+
+/**
+ * `gcloud auth application-default login` waits on a localhost callback and
+ * prints its authorization URL on stderr. `BROWSER=true` stops it opening a
+ * tab of its own, so the URL goes through the same authorization screen as
+ * the AWS logins.
+ */
+const loginGcloud = Effect.scoped(
+  Effect.gen(function* () {
+    const interaction = yield* Interaction.Interaction;
+    const authorizationUrl = yield* Deferred.make<string>();
+    const stderr = yield* Ref.make("");
+    const handle = yield* ChildProcess.make("gcloud", ["auth", "application-default", "login"], {
+      shell: false,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      env: { BROWSER: "true" },
+      extendEnv: true,
+    }).pipe(
+      Effect.mapError((cause) =>
+        AuthError.make({
+          message:
+            "Failed to run gcloud. Install the Google Cloud CLI: https://cloud.google.com/sdk/docs/install",
+          cause,
+        }),
+      ),
+    );
+    const collectStderr = handle.stderr.pipe(
+      Stream.decodeText(),
+      Stream.runForEach((chunk) =>
+        Effect.gen(function* () {
+          const combined = yield* Ref.updateAndGet(stderr, (current) => current + chunk);
+          const url = parseGcloudLoginOutput(combined);
+          if (url !== undefined) {
+            yield* Deferred.succeed(authorizationUrl, url);
+          }
+        }),
+      ),
+    );
+    const process = Effect.gen(function* () {
+      const [exitCode] = yield* Effect.all(
+        [handle.exitCode, Stream.runDrain(handle.stdout), collectStderr],
+        { concurrency: 3 },
+      );
+      if (exitCode !== 0) {
+        const detail = (yield* Ref.get(stderr)).trim();
+        return yield* AuthError.make({
+          message: `gcloud auth application-default login exited with code ${exitCode}${detail === "" ? "" : `: ${detail}`}`,
+        });
+      }
+    });
+    const processFiber = yield* Effect.forkScoped(process);
+    const url = yield* Deferred.await(authorizationUrl).pipe(
+      Effect.raceFirst(
+        Fiber.join(processFiber).pipe(
+          Effect.flatMap(() =>
+            Effect.fail(
+              AuthError.make({
+                message: "gcloud login completed without providing an authorization URL.",
+              }),
+            ),
+          ),
+        ),
+      ),
+    );
+    yield* Interaction.browserLogin({
+      provider: "GCP",
+      waitingLabel: "waiting for browser authorization…",
+      url,
+      waitFor: Fiber.join(processFiber),
+    });
+    yield* interaction.output.success("GCP: gcloud login complete");
   }),
 );

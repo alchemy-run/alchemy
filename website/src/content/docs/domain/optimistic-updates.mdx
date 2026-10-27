@@ -13,7 +13,7 @@ Every command can carry a `commandId` you choose. The events it causes carry the
 
 ```typescript
 // packages/web/src/Deposits.ts
-import type * as Domain from "@alchemy.run/domain";
+import * as Domain from "@alchemy.run/domain";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -79,8 +79,8 @@ export const Send = Command.define("Send", {
     Effect.gen(function* () {
       const bank = yield* CustomerApi.Client;
       yield* kind === "deposit"
-        ? bank.DepositMoney({ target: accountId, amount, commandId })
-        : bank.WithdrawMoney({ target: accountId, amount, commandId }, mfa);
+        ? bank.DepositMoney(accountId, { amount }, { commandId })
+        : bank.WithdrawMoney(accountId, { amount }, { commandId, ...mfa });
       return Message.Accepted({ commandId });
     }).pipe(
       Effect.catch((error) => Effect.succeed(Message.Rejected({ commandId, reason: error._tag }))),
@@ -154,6 +154,7 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
             return bank.Statement.events(accountId);
           }),
         ).pipe(
+          Stream.filter(Domain.Read.isEvent),
           Stream.map(({ event, envelope }) =>
             Message.GotLine({ commandId: envelope.commandId, line: event }),
           ),
@@ -205,6 +206,46 @@ Confirm from the stream rather than the command's reply: the event can arrive be
 ## Mark what the bank refused
 
 A typed rejection, like `InsufficientFunds`, marks the line `rejected` with its reason. The balance shown is the confirmed balance plus pending lines, so a rejected line simply stops counting. Nothing was committed early, so there's nothing to roll back.
+
+## Predict the outcome locally
+
+To show what the bank will do, run the aggregate's own rules in the browser. `Account.predict` gives the events and next state, or the rejection the bank would return. `AccountSummary.evolve` folds those events like the server's view:
+
+```typescript
+const outcome = Account.predict(account, new WithdrawMoney({ amount: 30 }), { id, now, context });
+switch (outcome._tag) {
+  case "Rejected": // InsufficientFunds: show it, send nothing
+    return showRefused(outcome.rejection);
+  case "Accepted": {
+    const summary = outcome.events.reduce(
+      (state, event, i) =>
+        AccountSummary.evolve(state, {
+          name: "Account",
+          event,
+          source: Account.ref(id),
+          envelope: outcome.envelopes[i],
+        }),
+      shown,
+    );
+    return showPending(summary);
+  }
+  case "Unpredictable": // only the bank can tell: wait for it
+    return showPending(shown);
+}
+```
+
+A prediction commits nothing: still confirm from the stream.
+
+## Give the client what middleware provides
+
+`WithdrawMoney` passes through `Session`, which gives `decide` the `CurrentActor`. On the server, `Session` reads it from the request. The browser already knows who is signed in, so it provides the same service from a client-side Layer:
+
+```typescript
+const ClientSession = Layer.succeed(CurrentActor, { _tag: "Customer", customerId });
+const context = yield* Layer.build(ClientSession);
+```
+
+`predict` requires `context` for every service a command's middleware provides, so a command is predictable once each one has a client-side Layer. Leaving one out is a type error.
 
 ## Test it
 

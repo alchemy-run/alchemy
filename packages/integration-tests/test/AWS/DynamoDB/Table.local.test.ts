@@ -8,13 +8,13 @@
  */
 import * as AWS from "@alchemy.run/aws";
 import { expect } from "@alchemy.run/test";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, rawAwsJson, regionOfArn } from "../Local/fixtures/raw.ts";
+import { rawAwsJson, regionOfArn } from "../Local/fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "dev table create/destroy against floci",
   (stack) =>
     Effect.gen(function* () {

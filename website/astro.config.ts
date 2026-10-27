@@ -445,6 +445,7 @@ export default defineConfig({
                   label: "Local development",
                   link: "/environments/local-development",
                 },
+                { label: "Worktrees", link: "/environments/worktrees" },
                 { label: "CI", link: "/environments/ci" },
               ],
             },
@@ -1604,6 +1605,7 @@ export default defineConfig({
               label: "Security",
               items: [
                 { label: "Sessions and middleware", link: "/domain/sessions" },
+                { label: "Sign in with better-auth", link: "/domain/better-auth" },
                 { label: "Views as security boundaries", link: "/domain/view-security" },
               ],
             },

@@ -1,15 +1,14 @@
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as artifactregistry from "@distilled.cloud/gcp/artifactregistry_v1";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as pubsub from "@distilled.cloud/gcp/pubsub_v1";
 import * as cloudrun from "@distilled.cloud/gcp/run_v2";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -24,14 +23,6 @@ import BoundService from "./fixtures/service.ts";
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
 
 const HELLO_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 
@@ -168,7 +159,7 @@ const fetchJson = <A>(url: string) =>
     return (yield* response.json) as A;
   });
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "effect-native Function grants resource-scoped IAM and revokes it when a binding is removed",
   (stack) =>
     Effect.gen(function* () {
@@ -260,7 +251,7 @@ test.provider.skipIf(!dockerAvailable)(
 );
 
 // Memorystore Redis provisioning takes 5-10 minutes.
-test.provider.skipIf(!dockerAvailable || !process.env.GCP_TEST_SLOW || !!process.env.FAST)(
+test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
   "effect-native Function with Memorystore Redis over Direct VPC",
   (stack) =>
     Effect.gen(function* () {

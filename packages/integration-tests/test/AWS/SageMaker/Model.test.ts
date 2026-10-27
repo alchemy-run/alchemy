@@ -3,8 +3,8 @@ import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Role } from "@alchemy.run/aws/IAM/Role";
 import { Model } from "@alchemy.run/aws/SageMaker";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as sagemaker from "@distilled.cloud/aws/sagemaker";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { sklearnImage } from "./images.ts";
 

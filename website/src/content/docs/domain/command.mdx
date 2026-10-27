@@ -57,6 +57,8 @@ export const AccountId = Schema.String.pipe(Schema.brand("AccountId"));
 
 The brand makes the id its own type. A `CustomerId` is a string too, but passing one where an `AccountId` is expected is a type error, so a command can't be sent to the wrong kind of instance.
 
+The target must be the id of the aggregate that lists the command. If `Account` lists a command whose target is a `CustomerId`, or a plain `Schema.String`, that entry in `Account`'s `commands` is a type error that names the command.
+
 The target isn't part of the command's data. You pass it alongside the command when you send it, and the model uses it to route the command to that one instance.
 
 ## Carry the request's data
@@ -99,8 +101,8 @@ The aggregate computes it from its state after the events, in a `reply` handler 
 
 ```typescript title="src/Account.aggregate.ts"
 reply: {
-  DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }),
-  WithdrawMoney: (s) => ({ balance: mustBeOpen(s).balance }),
+  DepositMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
+  WithdrawMoney: (s) => ({ balance: s._tag === "Open" ? s.balance : 0 }),
 },
 ```
 
@@ -127,6 +129,8 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
 
 Middleware runs in order, and any of it can stop the command with its own error, like `Unauthorized`. What it provides, such as who the caller is, travels with the command to the aggregate, where `decide` reads it to authorize the change. See [Sessions and middleware](/domain/sessions).
 
+A client can run the same `decide` with `Account.predict` when it provides what the middleware would, from a client-side Layer. See [Optimistic updates](/domain/optimistic-updates#give-the-client-what-middleware-provides).
+
 ## Send it
 
 Inside a hosted model, you send a command through the aggregate's client, with the target id first.
@@ -137,7 +141,7 @@ yield* accounts
   .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
 ```
 
-From a client of an [Api](/domain/api), each command is a method that takes the target and the input together: `bank.WithdrawMoney({ target: accountId, amount: 2_000 })`.
+From a client of an [Api](/domain/api), each command is a method that takes the target, the input, and optional call options: `bank.WithdrawMoney(accountId, { amount: 2_000 })`.
 
 Either way, `send` succeeds once the events have committed, with a receipt. It holds the stream and the version the instance committed at, the events it recorded, and the reply.
 
@@ -158,8 +162,8 @@ export const withdrawOnce = Effect.fn(function* (
   accountId: AccountId,
   requestId: string,
 ) {
-  const first = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000, commandId: requestId }, mfa);
-  const retry = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000, commandId: requestId }, mfa);
+  const first = yield* bank.WithdrawMoney(accountId, { amount: 2_000 }, { commandId: requestId, ...mfa });
+  const retry = yield* bank.WithdrawMoney(accountId, { amount: 2_000 }, { commandId: requestId, ...mfa });
   return first.version === retry.version;
 });
 ```
@@ -173,7 +177,11 @@ Commands sent by a [policy](/domain/policy) get ids derived from the event that 
 A command can also be scheduled to arrive at a later time, which is how deadlines work: "expire this transfer if nobody approves it within a day". Only commands that can't be refused can be scheduled, because there's no caller waiting to handle a rejection. See [Deadlines](/domain/deadlines).
 
 ```typescript title="packages/domain/src/Transfer/TransferApprovalDeadline.policy.ts"
-yield* transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW });
+yield* transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW }).pipe(
+  Effect.catchTag("AlreadyExecuted", () => Effect.void),
+);
 ```
+
+Scheduling fails with `AlreadyExecuted` when the transfer already handled a command with that id.
 
 Next, [Event](/domain/event) covers what a command records when it succeeds.

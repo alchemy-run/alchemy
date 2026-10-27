@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Analyzer, ArchiveRule } from "@alchemy.run/aws/AccessAnalyzer";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as aa from "@distilled.cloud/aws/accessanalyzer";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

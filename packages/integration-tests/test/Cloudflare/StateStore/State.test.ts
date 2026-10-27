@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { STATE_STORE_VERSION } from "@alchemy.run/cloudflare/StateStore/Api";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { State } from "alchemy/State/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 /**
  * Live-API tests for the deployed Cloudflare State Store at

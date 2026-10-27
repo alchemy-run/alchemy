@@ -305,7 +305,7 @@ a hosted runtime, websites). A package holds:
 | `scripts/build.ts` | copied verbatim from a sibling package |
 | `src/Contributions.ts` | `Contributions.make({ name, auth, … })` — what the CLI, the Alchemist API, and the test harness load without the user's stack |
 | `src/AuthProvider.ts` | `makeStoredAuthProvider` fields, CI env vars, `<Provider>Auth` layer |
-| `src/Credentials.ts` | `fromAuthProvider()` → the distilled `Credentials` layer |
+| `src/Credentials.ts` | `fromAuthProvider()` = `lazyCredentials<Resolved, ConfigError>()(...)` → the distilled `Credentials` layer |
 | `src/Providers.ts` | `ProviderCollection` + `providers()` layer (provider layers, credentials, `FetchHttpClient`, auth, profile and credential stores) |
 | `src/<Provider>Bindings.ts` | how bindings reach the cloud from any host (step 5) |
 | `src/globals.d.ts` | `import type {} from "alchemy/Phase";` so `globalThis.__ALCHEMY_RUNTIME__` type-checks |
@@ -937,7 +937,7 @@ workspace project with the layout of `examples/gcp-pubsub-worker`:
   `workspace:*` dependencies), `tsconfig.json` referencing
   `packages/alchemy` and the provider package, and a `README.md`.
 - `alchemy.run.ts`, with the runtime and resources in `src/`.
-- `test/integ.test.ts` with `alchemy/Test/Bun`: deploy in `beforeAll`,
+- `test/integ.test.ts` with `@alchemy.run/test/Bun`: deploy in `beforeAll`,
   call the deployed app over HTTP, verify cloud state through distilled,
   destroy in `afterAll`. Websites and `dev`-capable apps also get
   `test/dev.test.ts`.

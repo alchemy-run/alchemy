@@ -1,11 +1,11 @@
 import * as NodeCrypto from "node:crypto";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { KeyPair, KeyPairProvider } from "@/KeyPair";
 import * as Provider from "@/Provider";
 import { inMemoryState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({
   providers: KeyPairProvider(),
