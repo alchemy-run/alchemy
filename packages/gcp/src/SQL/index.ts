@@ -12,3 +12,4 @@ export * from "./GetUserHttp.ts";
 export * from "./Instance.ts";
 export * from "./SslCert.ts";
 export * from "./User.ts";
+export type { MigrationsTransport } from "./Migrations.ts";

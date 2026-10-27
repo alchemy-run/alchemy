@@ -410,6 +410,14 @@ are the mistakes that most often slip through review (each has a check in
   or parts of `output` are missing, so the next run's opening `destroy`
   removes whatever a crashed run left behind. Prove it once by interrupting
   a create.
+- **SQL databases take `migrations`.** Every resource that hosts a SQL
+  schema applies migrations on deploy through `@alchemy.run/sql/Migrations`;
+  the provider only writes a `SqlExecutor` for its transport. Prefer the
+  cloud's HTTPS data API, then a direct or connector connection, then an
+  in-network runner, and take credentials from the platform before asking
+  for `migrationsUser` / `migrationsPassword`. Follow **SQL database
+  migrations** in `AGENTS.md`; a SQL database shipped without migrations is
+  incomplete.
 - **Implement `list`** filtered to Alchemy-owned resources, and declare
   `nuke: { dependsOn: [...] }` where delete order matters, so
   `alchemy unsafe nuke` can clean the test account.

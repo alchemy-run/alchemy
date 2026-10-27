@@ -440,6 +440,56 @@ The canonical reference reconcilers cover the common shapes:
 
 Existence-only resources (Lambda Permission, EC2 Route, EC2 RouteTableAssociation, IAM AccessKey, etc.) have nothing mutable beyond their identity. Their reconciler is just observe → if missing, create. There is no sync step.
 
+# SQL database migrations
+
+Every SQL database resource applies schema migrations at deploy time through a `migrations` prop. A database resource without it is a gap to fill. Users get the same DX on every cloud:
+
+```ts
+const db = yield* GCP.SQL.Database("App", {
+  instance: instance.instanceName,
+  migrations: "./migrations", // a directory, { dir, table }, or a Drizzle.Schema
+  migrationsUser: user.userName,
+  migrationsPassword: password.text,
+});
+```
+
+The shared engine lives in `@alchemy.run/sql/Migrations`. It reads the directory (flat `.sql` files, drizzle-kit, or Prisma layouts) and keeps history in Alchemy's `__alchemy_migrations` table. It converts a foreign drizzle-kit/Prisma/wrangler table once, and fails with `RewrittenMigrationHistoryError` when an applied file is edited or removed. The provider never reimplements any of this. It supplies one thing, a `SqlExecutor` for its database:
+
+```ts
+// Props
+migrations?: MigrationsInput;
+// Attributes
+migrationsDir: string | undefined;
+migrationsTable: string | undefined;
+migrationsHashes: Record<string, string>;
+
+// diff: pending files or a table move update in place, never replace
+if (yield* diffMigrations({ news, output })) return { action: "update" } as const;
+
+// reconcile: last, once the database is ready and every other aspect is synced
+const migrationsInput = migrationsInputOf(news);
+const run = migrationsInput
+  ? yield* runMigrations({
+      input: migrationsInput,
+      stamped: stampedOf(output),
+      withExecutor: (apply) => withExecutor(apply), // acquire a SqlExecutor, apply, release
+    })
+  : undefined;
+return { ...attrs, ...migrationsAttrs({ input: migrationsInput, run, output }) };
+```
+
+Rules:
+
+- **Where the prop goes.** Put it on the resource that owns one database's schema: the database (`GCP.SQL.Database`, Cloudflare D1, Turso), the branch (Neon, PlanetScale), or the instance or cluster when it serves exactly one database (`AWS.RDS.DBInstance`, `AWS.DSQL.Cluster`, the primary `GCP.AlloyDB.Instance`). Migrations need a running endpoint, so they go on the resource that is reconciled after the endpoint is ready, not on a parent that is created before it.
+- **Transport, in order of preference.** First, an HTTPS data API, which needs no network route from the deploying machine (D1 HTTP, the RDS Data API, Cloud SQL and AlloyDB `executeSql`). Second, a direct driver connection over a public endpoint or the cloud's connector. Third, a runner inside the private network (`AWS.RDS.MigrationRunner`). When there is more than one, expose `migrationsTransport`, and default to the data API whenever the target has it enabled.
+- **Credentials.** Use the platform's own credentials when it has them: RDS managed secrets, Neon and PlanetScale minted roles, D1 API tokens. Otherwise take `migrationsUser` and `migrationsPassword` (`string | Redacted<string>`). Never ask the user to stage a secret just for the transport; when an API only reads passwords from a secret store, the provider stages and removes one itself.
+- **Executors.** Driver connections use `makePgMigrationExecutor` / `makeMySQLMigrationExecutor`. A data API gets a small executor in the provider package. `query` returns rows keyed by column name, with `inlineSqlParams` when the API has no bind parameters. `batch` runs a migration and its bookkeeping insert atomically: one transaction, or one multi-statement call that the API commits as a unit. Targets that can't commit DDL atomically set `transactionalDdl: false` and override `applyMigration`: DSQL checkpoints each statement, and Spanner names each DDL operation after the migration so a crashed deploy waits for the operation instead of rerunning it.
+- **Errors.** Every transport failure surfaces as `MigrationError` with the database's own message. A SQL error inside a 200 response, as the data APIs return it, is a failure, not a success.
+- **Tests.** Write one live test per transport. Deploy one migration and verify the table and `__alchemy_migrations` out-of-band. Add a file and redeploy; only the new file runs. Redeploy unchanged and assert that `stack.plan` reports no update. Destroy and verify the database is gone. Write migration files into a scoped temp directory (`fs.makeTempDirectoryScoped`) and pass it as `migrations`.
+- **Docs.** Add a `### Migrations` section to the resource JSDoc, with one example per transport and credential source.
+
+References: [AWS.RDS.DBInstance](./packages/aws/src/RDS/DBInstance.ts) + [Migrations.ts](./packages/aws/src/RDS/Migrations.ts) (three transports), [Turso Database](./packages/turso/src/Database.ts) (one HTTP executor), [GCP.SQL.Database](./packages/gcp/src/SQL/Database.ts) (data API with a staged secret, plus the Cloud SQL connector), [GCP.Spanner.Database](./packages/gcp/src/Spanner/Database.ts) (non-transactional DDL, a GoogleSQL dialect in the shared engine).
+
 5. Research and design the test cases for each resource. Test cases can be single or multi-step. Single-step test cases are just testing a single create success or failure mode. Multi-step cases are testing a sequence of operations, starting with create and then updating or replacing the resource multiple times. Test cases should be designed to be exhaustive and cover all possible success and failure modes, starting from simple happy paths to long, complicated aggregate (including other resources) smoke tests.
 6. Implement the Resource contract and Provider in `packages/{cloud}/src/{Service}/{Resource}.ts`.
 

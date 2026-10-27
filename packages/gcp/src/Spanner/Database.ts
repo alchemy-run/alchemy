@@ -1,3 +1,10 @@
+import {
+  diffMigrations,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+  type MigrationsInput,
+} from "@alchemy.run/sql/Migrations";
 import * as spanner from "@distilled.cloud/gcp/spanner_v1";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -10,6 +17,7 @@ import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { ALCHEMY_LABEL_PREFIX } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { runDatabaseMigrations } from "./Migrations.ts";
 import { waitForOperation } from "./operations.ts";
 
 const DEFAULT_DIALECT = "GOOGLE_STANDARD_SQL";
@@ -53,9 +61,25 @@ export type DatabaseProps = {
   databaseDialect?: DatabaseDialect;
   /**
    * Extra DDL statements run atomically with create. Immutable —
-   * changing them replaces the database.
+   * changing them replaces the database, so evolve a schema with
+   * `migrations` instead.
    */
   extraStatements?: string[];
+  /**
+   * SQL migrations to apply on deploy, once the database is ready. Accepts
+   * a directory path, a `{ dir, table }` object, or a `Drizzle.Schema`
+   * output. Only pending migrations run; editing or removing an applied
+   * file fails the deploy. Works on both dialects.
+   *
+   * Spanner can't commit DDL and DML together: a migration's DDL runs as
+   * schema operations named after the migration (a deploy that crashed
+   * mid-migration waits for the operation it started instead of running
+   * it twice), and its trailing DML commits with the bookkeeping row. DML
+   * between DDL statements fails the deploy; split it into its own
+   * migration. Bookkeeping lives in the `alchemy_migrations` table
+   * (Spanner names can't start with `_`).
+   */
+  migrations?: MigrationsInput;
   /**
    * Customer-managed encryption. Immutable — changing it replaces the
    * database.
@@ -99,6 +123,12 @@ export type Database = Resource<
     reconciling: boolean | undefined;
     /** RFC3339 creation timestamp. */
     createTime: string | undefined;
+    /** Directory of the applied SQL migrations. */
+    migrationsDir: string | undefined;
+    /** Migration bookkeeping table. */
+    migrationsTable: string | undefined;
+    /** Applied migration content hashes. */
+    migrationsHashes: Record<string, string>;
   },
   never,
   Providers
@@ -145,6 +175,20 @@ export type Database = Resource<
  * const getDdl = yield* GCP.Spanner.GetDdl(database);
  * const { statements } = yield* getDdl();
  * ```
+ *
+ * ### Migrations
+ * **Example:** Apply migrations on deploy
+ * ```typescript
+ * const database = yield* GCP.Spanner.Database("AppDb", {
+ *   instance: instance.instanceId,
+ *   migrations: "./migrations",
+ * });
+ * ```
+ *
+ * Each file in `./migrations` holds GoogleSQL (or PostgreSQL, with
+ * `databaseDialect: "POSTGRESQL"`) statements separated by `;`. Migrations
+ * run as the deploying identity, which needs `spanner.databases.updateDdl`
+ * and `spanner.databases.write`.
  *
  * @resource
  * @category Spanner
@@ -250,7 +294,16 @@ const encryptionKey = (config: EncryptionConfig | undefined) =>
 
 const extraKey = (statements: string[] | undefined) => JSON.stringify(statements ?? []);
 
-const toAttrs = (database: spanner.Database, project: string): Database["Attributes"] => {
+type MigrationAttrs = Pick<
+  Database["Attributes"],
+  "migrationsDir" | "migrationsTable" | "migrationsHashes"
+>;
+
+const toAttrs = (
+  database: spanner.Database,
+  project: string,
+  migrations?: Partial<MigrationAttrs>,
+): Database["Attributes"] => {
   const name = database.name ?? "";
   const parsed = parseName(name);
   return {
@@ -267,6 +320,9 @@ const toAttrs = (database: spanner.Database, project: string): Database["Attribu
     encryptionConfig: encryptionOf(database.encryptionConfig),
     reconciling: database.reconciling,
     createTime: database.createTime,
+    migrationsDir: migrations?.migrationsDir,
+    migrationsTable: migrations?.migrationsTable,
+    migrationsHashes: migrations?.migrationsHashes ?? {},
   };
 };
 
@@ -384,7 +440,12 @@ export const DatabaseProvider = () =>
         previousKms !== nextKms ||
         extraChanged;
 
-      if (!replace) return undefined;
+      if (!replace) {
+        if (yield* diffMigrations({ news, output })) {
+          return { action: "update" as const };
+        }
+        return undefined;
+      }
       return {
         action: "replace" as const,
         deleteFirst: !instanceChanged && previousId !== undefined && nextId === previousId,
@@ -399,7 +460,7 @@ export const DatabaseProvider = () =>
       const name = output?.name ?? resourceName(env.project, instanceId, databaseId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      return toAttrs(existing, env.project);
+      return toAttrs(existing, env.project, output);
     }),
 
     list: () =>
@@ -483,7 +544,23 @@ export const DatabaseProvider = () =>
         current = yield* waitUntilReady(name);
       }
 
-      return toAttrs(current, env.project);
+      // Sync migrations — the shared pipeline skips already-applied ones.
+      const migrationsInput = migrationsInputOf(news);
+      const migrations = migrationsInput
+        ? yield* runDatabaseMigrations({
+            database: current.name ?? name,
+            dialect:
+              normalizeDialect(current.databaseDialect) === "POSTGRESQL" ? "postgres" : "googlesql",
+            input: migrationsInput,
+            stamped: stampedOf(output),
+          })
+        : undefined;
+
+      return toAttrs(
+        current,
+        env.project,
+        migrationsAttrs({ input: migrationsInput, run: migrations, output }),
+      );
     }),
 
     delete: Effect.fn(function* ({ output }) {

@@ -1,3 +1,11 @@
+import {
+  diffMigrations,
+  MigrationError,
+  migrationsAttrs,
+  migrationsInputOf,
+  stampedOf,
+  type MigrationsInput,
+} from "@alchemy.run/sql/Migrations";
 import * as alloydb from "@distilled.cloud/gcp/alloydb_v1";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
@@ -7,6 +15,7 @@ import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
@@ -18,6 +27,7 @@ import {
   toLabels,
 } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
+import { runInstanceMigrations } from "./Migrations.ts";
 import { waitForDeleteOperation, waitForOperation } from "./operations.ts";
 
 const DEFAULT_INSTANCE_TYPE = "PRIMARY";
@@ -146,9 +156,36 @@ export type InstanceProps = {
    */
   connectionPoolConfig?: ConnectionPoolConfig;
   /**
-   * Controls the Data API (`executeSql`).
+   * Controls the Data API (`executeSql`). `migrations` run through it, so
+   * leave it enabled on an instance that applies them.
    */
   dataApiAccess?: alloydb.InstanceDataApiAccessEnum | (string & {});
+  /**
+   * SQL migrations to apply on deploy, once this instance is ready.
+   * PRIMARY instances only. Accepts a directory path, a `{ dir, table }`
+   * object, or a `Drizzle.Schema` output. Only pending migrations run;
+   * editing or removing an applied file fails the deploy.
+   *
+   * Migrations run through the AlloyDB Data API (`executeSql`), so the
+   * deploying machine needs no route to the instance. Bookkeeping lives in
+   * Alchemy's `__alchemy_migrations` table; each migration commits with
+   * its bookkeeping row.
+   */
+  migrations?: MigrationsInput;
+  /**
+   * Database that `migrations` target.
+   * @default "postgres"
+   */
+  migrationsDatabase?: string;
+  /**
+   * Built-in database user that `migrations` log in as — e.g. the
+   * cluster's `initialUser`. It owns the tables the migrations create.
+   */
+  migrationsUser?: string;
+  /**
+   * Password of `migrationsUser`.
+   */
+  migrationsPassword?: string | Redacted.Redacted<string>;
 };
 
 export type Instance = Resource<
@@ -201,6 +238,12 @@ export type Instance = Resource<
     createTime: string | undefined;
     /** RFC3339 last-update timestamp. */
     updateTime: string | undefined;
+    /** Directory of the applied SQL migrations. */
+    migrationsDir: string | undefined;
+    /** Migration bookkeeping table. */
+    migrationsTable: string | undefined;
+    /** Applied migration content hashes. */
+    migrationsHashes: Record<string, string>;
   },
   never,
   Providers
@@ -250,6 +293,28 @@ export type Instance = Resource<
  *   machineConfig: { cpuCount: 2 },
  * });
  * ```
+ *
+ * ### Migrations
+ * **Example:** Apply migrations on the primary
+ * ```typescript
+ * const cluster = yield* GCP.AlloyDB.Cluster("AppDb", {
+ *   pscConfig: { pscEnabled: true },
+ *   initialUser: { user: "postgres", password: "change-me" },
+ * });
+ * const primary = yield* GCP.AlloyDB.Instance("Primary", {
+ *   cluster: cluster.name,
+ *   instanceType: "PRIMARY",
+ *   dataApiAccess: "ENABLED",
+ *   migrations: "./migrations",
+ *   migrationsUser: "postgres",
+ *   migrationsPassword: "change-me",
+ * });
+ * ```
+ *
+ * Migrations run through the AlloyDB Data API, so the deploying machine
+ * needs no route to the cluster's network. The deploying identity needs
+ * `alloydb.instances.executeSql`. Set `migrationsDatabase` to target a
+ * database other than `postgres`.
  *
  * @resource
  * @category AlloyDB
@@ -458,7 +523,16 @@ const isAvailable = (state: string | undefined) => {
 
 const isFailed = (state: string | undefined) => (state ?? "").toUpperCase() === "FAILED";
 
-const toAttrs = (instance: alloydb.Instance, project: string) => {
+type MigrationAttrs = Pick<
+  Instance["Attributes"],
+  "migrationsDir" | "migrationsTable" | "migrationsHashes"
+>;
+
+const toAttrs = (
+  instance: alloydb.Instance,
+  project: string,
+  migrations?: Partial<MigrationAttrs>,
+): Instance["Attributes"] => {
   const name = instance.name ?? "";
   const parsed = parseName(name);
   const clusterId = parsed.clusterId;
@@ -488,6 +562,9 @@ const toAttrs = (instance: alloydb.Instance, project: string) => {
     uid: instance.uid,
     createTime: instance.createTime,
     updateTime: instance.updateTime,
+    migrationsDir: migrations?.migrationsDir,
+    migrationsTable: migrations?.migrationsTable,
+    migrationsHashes: migrations?.migrationsHashes ?? {},
   };
 };
 
@@ -639,7 +716,12 @@ export const InstanceProvider = () =>
         previousLocation !== nextLocation ||
         previousType !== nextType;
 
-      if (!replace) return undefined;
+      if (!replace) {
+        if (yield* diffMigrations({ news, output })) {
+          return { action: "update" as const };
+        }
+        return undefined;
+      }
       return {
         action: "replace" as const,
         deleteFirst:
@@ -655,7 +737,7 @@ export const InstanceProvider = () =>
       if (output?.name) {
         const existing = yield* getByName(output.name);
         if (existing === undefined) return undefined;
-        const attrs = toAttrs(existing, env.project);
+        const attrs = toAttrs(existing, env.project, output);
         return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
       }
       const instanceId = yield* toId(id, olds?.instanceId, output?.instanceId);
@@ -668,7 +750,7 @@ export const InstanceProvider = () =>
       const name = resourceName(ref.project, ref.location, ref.clusterId, instanceId);
       const existing = yield* getByName(name);
       if (existing === undefined) return undefined;
-      const attrs = toAttrs(existing, env.project);
+      const attrs = toAttrs(existing, env.project, output);
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
 
@@ -885,9 +967,28 @@ export const InstanceProvider = () =>
         current = yield* waitUntilReady(name);
       }
 
+      // Sync migrations — the shared pipeline skips already-applied ones.
+      const migrationsInput = migrationsInputOf(news);
+      if (migrationsInput && normalizeInstanceType(current.instanceType) !== "PRIMARY") {
+        return yield* new MigrationError({
+          message: `migrations run on PRIMARY instances; '${name}' is ${normalizeInstanceType(current.instanceType)}`,
+        });
+      }
+      const migrations = migrationsInput
+        ? yield* runInstanceMigrations({
+            instance: name,
+            database: news.migrationsDatabase ?? "postgres",
+            input: migrationsInput,
+            stamped: stampedOf(output),
+            user: news.migrationsUser,
+            password: news.migrationsPassword,
+          })
+        : undefined;
+
       return toAttrs(
         { ...current, displayName: current.displayName ?? news.displayName },
         env.project,
+        migrationsAttrs({ input: migrationsInput, run: migrations, output }),
       );
     }),
 
