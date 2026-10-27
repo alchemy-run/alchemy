@@ -12,6 +12,7 @@ import * as S3 from "@distilled.cloud/aws/s3";
 import { NodeServices } from "@effect/platform-node";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
+import * as Drift from "alchemy/Drift";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { ResourceContext } from "alchemy/ResourceContext";
@@ -1628,6 +1629,135 @@ const deleteBucketIfExists = Effect.fn(function* (bucketName: string) {
 });
 
 class BucketStillExists extends Data.TaggedError("BucketStillExists") {}
+
+// #2659: `read` must observe every managed setting, or an out-of-band change
+// reads as `unchanged` and drift never repairs it.
+test.provider(
+  "drift detects and repairs out-of-band configuration changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const bucket = yield* stack.deploy(
+        Bucket("DriftConfigBucket", {
+          forceDestroy: true,
+          tags: { team: "storage" },
+          versioning: "Enabled",
+          publicAccessBlock: {
+            blockPublicAcls: true,
+            ignorePublicAcls: true,
+            blockPublicPolicy: true,
+            restrictPublicBuckets: true,
+          },
+          cors: [{ AllowedMethods: ["GET"], AllowedOrigins: ["*"], MaxAgeSeconds: 300 }],
+          lifecycleRules: [
+            {
+              ID: "expire-logs",
+              Status: "Enabled",
+              Filter: { Prefix: "logs/" },
+              Expiration: { Days: 30 },
+            },
+          ],
+          requestPayer: "BucketOwner",
+        }),
+      );
+      const bucketName = bucket.bucketName;
+      const target = { name: stack.name, stage: stack.stage };
+      const detect = Drift.detect(target).pipe(
+        Effect.map((result) => result.resources.DriftConfigBucket),
+        Effect.provide(stack.state),
+      );
+      expect((yield* detect)?.action).toBe("unchanged");
+
+      yield* S3.putBucketVersioning({
+        Bucket: bucketName,
+        VersioningConfiguration: { Status: "Suspended" },
+      });
+      yield* S3.deleteBucketCors({ Bucket: bucketName });
+      yield* S3.putBucketLifecycleConfiguration({
+        Bucket: bucketName,
+        LifecycleConfiguration: {
+          Rules: [
+            {
+              ID: "expire-logs",
+              Status: "Enabled",
+              Filter: { Prefix: "logs/" },
+              Expiration: { Days: 7 },
+            },
+          ],
+        },
+      });
+      yield* S3.putBucketTagging({
+        Bucket: bucketName,
+        Tagging: { TagSet: [{ Key: "team", Value: "other" }] },
+      });
+      yield* S3.deletePublicAccessBlock({ Bucket: bucketName });
+      yield* S3.putBucketEncryption({
+        Bucket: bucketName,
+        ServerSideEncryptionConfiguration: {
+          Rules: [
+            {
+              ApplyServerSideEncryptionByDefault: { SSEAlgorithm: "AES256" },
+              BucketKeyEnabled: true,
+            },
+          ],
+        },
+      });
+      yield* S3.putBucketRequestPayment({
+        Bucket: bucketName,
+        RequestPaymentConfiguration: { Payer: "Requester" },
+      });
+
+      // Bucket configuration is eventually consistent: wait until every
+      // out-of-band change is observed.
+      const drifted = yield* detect.pipe(
+        Effect.repeat({
+          until: (result) =>
+            result?.attr?.versioning === "Suspended" &&
+            result.attr.cors?.length === 0 &&
+            result.attr.lifecycleRules?.[0]?.Expiration?.Days === 7 &&
+            result.attr.tags?.team === "other" &&
+            result.attr.publicAccessBlock?.blockPublicAcls === false &&
+            result.attr.encryption?.bucketKeyEnabled === true &&
+            result.attr.requestPayer === "Requester",
+          schedule: Schedule.spaced("2 seconds"),
+          times: 15,
+        }),
+      );
+      expect(drifted?.action).toBe("drifted");
+      expect(drifted?.attr).toMatchObject({
+        versioning: "Suspended",
+        cors: [],
+        tags: { team: "other" },
+        requestPayer: "Requester",
+      });
+
+      const repaired = yield* Drift.repair(target).pipe(Effect.provide(stack.state));
+      expect(repaired.resources.DriftConfigBucket?.action).toBe("repaired");
+      expect((yield* detect)?.action).toBe("unchanged");
+
+      const versioning = yield* S3.getBucketVersioning({ Bucket: bucketName });
+      expect(versioning.Status).toBe("Enabled");
+      const cors = yield* S3.getBucketCors({ Bucket: bucketName });
+      expect(cors.CORSRules?.[0]?.AllowedMethods).toEqual(["GET"]);
+      const lifecycle = yield* S3.getBucketLifecycleConfiguration({ Bucket: bucketName });
+      expect(lifecycle.Rules?.[0]?.Expiration?.Days).toBe(30);
+      const tags = yield* S3.getBucketTagging({ Bucket: bucketName });
+      expect(tags.TagSet).toEqual([{ Key: "team", Value: "storage" }]);
+      const pab = yield* S3.getPublicAccessBlock({ Bucket: bucketName });
+      expect(pab.PublicAccessBlockConfiguration?.BlockPublicAcls).toBe(true);
+      const encryption = yield* S3.getBucketEncryption({ Bucket: bucketName });
+      expect(encryption.ServerSideEncryptionConfiguration?.Rules?.[0]?.BucketKeyEnabled).toBe(
+        false,
+      );
+      const payment = yield* S3.getBucketRequestPayment({ Bucket: bucketName });
+      expect(payment.Payer).toBe("BucketOwner");
+
+      yield* stack.destroy();
+      yield* assertBucketDeleted(bucketName);
+    }).pipe(Effect.onError(() => stack.destroy().pipe(Effect.ignore))),
+  { tags: ["provider:aws", "provider:aws:s3", "live"], timeout: 240_000 },
+);
 
 const assertBucketDeleted = Effect.fn(function* (bucketName: string) {
   yield* S3.headBucket({ Bucket: bucketName }).pipe(

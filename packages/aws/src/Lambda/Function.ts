@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as iam from "@distilled.cloud/aws/iam";
@@ -34,6 +35,7 @@ import * as Exit from "effect/Exit";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -609,6 +611,83 @@ export interface Function extends Resource<
      * function. Lets `alchemy drift` detect out-of-band changes.
      */
     timeoutSeconds?: number;
+    /**
+     * Runtime of the function (ZIP packages only), as observed on the
+     * deployed function. Lets `alchemy drift` detect out-of-band changes.
+     */
+    runtime?: string;
+    /**
+     * Handler string of the function (ZIP packages only), as observed on the
+     * deployed function. Lets `alchemy drift` detect out-of-band changes.
+     */
+    handler?: string;
+    /**
+     * Instruction set architecture, as observed on the deployed function.
+     * Lets `alchemy drift` detect out-of-band changes.
+     */
+    architecture?: string;
+    /**
+     * ARNs of the attached layer versions, in order, as observed on the
+     * deployed function. Lets `alchemy drift` detect out-of-band changes.
+     */
+    layers?: string[];
+    /**
+     * Environment variables of the deployed function, each value replaced by
+     * a SHA-256 fingerprint so secrets never reach state. Lets
+     * `alchemy drift` detect out-of-band additions, removals and edits.
+     */
+    environment?: Record<string, string>;
+    /**
+     * VPC attachment, as observed on the deployed function. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    vpcConfig?: {
+      subnetIds: string[];
+      securityGroupIds: string[];
+    };
+    /**
+     * EFS mounts, as observed on the deployed function. Lets `alchemy drift`
+     * detect out-of-band changes.
+     */
+    fileSystemConfigs?: {
+      arn: string;
+      localMountPath: string;
+    }[];
+    /**
+     * X-Ray tracing mode, as observed on the deployed function. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    tracing?: string;
+    /**
+     * SHA-256 of the deployed code package, as reported by Lambda. Lets
+     * `alchemy drift` detect code replaced out-of-band.
+     */
+    codeSha256?: string;
+    /**
+     * Function URL settings, as observed on the deployed URL. Lets
+     * `alchemy drift` detect out-of-band authentication or CORS changes.
+     */
+    functionUrlConfig?: {
+      authType?: string;
+      invokeMode?: string;
+      cors?: Lambda.Cors;
+    };
+    /**
+     * Retention of the function's log group in days (`undefined` when logs
+     * never expire), observed when `logging.retention` is set. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    logRetentionInDays?: number;
+    /**
+     * Policies Alchemy manages on the execution role, as observed: the AWS
+     * managed policies Alchemy attaches, and the inline policy documents it
+     * writes (binding statements and the log-group guard). Lets
+     * `alchemy drift` detect out-of-band detaches and edits.
+     */
+    executionRole?: {
+      managedPolicyArns: string[];
+      inlinePolicies: Record<string, unknown>;
+    };
   },
   {
     env?: Record<string, any>;
@@ -1752,6 +1831,141 @@ export const FunctionProvider = () =>
         );
       });
 
+      const readFunctionUrlConfig = (functionName: string, qualifier: string | undefined) =>
+        Lambda.getFunctionUrlConfig({
+          FunctionName: functionName,
+          Qualifier: qualifier,
+        }).pipe(
+          Effect.retry({
+            while: (e: any) => e._tag === "ResourceConflictException",
+            schedule: Schedule.exponential(100),
+          }),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+        );
+
+      // AWS managed policies Alchemy attaches to the execution role. Other
+      // attachments (e.g. an `IAM.RolePolicyAttachment` on `roleName`) are
+      // not ours to observe.
+      const managedExecutionPolicyArns = new Set([
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole",
+        "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole",
+        "arn:aws:iam::aws:policy/AmazonElasticFileSystemClientReadWriteAccess",
+        xrayWriteAccessPolicyArn,
+      ]);
+
+      /**
+       * Project the configuration `alchemy drift` compares: every setting
+       * reconcile converges, as observed on the deployed function. `read`
+       * and `reconcile` share it so a converged function reads unchanged.
+       */
+      const observeFunctionConfiguration = Effect.fn(function* ({
+        id,
+        configuration: fn,
+        qualifier,
+        roleName,
+        logging,
+      }: {
+        id: string;
+        configuration: Lambda.FunctionConfiguration;
+        qualifier: string | undefined;
+        roleName: string;
+        logging: FunctionProps["logging"];
+      }) {
+        const functionName = fn.FunctionName!;
+        const policyName = yield* createPolicyName(id);
+        const readInlinePolicy = (PolicyName: string) =>
+          iam.getRolePolicy({ RoleName: roleName, PolicyName }).pipe(
+            Effect.map((policy) => JSON.parse(decodeURIComponent(policy.PolicyDocument))),
+            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+          );
+        const [urlConfig, logRetentionInDays, attached, bindingPolicy, guardPolicy] =
+          yield* Effect.all(
+            [
+              readFunctionUrlConfig(functionName, qualifier),
+              logging?.retention === undefined
+                ? Effect.succeed(undefined)
+                : logs
+                    .describeLogGroups({ logGroupNamePrefix: `/aws/lambda/${functionName}` })
+                    .pipe(
+                      Effect.map(
+                        (result) =>
+                          result.logGroups?.find(
+                            (group) => group.logGroupName === `/aws/lambda/${functionName}`,
+                          )?.retentionInDays,
+                      ),
+                    ),
+              iam.listAttachedRolePolicies({ RoleName: roleName }).pipe(
+                Effect.map((result) =>
+                  (result.AttachedPolicies ?? []).flatMap((policy) =>
+                    policy.PolicyArn && managedExecutionPolicyArns.has(policy.PolicyArn)
+                      ? [policy.PolicyArn]
+                      : [],
+                  ),
+                ),
+                Effect.catchTag("NoSuchEntityException", () => Effect.succeed([] as string[])),
+              ),
+              readInlinePolicy(policyName),
+              readInlinePolicy(logGroupGuardPolicyName),
+            ],
+            { concurrency: "unbounded" },
+          );
+        const environment = yield* Effect.sync(() =>
+          Object.fromEntries(
+            Object.entries(fn.Environment?.Variables ?? {})
+              .sort(([a], [b]) => a.localeCompare(b))
+              .map(([key, value]) => [
+                key,
+                createHash("sha256")
+                  .update(Redacted.isRedacted(value) ? Redacted.value(value) : (value ?? ""))
+                  .digest("hex"),
+              ]),
+          ),
+        );
+        const subnetIds = [...(fn.VpcConfig?.SubnetIds ?? [])].sort();
+        const fileSystemConfigs = (fn.FileSystemConfigs ?? [])
+          .map((config) => ({ arn: config.Arn, localMountPath: config.LocalMountPath }))
+          .sort((a, b) => a.localMountPath.localeCompare(b.localMountPath));
+        const cors = urlConfig?.Cors;
+        return {
+          memorySize: fn.MemorySize,
+          timeoutSeconds: fn.Timeout,
+          runtime: fn.Runtime,
+          handler: fn.Handler,
+          architecture: fn.Architectures?.[0],
+          layers: (fn.Layers ?? []).flatMap((layer) => (layer.Arn ? [layer.Arn] : [])),
+          environment,
+          vpcConfig:
+            subnetIds.length > 0
+              ? {
+                  subnetIds,
+                  securityGroupIds: [...(fn.VpcConfig?.SecurityGroupIds ?? [])].sort(),
+                }
+              : undefined,
+          fileSystemConfigs: fileSystemConfigs.length > 0 ? fileSystemConfigs : undefined,
+          tracing: fn.TracingConfig?.Mode,
+          codeSha256: fn.CodeSha256,
+          functionUrlConfig: urlConfig
+            ? {
+                authType: urlConfig.AuthType,
+                invokeMode: urlConfig.InvokeMode,
+                // A cleared CORS config reads back as an empty object.
+                cors:
+                  cors && Object.values(cors).some((value) => value !== undefined)
+                    ? cors
+                    : undefined,
+              }
+            : undefined,
+          logRetentionInDays,
+          executionRole: {
+            managedPolicyArns: attached.sort(),
+            inlinePolicies: {
+              ...(bindingPolicy === undefined ? {} : { [policyName]: bindingPolicy }),
+              ...(guardPolicy === undefined ? {} : { [logGroupGuardPolicyName]: guardPolicy }),
+            },
+          },
+        } satisfies Partial<Function["Attributes"]>;
+      });
+
       const syncReservedConcurrentExecutions = Effect.fn(function* ({
         functionName,
         reservedConcurrentExecutions,
@@ -2270,7 +2484,9 @@ export const FunctionProvider = () =>
           } satisfies Lambda.CreateFunctionUrlConfigRequest | Lambda.UpdateFunctionUrlConfigRequest;
           const { FunctionUrl } = yield* Lambda.createFunctionUrlConfig(config).pipe(
             Effect.catchTag("ResourceConflictException", () =>
-              Lambda.updateFunctionUrlConfig(config),
+              // An omitted Cors leaves the URL's CORS as-is; clear it so CORS
+              // added out-of-band is removed.
+              Lambda.updateFunctionUrlConfig({ ...config, Cors: config.Cors ?? {} }),
             ),
             retryFunctionMutation,
           );
@@ -2580,16 +2796,16 @@ export const FunctionProvider = () =>
                 Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
               )
             : undefined;
-          const functionUrl = yield* Lambda.getFunctionUrlConfig({
-            FunctionName: fn.FunctionName,
-            Qualifier: alias?.Name,
-          }).pipe(
-            Effect.map((f) => f.FunctionUrl),
-            Effect.retry({
-              while: (e: any) => e._tag === "ResourceConflictException",
-              schedule: Schedule.exponential(100),
-            }),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          const roleName = output?.roleName ?? fn.Role.split("/").pop()!;
+          const observed = yield* observeFunctionConfiguration({
+            id,
+            configuration: fn,
+            qualifier: alias?.Name,
+            roleName,
+            logging: olds?.logging,
+          });
+          const functionUrl = yield* readFunctionUrlConfig(fn.FunctionName, alias?.Name).pipe(
+            Effect.map((config) => config?.FunctionUrl),
           );
           const reservedConcurrentExecutions = yield* getReservedConcurrentExecutions(
             fn.FunctionName,
@@ -2598,6 +2814,7 @@ export const FunctionProvider = () =>
           // diff doesn't see drift it can't reconstruct from the API.
           const attrs = {
             ...output,
+            ...observed,
             functionArn: fn.FunctionArn,
             functionName: fn.FunctionName,
             qualifiedArn: alias?.AliasArn ?? fn.FunctionArn,
@@ -2605,15 +2822,13 @@ export const FunctionProvider = () =>
             version: alias?.FunctionVersion,
             functionUrl,
             roleArn: fn.Role,
-            roleName: output?.roleName ?? fn.Role.split("/").pop()!,
+            roleName,
             code: refreshPersistedFunctionCode({
               output,
               packageType: fn.PackageType,
               observed: result?.Code,
             }),
             reservedConcurrentExecutions,
-            memorySize: fn.MemorySize,
-            timeoutSeconds: fn.Timeout,
           } satisfies Function["Attributes"];
           return (yield* hasAlchemyTags(id, tagsResult)) ? attrs : Unowned(attrs);
         }),
@@ -2879,7 +3094,10 @@ export const FunctionProvider = () =>
               ...news.env,
             },
             functionName,
-            vpc,
+            // On update an omitted VpcConfig means "leave as-is"; detach
+            // explicitly so a VPC attached out-of-band is removed.
+            vpc:
+              vpc ?? (output !== undefined ? { subnetIds: [], securityGroupIds: [] } : undefined),
             preferUpdate: output !== undefined,
             // `[]` (when the prop/bindings were removed on a function that
             // previously had mounts) explicitly clears the file-system
@@ -2967,6 +3185,16 @@ export const FunctionProvider = () =>
 
           yield* session.note(summary(prepared.deployment));
 
+          const observed = yield* observeFunctionConfiguration({
+            id,
+            configuration:
+              configuration ??
+              (yield* Lambda.getFunctionConfiguration({ FunctionName: functionName })),
+            qualifier: news.alias,
+            roleName,
+            logging: news.logging,
+          });
+
           return {
             ...output,
             functionArn,
@@ -2980,8 +3208,7 @@ export const FunctionProvider = () =>
             roleArn,
             code: prepared.attributes,
             reservedConcurrentExecutions,
-            memorySize: configuration?.MemorySize,
-            timeoutSeconds: configuration?.Timeout,
+            ...observed,
           };
         }),
         delete: Effect.fn(function* ({ output }) {
