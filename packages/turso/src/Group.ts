@@ -157,15 +157,20 @@ export const GroupProvider = () =>
             return { action: "replace", deleteFirst: news.name !== undefined } as const;
           }
         }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const org = output?.organization ?? (yield* organization);
           const name = output?.name ?? (yield* groupName(id, olds?.name));
           const group = yield* observe(org, name);
           if (!group) return undefined;
           const attrs = toAttrs(org, group, group.delete_protection ?? false);
           // Turso has no tags: a group found under an explicit, user-chosen
-          // name without prior state may belong to someone else.
-          return output === undefined && olds?.name !== undefined ? Unowned(attrs) : attrs;
+          // name without prior state may belong to someone else — unless it
+          // is the generation a delete-first replacement is about to free.
+          const ours =
+            output !== undefined ||
+            olds?.name === undefined ||
+            (previous?.organization === org && previous.name === name);
+          return ours ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const org = output?.organization ?? (yield* organization);

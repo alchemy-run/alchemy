@@ -351,7 +351,7 @@ export const DatabaseProvider = () =>
             }
           }
         }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const org = output?.organization ?? (yield* organization);
           const name = output?.name ?? (yield* databaseName(id, olds?.name));
           const db = yield* observe(org, name);
@@ -363,8 +363,13 @@ export const DatabaseProvider = () =>
             importHashes: output?.importHashes ?? {},
           });
           // Turso has no tags: a database found under an explicit,
-          // user-chosen name without prior state may belong to someone else.
-          return output === undefined && olds?.name !== undefined ? Unowned(attrs) : attrs;
+          // user-chosen name without prior state may belong to someone else — unless it
+          // is the generation a delete-first replacement is about to free.
+          const ours =
+            output !== undefined ||
+            olds?.name === undefined ||
+            (previous?.organization === org && previous.name === name);
+          return ours ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const org = output?.organization ?? (yield* organization);
