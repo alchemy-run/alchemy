@@ -1,0 +1,35 @@
+---
+title: Setup
+description: Connect alchemy to Entire — device login, CI tokens, and profiles.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Install `@alchemy.run/entire`:
+
+<PackageManagers add="@alchemy.run/entire" />
+
+Register the provider:
+
+```typescript
+// alchemy.run.ts
+import * as Entire from "@alchemy.run/entire";
+
+providers: Layer.mergeAll(Cloudflare.providers(), Entire.providers()),
+```
+
+Run `alchemy profile edit --add Entire`. Alchemy starts Entire's device
+login, opens the approval page, and saves the grant under
+`~/.alchemy/credentials/<profile>/`. The access token refreshes itself.
+
+Entire issues no API keys. In CI (`CI=true`), set `ENTIRE_TOKEN` to an
+access token: `entire auth token` prints one, and a service account's
+session works too. `ENTIRE_CORE_BASE_URL` and `ENTIRE_API_BASE_URL`
+point at another region.
+
+See [Profiles](/environments/profiles) for how credentials are stored
+and switched.
+
+## Next steps
+
+- [Entire overview](/entire) — resources and compositions.
