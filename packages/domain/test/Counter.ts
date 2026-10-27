@@ -46,6 +46,9 @@ export class Total extends Domain.View("Total", {
   initial: { total: 0 },
   evolve: { Incremented: (state, { amount }) => ({ total: state.total + amount }) },
   events: [Incremented],
+  rejects: [Limit],
+  validate: (_, state) =>
+    state && state.total > 5 ? Effect.fail(new Limit({ amount: state.total })) : Effect.void,
 }) {}
 export class Counters extends Domain.Model("Counters", { aggregates: [Counter], views: [Total] }) {}
 export class CounterApi extends Domain.Api("CounterApi", Increment, Reset, Total) {}

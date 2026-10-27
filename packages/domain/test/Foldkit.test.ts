@@ -1,5 +1,7 @@
 import { expect, it } from "@effect/vitest";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as RpcClientError from "effect/rpc/RpcClientError";
@@ -235,3 +237,26 @@ it("can restart a failed Flags cursor without changing the View key", () => {
     ),
   ).toBe(false);
 });
+
+it.live("turns a mid-stream validate refusal into an app Message", () =>
+  Effect.gen(function* () {
+    const started = yield* Deferred.make<void>();
+    const read = Foldkit.watchView(CounterApi, "Total", {
+      key: () => target,
+      toMessage: (snapshot) => `snapshot:${snapshot.cursor}`,
+      onFailure: (error) => `failed:${error._tag}`,
+    });
+    const watch = yield* read.dependenciesToStream({ key: target, isEnabled: true }).pipe(
+      Stream.tap(() => Deferred.succeed(started, undefined)),
+      Stream.runCollect,
+      Effect.forkChild,
+    );
+    yield* Deferred.await(started);
+    yield* Counter.Increment({ target, input: { amount: 6 }, commandId: "page:0" }).effect;
+    expect(yield* Fiber.join(watch)).toEqual(["snapshot:0", "failed:Limit"]);
+    const messages = yield* feed
+      .dependenciesToStream(dependencies, () => dependencies)
+      .pipe(Stream.runCollect);
+    expect(messages).toEqual(["failed:Limit"]);
+  }).pipe(Effect.scoped, Effect.provide(Client)),
+);
