@@ -26,7 +26,6 @@ describe("makeD1MigrationExecutor", () => {
 
       const [batch, query] = policies;
       expect(query?._tag).toBe("None");
-      expect(batch?._tag).toBe("Some");
       const policy = Option.getOrThrow(batch!);
       const options =
         typeof policy === "function" ? policy(yield* Ref.make<unknown>(undefined)) : policy;
