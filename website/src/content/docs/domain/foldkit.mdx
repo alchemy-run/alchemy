@@ -13,10 +13,10 @@ Install `foldkit` in the web package. Domain's root entry does not import it. Th
 import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 
-export const Bank = DomainFoldkit.commands(CustomerApi);
+export const Bank = DomainFoldkit.client(CustomerApi);
 ```
 
-`Bank` has one Command per Api command. Each Command takes `{ target, input, commandId }`. Its result is `Bank.Message.Succeeded<Name>` or `Bank.Message.Failed<Name>`.
+`Bank` has one Command per Api command and a read namespace for each View, Aggregate, and Stream. Each read namespace has `watch` and `events`. View namespaces also have `SnapshotFlags` and `decodeSnapshotFlags`. The name `Message` is reserved; an Api with that entry name is rejected at compile time and at runtime. Each Command takes `{ target, input, commandId }`. Its result is `Bank.Message.Succeeded<Name>` or `Bank.Message.Failed<Name>`.
 
 A success carries `reply` and `receipt: { stream, version }`. Pass the receipt to a read's `atLeast` option when that read must include the write.
 
@@ -99,7 +99,7 @@ const SummaryMessage = defineMessageUnion({
 const subscriptions = Subscription.make<
   Model, typeof SummaryMessage.Type, typeof CustomerApi.Client.Identifier
 >()(() => ({
-  summary: DomainFoldkit.watchView(CustomerApi, "AccountSummary", {
+  summary: Bank.AccountSummary.watch({
     key: (model: Model) => model.accountId,
     toMessage: (snapshot): typeof SummaryMessage.Type => SummaryMessage.ReceivedSummary(snapshot),
     onFailure: (error): typeof SummaryMessage.Type => SummaryMessage.FailedWatchSummary({ reason: error._tag }),
@@ -118,24 +118,21 @@ The adapter converts absent state to `Option.none()`. Store the state and cursor
 
 Use `isEnabled: (model) => model.online` to stop the stream while offline. A return to online restarts it with a fresh snapshot.
 
-Use `watchView` for state. A View can change its state without an output event, so `events` cannot replace the state watch.
+Use `watch` for state. A View can change its state without an output event, so `events` cannot replace the state watch.
 
 ## Seed the first paint
 
 The server reads `client.AccountSummary.snapshot(accountId)` and encodes its state with the View's Schema. Put its `{ state, cursor }` into Flags.
 
 ```typescript
-const seeded = DomainFoldkit.decodeSnapshotFlags(
-  (AccountSummary.definition.state ?? Schema.Never),
-  flags.summary,
-);
+const seeded = Bank.AccountSummary.decodeSnapshotFlags(flags.summary);
 const summary = Option.flatMap(seeded, (snapshot) => snapshot.state);
 const summaryCursor = Option.map(seeded, (snapshot) => snapshot.cursor);
 ```
 
 Keep the outer Flags field as `Schema.Unknown`. Decode that field in `init`. A stale state Schema then falls back to empty state and a fresh watch, instead of preventing boot.
 
-`SnapshotFlags(State)` is the Schema for this wire shape. It decodes `null` state to `Option.none()`. Its cursor must be a nonnegative integer.
+`Bank.AccountSummary.SnapshotFlags` is the Schema for this wire shape. It decodes `null` state to `Option.none()`. Its cursor must be a nonnegative integer.
 
 For an event feed seeded from Flags, use the same snapshot's cursor. See [Optimistic updates](/domain/optimistic-updates#resume-the-feed).
 

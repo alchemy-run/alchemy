@@ -48,9 +48,9 @@ import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
 import { Command, Subscription } from "foldkit";
 import * as Option from "effect/Option";
 
-const BankCommands = DomainFoldkit.commands(CustomerApi);
+const BankClient = DomainFoldkit.client(CustomerApi);
 
-const send = BankCommands.DepositMoney({
+const send = BankClient.DepositMoney({
   target: model.accountId,
   input: { amount: 1_000 },
   commandId: allocation.commandId,
@@ -58,7 +58,7 @@ const send = BankCommands.DepositMoney({
 const command = Command.mapMessage(send, (result) => Message.ReceivedBankResult({ result }));
 ```
 
-Allocate ids with `DomainFoldkit.next(model.commandIds)` and store the returned state with `modifyFields`. Declare `ReceivedBankResult` with `{ result: BankCommands.Message }`. Match the result through `BankCommands.Message.match`: `SucceededDepositMoney` carries the reply and receipt; `FailedDepositMoney` carries `Rejected`, `Denied`, or `Unknown`. Preserve Rejection and middleware error fields. Retry `Unknown` with the original id because the write may have committed. Command defects also produce `Unknown`.
+Allocate ids with `DomainFoldkit.next(model.commandIds)` and store the returned state with `modifyFields`. Declare `ReceivedBankResult` with `{ result: BankClient.Message }`. Match the result through `BankClient.Message.match`: `SucceededDepositMoney` carries the reply and receipt; `FailedDepositMoney` carries `Rejected`, `Denied`, or `Unknown`. Preserve Rejection and middleware error fields. Retry `Unknown` with the original id because the write may have committed. Command defects also produce `Unknown`.
 
 More: [Integrate with Foldkit: Derive the Commands](https://alchemy.run/domain/foldkit#derive-the-commands), [Send a command from update](https://alchemy.run/domain/foldkit#send-a-command-from-update).
 
@@ -66,7 +66,7 @@ More: [Integrate with Foldkit: Derive the Commands](https://alchemy.run/domain/f
 
 ```ts
 const subscriptions = Subscription.make<Model, Message, Bank>()(() => ({
-  summary: DomainFoldkit.watchView(CustomerApi, "AccountSummary", {
+  summary: BankClient.AccountSummary.watch({
     key: (model: Model) => model.accountId,
     isEnabled: (model) => model.online,
     toMessage: ({ state, cursor }): Message => Message.ReceivedBalance({
@@ -76,7 +76,7 @@ const subscriptions = Subscription.make<Model, Message, Bank>()(() => ({
     onFailure: (error): Message => Message.FailedWatchSummary({ reason: error._tag }),
     onDefect: (): Message => Message.FailedWatchSummary({ reason: "Read defect" }),
   }),
-  statement: DomainFoldkit.viewEvents(CustomerApi, "Statement", {
+  statement: BankClient.Statement.events({
     key: (model: Model) => model.accountId,
     cursor: (model) => model.statementCursor,
     isEnabled: (model) => model.online,
@@ -94,7 +94,7 @@ const subscriptions = Subscription.make<Model, Message, Bank>()(() => ({
 
 Store absent state and the event cursor with `Option`. Apply each line and its cursor in one update. Cursor changes do not restart the feed. `onFailure` handles typed read failures; `onDefect` receives unexpected read Causes. Interruption ends the read without a Message. Mark the feed live after `CaughtUpStatement`.
 
-Decode snapshot Flags with `DomainFoldkit.decodeSnapshotFlags`. Use `watchView` for current state and `viewEvents` for output entries and command confirmation.
+Decode snapshot Flags with `BankClient.AccountSummary.decodeSnapshotFlags`. Use `watch` for current state and `events` for output entries and command confirmation.
 
 More: [Integrate with Foldkit: Follow a View's state](https://alchemy.run/domain/foldkit#follow-a-views-state), [Seed the first paint](https://alchemy.run/domain/foldkit#seed-the-first-paint), [Optimistic updates: Resume the feed](https://alchemy.run/domain/optimistic-updates#resume-the-feed).
 

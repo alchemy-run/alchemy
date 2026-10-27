@@ -5,7 +5,7 @@ description: Show pending intent, confirm it by commandId from a View feed, and 
 
 Show a deposit when the customer clicks. Confirm it when the bank's event arrives. A successful command reply means the write committed. The line waits for the feed before it becomes confirmed.
 
-This guide uses `Bank = DomainFoldkit.commands(CustomerApi)` from [Integrate with Foldkit](/domain/foldkit). The bank example keeps its own queue and line Model. The adapter has no generic pending-state helper.
+This guide uses `Bank = DomainFoldkit.client(CustomerApi)` from [Integrate with Foldkit](/domain/foldkit). The bank example keeps its own queue and line Model. The adapter has no generic pending-state helper.
 
 ## Track each intent
 
@@ -79,7 +79,7 @@ const Message = defineMessageUnion({
 });
 
 const subscriptions = Subscription.make<Model, typeof Message.Type, typeof CustomerApi.Client.Identifier>()(() => ({
-  statement: DomainFoldkit.viewEvents(CustomerApi, "Statement", {
+  statement: Bank.Statement.events({
     key: (model: Model) => model.accountId,
     cursor: (model) => model.statementCursor,
     isEnabled: (model) => model.online,
@@ -99,7 +99,7 @@ const subscriptions = Subscription.make<Model, typeof Message.Type, typeof Custo
 A restart reads the latest Model cursor and passes it as `after`. Cursor changes leave the stream alive. The adapter drops entries at or below the applied cursor. A filtered feed can skip sequence numbers, so the adapter does not count gaps.
 
 
-The adapter does not reduce entries into state. Use `watchView` for the current View state. Use this event feed to confirm intents or build the app's display list.
+The adapter does not reduce entries into state. Use `watch` for the current View state. Use this event feed to confirm intents or build the app's display list.
 
 ## Keep the offline queue
 

@@ -12,7 +12,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Client, CounterApi, CounterId } from "./FoldkitCounter.ts";
 
-const Counter = Foldkit.commands(CounterApi);
+const Counter = Foldkit.client(CounterApi);
 const target = CounterId.make("one");
 
 it.live("keeps reply, receipt and the caller's id on success", () =>
@@ -112,7 +112,7 @@ it("allocates ids without changing the prior state", () => {
   expect(ids.sent).toBe(0);
 });
 
-const watched = Foldkit.watchView(CounterApi, "Total", {
+const watched = Counter.Total.watch({
   key: (model: { id: typeof CounterId.Type; cursor: number; online: boolean }) => model.id,
   isEnabled: (model) => model.online,
   toMessage: (snapshot) => ({ _tag: "ReceivedTotal", snapshot }),
@@ -173,7 +173,7 @@ it.live("does not open a disabled watch", () =>
 );
 
 type FeedModel = { id: typeof CounterId.Type; cursor: Option.Option<number>; online: boolean };
-const feed = Foldkit.viewEvents(CounterApi, "Total", {
+const feed = Counter.Total.events({
   key: (model: FeedModel) => model.id,
   cursor: (model) => model.cursor,
   isEnabled: (model) => model.online,
@@ -233,18 +233,17 @@ it("keeps the event stream alive across cursor changes", () => {
 });
 
 it("decodes snapshot Flags and falls back when their state Schema changed", () => {
-  const State = Schema.Struct({ total: Schema.Number });
-  expect(Foldkit.decodeSnapshotFlags(State, { state: { total: 4 }, cursor: 7 })).toEqual(
+  expect(Counter.Total.decodeSnapshotFlags({ state: { total: 4 }, cursor: 7 })).toEqual(
     Option.some({ state: Option.some({ total: 4 }), cursor: 7 }),
   );
-  expect(Foldkit.decodeSnapshotFlags(State, { state: null, cursor: 0 })).toEqual(
+  expect(Counter.Total.decodeSnapshotFlags({ state: null, cursor: 0 })).toEqual(
     Option.some({ state: Option.none(), cursor: 0 }),
   );
-  expect(Foldkit.decodeSnapshotFlags(State, { state: { oldTotal: 4 }, cursor: 7 })).toEqual(
+  expect(Counter.Total.decodeSnapshotFlags({ state: { oldTotal: 4 }, cursor: 7 })).toEqual(
     Option.none(),
   );
-  expect(Foldkit.decodeSnapshotFlags(State, { state: null, cursor: -1 })).toEqual(Option.none());
-  expect(Foldkit.decodeSnapshotFlags(State, undefined)).toEqual(Option.none());
+  expect(Counter.Total.decodeSnapshotFlags({ state: null, cursor: -1 })).toEqual(Option.none());
+  expect(Counter.Total.decodeSnapshotFlags(undefined)).toEqual(Option.none());
 });
 
 it("can restart a failed Flags cursor without changing the View key", () => {
@@ -259,7 +258,7 @@ it("can restart a failed Flags cursor without changing the View key", () => {
 it.live("turns a mid-stream validate refusal into an app Message", () =>
   Effect.gen(function* () {
     const started = yield* Deferred.make<void>();
-    const read = Foldkit.watchView(CounterApi, "Total", {
+    const read = Counter.Total.watch({
       key: () => target,
       toMessage: (snapshot) => `snapshot:${snapshot.cursor}`,
       onFailure: (error) => `failed:${error._tag}`,
@@ -313,7 +312,7 @@ it.live("turns watch and event defects into Messages", () =>
         events: () => Stream.die("events failed"),
       },
     });
-    const read = Foldkit.watchView(CounterApi, "Total", {
+    const read = Counter.Total.watch({
       key: () => target,
       toMessage: () => "snapshot",
       onFailure: () => "failure",
@@ -356,3 +355,72 @@ it.live("preserves interruption in watch and event streams", () =>
     }
   }).pipe(Effect.provide(Client)),
 );
+
+it.live("watches Aggregate state and follows committed events", () =>
+  Effect.gen(function* () {
+    yield* Counter.Increment({ target, input: { amount: 3 }, commandId: "page:aggregate" }).effect;
+    const watch = Counter.Counter.watch({
+      key: () => target,
+      toMessage: (snapshot) => snapshot,
+      onFailure: () => ({ state: Option.none(), cursor: -1 }),
+      onDefect: () => ({ state: Option.none(), cursor: -1 }),
+    });
+    const snapshots = yield* watch
+      .dependenciesToStream({ key: target, isEnabled: true })
+      .pipe(Stream.take(1), Stream.runCollect);
+    expect(snapshots).toEqual([{ state: Option.some({ total: 3 }), cursor: 1 }]);
+    const feed = Counter.Counter.events({
+      key: () => target,
+      cursor: () => Option.none(),
+      onEntry: (entry) => entry.event.amount,
+      onCaughtUp: (cursor) => cursor,
+      onFailure: () => -1,
+      onDefect: () => -1,
+    });
+    const dependencies = feed.modelToDependencies(undefined);
+    const events = yield* feed
+      .dependenciesToStream(dependencies, () => dependencies)
+      .pipe(Stream.take(2), Stream.runCollect);
+    expect(events).toEqual([3, 1]);
+  }).pipe(Effect.provide(Client)),
+);
+
+it.live("watches Stream absence and reports CaughtUp", () =>
+  Effect.gen(function* () {
+    const watch = Counter.Outputs.watch({
+      key: () => target,
+      toMessage: (snapshot) => snapshot,
+      onFailure: () => ({ state: Option.none(), cursor: -1 }),
+      onDefect: () => ({ state: Option.none(), cursor: -1 }),
+    });
+    const snapshots = yield* watch
+      .dependenciesToStream({ key: target, isEnabled: true })
+      .pipe(Stream.take(1), Stream.runCollect);
+    expect(snapshots).toEqual([{ state: Option.none(), cursor: 0 }]);
+    const feed = Counter.Outputs.events({
+      key: () => target,
+      cursor: () => Option.none(),
+      onEntry: (entry) => entry.event.amount,
+      onCaughtUp: (cursor) => cursor,
+      onFailure: () => -1,
+      onDefect: () => -1,
+    });
+    const dependencies = feed.modelToDependencies(undefined);
+    const events = yield* feed
+      .dependenciesToStream(dependencies, () => dependencies)
+      .pipe(Stream.take(1), Stream.runCollect);
+    expect(events).toEqual([0]);
+  }).pipe(Effect.provide(Client)),
+);
+
+it("rejects the reserved Message read name", () => {
+  class MessageView extends Domain.View("Message", {
+    from: [],
+    key: Schema.String,
+    state: Schema.Number,
+    initial: 0,
+  }) {}
+  class CollisionApi extends Domain.Api("CollisionApi", MessageView) {}
+  // @ts-expect-error Message is reserved for command results
+  expect(() => Foldkit.client(CollisionApi)).toThrow("reserves the Api entry name Message");
+});

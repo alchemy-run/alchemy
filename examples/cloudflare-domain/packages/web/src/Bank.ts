@@ -1,7 +1,6 @@
 import type * as Domain from "@alchemy.run/domain";
 import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
 import { AccountId, mainAccountId } from "@bank/domain/Account/Account.id";
-import { AccountSummary } from "@bank/domain/Account/AccountSummary.view";
 import { StatementLine } from "@bank/domain/Account/Statement.view";
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
 import { Username } from "@bank/domain/Customer/Username";
@@ -19,7 +18,7 @@ import { defineMessageUnion } from "foldkit/message";
 import { modifyFields } from "foldkit/struct";
 
 type Bank = Domain.Api.ClientKey<"CustomerApi">;
-export const BankCommands = DomainFoldkit.commands(CustomerApi);
+export const BankClient = DomainFoldkit.client(CustomerApi);
 
 // MODEL
 
@@ -80,7 +79,7 @@ export const Message = defineMessageUnion({
   ClickedDeposit: {},
   ClickedWithdraw: {},
   ClickedRetryLine: { commandId: Schema.String },
-  ReceivedBankResult: { result: BankCommands.Message },
+  ReceivedBankResult: { result: BankClient.Message },
   CompletedDeliver: { outcomes: Schema.Array(Outcome) },
   CompletedSaveIntents: {},
   WentOnline: {},
@@ -112,10 +111,10 @@ const outcomeOfFailure = (
 
 const deliver = (accountId: AccountId, intent: Intent) => {
   const { commandId, amount } = intent;
-  const send: Command.Command<typeof BankCommands.Message.Type, never, Bank> =
+  const send: Command.Command<typeof BankClient.Message.Type, never, Bank> =
     intent.kind === "deposit"
-      ? BankCommands.DepositMoney({ target: accountId, input: { amount }, commandId })
-      : BankCommands.WithdrawMoney({ target: accountId, input: { amount }, commandId });
+      ? BankClient.DepositMoney({ target: accountId, input: { amount }, commandId })
+      : BankClient.WithdrawMoney({ target: accountId, input: { amount }, commandId });
   return send.effect.pipe(
     Effect.flatMap((result) =>
       Match.value(result).pipe(
@@ -286,7 +285,7 @@ export const update = (model: Model, message: Message) =>
         model: modifyFields(model, { commandIds: () => allocation.commandIds }),
         commands: [
           Command.mapMessage(
-            BankCommands.RegisterCustomer({
+            BankClient.RegisterCustomer({
               target: model.customerId,
               input: { name: model.customerId, username: Username.make(model.customerId) },
               commandId: allocation.commandId,
@@ -354,10 +353,7 @@ export const update = (model: Model, message: Message) =>
 // INIT
 
 export const init = (flags: Flags): Update.Return<Model, Message, Bank> => {
-  const summary = DomainFoldkit.decodeSnapshotFlags(
-    AccountSummary.definition.state ?? Schema.Never,
-    flags.summary,
-  );
+  const summary = BankClient.AccountSummary.decodeSnapshotFlags(flags.summary);
   const model = Model.make({
     customerId: flags.customerId,
     accountId: mainAccountId(flags.customerId),
@@ -393,7 +389,7 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
         ),
     },
   ),
-  summary: DomainFoldkit.watchView(CustomerApi, "AccountSummary", {
+  summary: BankClient.AccountSummary.watch({
     key: (model: Model) => model.accountId,
     isEnabled: (model) => model.online,
     toMessage: ({ state, cursor }): Message =>
@@ -401,7 +397,7 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
     onFailure: (error): Message => Message.FailedWatchSummary({ reason: error._tag }),
     onDefect: (): Message => Message.FailedWatchSummary({ reason: "Read defect" }),
   }),
-  statement: DomainFoldkit.viewEvents(CustomerApi, "Statement", {
+  statement: BankClient.Statement.events({
     key: (model: Model) => model.accountId,
     cursor: (model) => model.statementCursor,
     isEnabled: (model) => model.online,

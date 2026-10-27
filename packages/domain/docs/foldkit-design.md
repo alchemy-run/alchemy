@@ -77,8 +77,14 @@ The adapter targets the workspace catalog's Foldkit `^0.169.0`, whose `Command.d
 ### 1. Commands from the Api
 
 ```ts
-export const Bank = DomainFoldkit.commands(CustomerApi)
+export const Bank = DomainFoldkit.client(CustomerApi)
 ```
+
+`ClientOf<A>` maps the Api entries to Command methods and read namespaces. Each View, Aggregate, and Stream exposes `watch(options)` and `events(options)`. Their key, Snapshot state, event entry, and failure types come from the corresponding Domain read client. Aggregate entries carry committed events; Stream watch state is the latest entry. Both feeds use `Read.CaughtUp` and envelope sequence numbers, so cursor resume and dedup use the same rules as Views.
+
+View namespaces also expose `SnapshotFlags` and `decodeSnapshotFlags(flags)`, bound to the View state Schema. Aggregate and Stream namespaces do not expose Flags helpers: the Domain Aggregate read client has no `snapshot` method, and Stream watch state is an entry rather than a View state. Their `watch` and `events` methods are available.
+
+`Message` is reserved for the command result union. `client(api)` rejects an Api with a command or read entry named `Message` in its type signature and at runtime. The client reads `api.Client` from context; it owns no connection, protocol, or Layer. The app provides `api.layerClient` and its protocol in `resources`.
 
 For each command in `CustomerApi.commands`:
 
@@ -104,10 +110,10 @@ Headers such as an MFA code go through a client Layer or a config seam. They are
 
 `commandId` must be unique and `update` must stay pure. `DomainFoldkit.CommandIds` is a Schema value `{ session, sent }` with a pure `next`. `session` comes from Flags, once per page load, so two tabs never share it, and a cached server render must not reuse it.
 
-### 2. A View's state: `watchView`
+### 2. A View's state: `watch`
 
 ```ts
-watchView(CustomerApi, "AccountSummary", {
+Bank.AccountSummary.watch({
   key: (model) => model.accountId,
   toMessage: (snapshot): Message => Message.ReceivedSummary({ snapshot }),
   onFailure: (error): Message => Message.FailedWatchSummary({ reason: error._tag }),
@@ -119,10 +125,10 @@ A Subscription entry on `watch`. The app passes its own Message, so the app name
 
 This is the state source. Not every state change has an output event: the Kernel can evolve a View's state and emit nothing (for example `AccountOpened` in `Statement`), so state never comes from `events`.
 
-### 3. A View's log: `viewEvents`
+### 3. A View's log: `events`
 
 ```ts
-viewEvents(CustomerApi, "Statement", {
+Bank.Statement.events({
   key: (model) => model.accountId,
   cursor: (model) => model.statementCursor,
   onEntry: (entry): Message => Message.ReceivedStatementLine({ entry }),
@@ -145,9 +151,9 @@ The adapter has no reducer. Each entry carries the View's `state` after it; any 
 
 ### 4. First paint: `SnapshotFlags`
 
-The server reads `snapshot(key)` and puts `{ state, cursor }` into Flags. `init` seeds the Model for `watchView` and the cursor for `viewEvents`. State and cursor come from one read, so the log resumes with no gap and no duplicate.
+The server reads `snapshot(key)` and puts `{ state, cursor }` into Flags. `init` seeds the Model for `watch` and the cursor for `events`. State and cursor come from one read, so the log resumes with no gap and no duplicate.
 
-`SnapshotFlags(State)` decodes wire `{ state, cursor }` and converts null to `Option.none()`. `decodeSnapshotFlags(State, unknownFlags)` returns `None` when decode fails. The app keeps the untrusted snapshot field as `Schema.Unknown` in its outer Flags and decodes that field in init, so stale data cannot prevent boot.
+`Bank.AccountSummary.SnapshotFlags` decodes wire `{ state, cursor }` and converts null to `Option.none()`. `Bank.AccountSummary.decodeSnapshotFlags(unknownFlags)` returns `None` when decode fails. The app keeps the untrusted snapshot field as `Schema.Unknown` in its outer Flags and decodes that field in init, so stale data cannot prevent boot.
 
 Flags can be stale: a cached page, an old tab, a new deploy that changed the state's Schema. A Flags decode failure falls back to an empty Model and a fresh `watch`. An `events` failure on the Flags cursor lets the app clear the seeded state and cursor, then increment `restartKey`. The next stream starts with `after` unset. The app attempts this once; later failures reach its normal error state. Domain has no distinct stale-cursor error, so the adapter does not retry every read failure by itself.
 
@@ -168,7 +174,7 @@ Each needs its own design first.
 
 - **Optimistic reconciliation.** A generic `Pending` helper does not hold. A command emits zero or more events, a View can drop or transform them, and the number of output entries with one `commandId` does not tell when a command is fully applied. A stored prediction goes stale when another device writes. The design must cover ordered intents, re-prediction from current Aggregate state, completion through the receipt and an `atLeast` read, idempotent duplicate confirmation, and where the Aggregate state for `predict` comes from (reading it over the wire may need a permission the Api does not give). Until then, the bank guide keeps its explicit pattern: confirm a pending line by `commandId` from the feed.
 - **Trace fixtures.** A Domain Story run replayed as a Foldkit Story, after alchemy#2570.
-- **LiveQuery.** Foldkit's keyed live feed (foldkit/foldkit#1785) becomes an optional source once `viewEvents` proves the shape and #1655 merges.
+- **LiveQuery.** Foldkit's keyed live feed (foldkit/foldkit#1785) becomes an optional source once `events` proves the shape and #1655 merges.
 
 ## Scope
 

@@ -12,7 +12,7 @@ import {
   type Line,
   Message,
   type Model,
-  BankCommands,
+  BankClient,
   SaveIntents,
   shownBalance,
   update,
@@ -293,8 +293,8 @@ test("a new customer opens their account; it appears through the subscription", 
     given(modifyFields(account, { balance: () => Option.none(), lines: () => [] })),
     message(Message.ClickedRegister()),
     Command.resolve(
-      BankCommands.RegisterCustomer,
-      BankCommands.Message.SucceededRegisterCustomer({
+      BankClient.RegisterCustomer,
+      BankClient.Message.SucceededRegisterCustomer({
         commandId: "s:0",
         reply: undefined,
         receipt: { stream: "Customer/c-1", version: 1 },

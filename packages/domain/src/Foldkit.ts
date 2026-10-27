@@ -8,10 +8,12 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Command, type Subscription } from "foldkit";
 import { defineMessageUnion, type MessageUnion } from "foldkit/message";
+import type * as Aggregate from "./Aggregate.ts";
 import type * as Api from "./Api.ts";
 import type * as DomainCommand from "./Command.ts";
 import * as Key from "./Key.ts";
 import * as Read from "./Read.ts";
+import type * as DomainStream from "./Stream.ts";
 import type * as View from "./View.ts";
 
 /** Per-call headers, resolved at execution time and excluded from replayable args. */
@@ -68,7 +70,7 @@ type Result<A extends Api.Any, C extends DomainCommand.Any> = Extract<
 >;
 
 /** Typed Command definitions and their result Message union, derived from an Api. */
-export type Commands<A extends Api.Any> = {
+type CommandDefinitions<A extends Api.Any> = {
   readonly [C in Api.CommandsOf<A> as C["tag"]]: Command.CommandDefinitionWithArgs<
     C["tag"],
     Args<C>,
@@ -83,8 +85,8 @@ export type Commands<A extends Api.Any> = {
 const Receipt = Schema.Struct({ stream: Schema.String, version: Schema.Number });
 
 /** Build one Foldkit Command per Api command. Provide the Api client at the runtime boundary. */
-export function commands<A extends Api.Any>(api: A): Commands<A>;
-export function commands(api: Api.Any): unknown {
+function commandDefinitions<A extends Api.Any>(api: A): CommandDefinitions<A>;
+function commandDefinitions(api: Api.Any): unknown {
   const cases: Record<string, Schema.Struct.Fields> = {};
   for (const command of api.commands) {
     const rejection = Schema.Union(command.rejects);
@@ -170,12 +172,119 @@ const classifyFailure = (command: DomainCommand.Any, error: unknown) => {
   return { _tag: "Unknown" };
 };
 
-type Views<A extends Api.Any> = Extract<A["entries"][number], View.Any>;
-type ViewNamed<A extends Api.Any, Name extends Views<A>["viewName"]> = Extract<
-  Views<A>,
-  { readonly viewName: Name }
+type ReadEntry = View.Any | Aggregate.Any | DomainStream.Any;
+type Reads<A extends Api.Any> = Extract<A["entries"][number], ReadEntry>;
+type ReadName<V extends ReadEntry> = V extends View.Any
+  ? V["viewName"]
+  : V extends Aggregate.Any
+    ? V["aggregateName"]
+    : V extends DomainStream.Any
+      ? V["streamName"]
+      : never;
+type ReadClient<V extends ReadEntry> = V extends View.Any
+  ? Api.ViewClient<V>
+  : V extends Aggregate.Any
+    ? Api.AggregateClient<V>
+    : V extends DomainStream.Any
+      ? Api.StreamClient<V>
+      : never;
+type ReadKey<V extends ReadEntry> = Parameters<ReadClient<V>["watch"]>[0];
+type StateOf<V extends ReadEntry> = Stream.Success<ReturnType<ReadClient<V>["watch"]>>["state"];
+type EntryOf<V extends ReadEntry> = Exclude<
+  Stream.Success<ReturnType<ReadClient<V>["events"]>>,
+  Read.CaughtUp
 >;
-type ViewKey<V extends View.Any> = Key.IdOf<View.KeyOf<V>>;
+type ErrorOf<V extends ReadEntry> = Stream.Error<ReturnType<ReadClient<V>["watch"]>>;
+type ViewStateSchema<V extends View.Any> = [NonNullable<V["definition"]["state"]>] extends [never]
+  ? typeof Schema.Never
+  : Extract<NonNullable<V["definition"]["state"]>, Schema.Top>;
+type ViewFlags<V extends View.Any> = ReturnType<typeof snapshotFlags<ViewStateSchema<V>>>;
+
+/** A read namespace with Foldkit Subscription entries, bound to one Api entry. */
+export interface ReadClientOf<A extends Api.Any, V extends ReadEntry> {
+  readonly watch: <Model, Message>(
+    options: WatchOptions<Model, Message, V>,
+  ) => Subscription.EntryWithoutKeepAlive<
+    Model,
+    Message,
+    { key: ReadKey<V>; isEnabled: boolean },
+    A["Client"]["Identifier"]
+  >;
+  readonly events: <Model, Message>(
+    options: EventsOptions<Model, Message, V>,
+  ) => EventsSubscription<A, Model, Message, V>;
+}
+
+/** Commands and read namespaces computed from the Api's entries. Message is reserved. */
+export type ClientOf<A extends Api.Any> = CommandDefinitions<A> & {
+  readonly [V in Reads<A> as ReadName<V>]: ReadClientOf<A, V> &
+    (V extends View.Any
+      ? {
+          readonly SnapshotFlags: ViewFlags<V>;
+          readonly decodeSnapshotFlags: (flags: unknown) => Option.Option<ViewFlags<V>["Type"]>;
+        }
+      : {});
+};
+
+/** Build a Foldkit client. The app provides api.layerClient in its runtime resources. */
+export function client<A extends Api.Any>(
+  api: A & ("Message" extends keyof Api.ClientOf<A> ? never : unknown),
+): ClientOf<A>;
+export function client(api: Api.Any): unknown {
+  if (
+    api.commands.some((command) => command.tag === "Message") ||
+    api.entries.some(
+      (entry) =>
+        (entry.kind === "View" && entry.viewName === "Message") ||
+        (entry.kind === "Aggregate" && entry.aggregateName === "Message") ||
+        (entry.kind === "Stream" && entry.streamName === "Message"),
+    )
+  ) {
+    throw new Error("Foldkit client reserves the Api entry name Message");
+  }
+  const definitions = commandDefinitions(api) as Record<string, unknown>;
+  for (const entry of api.entries) {
+    if (entry.kind !== "View" && entry.kind !== "Aggregate" && entry.kind !== "Stream") {
+      continue;
+    }
+    const name = readName(entry);
+    definitions[name] = {
+      watch: (options: WatchOptions<unknown, unknown, ReadEntry>) =>
+        watchRead(api, entry, name, options),
+      events: (options: EventsOptions<unknown, unknown, ReadEntry>) =>
+        readEvents(api, entry, name, options),
+      ...(entry.kind === "View"
+        ? {
+            SnapshotFlags: snapshotFlags(entry.definition.state ?? Schema.Never),
+            decodeSnapshotFlags: (flags: unknown) =>
+              Schema.decodeUnknownOption(
+                snapshotFlags(
+                  (entry.definition.state ?? Schema.Never) as Schema.Schema<unknown> & {
+                    readonly DecodingServices: never;
+                  },
+                ),
+              )(flags),
+          }
+        : {}),
+    };
+  }
+  return definitions;
+}
+
+const readName = (entry: ReadEntry): string => {
+  if (entry.kind === "View") {
+    return entry.viewName;
+  } else if (entry.kind === "Aggregate") {
+    return entry.aggregateName;
+  } else {
+    return entry.streamName;
+  }
+};
+
+const keySchemaOf = (entry: ReadEntry) =>
+  Schema.toType(
+    entry.kind === "Aggregate" ? entry.definition.id : Key.idSchemaOf(entry.definition.key),
+  );
 
 /** A watch Snapshot with explicit absence for Foldkit Models. */
 export type Snapshot<State> = Readonly<{
@@ -183,38 +292,26 @@ export type Snapshot<State> = Readonly<{
   cursor: number;
 }>;
 
-/** Callbacks for a View's live state. Cursor changes do not restart the watch. */
-export interface WatchOptions<Model, Message, V extends View.Any> {
-  readonly key: (model: Model) => ViewKey<V>;
+/** Callbacks for live read state. Cursor changes do not restart the watch. */
+export interface WatchOptions<Model, Message, V extends ReadEntry> {
+  readonly key: (model: Model) => ReadKey<V>;
   readonly isEnabled?: (model: Model) => boolean;
-  readonly toMessage: (snapshot: Snapshot<View.StateOf<V>>) => Message;
-  readonly onFailure: (error: Api.ReadError<V["definition"]>) => Message;
+  readonly toMessage: (snapshot: Snapshot<StateOf<V>>) => Message;
+  readonly onFailure: (error: ErrorOf<V>) => Message;
   /** Handle unexpected read defects. Interruption does not call this callback. */
   readonly onDefect: (cause: Cause.Cause<unknown>) => Message;
 }
 
-/** Follow a View's state and cursor. Pass the result as an entry to Subscription.make. */
-export function watchView<A extends Api.Any, Name extends Views<A>["viewName"], Model, Message>(
-  api: A,
-  name: Name,
-  options: WatchOptions<Model, Message, ViewNamed<A, Name>>,
-): Subscription.EntryWithoutKeepAlive<
-  Model,
-  Message,
-  { key: ViewKey<ViewNamed<A, Name>>; isEnabled: boolean },
-  A["Client"]["Identifier"]
->;
-export function watchView(
+/** Follow read state and cursor. Pass the result as an entry to Subscription.make. */
+function watchRead(
   api: Api.Any,
+  entry: ReadEntry,
   name: string,
-  options: WatchOptions<unknown, unknown, View.Any>,
+  options: WatchOptions<unknown, unknown, ReadEntry>,
 ): unknown {
-  const view = api.entries.find(
-    (entry): entry is View.Any => entry.kind === "View" && entry.viewName === name,
-  )!;
   return {
     dependenciesSchema: Schema.Struct({
-      key: Schema.toType(Key.idSchemaOf(view.definition.key)),
+      key: keySchemaOf(entry),
       isEnabled: Schema.Boolean,
     }),
     modelToDependencies: (model: unknown) => ({
@@ -224,8 +321,10 @@ export function watchView(
     dependenciesToStream: ({ key, isEnabled }: { key: string; isEnabled: boolean }) =>
       isEnabled
         ? Stream.unwrap(
-            Effect.map(Effect.service(api.Client), (client) =>
-              (client as Record<string, Api.ViewClient<View.Any>>)[name].watch(key),
+            api.Client.pipe(
+              Effect.map((client) =>
+                (client as Record<string, ReadClient<ReadEntry>>)[name].watch(key),
+              ),
             ),
           ).pipe(
             Stream.map(({ state, cursor }) =>
@@ -245,46 +344,42 @@ export function watchView(
   };
 }
 
-/** Callbacks for a resumable View output feed. The app stores the cursor after applying each entry. */
-export interface EventsOptions<Model, Message, V extends View.Any> {
-  readonly key: (model: Model) => ViewKey<V>;
+/** Callbacks for a resumable event feed. The app stores the cursor after applying each entry. */
+export interface EventsOptions<Model, Message, V extends ReadEntry> {
+  readonly key: (model: Model) => ReadKey<V>;
   readonly cursor: (model: Model) => Option.Option<number>;
   readonly isEnabled?: (model: Model) => boolean;
   readonly restartKey?: (model: Model) => number;
-  readonly onEntry: (entry: View.Entry<View.StateOf<V>, View.EventOf<V>, ViewKey<V>>) => Message;
+  readonly onEntry: (entry: EntryOf<V>) => Message;
   readonly onCaughtUp: (cursor: number) => Message;
-  readonly onFailure: (error: Api.ReadError<V["definition"]>) => Message;
+  readonly onFailure: (error: ErrorOf<V>) => Message;
   /** Handle unexpected read defects. Interruption does not call this callback. */
   readonly onDefect: (cause: Cause.Cause<unknown>) => Message;
 }
 
-/** Follow View output entries after the Model's cursor, without counting sequence gaps. */
-export function viewEvents<A extends Api.Any, Name extends Views<A>["viewName"], Model, Message>(
-  api: A,
-  name: Name,
-  options: EventsOptions<Model, Message, ViewNamed<A, Name>>,
-): {
+/** Follow event entries after the Model's cursor, without counting sequence gaps. */
+type EventsSubscription<A extends Api.Any, Model, Message, V extends ReadEntry> = {
   readonly dependenciesSchema: Schema.Struct<{
-    key: Schema.Schema<ViewKey<ViewNamed<A, Name>>>;
+    key: Schema.Schema<ReadKey<V>>;
     cursor: Schema.Schema<Option.Option<number>>;
     restartKey: Schema.optional<typeof Schema.Number>;
     isEnabled: typeof Schema.Boolean;
   }>;
   readonly modelToDependencies: (model: Model) => {
-    key: ViewKey<ViewNamed<A, Name>>;
+    key: ReadKey<V>;
     cursor: Option.Option<number>;
     restartKey?: number;
     isEnabled: boolean;
   };
   readonly keepAliveEquivalence: (
     left: {
-      key: ViewKey<ViewNamed<A, Name>>;
+      key: ReadKey<V>;
       cursor: Option.Option<number>;
       restartKey?: number;
       isEnabled: boolean;
     },
     right: {
-      key: ViewKey<ViewNamed<A, Name>>;
+      key: ReadKey<V>;
       cursor: Option.Option<number>;
       restartKey?: number;
       isEnabled: boolean;
@@ -292,28 +387,26 @@ export function viewEvents<A extends Api.Any, Name extends Views<A>["viewName"],
   ) => boolean;
   readonly dependenciesToStream: (
     dependencies: {
-      key: ViewKey<ViewNamed<A, Name>>;
+      key: ReadKey<V>;
       cursor: Option.Option<number>;
       restartKey?: number;
       isEnabled: boolean;
     },
     readDependencies: () => {
-      key: ViewKey<ViewNamed<A, Name>>;
+      key: ReadKey<V>;
       cursor: Option.Option<number>;
       restartKey?: number;
       isEnabled: boolean;
     },
   ) => Stream.Stream<Message, never, A["Client"]["Identifier"]>;
 };
-export function viewEvents(
+function readEvents(
   api: Api.Any,
+  entry: ReadEntry,
   name: string,
-  options: EventsOptions<unknown, unknown, View.Any>,
+  options: EventsOptions<unknown, unknown, ReadEntry>,
 ): unknown {
-  const view = api.entries.find(
-    (entry): entry is View.Any => entry.kind === "View" && entry.viewName === name,
-  )!;
-  const keySchema = Schema.toType(Key.idSchemaOf(view.definition.key));
+  const keySchema = keySchemaOf(entry);
   const sameKey = Schema.toEquivalence(keySchema);
   type Dependencies = {
     key: string;
@@ -346,10 +439,12 @@ export function viewEvents(
         }
         let deliveredCursor = Option.getOrElse(cursor, () => 0);
         return Stream.unwrap(
-          Effect.map(Effect.service(api.Client), (client) =>
-            (client as Record<string, Api.ViewClient<View.Any>>)[name].events(key, {
-              after: Option.getOrUndefined(cursor),
-            }),
+          api.Client.pipe(
+            Effect.map((client) =>
+              (client as Record<string, ReadClient<ReadEntry>>)[name].events(key, {
+                after: Option.getOrUndefined(cursor),
+              }),
+            ),
           ),
         ).pipe(
           Stream.filter((frame) => {
@@ -381,16 +476,8 @@ export function viewEvents(
 }
 
 /** Decode snapshot wire data in Flags, converting null state to Option.none. */
-export const SnapshotFlags = <State extends Schema.Top>(state: State) =>
+const snapshotFlags = <State extends Schema.Top>(state: State) =>
   Schema.Struct({
     state: Schema.OptionFromNullOr(state),
     cursor: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
   });
-
-/** Ignore an unreadable or stale snapshot so init can start with empty state and a fresh watch. */
-export const decodeSnapshotFlags = <
-  State extends Schema.Top & { readonly DecodingServices: never },
->(
-  state: State,
-  flags: unknown,
-) => Schema.decodeUnknownOption(SnapshotFlags(state))(flags);
