@@ -311,6 +311,9 @@ export const Platform = <
           (resolved) => hooks.transformProps!(id, resolved),
         );
 
+  // Registered resources whose `onCreate` hook has run (or is running).
+  const onCreateRan = new WeakSet<object>();
+
   const constructor = (id?: string, props?: any, impl?: Impl, isTag = false): any => {
     if (!id) {
       // impl was not provided inline, this is a tagged instance
@@ -378,19 +381,25 @@ export const Platform = <
               }),
             )
         ).pipe(
-          Effect.tap((resource) =>
-            hooks.onCreate
-              ? Effect.flatMap(
-                  // `props` may itself be an Effect (e.g. when wrapped by
-                  // `Cloudflare.Website.Vite` via `Effect.map`); resolve it before
-                  // handing it to the hook so `onCreate` always sees the
-                  // plain props object — the second call site (in
-                  // `cls.make`) already does this.
-                  Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
-                  (resolved) => hooks.onCreate!(resource as R, resolved),
-                )
-              : Effect.void,
-          ),
+          Effect.tap((resource) => {
+            // Run the hook once per registered resource. Every `yield*` of
+            // this declaration returns the already-registered resource, so
+            // re-running the hook would re-yield its `env` — and two Workers
+            // whose `env` entries yield each other would recurse forever
+            // (#2672). Marking before the hook runs lets a cycle back to
+            // this resource see it as in progress and stop.
+            if (!hooks.onCreate || onCreateRan.has(resource)) return Effect.void;
+            onCreateRan.add(resource);
+            return Effect.flatMap(
+              // `props` may itself be an Effect (e.g. when wrapped by
+              // `Cloudflare.Website.Vite` via `Effect.map`); resolve it before
+              // handing it to the hook so `onCreate` always sees the
+              // plain props object — the second call site (in
+              // `cls.make`) already does this.
+              Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
+              (resolved) => hooks.onCreate!(resource as R, resolved),
+            );
+          }),
         );
       return Object.assign(
         function (props: Props, impl: Impl) {
@@ -467,11 +476,13 @@ export const Platform = <
               const buildScope = yield* Effect.scope;
               const instance = Object.assign(
                 yield* resource(id, props as any).pipe(
-                  Effect.flatMap(
-                    (resource) =>
+                  Effect.flatMap((resource) => {
+                    onCreateRan.add(resource);
+                    return (
                       hooks.onCreate?.(resource, props).pipe(Effect.map(() => resource)) ??
-                      Effect.succeed(resource),
-                  ),
+                      Effect.succeed(resource)
+                    );
+                  }),
                 ),
                 runtimeContext,
               );
