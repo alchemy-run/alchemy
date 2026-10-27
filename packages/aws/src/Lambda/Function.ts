@@ -4,7 +4,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import type { CreateFunctionRequest } from "@distilled.cloud/aws/lambda";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { Region } from "@distilled.cloud/aws/Region";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
 import * as Binding from "alchemy/Binding";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import type { PackageInstall } from "alchemy/Bundle/InstalledPackages";
@@ -1170,6 +1170,26 @@ export const normalizeFunctionUrl = (
  *       Data: new TextEncoder().encode(JSON.stringify({ orderId: "123" })),
  *     });
  *     return HttpServerResponse.text("Sent");
+ *   }),
+ * };
+ * ```
+ *
+ * ### GCP Bindings
+ * A GCP binding reaches Google Cloud through workload identity federation:
+ * the function's role may impersonate a service account that holds the
+ * binding's roles, so no service account key is created. A new grant can
+ * take a few minutes to start working.
+ *
+ * **Example:** Publish to a Pub/Sub topic
+ * ```typescript
+ * // init
+ * const publish = yield* GCP.PubSub.Publish(topic);
+ *
+ * return {
+ *   fetch: Effect.gen(function* () {
+ *     // runtime
+ *     yield* publish({ body: { messages: [{ data: btoa("hello") }] } });
+ *     return HttpServerResponse.text("Published");
  *   }),
  * };
  * ```
@@ -2652,7 +2672,7 @@ export const FunctionProvider = () =>
         observe: Effect.fn(function* ({ id, news }) {
           // Precreate creates — or updates — the function named here. Its
           // execution role is named from the logical id alone.
-          if (!isResolved(news.functionName)) return undefined;
+          if (!isResolved(news.functionName)) return Unresolved;
           const functionName = yield* createFunctionName(id, news.functionName);
           const result = yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
             Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),

@@ -1,17 +1,15 @@
-import type { RestEndpointMethodTypes } from "@octokit/rest";
+import type * as Pulls from "@distilled.cloud/github/pulls";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { GitHubApiError } from "./ApiError.ts";
-import type { EndpointParameters } from "./EndpointParameters.ts";
 import type { Repository } from "./Repository.ts";
 
-export interface CreatePullRequestReviewRequest extends EndpointParameters<
-  RestEndpointMethodTypes["pulls"]["createReview"]["parameters"]
+export interface CreatePullRequestReviewRequest extends Omit<
+  Pulls.CreateReviewRequest,
+  "owner" | "repo"
 > {}
 
-export type CreatePullRequestReviewResponse =
-  RestEndpointMethodTypes["pulls"]["createReview"]["response"]["data"];
+export type CreatePullRequestReviewResponse = Pulls.PullRequestReview;
 
 /**
  * Submit a pull request review (`pulls.createReview`): a `body`, an `event`
@@ -44,7 +42,7 @@ export interface CreatePullRequestReview extends Binding.Service<
   ) => Effect.Effect<
     (
       request: CreatePullRequestReviewRequest,
-    ) => Effect.Effect<CreatePullRequestReviewResponse, GitHubApiError, RuntimeContext>
+    ) => Effect.Effect<CreatePullRequestReviewResponse, Pulls.CreateReviewError, RuntimeContext>
   >
 > {}
 

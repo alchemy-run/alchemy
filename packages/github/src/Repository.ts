@@ -1,8 +1,11 @@
+import * as Repos from "@distilled.cloud/github/repos";
+import * as Users from "@distilled.cloud/github/users";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import * as Stream from "effect/Stream";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface RepositoryProps {
@@ -222,7 +225,7 @@ export interface Repository extends Resource<
  * resource (or the whole stack) in {@link destroy}() from
  * `alchemy/RemovalPolicy`.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied by
+ * Authentication is resolved via the GitHub `Credentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
  * `repo` scope (and `delete_repo` when deletion is opted in via `destroy()`).
  * ### Creating a Repository
@@ -385,293 +388,194 @@ export const RepositoryProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news, olds }) {
-      const octokit = yield* octokitFor(news.baseUrl);
+    reconcile: Effect.fn(
+      function* ({ news, olds }) {
+        const getRepo = (repo: string) =>
+          Repos.get({ owner: news.owner, repo }).pipe(
+            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          );
 
-      const getRepo = (repo: string) =>
-        Effect.tryPromise({
-          try: async () => {
-            try {
-              const { data } = await octokit.rest.repos.get({
-                owner: news.owner,
-                repo,
-              });
-              return data;
-            } catch (error: any) {
-              if (error.status === 404) return undefined;
-              throw error;
-            }
-          },
-          catch: (e) => e as Error,
-        });
+        // Observe — probe for the live repository under the desired name. On a
+        // rename (name changed since last deploy) the desired name 404s, so fall
+        // back to the prior name so we converge by renaming rather than creating
+        // a duplicate.
+        let observed = yield* getRepo(news.name);
+        if (observed === undefined && olds?.name !== undefined && olds.name !== news.name) {
+          observed = yield* getRepo(olds.name);
+        }
 
-      // Observe — probe for the live repository under the desired name. On a
-      // rename (name changed since last deploy) the desired name 404s, so fall
-      // back to the prior name so we converge by renaming rather than creating
-      // a duplicate.
-      let observed = yield* getRepo(news.name);
-      if (observed === undefined && olds?.name !== undefined && olds.name !== news.name) {
-        observed = yield* getRepo(olds.name);
-      }
+        // Ensure — create the repository when it does not exist. The owner may be
+        // a user or an organization; pick the matching create endpoint.
+        if (observed === undefined) {
+          const owner = yield* Users.getByUsername({ username: news.owner });
 
-      // Ensure — create the repository when it does not exist. The owner may be
-      // a user or an organization; pick the matching create endpoint.
-      if (observed === undefined) {
-        const ownerType = yield* Effect.tryPromise({
-          try: async () => {
-            const { data } = await octokit.rest.users.getByUsername({
-              username: news.owner,
-            });
-            return data.type;
-          },
-          catch: (e) => e as Error,
-        });
+          const createInput = {
+            name: news.name,
+            description: news.description,
+            homepage: news.homepage,
+            has_issues: news.hasIssues,
+            has_projects: news.hasProjects,
+            has_wiki: news.hasWiki,
+            is_template: news.isTemplate,
+            auto_init: news.autoInit,
+            gitignore_template: news.gitignoreTemplate,
+            license_template: news.licenseTemplate,
+            allow_squash_merge: news.allowSquashMerge,
+            allow_merge_commit: news.allowMergeCommit,
+            allow_rebase_merge: news.allowRebaseMerge,
+            allow_auto_merge: news.allowAutoMerge,
+            delete_branch_on_merge: news.deleteBranchOnMerge,
+          };
 
-        const createInput = {
+          observed = yield* (
+            owner.type === "Organization"
+              ? // The org endpoint accepts `visibility` directly, which is the
+                // sole authority over public/private/internal. `internal` is
+                // only valid here.
+                Repos.createInOrg({ org: news.owner, ...createInput, visibility: news.visibility })
+              : // A personal account is either a `User` or a `Bot`; both create
+                // through the authenticated-user endpoint, which only
+                // understands the boolean `private` flag.
+                Repos.createForAuthenticatedUser({
+                  ...createInput,
+                  private: news.visibility ? news.visibility !== "public" : undefined,
+                })
+          ).pipe(
+            // A 422 means the name already exists — treat as a create race
+            // and re-observe so the sync step converges its settings.
+            Effect.catchTag("UnprocessableEntity", () => Effect.succeed(undefined)),
+          );
+
+          if (observed === undefined) {
+            observed = yield* getRepo(news.name);
+          }
+          if (observed === undefined) {
+            return yield* Effect.fail(
+              new Error(`Failed to create or locate GitHub repository ${news.owner}/${news.name}`),
+            );
+          }
+        }
+
+        // Sync — converge settings (and the name on a rename) against the live
+        // repository. GitHub's update is an idempotent PATCH, so we always issue
+        // it with the desired settings. `archived` is applied in a separate,
+        // later PATCH because an archived repository rejects any other settings
+        // change in the same call.
+        const repoName = observed.name;
+        const updateInput = {
+          owner: news.owner,
+          repo: repoName,
           name: news.name,
           description: news.description,
           homepage: news.homepage,
+          private: news.visibility ? news.visibility !== "public" : undefined,
+          visibility: news.visibility,
           has_issues: news.hasIssues,
           has_projects: news.hasProjects,
           has_wiki: news.hasWiki,
+          has_discussions: news.hasDiscussions,
           is_template: news.isTemplate,
-          auto_init: news.autoInit,
-          gitignore_template: news.gitignoreTemplate,
-          license_template: news.licenseTemplate,
           allow_squash_merge: news.allowSquashMerge,
           allow_merge_commit: news.allowMergeCommit,
           allow_rebase_merge: news.allowRebaseMerge,
           allow_auto_merge: news.allowAutoMerge,
           delete_branch_on_merge: news.deleteBranchOnMerge,
+          // Only set the default branch when it actually differs from the
+          // observed branch. GitHub returns 422 if the branch does not yet
+          // exist (e.g. an empty repo), so the 422 handler below strips it and
+          // retries rather than hard-failing — the branch may be created right
+          // after this deploy.
+          default_branch:
+            news.defaultBranch !== undefined && observed.default_branch !== news.defaultBranch
+              ? news.defaultBranch
+              : undefined,
         };
 
-        observed = yield* Effect.tryPromise({
-          try: async () => {
-            try {
-              const { data } =
-                ownerType === "Organization"
-                  ? // The org endpoint accepts `visibility` directly, which is
-                    // the sole authority over public/private/internal. `internal`
-                    // is only valid here.
-                    await octokit.rest.repos.createInOrg({
-                      org: news.owner,
-                      ...createInput,
-                      visibility: news.visibility,
-                    } as Parameters<typeof octokit.rest.repos.createInOrg>[0])
-                  : // A personal account is either a `User` or a `Bot`; both
-                    // create through the authenticated-user endpoint, which only
-                    // understands the boolean `private` flag.
-                    await octokit.rest.repos.createForAuthenticatedUser({
-                      ...createInput,
-                      private: news.visibility ? news.visibility !== "public" : undefined,
-                    } as Parameters<typeof octokit.rest.repos.createForAuthenticatedUser>[0]);
-              return data;
-            } catch (error: any) {
-              // A 422 means the name already exists — treat as a create race
-              // and re-observe so the sync step converges its settings.
-              if (error.status === 422) return undefined;
-              throw error;
-            }
-          },
-          catch: (e) => e as Error,
-        });
+        const updated = yield* Repos.update(updateInput).pipe(
+          // A 422 on a default-branch update usually means the branch does not
+          // exist yet. Drop it and retry so the rest of the settings still
+          // converge.
+          Effect.catchTag("UnprocessableEntity", (error) => {
+            if (!updateInput.default_branch) return Effect.fail(error);
+            const { default_branch: _default_branch, ...withoutBranch } = updateInput;
+            return Repos.update(withoutBranch);
+          }),
+        );
 
-        if (observed === undefined) {
-          observed = yield* getRepo(news.name);
+        // Sync — apply `archived` in its own PATCH. Use the confirmed
+        // post-rename name from the first update so the call targets the right
+        // repo. Archiving is one-directional in this PATCH: only send it when
+        // explicitly provided.
+        if (news.archived !== undefined) {
+          yield* Repos.update({ owner: news.owner, repo: updated.name, archived: news.archived });
         }
-        if (observed === undefined) {
-          return yield* Effect.fail(
-            new Error(`Failed to create or locate GitHub repository ${news.owner}/${news.name}`),
-          );
+
+        // Sync — topics are managed via a dedicated endpoint. The provided list
+        // fully replaces existing topics, so removing the field (defined -> undefined)
+        // must clear them. Use the confirmed post-rename name from the first PATCH.
+        if (news.topics !== undefined || olds?.topics !== undefined) {
+          yield* Repos.replaceAllTopics({
+            owner: news.owner,
+            repo: updated.name,
+            names: news.topics ?? [],
+          });
         }
-      }
 
-      // Sync — converge settings (and the name on a rename) against the live
-      // repository. GitHub's update is an idempotent PATCH, so we always issue
-      // it with the desired settings. `archived` is applied in a separate,
-      // later PATCH because an archived repository rejects any other settings
-      // change in the same call.
-      const repoName = observed.name;
-      const updateInput = {
-        owner: news.owner,
-        repo: repoName,
-        name: news.name,
-        description: news.description,
-        homepage: news.homepage,
-        private: news.visibility ? news.visibility !== "public" : undefined,
-        visibility: news.visibility,
-        has_issues: news.hasIssues,
-        has_projects: news.hasProjects,
-        has_wiki: news.hasWiki,
-        has_discussions: news.hasDiscussions,
-        is_template: news.isTemplate,
-        allow_squash_merge: news.allowSquashMerge,
-        allow_merge_commit: news.allowMergeCommit,
-        allow_rebase_merge: news.allowRebaseMerge,
-        allow_auto_merge: news.allowAutoMerge,
-        delete_branch_on_merge: news.deleteBranchOnMerge,
-        // Only set the default branch when it actually differs from the
-        // observed branch. GitHub returns 422 if the branch does not yet
-        // exist (e.g. an empty repo), so the 422 handler below strips it and
-        // retries rather than hard-failing — the branch may be created right
-        // after this deploy.
-        default_branch:
-          news.defaultBranch !== undefined && observed.default_branch !== news.defaultBranch
-            ? news.defaultBranch
-            : undefined,
-      };
-
-      const updated = yield* Effect.tryPromise({
-        // Octokit's typed params lag the REST API: `visibility: "internal"`
-        // and `has_discussions` are valid at runtime but missing from the
-        // generated types, so assert to the accepted parameter shape.
-        try: async () => {
-          try {
-            const { data } = await octokit.rest.repos.update(
-              updateInput as Parameters<typeof octokit.rest.repos.update>[0],
-            );
-            return data;
-          } catch (error: any) {
-            // A 422 on a default-branch update usually means the branch does
-            // not exist yet. Drop it and retry so the rest of the settings
-            // still converge.
-            if (error.status === 422 && updateInput.default_branch) {
-              const { default_branch: _default_branch, ...withoutBranch } = updateInput;
-              const { data } = await octokit.rest.repos.update(
-                withoutBranch as Parameters<typeof octokit.rest.repos.update>[0],
-              );
-              return data;
-            }
-            throw error;
-          }
-        },
-        catch: (e) => e as Error,
-      });
-
-      // Sync — apply `archived` in its own PATCH. Use the confirmed
-      // post-rename name from the first update so the call targets the right
-      // repo. Archiving is one-directional in this PATCH: only send it when
-      // explicitly provided.
-      if (news.archived !== undefined) {
-        yield* Effect.tryPromise({
-          try: () =>
-            octokit.rest.repos.update({
-              owner: news.owner,
-              repo: updated.name,
-              archived: news.archived,
-            } as Parameters<typeof octokit.rest.repos.update>[0]),
-          catch: (e) => e as Error,
-        });
-      }
-
-      // Sync — topics are managed via a dedicated endpoint. The provided list
-      // fully replaces existing topics, so removing the field (defined -> undefined)
-      // must clear them. Use the confirmed post-rename name from the first PATCH.
-      if (news.topics !== undefined || olds?.topics !== undefined) {
-        yield* Effect.tryPromise({
-          try: () =>
-            octokit.rest.repos.replaceAllTopics({
-              owner: news.owner,
-              repo: updated.name,
-              names: news.topics ?? [],
-            }),
-          catch: (e) => e as Error,
-        });
-      }
-
-      return attrsOf(updated);
-    }),
+        return attrsOf(updated);
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
     // Enumerate every repository the authenticated token can see. GitHub has no
     // account/region scope resolved from env services — the ambient scope is the
     // token itself, so we list the authenticated user's repositories (across all
-    // owners/orgs the token is a member of). `octokit.paginate` walks every page
-    // exhaustively. Each list item is a full repository object, so it hydrates
-    // directly into the same `Attributes` shape `read` returns.
+    // owners/orgs the token is a member of), every page. Each list item is a
+    // full repository object, so it hydrates directly into the same
+    // `Attributes` shape `read` returns.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
-
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
-
-      return repos.map((repo) => attrsOf(repo as Parameters<typeof attrsOf>[0]));
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
+      return repos.map(attrsOf);
     }),
 
     // Read by the numeric repository ID, which is stable across renames. This
     // refreshes the output attributes (including the current name) so that a
     // subsequent delete targets the live repository even when a prior rename's
     // state persistence failed.
-    read: Effect.fn(function* ({ olds, output }) {
-      if (output === undefined) {
-        return undefined;
-      }
-
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      return yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            const { data } = await octokit.request("GET /repositories/{id}", {
-              id: output.repoId,
-            });
-            return attrsOf(data as Parameters<typeof attrsOf>[0]);
-          } catch (error: any) {
-            if (error.status === 404) return undefined;
-            throw error;
-          }
-        },
-        catch: (e) => e as Error,
-      });
-    }),
-
-    delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      // Resolve the current repository name via the stable numeric ID. A rename
-      // whose state persistence failed leaves `olds.name` stale; deleting by
-      // the stale name 404s and silently leaves the repo behind. Looking it up
-      // by `repoId` gives us the live name.
-      let owner = olds.owner;
-      let repo = olds.name;
-      if (output?.repoId !== undefined) {
-        const current = yield* Effect.tryPromise({
-          try: async () => {
-            try {
-              const { data } = await octokit.request("GET /repositories/{id}", {
-                id: output.repoId,
-              });
-              return data;
-            } catch (error: any) {
-              if (error.status === 404) return undefined;
-              throw error;
-            }
-          },
-          catch: (e) => e as Error,
-        });
-        if (current !== undefined) {
-          owner = current.owner.login;
-          repo = current.name;
+    read: Effect.fn(
+      function* ({ output }) {
+        if (output === undefined) {
+          return undefined;
         }
-      }
+        return yield* Repos.getById({ id: output.repoId }).pipe(
+          Effect.map(attrsOf),
+          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        );
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
 
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await octokit.rest.repos.delete({ owner, repo });
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error;
-            }
-          }
-        },
-        catch: (e) => e as Error,
-      });
-    }),
+    delete: Effect.fn(
+      function* ({ olds, output }) {
+        // Resolve the current repository name via the stable numeric ID. A rename
+        // whose state persistence failed leaves `olds.name` stale; deleting by
+        // the stale name 404s and silently leaves the repo behind. Looking it up
+        // by `repoId` gives us the live name.
+        const current =
+          output?.repoId !== undefined
+            ? yield* Repos.getById({ id: output.repoId }).pipe(
+                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              )
+            : undefined;
+
+        yield* Repos.Delete({
+          owner: current?.owner.login ?? olds.owner,
+          repo: current?.name ?? olds.name,
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });
 
 const attrsOf = (data: {

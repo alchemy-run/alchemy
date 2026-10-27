@@ -7,7 +7,42 @@ import DAG from "../../../components/DAG.astro";
 
 An event records something that happened: `AccountOpened`, `MoneyDeposited`, `MoneyWithdrawn`. It's named in the past tense because, by the time anyone sees it, it's a fact.
 
-Events are the only thing an aggregate stores as its history. Its state, every view, and every policy's reaction are all derived from them. This page covers how to declare an event, what to put in it, and what happens to it after it's recorded.
+Events are the only thing an aggregate stores as its history. Its state, every view, and every policy's reaction are all derived from them. This chapter covers how to find a business's events, how to declare one, what to put in it, and what happens to it after it's recorded.
+
+## Events are the business's memory
+
+Businesses ran on events long before software. A bank's ledger is a list of things that happened, written in order and never erased: opened, deposited 100, withdrew 30. The balance at the bottom of the page is a sum of the lines above it. When the bank finds a mistake, it doesn't rub out a line; it writes a new one that corrects it.
+
+An event-sourced model keeps its history the same way. Each event is one line in the ledger of one aggregate instance. Everything else, the account's state, its statement, the customer's dashboard, is worked out from those lines. Because nothing is overwritten, you can always answer "how did it get like this?", and a question nobody thought to ask last year can be answered from history you already have.
+
+<DAG
+  nodes={[
+    { id: "opened", label: "AccountOpened", type: "seq 1", kind: "event", col: 0, row: 0 },
+    { id: "deposited", label: "MoneyDeposited 100", type: "seq 2", kind: "event", col: 1, row: 0 },
+    { id: "withdrew", label: "MoneyWithdrawn 30", type: "seq 3", kind: "event", col: 2, row: 0 },
+    { id: "state", label: "balance: 70", type: "derived", col: 2, row: 1 },
+  ]}
+  edges={[
+    { from: "opened", to: "deposited" },
+    { from: "deposited", to: "withdrew" },
+    { from: "withdrew", to: "state", dashed: true },
+  ]}
+  caption="The events are the record. The balance is what they add up to."
+/>
+
+## Find the events
+
+To find a business's events, ask its people to tell the story of their work as a series of things that happened, in order. "The customer registers. Their main account is opened. They deposit their pay. They withdraw cash. Late at night they withdraw again, and the account is frozen for review." Each sentence in the past tense is an event: `CustomerRegistered`, `AccountOpened`, `MoneyDeposited`, `MoneyWithdrawn`, `AccountFrozen`.
+
+Telling it as a story surfaces the things people care about, in their own words, and in the order they happen. The commands fall out next: for each event, ask what someone asked for to make it happen. The aggregates come after that: for each command, ask what has to be checked before it's allowed, and what state that check needs.
+
+## Name what the business saw
+
+Name an event after what happened in the business, not after what changed in a database. `AccountFrozen` tells you something. `AccountUpdated` or `StatusChanged` tells you a row was written, and leaves you to dig through its fields to find out why.
+
+A specific name is what lets the rest of the model react. A fraud policy listens for `MoneyWithdrawn`; a statement prints a line for each `MoneyDeposited`. Neither could subscribe to "the account changed" without re-deciding what kind of change it was.
+
+One command can record more than one event when more than one thing happened. And a rejection is not an event: when a command is refused, nothing happened, so nothing is recorded.
 
 ## Declare an event
 
@@ -44,6 +79,20 @@ The same goes for who did something and why. When a support agent freezes an acc
 export class AccountFrozen extends Domain.Event("AccountFrozen", {
   reason: Schema.String,
   by: Actor,
+}) {}
+```
+
+## Keep old events readable
+
+Events are kept for good, so every event you've ever recorded will be read again: each time an aggregate rebuilds its state, and each time a view is built from history. Treat an event's shape as a promise to your future self.
+
+Add a new field as optional, so events recorded before it existed still decode. When the meaning of something changes, add a new event rather than changing what an old one means. A history in which `MoneyWithdrawn` meant one thing in March and another in May is a history nobody can read.
+
+```typescript
+export class MoneyWithdrawn extends Domain.Event("MoneyWithdrawn", {
+  amount: Schema.Int,
+  balanceAfter: Schema.Int,
+  channel: Schema.optional(Schema.Literals(["atm", "app"])), // added later
 }) {}
 ```
 
@@ -101,15 +150,10 @@ A view can record events of its own as it folds, such as one `StatementLine` per
 
 A client can read an instance's history directly, then keep receiving new events as they're recorded.
 
-```typescript
-// packages/server/test/followAccount.ts
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import type { AccountId } from "@bank/domain/Account/Account.id";
-import type { CustomerClient } from "./flows.ts";
-
+```typescript title="packages/server/test/followAccount.ts"
 export const followAccount = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
   yield* bank.Account.events(accountId).pipe(
+    Stream.filter(Domain.Read.isEvent),
     Stream.runForEach(({ event, envelope }) =>
       Effect.log(`#${envelope.seq} ${event._tag} (command ${envelope.commandId})`),
     ),
@@ -117,6 +161,6 @@ export const followAccount = Effect.fn(function* (bank: CustomerClient, accountI
 });
 ```
 
-`events` replays from the beginning, then continues live. Pass `after` with a `seq` to resume from a position you've already seen.
+`events` replays from the beginning, sends a `CaughtUp` frame, then continues live. `Domain.Read.isEvent` keeps only the events. Pass `after` with a `seq` to resume from a position you've already seen.
 
-Next, [Aggregate](/domain/aggregate) puts commands and events together.
+Next, [Aggregate](/domain/aggregate): where commands are decided and events are recorded.

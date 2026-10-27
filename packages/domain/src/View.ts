@@ -9,6 +9,7 @@ import type * as Stream from "effect/Stream";
 import type * as Aggregate from "./Aggregate.ts";
 import type * as Event from "./Event.ts";
 import type { Filter } from "./Filter.ts";
+import { evolveView, type LocalViewInput } from "./internal.ts";
 import type * as Key from "./Key.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
@@ -258,22 +259,12 @@ export interface Entry<S, E, Id = string> {
 }
 
 /**
- * A key's state and the cursor it is valid at: the `seq` of the last event
- * the key had emitted when the state was read (`"0"` before any).
- */
-export interface Snapshot<S> {
-  readonly state: S | null;
-  /** Pass as `after` to `events` to receive every later entry, once. */
-  readonly cursor: string;
-}
-
-/**
  * A page of entries.
  */
 export interface Page<Entry> {
   readonly entries: ReadonlyArray<Entry>;
   /** Pass as `after` to continue; `null` when there are no more entries. */
-  readonly cursor: string | null;
+  readonly cursor: number | null;
 }
 
 /**
@@ -309,7 +300,7 @@ export interface Host<S, Key extends Key.Any, E> {
       readonly atLeast?: { readonly stream: string; readonly version: number };
       readonly timeout?: Duration.Input;
     },
-  ) => Effect.Effect<Snapshot<S>, ConsistencyTimeout>;
+  ) => Effect.Effect<Read.Snapshot<S | null>, ConsistencyTimeout>;
   /** Wait until a key's state matches a filter. */
   readonly waitFor: (
     key: Key.RefOf<Key>,
@@ -337,7 +328,7 @@ export interface Host<S, Key extends Key.Any, E> {
    */
   readonly events: (
     key: Key.RefOf<Key>,
-    options?: { readonly after?: string; readonly where?: Filter<E> },
+    options?: { readonly after?: number; readonly where?: Filter<E> },
   ) => Stream.Stream<Entry<S, E, Key.IdOf<Key>>>;
   /** A page of the key's emitted events, oldest first unless `order` is `"desc"`. */
   readonly list: (
@@ -346,7 +337,7 @@ export interface Host<S, Key extends Key.Any, E> {
       readonly where?: Filter<E>;
       readonly order?: "asc" | "desc";
       readonly take?: number;
-      readonly after?: string;
+      readonly after?: number;
     },
   ) => Effect.Effect<Page<Entry<S, E, Key.IdOf<Key>>>>;
 }
@@ -469,6 +460,10 @@ export const make = <
     static readonly State = definition.state;
     /** Derived values, computed from a state when read. */
     static readonly computed = definition.computed ?? {};
+    /** Apply one input to one key's state, as the server's view does. */
+    static evolve(state: unknown, input: LocalViewInput) {
+      return evolveView({ definition }, state, input);
+    }
   } as unknown as ViewClass<
     Name,
     Definition<From, Key, S, Events, Computed, Ms, Rejects>,
@@ -478,6 +473,27 @@ export const make = <
     ComputedFns<StateType<S>, Computed>,
     Output<From, Events>
   >;
+};
+
+/** One source input, with the source's state optional (aggregates attach none). */
+type LocalSourceInput<I> = I extends {
+  readonly name: infer N;
+  readonly event: infer E;
+  readonly source: infer R;
+  readonly state: infer S;
+}
+  ? { readonly name: N; readonly event: E; readonly source: R; readonly state?: S }
+  : never;
+
+/** What {@link ViewClass.evolve} applies: a source input, its envelope, and the key. */
+export type LocalInput<Def, Key extends Key.Any> = (Def extends {
+  readonly from: infer From extends ReadonlyArray<unknown>;
+}
+  ? LocalSourceInput<Inputs<From>>
+  : never) & {
+  readonly envelope: Aggregate.Envelope;
+  /** The key to update: defaults to what `keyOf` returns, or to the source. */
+  readonly key?: Key.RefOf<Key>;
 };
 
 /**
@@ -499,6 +515,28 @@ export interface ViewClass<
   readonly State: S;
   /** Derived values, computed from a state when read. */
   readonly computed: Computed;
+  /**
+   * Apply one input (an event of a source) to one key's state, with this
+   * view's own `keyOf` and `evolve`: the state the server's view will hold
+   * after it. Use it with the events of `Aggregate.predict` to show a view's
+   * next state before the server answers. `key` defaults to what `keyOf`
+   * returns, or to the source; it is required for a view with routes.
+   *
+   * **Example:** The next balance of a predicted withdrawal
+   * ```typescript
+   * const next = outcome.events.reduce(
+   *   (state, event, i) =>
+   *     AccountSummary.evolve(state, {
+   *       name: "Account",
+   *       event,
+   *       source: Account.ref(id),
+   *       envelope: outcome.envelopes[i],
+   *     }),
+   *   summary,
+   * );
+   * ```
+   */
+  evolve(state: St | null, input: LocalInput<Def, Key>): St | null;
   readonly "~state": St;
   readonly "~events": Out;
 }

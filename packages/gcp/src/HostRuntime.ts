@@ -8,6 +8,7 @@ import {
   ensureHostServiceAccount,
   hostServiceAccountEmail,
   hostServiceAccountId,
+  serviceAccountUniqueId,
   syncHostIam,
   type AppliedIamGrant,
   type GcpHostBinding,
@@ -25,6 +26,12 @@ import {
 export interface HostIdentityAttrs {
   /** Runtime service account email. */
   serviceAccount: string | undefined;
+  /**
+   * Numeric unique ID of the runtime service account, the `sub` of the
+   * Google ID tokens the host fetches. AWS bindings trust it to let the
+   * host assume an IAM role without a key.
+   */
+  serviceAccountUniqueId: string | undefined;
   /** True when Alchemy minted the per-host runtime service account. */
   managedServiceAccount: boolean;
   /**
@@ -114,8 +121,19 @@ export const resolveHostIdentity = Effect.fn(function* (options: {
     ),
   );
 
+  const uniqueId = yield* serviceAccountUniqueId(serviceAccount).pipe(
+    Effect.tapError(() =>
+      created
+        ? deleteHostServiceAccount({ project: options.project, email: serviceAccount }).pipe(
+            Effect.ignore,
+          )
+        : Effect.void,
+    ),
+  );
+
   return {
     serviceAccount,
+    uniqueId,
     managed,
     env: synced.env,
     grants: synced.grants,

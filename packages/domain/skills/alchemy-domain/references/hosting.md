@@ -58,19 +58,25 @@ const asSystem = Layer.succeed(Session, (effect) =>
   Effect.provideService(effect, CurrentActor, system("payments-webhook")),
 );
 const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));   // per request, in Effect.scoped
-yield* bank.DepositMoney({ target: accountId, amount });
+yield* bank.DepositMoney(accountId, { amount });
 ```
 
 - Build `clientInProcess` per request in a Worker. `layerClientInProcess` provides `CustomerApi.Client` in process, for long-lived processes and scripts.
 - Do not send a request to the Worker's own URL, and do not pass a verified secret through a header to `clientInProcess` to be checked again.
 
+More: [Api: Call it in process](https://alchemy.run/domain/api#call-it-in-process), [In memory](https://alchemy.run/domain/in-memory).
+
 ## Live reads
 
 Clients that `watch` or read `events` open a WebSocket per read, with `Domain.protocolWebSocket`. The Worker runs the read's middleware, then hands the socket to the Durable Object that owns the key. That object pushes each committed change, judged by `validate` again, and hibernates in between. Commands go over HTTP.
 
+More: [Cloudflare: Watch without polling](https://alchemy.run/domain/cloudflare#watch-without-polling).
+
 ## Deploying
 
 The root `alchemy.run.ts` yields the server Worker and the foldkit website (see [layout.md](layout.md)). Deploy with `alchemy deploy`, develop with `alchemy dev`, and tear down with `alchemy destroy`.
+
+More: [Cloudflare: Deploy it](https://alchemy.run/domain/cloudflare#deploy-it), [Cloudflare: Deploy without dropping requests](https://alchemy.run/domain/cloudflare#deploy-without-dropping-requests).
 
 ## Observability
 
@@ -84,8 +90,12 @@ All of them carry `domain.correlation_id`, the first command of the flow, which 
 
 Metrics: `domain.commands`, `domain.command.duration`, `domain.events`, `domain.lag` (commit to handling), `domain.runs`, `domain.projection.batch_size`, `domain.external.calls`. Turn off view spans with `Bank.layer(handlers, { telemetry: { views: false } })`.
 
+More: [Observability](https://alchemy.run/domain/observability).
+
 ## Pitfalls
 
 - Durable Object calls right after a fresh deploy can briefly hit alchemy's placeholder script. The Domain platform retries its own calls, so make test readiness probes retry the first real request.
 - Never keep per-request objects (sockets, promises) across events in a Durable Object or Worker. Resolve services at init, and do I/O per request.
 - Handlers may require `RuntimeContext` (for bindings); every platform provides it when it runs them.
+
+More: [Cloudflare: Know what runs where](https://alchemy.run/domain/cloudflare#know-what-runs-where).

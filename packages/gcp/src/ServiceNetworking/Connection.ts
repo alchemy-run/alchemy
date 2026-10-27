@@ -8,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { waitGlobalOperation } from "../Compute/operations.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { waitForOperation as waitForLongRunning } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
@@ -270,6 +271,21 @@ const waitForOperation = (
     ),
   );
 
+const removeConsumerPeering = (project: string, network: string, peering: string) =>
+  compute
+    .removePeeringNetworks({
+      project,
+      network,
+      body: { name: peering || DEFAULT_PEERING },
+    })
+    .pipe(
+      Effect.flatMap((operation) =>
+        waitGlobalOperation(project, operation, { ignore: ["RESOURCE_NOT_FOUND"] }),
+      ),
+      Effect.catchTag("NotFound", () => Effect.void),
+      Effect.asVoid,
+    );
+
 const waitUntilPresent = (parent: string, consumerNetwork: string) =>
   getByNetwork(parent, consumerNetwork).pipe(
     Effect.filterOrFail(
@@ -501,7 +517,16 @@ export const ConnectionProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(operation, { notFoundOk: true });
+        yield* waitForOperation(operation, { notFoundOk: true }).pipe(
+          // `FAILED_PRECONDITION`: a producer (Cloud SQL keeps its side for
+          // a while after the instance is deleted) still uses the
+          // connection. Removing the peering from the consumer VPC is
+          // always allowed and drops the connection with it.
+          Effect.catchIf(
+            (error) => error._tag === "GCP.OperationFailed" && error.code === 9,
+            () => removeConsumerPeering(output.project, output.networkName, output.peering),
+          ),
+        );
       }
       yield* waitUntilGone(parent, consumerNetwork);
     }),

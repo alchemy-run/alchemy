@@ -913,7 +913,10 @@ export default defineConfig({
             },
             {
               label: "Security & secrets",
-              items: [{ label: "Secrets & env", link: "/aws/security/secrets-env" }],
+              items: [
+                { label: "Secrets & env", link: "/aws/security/secrets-env" },
+                { label: "Federated identity", link: "/aws/security/federated-identity" },
+              ],
             },
             {
               label: "Observability",
@@ -1012,6 +1015,7 @@ export default defineConfig({
               items: [
                 { label: "IAM & bindings", link: "/gcp/security/iam" },
                 { label: "Secret Manager & KMS", link: "/gcp/security/secrets-kms" },
+                { label: "Federated identity", link: "/gcp/security/federated-identity" },
               ],
             },
             {
@@ -1605,6 +1609,7 @@ export default defineConfig({
               label: "Security",
               items: [
                 { label: "Sessions and middleware", link: "/domain/sessions" },
+                { label: "Sign in with better-auth", link: "/domain/better-auth" },
                 { label: "Views as security boundaries", link: "/domain/view-security" },
               ],
             },
