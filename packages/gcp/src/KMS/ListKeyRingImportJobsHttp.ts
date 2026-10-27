@@ -19,7 +19,7 @@ export const ListKeyRingImportJobsHttp = Layer.effect(
         resource: "GCP.KMS.KeyRing",
         operation: cloudkms.listProjectsLocationsKeyRingsImportJobs,
         param: "parent",
-        iam: { role: "roles/cloudkms.importer", on: "kms.keyRing" },
+        iam: { role: "roles/cloudkms.viewer", on: "kms.keyRing" },
       },
     ],
   }),

@@ -11,9 +11,9 @@
  * - `<Service>.json`: the discovery doc and distilled module, the service's
  *   resources (full-name pattern and IAM kind), and overrides for what can't
  *   be derived (permissions, names, skips with a reason).
- * - `roles.json`: permission → smallest predefined role holding it,
- *   preferring the permission's own service. Refresh with
- *   `node scripts/generate-gcp-bindings.ts --refresh-roles` (needs gcloud).
+ * - `roles.json`: permission → the role a binding grants for it. Refresh
+ *   with `node scripts/generate-gcp-bindings.ts --refresh-roles` (needs
+ *   gcloud); see {@link pickRole} for the choice.
  *
  * Each discovery method is classified:
  *
@@ -39,6 +39,9 @@ import { Argument, Command, Flag } from "effect/cli";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
@@ -58,6 +61,12 @@ interface ResourceConfig {
   scopeByCondition?: boolean;
   /** Resource type when it isn't `GCP.<Service>.<key>`. */
   type?: string;
+  /**
+   * Only marks create/patch/update/delete on this resource as its provider's
+   * lifecycle; other methods bind through the parent resource. For child
+   * resources with no IAM policy of their own (Spanner backup schedules).
+   */
+  lifecycleOnly?: boolean;
 }
 
 interface ApiConfig {
@@ -297,9 +306,20 @@ const classify = (options: {
       results.push({ id, kind: "project", reason: "no resource-name path parameter" });
       continue;
     }
+    const lifecycleOnly = resources.find(
+      (r) =>
+        r.lifecycleOnly &&
+        r.segments.length === target.segments.length &&
+        r.segments.every((s, i) => s === target.segments[i]),
+    );
+    if (lifecycleOnly && LIFECYCLE_VERBS.has(verb)) {
+      results.push({ id, kind: "lifecycle" });
+      continue;
+    }
     const resource = resources
       .filter(
         (r) =>
+          !r.lifecycleOnly &&
           r.segments.length <= target.segments.length &&
           r.segments.every((s, i) => s === target.segments[i]) &&
           (config.append?.[id] !== undefined ||
@@ -690,15 +710,111 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
   );
 });
 
+// ============ Roles ============
+
+interface Role {
+  name: string;
+  stage?: string;
+  deleted?: boolean;
+  includedPermissions?: string[];
+}
+
+const BASIC_ROLES = new Set(["roles/owner", "roles/editor", "roles/viewer", "roles/browser"]);
+const READ_ONLY_ROLE = /(viewer|reader)$/i;
+
+/**
+ * The role a binding grants for `permission`: the predefined role holding it
+ * with the fewest permissions, preferring the permission's own service
+ * (`roles/pubsub.*` for `pubsub.topics.get`). A `get`/`list` permission
+ * prefers a read-only role (named `*viewer`/`*reader`) of its service, so a
+ * read never grants one that can also write (`spanner.backupWriter` is
+ * smaller than `spanner.viewer`). Basic, service-agent and deprecated roles
+ * never qualify.
+ */
+const pickRole = (permission: string, candidates: Role[]) => {
+  const service = permission.split(".")[0]!;
+  const own = (role: Role) => role.name.startsWith(`roles/${service}.`);
+  const smallest = (roles: Role[]) =>
+    [...roles].sort(
+      (a, b) =>
+        Number(!own(a)) - Number(!own(b)) ||
+        a.includedPermissions!.length - b.includedPermissions!.length ||
+        a.name.localeCompare(b.name),
+    )[0];
+  const readOnly = /\.(get|list)$/.test(permission)
+    ? candidates.filter((role) => own(role) && READ_ONLY_ROLE.test(role.name))
+    : [];
+  return smallest(readOnly.length > 0 ? readOnly : candidates)?.name;
+};
+
+/** Rebuild `roles.json` from every predefined role (IAM `roles.list`, full view). */
+const refreshRoles = Effect.fn(function* (root: string) {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const spawner = yield* ChildProcessSpawner;
+  const token = (yield* spawner.string(
+    ChildProcess.make("gcloud", ["auth", "print-access-token"], { stdin: "ignore" }),
+  )).trim();
+  const client = yield* HttpClient.HttpClient;
+  const roles: Role[] = [];
+  let pageToken: string | undefined;
+  do {
+    const url = new URL("https://iam.googleapis.com/v1/roles");
+    url.searchParams.set("view", "FULL");
+    url.searchParams.set("pageSize", "1000");
+    if (pageToken) url.searchParams.set("pageToken", pageToken);
+    const response = yield* client.get(url.toString(), {
+      headers: { authorization: `Bearer ${token}` },
+    });
+    const page = (yield* response.json) as { roles?: Role[]; nextPageToken?: string };
+    roles.push(...(page.roles ?? []));
+    pageToken = page.nextPageToken;
+  } while (pageToken);
+  const byPermission = new Map<string, Role[]>();
+  for (const role of roles) {
+    if (
+      BASIC_ROLES.has(role.name) ||
+      role.deleted ||
+      role.stage === "DEPRECATED" ||
+      /serviceagent/i.test(role.name)
+    ) {
+      continue;
+    }
+    for (const permission of role.includedPermissions ?? []) {
+      byPermission.set(permission, [...(byPermission.get(permission) ?? []), role]);
+    }
+  }
+  const map = Object.fromEntries(
+    [...byPermission.keys()]
+      .sort()
+      .map((permission) => [permission, pickRole(permission, byPermission.get(permission)!)!]),
+  );
+  yield* fs.writeFileString(
+    path.join(root, "packages/gcp/bindings/roles.json"),
+    `${JSON.stringify(map, null, 2)}\n`,
+  );
+  yield* Console.log(
+    `roles.json: ${Object.keys(map).length} permissions from ${roles.length} roles`,
+  );
+});
+
 const services = Argument.String("service").pipe(Argument.variadic());
 
 const command = Command.make(
   "generate-gcp-bindings",
-  { services, report: Flag.Boolean("report").pipe(Flag.withDefault(false)) },
-  Effect.fn(function* ({ services, report }) {
+  {
+    services,
+    report: Flag.Boolean("report").pipe(Flag.withDefault(false)),
+    refreshRoles: Flag.Boolean("refresh-roles").pipe(Flag.withDefault(false)),
+  },
+  Effect.fn(function* ({ services, report, refreshRoles: refresh }) {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const root = path.resolve(import.meta.dirname, "..");
+    if (refresh) {
+      yield* refreshRoles(root);
+      if (services.length === 0) return;
+    }
     const all = (yield* fs.readDirectory(path.join(root, "packages/gcp/bindings")))
       .filter((f) => f.endsWith(".json") && f !== "roles.json")
       .map((f) => f.slice(0, -5))
@@ -710,6 +826,6 @@ const command = Command.make(
 );
 
 Command.run(command, { version: "0.0.0" }).pipe(
-  Effect.provide(NodeServices.layer),
+  Effect.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
   NodeRuntime.runMain,
 );

@@ -22,7 +22,7 @@ export const ListWorkflowExecutionsHttp = Layer.effect(
         resource: "GCP.Workflows.Workflow",
         operation: workflowexecutions.listProjectsLocationsWorkflowsExecutions,
         param: "parent",
-        iam: { role: "roles/workflows.invoker" },
+        iam: { role: "roles/workflows.viewer" },
       },
     ],
   }),

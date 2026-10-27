@@ -1,8 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
-import { probeParam, serveProbes } from "../../bindingHost.ts";
+import { outcome, probeParam, serveProbes } from "../../bindingHost.ts";
 
 /** Repository the host lists (roles/artifactregistry.reader on it). */
 export const Images = GCP.ArtifactRegistry.Repository("Images", {
@@ -29,12 +28,6 @@ export const Googet = repository("Googet", "GOOGET");
 
 /** A bucket path that doesn't exist: imports and exports reach the API and fail there. */
 const MISSING_GCS = "gs://alchemy-binding-missing-bucket/none";
-
-/** A typed failure as `{ _tag }`, so a probe can report it as a value. */
-const outcome = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.result(effect).pipe(
-    Effect.map((result) => (Result.isFailure(result) ? result.failure._tag : "succeeded")),
-  );
 
 /**
  * Effect-native Cloud Run service exercising every Artifact Registry

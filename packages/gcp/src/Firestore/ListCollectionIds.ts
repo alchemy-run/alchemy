@@ -26,7 +26,7 @@ export type ListCollectionIdsShape = (
  * Lists all the collection IDs underneath a document.
  *
  * Bind it to a {@link Database} and provide {@link ListCollectionIdsHttp}. The
- * host gets `roles/datastore.user` on the project, under an IAM condition matching only the bound resource.
+ * host gets `roles/datastore.viewer` on the project, under an IAM condition matching only the bound resource.
  *
  * ### Usage
  * **Example:** Call `documents.listCollectionIds`

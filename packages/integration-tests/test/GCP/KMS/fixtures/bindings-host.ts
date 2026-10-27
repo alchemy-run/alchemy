@@ -1,8 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Result from "effect/Result";
-import { probeParam, serveProbes } from "../../bindingHost.ts";
+import { outcome, probeParam, serveProbes } from "../../bindingHost.ts";
 import { KEY_RING_ID, kmsTestId } from "../common.ts";
 
 /** Key ring every fixture key lives in; the key-ring bindings are granted on it. */
@@ -62,12 +61,6 @@ export const Wrap = Effect.gen(function* () {
     protectionLevel: "SOFTWARE",
   });
 });
-
-/** A typed failure as `{ _tag }`, so a probe can report it as a value. */
-const failureTag = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.result(effect).pipe(
-    Effect.map((result) => (Result.isFailure(result) ? result.failure._tag : "succeeded")),
-  );
 
 /**
  * Effect-native Cloud Run service exercising every KMS binding as its own
@@ -145,7 +138,7 @@ export default class KmsBindingsHost extends GCP.Function<KmsBindingsHost>()(
         ),
         // Only versions whose generation or import failed can be deleted.
         deleteVersion: Effect.flatMap(version, (cryptoKeyVersion) =>
-          failureTag(deleteVersion({ cryptoKeyVersion })),
+          outcome(deleteVersion({ cryptoKeyVersion })),
         ),
         sign: Effect.gen(function* () {
           const cryptoKeyVersion = yield* version;
@@ -197,7 +190,7 @@ export default class KmsBindingsHost extends GCP.Function<KmsBindingsHost>()(
         // Encapsulating needs an ML-KEM client; a malformed ciphertext proves
         // the call is authorized and reaches the key.
         decapsulate: Effect.flatMap(version, (cryptoKeyVersion) =>
-          failureTag(
+          outcome(
             decapsulate({
               cryptoKeyVersion,
               body: { ciphertext: btoa("not-a-kem-ciphertext") },

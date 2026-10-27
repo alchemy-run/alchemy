@@ -26,7 +26,7 @@ export type ListKeyRingImportJobsShape = (
  * Lists ImportJobs.
  *
  * Bind it to a {@link KeyRing} and provide {@link ListKeyRingImportJobsHttp}. The
- * host gets `roles/cloudkms.importer` on the bound resource.
+ * host gets `roles/cloudkms.viewer` on the bound resource.
  *
  * ### Usage
  * **Example:** Call `importJobs.list`

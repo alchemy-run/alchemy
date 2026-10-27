@@ -67,6 +67,22 @@ export const serveProbes = (routes: Record<string, Probe>) =>
     return yield* HttpServerResponse.json(outcome);
   });
 
+/**
+ * A probe step whose typed failure is the expected outcome, as a value:
+ * its tag, or `"succeeded"`. `Forbidden`/`PermissionDenied` still fail, so
+ * {@link callProbe} retries them while a fresh IAM grant propagates.
+ */
+export const outcome = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.map(() => "succeeded" as string),
+    Effect.catchIf(
+      (error) => error._tag !== "Forbidden" && error._tag !== "PermissionDenied",
+      (error) => Effect.succeed(error._tag as string),
+    ),
+  );
+
 /** A probe's query parameter: `/probe/runTask?task=a` → `probeParam("task")` is `"a"`. */
 export const probeParam = Effect.fn(function* (key: string) {
   const request = yield* HttpServerRequest;

@@ -310,7 +310,6 @@ describe(
               "roles/secretmanager.viewer",
             ]);
             expect(yield* regionalSecretRoles(secrets.genRegional)).toEqual([
-              "roles/secretmanager.secretVersionManager",
               "roles/secretmanager.viewer",
             ]);
           }),

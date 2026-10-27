@@ -20,7 +20,7 @@ export const ListDocumentsHttp = Layer.effect(
         operation: firestore.listDocumentsProjectsDatabasesDocuments,
         param: "parent",
         append: "documents",
-        iam: { role: "roles/datastore.user", scopeByCondition: true },
+        iam: { role: "roles/datastore.viewer", scopeByCondition: true },
       },
     ],
   }),

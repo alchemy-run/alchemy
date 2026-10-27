@@ -20,7 +20,7 @@ export const RunAggregationQueryHttp = Layer.effect(
         operation: firestore.runAggregationQueryProjectsDatabasesDocuments,
         param: "parent",
         append: "documents",
-        iam: { role: "roles/datastore.user", scopeByCondition: true },
+        iam: { role: "roles/datastore.viewer", scopeByCondition: true },
       },
     ],
   }),

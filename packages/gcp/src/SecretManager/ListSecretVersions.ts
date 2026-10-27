@@ -28,7 +28,7 @@ export type ListSecretVersionsShape = (
  * Lists SecretVersions.
  *
  * Bind it to a {@link Secret} or {@link LocationsSecret} and provide {@link ListSecretVersionsHttp}. The
- * host gets `roles/secretmanager.secretVersionManager` on the bound resource.
+ * host gets `roles/secretmanager.viewer` on the bound resource.
  *
  * ### Usage
  * **Example:** Call `versions.list`

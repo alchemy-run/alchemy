@@ -20,7 +20,7 @@ export const PartitionQueryHttp = Layer.effect(
         operation: firestore.partitionQueryProjectsDatabasesDocuments,
         param: "parent",
         append: "documents",
-        iam: { role: "roles/datastore.user", scopeByCondition: true },
+        iam: { role: "roles/datastore.viewer", scopeByCondition: true },
       },
     ],
   }),

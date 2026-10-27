@@ -15,8 +15,6 @@
     "artifactregistry.projects.locations.repositories.exportArtifact": "artifactregistry.repositories.exportArtifacts"
   },
   "roles": {
-    "artifactregistry.repositories.get": "roles/artifactregistry.reader",
-    "artifactregistry.repositories.list": "roles/artifactregistry.reader",
     "artifactregistry.repositories.downloadArtifacts": "roles/artifactregistry.reader",
     "artifactregistry.repositories.uploadArtifacts": "roles/artifactregistry.writer"
   },

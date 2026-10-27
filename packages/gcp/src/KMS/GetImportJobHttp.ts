@@ -19,7 +19,7 @@ export const GetImportJobHttp = Layer.effect(
         resource: "GCP.KMS.ImportJob",
         operation: cloudkms.getProjectsLocationsKeyRingsImportJobs,
         param: "name",
-        iam: { role: "roles/cloudkms.importer", on: "kms.importJob" },
+        iam: { role: "roles/cloudkms.viewer", on: "kms.importJob" },
       },
     ],
   }),

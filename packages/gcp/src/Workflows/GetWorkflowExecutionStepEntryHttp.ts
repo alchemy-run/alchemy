@@ -26,7 +26,7 @@ export const GetWorkflowExecutionStepEntryHttp = Layer.effect(
           ["executions", "execution"],
           ["stepEntries", "stepEntry"],
         ],
-        iam: { role: "roles/workflows.invoker" },
+        iam: { role: "roles/workflows.viewer" },
       },
     ],
   }),

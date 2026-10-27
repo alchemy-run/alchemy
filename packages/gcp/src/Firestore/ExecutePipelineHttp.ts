@@ -19,7 +19,7 @@ export const ExecutePipelineHttp = Layer.effect(
         resource: "GCP.Firestore.Database",
         operation: firestore.executePipelineProjectsDatabasesDocuments,
         param: "database",
-        iam: { role: "roles/datastore.user", scopeByCondition: true },
+        iam: { role: "roles/datastore.viewer", scopeByCondition: true },
       },
     ],
   }),

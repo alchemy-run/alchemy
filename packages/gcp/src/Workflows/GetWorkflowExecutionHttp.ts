@@ -20,7 +20,7 @@ export const GetWorkflowExecutionHttp = Layer.effect(
         operation: workflowexecutions.getProjectsLocationsWorkflowsExecutions,
         param: "name",
         children: [["executions", "execution"]],
-        iam: { role: "roles/workflows.invoker" },
+        iam: { role: "roles/workflows.viewer" },
       },
     ],
   }),

@@ -26,7 +26,7 @@ export type PartitionQueryShape = (
  * Partitions a query by returning partition cursors that can be used to run the query in parallel.
  *
  * Bind it to a {@link Database} and provide {@link PartitionQueryHttp}. The
- * host gets `roles/datastore.user` on the project, under an IAM condition matching only the bound resource.
+ * host gets `roles/datastore.viewer` on the project, under an IAM condition matching only the bound resource.
  *
  * ### Usage
  * **Example:** Call `documents.partitionQuery`

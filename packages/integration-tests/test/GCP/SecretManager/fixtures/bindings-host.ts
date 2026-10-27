@@ -2,7 +2,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
-import { serveProbes } from "../../bindingHost.ts";
+import { outcome, serveProbes } from "../../bindingHost.ts";
 
 /** Secret the per-operation AddSecretVersion / AccessSecretVersion bind. */
 export const OpsSecret = GCP.SecretManager.Secret("OpsSecret", {});
@@ -54,12 +54,6 @@ export default class SecretManagerBindingsHost extends GCP.Function<SecretManage
     const rotate = yield* GCP.SecretManager.RotateSecret(GenSecret);
     const enableRotation = yield* GCP.SecretManager.EnableSecretManagedRotation(GenSecret);
 
-    /** A typed failure as `{ _tag }`, so a probe can report it as a value. */
-    const failureTag = <A, E extends { _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
-      Effect.result(effect).pipe(
-        Effect.map((result) => (Result.isFailure(result) ? result.failure._tag : "succeeded")),
-      );
-
     const roundTrip = (add: typeof addVersion, read: typeof access, value: string) =>
       Effect.gen(function* () {
         const payload = btoa(value);
@@ -89,8 +83,8 @@ export default class SecretManagerBindingsHost extends GCP.Function<SecretManage
         // Managed rotation needs a Cloud SQL secret; on a plain secret the
         // call is authorized and rejected as a bad request.
         managedRotation: Effect.all({
-          rotate: failureTag(rotate()),
-          enable: failureTag(enableRotation()),
+          rotate: outcome(rotate()),
+          enable: outcome(enableRotation()),
         }),
         read: Effect.gen(function* () {
           const latest = yield* reader.access();

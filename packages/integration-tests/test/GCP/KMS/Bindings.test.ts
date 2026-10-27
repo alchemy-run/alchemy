@@ -157,18 +157,14 @@ describe(
 
             expect(
               hostRoles(yield* kms.getIamPolicyProjectsLocationsKeyRings({ resource: names.ring })),
-            ).toEqual([
-              "roles/cloudkms.encryptionDashboardViewer",
-              "roles/cloudkms.importer",
-              "roles/cloudkms.viewer",
-            ]);
+            ).toEqual(["roles/cloudkms.encryptionDashboardViewer", "roles/cloudkms.viewer"]);
             expect(
               hostRoles(
                 yield* kms.getIamPolicyProjectsLocationsKeyRingsImportJobs({
                   resource: names.importJob,
                 }),
               ),
-            ).toEqual(["roles/cloudkms.importer"]);
+            ).toEqual(["roles/cloudkms.viewer"]);
           }),
         live,
       );

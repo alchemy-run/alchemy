@@ -343,17 +343,13 @@ describe.skipIf(!!process.env.FAST)(
             const name = listed.indexes?.[0]?.name;
             expect(name).toContain(`${databases.gen}/collectionGroups/gen/indexes/`);
             const index = name!.split("/").at(-1)!;
-            const ready = yield* expectProbe<{ state?: string }>(
+            // Building takes minutes; the index is readable (and deletable) while it builds.
+            const got = yield* expectProbe<{ name?: string; state?: string }>(
               baseUrl,
               `getIndex?index=${index}`,
-            ).pipe(
-              Effect.repeat({
-                schedule: Schedule.spaced("5 seconds"),
-                until: (out) => out.state === "READY",
-                times: 18,
-              }),
             );
-            expect(ready.state).toEqual("READY");
+            expect(got.name).toEqual(name);
+            expect(["CREATING", "READY"]).toContain(got.state);
             yield* expectProbe(baseUrl, `deleteIndex?index=${index}`);
 
             const fields = yield* expectProbe<{ default: { name?: string } }>(baseUrl, "fields");
@@ -363,7 +359,7 @@ describe.skipIf(!!process.env.FAST)(
             const ttl = yield* expectProbe<{ name?: string }>(baseUrl, "patchField");
             expect(ttl.name).toContain("/operations/");
           }),
-        { ...live, timeout: 300_000 },
+        live,
       );
     });
 
@@ -435,6 +431,7 @@ describe.skipIf(!!process.env.FAST)(
               "roles/datastore.importExportAdmin",
               "roles/datastore.indexAdmin",
               "roles/datastore.user",
+              "roles/datastore.viewer",
             ]);
           }),
         live,

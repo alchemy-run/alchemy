@@ -31,7 +31,7 @@ export type GetSecretVersionShape = (
  * Gets metadata for a SecretVersion.
  *
  * Bind it to a {@link Secret} or {@link LocationsSecret} and provide {@link GetSecretVersionHttp}. The
- * host gets `roles/secretmanager.secretVersionManager` on the bound resource.
+ * host gets `roles/secretmanager.viewer` on the bound resource.
  *
  * ### Usage
  * **Example:** Call `versions.get`

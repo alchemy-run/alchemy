@@ -23,7 +23,7 @@ export const ListWorkflowExecutionStepEntriesHttp = Layer.effect(
         operation: workflowexecutions.listProjectsLocationsWorkflowsExecutionsStepEntries,
         param: "parent",
         children: [["executions", "execution"]],
-        iam: { role: "roles/workflows.invoker" },
+        iam: { role: "roles/workflows.viewer" },
       },
     ],
   }),

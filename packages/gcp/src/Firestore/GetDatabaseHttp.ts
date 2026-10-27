@@ -19,7 +19,7 @@ export const GetDatabaseHttp = Layer.effect(
         resource: "GCP.Firestore.Database",
         operation: firestore.getProjectsDatabases,
         param: "name",
-        iam: { role: "roles/datastore.user", scopeByCondition: true },
+        iam: { role: "roles/datastore.viewer", scopeByCondition: true },
       },
     ],
   }),

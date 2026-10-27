@@ -26,7 +26,7 @@ export type GetImportJobShape = (
  * Returns metadata for a given ImportJob.
  *
  * Bind it to a {@link ImportJob} and provide {@link GetImportJobHttp}. The
- * host gets `roles/cloudkms.importer` on the bound resource.
+ * host gets `roles/cloudkms.viewer` on the bound resource.
  *
  * ### Usage
  * **Example:** Call `importJobs.get`
