@@ -187,7 +187,7 @@ const toAttrs = (assignment: oracle.GoldengateConnectionAssignment, project: str
 
 const getByName = (name: string) =>
   retryQuota(oracle.getProjectsLocationsGoldengateConnectionAssignments({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listAssignments = (project: string, region: string) => {
@@ -303,7 +303,7 @@ export const GoldengateConnectionAssignmentProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -331,7 +331,7 @@ export const GoldengateConnectionAssignmentProvider = () =>
         })
         .pipe(
           retryConflict,
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

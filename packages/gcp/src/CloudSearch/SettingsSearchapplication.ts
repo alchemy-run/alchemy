@@ -271,15 +271,13 @@ export const SettingsSearchapplicationProvider = () =>
       if (current === undefined) {
         const created = yield* cloudsearch
           .createSettingsSearchapplications({ body: desired })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName = operationResourceName(done);
           if (createdName !== undefined) {
             current = yield* waitUntilExists(getSearchApplication(createdName), createdName).pipe(
-              Effect.catchTag("GCP.CloudSearch.ResourceNotResolved", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("GCP.CloudSearch.ResourceNotResolved", () => Effect.undefined),
             );
           }
         }
@@ -344,7 +342,7 @@ export const SettingsSearchapplicationProvider = () =>
       const name = toSearchApplicationName(output.name || output.searchApplicationId);
       const operation = yield* cloudsearch
         .deleteSettingsSearchapplications({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

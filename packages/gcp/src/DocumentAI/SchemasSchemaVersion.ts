@@ -155,10 +155,10 @@ const toAttrs = (version: documentai.GoogleCloudDocumentaiV1SchemaVersion, proje
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : documentai
         .getProjectsLocationsSchemasSchemaVersions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwnedVersions = (project: string) =>
   Effect.gen(function* () {
@@ -308,7 +308,7 @@ export const SchemasSchemaVersionProvider = () =>
         documentai.deleteProjectsLocationsSchemasSchemaVersions({
           name: output.name,
         }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

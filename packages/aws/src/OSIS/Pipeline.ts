@@ -222,7 +222,7 @@ export const PipelineProvider = () =>
       const readPipeline = Effect.fn(function* (name: string) {
         return yield* osis.getPipeline({ PipelineName: name }).pipe(
           Effect.map((response) => response.Pipeline),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -434,7 +434,7 @@ export const PipelineProvider = () =>
                 (name) =>
                   osis.getPipeline({ PipelineName: name }).pipe(
                     Effect.map((response) => response.Pipeline),
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                   ),
                 { concurrency: 4 },
               ),

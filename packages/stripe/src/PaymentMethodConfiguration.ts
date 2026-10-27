@@ -445,7 +445,7 @@ const isMissingConfiguration = isMissingStripeResource;
 
 const getById = (configuration: string) =>
   GetPaymentMethodConfiguration({ configuration }).pipe(
-    Effect.catchIf(isMissingConfiguration, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingConfiguration, () => Effect.undefined),
   );
 
 const listByActive = Effect.fn(function* (active: boolean) {

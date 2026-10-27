@@ -173,10 +173,10 @@ const toAttrs = (flow: dialogflow.GoogleCloudDialogflowCxV3Flow, project: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsFlows({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, agent: string, hinted?: string) =>
   Effect.gen(function* () {

@@ -203,7 +203,7 @@ const getById = (
   certificateId: string,
 ) =>
   certificateId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         appengine.getProjectsLocationsApplicationsAuthorizedCertificates({
           projectsId,

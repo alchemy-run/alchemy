@@ -162,7 +162,7 @@ const toAttrs = (lake: dataplex.GoogleCloudDataplexV1Lake, project: string) => {
 const getByName = (name: string) =>
   dataplex
     .getProjectsLocationsLakes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 // Lakes provision a metastore-backed control plane for 2-5 minutes.
 const waitUntilReady = (name: string) =>
@@ -276,7 +276,7 @@ export const LakeProvider = () =>
               times: 8,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -327,7 +327,7 @@ export const LakeProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

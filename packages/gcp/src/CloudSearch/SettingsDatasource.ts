@@ -249,15 +249,13 @@ export const SettingsDatasourceProvider = () =>
       if (current === undefined) {
         const created = yield* cloudsearch
           .createSettingsDatasources({ body: desired })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName = operationResourceName(done);
           if (createdName !== undefined) {
             current = yield* waitUntilExists(getDatasource(createdName), createdName).pipe(
-              Effect.catchTag("GCP.CloudSearch.ResourceNotResolved", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("GCP.CloudSearch.ResourceNotResolved", () => Effect.undefined),
             );
           }
         }
@@ -318,7 +316,7 @@ export const SettingsDatasourceProvider = () =>
       const name = toDatasourceName(output.name || output.datasourceId);
       const operation = yield* cloudsearch
         .deleteSettingsDatasources({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

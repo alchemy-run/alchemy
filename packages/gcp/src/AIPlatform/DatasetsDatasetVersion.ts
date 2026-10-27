@@ -133,10 +133,10 @@ const parseVersionName = (name: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getDatasetsDatasetVersions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Dataset versions carry ownership only in their display name, which
@@ -311,7 +311,7 @@ export const DatasetsDatasetVersionProvider = () =>
             parent: news.dataset,
             body: { displayName: desiredDisplayName },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName =
@@ -348,7 +348,7 @@ export const DatasetsDatasetVersionProvider = () =>
       if (existing === undefined) return;
       const operation = yield* aiplatform
         .deleteDatasetsDatasetVersions({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

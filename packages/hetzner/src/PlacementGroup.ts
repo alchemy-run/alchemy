@@ -142,7 +142,7 @@ const toAttrs = (group: GetPlacementGroupResponsePlacementGroup) => ({
 const getById = (id: number) =>
   Hetzner.placementGroups.getPlacementGroup({ id }).pipe(
     Effect.map(({ placement_group }) => placement_group),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
@@ -231,7 +231,7 @@ export const PlacementGroupProvider = () =>
       if (current === undefined) {
         const created = yield* Hetzner.placementGroups
           .createPlacementGroup({ name, type, labels: desired })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created?.action != null) {
           yield* waitForAction(created.action.id);
         }

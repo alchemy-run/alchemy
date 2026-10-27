@@ -591,7 +591,7 @@ export const JobDefinitionProvider = () =>
             Effect.map((response) => response.taskDefinition?.status),
             // Not-found means ECS already completed the asynchronous
             // deletion and is therefore terminal as well.
-            Effect.catchTag("ClientException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ClientException", () => Effect.undefined),
           );
           if (status !== undefined && status !== "DELETE_IN_PROGRESS") {
             return yield* new JobDefinitionStillVisible({

@@ -39,7 +39,7 @@ const transientState = (state: string | undefined) =>
 export const getVolumeById = (appName: string, volumeId: string) =>
   machines.getVolumeById({ app_name: appName, volume_id: volumeId }).pipe(
     Effect.map((volume) => (destroying(volume.state) ? undefined : volume)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const listVolumesByApp = (appName: string) =>
@@ -66,7 +66,7 @@ export const listVolumeGroup = (appName: string, name: string, region: string) =
 export const waitUntilVolumeReady = (appName: string, volumeId: string) =>
   getVolumeById(appName, volumeId).pipe(
     Effect.flatMap((volume) => {
-      if (volume === undefined) return Effect.succeed(undefined);
+      if (volume === undefined) return Effect.undefined;
       if (transientState(volume.state)) {
         return Effect.fail(
           new VolumePending({
@@ -130,7 +130,7 @@ export const createVolume = Effect.fn(function* (input: {
       source_volume_id: input.disk.sourceVolumeId,
       require_unique_zone: input.disk.requireUniqueZone,
     })
-    .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
   if (created?.id !== undefined && created.id.length > 0) {
     return (yield* waitUntilVolumeReady(input.appName, created.id)) ?? created;
   }

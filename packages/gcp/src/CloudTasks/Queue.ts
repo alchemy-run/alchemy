@@ -307,7 +307,7 @@ const toAttrs = (queue: cloudtasks.Queue, project: string): Queue["Attributes"] 
 const getByName = (name: string) =>
   cloudtasks
     .getProjectsLocationsQueues({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const sameHttpTarget = (left: cloudtasks.HttpTarget, right: cloudtasks.HttpTarget | undefined) => {
   const normalize = (target: cloudtasks.HttpTarget | undefined) => {

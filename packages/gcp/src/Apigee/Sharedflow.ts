@@ -248,12 +248,12 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSharedflows({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const getRevision = (name: string) =>
   apigee
     .getOrganizationsSharedflowsRevisions({ name, format: "bundle" })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const descriptionFromBundle = (body: apigee.GoogleApiHttpBody | undefined) =>
   Effect.gen(function* () {

@@ -92,7 +92,7 @@ export const ConditionalForwarderProvider = () =>
             DirectoryId: directoryId,
             RemoteDomainNames: [remoteDomainName],
           })
-          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.undefined));
         return response?.ConditionalForwarders?.find(
           (forwarder) => forwarder.RemoteDomainName === remoteDomainName,
         );

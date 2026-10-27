@@ -270,7 +270,7 @@ const desiredBody = (news: RepositoriesPullRequestsPullRequestCommentProps): str
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         ssm.getProjectsLocationsRepositoriesPullRequestsPullRequestComments({
           name,
@@ -425,7 +425,7 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
             parent: pullRequest,
             body: encoded,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const operation = yield* waitForOperation(created);
           const createdName = nameFromOperation(operation);
@@ -466,7 +466,7 @@ export const RepositoriesPullRequestsPullRequestCommentProvider = () =>
           .deleteProjectsLocationsRepositoriesPullRequestsPullRequestComments({
             name: output.name,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

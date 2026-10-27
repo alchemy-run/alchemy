@@ -171,7 +171,7 @@ const toAttrs = (
 const getByName = (project: string, publicAdvertisedPrefix: string) =>
   compute
     .getPublicAdvertisedPrefixes({ project, publicAdvertisedPrefix })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, prefixName: string) =>
   getByName(project, prefixName).pipe(
@@ -270,7 +270,7 @@ export const PublicAdvertisedPrefixProvider = () =>
             },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, prefixName);
       }
 
@@ -305,6 +305,6 @@ export const PublicAdvertisedPrefixProvider = () =>
           publicAdvertisedPrefix: output.prefixName,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }),
   });

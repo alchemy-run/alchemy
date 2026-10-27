@@ -166,15 +166,15 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsReasoningEnginesSandboxEnvironmentTemplates({
           name,
         })
         .pipe(
           Effect.catchTags({
-            NotFound: () => Effect.succeed(undefined),
-            SandboxEnvironmentsNotEnabled: () => Effect.succeed(undefined),
+            NotFound: () => Effect.undefined,
+            SandboxEnvironmentsNotEnabled: () => Effect.undefined,
           }),
         );
 
@@ -311,7 +311,7 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
               egressControlConfig: news.egressControlConfig,
             }),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         const done =
           created !== undefined
             ? yield* waitForOperation(created, { alreadyExistsOk: true })
@@ -334,7 +334,7 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
         .deleteProjectsLocationsReasoningEnginesSandboxEnvironmentTemplates({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

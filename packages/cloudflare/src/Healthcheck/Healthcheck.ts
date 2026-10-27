@@ -441,7 +441,7 @@ type ObservedHealthcheck = healthchecks.GetHealthcheckResponse;
 const getHealthcheck = (zoneId: string, healthcheckId: string) =>
   healthchecks
     .getHealthcheck({ zoneId, healthcheckId })
-    .pipe(Effect.catchTag("HealthcheckNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("HealthcheckNotFound", () => Effect.undefined));
 
 /**
  * Find a health check by exact name. Names are unique per zone, so the

@@ -237,7 +237,7 @@ const toAttrs = (report: apigee.GoogleCloudApigeeV1CustomReport, organization: s
 const getByName = (name: string) =>
   apigee
     .getOrganizationsReports({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const toBody = (
   news: ReportProps,

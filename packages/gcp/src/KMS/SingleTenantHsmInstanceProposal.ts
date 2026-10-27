@@ -357,7 +357,7 @@ const operationKey = (props: {
 const getByName = (name: string) =>
   kms
     .getProjectsLocationsSingleTenantHsmInstancesProposals({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const paginate = <A, E, R>(
   fetch: (

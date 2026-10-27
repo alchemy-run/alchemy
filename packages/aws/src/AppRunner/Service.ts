@@ -1106,7 +1106,7 @@ await bootstrap(entrypoint);
       const readService = Effect.fn(function* (arn: string) {
         const response = yield* apprunner
           .describeService({ ServiceArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const service = response?.Service;
         return service === undefined || statusIs(service.Status, "DELETED") ? undefined : service;
       });

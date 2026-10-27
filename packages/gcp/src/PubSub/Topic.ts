@@ -157,7 +157,7 @@ const toAttrs = (topic: pubsub.Topic, project: string) => {
 const getByName = (name: string) =>
   pubsub
     .getProjectsTopics({ topic: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 // Pub/Sub serves reads from replicas that lag writes: one successful GET
 // does not mean the next one (or a publish routed to it) sees the
@@ -247,7 +247,7 @@ export const TopicProvider = () =>
               messageRetentionDuration: news.messageRetentionDuration,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         // Block until Pub/Sub serves the topic, not just the create response.
         current = yield* waitUntilPresent(name);
       }

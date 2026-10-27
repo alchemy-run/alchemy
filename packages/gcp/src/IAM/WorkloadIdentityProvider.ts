@@ -203,7 +203,7 @@ const toAttrs = (
 const getProvider = (name: string) =>
   iam
     .getProjectsLocationsWorkloadIdentityPoolsProviders({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitForProviderOperation = (operation: iam.Operation) =>
   waitForOperation(operation, (name) =>
@@ -391,7 +391,7 @@ export const WorkloadIdentityProviderProvider = () =>
       if (current?.state === "DELETED") return;
       const operation = yield* iam
         .deleteProjectsLocationsWorkloadIdentityPoolsProviders({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) yield* waitForProviderOperation(operation);
     }),
   });

@@ -191,7 +191,7 @@ const toAttrs = (feed: dataplex.GoogleCloudDataplexV1MetadataFeed, project: stri
 const getByName = (name: string) =>
   dataplex
     .getProjectsLocationsMetadataFeeds({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const topicResource = (topic: string, project: string) =>
   topic.includes("/") ? topic : `projects/${project}/topics/${topic}`;
@@ -202,7 +202,7 @@ const grantDataplexPubsub = (project: string, topic: string | undefined) =>
     const resource = topicResource(topic, project);
     const projectResource = yield* resourcemanager
       .getProjects({ name: `projects/${project}` })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     const projectNumber = lastSegment(projectResource?.name ?? "");
     if (projectNumber.length === 0) return;
     const member = `serviceAccount:service-${projectNumber}@gcp-sa-dataplex.iam.gserviceaccount.com`;
@@ -333,7 +333,7 @@ export const MetadataFeedProvider = () =>
               pubsubTopic: news.pubsubTopic,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -384,7 +384,7 @@ export const MetadataFeedProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

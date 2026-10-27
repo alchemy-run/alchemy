@@ -37,7 +37,7 @@ export const make = <K, A, I, E, R>(
       const kv = yield* Cloudflare.KV.ReadWriteNamespace(Cache);
       const id = key(input);
       const hit = yield* kv.get(id, { cacheTtl: seconds(MIN_TTL) }).pipe(
-        Effect.flatMap((text) => (text === null ? Effect.succeed(undefined) : decode(text))),
+        Effect.flatMap((text) => (text === null ? Effect.undefined : decode(text))),
         Effect.catch((e) =>
           Effect.logWarning(`cache read of ${id} failed: ${e.message}`).pipe(Effect.as(undefined)),
         ),

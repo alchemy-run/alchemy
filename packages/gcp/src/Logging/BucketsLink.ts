@@ -218,10 +218,10 @@ const isValidLinkName = (name: string) =>
 
 const getByName = (name: string) =>
   !isValidLinkName(name)
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : logging
         .getProjectsLocationsBucketsLinks({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
@@ -368,7 +368,7 @@ export const BucketsLinkProvider = () =>
             linkId,
             body: { description: desiredDescription },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }

@@ -122,7 +122,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsKeyvaluemapsEntries({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const KeyvaluemapsEntryProvider = () =>
   Provider.succeed(KeyvaluemapsEntry, {

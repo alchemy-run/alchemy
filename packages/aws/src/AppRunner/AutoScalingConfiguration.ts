@@ -149,7 +149,7 @@ export const AutoScalingConfigurationProvider = () =>
           .describeAutoScalingConfiguration({
             AutoScalingConfigurationArn: summary.AutoScalingConfigurationArn,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const config = described?.AutoScalingConfiguration;
         return config !== undefined && isActiveStatus(config.Status) ? config : undefined;
       });
@@ -289,7 +289,7 @@ export const AutoScalingConfigurationProvider = () =>
                     .pipe(
                       Effect.flatMap((r) => toAttrs(r.AutoScalingConfiguration)),
                       // Tolerate a delete race — drop the item.
-                      Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                      Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                     ),
                 { concurrency: 4 },
               ),

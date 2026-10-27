@@ -219,14 +219,14 @@ const emptyList = <A>() => Effect.succeed([] as A[]);
 
 export const getGroup = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudidentity
         .getGroups({ name: expandGroup(name) })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const lookupGroupName = (groupKeyId: string, namespace: string | undefined) =>
   groupKeyId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudidentity
         .lookupGroups({
           "groupKey.id": groupKeyId,
@@ -234,7 +234,7 @@ export const lookupGroupName = (groupKeyId: string, namespace: string | undefine
         })
         .pipe(
           Effect.map((result) => result.name),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
 
 export const getGroupByKey = (groupKeyId: string, namespace: string | undefined) =>
@@ -280,10 +280,10 @@ export const findOwnedGroup = (id: string, parent?: string) =>
 
 export const getMembership = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudidentity
         .getGroupsMemberships({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const lookupMembershipName = (
   parent: string,
@@ -291,7 +291,7 @@ export const lookupMembershipName = (
   namespace: string | undefined,
 ) =>
   parent.length === 0 || memberKeyId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudidentity
         .lookupGroupsMemberships({
           parent: expandGroup(parent),
@@ -300,7 +300,7 @@ export const lookupMembershipName = (
         })
         .pipe(
           Effect.map((result) => result.name),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
 
 export const getMembershipByKey = (
@@ -332,13 +332,13 @@ export const listMemberships = (parent: string) =>
 
 export const getDevice = (name: string, customer?: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudidentity
         .getDevices({
           name: expandName(name, "devices"),
           customer: customer ? normalizeCustomer(customer) : undefined,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listDevices = (customer?: string) =>
   cloudidentity.listDevices
@@ -376,12 +376,12 @@ export const findOwnedDevice = (id: string, serialNumber: string | undefined, cu
 
 export const getOidcProfile = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudidentity
         .getInboundOidcSsoProfiles({
           name: expandName(name, "inboundOidcSsoProfiles"),
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listOidcProfiles = () =>
   cloudidentity.listInboundOidcSsoProfiles.pages({ pageSize: 100 }).pipe(
@@ -404,12 +404,12 @@ export const findOwnedOidcProfile = (id: string) =>
 
 export const getSamlProfile = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudidentity
         .getInboundSamlSsoProfiles({
           name: expandName(name, "inboundSamlSsoProfiles"),
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listSamlProfiles = () =>
   cloudidentity.listInboundSamlSsoProfiles.pages({ pageSize: 100 }).pipe(
@@ -432,12 +432,12 @@ export const findOwnedSamlProfile = (id: string) =>
 
 export const getSsoAssignment = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudidentity
         .getInboundSsoAssignments({
           name: expandName(name, "inboundSsoAssignments"),
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listSsoAssignments = () =>
   cloudidentity.listInboundSsoAssignments.pages({ pageSize: 100 }).pipe(

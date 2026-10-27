@@ -407,10 +407,8 @@ const hydrateLineItems = (link: StripePaymentLink) =>
 
 const getById = (payment_link: string) =>
   GetPaymentLink({ payment_link }).pipe(
-    Effect.catchIf(isMissingPaymentLink, () => Effect.succeed(undefined)),
-    Effect.flatMap((link) =>
-      link === undefined ? Effect.succeed(undefined) : hydrateLineItems(link),
-    ),
+    Effect.catchIf(isMissingPaymentLink, () => Effect.undefined),
+    Effect.flatMap((link) => (link === undefined ? Effect.undefined : hydrateLineItems(link))),
   );
 
 const listByActive = Effect.fn(function* (active: boolean) {

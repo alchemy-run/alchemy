@@ -320,7 +320,7 @@ export const NodegroupProvider = () =>
       }) {
         const described = yield* eks
           .describeNodegroup({ clusterName, nodegroupName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const nodegroup = described?.nodegroup;
         if (
           !nodegroup?.nodegroupArn ||
@@ -358,7 +358,7 @@ export const NodegroupProvider = () =>
       const waitForNodegroupDeleted = (clusterName: string, nodegroupName: string) =>
         readNodegroup({ clusterName, nodegroupName }).pipe(
           Effect.flatMap((state) =>
-            state ? Effect.fail(new NodegroupStillExists()) : Effect.succeed(undefined),
+            state ? Effect.fail(new NodegroupStillExists()) : Effect.undefined,
           ),
           Effect.retry({
             while: (error) => error instanceof NodegroupStillExists,

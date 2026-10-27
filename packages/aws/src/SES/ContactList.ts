@@ -169,7 +169,7 @@ export const ContactListProvider = () =>
       const getList = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getContactList({ ContactListName: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       return ContactList.Provider.of({

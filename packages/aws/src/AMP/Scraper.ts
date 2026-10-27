@@ -192,7 +192,7 @@ export const ScraperProvider = () =>
       const describe = Effect.fn(function* (scraperId: string) {
         const response = yield* amp
           .describeScraper({ scraperId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.scraper;
       });
 

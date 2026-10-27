@@ -231,10 +231,10 @@ export const deleteRetry = <A, E extends { readonly _tag: string }, R>(
 
 export const missingGet = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : analyticshub
         .getProjectsLocationsDataExchanges({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const emptyList = <A>() => Effect.succeed<A[]>([]);
 

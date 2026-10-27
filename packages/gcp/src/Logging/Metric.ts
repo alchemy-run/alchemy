@@ -459,7 +459,7 @@ const toBody = (
 const getByName = (metricName: string) =>
   logging
     .getProjectsMetrics({ metricName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const MetricProvider = () =>
   Provider.succeed(Metric, {

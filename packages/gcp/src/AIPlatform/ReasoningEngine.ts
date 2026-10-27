@@ -171,10 +171,10 @@ const toAttrs = (engine: aiplatform.GoogleCloudAiplatformV1ReasoningEngine, proj
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsReasoningEngines({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   aiplatform.listProjectsLocationsReasoningEngines.pages({ parent, pageSize: 100 }).pipe(
@@ -312,7 +312,7 @@ export const ReasoningEngineProvider = () =>
               encryptionSpec: news.encryptionSpec,
             }),
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -374,8 +374,8 @@ export const ReasoningEngineProvider = () =>
         }),
       ).pipe(
         Effect.catchTags({
-          NotFound: () => Effect.succeed(undefined),
-          BadRequest: () => Effect.succeed(undefined),
+          NotFound: () => Effect.undefined,
+          BadRequest: () => Effect.undefined,
         }),
       );
       if (operation !== undefined) {

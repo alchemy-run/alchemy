@@ -151,7 +151,7 @@ export const RuleProvider = () =>
       ) =>
         vpclattice
           .getRule({ serviceIdentifier, listenerIdentifier, ruleIdentifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findByName = (serviceIdentifier: string, listenerIdentifier: string, name: string) =>
         vpclattice.listRules.pages({ serviceIdentifier, listenerIdentifier }).pipe(
@@ -164,11 +164,11 @@ export const RuleProvider = () =>
           Effect.flatMap((summary) =>
             summary?.id
               ? observe(serviceIdentifier, listenerIdentifier, summary.id)
-              : Effect.succeed(undefined),
+              : Effect.undefined,
           ),
           // The owning listener/service may already be gone during
           // teardown races.
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {

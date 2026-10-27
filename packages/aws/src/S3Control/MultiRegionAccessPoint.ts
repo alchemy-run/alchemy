@@ -181,7 +181,7 @@ export const MultiRegionAccessPointProvider = () =>
         inMrapRegion(
           s3control.getMultiRegionAccessPoint({ AccountId: accountId, Name: name }).pipe(
             Effect.map((r) => r.AccessPoint),
-            Effect.catchTag("NoSuchMultiRegionAccessPoint", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchMultiRegionAccessPoint", () => Effect.undefined),
           ),
         );
 

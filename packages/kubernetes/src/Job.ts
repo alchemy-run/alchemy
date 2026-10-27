@@ -478,7 +478,7 @@ export const JobProvider = () =>
           const observed = yield* readObject({
             transport,
             object: anchor,
-          }).pipe(Effect.catchTag("KubernetesNotFound", () => Effect.succeed(undefined)));
+          }).pipe(Effect.catchTag("KubernetesNotFound", () => Effect.undefined));
           if (observed === undefined) return undefined;
           return output;
         }),

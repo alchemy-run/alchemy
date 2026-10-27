@@ -364,12 +364,12 @@ const createClusterName = (id: string, props: { clusterName?: string | undefined
 const describeClusterOrUndefined = (name: string) =>
   sagemaker
     .describeCluster({ ClusterName: name })
-    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.undefined));
 
 const fetchClusterTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.undefined));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -481,7 +481,7 @@ const waitForCluster = (name: string, target: "InService" | "Gone") =>
         // full wait budget on a delete that can never finish.
         const nodes = yield* sagemaker
           .listClusterNodes({ ClusterName: name })
-          .pipe(Effect.catchTag("ResourceNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFound", () => Effect.undefined));
         const blocked = (nodes?.ClusterNodeSummaries ?? []).find((node) =>
           node.InstanceStatus?.Message?.includes("does not have permission to perform"),
         );

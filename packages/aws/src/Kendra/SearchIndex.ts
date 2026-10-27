@@ -182,8 +182,9 @@ const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* kendra
     .listTagsForResource({ ResourceARN: arn })
     .pipe(
-      Effect.catchTag(["ResourceNotFoundException", "ResourceUnavailableException"], () =>
-        Effect.succeed(undefined),
+      Effect.catchTag(
+        ["ResourceNotFoundException", "ResourceUnavailableException"],
+        () => Effect.undefined,
       ),
     );
   return Object.fromEntries((response?.Tags ?? []).map((tag) => [tag.Key, tag.Value]));
@@ -197,7 +198,7 @@ interface IndexState {
 const readIndexById = Effect.fn(function* (id: string, arnOf: (indexId: string) => string) {
   const described = yield* kendra
     .describeIndex({ Id: id })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.Status === "DELETING") return undefined;
   const arn = arnOf(described.Id ?? id);
   const state: IndexState = {
@@ -275,7 +276,7 @@ const waitForIndexStatus = (id: string, target: "ACTIVE" | "DELETED") =>
     Effect.gen(function* () {
       const described = yield* kendra
         .describeIndex({ Id: id })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new IndexNotReady({ id, status: described.Status });

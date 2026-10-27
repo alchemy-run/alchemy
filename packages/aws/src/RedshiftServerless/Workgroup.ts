@@ -188,7 +188,7 @@ export const WorkgroupProvider = () =>
       const readWorkgroup = Effect.fn(function* (name: string) {
         const response = yield* redshiftserverless
           .getWorkgroup({ workgroupName: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.workgroup;
       });
 

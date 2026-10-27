@@ -179,7 +179,7 @@ const toAttrs = (certificate: appengine.AuthorizedCertificate, appsId: string, p
 
 const getById = (appsId: string, certificateId: string) =>
   certificateId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         appengine.getAppsAuthorizedCertificates({
           appsId,

@@ -102,7 +102,7 @@ export const OriginRequestPolicyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getOriginRequestPolicyConfig({ Id: id })
-          .pipe(Effect.catchTag("NoSuchOriginRequestPolicy", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchOriginRequestPolicy", () => Effect.undefined));
         if (!config?.OriginRequestPolicyConfig) return undefined;
         return { config: config.OriginRequestPolicyConfig, etag: config.ETag };
       });

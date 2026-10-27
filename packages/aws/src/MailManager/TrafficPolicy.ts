@@ -112,7 +112,7 @@ export const TrafficPolicyProvider = () =>
       const getById = (trafficPolicyId: string) =>
         mm
           .getTrafficPolicy({ TrafficPolicyId: trafficPolicyId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findByName = (name: string) =>
         mm.listTrafficPolicies.pages({}).pipe(
@@ -206,7 +206,7 @@ export const TrafficPolicyProvider = () =>
                 MaxMessageSizeBytes: news.maxMessageSizeBytes,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             policy =
               created !== undefined
                 ? yield* getById(created.TrafficPolicyId)

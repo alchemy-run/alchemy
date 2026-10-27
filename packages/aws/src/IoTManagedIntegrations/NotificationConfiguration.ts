@@ -95,7 +95,7 @@ export const NotificationConfigurationProvider = () =>
       const observe = (eventType: mi.EventType) =>
         mi
           .getNotificationConfiguration({ EventType: eventType })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // GetNotificationConfiguration does not return an ARN; the tag APIs
       // need one, so construct it from the ambient account/region (same

@@ -117,7 +117,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   dataplex
     .getProjectsLocationsLakesZonesEntitiesPartitions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwnedEntityNames = (project: string, region: string) =>
   Effect.gen(function* () {

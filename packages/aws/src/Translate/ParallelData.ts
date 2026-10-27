@@ -144,7 +144,7 @@ export const ParallelDataProvider = () =>
       const getOne = Effect.fn(function* (name: string) {
         return yield* translate
           .getParallelData({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // The import runs asynchronously (CREATING/UPDATING → ACTIVE|FAILED);
@@ -275,7 +275,7 @@ export const ParallelDataProvider = () =>
           // Deletion is asynchronous (DELETING) — wait until gone so a
           // replacement can immediately reuse the name.
           yield* translate.getParallelData({ Name: output.parallelDataName }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             Effect.repeat({
               schedule: Schedule.spaced("5 seconds"),
               until: (r): boolean => r === undefined,

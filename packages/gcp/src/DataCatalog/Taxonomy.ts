@@ -242,7 +242,7 @@ export const TaxonomyProvider = () =>
               activatedPolicyTypes,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* observe(id, undefined, env.project, location));
       }
 

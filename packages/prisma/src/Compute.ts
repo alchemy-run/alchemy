@@ -1378,7 +1378,7 @@ const readPackageMain = Effect.fn(function* (directory: string) {
   const text = yield* fs.readFileString(path.join(directory, "package.json")).pipe(
     Effect.catchIf(
       (error) => error._tag === "PlatformError" && error.reason._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
   if (!text) return undefined;
@@ -1700,7 +1700,7 @@ const findExistingApp = Effect.fn(function* (output: Compute["Attributes"] | und
   return appId
     ? yield* getService({ serviceId: appId }).pipe(
         Effect.map((response) => response.data),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       )
     : undefined;
 });
@@ -2001,7 +2001,7 @@ const destroyComputeEnvironment = Effect.fn(function* (
       scope.class,
       key,
       scope.branchId,
-    ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     if (!variable) continue;
     if (variable.id !== ownedId || variable.isManagedBySystem) continue;
     yield* deleteEnvironmentVariable({
@@ -2136,14 +2136,12 @@ const ProviderLive = () =>
           const app = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : yield* findAppInProject;
           if (!app) return undefined;
           const readDeployment = (id: string) =>
-            observeDeployment(id).pipe(
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-            );
+            observeDeployment(id).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
           const outputDeployment = output?.deploymentId
             ? yield* readDeployment(output.deploymentId)
             : undefined;
@@ -2262,7 +2260,7 @@ const ProviderLive = () =>
             );
             const persistedDeployment = output?.deploymentId
               ? yield* observeDeployment(output.deploymentId).pipe(
-                  Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                  Effect.catchTag("NotFound", () => Effect.undefined),
                 )
               : undefined;
             const terminalFailedDeploymentId =
@@ -2274,7 +2272,7 @@ const ProviderLive = () =>
               action: "stop" | "destroy",
             ) {
               const observed = yield* observeDeployment(deploymentId).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               );
               if (!observed) {
                 return (action === "destroy" ? "destroyed" : "stopped") as "destroyed" | "stopped";
@@ -2288,7 +2286,7 @@ const ProviderLive = () =>
                 Effect.catchTag("NotFound", () => Effect.void),
               );
               yield* waitForDeploymentStatus(deploymentId, "stopped", effectiveNews).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               );
               return "stopped" as const;
             });

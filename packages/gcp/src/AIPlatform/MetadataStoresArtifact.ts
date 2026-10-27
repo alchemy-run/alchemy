@@ -182,7 +182,7 @@ const toAttrs = (artifact: aiplatform.GoogleCloudAiplatformV1Artifact, project: 
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsMetadataStoresArtifacts({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listArtifacts = (parent: string) =>
   aiplatform.listProjectsLocationsMetadataStoresArtifacts.pages({ parent, pageSize: 100 }).pipe(
@@ -375,7 +375,7 @@ export const MetadataStoresArtifactProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

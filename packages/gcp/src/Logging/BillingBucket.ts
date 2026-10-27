@@ -259,7 +259,7 @@ const toAttrs = (bucket: logging.LogBucket, billingAccountId: string, location: 
 const getByName = (name: string) =>
   logging
     .getBillingAccountsLocationsBuckets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const undelete = (name: string) =>
   logging

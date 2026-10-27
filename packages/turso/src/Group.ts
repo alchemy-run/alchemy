@@ -125,7 +125,7 @@ export const GroupProvider = () =>
       const observe = (org: string, name: string) =>
         turso.getGroup({ organizationSlug: org, groupName: name }).pipe(
           Effect.map((res) => res.group),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
 
       const toAttrs = (

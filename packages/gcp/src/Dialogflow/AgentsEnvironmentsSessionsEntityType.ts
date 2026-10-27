@@ -161,10 +161,10 @@ const entityTypeIdOf = (entityType: string) => lastSegment(entityType);
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsEnvironmentsSessionsEntityTypes({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const AgentsEnvironmentsSessionsEntityTypeProvider = () =>
   Provider.succeed(AgentsEnvironmentsSessionsEntityType, {

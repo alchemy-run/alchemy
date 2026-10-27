@@ -110,7 +110,7 @@ export const makeLocalState = () =>
 
     const ensure = (dir: string) =>
       created.has(dir)
-        ? Effect.succeed(void 0)
+        ? Effect.void
         : fs
             .makeDirectory(dir, { recursive: true })
             .pipe(Effect.tap(() => Effect.sync(() => created.add(dir))));

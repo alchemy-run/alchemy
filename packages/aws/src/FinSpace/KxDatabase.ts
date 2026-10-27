@@ -87,8 +87,9 @@ const fetchDatabaseTags = Effect.fn(function* (arn: string) {
   const response = yield* finspace
     .listTagsForResource({ resourceArn: arn })
     .pipe(
-      Effect.catchTag(["ResourceNotFoundException", "InvalidRequestException"], () =>
-        Effect.succeed(undefined),
+      Effect.catchTag(
+        ["ResourceNotFoundException", "InvalidRequestException"],
+        () => Effect.undefined,
       ),
     );
   return Object.fromEntries(
@@ -101,7 +102,7 @@ const fetchDatabaseTags = Effect.fn(function* (arn: string) {
 const readDatabase = Effect.fn(function* (environmentId: string, databaseName: string) {
   const response = yield* finspace
     .getKxDatabase({ environmentId, databaseName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!response) return undefined;
   const databaseArn = response.databaseArn ?? "";
   const attrs: KxDatabase["Attributes"] = {
@@ -164,9 +165,7 @@ export const KxDatabaseProvider = () =>
                 tags: desiredTags,
                 clientToken,
               })
-              .pipe(
-                Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.undefined));
             yield* session.note(`Created kdb database ${databaseName}`);
             attrs = yield* readDatabase(environmentId, databaseName);
             if (attrs === undefined) {

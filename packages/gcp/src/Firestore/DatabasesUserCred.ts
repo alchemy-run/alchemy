@@ -149,7 +149,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   firestore
     .getProjectsDatabasesUserCreds({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnDatabase = (parent: string) =>
   firestore.listProjectsDatabasesUserCreds({ parent }).pipe(

@@ -202,7 +202,7 @@ const toAttrs = (backup: bigtable.Backup, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesClustersBackups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isBusy = (state: string | undefined) =>
   state === "CREATING" || state === "STATE_UNSPECIFIED" || state === undefined;
@@ -368,7 +368,7 @@ export const InstancesClustersBackupProvider = () =>
               hotToStandardTime: news.hotToStandardTime,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }

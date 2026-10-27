@@ -180,10 +180,10 @@ const toAttrs = (config: dlp.GooglePrivacyDlpV2DiscoveryConfig, project: string)
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsLocationsDiscoveryConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DiscoveryConfigProvider = () =>
   Provider.succeed(DiscoveryConfig, {

@@ -362,11 +362,11 @@ const isUsableEntryName = (name: string) =>
 
 const getByName = (name: string) => {
   if (!isUsableEntryName(name)) {
-    return Effect.succeed(undefined);
+    return Effect.undefined;
   }
   return certificatemanager
     .getProjectsLocationsCertificateMapsCertificateMapEntries({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 };
 
 const waitUntilExists = (name: string) =>
@@ -603,7 +603,7 @@ export const CertificateMapEntryProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -663,7 +663,7 @@ export const CertificateMapEntryProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

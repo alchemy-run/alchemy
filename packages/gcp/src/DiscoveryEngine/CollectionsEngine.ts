@@ -211,7 +211,7 @@ const idsOf = (values: readonly string[] | undefined) => (values ?? []).map(data
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEngines({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (engine: discoveryengine.GoogleCloudDiscoveryengineV1Engine, project: string) => {
   const name = engine.name ?? "";
@@ -367,7 +367,7 @@ export const CollectionsEngineProvider = () =>
               appType: news.appType,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -431,7 +431,7 @@ export const CollectionsEngineProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

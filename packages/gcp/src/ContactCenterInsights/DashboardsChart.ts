@@ -212,10 +212,10 @@ const toAttrs = (chart: cci.GoogleCloudContactcenterinsightsV1Chart, project: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsDashboardsCharts({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listDashboards = (parent: string) =>
   cci.listProjectsLocationsDashboards.pages({ parent, pageSize: 100 }).pipe(

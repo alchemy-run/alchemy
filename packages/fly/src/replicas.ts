@@ -115,7 +115,7 @@ export const gone = (machine: FlyMachine | undefined) =>
 export const getMachineById = (appName: string, machineId: string) =>
   machines.getMachine({ app_name: appName, machine_id: machineId }).pipe(
     Effect.map((machine) => (gone(machine) ? undefined : machine)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 /**
@@ -137,7 +137,7 @@ const getLeasedMachine = (appName: string, machineId: string) =>
 const getLeasedMachineById = (appName: string, machineId: string) =>
   getLeasedMachine(appName, machineId).pipe(
     Effect.map((machine) => (gone(machine) ? undefined : machine)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const listMachinesByApp = (appName: string) =>
@@ -1187,7 +1187,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
           skip_launch: input.skipLaunch === true ? true : undefined,
           min_secrets_version: input.minSecretsVersion,
         })
-        .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
       current =
         created ??
         (yield* listMachinesByApp(input.appName).pipe(

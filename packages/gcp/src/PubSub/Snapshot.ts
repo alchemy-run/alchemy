@@ -151,7 +151,7 @@ const toAttrs = (snapshot: pubsub.Snapshot, project: string) => {
 const getByName = (name: string) =>
   pubsub
     .getProjectsSnapshots({ snapshot: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
@@ -274,7 +274,7 @@ export const SnapshotProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         // Block until Pub/Sub consistently serves the snapshot; the next
         // call (label patch) can otherwise hit a lagging replica.
         current = yield* waitUntilPresent(name);

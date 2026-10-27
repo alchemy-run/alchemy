@@ -288,7 +288,7 @@ export const DatabaseProvider = () =>
       const observe = (org: string, name: string) =>
         turso.getDatabase({ organizationSlug: org, databaseName: name }).pipe(
           Effect.map((res) => res.database),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
 
       const toAttrs = (

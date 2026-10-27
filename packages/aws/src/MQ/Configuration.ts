@@ -141,7 +141,7 @@ export const ConfigurationProvider = () =>
       const readConfiguration = Effect.fn(function* (configurationId: string) {
         return yield* mq
           .describeConfiguration({ ConfigurationId: configurationId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       /** Enumerate all configurations (listConfigurations is not paginated). */

@@ -175,12 +175,12 @@ const toAttrs = (definition: healthcare.AttributeDefinition, project: string, re
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsConsentStoresAttributeDefinitions({
           name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetsConsentStoresAttributeDefinitionProvider = () =>
   Provider.succeed(DatasetsConsentStoresAttributeDefinition, {

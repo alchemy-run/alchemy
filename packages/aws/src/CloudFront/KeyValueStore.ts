@@ -91,7 +91,7 @@ export const KeyValueStoreProvider = () =>
         }
         return yield* cloudfront
           .describeKeyValueStore({ Name: store.Name })
-          .pipe(Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("EntityNotFound", () => Effect.undefined));
       });
 
       return {
@@ -178,7 +178,7 @@ export const KeyValueStoreProvider = () =>
           function* ({ output }) {
             const current = yield* cloudfront
               .describeKeyValueStore({ Name: output.keyValueStoreName })
-              .pipe(Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("EntityNotFound", () => Effect.undefined));
 
             const etag = current?.ETag;
             if (!etag) {

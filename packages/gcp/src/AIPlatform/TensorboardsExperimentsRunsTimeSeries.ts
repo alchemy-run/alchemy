@@ -174,10 +174,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsTensorboardsExperimentsRunsTimeSeries({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listTensorboards = (project: string, location: string) =>
   aiplatform.listProjectsLocationsTensorboards
@@ -234,7 +234,7 @@ const findOwned = (parent: string, id: string) =>
       Stream.filterEffect((series) => ownedByAlchemy(id, series.description)),
       Stream.runHead,
       Effect.map(Option.getOrUndefined),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
 
 export const TensorboardsExperimentsRunsTimeSeriesProvider = () =>
@@ -374,7 +374,7 @@ export const TensorboardsExperimentsRunsTimeSeriesProvider = () =>
         .deleteProjectsLocationsTensorboardsExperimentsRunsTimeSeries({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

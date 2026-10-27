@@ -223,7 +223,7 @@ export const DashboardProvider = () =>
           .getDashboard({
             DashboardName: dashboardName,
           })
-          .pipe(Effect.catchTag("DashboardNotFoundError", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DashboardNotFoundError", () => Effect.undefined));
 
         if (!output?.DashboardName) {
           return undefined;

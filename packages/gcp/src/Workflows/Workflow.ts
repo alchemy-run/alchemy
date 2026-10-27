@@ -292,7 +292,7 @@ const toAttrs = (workflow: workflows.Workflow, project: string) => {
 const getByName = (name: string) =>
   workflows
     .getProjectsLocationsWorkflows({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait for a workflow operation. ALREADY_EXISTS (code 6) counts as success
@@ -434,7 +434,7 @@ export const WorkflowProvider = () =>
             workflowId,
             body: desiredBody,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -484,7 +484,7 @@ export const WorkflowProvider = () =>
             updateMask: updateMask.join(","),
             body: desiredBody,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation === undefined) {
           const created = yield* workflows
             .createProjectsLocationsWorkflows({
@@ -492,7 +492,7 @@ export const WorkflowProvider = () =>
               workflowId,
               body: desiredBody,
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {
             yield* waitForOperation(created);
           }
@@ -512,7 +512,7 @@ export const WorkflowProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* workflows
         .deleteProjectsLocationsWorkflows({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

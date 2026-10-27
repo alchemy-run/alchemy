@@ -320,7 +320,7 @@ export const AddressMapProvider = () =>
 const getMap = (accountId: string, addressMapId: string) =>
   addressing
     .getAddressMap({ accountId, addressMapId })
-    .pipe(Effect.catchTag("AddressMapNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AddressMapNotFound", () => Effect.undefined));
 
 /** Desired IPs — inputs have been resolved to concrete strings by Plan. */
 const desiredIps = (news: AddressMapProps): string[] => (news.ips ?? []).map((ip) => ip as string);

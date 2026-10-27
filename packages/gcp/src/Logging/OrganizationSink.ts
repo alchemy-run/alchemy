@@ -266,7 +266,7 @@ const toAttrs = (sink: logging.LogSink, organization: string, project: string) =
 const getByName = (name: string) =>
   logging
     .getOrganizationsSinks({ sinkName: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toCreateBody = (
   sinkId: string,

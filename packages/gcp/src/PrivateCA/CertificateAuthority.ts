@@ -582,7 +582,7 @@ const configKey = (config: CertificateConfig | undefined) => jsonKey(config);
 const getByName = (name: string) =>
   privateca
     .getProjectsLocationsCaPoolsCertificateAuthorities({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait for a Certificate Authority Service operation; CA creation and
@@ -697,9 +697,9 @@ const disableIfNeeded = (current: privateca.CertificateAuthority) => {
     })
     .pipe(
       Effect.catchTags({
-        NotFound: () => Effect.succeed(undefined),
-        BadRequest: () => Effect.succeed(undefined),
-        Conflict: () => Effect.succeed(undefined),
+        NotFound: () => Effect.undefined,
+        BadRequest: () => Effect.undefined,
+        Conflict: () => Effect.undefined,
       }),
       Effect.flatMap((operation) => runOperation(operation)),
       Effect.flatMap(() => waitUntilSteady(name)),
@@ -914,7 +914,7 @@ export const CertificateAuthorityProvider = () =>
             certificateAuthorityId,
             body: toCreateBody(news, certificateAuthorityId, desiredLabels),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         yield* runOperation(created);
         current = yield* waitUntilExists(name);
       }
@@ -960,7 +960,7 @@ export const CertificateAuthorityProvider = () =>
               subordinateConfig: news.subordinateConfig,
             },
           })
-          .pipe(Effect.catchTag("BadRequest", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("BadRequest", () => Effect.undefined));
         yield* runOperation(patched);
         current = yield* waitUntilSteady(name);
       }
@@ -986,8 +986,8 @@ export const CertificateAuthorityProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              NotFound: () => Effect.succeed(undefined),
-              BadRequest: () => Effect.succeed(undefined),
+              NotFound: () => Effect.undefined,
+              BadRequest: () => Effect.undefined,
             }),
             Effect.retry({
               while: (error) => error._tag === "Conflict",

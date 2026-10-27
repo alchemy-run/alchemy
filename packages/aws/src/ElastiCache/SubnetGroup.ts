@@ -64,7 +64,7 @@ export const SubnetGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* elasticache
           .describeCacheSubnetGroups({ CacheSubnetGroupName: name })
-          .pipe(Effect.catchTag("CacheSubnetGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("CacheSubnetGroupNotFoundFault", () => Effect.undefined));
         return response?.CacheSubnetGroups?.[0];
       });
       const attrs = Effect.fn(function* (group: elasticache.CacheSubnetGroup) {

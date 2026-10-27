@@ -315,10 +315,10 @@ const destBody = (
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : netapp
         .getProjectsLocationsVolumesReplications({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   listAtNested(project, "volumes/-", (parent) =>
@@ -455,7 +455,7 @@ export const VolumesReplicationProvider = () =>
               clusterLocation: news.clusterLocation,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -516,7 +516,7 @@ export const VolumesReplicationProvider = () =>
             name: current.name ?? name,
             body: {},
           })
-          .pipe(Effect.catchTag(["Conflict", "BadRequest"], () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag(["Conflict", "BadRequest"], () => Effect.undefined));
         if (resumed !== undefined) {
           yield* waitForOperation(resumed);
         }
@@ -533,7 +533,7 @@ export const VolumesReplicationProvider = () =>
             name: current.name ?? name,
             body: { force: news.forceStopping ?? true },
           })
-          .pipe(Effect.catchTag(["Conflict", "BadRequest"], () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag(["Conflict", "BadRequest"], () => Effect.undefined));
         if (stopped !== undefined) {
           yield* waitForOperation(stopped);
         }
@@ -562,11 +562,7 @@ export const VolumesReplicationProvider = () =>
             name: output.name,
             body: { force: olds?.forceStopping ?? true },
           })
-          .pipe(
-            Effect.catchTag(["NotFound", "Conflict", "BadRequest"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag(["NotFound", "Conflict", "BadRequest"], () => Effect.undefined));
         if (stopped !== undefined) {
           yield* waitForDeleteOperation(stopped);
         }
@@ -580,7 +576,7 @@ export const VolumesReplicationProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);
@@ -594,11 +590,7 @@ export const VolumesReplicationProvider = () =>
             name: destination,
             force: true,
           })
-          .pipe(
-            Effect.catchTag(["NotFound", "Conflict", "BadRequest"], () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag(["NotFound", "Conflict", "BadRequest"], () => Effect.undefined));
         if (deleted !== undefined) {
           yield* waitForDeleteOperation(deleted);
         }

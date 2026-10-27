@@ -222,7 +222,7 @@ const readProject = Query.fn((id: string) => projectFields(Railway.project({ id 
 const getById = (projectId: string) =>
   readProject(projectId).pipe(
     Effect.map((project) => (isGone(project) ? undefined : project)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const currentWorkspaceId = Effect.fn(function* () {
@@ -362,7 +362,7 @@ export const ProjectProvider = () =>
           ...(props.defaultEnvironmentName !== undefined
             ? { defaultEnvironmentName: props.defaultEnvironmentName }
             : {}),
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         current = created ?? (yield* findByName(workspaceId, name));
       }
 

@@ -114,7 +114,7 @@ export const TypeProvider = () =>
       const readType = Effect.fn(function* (keyspaceName: string, typeName: string) {
         return yield* keyspaces
           .getType({ keyspaceName, typeName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const toAttributes = (found: keyspaces.GetTypeResponse) => ({

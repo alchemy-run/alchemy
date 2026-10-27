@@ -245,7 +245,7 @@ const toAttrs = (query: logging.SavedQuery, billingAccountId: string, location: 
 const getByName = (name: string) =>
   logging
     .getBillingAccountsLocationsSavedQueries({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toBody = (props: BillingSavedQueryProps, description: string): logging.SavedQuery => ({
   displayName: props.displayName,

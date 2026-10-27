@@ -200,13 +200,13 @@ const desiredBody = (news: BatchProps, desiredLabels: Record<string, string>): d
 const getByName = (name: string) =>
   dataproc
     .getProjectsLocationsBatches({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilTerminal = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((batch) =>
       batch === undefined
-        ? Effect.succeed(undefined)
+        ? Effect.undefined
         : TERMINAL.has(batch.state ?? "")
           ? Effect.succeed(batch)
           : Effect.fail(
@@ -321,7 +321,7 @@ export const BatchProvider = () =>
             batchId,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created) {
           yield* waitForOperation(created);
         }

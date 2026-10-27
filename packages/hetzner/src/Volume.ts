@@ -235,7 +235,7 @@ const createVolumeName = (id: string, name: string | undefined, existing?: strin
 const getById = (id: number) =>
   Hetzner.volumes.getVolume({ id }).pipe(
     Effect.map(({ volume }) => volume),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByName = (name: string) =>
@@ -369,7 +369,7 @@ export const VolumeProvider = () =>
             server: desiredServerId,
             automount: desiredServerId !== undefined ? news.automount : undefined,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           if (created.action) {
             yield* settleActions([created.action, ...created.next_actions]);

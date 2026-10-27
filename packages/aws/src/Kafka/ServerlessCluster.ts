@@ -141,7 +141,7 @@ export const ServerlessClusterProvider = () =>
       const describeByArn = Effect.fn(function* (arn: string) {
         const response = yield* kafka
           .describeClusterV2({ ClusterArn: arn })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         return response?.ClusterInfo;
       });
 
@@ -150,8 +150,8 @@ export const ServerlessClusterProvider = () =>
           Effect.map((r) => r.BootstrapBrokerStringSaslIam),
           // Brokers are only resolvable once the cluster is ACTIVE.
           Effect.catchTags({
-            BadRequestException: () => Effect.succeed(undefined),
-            ConflictException: () => Effect.succeed(undefined),
+            BadRequestException: () => Effect.undefined,
+            ConflictException: () => Effect.undefined,
           }),
         );
       });

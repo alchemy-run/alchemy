@@ -93,7 +93,7 @@ export const PublicKeyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getPublicKeyConfig({ Id: id })
-          .pipe(Effect.catchTag("NoSuchPublicKey", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchPublicKey", () => Effect.undefined));
         if (!config?.PublicKeyConfig) return undefined;
         return { config: config.PublicKeyConfig, etag: config.ETag };
       });

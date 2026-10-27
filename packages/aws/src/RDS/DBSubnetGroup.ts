@@ -107,7 +107,7 @@ export const DBSubnetGroupProvider = () =>
           .describeDBSubnetGroups({
             DBSubnetGroupName: groupName,
           })
-          .pipe(Effect.catchTag("DBSubnetGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBSubnetGroupNotFoundFault", () => Effect.undefined));
         return response?.DBSubnetGroups?.[0];
       });
 

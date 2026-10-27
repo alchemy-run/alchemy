@@ -162,7 +162,7 @@ const toAttrs = (exclusion: logging.LogExclusion, billingAccountId: string) => {
 const getByName = (name: string) =>
   logging
     .getBillingAccountsExclusions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const BillingExclusionProvider = () =>
   Provider.succeed(BillingExclusion, {

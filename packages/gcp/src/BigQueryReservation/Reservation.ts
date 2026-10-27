@@ -326,7 +326,7 @@ const toAttrs = (current: bigqueryreservation.Reservation, project: string) => {
 const getByName = (name: string) =>
   bigqueryreservation
     .getProjectsLocationsReservations({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwnedAt = (project: string, location: string) =>
   bigqueryreservation.listProjectsLocationsReservations

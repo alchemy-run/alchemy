@@ -151,10 +151,10 @@ const toAttrs = (mapping: healthcare.UserDataMapping, project: string, region: s
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsConsentStoresUserDataMappings({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetsConsentStoresUserDataMappingProvider = () =>
   Provider.succeed(DatasetsConsentStoresUserDataMapping, {

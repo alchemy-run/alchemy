@@ -179,7 +179,7 @@ const toAttrs = (developer: apigee.GoogleCloudApigeeV1Developer, organization: s
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDevelopers({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const DeveloperProvider = () =>
   Provider.succeed(Developer, {

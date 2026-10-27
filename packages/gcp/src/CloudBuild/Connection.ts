@@ -824,7 +824,7 @@ const toAttrs = (connection: cloudbuild.Connection, project: string) => {
 const getByName = (name: string) =>
   cloudbuild
     .getProjectsLocationsConnections({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait on a Cloud Build connections long-running operation (seconds to a minute).
@@ -1004,7 +1004,7 @@ export const ConnectionProvider = () =>
               annotations: desiredAnnotations,
             }),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -1079,7 +1079,7 @@ export const ConnectionProvider = () =>
             updateMask: updateMask.join(","),
             body,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation === undefined) {
           const created = yield* cloudbuild
             .createProjectsLocationsConnections({
@@ -1091,7 +1091,7 @@ export const ConnectionProvider = () =>
                 annotations: desiredAnnotations,
               }),
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {
             yield* waitForOperation(created);
           }
@@ -1111,7 +1111,7 @@ export const ConnectionProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* cloudbuild
         .deleteProjectsLocationsConnections({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

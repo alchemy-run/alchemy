@@ -221,7 +221,7 @@ const getByRef = (projectId: string, datasetId: string, tableId: string, policyI
       tableId,
       policyId,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toPolicyBody = (
   projectId: string,

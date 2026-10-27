@@ -107,7 +107,7 @@ const createSlotTypeName = (id: string, props: { slotTypeName?: string | undefin
 const describeSlotType = Effect.fn(function* (botId: string, localeId: string, slotTypeId: string) {
   return yield* lexm
     .describeSlotType({ botId, botVersion: "DRAFT", localeId, slotTypeId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 });
 
 /** Find a slot type of the locale by exact name (used when state was lost). */

@@ -523,7 +523,7 @@ const waitUntilGone = (addOnId: string, name: string) =>
 const resolveOrganization = (orgSlug: string) =>
   addons
     .organization({ slug: orgSlug })
-    .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("FlyIoParseError", () => Effect.undefined));
 
 const ensureTos = (orgSlug: string, organizationId: string) =>
   Effect.gen(function* () {
@@ -832,7 +832,7 @@ const findAttachedBucket = (input: { id?: string; name: string }) =>
         name: listed.name ?? input.name,
         provider: TIGRIS,
       })
-      .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("FlyIoParseError", () => Effect.undefined));
     return detail ?? listed;
   });
 

@@ -745,7 +745,7 @@ export const ProviderLive = () =>
               )
         ).pipe(
           Effect.map((response) => response.domains.map(toCustomDomainAttributes)),
-          Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchBucket", () => Effect.undefined),
         );
       });
 
@@ -892,7 +892,7 @@ export const ProviderLive = () =>
           // The hostname exists whether or not public access is on; a
           // disabled domain serves 401, so only report it while enabled.
           Effect.map((response) => (response.enabled ? response.domain : undefined)),
-          Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchBucket", () => Effect.undefined),
         );
       });
 
@@ -1349,7 +1349,7 @@ export const ProviderLive = () =>
               bucketName: name,
               jurisdiction,
             })
-            .pipe(Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchBucket", () => Effect.undefined));
 
           // Ensure — create if missing. R2 reports a concurrent create
           // (or partial state-persistence failure) as
@@ -1598,7 +1598,7 @@ export const ProviderLive = () =>
                 localUploads: output?.localUploads,
                 publicDomain: output?.publicDomain,
               })),
-              Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchBucket", () => Effect.undefined),
             );
         }),
       };

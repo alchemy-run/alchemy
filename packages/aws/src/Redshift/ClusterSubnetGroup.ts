@@ -133,9 +133,7 @@ export const ClusterSubnetGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* redshift
           .describeClusterSubnetGroups({ ClusterSubnetGroupName: name })
-          .pipe(
-            Effect.catchTag("ClusterSubnetGroupNotFoundFault", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("ClusterSubnetGroupNotFoundFault", () => Effect.undefined));
         return response?.ClusterSubnetGroups?.[0];
       });
 
@@ -253,9 +251,7 @@ export const ClusterSubnetGroupProvider = () =>
               .deleteClusterSubnetGroup({
                 ClusterSubnetGroupName: output.clusterSubnetGroupName,
               })
-              .pipe(
-                Effect.catchTag("ClusterSubnetGroupNotFoundFault", () => Effect.succeed(undefined)),
-              ),
+              .pipe(Effect.catchTag("ClusterSubnetGroupNotFoundFault", () => Effect.undefined)),
           );
         }),
 

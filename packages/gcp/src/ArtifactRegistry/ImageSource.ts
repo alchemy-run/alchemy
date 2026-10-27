@@ -284,7 +284,7 @@ export const buildAndPushArtifactRegistryImage = Effect.fn(function* (
 export const destroyImageRepository = Effect.fn(function* (name: string) {
   const operation = yield* artifactregistry
     .deleteProjectsLocationsRepositories({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   if (operation !== undefined) {
     yield* waitForDeleteOperation(operation);
   }
@@ -310,7 +310,7 @@ export const destroyHostImageRepository = Effect.fn(function* (
   const name = resourceName(output.project, output.location, repositoryId);
   const repository = yield* artifactregistry
     .getProjectsLocationsRepositories({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   if (repository === undefined) return;
   if (!(yield* hasAlchemyLabels(id, tagRecord(repository.labels)))) return;
   yield* destroyImageRepository(name);
@@ -501,7 +501,7 @@ export const makeImageSource = Effect.gen(function* () {
     };
     const existing = yield* artifactregistry
       .getProjectsLocationsRepositories({ name })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     if (existing?.name) {
       return {
         name: existing.name,
@@ -522,7 +522,7 @@ export const makeImageSource = Effect.gen(function* () {
           labels: desiredLabels,
         },
       })
-      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (created !== undefined) {
       yield* waitForOperation(created);
     }
@@ -554,7 +554,7 @@ export const makeImageSource = Effect.gen(function* () {
       .getProjectsLocationsRepositoriesPackagesTags({
         name: tagResourceName(project, location, repositoryId, imageTag),
       })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
   const resolve = Effect.fn(function* (options: ArtifactRegistryResolveOptions) {

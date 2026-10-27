@@ -128,7 +128,7 @@ const createDisplayName = (id: string, props: { displayName?: string | undefined
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
@@ -140,7 +140,7 @@ interface IndexState {
 const readIndexById = Effect.fn(function* (applicationId: string, indexId: string) {
   const described = yield* qbusiness
     .getIndex({ applicationId, indexId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.status === "DELETING") return undefined;
   const arn = described.indexArn;
   if (arn === undefined) return undefined;
@@ -209,7 +209,7 @@ const waitForIndexStatus = (applicationId: string, indexId: string, target: "ACT
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getIndex({ applicationId, indexId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new IndexNotReady({ indexId, status: described.status });

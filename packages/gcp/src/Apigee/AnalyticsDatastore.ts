@@ -173,7 +173,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsAnalyticsDatastores({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const AnalyticsDatastoreProvider = () =>
   Provider.succeed(AnalyticsDatastore, {
@@ -253,7 +253,7 @@ export const AnalyticsDatastoreProvider = () =>
               datastoreConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? undefined;
       }
 

@@ -245,10 +245,10 @@ const toAttrs = (app: ces.App, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ces
         .getProjectsLocationsApps({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isOwnedApp = (app: ces.App) =>
   hasAlchemyLabelMap(app.metadata) ||
@@ -337,7 +337,7 @@ export const AppProvider = () =>
               languageSettings: news.languageSettings,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -422,7 +422,7 @@ export const AppProvider = () =>
       if (!output.name) return;
       const deleted = yield* retryTransient(
         ces.deleteProjectsLocationsApps({ name: output.name }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForDeleteOperation(deleted);
       }

@@ -234,12 +234,12 @@ const toAttrs = (
 const getByRef = (projectId: string, jobId: string, location: string) =>
   bigquery
     .getJobs({ projectId, jobId, location })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilDone = (projectId: string, jobId: string, location: string) =>
   getByRef(projectId, jobId, location).pipe(
     Effect.flatMap((job) => {
-      if (job === undefined) return Effect.succeed(undefined);
+      if (job === undefined) return Effect.undefined;
       const state = job.status?.state ?? "";
       if (state === "DONE") return Effect.succeed(job);
       return Effect.fail(new JobNotDone({ jobId, state }));

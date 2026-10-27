@@ -215,9 +215,9 @@ const toAttrs = (item: rma.Collector, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : rma.getProjectsLocationsCollectors({ name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.map((item) => (item === undefined || isGoneState(item.state) ? undefined : item)),
       );
 
@@ -229,10 +229,7 @@ const ignoreConflict = <A, R>(
     | rma.ResumeProjectsLocationsCollectorsError,
     R
   >,
-) =>
-  effect.pipe(
-    Effect.catchTag(["Conflict", "BadRequest"], () => Effect.succeed<A | undefined>(undefined)),
-  );
+) => effect.pipe(Effect.catchTag(["Conflict", "BadRequest"], () => Effect.undefined));
 
 const applyDesiredState = (name: string, current: rma.Collector, news: CollectorProps) =>
   Effect.gen(function* () {
@@ -333,7 +330,7 @@ export const CollectorProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -401,7 +398,7 @@ export const CollectorProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

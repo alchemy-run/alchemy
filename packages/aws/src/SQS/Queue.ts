@@ -452,7 +452,7 @@ export const QueueProvider = () =>
         const queueArn = `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
         let queueUrl = yield* sqs.getQueueUrl({ QueueName: queueName }).pipe(
           Effect.map((r) => r.QueueUrl),
-          Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(undefined)),
+          Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
         );
 
         if (queueUrl === undefined) {
@@ -515,7 +515,7 @@ export const QueueProvider = () =>
                       const queueArn = `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
                       return { queueName, queueUrl, queueArn };
                     }),
-                    Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(undefined)),
+                    Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
                   ),
               { concurrency: 10 },
             );
@@ -526,13 +526,13 @@ export const QueueProvider = () =>
           const queueName = output?.queueName ?? (yield* createQueueName(id, olds ?? {}));
           const url = yield* sqs.getQueueUrl({ QueueName: queueName }).pipe(
             Effect.map((r) => r.QueueUrl),
-            Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(undefined)),
+            Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
           );
           if (!url) return undefined;
           const queueArn = `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
           const tagsResp = yield* sqs.listQueueTags({ QueueUrl: url }).pipe(
             Effect.map((r) => r.Tags ?? {}),
-            Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(undefined)),
+            Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
           );
           if (tagsResp === undefined) return undefined;
           const attrs = {

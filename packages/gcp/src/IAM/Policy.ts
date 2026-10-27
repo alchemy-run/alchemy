@@ -207,10 +207,10 @@ const toAttrs = (policy: iam.GoogleIamV2Policy) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : iam.getPolicies({ name }).pipe(
         Effect.map((policy) => (policy.deleteTime ? undefined : policy)),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
 
 const listAt = (parent: string) =>
@@ -261,7 +261,7 @@ export const PolicyProvider = () =>
         const policies = yield* listAt(parent);
         const named = yield* Effect.forEach(
           policies,
-          (policy) => (policy.name ? getByName(policy.name) : Effect.succeed(undefined)),
+          (policy) => (policy.name ? getByName(policy.name) : Effect.undefined),
           { concurrency: 4 },
         );
         return named
@@ -352,7 +352,7 @@ export const PolicyProvider = () =>
       if (!output.name) return;
       const operation = yield* iam
         .deletePolicies({ name: output.name, etag: output.etag })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation) {
         yield* waitForDeleteOperation(operation);
       }

@@ -571,7 +571,7 @@ const isPlaceholder = (instance: alloydb.Instance) => {
 const getByName = (name: string) =>
   alloydb
     .getProjectsLocationsClustersInstances({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -815,7 +815,7 @@ export const InstanceProvider = () =>
                 body,
               })
         ).pipe(
-          Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+          Effect.catchTag("Conflict", () => Effect.undefined),
           Effect.tap((created) =>
             created === undefined ? Effect.void : waitForOperation(created),
           ),
@@ -995,7 +995,7 @@ export const InstanceProvider = () =>
       const operation = yield* alloydb
         .deleteProjectsLocationsClustersInstances({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 40,

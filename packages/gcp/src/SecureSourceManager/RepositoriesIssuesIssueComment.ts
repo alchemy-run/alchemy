@@ -155,7 +155,7 @@ const toAttrs = (item: ssm.IssueComment, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(ssm.getProjectsLocationsRepositoriesIssuesIssueComments({ name }));
 
 const listOnIssue = (issue: string) =>
@@ -280,7 +280,7 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
             parent: issue,
             body: { body },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const operation = yield* waitForOperation(created);
           const createdName = nameFromOperation(operation);
@@ -318,7 +318,7 @@ export const RepositoriesIssuesIssueCommentProvider = () =>
           .deleteProjectsLocationsRepositoriesIssuesIssueComments({
             name: output.name,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

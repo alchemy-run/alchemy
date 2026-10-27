@@ -155,7 +155,7 @@ export const ScheduleProvider = () =>
               Name: scheduleName,
               GroupName: groupName !== "default" ? groupName : undefined,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!described?.Arn || !described.Name) {
             return undefined;
@@ -194,7 +194,7 @@ export const ScheduleProvider = () =>
           // Observe — fetch live schedule.
           let observed = yield* scheduler
             .getSchedule({ Name: scheduleName, GroupName: groupNameParam })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // Ensure — create if missing. EventBridge Scheduler does not support
           // tagging individual schedules (only schedule groups), so ownership
@@ -214,7 +214,7 @@ export const ScheduleProvider = () =>
               );
             observed = yield* scheduler
               .getSchedule({ Name: scheduleName, GroupName: groupNameParam })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           }
 
           if (!observed?.Arn) {
@@ -284,7 +284,7 @@ export const ScheduleProvider = () =>
                           }
                         : undefined,
                     ),
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                   );
               },
               { concurrency: 10 },

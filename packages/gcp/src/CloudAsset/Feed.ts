@@ -235,10 +235,8 @@ const toAttrs = (feed: cloudasset.Feed, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
-    : cloudasset
-        .getFeeds({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    ? Effect.undefined
+    : cloudasset.getFeeds({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const observe = (project: string, feedId: string, outputName?: string) =>
   Effect.gen(function* () {

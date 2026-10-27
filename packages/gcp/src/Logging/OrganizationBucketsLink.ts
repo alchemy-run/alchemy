@@ -182,7 +182,7 @@ const toAttrs = (link: logging.Link, fallbackBucket: string, project: string) =>
 const getByName = (name: string) =>
   logging
     .getOrganizationsLocationsBucketsLinks({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
@@ -347,7 +347,7 @@ export const OrganizationBucketsLinkProvider = () =>
       if (output.lifecycleState === "DELETE_REQUESTED") return;
       const operation = yield* logging
         .deleteOrganizationsLocationsBucketsLinks({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);
       }

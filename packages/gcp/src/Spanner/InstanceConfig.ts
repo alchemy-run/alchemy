@@ -220,7 +220,7 @@ const toAttrs = (config: spanner.InstanceConfig, project: string): InstanceConfi
 const getByName = (name: string) =>
   spanner
     .getProjectsInstanceConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -398,7 +398,7 @@ export const InstanceConfigProvider = () =>
               },
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }

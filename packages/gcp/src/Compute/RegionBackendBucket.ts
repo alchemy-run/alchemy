@@ -194,7 +194,7 @@ const toAttrs = (
 const getByName = (project: string, region: string, name: string) =>
   compute
     .getRegionBackendBuckets({ project, region, backendBucket: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, name: string) =>
   getByName(project, region, name).pipe(
@@ -314,7 +314,7 @@ export const RegionBackendBucketProvider = () =>
             body: insertBody,
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, region, name);
       }
 
@@ -389,6 +389,6 @@ export const RegionBackendBucketProvider = () =>
           backendBucket: output.name,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }),
   });

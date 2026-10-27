@@ -109,14 +109,14 @@ const toTagRecord = (
 const readDatabase = Effect.fn(function* (databaseName: string) {
   const response = yield* withWriteEndpoint(
     TSW.describeDatabase({ DatabaseName: databaseName }),
-  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!response?.Database) {
     return undefined;
   }
   const database = response.Database;
   const tagsResponse = yield* withWriteEndpoint(
     TSW.listTagsForResource({ ResourceARN: database.Arn! }),
-  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!tagsResponse) {
     return undefined;
   }

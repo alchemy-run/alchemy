@@ -626,7 +626,7 @@ const getKubernetesTransport = (
 const getByName = (name: string) =>
   container
     .getProjectsLocationsClusters({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const operationResourceName = (
   project: string,
@@ -772,7 +772,7 @@ const ensureDefaultPoolRemoved = (project: string, location: string, clusterName
         name: `${clusterName}/nodePools/${DEFAULT_POOL_NAME}`,
       })
       .pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.retry({
           while: (error) => error._tag === "Conflict",
           times: 8,
@@ -1031,7 +1031,7 @@ export const ClusterProvider = () =>
                 cluster: toCreateBody(news, clusterId, desiredLabels, autopilot, env.project),
               },
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
           if (created !== undefined) {
             yield* waitForOperation(env.project, location, created);
           }
@@ -1040,7 +1040,7 @@ export const ClusterProvider = () =>
         // cluster") and leaves the cluster in ERROR; delete it and try again.
         const removeFailed = Effect.gen(function* () {
           const operation = yield* container.deleteProjectsLocationsClusters({ name }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
             Effect.retry({
               while: (error) => error._tag === "Conflict",
               times: 8,
@@ -1272,7 +1272,7 @@ export const ClusterProvider = () =>
       const operation = yield* container
         .deleteProjectsLocationsClusters({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) =>
               error._tag === "Conflict" ||

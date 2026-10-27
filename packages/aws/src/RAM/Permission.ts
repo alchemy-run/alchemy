@@ -190,7 +190,7 @@ const toAttrs = (
 const readDetail = Effect.fn(function* (arn: string) {
   const detail = yield* ram.getPermission({ permissionArn: arn }).pipe(
     Effect.map((r) => r.permission),
-    Effect.catchTag("UnknownResourceException", () => Effect.succeed(undefined)),
+    Effect.catchTag("UnknownResourceException", () => Effect.undefined),
   );
   return detail && isLive(detail.status) ? detail : undefined;
 });
@@ -268,9 +268,7 @@ export const PermissionProvider = () =>
               })
               .pipe(
                 Effect.map((r) => r.permission),
-                Effect.catchTag("PermissionAlreadyExistsException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("PermissionAlreadyExistsException", () => Effect.undefined),
               );
             // Prefer the ARN from the create response; on the AlreadyExists
             // race fall back to the (briefly eventually consistent) list.

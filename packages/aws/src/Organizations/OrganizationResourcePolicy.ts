@@ -78,7 +78,7 @@ const readResourcePolicy = () =>
   retryOrganizations(
     organizations.describeResourcePolicy({}).pipe(
       Effect.map((response) => response.ResourcePolicy),
-      Effect.catchTag("ResourcePolicyNotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("ResourcePolicyNotFoundException", () => Effect.undefined),
       Effect.map((policy) => {
         const summary = policy?.ResourcePolicySummary;
         return summary?.Id && summary.Arn

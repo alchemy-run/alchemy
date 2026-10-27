@@ -294,7 +294,7 @@ const toAttrs = (endpoint: servicedirectory.Endpoint, project: string, region: s
 const getByName = (name: string) =>
   servicedirectory
     .getProjectsLocationsNamespacesServicesEndpoints({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const deleteByName = (name: string) =>
   servicedirectory.deleteProjectsLocationsNamespacesServicesEndpoints({ name }).pipe(

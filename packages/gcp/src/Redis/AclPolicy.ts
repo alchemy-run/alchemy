@@ -235,7 +235,7 @@ const isPlaceholder = (policy: redis.AclPolicy) => {
 const getByName = (name: string) =>
   redis
     .getProjectsLocationsAclPolicies({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Wait for an operation through the shared GCP waiter. */
 const waitForOperation = (operation: redis.Operation, options?: { notFoundOk?: boolean }) =>
@@ -368,7 +368,7 @@ export const AclPolicyProvider = () =>
             aclPolicyId,
             body: { rules: bodyRules },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current =
           created && created.name && !isPlaceholder(created)
             ? created
@@ -414,7 +414,7 @@ export const AclPolicyProvider = () =>
           name: output.name,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

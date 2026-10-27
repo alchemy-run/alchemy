@@ -197,14 +197,14 @@ const toWireRetention = (
 const readTable = Effect.fn(function* (databaseName: string, tableName: string) {
   const response = yield* withWriteEndpoint(
     TSW.describeTable({ DatabaseName: databaseName, TableName: tableName }),
-  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!response?.Table) {
     return undefined;
   }
   const table = response.Table;
   const tagsResponse = yield* withWriteEndpoint(
     TSW.listTagsForResource({ ResourceARN: table.Arn! }),
-  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!tagsResponse) {
     return undefined;
   }

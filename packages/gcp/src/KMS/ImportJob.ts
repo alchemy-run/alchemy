@@ -236,7 +236,7 @@ const toAttrs = (job: kms.ImportJob, project: string, region: string): ImportJob
 const getByName = (name: string) =>
   kms
     .getProjectsLocationsKeyRingsImportJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const paginate = <A, E, R>(
   fetch: (

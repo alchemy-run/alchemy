@@ -110,8 +110,8 @@ export const MetricStreamProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              InvalidParameterValueException: () => Effect.succeed(undefined),
-              ResourceNotFoundException: () => Effect.succeed(undefined),
+              InvalidParameterValueException: () => Effect.undefined,
+              ResourceNotFoundException: () => Effect.undefined,
             }),
           );
 
@@ -181,7 +181,7 @@ export const MetricStreamProvider = () =>
 
             const results = yield* Effect.forEach(
               entries,
-              (entry) => (entry.Name ? readMetricStream(entry.Name) : Effect.succeed(undefined)),
+              (entry) => (entry.Name ? readMetricStream(entry.Name) : Effect.undefined),
               { concurrency: 10 },
             );
 

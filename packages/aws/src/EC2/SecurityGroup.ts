@@ -684,7 +684,7 @@ export const SecurityGroupProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const sg = output
             ? yield* describeSecurityGroup(output.groupId).pipe(
-                Effect.catchTag("InvalidGroup.NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("InvalidGroup.NotFound", () => Effect.undefined),
               )
             : yield* findOwnedGroup(id, yield* createGroupName(id, olds?.groupName), olds?.vpcId);
           if (!sg?.GroupId) return undefined;
@@ -748,7 +748,7 @@ export const SecurityGroupProvider = () =>
 
           if (output) {
             const group = yield* describeSecurityGroup(output.groupId).pipe(
-              Effect.catchTag("InvalidGroup.NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("InvalidGroup.NotFound", () => Effect.undefined),
             );
             if (group === undefined) return { action: "update", stables: [] };
             const owned = yield* declaredSecurityGroupRuleIds(output.groupId);

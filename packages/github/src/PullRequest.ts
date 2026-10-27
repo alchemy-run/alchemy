@@ -286,7 +286,7 @@ export const PullRequestProvider = () =>
         const body = news.body === undefined ? undefined : dedent(news.body);
         const getPull = (number: number) =>
           Pulls.get({ ...scope, pull_number: number }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
         const findOpen = () =>
           Pulls.list({
@@ -405,7 +405,7 @@ export const PullRequestProvider = () =>
 
         // GitHub preserves pull request history; destruction closes it.
         const observed = yield* Pulls.get(pull).pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
         if (observed?.state === "open") {
           yield* Pulls.update({ ...pull, state: "closed" }).pipe(

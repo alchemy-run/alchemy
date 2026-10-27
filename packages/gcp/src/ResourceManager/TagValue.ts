@@ -166,7 +166,7 @@ const toAttrs = (value: crm.TagValue, project: string): TagValue["Attributes"] =
 const getByName = (name: string) =>
   crm
     .getTagValues({ name })
-    .pipe(Effect.catchTag(["NotFound", "TagValueNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "TagValueNotFound"], () => Effect.undefined));
 
 const listTagValuesUnder = (parent: string) =>
   crm.listTagValues.pages({ parent, pageSize: 300 }).pipe(
@@ -300,15 +300,13 @@ export const TagValueProvider = () =>
               description: desiredDescription,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           const done = yield* waitForCreate(operation);
           const createdName = nameFromOperation(done);
           if (createdName !== undefined) {
             current = yield* waitUntilExists(createdName).pipe(
-              Effect.catchTag("GCP.ResourceManager.TagValueNotResolved", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("GCP.ResourceManager.TagValueNotResolved", () => Effect.undefined),
             );
           }
         }
@@ -347,7 +345,7 @@ export const TagValueProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag(["NotFound", "TagValueNotFound"], () => Effect.succeed(undefined)),
+        Effect.catchTag(["NotFound", "TagValueNotFound"], () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

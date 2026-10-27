@@ -135,7 +135,7 @@ const toAttributes = (framework: auditmanager.Framework): Framework["Attributes"
 const readFrameworkById = Effect.fn(function* (frameworkId: string) {
   const response = yield* auditmanager
     .getAssessmentFramework({ frameworkId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return response?.framework;
 });
 

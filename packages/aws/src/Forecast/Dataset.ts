@@ -128,7 +128,7 @@ export const DatasetProvider = () =>
       const describe = Effect.fn(function* (datasetArn: string) {
         return yield* forecast
           .describeDataset({ DatasetArn: datasetArn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const toAttrs = (dataset: forecast.DescribeDatasetResponse) => ({

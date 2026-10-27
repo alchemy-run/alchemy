@@ -161,7 +161,7 @@ const toAttrs = (term: dataplex.GoogleCloudDataplexV1GlossaryTerm, project: stri
 const getByName = (name: string) =>
   dataplex
     .getProjectsLocationsGlossariesTerms({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const GlossariesTermProvider = () =>
   Provider.succeed(GlossariesTerm, {

@@ -299,7 +299,7 @@ interface ObservedWan {
 const getWan = (accountId: string, siteId: string, wanId: string) =>
   magicTransit.getSiteWan({ accountId, siteId, wanId }).pipe(
     Effect.map((wan): ObservedWan | undefined => wan),
-    Effect.catchTag("SiteWanNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("SiteWanNotFound", () => Effect.undefined),
   );
 
 /**

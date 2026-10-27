@@ -175,11 +175,11 @@ export const missingGet =
   ) =>
   (name: string) =>
     name.length === 0
-      ? Effect.succeed(undefined)
+      ? Effect.undefined
       : effect({ name }).pipe(
           Effect.catchIf(
             (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         );
 

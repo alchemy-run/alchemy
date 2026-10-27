@@ -175,7 +175,7 @@ const toTagRecord = (
 const readScheduledQuery = Effect.fn(function* (scheduledQueryArn: string) {
   const response = yield* withQueryEndpoint(
     TSQ.describeScheduledQuery({ ScheduledQueryArn: scheduledQueryArn }),
-  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!response?.ScheduledQuery) {
     return undefined;
   }
@@ -185,7 +185,7 @@ const readScheduledQuery = Effect.fn(function* (scheduledQueryArn: string) {
       EffectStream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
     ),
-  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!tags) {
     return undefined;
   }

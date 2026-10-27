@@ -163,7 +163,7 @@ export const MultiRegionEndpointProvider = () =>
       const getEndpoint = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getMultiRegionEndpoint({ EndpointName: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       // getMultiRegionEndpoint does not return tags, so ownership costs a

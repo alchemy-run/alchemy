@@ -191,9 +191,7 @@ const toAttrs = (exclusion: logging.LogExclusion, project: string) => {
 };
 
 const getByName = (name: string) =>
-  logging
-    .getProjectsExclusions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  logging.getProjectsExclusions({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ExclusionProvider = () =>
   Provider.succeed(Exclusion, {

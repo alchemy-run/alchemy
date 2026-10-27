@@ -90,7 +90,7 @@ export const AddressListProvider = () =>
       const getById = (addressListId: string) =>
         mm
           .getAddressList({ AddressListId: addressListId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // Address lists have no name-keyed Get — enumerate and match. The
       // physical name is deterministic, so this recovers identity after a
@@ -177,7 +177,7 @@ export const AddressListProvider = () =>
                 AddressListName: name,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             list =
               created !== undefined
                 ? yield* getById(created.AddressListId)

@@ -124,7 +124,7 @@ export const SignalCatalogProvider = () =>
       const readCatalog = Effect.fn(function* (name: string) {
         return yield* iotfleetwise.getSignalCatalog({ name }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

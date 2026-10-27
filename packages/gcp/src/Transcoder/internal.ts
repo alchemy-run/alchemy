@@ -153,10 +153,10 @@ export const configKey = (config: transcoder.JobConfig | undefined): string => j
 
 export const getJobTemplate = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : transcoder
         .getProjectsLocationsJobTemplates({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait (bounded) for a template we know exists — e.g. after a create

@@ -166,7 +166,7 @@ const readQueueById = Effect.fn(function* (
 ) {
   const described = yield* deadline
     .getQueue({ farmId, queueId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described) return undefined;
   const queueArn = arnOf(`farm/${described.farmId}/queue/${described.queueId}`);
   const state: QueueState = {
@@ -364,9 +364,7 @@ export const QueueProvider = () =>
             Effect.gen(function* () {
               const described = yield* deadline
                 .getQueue({ farmId: output.farmId, queueId: output.queueId })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
               if (described !== undefined) {
                 return yield* new QueueStillExists({ queueId: output.queueId });
               }

@@ -171,10 +171,10 @@ const toAttrs = (session: discoveryengine.GoogleCloudDiscoveryengineV1Session, p
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsDataStoresSessions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAtParent = (parent: string) =>
   discoveryengine.listProjectsLocationsDataStoresSessions.pages({ parent, pageSize: 100 }).pipe(

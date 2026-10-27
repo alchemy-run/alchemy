@@ -348,7 +348,7 @@ const readStream = Effect.fn(function* ({
       StreamName: streamName,
       StreamARN: streamArn,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
   if (!response) {
     return undefined;
@@ -363,7 +363,7 @@ const readStream = Effect.fn(function* ({
     .listTagsForResource({
       ResourceARN: summary.StreamARN,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!tagsResponse) {
     return undefined;
   }
@@ -371,7 +371,7 @@ const readStream = Effect.fn(function* ({
     .getResourcePolicy({
       ResourceARN: summary.StreamARN,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
   return toAttrs({
     summary,

@@ -191,10 +191,10 @@ const toAttrs = (config: apigateway.ApigatewayApiConfig, project: string, api?: 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apigateway
         .getProjectsLocationsApisConfigs({ name, view: "FULL" })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const documentsChanged = (news: ApisConfigProps, olds: ApisConfigProps | undefined) =>
   (news.openapiDocuments !== undefined &&
@@ -278,7 +278,7 @@ export const ApisConfigProvider = () =>
               managedServiceConfigs,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -330,7 +330,7 @@ export const ApisConfigProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -207,7 +207,7 @@ const toAttrs = (
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* influxdb
     .listTagsForResource({ resourceArn: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   const tags = response?.tags ?? {};
   return Object.fromEntries(
     Object.entries(tags).filter((entry): entry is [string, string] => typeof entry[1] === "string"),
@@ -217,7 +217,7 @@ const fetchTags = Effect.fn(function* (arn: string) {
 const readInstanceById = Effect.fn(function* (identifier: string) {
   const instance = yield* influxdb
     .getDbInstance({ identifier })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!instance) return undefined;
   return toAttrs(instance, yield* fetchTags(instance.arn));
 });
@@ -270,7 +270,7 @@ const waitForStatus = (identifier: string, target: "AVAILABLE" | "DELETED") =>
     Effect.gen(function* () {
       const instance = yield* influxdb
         .getDbInstance({ identifier })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (instance === undefined) return;
         return yield* new DbInstanceNotReady({ identifier, status: instance.status });

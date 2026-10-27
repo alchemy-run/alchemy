@@ -113,7 +113,7 @@ const getByName = (tenant: string, name: string) =>
       tenant,
       name,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (
   config: discoveryengine.A2aV1TaskPushNotificationConfig,

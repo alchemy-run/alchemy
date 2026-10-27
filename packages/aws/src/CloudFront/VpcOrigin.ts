@@ -146,7 +146,7 @@ export const VpcOriginProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const result = yield* cloudfront
           .getVpcOrigin({ Id: id })
-          .pipe(Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("EntityNotFound", () => Effect.undefined));
         if (!result?.VpcOrigin?.Id) {
           return undefined;
         }

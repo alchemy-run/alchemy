@@ -369,7 +369,7 @@ const resolveName = (id: string, name: string | undefined, existing?: string) =>
 export const getLiveCluster = (clusterId: string) =>
   mpg.getClusterById({ id: clusterId }).pipe(
     Effect.map((res) => (isLiveCluster(res.data) ? res.data : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const getClusterResponse = (clusterId: string) =>
@@ -377,7 +377,7 @@ export const getClusterResponse = (clusterId: string) =>
     Effect.map((res): GetClusterResponse | undefined =>
       isLiveCluster(res.data) ? res : undefined,
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listOrgClusters = (orgSlug: string) =>
@@ -535,7 +535,7 @@ export const attachPostgresSecrets = Effect.fn(function* (
       times: 10,
       schedule: backoff,
     }),
-    Effect.catchTag("Fly.PostgresCredentialsPending", () => Effect.succeed(undefined)),
+    Effect.catchTag("Fly.PostgresCredentialsPending", () => Effect.undefined),
   );
   if (creds === undefined) {
     return yield* new PostgresCredentialsMissing({ clusterId });
@@ -674,7 +674,7 @@ export const PostgresProvider = () =>
           })
           .pipe(
             Effect.map((res) => res.data),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = isLiveCluster(created) ? created : yield* findByName(orgSlug, name);
       }

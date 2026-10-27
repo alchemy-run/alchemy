@@ -80,7 +80,7 @@ export const ScheduleGroupProvider = () =>
             .getScheduleGroup({
               Name: scheduleGroupName,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!described?.Arn || !described.Name) {
             return undefined;
@@ -100,7 +100,7 @@ export const ScheduleGroupProvider = () =>
           // Observe — fetch live group; gracefully handle missing.
           let observed = yield* scheduler
             .getScheduleGroup({ Name: scheduleGroupName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // Ensure — create if missing. Tolerate `ConflictException` as a
           // race or adoption case: verify ownership via tags before
@@ -137,7 +137,7 @@ export const ScheduleGroupProvider = () =>
               );
             observed = yield* scheduler
               .getScheduleGroup({ Name: scheduleGroupName })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           }
 
           if (!observed?.Arn) {
@@ -217,7 +217,7 @@ export const ScheduleGroupProvider = () =>
                         }
                       : undefined,
                   ),
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                 ),
               { concurrency: 10 },
             );

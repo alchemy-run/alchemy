@@ -485,7 +485,7 @@ export const ProjectProvider = () =>
           if (observed !== undefined) {
             observed = yield* retryIamPropagation(codebuild.updateProject({ name, ...spec })).pipe(
               Effect.map((updated) => updated.project),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           }
 
@@ -521,7 +521,7 @@ export const ProjectProvider = () =>
             .getResourcePolicy({ resourceArn: observed.arn })
             .pipe(
               Effect.map((res) => res.policy),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           if (desiredPolicy === undefined) {
             if (observedPolicy !== undefined && observedPolicy !== "") {

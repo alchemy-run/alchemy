@@ -658,7 +658,7 @@ export const BucketProvider = () =>
             times: 8,
             schedule: Schedule.spaced("1 second"),
           }),
-          Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)),
+          Effect.catchTag("RailwayValidationError", () => Effect.undefined),
         );
         current = created ?? (yield* findInProject(projectId, (bucket) => bucket.name === name));
       }

@@ -260,10 +260,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsIntents({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isOwnedIntent = (intent: dialogflow.GoogleCloudDialogflowCxV3Intent) =>
   hasOwnershipMarker(intent.displayName) ||
@@ -290,7 +290,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
       Stream.filter((intent) => intent.displayName === displayName),
       Stream.runHead,
       Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
 
 export const AgentsIntentProvider = () =>

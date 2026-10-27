@@ -228,9 +228,7 @@ export const WebACLProvider = () =>
             scope,
             wafv2
               .getWebACL({ Name: name, Scope: scope, Id: cachedId })
-              .pipe(
-                Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-              ),
+              .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
           );
           if (byId?.WebACL) {
             return byId;
@@ -248,9 +246,7 @@ export const WebACLProvider = () =>
               scope,
               wafv2
                 .getWebACL({ Name: name, Scope: scope, Id: summary.Id })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
           }
           if (!listed.NextMarker || (listed.WebACLs?.length ?? 0) === 0) {
@@ -358,9 +354,7 @@ export const WebACLProvider = () =>
                     ...desired,
                     Tags: createTagsList(desiredTags),
                   })
-                  .pipe(
-                    Effect.catchTag("WAFDuplicateItemException", () => Effect.succeed(undefined)),
-                  ),
+                  .pipe(Effect.catchTag("WAFDuplicateItemException", () => Effect.undefined)),
               ),
             );
             observed = yield* findWebACL(scope, name, undefined);
@@ -454,9 +448,7 @@ export const WebACLProvider = () =>
                   Scope: scope,
                   Id: output.webAclId,
                 })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
             if (!found?.WebACL || found.LockToken === undefined) {
               return;

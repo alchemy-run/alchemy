@@ -148,7 +148,7 @@ const toAttrs = (folder: resourcemanager.Folder) => ({
 const getByName = (name: string) =>
   resourcemanager
     .getFolders({ name })
-    .pipe(Effect.catchTag(["NotFound", "FolderNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "FolderNotFound"], () => Effect.undefined));
 
 const listChildren = (parent: string, showDeleted = true) =>
   collectPages(
@@ -257,7 +257,7 @@ export const FolderProvider = () =>
               displayName,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const settled = yield* waitForCreate(created);
           current = yield* waitUntilExists(
@@ -319,7 +319,7 @@ export const FolderProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag(["NotFound", "FolderNotFound"], () => Effect.succeed(undefined)),
+        Effect.catchTag(["NotFound", "FolderNotFound"], () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

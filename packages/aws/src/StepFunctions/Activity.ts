@@ -121,7 +121,7 @@ export const ActivityProvider = () =>
       const describeOrUndefined = Effect.fn(function* (activityArn: string) {
         return yield* sfn
           .describeActivity({ activityArn })
-          .pipe(Effect.catchTag("ActivityDoesNotExist", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ActivityDoesNotExist", () => Effect.undefined));
       });
 
       const fetchObservedTags = Effect.fn(function* (resourceArn: string) {

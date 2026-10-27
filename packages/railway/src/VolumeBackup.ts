@@ -426,7 +426,7 @@ const getByInstanceId = (volumeInstanceId: string) =>
     Effect.map((instance): CloudInstance | undefined =>
       isGoneInstance(instance) ? undefined : instance,
     ),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>

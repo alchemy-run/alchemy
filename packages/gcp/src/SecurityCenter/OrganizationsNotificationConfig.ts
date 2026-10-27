@@ -158,10 +158,10 @@ const toAttrs = (config: scc.NotificationConfig, organization: string, project: 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getOrganizationsNotificationConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const OrganizationsNotificationConfigProvider = () =>
   Provider.succeed(OrganizationsNotificationConfig, {

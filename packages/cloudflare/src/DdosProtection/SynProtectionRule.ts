@@ -283,7 +283,7 @@ const ruleName = (props: { scope: string; name?: string }) => props.name ?? "glo
 const getRule = (accountId: string, ruleId: string) =>
   ddos.getAdvancedTcpProtectionSynProtectionRuleItem({ accountId, ruleId }).pipe(
     Effect.map((rule): ObservedRule | undefined => rule),
-    Effect.catchTag("SynProtectionRuleNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("SynProtectionRuleNotFound", () => Effect.undefined),
   );
 
 /**

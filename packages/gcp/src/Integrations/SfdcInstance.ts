@@ -168,10 +168,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : integrations.getProjectsLocationsSfdcInstances({ name }).pipe(
         Effect.map((instance) => (isDeleted(instance) ? undefined : instance)),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
 
 export const SfdcInstanceProvider = () =>

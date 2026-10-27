@@ -140,7 +140,7 @@ const fetchModelTags = Effect.fn(function* (arn: string) {
 const readModel = Effect.fn(function* (modelName: string) {
   const described = yield* sagemaker
     .describeModel({ ModelName: modelName })
-    .pipe(Effect.catchTag("ModelNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ModelNotFound", () => Effect.undefined));
   if (!described) return undefined;
   return {
     modelName: described.ModelName,

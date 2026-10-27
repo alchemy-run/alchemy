@@ -419,7 +419,7 @@ export const ExperimentTemplateProvider = () =>
       const getTemplate = (templateId: string) =>
         fis.getExperimentTemplate({ id: templateId }).pipe(
           Effect.map((r) => r.experimentTemplate),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       // FIS template IDs are server-generated, so when the cached output is
@@ -535,7 +535,7 @@ export const ExperimentTemplateProvider = () =>
               summaries,
               (summary) =>
                 summary.id === undefined
-                  ? Effect.succeed(undefined)
+                  ? Effect.undefined
                   : getTemplate(summary.id).pipe(Effect.map((t) => (t ? toAttrs(t) : undefined))),
               { concurrency: 10 },
             );

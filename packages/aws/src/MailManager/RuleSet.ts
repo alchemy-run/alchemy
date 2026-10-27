@@ -138,7 +138,7 @@ export const RuleSetProvider = () =>
       const getById = (ruleSetId: string) =>
         mm
           .getRuleSet({ RuleSetId: ruleSetId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // Rule sets have no name-keyed Get — enumerate and match. The physical
       // name is deterministic, so this recovers identity after a lost state
@@ -220,7 +220,7 @@ export const RuleSetProvider = () =>
                 Rules: desiredRules,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             ruleSet =
               created !== undefined
                 ? yield* getById(created.RuleSetId)

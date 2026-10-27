@@ -192,10 +192,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apihub
         .getProjectsLocationsPluginsInstances({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   apihub.listProjectsLocationsPluginsInstances.pages({ parent, pageSize: 1000 }).pipe(
@@ -354,14 +354,14 @@ export const PluginsInstanceProvider = () =>
               sourceEnvironmentsConfig: news.sourceEnvironmentsConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
           current = yield* waitUntilExists(getByName(name), name);
         }
         if (current === undefined) {
           current = yield* waitUntilExists(getByName(name), name).pipe(
-            Effect.catchTag("GCP.ApiHub.ResourceNotResolved", () => Effect.succeed(undefined)),
+            Effect.catchTag("GCP.ApiHub.ResourceNotResolved", () => Effect.undefined),
           );
         }
       }
@@ -405,7 +405,7 @@ export const PluginsInstanceProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

@@ -155,7 +155,7 @@ interface AssetModelState_ {
 const readAssetModelById = Effect.fn(function* (assetModelId: string) {
   const described = yield* sitewise
     .describeAssetModel({ assetModelId, excludeProperties: false })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.assetModelStatus.state === "DELETING") {
     return undefined;
   }
@@ -232,7 +232,7 @@ const waitForAssetModelState = (assetModelId: string, target: "ACTIVE" | "DELETE
     Effect.gen(function* () {
       const described = yield* sitewise
         .describeAssetModel({ assetModelId, excludeProperties: true })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new AssetModelNotReady({

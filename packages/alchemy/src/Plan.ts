@@ -813,7 +813,7 @@ const makePlan = <A>(
                     newBindings,
                   })
                   .pipe(providePlanScope(resource, oldState.instanceId))
-              : Effect.succeed(undefined);
+              : Effect.undefined;
 
             // A present `diff.stables` is authoritative for this update and
             // overrides `provider.stables`. We only fall back to the

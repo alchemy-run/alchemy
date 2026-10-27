@@ -128,10 +128,10 @@ const toAttrs = (run: aiplatform.GoogleCloudAiplatformV1TensorboardRun, project:
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsTensorboardsExperimentsRuns({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listTensorboards = (project: string, location: string) =>
   aiplatform.listProjectsLocationsTensorboards
@@ -279,7 +279,7 @@ export const TensorboardsExperimentsRunProvider = () =>
         .deleteProjectsLocationsTensorboardsExperimentsRuns({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

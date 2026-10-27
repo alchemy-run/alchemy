@@ -134,7 +134,7 @@ export const ResponseHeadersPolicyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getResponseHeadersPolicyConfig({ Id: id })
-          .pipe(Effect.catchTag("NoSuchResponseHeadersPolicy", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchResponseHeadersPolicy", () => Effect.undefined));
         if (!config?.ResponseHeadersPolicyConfig) return undefined;
         return {
           config: config.ResponseHeadersPolicyConfig,

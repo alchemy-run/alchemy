@@ -142,7 +142,7 @@ const readAddon = Effect.fn(function* ({
       clusterName,
       addonName,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
   const addon = response?.addon;
   if (!addon?.addonArn || !addon.addonName || !addon.clusterName) {

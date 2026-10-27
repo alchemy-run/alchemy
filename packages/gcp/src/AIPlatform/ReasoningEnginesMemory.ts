@@ -181,7 +181,7 @@ const toAttrs = (memory: aiplatform.GoogleCloudAiplatformV1Memory, project: stri
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsReasoningEnginesMemories({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -317,7 +317,7 @@ export const ReasoningEnginesMemoryProvider = () =>
               expireTime: news.expireTime,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -371,7 +371,7 @@ export const ReasoningEnginesMemoryProvider = () =>
         .deleteProjectsLocationsReasoningEnginesMemories({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

@@ -297,7 +297,7 @@ const toAttrs = (connector: vpcaccess.Connector, project: string, region: string
 const getByName = (name: string) =>
   vpcaccess
     .getProjectsLocationsConnectors({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 // Connector create/delete takes 2-5 minutes.
 const waitForOperation = (operation: vpcaccess.Operation) =>
@@ -498,7 +498,7 @@ export const ConnectorProvider = () =>
             connectorId,
             body: createBody(news),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         } else {
@@ -562,7 +562,7 @@ export const ConnectorProvider = () =>
       const operation = yield* vpcaccess
         .deleteProjectsLocationsConnectors({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

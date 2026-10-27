@@ -70,7 +70,7 @@ export const EventTopicProvider = () =>
             DirectoryId: directoryId,
             TopicNames: [topicName],
           })
-          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.undefined));
         return response?.EventTopics?.find((topic) => topic.TopicName === topicName);
       });
 

@@ -220,10 +220,10 @@ const toAttrs = (policy: bqdp.DataPolicy, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : bqdp
         .getProjectsLocationsDataPolicies({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (project: string, location: string) =>
   bqdp.listProjectsLocationsDataPolicies

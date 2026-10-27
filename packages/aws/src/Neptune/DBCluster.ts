@@ -362,7 +362,7 @@ export const DBClusterProvider = () =>
           .describeDBClusters({
             DBClusterIdentifier: clusterId,
           })
-          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.undefined));
         return response?.DBClusters?.[0];
       });
 
@@ -370,7 +370,7 @@ export const DBClusterProvider = () =>
         if (!arn) return {} as Record<string, string>;
         const response = yield* neptune
           .listTagsForResource({ ResourceName: arn })
-          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.undefined));
         return toTagRecord(response?.TagList);
       });
 

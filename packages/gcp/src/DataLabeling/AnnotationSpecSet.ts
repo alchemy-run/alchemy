@@ -164,12 +164,12 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : datalabeling.getProjectsAnnotationSpecSets({ name }).pipe(
         Effect.provide(noRetryLayer),
         Effect.catchTags({
-          NotFound: () => Effect.succeed(undefined),
-          BadGateway: () => Effect.succeed(undefined),
+          NotFound: () => Effect.undefined,
+          BadGateway: () => Effect.undefined,
         }),
       );
 

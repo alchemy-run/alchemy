@@ -242,7 +242,7 @@ const toAttrs = (organization: apigee.GoogleCloudApigeeV1Organization, project: 
 const getByName = (name: string) =>
   apigee
     .getOrganizations({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const toBody = (
   props: OrganizationProps,
@@ -388,9 +388,7 @@ export const OrganizationProvider = () =>
           name: output.name,
           retention: "MINIMUM",
         })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, {
           notFoundOk: true,

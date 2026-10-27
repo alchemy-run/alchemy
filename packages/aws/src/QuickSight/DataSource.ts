@@ -139,7 +139,7 @@ export const DataSourceProvider = () =>
             AwsAccountId: accountId,
             DataSourceId: dataSourceId,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const source = response?.DataSource;
         if (source === undefined || source.Status === "DELETED") {
           return undefined;

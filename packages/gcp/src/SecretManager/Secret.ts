@@ -347,7 +347,7 @@ const toAttrs = (secret: secretmanager.Secret, project: string) => {
 const getByName = (name: string) =>
   secretmanager
     .getProjectsSecrets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilMissing = (name: string) =>
   getByName(name).pipe(

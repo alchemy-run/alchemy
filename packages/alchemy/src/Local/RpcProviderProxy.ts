@@ -183,7 +183,7 @@ const make = Effect.fn(function* (spawnerUrl: string) {
         (entry) => entry.connection !== undefined,
       )?.connection;
       return connection === undefined
-        ? Effect.succeed(undefined)
+        ? Effect.undefined
         : Effect.tryPromise(async () => (await connection.pending).rpc.getDiagnostics()).pipe(
             Effect.map(
               ({ sessions, testSessions, contexts, building, artifactBags, artifacts }) => ({

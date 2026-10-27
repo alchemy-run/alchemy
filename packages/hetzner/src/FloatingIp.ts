@@ -196,7 +196,7 @@ const createFloatingIpName = (id: string, name: string | undefined, existing?: s
 const getById = (id: number) =>
   Hetzner.floatingIps.getFloatingIp({ id }).pipe(
     Effect.map(({ floating_ip }) => floating_ip),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByName = (name: string) =>
@@ -336,7 +336,7 @@ export const FloatingIpProvider = () =>
             description: desiredDescription,
             labels: desiredLabels,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           if (created.action) {
             yield* waitForAction(created.action);

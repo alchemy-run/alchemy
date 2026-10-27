@@ -197,7 +197,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApiproductsRateplans({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const ApiproductsRateplanProvider = () =>
   Provider.succeed(ApiproductsRateplan, {
@@ -267,7 +267,7 @@ export const ApiproductsRateplanProvider = () =>
             parent,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? undefined;
       }
 

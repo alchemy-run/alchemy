@@ -127,7 +127,7 @@ export const CachePolicyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getCachePolicyConfig({ Id: id })
-          .pipe(Effect.catchTag("NoSuchCachePolicy", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchCachePolicy", () => Effect.undefined));
         if (!config?.CachePolicyConfig) return undefined;
         return { config: config.CachePolicyConfig, etag: config.ETag };
       });

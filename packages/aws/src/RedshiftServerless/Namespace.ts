@@ -179,7 +179,7 @@ export const NamespaceProvider = () =>
       const readNamespace = Effect.fn(function* (name: string) {
         const response = yield* redshiftserverless
           .getNamespace({ namespaceName: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.namespace;
       });
 

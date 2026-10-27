@@ -141,7 +141,7 @@ export const findAssociation = Effect.fn(function* ({
       clusterName,
       associationId: summary.associationId,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   const association = described?.association;
   if (!association?.associationArn || !association.associationId) {
     return undefined;

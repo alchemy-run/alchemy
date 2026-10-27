@@ -285,7 +285,7 @@ const readOUById = Effect.fn(function* (ouId: string) {
       })
       .pipe(
         Effect.map((response) => response.OrganizationalUnit),
-        Effect.catchTag("OrganizationalUnitNotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("OrganizationalUnitNotFoundException", () => Effect.undefined),
       ),
   );
 
@@ -295,7 +295,7 @@ const readOUById = Effect.fn(function* (ouId: string) {
 
   const [parentId, tags] = yield* Effect.all([
     readParentId(described.Id).pipe(
-      Effect.catchTag("ChildNotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("ChildNotFoundException", () => Effect.undefined),
     ),
     readResourceTags(described.Id).pipe(
       Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),

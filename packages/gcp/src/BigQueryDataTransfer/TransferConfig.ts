@@ -509,7 +509,7 @@ const toAttrs = (config: bqdt.TransferConfig, project: string, location: string)
 const getByName = (name: string) =>
   bqdt
     .getProjectsLocationsTransferConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   bqdt.listProjectsLocationsTransferConfigs

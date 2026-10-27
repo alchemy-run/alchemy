@@ -173,7 +173,7 @@ export const ServiceTokenProvider = () =>
             accountId: acct,
             serviceTokenId: output.serviceTokenId,
           })
-          .pipe(Effect.catchTag("AccessServiceTokenNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("AccessServiceTokenNotFound", () => Effect.undefined));
         if (direct && direct.id) {
           return {
             serviceTokenId: direct.id,
@@ -218,7 +218,7 @@ export const ServiceTokenProvider = () =>
             accountId: acct,
             serviceTokenId: output.serviceTokenId,
           })
-          .pipe(Effect.catchTag("AccessServiceTokenNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("AccessServiceTokenNotFound", () => Effect.undefined));
       }
       if (!observed || !observed.id) {
         observed = yield* findTokenByName(acct, name);

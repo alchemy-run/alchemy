@@ -264,7 +264,7 @@ const readPermissionSetByArn = Effect.fn(function* ({
         InstanceArn: instanceArn,
         PermissionSetArn: permissionSetArn,
       })
-      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined))),
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
   );
 
   const permissionSet = response?.PermissionSet;

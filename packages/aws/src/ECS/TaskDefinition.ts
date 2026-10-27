@@ -484,7 +484,7 @@ export const TaskDefinitionProvider = () =>
             described.taskDefinition?.status === "ACTIVE" ? described.taskDefinition : undefined,
           ),
           // "Unable to describe task definition" — no ACTIVE revision exists.
-          Effect.catchTag("ClientException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ClientException", () => Effect.undefined),
         );
 
       const attrsOf = (
@@ -728,7 +728,7 @@ export const TaskDefinitionProvider = () =>
                   Effect.map((described) =>
                     described.taskDefinition ? attrsOf(described.taskDefinition) : undefined,
                   ),
-                  Effect.catchTag("ClientException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ClientException", () => Effect.undefined),
                 ),
               { concurrency: 10 },
             );

@@ -181,10 +181,10 @@ const toAttrs = (item: osconfig.GoogleCloudOsconfigV2__PolicyOrchestrator, proje
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : osconfig
         .getFoldersLocationsGlobalPolicyOrchestrators({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const desiredBody = (
   news: FoldersLocationsGlobalPolicyOrchestratorProps,
@@ -288,7 +288,7 @@ export const FoldersLocationsGlobalPolicyOrchestratorProvider = () =>
             policyOrchestratorId,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -351,7 +351,7 @@ export const FoldersLocationsGlobalPolicyOrchestratorProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

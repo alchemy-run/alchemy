@@ -310,7 +310,7 @@ const toAttrs = (cluster: bigtable.Cluster, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesClusters({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isBusy = (state: string | undefined) =>
   state === "CREATING" ||
@@ -493,7 +493,7 @@ export const ClusterProvider = () =>
             clusterId,
             body: toCreateBody(news, env.project, zone, storage),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }

@@ -152,13 +152,13 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (identifier: string) {
         return yield* dsql
           .getCluster({ identifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const readTags = Effect.fn(function* (arn: string) {
         const response = yield* dsql
           .listTagsForResource({ resourceArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return Object.fromEntries(
           Object.entries(response?.tags ?? {}).filter(
             (entry): entry is [string, string] => typeof entry[1] === "string",

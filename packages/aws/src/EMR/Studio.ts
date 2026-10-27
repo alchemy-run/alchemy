@@ -212,7 +212,7 @@ export const StudioProvider = () =>
       const readStudio = Effect.fn(function* (studioId: string) {
         const response = yield* emr
           .describeStudio({ StudioId: studioId })
-          .pipe(Effect.catchTag("StudioNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("StudioNotFound", () => Effect.undefined));
         return response?.Studio;
       });
 

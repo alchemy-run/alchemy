@@ -139,7 +139,7 @@ export const AccessEntryProvider = () =>
           Effect.gen(function* () {
             const cluster = yield* eks.describeCluster({ name: clusterName }).pipe(
               Effect.map((response) => response.cluster),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
             // CONFIG_MAP clusters have no access entries, and EKS rejects
             // ListAccessEntries on them.
@@ -390,7 +390,7 @@ const readAccessEntry = Effect.fn(function* ({
       clusterName,
       principalArn,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
   const accessEntry = response?.accessEntry;
   if (!accessEntry?.accessEntryArn || !accessEntry.clusterName || !accessEntry.principalArn) {

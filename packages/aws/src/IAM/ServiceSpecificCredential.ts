@@ -183,7 +183,7 @@ export const ServiceSpecificCredentialProvider = () =>
                     entry.ServiceSpecificCredentialId === output.serviceSpecificCredentialId,
                 ),
               ),
-              Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
             )
         : undefined;
 

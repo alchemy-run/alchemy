@@ -141,10 +141,10 @@ const toAttrs = (exp: scc.GoogleCloudSecuritycenterV1BigQueryExport, project: st
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getProjectsBigQueryExports({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const BigQueryExportProvider = () =>
   Provider.succeed(BigQueryExport, {

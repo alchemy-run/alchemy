@@ -151,7 +151,7 @@ export const GroupProvider = () =>
           })
           .pipe(
             Effect.map(toObserved),
-            Effect.catchTag("AccessGroupNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("AccessGroupNotFound", () => Effect.undefined),
           );
         if (direct && direct.id) {
           return {
@@ -207,7 +207,7 @@ export const GroupProvider = () =>
           })
           .pipe(
             Effect.map(toObserved),
-            Effect.catchTag("AccessGroupNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("AccessGroupNotFound", () => Effect.undefined),
           );
       }
       if (!observed) {

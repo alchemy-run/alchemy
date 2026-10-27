@@ -181,7 +181,7 @@ export const InputProvider = () =>
       const getInput = Effect.fn(function* (inputId: string) {
         const input = yield* medialive
           .describeInput({ InputId: inputId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         if (input === undefined || isGone(input.State)) return undefined;
         return yield* ensureIdentified(input, "DescribeInput Id/Arn");
       });

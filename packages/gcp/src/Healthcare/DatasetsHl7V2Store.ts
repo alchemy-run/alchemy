@@ -174,10 +174,10 @@ const toAttrs = (store: healthcare.Hl7V2Store, project: string, region: string) 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsHl7V2Stores({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetsHl7V2StoreProvider = () =>
   Provider.succeed(DatasetsHl7V2Store, {

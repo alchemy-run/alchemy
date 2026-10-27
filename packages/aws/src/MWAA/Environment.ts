@@ -345,7 +345,7 @@ export const EnvironmentProvider = () =>
       const readEnvironment = Effect.fn(function* (name: string) {
         const response = yield* mwaa
           .getEnvironment({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.Environment;
       });
 

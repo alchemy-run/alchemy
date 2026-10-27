@@ -191,7 +191,7 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : missingToUndefined(
         apigee.getOrganizationsEnvironmentsApisRevisionsDebugsessions({
           name,

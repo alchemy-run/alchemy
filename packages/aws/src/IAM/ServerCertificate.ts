@@ -101,7 +101,7 @@ export const ServerCertificateProvider = () =>
           .getServerCertificate({
             ServerCertificateName: name,
           })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         return response?.ServerCertificate;
       });
 

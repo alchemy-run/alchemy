@@ -178,10 +178,10 @@ const toAttrs = (assessment: cci.GoogleCloudContactcenterinsightsV1Assessment, p
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsConversationsAssessments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAtParent = (parent: string, project: string) =>
   cci.listProjectsLocationsConversationsAssessments.pages({ parent, pageSize: 100 }).pipe(
@@ -199,7 +199,7 @@ const findOwned = (parent: string, displayName: string) =>
     Stream.filter((assessment) => assessment.agentInfo?.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const ConversationsAssessmentProvider = () =>
@@ -266,7 +266,7 @@ export const ConversationsAssessmentProvider = () =>
             parent: news.parent,
             body: { agentInfo: desiredAgent },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* findOwned(news.parent, displayName));
       }
 

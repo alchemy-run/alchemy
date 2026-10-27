@@ -253,7 +253,7 @@ const toAttrs = (
 
 const getById = (appsId: string, servicesId: string, versionsId: string) =>
   versionsId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         appengine.getAppsServicesVersions({
           appsId,
@@ -470,7 +470,7 @@ export const AppsServicesVersionProvider = () =>
           servicesId: output.serviceId || DEFAULT_SERVICE,
           versionsId: output.versionId,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation === undefined) return;
       yield* waitForOperation(operation, {
         appsId: output.appsId,

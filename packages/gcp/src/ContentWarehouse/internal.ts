@@ -395,7 +395,7 @@ export const ensureProject = (parent: string) =>
           documentCreatorDefaultRole: "DOCUMENT_ADMIN",
         },
       })
-      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (operation !== undefined) {
       yield* waitForOperation(operation);
     }

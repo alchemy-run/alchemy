@@ -313,7 +313,7 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (identifier: string) {
         const response = yield* redshift
           .describeClusters({ ClusterIdentifier: identifier })
-          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.undefined));
         return response?.Clusters?.[0];
       });
 
@@ -478,7 +478,7 @@ export const ClusterProvider = () =>
                   Value,
                 })),
               })
-              .pipe(Effect.catchTag("ClusterAlreadyExistsFault", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ClusterAlreadyExistsFault", () => Effect.undefined));
           }
 
           // Provisioning and in-flight modifications both surface as a
@@ -615,7 +615,7 @@ export const ClusterProvider = () =>
                 ClusterIdentifier: identifier,
                 SkipFinalClusterSnapshot: true,
               })
-              .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined))),
+              .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.undefined)),
           ).pipe(Effect.catchTag("InvalidClusterStateFault", () => Effect.void));
         }),
 

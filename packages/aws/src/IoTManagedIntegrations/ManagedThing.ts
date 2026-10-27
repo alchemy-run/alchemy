@@ -141,7 +141,7 @@ export const ManagedThingProvider = () =>
       const observeById = (identifier: string) =>
         mi
           .getManagedThing({ Identifier: identifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // Recover an existing managed thing by display name when no Id is
       // cached (e.g. after a state persistence failure).

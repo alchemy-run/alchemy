@@ -141,7 +141,7 @@ export const IngressPointProvider = () =>
       const getById = (ingressPointId: string) =>
         mm
           .getIngressPoint({ IngressPointId: ingressPointId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findByName = (name: string) =>
         mm.listIngressPoints.pages({}).pipe(
@@ -267,7 +267,7 @@ export const IngressPointProvider = () =>
                 TlsPolicy: news.tlsPolicy,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             ingress =
               created !== undefined
                 ? yield* getById(created.IngressPointId)

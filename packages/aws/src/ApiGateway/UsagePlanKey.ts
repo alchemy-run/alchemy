@@ -68,7 +68,7 @@ export const UsagePlanKeyProvider = () =>
               usagePlanId: output.usagePlanId,
               keyId: output.keyId,
             })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!k?.id) return undefined;
           return {
             usagePlanId: output.usagePlanId,
@@ -91,7 +91,7 @@ export const UsagePlanKeyProvider = () =>
           // exists there's nothing to sync.
           let observed = yield* ag
             .getUsagePlanKey({ usagePlanId, keyId })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
           // Ensure — create the link if missing.
           if (!observed?.id) {

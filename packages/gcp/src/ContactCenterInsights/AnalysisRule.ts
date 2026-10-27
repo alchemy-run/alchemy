@@ -209,10 +209,10 @@ const toAttrs = (rule: cci.GoogleCloudContactcenterinsightsV1AnalysisRule, proje
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsAnalysisRules({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsAnalysisRules.pages({ parent, pageSize: 100 }).pipe(
@@ -230,7 +230,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((rule) => rule.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 /** Analysis rules reject display names over 64 characters ("Request contains an invalid argument"). */

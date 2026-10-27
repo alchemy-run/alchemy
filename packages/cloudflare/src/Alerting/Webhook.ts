@@ -308,7 +308,7 @@ const narrowWebhook = (raw: {
 const observeWebhook = (accountId: string, webhookId: string) =>
   alerting.getDestinationWebhook({ accountId, webhookId }).pipe(
     Effect.map((w) => narrowWebhook({ ...w, id: w.id ?? webhookId })),
-    Effect.catchTag("WebhookNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("WebhookNotFound", () => Effect.undefined),
   );
 
 const findWebhookByName = (accountId: string, name: string) =>

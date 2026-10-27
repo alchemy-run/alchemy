@@ -779,7 +779,7 @@ export const TableProvider = () =>
       const readTableResourcePolicy = (tableArn: string) =>
         dynamodb.getResourcePolicy({ ResourceArn: tableArn }).pipe(
           Effect.map((response) => response.Policy),
-          Effect.catchTag("PolicyNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("PolicyNotFoundException", () => Effect.undefined),
           Effect.retry({
             while: isRetryableControlPlaneError,
             schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(15)]),
@@ -1307,7 +1307,7 @@ export const TableProvider = () =>
               continuousBackupsResult.ContinuousBackupsDescription?.PointInTimeRecoveryDescription,
             timeToLiveDescription: ttlResult.TimeToLiveDescription,
           };
-        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const toAttrs = (state: {
         table: DynamoDB.TableDescription;
@@ -1650,7 +1650,7 @@ export const TableProvider = () =>
                       "TableNotFoundException",
                       "ResourceNotFoundException",
                     ],
-                    () => Effect.succeed(undefined),
+                    () => Effect.undefined,
                   ),
                 ),
               { concurrency: 8 },
@@ -1662,7 +1662,7 @@ export const TableProvider = () =>
             output?.tableName ?? (olds ? yield* createTableName(id, olds) : undefined);
           if (!tableName) return undefined;
           const state = yield* readTableState(tableName).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
           if (!state) return undefined;
           const attrs = {

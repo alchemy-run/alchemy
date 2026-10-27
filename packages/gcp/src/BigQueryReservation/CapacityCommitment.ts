@@ -213,7 +213,7 @@ const toAttrs = (current: bigqueryreservation.CapacityCommitment, project: strin
 const getByName = (name: string) =>
   bigqueryreservation
     .getProjectsLocationsCapacityCommitments({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilSettled = (name: string) =>
   getByName(name).pipe(

@@ -1097,7 +1097,7 @@ export const TaskProvider = () =>
             .describeTaskDefinition({
               taskDefinition: output?.taskDefinitionArn ?? family,
             })
-            .pipe(Effect.catchTag("ClientException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ClientException", () => Effect.undefined));
           const taskDefinition = described?.taskDefinition;
           if (!taskDefinition?.taskDefinitionArn) {
             return undefined;
@@ -1277,7 +1277,7 @@ export const TaskProvider = () =>
                       ? toListAttributes(described.taskDefinition, region, accountId)
                       : undefined,
                   ),
-                  Effect.catchTag("ClientException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ClientException", () => Effect.undefined),
                 ),
               { concurrency: 10 },
             );

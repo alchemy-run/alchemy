@@ -37,7 +37,7 @@ const readBoundValue = (key: string): Effect.Effect<unknown> =>
     // directly instead of constructing a Config/Schema error for each absence.
     Effect.orDie,
     Effect.catchDefect((defect) =>
-      Predicate.isTagged(defect, "SourceError") ? Effect.succeed(undefined) : Effect.die(defect),
+      Predicate.isTagged(defect, "SourceError") ? Effect.undefined : Effect.die(defect),
     ),
     Effect.map((node) => {
       const raw = node?.value;

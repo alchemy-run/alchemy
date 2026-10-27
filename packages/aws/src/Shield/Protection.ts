@@ -120,9 +120,7 @@ export const Protection = Resource<Protection>("AWS.Shield.Protection");
 const observeByResourceArn = (resourceArn: string) =>
   shield.describeProtection({ ResourceArn: resourceArn }).pipe(
     Effect.map((r) => r.Protection),
-    Effect.catchTag(["ResourceNotFoundException", "SubscriptionNotFound"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["ResourceNotFoundException", "SubscriptionNotFound"], () => Effect.undefined),
   );
 
 const toTagRecord = (tags: shield.Tag[] | undefined): Record<string, string> =>

@@ -365,8 +365,9 @@ export const ClusterProvider = () =>
             serviceArns,
             (service) =>
               ecs.deleteService({ cluster, service, force: true }).pipe(
-                Effect.catchTag(["ServiceNotFoundException", "ClusterNotFoundException"], () =>
-                  Effect.succeed(undefined),
+                Effect.catchTag(
+                  ["ServiceNotFoundException", "ClusterNotFoundException"],
+                  () => Effect.undefined,
                 ),
                 Effect.asVoid,
               ),
@@ -383,7 +384,7 @@ export const ClusterProvider = () =>
             taskArns,
             (task) =>
               ecs.stopTask({ cluster, task, reason: "alchemy delete" }).pipe(
-                Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ClusterNotFoundException", () => Effect.undefined),
                 Effect.asVoid,
               ),
             { discard: true },
@@ -407,7 +408,7 @@ export const ClusterProvider = () =>
                   force: true,
                 })
                 .pipe(
-                  Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ClusterNotFoundException", () => Effect.undefined),
                   Effect.asVoid,
                 ),
             { discard: true },

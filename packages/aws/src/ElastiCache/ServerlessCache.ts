@@ -287,7 +287,7 @@ export const ServerlessCacheProvider = () =>
       const readCache = Effect.fn(function* (name: string) {
         const response = yield* elasticache
           .describeServerlessCaches({ ServerlessCacheName: name })
-          .pipe(Effect.catchTag("ServerlessCacheNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ServerlessCacheNotFoundFault", () => Effect.undefined));
         return response?.ServerlessCaches?.[0];
       });
 

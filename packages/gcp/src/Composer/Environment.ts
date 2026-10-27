@@ -490,7 +490,7 @@ const isPlaceholder = (environment: composer.Environment) => {
 const getByName = (name: string) =>
   composer
     .getProjectsLocationsEnvironments({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 // Environment creates run 20-30 minutes, deletes 10-20.
 const waitForOperation = (operation: composer.Operation) =>
@@ -889,7 +889,7 @@ export const EnvironmentProvider = () =>
               storageConfig: news.storageConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -946,7 +946,7 @@ export const EnvironmentProvider = () =>
       const operation = yield* composer
         .deleteProjectsLocationsEnvironments({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

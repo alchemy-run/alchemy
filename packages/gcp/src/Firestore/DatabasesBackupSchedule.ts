@@ -158,7 +158,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   firestore
     .getProjectsDatabasesBackupSchedules({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnDatabase = (parent: string) =>
   firestore.listProjectsDatabasesBackupSchedules({ parent }).pipe(
@@ -257,7 +257,7 @@ export const DatabasesBackupScheduleProvider = () =>
               weeklyRecurrence: weeklyDay !== undefined ? { day: weeklyDay } : undefined,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created?.name !== undefined) {
           current = created;
         } else {

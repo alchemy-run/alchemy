@@ -151,10 +151,10 @@ const toAttrs = (store: healthcare.DicomStore, project: string, region: string) 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsDicomStores({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetsDicomStoreProvider = () =>
   Provider.succeed(DatasetsDicomStore, {

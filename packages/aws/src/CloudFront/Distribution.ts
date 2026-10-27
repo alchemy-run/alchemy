@@ -838,7 +838,7 @@ export const DistributionProvider = () =>
         );
         const distribution = yield* cloudfront.getDistribution({ Id: distributionId }).pipe(
           Effect.map((response) => response.Distribution),
-          Effect.catchTag("NoSuchDistribution", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchDistribution", () => Effect.undefined),
         );
 
         if (!distribution?.Id) {
@@ -889,7 +889,7 @@ export const DistributionProvider = () =>
               .getDistributionConfig({
                 Id: item.Id,
               })
-              .pipe(Effect.catchTag("NoSuchDistribution", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("NoSuchDistribution", () => Effect.undefined));
 
             if (config?.DistributionConfig?.CallerReference === callerReference) {
               yield* Effect.logInfo(
@@ -1046,7 +1046,7 @@ export const DistributionProvider = () =>
                               | Distribution["Attributes"]
                               | undefined,
                         )
-                      : Effect.succeed(undefined),
+                      : Effect.undefined,
                   ),
                 ),
               { concurrency: 10 },

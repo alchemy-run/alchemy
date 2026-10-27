@@ -851,7 +851,7 @@ export const BucketProvider = () =>
       const readBucketPolicy = (bucketName: string) =>
         s3.getBucketPolicy({ Bucket: bucketName }).pipe(
           Effect.map((r): unknown => (r.Policy === undefined ? undefined : parsePolicy(r.Policy))),
-          Effect.catchTag("NoSuchBucketPolicy", () => Effect.succeed<unknown>(undefined)),
+          Effect.catchTag("NoSuchBucketPolicy", () => Effect.undefined),
         );
 
       const syncBucketPolicy = Effect.fn(function* ({
@@ -1290,9 +1290,7 @@ export const BucketProvider = () =>
       const readPublicAccessBlock = (bucketName: string) =>
         s3.getPublicAccessBlock({ Bucket: bucketName }).pipe(
           Effect.map((r) => r.PublicAccessBlockConfiguration),
-          Effect.catchTag("NoSuchPublicAccessBlockConfiguration", () =>
-            Effect.succeed<s3.PublicAccessBlockConfiguration | undefined>(undefined),
-          ),
+          Effect.catchTag("NoSuchPublicAccessBlockConfiguration", () => Effect.undefined),
         );
 
       const projectPublicAccessBlock = (
@@ -1434,9 +1432,7 @@ export const BucketProvider = () =>
       const readBucketOwnershipControls = (bucketName: string) =>
         s3.getBucketOwnershipControls({ Bucket: bucketName }).pipe(
           Effect.map((r) => r.OwnershipControls?.Rules?.[0]?.ObjectOwnership),
-          Effect.catchTag("OwnershipControlsNotFoundError", () =>
-            Effect.succeed<string | undefined>(undefined),
-          ),
+          Effect.catchTag("OwnershipControlsNotFoundError", () => Effect.undefined),
         );
 
       const syncBucketOwnershipControls = Effect.fn(function* ({
@@ -1727,9 +1723,7 @@ export const BucketProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.IntelligentTieringConfiguration),
-            Effect.catchTag("NoSuchConfiguration", () =>
-              Effect.succeed<s3.IntelligentTieringConfiguration | undefined>(undefined),
-            ),
+            Effect.catchTag("NoSuchConfiguration", () => Effect.undefined),
           );
 
       // The declared configurations, observed per id (the per-id read is
@@ -1858,7 +1852,7 @@ export const BucketProvider = () =>
       ) {
         const owner = yield* notificationOwner(bucketName);
         const managed = <A, E, R>(isManaged: boolean, read: () => Effect.Effect<A, E, R>) =>
-          isManaged ? read() : Effect.succeed(undefined);
+          isManaged ? read() : Effect.undefined;
         return yield* Effect.all(
           {
             tags: readBucketTags(bucketName),
@@ -2010,7 +2004,7 @@ export const BucketProvider = () =>
           }
           if (output) {
             const observed = yield* readBucketEncryption(output.bucketName).pipe(
-              Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchBucket", () => Effect.undefined),
             );
             if (
               encryptionFingerprint(observed) !==
@@ -2031,7 +2025,7 @@ export const BucketProvider = () =>
                 .getBucketNotificationConfiguration({
                   Bucket: output.bucketName,
                 })
-                .pipe(Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)));
+                .pipe(Effect.catchTag("NoSuchBucket", () => Effect.undefined));
               const tags: Record<string, string> = notifications
                 ? yield* fetchBucketTags(output.bucketName)
                 : {};

@@ -191,7 +191,7 @@ const toAttrs = (cache: aiplatform.GoogleCloudAiplatformV1CachedContent, project
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsCachedContents({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listCaches = (project: string, region: string) => {
   const collect = (parent: string) =>

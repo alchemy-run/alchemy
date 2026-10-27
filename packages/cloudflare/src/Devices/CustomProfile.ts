@@ -483,7 +483,7 @@ type ObservedProfile = NonNullable<zeroTrust.GetDevicePolicyCustomResponse>;
 const observeProfile = (accountId: string, policyId: string) =>
   zeroTrust.getDevicePolicyCustom({ accountId, policyId }).pipe(
     Effect.map((p): ObservedProfile | undefined => p ?? undefined),
-    Effect.catchTag("DevicePolicyNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("DevicePolicyNotFound", () => Effect.undefined),
   );
 
 /**

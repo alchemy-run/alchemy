@@ -108,7 +108,7 @@ interface AssetState_ {
 const readAssetById = Effect.fn(function* (assetId: string) {
   const described = yield* sitewise
     .describeAsset({ assetId, excludeProperties: true })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.assetStatus.state === "DELETING") {
     return undefined;
   }
@@ -181,7 +181,7 @@ const waitForAssetState = (assetId: string, target: "ACTIVE" | "DELETED") =>
     Effect.gen(function* () {
       const described = yield* sitewise
         .describeAsset({ assetId, excludeProperties: true })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new AssetNotReady({ assetId, state: described.assetStatus.state });

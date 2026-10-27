@@ -184,10 +184,10 @@ const toAttrs = (policy: dlp.GooglePrivacyDlpV2ContentPolicy, project: string) =
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsLocationsContentPolicies({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ContentPolicyProvider = () =>
   Provider.succeed(ContentPolicy, {

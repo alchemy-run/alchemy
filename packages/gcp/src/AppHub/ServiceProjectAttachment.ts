@@ -121,10 +121,10 @@ const toAttrs = (item: apphub.ServiceProjectAttachment, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apphub
         .getProjectsLocationsServiceProjectAttachments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ServiceProjectAttachmentProvider = () =>
   Provider.succeed(ServiceProjectAttachment, {
@@ -218,7 +218,7 @@ export const ServiceProjectAttachmentProvider = () =>
               serviceProject,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -249,7 +249,7 @@ export const ServiceProjectAttachmentProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

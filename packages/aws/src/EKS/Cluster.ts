@@ -691,7 +691,7 @@ export const ClusterProvider = () =>
           .describeCluster({
             name: clusterName,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const cluster = described?.cluster;
         if (!cluster?.arn || !cluster.name || !cluster.roleArn) {
           return undefined;
@@ -700,7 +700,7 @@ export const ClusterProvider = () =>
           .listTagsForResource({
             resourceArn: cluster.arn,
           })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         const tags = normalizeTags(listedTags?.tags ?? cluster.tags);
         return mapClusterState(cluster, tags, kubernetesObjects ?? [], managedRoles);
       });
@@ -749,7 +749,7 @@ export const ClusterProvider = () =>
           clusterName,
         }).pipe(
           Effect.flatMap((state) =>
-            state ? Effect.fail(new ClusterStillExists()) : Effect.succeed(undefined),
+            state ? Effect.fail(new ClusterStillExists()) : Effect.undefined,
           ),
           Effect.retry({
             while: (error) => error instanceof ClusterStillExists,

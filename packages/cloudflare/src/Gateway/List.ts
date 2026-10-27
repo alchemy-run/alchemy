@@ -284,7 +284,7 @@ type ObservedList = zeroTrust.GetGatewayListResponse;
 const getList = (accountId: string, listId: string) =>
   zeroTrust.getGatewayList({ accountId, listId }).pipe(
     Effect.map((l): ObservedList | undefined => l),
-    Effect.catchTag("GatewayListNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("GatewayListNotFound", () => Effect.undefined),
   );
 
 /**

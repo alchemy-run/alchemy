@@ -86,7 +86,7 @@ export const SubnetGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeSubnetGroups({ SubnetGroupName: name })
-          .pipe(Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("SubnetGroupNotFoundFault", () => Effect.undefined));
         return response?.SubnetGroups?.[0];
       });
 

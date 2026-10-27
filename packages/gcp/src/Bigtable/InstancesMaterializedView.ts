@@ -145,7 +145,7 @@ const toAttrs = (view: bigtable.MaterializedView, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesMaterializedViews({ name, view: "FULL" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -283,7 +283,7 @@ export const InstancesMaterializedViewProvider = () =>
               times: 8,
               schedule: Schedule.spaced("5 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });

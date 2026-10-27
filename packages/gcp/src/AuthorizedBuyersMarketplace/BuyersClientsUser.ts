@@ -129,10 +129,10 @@ export class BuyersClientsUserNotResolved extends Data.TaggedError(
 
 const getByName = (name: string) =>
   !name
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : marketplace
         .getBuyersClientsUsers({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const lookupName = (
   parent: string,

@@ -242,11 +242,7 @@ export const DeviceProvider = () =>
             customer,
             body: desired,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              Effect.succeed<cloudidentity.Operation | undefined>(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(
             Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
@@ -289,11 +285,7 @@ export const DeviceProvider = () =>
           name: output.name,
           customer: normalizeCustomer(output.customer),
         })
-        .pipe(
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed<cloudidentity.Operation | undefined>(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, { notFoundOk: true });
       }

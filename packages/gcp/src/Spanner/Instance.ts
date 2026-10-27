@@ -362,9 +362,7 @@ const toAttrs = (instance: spanner.Instance, project: string): Instance["Attribu
 };
 
 const getByName = (name: string) =>
-  spanner
-    .getProjectsInstances({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  spanner.getProjectsInstances({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
@@ -554,7 +552,7 @@ export const InstanceProvider = () =>
               ),
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }

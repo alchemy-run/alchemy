@@ -387,7 +387,7 @@ export const DomainProvider = () =>
       const readDomain = Effect.fn(function* (name: string) {
         return yield* opensearch.describeDomain({ DomainName: name }).pipe(
           Effect.map((response) => response.DomainStatus),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -650,7 +650,7 @@ export const DomainProvider = () =>
                 (name) =>
                   opensearch.describeDomain({ DomainName: name }).pipe(
                     Effect.map((response) => response.DomainStatus),
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                   ),
                 { concurrency: 4 },
               ),

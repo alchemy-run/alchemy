@@ -231,7 +231,7 @@ export const ProfileProvider = () =>
       const getById = (profileId: string) =>
         rolesanywhere.getProfile({ profileId }).pipe(
           Effect.map((r) => r.profile),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       return {
@@ -359,9 +359,7 @@ export const ProfileProvider = () =>
                   profileId: profile.profileId!,
                   certificateField: previous.certificateField,
                 })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
               profile = cleaned?.profile ?? profile;
             }
           }

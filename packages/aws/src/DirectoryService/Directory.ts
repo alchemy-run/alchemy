@@ -197,7 +197,7 @@ export const DirectoryProvider = () =>
       const getById = Effect.fn(function* (directoryId: string) {
         const response = yield* ds
           .describeDirectories({ DirectoryIds: [directoryId] })
-          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("EntityDoesNotExistException", () => Effect.undefined));
         return response?.DirectoryDescriptions?.[0];
       });
 

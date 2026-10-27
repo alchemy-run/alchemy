@@ -392,7 +392,7 @@ export const RepositoryProvider = () =>
       function* ({ news, olds }) {
         const getRepo = (repo: string) =>
           Repos.get({ owner: news.owner, repo }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
 
         // Observe — probe for the live repository under the desired name. On a
@@ -443,7 +443,7 @@ export const RepositoryProvider = () =>
           ).pipe(
             // A 422 means the name already exists — treat as a create race
             // and re-observe so the sync step converges its settings.
-            Effect.catchTag("UnprocessableEntity", () => Effect.succeed(undefined)),
+            Effect.catchTag("UnprocessableEntity", () => Effect.undefined),
           );
 
           if (observed === undefined) {
@@ -550,7 +550,7 @@ export const RepositoryProvider = () =>
         }
         return yield* Repos.getById({ id: output.repoId }).pipe(
           Effect.map(attrsOf),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       },
       (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
@@ -565,7 +565,7 @@ export const RepositoryProvider = () =>
         const current =
           output?.repoId !== undefined
             ? yield* Repos.getById({ id: output.repoId }).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
 

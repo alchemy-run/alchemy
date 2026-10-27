@@ -109,7 +109,7 @@ export const WirelessGatewayProvider = () =>
       const getBy = (identifier: string, type: iotw.WirelessGatewayIdType) =>
         iotw
           .getWirelessGateway({ Identifier: identifier, IdentifierType: type })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const observe = Effect.fn(function* (
         output: WirelessGateway["Attributes"] | undefined,
@@ -203,7 +203,7 @@ export const WirelessGatewayProvider = () =>
                 LoRaWAN: news.loRaWAN,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             gateway =
               created?.Id !== undefined
                 ? yield* getBy(created.Id, "WirelessGatewayId")

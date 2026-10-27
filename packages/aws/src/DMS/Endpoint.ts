@@ -200,7 +200,7 @@ export const EndpointProvider = () =>
           .describeEndpoints({
             Filters: [{ Name: "endpoint-id", Values: [identifier] }],
           })
-          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundFault", () => Effect.undefined));
         return response?.Endpoints?.[0];
       });
 

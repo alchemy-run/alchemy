@@ -221,10 +221,10 @@ const toAttrs = (config: dataform.ReleaseConfig, project: string, region: string
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataform
         .getProjectsLocationsRepositoriesReleaseConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isOwnedConfig = (config: dataform.ReleaseConfig) =>
   hasAlchemyLabelMap(config.codeCompilationConfig?.vars);

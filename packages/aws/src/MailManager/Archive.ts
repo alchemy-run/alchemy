@@ -116,7 +116,7 @@ export const ArchiveProvider = () =>
       const getById = (archiveId: string) =>
         mm.getArchive({ ArchiveId: archiveId }).pipe(
           Effect.map((a) => (a.ArchiveState === "PENDING_DELETION" ? undefined : a)),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       // Archives have no name-keyed Get — enumerate and match, skipping
@@ -208,7 +208,7 @@ export const ArchiveProvider = () =>
                 KmsKeyArn: news.kmsKeyArn,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             archive =
               created !== undefined
                 ? yield* getById(created.ArchiveId)

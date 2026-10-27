@@ -118,7 +118,7 @@ export const PolicyStoreAliasProvider = () =>
       const observe = Effect.fn(function* (aliasName: string) {
         return yield* avp
           .getPolicyStoreAlias({ aliasName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return PolicyStoreAlias.Provider.of({
@@ -177,7 +177,7 @@ export const PolicyStoreAliasProvider = () =>
                 aliasName,
                 policyStoreId: news.policyStoreId,
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             if (created !== undefined) {
               yield* session.note(created.aliasName);
               return {

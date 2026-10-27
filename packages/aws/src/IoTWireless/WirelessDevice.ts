@@ -301,7 +301,7 @@ export const WirelessDeviceProvider = () =>
       const getBy = (identifier: string, type: iotw.WirelessDeviceIdType) =>
         iotw
           .getWirelessDevice({ Identifier: identifier, IdentifierType: type })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const observe = Effect.fn(function* (
         output: WirelessDevice["Attributes"] | undefined,
@@ -416,7 +416,7 @@ export const WirelessDeviceProvider = () =>
                 Sidewalk: news.sidewalk,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             device =
               created?.Id !== undefined
                 ? yield* getBy(created.Id, "WirelessDeviceId")

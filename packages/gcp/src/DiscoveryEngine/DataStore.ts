@@ -188,7 +188,7 @@ const solutionsOf = (
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsDataStores({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (store: discoveryengine.GoogleCloudDiscoveryengineV1DataStore, project: string) => {
   const name = store.name ?? "";
@@ -329,7 +329,7 @@ export const DataStoreProvider = () =>
               kmsKeyName: news.kmsKeyName,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -375,7 +375,7 @@ export const DataStoreProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

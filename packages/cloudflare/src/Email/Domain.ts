@@ -291,7 +291,7 @@ type ObservedDomain = emailSecurity.GetSettingDomainResponse;
 const getDomain = (accountId: string, domainId: string) =>
   emailSecurity.getSettingDomain({ accountId, domainId }).pipe(
     Effect.map((domain): ObservedDomain | undefined => domain),
-    Effect.catchTag("EmailSecurityDomainNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("EmailSecurityDomainNotFound", () => Effect.undefined),
   );
 
 /**

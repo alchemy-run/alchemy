@@ -95,7 +95,7 @@ const createIndexName = (id: string, props: { indexName?: string | undefined }) 
 const readIndex = Effect.fn(function* (indexName: string) {
   const found = yield* location
     .describePlaceIndex({ IndexName: indexName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!found) return undefined;
   return {
     indexName: found.IndexName,

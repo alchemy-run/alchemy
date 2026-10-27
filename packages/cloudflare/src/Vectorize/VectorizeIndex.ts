@@ -162,7 +162,7 @@ export const IndexProvider = () =>
       const name = output?.indexName ?? (yield* createIndexName(id, olds?.name));
       return yield* vectorize.getIndex({ accountId: acct, indexName: name }).pipe(
         Effect.map((index) => toAttributes(index, name, acct)),
-        Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(undefined)),
+        Effect.catchTag(["NotFound", "Gone"], () => Effect.undefined),
       );
     }),
     reconcile: Effect.fn(function* ({ id, news = {}, output }) {
@@ -179,7 +179,7 @@ export const IndexProvider = () =>
           accountId,
           indexName,
         })
-        .pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.undefined));
 
       // Ensure — create if missing. Cloudflare returns 409 Conflict when
       // an index with the same name already exists; tolerate the race by

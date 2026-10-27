@@ -244,7 +244,7 @@ const listAppDeployments = (appId: string) =>
 
 const findDeployment = (appId: string, foundryVersionId: string | undefined) =>
   foundryVersionId === undefined
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : listAppDeployments(appId).pipe(
         Effect.flatMap((deployments) => {
           const matches = deployments.filter(
@@ -535,7 +535,7 @@ const ProviderLive = () =>
               : yield* resolveAppId(olds.app);
           const savedDeployment = output?.deploymentId
             ? yield* observeDeployment(output.deploymentId).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           const listed = savedDeployment
@@ -594,7 +594,7 @@ const ProviderLive = () =>
             : output?.deploymentId;
           let deployment: ObservedDeployment | undefined = deploymentId
             ? yield* observeDeployment(deploymentId).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           if (deployment) {
@@ -712,7 +712,7 @@ const ProviderLive = () =>
         delete: Effect.fn(function* ({ output }) {
           if (isPrismaDevId(output.deploymentId)) return;
           const deployment = yield* observeDeployment(output.deploymentId).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!deployment) return;
           yield* ensureDeploymentMembership(output.appId, deployment);

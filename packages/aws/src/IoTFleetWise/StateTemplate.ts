@@ -122,7 +122,7 @@ export const StateTemplateProvider = () =>
       const readTemplate = Effect.fn(function* (identifier: string) {
         return yield* iotfleetwise.getStateTemplate({ identifier }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

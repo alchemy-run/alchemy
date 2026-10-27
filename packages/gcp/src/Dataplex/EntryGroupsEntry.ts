@@ -264,7 +264,7 @@ const toAttrs = (entry: dataplex.GoogleCloudDataplexV1Entry, project: string) =>
 
 const getByName = (name: string) =>
   retryQuota(dataplex.getProjectsLocationsEntryGroupsEntries({ name, view: "ALL" })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listEntriesUnder = (parent: string, project: string) =>

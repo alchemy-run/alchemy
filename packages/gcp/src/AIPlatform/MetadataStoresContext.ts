@@ -169,7 +169,7 @@ const toAttrs = (context: aiplatform.GoogleCloudAiplatformV1Context, project: st
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsMetadataStoresContexts({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listContexts = (parent: string) =>
   aiplatform.listProjectsLocationsMetadataStoresContexts.pages({ parent, pageSize: 100 }).pipe(
@@ -351,7 +351,7 @@ export const MetadataStoresContextProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

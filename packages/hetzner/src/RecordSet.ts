@@ -312,7 +312,7 @@ const getRrset = (zoneId: number, name: string, type: string) =>
     .getZoneRrset({ id_or_name: String(zoneId), rr_name: name, rr_type: type })
     .pipe(
       Effect.map(({ rrset }) => rrset),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
 
 const findByLabels = (zoneId: number, id: string) =>
@@ -526,7 +526,7 @@ export const RecordSetProvider = () =>
       const deleted = yield* retryLocked(
         Hetzner.zoneRrsets
           .deleteZoneRrset({ id_or_name: String(zoneId), rr_name: name, rr_type: type })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
       );
       if (deleted !== undefined) {
         yield* waitForZoneAction(deleted.action.id);

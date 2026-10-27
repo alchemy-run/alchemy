@@ -779,7 +779,7 @@ const isPlaceholder = (instance: file.Instance) => {
 const getByName = (name: string) =>
   file
     .getProjectsLocationsInstances({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait on a Filestore instance long-running operation (5–20 minutes).
@@ -1080,7 +1080,7 @@ export const InstanceProvider = () =>
             instanceId,
             body: toCreateBody(news, desiredLabels, tier, protocol),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -1170,7 +1170,7 @@ export const InstanceProvider = () =>
               deletionProtectionReason: "",
             },
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (patched !== undefined) {
           yield* waitForOperation(patched, { notFoundOk: true });
         }
@@ -1182,7 +1182,7 @@ export const InstanceProvider = () =>
           force: true,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

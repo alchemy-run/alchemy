@@ -391,7 +391,7 @@ const isPlaceholder = (resource: tpu.QueuedResource) => {
 const getByName = (name: string) =>
   tpu
     .getProjectsLocationsQueuedResources({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const specIdentityChanged = (
   previous: QueuedResourceProps | { nodeSpec?: NodeSpec[] } | undefined,
@@ -510,7 +510,7 @@ export const QueuedResourceProvider = () =>
               tpu: { nodeSpec: desiredSpecs(news, parent, desiredLabels) },
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -532,7 +532,7 @@ export const QueuedResourceProvider = () =>
           force,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

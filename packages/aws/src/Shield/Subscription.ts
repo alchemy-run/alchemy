@@ -72,7 +72,7 @@ export { SubscriptionResource as Subscription };
 // when the account is not subscribed — collapse it to `undefined`.
 const observeSubscription = shield.describeSubscription({}).pipe(
   Effect.map((r) => r.Subscription),
-  Effect.catchTag("SubscriptionNotFound", () => Effect.succeed(undefined)),
+  Effect.catchTag("SubscriptionNotFound", () => Effect.undefined),
 );
 
 const buildAttrs = (subscription: shield.Subscription) => ({

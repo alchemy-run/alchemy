@@ -88,7 +88,7 @@ export const CacheClusterProvider = () =>
             CacheClusterId: name,
             ShowCacheNodeInfo: true,
           })
-          .pipe(Effect.catchTag("CacheClusterNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("CacheClusterNotFoundFault", () => Effect.undefined));
         return response?.CacheClusters?.[0];
       });
       const waitForAvailable = Effect.fn(function* (name: string) {

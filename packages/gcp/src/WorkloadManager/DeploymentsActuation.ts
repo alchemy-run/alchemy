@@ -185,7 +185,7 @@ const toAttrs = (item: workloadmanager.Actuation, project: string, region: strin
 const getByName = (name: string) =>
   workloadmanager
     .getProjectsLocationsDeploymentsActuations({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtNested(project, region, "deployments/-", (parent) =>
@@ -269,7 +269,7 @@ export const DeploymentsActuationProvider = () =>
             parent: deployment,
             body: { name },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -302,7 +302,7 @@ export const DeploymentsActuationProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.

@@ -88,7 +88,7 @@ export const ACLProvider = () =>
       const readAcl = Effect.fn(function* (name: string) {
         const response = yield* memorydb
           .describeACLs({ ACLName: name })
-          .pipe(Effect.catchTag("ACLNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ACLNotFoundFault", () => Effect.undefined));
         return response?.ACLs?.[0];
       });
 

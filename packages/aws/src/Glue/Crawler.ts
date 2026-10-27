@@ -246,7 +246,7 @@ export const CrawlerProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         return yield* glue.getCrawler({ Name: name }).pipe(
           Effect.map((r) => r.Crawler),
-          Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("EntityNotFoundException", () => Effect.undefined),
         );
       });
 

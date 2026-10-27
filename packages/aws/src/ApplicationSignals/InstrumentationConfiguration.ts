@@ -220,7 +220,7 @@ export const InstrumentationConfigurationProvider = () =>
               ? { LocationHash: locationHash }
               : { CodeLocation: props.location },
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.Configuration;
       });
 

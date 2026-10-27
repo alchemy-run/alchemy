@@ -171,7 +171,7 @@ export const ScheduledActionProvider = () =>
             // `ValidationError: AutoScalingGroup ... not found` (typed
             // `AutoScalingGroupNotFound` via the auto-scaling patch); treat it
             // as "action gone" so refresh/read converge instead of failing.
-            Effect.catchTag("AutoScalingGroupNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("AutoScalingGroupNotFound", () => Effect.undefined),
           );
 
       const toAttributes = (

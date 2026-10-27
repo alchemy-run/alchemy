@@ -183,7 +183,7 @@ export const ImagePipelineProvider = () =>
       const getPipeline = Effect.fn(function* (arn: string) {
         const response = yield* imagebuilder
           .getImagePipeline({ imagePipelineArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.imagePipeline;
       });
 
@@ -275,9 +275,7 @@ export const ImagePipelineProvider = () =>
                 tags: desiredTags,
                 clientToken,
               })
-              .pipe(
-                Effect.catchTag("ResourceAlreadyExistsException", () => Effect.succeed(undefined)),
-              );
+              .pipe(Effect.catchTag("ResourceAlreadyExistsException", () => Effect.undefined));
             observed = yield* getPipeline(created?.imagePipelineArn ?? arn);
             if (observed === undefined) {
               return yield* Effect.fail(

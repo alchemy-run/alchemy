@@ -261,10 +261,10 @@ const toAttrs = (item: ds.Stream, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ds
         .getProjectsLocationsStreams({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string, region: string) =>
   listAtLocation(project, region, (parent) =>
@@ -400,7 +400,7 @@ export const StreamProvider = () =>
             validateOnly: news.validateOnly,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         yield* settleOperation(created);
         current = yield* waitUntilExists(getByName(name), name);
       }
@@ -479,7 +479,7 @@ export const StreamProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag(["NotFound", "Conflict"], () => Effect.succeed(undefined)),
+          Effect.catchTag(["NotFound", "Conflict"], () => Effect.undefined),
         );
       // Stream deletes take a few minutes.
       yield* settleOperation(operation, { notFoundOk: true });

@@ -127,7 +127,7 @@ export const UserProvider = () =>
       const describe = Effect.fn(function* (serverId: string, userName: string) {
         const response = yield* transfer
           .describeUser({ ServerId: serverId, UserName: userName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.User;
       });
 

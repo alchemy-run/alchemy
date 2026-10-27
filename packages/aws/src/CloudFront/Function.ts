@@ -107,7 +107,7 @@ export const FunctionProvider = () =>
             Name: name,
             Stage: stage,
           })
-          .pipe(Effect.catchTag("NoSuchFunctionExists", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchFunctionExists", () => Effect.undefined));
       });
 
       const getCurrent = Effect.fn(function* (name: string) {

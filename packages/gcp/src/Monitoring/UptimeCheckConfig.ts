@@ -482,7 +482,7 @@ const toAttrs = (config: monitoring.UptimeCheckConfig, project: string) => {
 const getByName = (name: string) =>
   monitoring
     .getProjectsUptimeCheckConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   monitoring.listProjectsUptimeCheckConfigs

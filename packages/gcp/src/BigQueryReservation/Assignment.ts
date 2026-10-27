@@ -231,7 +231,7 @@ const listAt = (parent: string) =>
         );
 
 const getByName = (name: string) => {
-  if (name.length === 0) return Effect.succeed(undefined);
+  if (name.length === 0) return Effect.undefined;
   const parent = parseName(name).reservation;
   return listAt(parent).pipe(
     Effect.map((assignments) => assignments.find((item) => item.name === name)),

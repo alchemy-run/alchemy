@@ -129,7 +129,7 @@ const toAttrs = (view: logging.LogView, bucketName: string) => {
 const getByName = (name: string) =>
   logging
     .getFoldersLocationsBucketsViews({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const FolderBucketsViewProvider = () =>
   Provider.succeed(FolderBucketsView, {

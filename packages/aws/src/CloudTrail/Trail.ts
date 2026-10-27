@@ -378,7 +378,7 @@ export const TrailProvider = () =>
       const readTrail = (name: string) =>
         cloudtrail.getTrail({ Name: name }).pipe(
           Effect.map((r) => r.Trail),
-          Effect.catchTag("TrailNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("TrailNotFoundException", () => Effect.undefined),
         );
 
       const toAttributes = Effect.fn(function* (trail: cloudtrail.Trail) {

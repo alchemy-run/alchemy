@@ -457,7 +457,7 @@ const resolvePlan = (plan: string | undefined, existingId: string | undefined) =
 const resolveOrganization = (orgSlug: string) =>
   addons
     .organization({ slug: orgSlug })
-    .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("FlyIoParseError", () => Effect.undefined));
 
 const ensureTos = (orgSlug: string, organizationId: string) =>
   Effect.gen(function* () {
@@ -598,7 +598,7 @@ export const attachRedisSecrets = Effect.fn(function* (
     if ((url === undefined || url.length === 0) && row.id !== undefined) {
       const detail = yield* addons
         .addOn({ id: row.id })
-        .pipe(Effect.catchTag("FlyIoParseError", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("FlyIoParseError", () => Effect.undefined));
       url = unwrapSensitive(detail?.publicUrl);
     }
     if (url === undefined || url.length === 0) {

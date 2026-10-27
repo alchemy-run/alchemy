@@ -124,7 +124,7 @@ export const WorkspaceProvider = () =>
       const describe = Effect.fn(function* (id: string) {
         const response = yield* grafana
           .describeWorkspace({ workspaceId: id })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.workspace;
       });
 

@@ -214,7 +214,7 @@ export const collectPages = <Page, A, E, R>(
 export const getDeployment = (project: string, deployment: string) =>
   deploymentmanager
     .getDeployments({ project, deployment })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listOwnedDeployments = (project: string) =>
   collectPages(
@@ -234,7 +234,7 @@ export const listOwnedDeployments = (project: string) =>
 
 export const getManifest = (project: string, deployment: string, manifest: string | undefined) => {
   if (manifest === undefined || manifest.length === 0) {
-    return Effect.succeed(undefined);
+    return Effect.undefined;
   }
   return deploymentmanager
     .getManifests({
@@ -242,7 +242,7 @@ export const getManifest = (project: string, deployment: string, manifest: strin
       deployment,
       manifest: lastSegment(manifest),
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 };
 
 export const settleDeployment = (project: string, item: deploymentmanager.Deployment) =>

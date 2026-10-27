@@ -128,7 +128,7 @@ export const WebExperience = Resource<WebExperience>("AWS.QBusiness.WebExperienc
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
@@ -140,7 +140,7 @@ interface WebExperienceState {
 const readWebExperienceById = Effect.fn(function* (applicationId: string, webExperienceId: string) {
   const described = yield* qbusiness
     .getWebExperience({ applicationId, webExperienceId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.status === "DELETING") return undefined;
   const arn = described.webExperienceArn;
   if (arn === undefined) return undefined;
@@ -202,7 +202,7 @@ const waitForWebExperienceSettled = (
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getWebExperience({ applicationId, webExperienceId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new WebExperienceNotReady({

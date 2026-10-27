@@ -172,7 +172,7 @@ const sameRestrictions = (a: ApiKeyRestrictions, b: ApiKeyRestrictions) => {
 const readKey = Effect.fn(function* (keyName: string) {
   const found = yield* location
     .describeKey({ KeyName: keyName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!found) return undefined;
   return {
     keyName: found.KeyName,

@@ -178,11 +178,11 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform.getReasoningEnginesSandboxEnvironments({ name }).pipe(
         Effect.catchTags({
-          NotFound: () => Effect.succeed(undefined),
-          SandboxEnvironmentsNotEnabled: () => Effect.succeed(undefined),
+          NotFound: () => Effect.undefined,
+          SandboxEnvironmentsNotEnabled: () => Effect.undefined,
         }),
       );
 
@@ -333,9 +333,9 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
           .pipe(
             GcpRetry.none,
             Effect.catchTags({
-              SandboxEnvironmentsNotEnabled: () => Effect.succeed(undefined),
-              BadRequest: () => Effect.succeed(undefined),
-              Conflict: () => Effect.succeed(undefined),
+              SandboxEnvironmentsNotEnabled: () => Effect.undefined,
+              BadRequest: () => Effect.undefined,
+              Conflict: () => Effect.undefined,
             }),
             Effect.timeoutOption("20 seconds"),
           );
@@ -365,7 +365,7 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
         .deleteReasoningEnginesSandboxEnvironments({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

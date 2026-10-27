@@ -140,7 +140,7 @@ export const ListenerRuleProvider = () =>
       }
       const described = yield* elbv2
         .describeRules({ RuleArns: [output.ruleArn] })
-        .pipe(Effect.catchTag("RuleNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("RuleNotFoundException", () => Effect.undefined));
       const rule = described?.Rules?.[0];
       if (!rule?.RuleArn) {
         return undefined;
@@ -223,7 +223,7 @@ export const ListenerRuleProvider = () =>
       if (output?.ruleArn) {
         const described = yield* elbv2
           .describeRules({ RuleArns: [output.ruleArn] })
-          .pipe(Effect.catchTag("RuleNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("RuleNotFoundException", () => Effect.undefined));
         rule = described?.Rules?.[0];
       }
 

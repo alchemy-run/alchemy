@@ -166,13 +166,13 @@ export const PublicRepositoryProvider = () =>
           }),
         ).pipe(
           Effect.map((r) => r.repositories?.[0]),
-          Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined),
         );
 
       const readPolicy = (repositoryName: string) =>
         pin(ecrpublic.getRepositoryPolicy({ repositoryName })).pipe(
           Effect.map((r) => r.policyText),
-          Effect.catchTag("RepositoryPolicyNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("RepositoryPolicyNotFoundException", () => Effect.undefined),
         );
 
       const syncPolicy = Effect.fn(function* (repositoryName: string, desired: string | undefined) {

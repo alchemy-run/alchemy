@@ -316,8 +316,8 @@ export const ownershipText = (resource: { displayName?: string; description?: st
 
 export const getByName = <A, E>(name: string, get: (name: string) => Effect.Effect<A, E, never>) =>
   name.length === 0
-    ? Effect.succeed(undefined)
-    : get(name).pipe(Effect.catchTag("NotFound" as never, () => Effect.succeed(undefined)));
+    ? Effect.undefined
+    : get(name).pipe(Effect.catchTag("NotFound" as never, () => Effect.undefined));
 
 export const listPages = <A, E, R>(pages: Stream.Stream<{ items: readonly A[] }, E, R>) =>
   pages.pipe(

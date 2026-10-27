@@ -311,7 +311,7 @@ export const ModelProvider = () =>
         yield* deleteVersions(name);
         const operation = yield* ml
           .deleteProjectsModels({ name })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation !== undefined) {
           yield* waitForOperation(operation, { notFoundOk: true });
         }

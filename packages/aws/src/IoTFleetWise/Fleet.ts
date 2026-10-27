@@ -83,7 +83,7 @@ export const FleetProvider = () =>
       const readFleet = Effect.fn(function* (fleetId: string) {
         return yield* iotfleetwise.getFleet({ fleetId }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

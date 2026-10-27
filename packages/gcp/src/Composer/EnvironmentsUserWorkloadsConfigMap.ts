@@ -156,7 +156,7 @@ const toAttrs = (configMap: composer.UserWorkloadsConfigMap, environmentName: st
 const getByName = (name: string) =>
   composer
     .getProjectsLocationsEnvironmentsUserWorkloadsConfigMaps({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(

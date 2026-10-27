@@ -66,7 +66,7 @@ export const CredentialsStoreLive = Layer.effect(
         Effect.gen(function* () {
           const filePath = yield* validateCredentialPath(profile, provider);
           const data = yield* fs.readFileString(filePath).pipe(
-            Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(undefined)),
+            Effect.catchReason("PlatformError", "NotFound", () => Effect.undefined),
             Effect.mapError((cause) =>
               AuthError.make({
                 message: `Could not read credentials at '${filePath}'.`,

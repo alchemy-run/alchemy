@@ -87,7 +87,7 @@ export class KubernetesNotFound extends Data.TaggedError("KubernetesNotFound")<{
  * becomes `undefined`; auth and HTTP failures stay failures.
  */
 export const ifClusterExists = <A, E, R>(effect: Effect.Effect<A, ClusterNotFoundError | E, R>) =>
-  effect.pipe(Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.succeed(undefined)));
+  effect.pipe(Effect.catchTag("Kubernetes.ClusterNotFoundError", () => Effect.undefined));
 
 const requestJson = Effect.fn(function* ({
   transport,

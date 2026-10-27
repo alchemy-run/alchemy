@@ -556,7 +556,7 @@ export const LiveContainerProvider = () =>
         if (build.kind !== "remote" || reuseRemotePublication) {
           const digest = yield* resolveRegistryDigest(imageRef, credentials).pipe(
             Effect.catchTag("ContainerRegistryError", (error) =>
-              error.reason === "ImageNotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+              error.reason === "ImageNotFound" ? Effect.undefined : Effect.fail(error),
             ),
           );
           if (digest !== undefined) {
@@ -800,7 +800,7 @@ export const LiveContainerProvider = () =>
 
       /** The build inputs and content hash of a Durable Object Container's image. */
       const computeDurableObjectImage = (id: string, props: DurableObjectContainerProps) =>
-        hasImageSource(props) ? computeImage(id, props, {}) : Effect.succeed(undefined);
+        hasImageSource(props) ? computeImage(id, props, {}) : Effect.undefined;
 
       /**
        * Publish the Container's image to Cloudflare's registry and wait until
@@ -1190,7 +1190,7 @@ export const LiveContainerProvider = () =>
           (d, i, arr) => arr.findIndex((other) => other.namespaceId === d.namespaceId) === i,
         );
         if (uniqueDos.length === 0) {
-          return Effect.succeed(undefined);
+          return Effect.undefined;
         }
         if (uniqueDos.length === 1) {
           return Effect.succeed(uniqueDos[0]);
@@ -1256,7 +1256,7 @@ export const LiveContainerProvider = () =>
           const application = yield* Containers.getContainerApplication({
             accountId: output.accountId,
             applicationId: output.applicationId,
-          }).pipe(Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)));
+          }).pipe(Effect.catchTag("ContainerApplicationNotFound", () => Effect.undefined));
           if (
             application &&
             (application.id !== output.applicationId ||
@@ -1393,7 +1393,7 @@ export const LiveContainerProvider = () =>
                 ...toAttributes(app),
                 hash: output.hash,
               })),
-              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.undefined),
             );
           }
           if (!existing) {

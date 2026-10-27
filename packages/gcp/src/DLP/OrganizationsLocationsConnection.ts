@@ -138,14 +138,14 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getOrganizationsLocationsConnections({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findByConnectionName = (parent: string, connectionName: string) =>
   connectionName.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp.listOrganizationsLocationsConnections.pages({ parent, pageSize: 100 }).pipe(
         Stream.flatMap((page) => Stream.fromIterable(page.connections ?? [])),
         Stream.filter(
@@ -153,7 +153,7 @@ const findByConnectionName = (parent: string, connectionName: string) =>
         ),
         Stream.runHead,
         Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
 
 const stateOf = (value: string | undefined) => value ?? DEFAULT_STATE;

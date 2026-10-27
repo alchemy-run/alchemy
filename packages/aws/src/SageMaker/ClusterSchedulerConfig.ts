@@ -106,7 +106,7 @@ const createConfigName = (id: string, props: { name?: string | undefined }) =>
 const describeConfigOrUndefined = (configId: string) =>
   sagemaker
     .describeClusterSchedulerConfig({ ClusterSchedulerConfigId: configId })
-    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFound", () => Effect.undefined));
 
 /**
  * Look a cluster policy up by exact name — used when state was lost (read
@@ -125,7 +125,7 @@ const findConfigByName = Effect.fn(function* (name: string) {
 const fetchConfigTags = Effect.fn(function* (arn: string) {
   const response = yield* sagemaker
     .listTags({ ResourceArn: arn })
-    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessDeniedException", () => Effect.undefined));
   return Object.fromEntries(
     (response?.Tags ?? []).flatMap((tag) =>
       tag.Key !== undefined ? [[tag.Key, tag.Value ?? ""]] : [],
@@ -297,7 +297,7 @@ export const ClusterSchedulerConfigProvider = () =>
                   Value,
                 })),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             configId =
               created?.ClusterSchedulerConfigId ??
               (yield* findConfigByName(name))?.ClusterSchedulerConfigId;

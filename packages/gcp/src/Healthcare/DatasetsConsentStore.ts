@@ -146,10 +146,10 @@ const toAttrs = (store: healthcare.ConsentStore, project: string, region: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsConsentStores({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetsConsentStoreProvider = () =>
   Provider.succeed(DatasetsConsentStore, {

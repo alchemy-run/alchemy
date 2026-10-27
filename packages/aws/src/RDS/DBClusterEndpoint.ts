@@ -147,7 +147,7 @@ export const DBClusterEndpointProvider = () =>
           .describeDBClusterEndpoints({
             DBClusterEndpointIdentifier: identifier,
           })
-          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.undefined));
         return response?.DBClusterEndpoints?.[0];
       });
 

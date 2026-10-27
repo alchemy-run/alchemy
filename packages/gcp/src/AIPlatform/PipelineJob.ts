@@ -182,7 +182,7 @@ const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1PipelineJob, project: st
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsPipelineJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const TERMINAL_STATES = new Set([
   "PIPELINE_STATE_SUCCEEDED",
@@ -353,7 +353,7 @@ export const PipelineJobProvider = () =>
       yield* cancelUntilTerminal(output.name);
       const operation = yield* aiplatform
         .deleteProjectsLocationsPipelineJobs({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

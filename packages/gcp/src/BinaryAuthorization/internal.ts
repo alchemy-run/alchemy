@@ -190,8 +190,8 @@ export const missingGet =
   ) =>
   (name: string) =>
     name.length === 0
-      ? Effect.succeed(undefined)
-      : effect({ name }).pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+      ? Effect.undefined
+      : effect({ name }).pipe(Effect.catchIf(isNotFound, () => Effect.undefined));
 
 const emptyList = <A>() => Effect.succeed<A[]>([]);
 

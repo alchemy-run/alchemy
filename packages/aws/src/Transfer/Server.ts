@@ -210,7 +210,7 @@ export const ServerProvider = () =>
       const describe = Effect.fn(function* (serverId: string) {
         const response = yield* transfer
           .describeServer({ ServerId: serverId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.Server;
       });
 

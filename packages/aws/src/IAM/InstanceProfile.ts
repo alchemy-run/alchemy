@@ -93,7 +93,7 @@ export const InstanceProfileProvider = () =>
           .getInstanceProfile({
             InstanceProfileName: name,
           })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         return response?.InstanceProfile;
       });
 

@@ -152,8 +152,9 @@ const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* kendra
     .listTagsForResource({ ResourceARN: arn })
     .pipe(
-      Effect.catchTag(["ResourceNotFoundException", "ResourceUnavailableException"], () =>
-        Effect.succeed(undefined),
+      Effect.catchTag(
+        ["ResourceNotFoundException", "ResourceUnavailableException"],
+        () => Effect.undefined,
       ),
     );
   return Object.fromEntries((response?.Tags ?? []).map((tag) => [tag.Key, tag.Value]));
@@ -177,7 +178,7 @@ const readDataSourceById = Effect.fn(function* (
 ) {
   const described = yield* kendra
     .describeDataSource({ IndexId: indexId, Id: dataSourceId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.Status === "DELETING") return undefined;
   const arn = arnOf(described.IndexId ?? indexId, described.Id ?? dataSourceId);
   const state: DataSourceState = {
@@ -261,7 +262,7 @@ const waitForDataSourceStatus = (indexId: string, id: string, target: "ACTIVE" |
     Effect.gen(function* () {
       const described = yield* kendra
         .describeDataSource({ IndexId: indexId, Id: id })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new DataSourceNotReady({ id, status: described.Status });

@@ -237,7 +237,7 @@ const normalizePem = (pem: string | undefined): string => (pem ?? "").replace(/\
 const getById = (id: number) =>
   Hetzner.certificates.getCertificate({ id }).pipe(
     Effect.map(({ certificate }) => certificate),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const findByName = (name: string) =>
@@ -327,7 +327,7 @@ const ensureCreated = Effect.fn(function* ({
             domain_names: news.domainNames,
             labels: desiredLabels,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)))
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined))
       : yield* Hetzner.certificates
           .createCertificate({
             name,
@@ -336,7 +336,7 @@ const ensureCreated = Effect.fn(function* ({
             private_key: news.privateKey,
             labels: desiredLabels,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
 
   if (created === undefined) {
     return undefined;

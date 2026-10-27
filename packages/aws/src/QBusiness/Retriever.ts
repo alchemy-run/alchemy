@@ -128,7 +128,7 @@ const createDisplayName = (id: string, props: { displayName?: string | undefined
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qbusiness
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return Object.fromEntries((response?.tags ?? []).map((tag) => [tag.key, tag.value]));
 });
 
@@ -140,7 +140,7 @@ interface RetrieverState {
 const readRetrieverById = Effect.fn(function* (applicationId: string, retrieverId: string) {
   const described = yield* qbusiness
     .getRetriever({ applicationId, retrieverId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described) return undefined;
   const arn = described.retrieverArn;
   if (arn === undefined) return undefined;
@@ -206,7 +206,7 @@ const waitForRetrieverActive = (applicationId: string, retrieverId: string) =>
     Effect.gen(function* () {
       const described = yield* qbusiness
         .getRetriever({ applicationId, retrieverId })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (described?.status === "ACTIVE") return;
       if (described?.status === "FAILED") {
         return yield* new RetrieverProvisioningFailed({ retrieverId });

@@ -380,7 +380,7 @@ const toBody = (
 const getByName = (name: string) =>
   monitoring
     .getServicesServiceLevelObjectives({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listSlos = (parent: string) =>
   monitoring.listServicesServiceLevelObjectives

@@ -714,8 +714,9 @@ const findDispatchNamespaceScript = (
   wfp
     .getDispatchNamespaceScript({ accountId, dispatchNamespace, scriptName })
     .pipe(
-      Effect.catchTag(["DispatchNamespaceNotFound", "DispatchNamespaceScriptNotFound"], () =>
-        Effect.succeed(undefined),
+      Effect.catchTag(
+        ["DispatchNamespaceNotFound", "DispatchNamespaceScriptNotFound"],
+        () => Effect.undefined,
       ),
     );
 
@@ -1604,7 +1605,7 @@ export const LiveWorkerProvider = () =>
             // Only a missing entrypoint means no rules yet. Any other failure must
             // stop here: the PUT below replaces the whole phase, so reading it as
             // empty would delete every other rule in the zone.
-            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
           const existingRules = entrypoint?.rules ?? [];
           const ourDesired = desired
             .filter((hostname) => params.zoneIdByHostname.get(hostname) === zoneId)
@@ -1697,7 +1698,7 @@ export const LiveWorkerProvider = () =>
             // Only a missing entrypoint means no rules yet. Any other failure must
             // stop here: the PUT below replaces the whole phase, so reading it as
             // empty would delete every other rule in the zone.
-            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
           const existingRules = entrypoint?.rules ?? [];
           const isOurs = (rule: { description?: string | null }) =>
             (rule.description ?? "").startsWith(prefix);
@@ -2043,12 +2044,11 @@ export const LiveWorkerProvider = () =>
                 params.observedNamespaces.some((ns) => ns.script === script)));
           const settings = yield* getScriptSettings(params.accountId, script, undefined).pipe(
             Effect.catchTags({
-              WorkerNotFound: (error) =>
-                knownSource ? Effect.fail(error) : Effect.succeed(undefined),
+              WorkerNotFound: (error) => (knownSource ? Effect.fail(error) : Effect.undefined),
               WorkerHasNoVersions: (error) =>
                 knownSource || params.sources.includes(script)
                   ? Effect.fail(error)
-                  : Effect.succeed(undefined),
+                  : Effect.undefined,
             }),
           );
           if (
@@ -2118,7 +2118,7 @@ export const LiveWorkerProvider = () =>
                         binding.scriptName != null &&
                         binding.scriptName !== script)),
                 )
-                  ? Effect.succeed(undefined)
+                  ? Effect.undefined
                   : Effect.fail(error),
               ),
             );
@@ -2299,7 +2299,7 @@ export const LiveWorkerProvider = () =>
           if (props.script !== undefined) {
             const [assets, bundleHash] = yield* Effect.all(
               [
-                opts.skipAssetsRead ? Effect.succeed(undefined) : prepareAssets(props.assets),
+                opts.skipAssetsRead ? Effect.undefined : prepareAssets(props.assets),
                 hashScript(props.script),
               ],
               { concurrency: "unbounded" },
@@ -2333,7 +2333,7 @@ export const LiveWorkerProvider = () =>
           }
           const [assets, bundle] = yield* Effect.all(
             [
-              opts.skipAssetsRead ? Effect.succeed(undefined) : prepareAssets(props.assets),
+              opts.skipAssetsRead ? Effect.undefined : prepareAssets(props.assets),
               prepareBundle(id, fqn, props),
             ],
             { concurrency: "unbounded" },
@@ -2995,7 +2995,7 @@ export const LiveWorkerProvider = () =>
           .getPreview({ accountId, workerId: parentName, previewId: previewName })
           .pipe(
             Effect.catchTags({
-              PreviewNotFound: () => Effect.succeed(undefined),
+              PreviewNotFound: () => Effect.undefined,
               WorkerNotFound: () =>
                 Effect.fail(
                   new WorkerPreviewConfigError({
@@ -3107,8 +3107,9 @@ export const LiveWorkerProvider = () =>
               deploymentId: "latest",
             })
             .pipe(
-              Effect.catchTag(["PreviewNotFound", "PreviewDeploymentNotFound"], () =>
-                Effect.succeed(undefined),
+              Effect.catchTag(
+                ["PreviewNotFound", "PreviewDeploymentNotFound"],
+                () => Effect.undefined,
               ),
             );
           const oldTag = latest?.migrationTag ?? undefined;
@@ -4337,8 +4338,9 @@ export const LiveWorkerProvider = () =>
           return assets.hash !== output.hash?.assets;
         }
         const read = yield* prepareAssets(assets).pipe(
-          Effect.catchTag(["PlatformError", "AssetTooLargeError", "TooManyAssetsError"], () =>
-            Effect.succeed(undefined),
+          Effect.catchTag(
+            ["PlatformError", "AssetTooLargeError", "TooManyAssetsError"],
+            () => Effect.undefined,
           ),
         );
         return read === undefined || read.hash !== output.hash?.assets;
@@ -4759,10 +4761,10 @@ export const LiveWorkerProvider = () =>
           }
           const settings = yield* getScriptSettings(accountId, name, namespace).pipe(
             Effect.catchTags({
-              WorkerNotFound: () => Effect.succeed(undefined),
-              WorkerHasNoVersions: () => Effect.succeed(undefined),
-              DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
-              DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+              WorkerNotFound: () => Effect.undefined,
+              WorkerHasNoVersions: () => Effect.undefined,
+              DispatchNamespaceScriptNotFound: () => Effect.undefined,
+              DispatchNamespaceNotFound: () => Effect.undefined,
             }),
           );
           if (settings === undefined) return undefined;
@@ -4894,10 +4896,10 @@ export const LiveWorkerProvider = () =>
             // script as `DispatchNamespaceScriptNotFound` (and a missing
             // namespace as `DispatchNamespaceNotFound`).
             Effect.catchTags({
-              WorkerNotFound: () => Effect.succeed(undefined),
-              WorkerHasNoVersions: () => Effect.succeed(undefined),
-              DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
-              DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+              WorkerNotFound: () => Effect.undefined,
+              WorkerHasNoVersions: () => Effect.undefined,
+              DispatchNamespaceScriptNotFound: () => Effect.undefined,
+              DispatchNamespaceNotFound: () => Effect.undefined,
             }),
           );
           let durableObjectNamespaces = getDurableObjects(existingSettings?.bindings);
@@ -5047,9 +5049,7 @@ export const LiveWorkerProvider = () =>
                 })
                 .pipe(
                   Effect.map(() => output),
-                  Effect.catchTag(["WorkerNotFound", "VersionNotFound"], () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag(["WorkerNotFound", "VersionNotFound"], () => Effect.undefined),
                 );
             }
             if (output?.previewOf !== undefined || olds?.preview?.of != null) {
@@ -5060,9 +5060,7 @@ export const LiveWorkerProvider = () =>
                 .getPreview({ accountId, workerId: output.previewOf, previewId: output.previewId })
                 .pipe(
                   Effect.map(() => output),
-                  Effect.catchTag(["WorkerNotFound", "PreviewNotFound"], () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag(["WorkerNotFound", "PreviewNotFound"], () => Effect.undefined),
                 );
             }
             if (output !== undefined && isUnscopedStub(output)) {
@@ -5152,7 +5150,7 @@ export const LiveWorkerProvider = () =>
                   })
                   .pipe(
                     Effect.map(() => output.versionId),
-                    Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)),
+                    Effect.catchTag("VersionNotFound", () => Effect.undefined),
                   )
               : undefined;
             const observeDomains = shouldObserveWorkerDomains(olds, output);
@@ -5266,10 +5264,10 @@ export const LiveWorkerProvider = () =>
               // The dispatch-namespace endpoints report the same conditions as
               // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
               Effect.catchTags({
-                WorkerNotFound: () => Effect.succeed(undefined),
-                WorkerHasNoVersions: () => Effect.succeed(undefined),
-                DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
-                DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+                WorkerNotFound: () => Effect.undefined,
+                WorkerHasNoVersions: () => Effect.undefined,
+                DispatchNamespaceScriptNotFound: () => Effect.undefined,
+                DispatchNamespaceNotFound: () => Effect.undefined,
               }),
             ),
         ),
@@ -5330,10 +5328,10 @@ export const LiveWorkerProvider = () =>
               schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(6)]),
             }),
             Effect.catchTags({
-              WorkerNotFound: () => Effect.succeed(undefined),
-              WorkerHasNoVersions: () => Effect.succeed(undefined),
-              DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
-              DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+              WorkerNotFound: () => Effect.undefined,
+              WorkerHasNoVersions: () => Effect.undefined,
+              DispatchNamespaceScriptNotFound: () => Effect.undefined,
+              DispatchNamespaceNotFound: () => Effect.undefined,
             }),
           );
           yield* Effect.logInfo(

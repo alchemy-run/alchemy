@@ -251,7 +251,7 @@ export const TelemetryRuleProvider = () =>
       const readRule = Effect.fn(function* (identifier: string) {
         return yield* obs
           .getTelemetryRule({ RuleIdentifier: identifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const waitUntilRuleAbsent = Effect.fn(function* (ruleName: string) {

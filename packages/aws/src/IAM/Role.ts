@@ -411,7 +411,7 @@ export const RoleProvider = () =>
                   };
                 }).pipe(
                   // A role may be deleted concurrently mid-hydration.
-                  Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                 ),
               { concurrency: 8 },
             );
@@ -435,7 +435,7 @@ export const RoleProvider = () =>
             .getRole({
               RoleName: roleName,
             })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (!role?.Role) {
             return undefined;
           }
@@ -505,7 +505,7 @@ export const RoleProvider = () =>
           // upstream so adopting a `Unowned` role is the engine's call.
           let observedRole = yield* iam
             .getRole({ RoleName: roleName })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
 
           // Ensure — create the role when missing. A peer reconciler may
           // have created it concurrently; tolerate that race by reading
@@ -698,7 +698,7 @@ export const RoleProvider = () =>
           for (let attempt = 0; attempt < 30; attempt++) {
             const remaining = yield* iam
               .getRole({ RoleName: output.roleName })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
             if (remaining === undefined) return;
             yield* Effect.sleep("1 second");
           }

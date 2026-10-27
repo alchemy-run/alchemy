@@ -448,7 +448,7 @@ const sameLogConfig = (
 const getByName = (project: string, region: string, name: string) =>
   compute
     .getRegionBackendServices({ project, region, backendService: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitPresent = (project: string, region: string, name: string) =>
   getByName(project, region, name).pipe(
@@ -462,7 +462,7 @@ const waitPresent = (project: string, region: string, name: string) =>
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
-    Effect.catchTag("GCP.Compute.RegionBackendServiceNotResolved", () => Effect.succeed(undefined)),
+    Effect.catchTag("GCP.Compute.RegionBackendServiceNotResolved", () => Effect.undefined),
   );
 
 const waitGone = (project: string, region: string, name: string) =>
@@ -621,7 +621,7 @@ export const RegionBackendServiceProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
@@ -743,7 +743,7 @@ export const RegionBackendServiceProvider = () =>
           backendService: output.name,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void

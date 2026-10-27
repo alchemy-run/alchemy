@@ -151,7 +151,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   networkconnectivity
     .getProjectsLocationsServiceConnectionTokens({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ServiceConnectionTokenProvider = () =>
   Provider.succeed(ServiceConnectionToken, {
@@ -247,7 +247,7 @@ export const ServiceConnectionTokenProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -274,7 +274,7 @@ export const ServiceConnectionTokenProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

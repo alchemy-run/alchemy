@@ -127,7 +127,7 @@ export const OriginAccessControlProvider = () =>
           .getOriginAccessControlConfig({
             Id: output.originAccessControlId,
           })
-          .pipe(Effect.catchTag("NoSuchOriginAccessControl", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchOriginAccessControl", () => Effect.undefined));
 
         if (!config?.OriginAccessControlConfig) {
           return undefined;
@@ -155,9 +155,7 @@ export const OriginAccessControlProvider = () =>
                 // omits it). Tolerate a concurrent delete between list and get.
                 const config = yield* cloudfront
                   .getOriginAccessControlConfig({ Id: summary.Id! })
-                  .pipe(
-                    Effect.catchTag("NoSuchOriginAccessControl", () => Effect.succeed(undefined)),
-                  );
+                  .pipe(Effect.catchTag("NoSuchOriginAccessControl", () => Effect.undefined));
                 return toAttrs(
                   {
                     Id: summary.Id!,

@@ -226,7 +226,7 @@ export const IdentityPoolProvider = () =>
       const describePool = Effect.fn(function* (identityPoolId: string) {
         return yield* ci
           .describeIdentityPool({ IdentityPoolId: identityPoolId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const findPoolsByName = Effect.fn(function* (name: string) {

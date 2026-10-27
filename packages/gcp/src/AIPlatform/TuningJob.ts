@@ -169,7 +169,7 @@ const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1TuningJob, project: stri
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsTuningJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listJobs = (project: string, region: string) => {
   const collect = (parent: string) =>

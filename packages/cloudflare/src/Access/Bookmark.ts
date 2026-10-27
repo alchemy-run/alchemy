@@ -229,7 +229,7 @@ const createBookmarkName = (id: string, name: string | undefined) =>
 const getBookmark = (acct: string, bookmarkId: string) =>
   zeroTrust
     .getAccessBookmark({ accountId: acct, bookmarkId })
-    .pipe(Effect.catchTag("AccessBookmarkNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessBookmarkNotFound", () => Effect.undefined));
 
 const findBookmarkByName = (acct: string, name: string) =>
   zeroTrust.listAccessBookmarks.items({ accountId: acct }).pipe(

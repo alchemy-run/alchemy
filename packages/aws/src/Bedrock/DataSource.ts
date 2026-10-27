@@ -134,14 +134,14 @@ export const DataSourceProvider = () =>
       const getDsOrUndefined = Effect.fn(function* (knowledgeBaseId: string, dataSourceId: string) {
         return yield* bedrock.getDataSource({ knowledgeBaseId, dataSourceId }).pipe(
           Effect.map((r) => r.dataSource),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
       const waitForSettled = Effect.fn(function* (knowledgeBaseId: string, dataSourceId: string) {
         return yield* bedrock.getDataSource({ knowledgeBaseId, dataSourceId }).pipe(
           Effect.map((r) => r.dataSource),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           Effect.repeat({
             schedule: Schedule.fixed("3 seconds"),
             until: (ds) => ds === undefined || !DS_TRANSIENT.has(ds.status),

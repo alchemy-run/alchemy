@@ -400,7 +400,7 @@ export const SecurityGroupRuleProvider = () =>
           if (!output) return undefined;
           return yield* describeRule(output.securityGroupRuleId).pipe(
             Effect.map(toAttrs),
-            Effect.catchTag("InvalidSecurityGroupRuleId.NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidSecurityGroupRuleId.NotFound", () => Effect.undefined),
           );
         }),
 
@@ -469,9 +469,7 @@ export const SecurityGroupRuleProvider = () =>
           const { group: _group, groupId: _groupId, ...oldRule } = olds;
           if (output) {
             const observed = yield* describeRule(output.securityGroupRuleId).pipe(
-              Effect.catchTag("InvalidSecurityGroupRuleId.NotFound", () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag("InvalidSecurityGroupRuleId.NotFound", () => Effect.undefined),
             );
             if (!observed) {
               return { action: "update", stables: ["groupOwnerId"] };
@@ -712,9 +710,7 @@ export const declaredSecurityGroupRuleIds = Effect.fn(function* (groupId: string
       const target = group ?? declaredId;
       // Evaluate only the declared target, never infer ownership from cloud tags.
       const declared = yield* Output.evaluate(target, upstream).pipe(
-        Effect.catchTag(["MissingSourceError", "InvalidReferenceError"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag(["MissingSourceError", "InvalidReferenceError"], () => Effect.undefined),
       );
       const declaredGroupId = typeof declared === "string" ? declared : declared?.groupId;
       if (declaredGroupId === groupId) ids.add(attrs.securityGroupRuleId);

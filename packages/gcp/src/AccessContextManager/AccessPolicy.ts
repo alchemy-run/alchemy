@@ -136,9 +136,7 @@ const toAttrs = (policy: acm.AccessPolicy): AccessPolicy["Attributes"] => {
 };
 
 const getByName = (name: string) =>
-  acm
-    .getAccessPolicies({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  acm.getAccessPolicies({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, organization: string) =>
   Effect.gen(function* () {
@@ -222,7 +220,7 @@ export const AccessPolicyProvider = () =>
               scopes: desiredScopes.length > 0 ? desiredScopes : undefined,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           const settled = yield* waitForOperation(created).pipe(
@@ -274,7 +272,7 @@ export const AccessPolicyProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* acm
         .deleteAccessPolicies({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

@@ -177,7 +177,7 @@ const createTitle = (id: string, props: { title?: string | undefined }) =>
 const fetchTags = Effect.fn(function* (arn: string) {
   const response = yield* qapps
     .listTagsForResource({ resourceARN: arn })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   const tags: Record<string, string> = {};
   for (const [key, value] of Object.entries(response?.tags ?? {})) {
     if (value !== undefined) tags[key] = value;
@@ -193,7 +193,7 @@ interface QAppState {
 const readQAppById = Effect.fn(function* (instanceId: string, appId: string) {
   const observed = yield* qapps
     .getQApp({ instanceId, appId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!observed || observed.status === "DELETED") return undefined;
   const state: QAppState = {
     observed,
