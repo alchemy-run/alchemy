@@ -58,13 +58,18 @@ export const TransferApprovalDeadlineLive = TransferApprovalDeadline.toLayer(
     const transfers = yield* Transfer;
     return Effect.fn(function* ({ source, event }) {
       if (!event.needsApproval) return;
-      yield* transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW });
+      yield* transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW }).pipe(
+        // A redelivery after the window closed: the expiry already ran.
+        Effect.catchTag("AlreadyExecuted", () => Effect.void),
+      );
     });
   }),
 );
 ```
 
 The schedule is durable: it fires even if everything restarted in between. Scheduling again with the same command id replaces the earlier one.
+
+A scheduled command takes its command id like any other command, so it runs once. Scheduling an id the transfer already handled fails with `AlreadyExecuted`, because that command would never run again. Here it means the policy ran a second time for the same event, after the expiry fired, so there's nothing to do.
 
 ## Let the aggregate decide the race
 
@@ -122,9 +127,15 @@ yield* transfers.schedule(source, new ExpireTransfer(), {
 yield* transfers.unschedule(source, `expire:${source.id}`);
 ```
 
-Unscheduling is durable, like scheduling. It does nothing when the command already fired or was never scheduled, so a policy can call it again on a redelivery. A cancelled command never fires, even when a story's clock passes its time.
+Unscheduling is durable, like scheduling. Once it succeeds, the command never fires, even when a story's clock passes its time. It does nothing when the command was never scheduled or was already cancelled, so a policy can call it again on a redelivery.
 
-A policy cancels after the approval is recorded, so the expiry can still arrive in between. Keep the guard in `decide`; cancelling saves the stale command, it doesn't replace the guard.
+When the command already ran, unscheduling fails with `AlreadyExecuted`. A policy cancels after the approval is recorded, so the expiry can still arrive in between. Keep the guard in `decide` for that case, and catch `AlreadyExecuted` when the policy should react to the deadline having won:
+
+```typescript
+yield* transfers
+  .unschedule(source, `expire:${source.id}`)
+  .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+```
 
 ## Test it with the clock
 
