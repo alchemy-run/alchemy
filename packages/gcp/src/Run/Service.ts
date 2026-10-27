@@ -18,7 +18,11 @@ import * as Stream from "effect/Stream";
 import { destroyHostImageRepository, makeImageSource } from "../ArtifactRegistry/ImageSource.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { retryActAs, type AppliedIamGrant, type GcpHostBinding } from "../Host.ts";
-import { createGcpHostRuntimeContext, type GcpHostRuntimeContext } from "../HostContext.ts";
+import {
+  createGcpHostRuntimeContext,
+  RPC_METHODS_ENV,
+  type GcpHostRuntimeContext,
+} from "../HostContext.ts";
 import {
   alchemyRuntimeEnv,
   isManagedServiceAccount,
@@ -40,6 +44,7 @@ import {
   waitForOperation as waitForLongRunningOperation,
 } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
+import { boundContainersOf, directContainerNames } from "./Container.ts";
 
 const DEFAULT_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 const MAX_NAME_LENGTH = 49;
@@ -74,8 +79,54 @@ export type ResourceRequirements = {
   startupCpuBoost?: boolean;
 };
 
-export type Container = {
-  /** DNS_LABEL container name. */
+export type HttpHeader = {
+  /** Header name. */
+  name: string;
+  /** Header value. */
+  value?: string;
+};
+
+export type Probe = {
+  /**
+   * Perform an HTTP GET; any 2xx–3xx response passes. Exactly one of
+   * `httpGet`, `tcpSocket`, or `grpc` must be set.
+   */
+  httpGet?: {
+    /** Request path. @default "/" */
+    path?: string;
+    /** Port to probe. @default the container's `ports[0].containerPort` */
+    port?: number;
+    /** Extra request headers. */
+    httpHeaders?: HttpHeader[];
+  };
+  /** Open a TCP connection; passes once the port accepts it. */
+  tcpSocket?: {
+    /** Port to probe. @default the container's `ports[0].containerPort` */
+    port?: number;
+  };
+  /** Call the gRPC health checking protocol. */
+  grpc?: {
+    /** Port to probe. @default the container's `ports[0].containerPort` */
+    port?: number;
+    /** Service name sent in the `HealthCheckRequest`. */
+    service?: string;
+  };
+  /**
+   * Seconds after the container starts before the first probe (max 240
+   * for startup probes, 3600 for liveness probes).
+   * @default 0
+   */
+  initialDelaySeconds?: number;
+  /** Seconds before a probe attempt times out. Must be less than `periodSeconds`. @default 1 */
+  timeoutSeconds?: number;
+  /** Seconds between probe attempts (max 240 for startup probes). @default 10 */
+  periodSeconds?: number;
+  /** Consecutive failures before the probe fails. @default 3 */
+  failureThreshold?: number;
+};
+
+export type ContainerSpec = {
+  /** DNS_LABEL container name. Required to reference it from `dependsOn`. */
   name?: string;
   /**
    * Container image (Artifact Registry, GCR, or Docker Hub). Required
@@ -97,6 +148,24 @@ export type Container = {
   workingDir?: string;
   /** Volume mounts. Names must match the template's `volumes`. */
   volumeMounts?: cloudrun.GoogleCloudRunV2VolumeMountList;
+  /**
+   * Probe that must pass before the container counts as started. Until it
+   * does, the revision takes no traffic and containers that `dependsOn`
+   * this one wait. Omitting it restores Cloud Run's default TCP probe on
+   * the serving port.
+   */
+  startupProbe?: Probe;
+  /**
+   * Probe run for the container's lifetime; Cloud Run restarts the
+   * container after `failureThreshold` consecutive failures. Omitting it
+   * removes any liveness probe.
+   */
+  livenessProbe?: Probe;
+  /**
+   * Names of containers that must start, and pass their startup probe,
+   * before this one starts.
+   */
+  dependsOn?: string[];
 };
 
 export type RevisionScaling = {
@@ -112,7 +181,7 @@ export type RevisionScaling = {
 
 export type RevisionTemplate = {
   /** Containers that make up the revision. */
-  containers?: Container[];
+  containers?: ContainerSpec[];
   /** Request timeout (e.g. `"300s"`). */
   timeout?: string;
   /** Max concurrent requests per instance. `0` uses the server default. */
@@ -247,6 +316,16 @@ export type ServiceProps = PlatformProps & {
    */
   port?: number;
   /**
+   * Startup probe for the main container (`template.containers[0]`).
+   * Shorthand for setting it on the container.
+   */
+  startupProbe?: Probe;
+  /**
+   * Liveness probe for the main container (`template.containers[0]`).
+   * Shorthand for setting it on the container.
+   */
+  livenessProbe?: Probe;
+  /**
    * Additional environment variables for the Effect-native container.
    * Merged after binding-injected `env`.
    */
@@ -312,6 +391,12 @@ export type Service = Resource<
     updateTime: string | undefined;
     /** Runtime service account email. */
     serviceAccount: string | undefined;
+    /**
+     * Numeric unique ID of the runtime service account: the `sub` of the
+     * Google ID tokens the host fetches. An AWS binding's IAM role trusts
+     * it, so the host reaches AWS without an access key.
+     */
+    serviceAccountUniqueId: string | undefined;
     /** True when Alchemy minted the per-host runtime service account. */
     managedServiceAccount: boolean;
     /** IAM roles bindings granted to the runtime service account. */
@@ -365,6 +450,75 @@ export type ServiceShape = Main<ServiceServices>;
  * });
  * ```
  *
+ * ### Health Probes and Sidecars
+ * **Example:** HTTP startup probe, with a proxy that starts after the app
+ * ```typescript
+ * const api = yield* GCP.Run.Service("api", {
+ *   template: {
+ *     containers: [
+ *       {
+ *         name: "proxy",
+ *         image: proxyImage,
+ *         ports: [{ name: "h2c", containerPort: 8080 }],
+ *         dependsOn: ["app"],
+ *       },
+ *       {
+ *         name: "app",
+ *         image: appImage,
+ *         startupProbe: {
+ *           httpGet: { path: "/health", port: 3000 },
+ *           periodSeconds: 2,
+ *           failureThreshold: 30,
+ *         },
+ *         livenessProbe: { httpGet: { path: "/health", port: 3000 }, periodSeconds: 10 },
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
+ * **Example:** TCP and gRPC probes
+ * ```typescript
+ * startupProbe: { tcpSocket: { port: 5432 }, initialDelaySeconds: 5 },
+ * livenessProbe: { grpc: { port: 9090, service: "health" }, timeoutSeconds: 3 },
+ * ```
+ * Changing a probe or `dependsOn` rolls a new revision. Removing
+ * `startupProbe` restores Cloud Run's default TCP probe.
+ *
+ * **Example:** Effect-native service with a sidecar
+ * ```typescript
+ * export class Api extends GCP.Run.Service<Api>()(
+ *   "Api",
+ *   {
+ *     main: import.meta.url,
+ *     template: {
+ *       containers: [
+ *         {
+ *           // image, ports and env are filled in from `main`
+ *           startupProbe: { httpGet: { path: "/health" } },
+ *           dependsOn: ["cache"],
+ *         },
+ *         {
+ *           name: "cache",
+ *           image: "docker.io/library/redis:7",
+ *           startupProbe: { tcpSocket: { port: 6379 } },
+ *         },
+ *       ],
+ *     },
+ *   },
+ *   Effect.gen(function* () {
+ *     return {
+ *       fetch: Effect.gen(function* () {
+ *         const request = yield* HttpServerRequest;
+ *         if (request.url === "/health") return HttpServerResponse.text("ok");
+ *         return HttpServerResponse.text("hello");
+ *       }),
+ *     };
+ *   }),
+ * ) {}
+ * ```
+ * The first container runs `main`; the rest deploy as sidecars.
+ *
  * ### Effect-native Function with bindings
  * **Example:** Publish tweets to Pub/Sub, cache in Memorystore
  * ```typescript
@@ -395,6 +549,29 @@ export type ServiceShape = Main<ServiceServices>;
  * ) {}
  * ```
  *
+ * ### Calling AWS without keys
+ * An AWS binding gives the service an IAM role that trusts its runtime
+ * service account's Google ID tokens. The service assumes the role with
+ * `AssumeRoleWithWebIdentity`, so no AWS access key is created.
+ *
+ * **Example:** Send to an SQS queue
+ * ```typescript
+ * const jobs = yield* AWS.SQS.Queue("Jobs");
+ *
+ * export class Api extends GCP.Run.Service<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const send = yield* AWS.SQS.SendMessage(jobs);
+ *     return {
+ *       fetch: send({ MessageBody: "hello" }).pipe(
+ *         Effect.as(HttpServerResponse.text("sent")),
+ *       ),
+ *     };
+ *   }).pipe(Effect.provide(AWS.SQS.SendMessageHttp)),
+ * ) {}
+ * ```
+ *
  * ### Updating a Service
  * **Example:** New revision
  * ```typescript
@@ -422,9 +599,9 @@ export type ServiceShape = Main<ServiceServices>;
  */
 export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRuntimeContext> =
   Platform("GCP.Run.Service", {
-    createRuntimeContext: createGcpHostRuntimeContext("GCP.Run.Service") as (
-      id: string,
-    ) => ServiceRuntimeContext,
+    createRuntimeContext: createGcpHostRuntimeContext("GCP.Run.Service", {
+      rpc: "private",
+    }) as (id: string) => ServiceRuntimeContext,
   });
 
 export class ServiceNotResolved extends Data.TaggedError("GCP.Run.ServiceNotResolved")<{
@@ -441,6 +618,18 @@ export class ServiceReconciling extends Data.TaggedError("GCP.Run.ServiceReconci
   name: string;
   state: string;
 }> {}
+
+/**
+ * The service returns RPC methods but `invokerIamDisabled` is set, so
+ * anyone could call them.
+ */
+export class ServiceRpcPublic extends Data.TaggedError("GCP.Run.ServiceRpcPublic")<{
+  id: string;
+}> {
+  override get message() {
+    return `GCP.Run.Service ${this.id} returns RPC methods but sets invokerIamDisabled, so they would be public. Keep the IAM invoker check on and call it with GCP.Run.InvokeService.`;
+  }
+}
 
 export class ServiceStillExists extends Data.TaggedError("GCP.Run.ServiceStillExists")<{
   name: string;
@@ -515,9 +704,17 @@ const toId = (id: string, serviceId: string | undefined, existing?: string) =>
 
 const desiredTemplate = (news: ServiceProps): cloudrun.GoogleCloudRunV2RevisionTemplate => {
   const template = news.template ?? {};
+  const [main = { image: DEFAULT_IMAGE }, ...rest] = template.containers ?? [];
   return {
     ...template,
-    containers: template.containers ?? [{ image: DEFAULT_IMAGE }],
+    containers: [
+      {
+        ...main,
+        startupProbe: news.startupProbe ?? main.startupProbe,
+        livenessProbe: news.livenessProbe ?? main.livenessProbe,
+      },
+      ...rest,
+    ],
   };
 };
 
@@ -539,6 +736,66 @@ const envFingerprint = (env: cloudrun.GoogleCloudRunV2EnvVarList | undefined) =>
       }))
       .sort((left, right) => left.name.localeCompare(right.name)),
   );
+
+// Cloud Run reports an unnamed port as `http1`.
+const portsFingerprint = (ports: cloudrun.GoogleCloudRunV2ContainerPortList | undefined) =>
+  JSON.stringify(
+    (ports ?? []).map((port) => ({
+      name: port.name || "http1",
+      containerPort: port.containerPort ?? 0,
+    })),
+  );
+
+// Cloud Run gives a serving container without a startup probe this one.
+const DEFAULT_STARTUP_PROBE: cloudrun.GoogleCloudRunV2Probe = {
+  tcpSocket: {},
+  timeoutSeconds: 240,
+  periodSeconds: 240,
+  failureThreshold: 1,
+};
+
+const probeFingerprint = (
+  probe: cloudrun.GoogleCloudRunV2Probe | undefined,
+  container: cloudrun.GoogleCloudRunV2Container,
+) => {
+  if (probe === undefined) return "";
+  const defaultPort = container.ports?.[0]?.containerPort ?? 8080;
+  return JSON.stringify({
+    httpGet:
+      probe.httpGet === undefined
+        ? null
+        : {
+            path: probe.httpGet.path || "/",
+            port: probe.httpGet.port || defaultPort,
+            headers: (probe.httpGet.httpHeaders ?? []).map((header) => [
+              header.name ?? "",
+              header.value ?? "",
+            ]),
+          },
+    tcpSocket: probe.tcpSocket === undefined ? null : { port: probe.tcpSocket.port || defaultPort },
+    grpc:
+      probe.grpc === undefined
+        ? null
+        : { port: probe.grpc.port || defaultPort, service: probe.grpc.service ?? "" },
+    initialDelaySeconds: probe.initialDelaySeconds ?? 0,
+    timeoutSeconds: probe.timeoutSeconds ?? 1,
+    periodSeconds: probe.periodSeconds ?? 10,
+    failureThreshold: probe.failureThreshold ?? 3,
+  });
+};
+
+// An omitted probe means the Cloud Run default, so a dropped probe still
+// rolls a revision that resets it.
+const startupProbeNeedsSync = (
+  desired: cloudrun.GoogleCloudRunV2Container,
+  observed: cloudrun.GoogleCloudRunV2Container,
+) => {
+  const have = probeFingerprint(observed.startupProbe, observed);
+  if (desired.startupProbe !== undefined) {
+    return probeFingerprint(desired.startupProbe, desired) !== have;
+  }
+  return have !== "" && have !== probeFingerprint(DEFAULT_STARTUP_PROBE, observed);
+};
 
 const containerNeedsSync = (
   desired: cloudrun.GoogleCloudRunV2ContainerList | undefined,
@@ -574,18 +831,7 @@ const containerNeedsSync = (
     }
     if (
       container.ports !== undefined &&
-      JSON.stringify(
-        container.ports.map((port) => ({
-          name: port.name ?? "",
-          containerPort: port.containerPort ?? 0,
-        })),
-      ) !==
-        JSON.stringify(
-          (current.ports ?? []).map((port) => ({
-            name: port.name ?? "",
-            containerPort: port.containerPort ?? 0,
-          })),
-        )
+      portsFingerprint(container.ports) !== portsFingerprint(current.ports)
     ) {
       return true;
     }
@@ -609,6 +855,16 @@ const containerNeedsSync = (
       return true;
     }
     if (container.name !== undefined && container.name !== (current.name ?? "")) {
+      return true;
+    }
+    if (startupProbeNeedsSync(container, current)) return true;
+    if (
+      probeFingerprint(container.livenessProbe, container) !==
+      probeFingerprint(current.livenessProbe, current)
+    ) {
+      return true;
+    }
+    if (JSON.stringify(container.dependsOn ?? []) !== JSON.stringify(current.dependsOn ?? [])) {
       return true;
     }
     if (
@@ -739,7 +995,11 @@ const toAttrs = (
   service: cloudrun.GoogleCloudRunV2Service,
   project: string,
   region: string,
-  extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
+  extras: {
+    iamGrants?: AppliedIamGrant[];
+    codeHash?: string;
+    serviceAccountUniqueId?: string;
+  } = {},
 ): Service["Attributes"] => {
   const name = service.name ?? "";
   const parsed = parseName(name, region);
@@ -770,6 +1030,7 @@ const toAttrs = (
       resourceName: name,
       serviceAccount: service.template?.serviceAccount,
     }),
+    serviceAccountUniqueId: extras.serviceAccountUniqueId,
     iamGrants: extras.iamGrants ?? [],
     codeHash: extras.codeHash,
   };
@@ -943,6 +1204,7 @@ export const ServiceProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region, {
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
+        serviceAccountUniqueId: output?.serviceAccountUniqueId,
       });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
@@ -969,6 +1231,9 @@ export const ServiceProvider = () =>
       }),
 
     reconcile: Effect.fn(function* ({ id, news, output, bindings, session }) {
+      if (news.invokerIamDisabled === true && news.env?.[RPC_METHODS_ENV] !== undefined) {
+        return yield* new ServiceRpcPublic({ id });
+      }
       const env = yield* GcpEnvironment.current;
       const serviceId = yield* toId(id, news.serviceId, output?.serviceId);
       const location = normalizeLocation(news.location ?? output?.location, env.region);
@@ -980,13 +1245,23 @@ export const ServiceProvider = () =>
       };
       const desiredAnnotations = news.annotations;
       const template = desiredTemplate(news);
+      const hostBindings = bindings as ResourceBinding<GcpHostBinding>[];
+      // Bound sidecars run as this service's account, so their bindings'
+      // roles are granted to it.
+      const boundContainers = boundContainersOf(hostBindings);
       const identity = yield* resolveHostIdentity({
         project: env.project,
         hostType: HOST_TYPE,
         resourceName: name,
         userServiceAccount: template.serviceAccount,
         effectNative: news.main !== undefined,
-        bindings: bindings as ResourceBinding<GcpHostBinding>[],
+        bindings: [
+          ...hostBindings,
+          ...boundContainers.map((container) => ({
+            sid: `GCP.Run.Container(${container.spec.name})`,
+            data: { iam: container.iam },
+          })),
+        ],
         output,
       });
       template.serviceAccount = identity.serviceAccount;
@@ -1007,7 +1282,7 @@ export const ServiceProvider = () =>
           })
           .pipe(Effect.onError(() => identity.cleanup));
         codeHash = image.codeHash;
-        const container = template.containers?.[0] ?? {};
+        const [container = {}, ...sidecars] = template.containers ?? [];
         template.containers = [
           {
             ...container,
@@ -1015,6 +1290,7 @@ export const ServiceProvider = () =>
             ports: container.ports ?? [{ containerPort: port }],
             env: mergeContainerEnv(container.env, identity.env, yield* alchemyRuntimeEnv, news.env),
           },
+          ...sidecars,
         ];
       } else {
         const runtimeEnv = { ...identity.env, ...news.env };
@@ -1030,10 +1306,22 @@ export const ServiceProvider = () =>
         }
       }
 
-      const mounted = mountCloudSqlInstances(
-        template,
-        bindings as ResourceBinding<GcpHostBinding>[],
-      );
+      if (boundContainers.length > 0) {
+        const [main = {}, ...rest] = template.containers ?? [];
+        const declared = new Set(rest.map((container) => container.name));
+        const dependsOn = [
+          ...new Set([...(main.dependsOn ?? []), ...directContainerNames(hostBindings)]),
+        ];
+        template.containers = [
+          { ...main, dependsOn },
+          ...rest,
+          ...boundContainers
+            .filter((container) => !declared.has(container.spec.name))
+            .map((container) => container.spec),
+        ];
+      }
+
+      const mounted = mountCloudSqlInstances(template, hostBindings);
       template.volumes = mounted.volumes;
       template.containers = mounted.containers;
 
@@ -1149,6 +1437,7 @@ export const ServiceProvider = () =>
       return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
+        serviceAccountUniqueId: identity.uniqueId,
       });
     }),
 

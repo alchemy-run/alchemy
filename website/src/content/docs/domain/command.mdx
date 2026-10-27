@@ -195,7 +195,7 @@ yield* accounts
   .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
 ```
 
-From a client of an [Api](/domain/api), each command is a method that takes the target and the input together: `bank.WithdrawMoney({ target: accountId, amount: 2_000 })`.
+From a client of an [Api](/domain/api), each command is a method that takes the target, the input, and optional call options: `bank.WithdrawMoney(accountId, { amount: 2_000 })`.
 
 Either way, `send` succeeds once the events have committed, with a receipt. It holds the stream and the version the instance committed at, the events it recorded, and the reply.
 
@@ -206,8 +206,8 @@ Networks fail after a command commits but before its receipt arrives. A client t
 Every command has an id to prevent that. The instance stores each receipt under its command's id, and when the same id arrives again, it returns the stored receipt without deciding again. Pass your own `commandId` when you might retry:
 
 ```typescript title="packages/server/test/withdrawOnce.ts"
-const first = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000, commandId: requestId }, mfa);
-const retry = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000, commandId: requestId }, mfa);
+const first = yield* bank.WithdrawMoney(accountId, { amount: 2_000 }, { commandId: requestId, ...mfa });
+const retry = yield* bank.WithdrawMoney(accountId, { amount: 2_000 }, { commandId: requestId, ...mfa });
 first.version === retry.version; // true
 ```
 

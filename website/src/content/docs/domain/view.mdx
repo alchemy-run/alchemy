@@ -82,7 +82,7 @@ So a view is always correct, but it can be a moment behind. Most screens never n
 
 ```typescript title="packages/server/test/depositThenRead.ts"
 export const depositThenRead = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
-  const receipt = yield* bank.DepositMoney({ target: accountId, amount: 500 });
+  const receipt = yield* bank.DepositMoney(accountId, { amount: 500 });
   const summary = yield* bank.AccountSummary.get(accountId, {
     atLeast: { stream: receipt.stream, version: receipt.version },
   });

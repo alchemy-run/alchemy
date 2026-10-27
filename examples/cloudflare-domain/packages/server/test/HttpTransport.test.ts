@@ -43,7 +43,7 @@ it.live("the CustomerApi round-trips over HTTP, including a streamed watch", () 
   Effect.gen(function* () {
     const sam = yield* CustomerApi.client;
     const accountId = yield* register(sam, "c-1", "sam");
-    yield* sam.DepositMoney({ target: accountId, amount: 70 });
+    yield* sam.DepositMoney(accountId, { amount: 70 });
     const dashboard = yield* sam.CustomerDashboard.watch(CustomerId.make("c-1")).pipe(
       Stream.map(({ state }) => state),
       Stream.filter((d) => d !== null && CustomerDashboard.computed.totalBalance(d) === 70),

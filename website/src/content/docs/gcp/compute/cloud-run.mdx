@@ -175,6 +175,106 @@ Set CPU, memory, timeout, and concurrency on the revision template:
 
 Every template change rolls out a new revision.
 
+## Check health
+
+Cloud Run's default startup probe passes as soon as the port accepts a
+connection. Give it an HTTP probe so a revision only takes traffic once
+the program can serve:
+
+```typescript
+{
+  main: import.meta.url,
+  template: {
+    containers: [
+      {
+        startupProbe: { httpGet: { path: "/health" }, periodSeconds: 2, failureThreshold: 30 },
+        livenessProbe: { httpGet: { path: "/health" }, periodSeconds: 10 },
+      },
+    ],
+  },
+}
+```
+
+A failing liveness probe restarts the container. Probes can also use
+`tcpSocket` or `grpc`. Remove `startupProbe` to go back to the default.
+
+## Add a sidecar
+
+Containers after the first run next to `main` in the same instance and
+reach each other on `localhost`. `dependsOn` holds a container back
+until the ones it names pass their startup probes:
+
+```typescript
+{
+  main: import.meta.url,
+  template: {
+    containers: [
+      { dependsOn: ["cache"] },
+      {
+        name: "cache",
+        image: "docker.io/library/redis:7",
+        startupProbe: { tcpSocket: { port: 6379 } },
+      },
+    ],
+  },
+}
+```
+
+Only the first container takes requests.
+
+## Run your own program as a sidecar
+
+A `GCP.Run.Container` is a program of its own, bundled into its own
+image. Return methods next to `fetch`:
+
+```typescript
+// src/worker.ts
+import * as GCP from "@alchemy.run/gcp";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Worker extends GCP.Run.Container<Worker>()(
+  "Worker",
+  { main: import.meta.url, port: 3000, startupProbe: { httpGet: { path: "/health" } } },
+  Effect.gen(function* () {
+    return {
+      greet: (name: string) => Effect.succeed(`hello ${name}`),
+      fetch: Effect.succeed(HttpServerResponse.text("ok")),
+    };
+  }),
+) {}
+```
+
+`GCP.Run.bindContainer` adds it to the service's revision, starts the
+service after it, and returns a typed client that calls it on
+`localhost`:
+
+```typescript
+// src/api.ts
+import * as GCP from "@alchemy.run/gcp";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import Worker from "./worker.ts";
+
+export default class Api extends GCP.Run.Service<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const worker = yield* GCP.Run.bindContainer(Worker);
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text(yield* worker.greet("sam"));
+      }),
+    };
+  }),
+) {}
+```
+
+Bindings inside a Container work as they do in the service: their env
+lands on the container and their roles go to the service's account.
+For a protocol other than HTTP, `GCP.Run.bindPort(Cache, 6379)` returns
+the sidecar's address instead.
+
 ## Receive events
 
 Event sources make Google call your service. Each one creates the

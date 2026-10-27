@@ -913,7 +913,10 @@ export default defineConfig({
             },
             {
               label: "Security & secrets",
-              items: [{ label: "Secrets & env", link: "/aws/security/secrets-env" }],
+              items: [
+                { label: "Secrets & env", link: "/aws/security/secrets-env" },
+                { label: "Federated identity", link: "/aws/security/federated-identity" },
+              ],
             },
             {
               label: "Observability",
@@ -1012,6 +1015,7 @@ export default defineConfig({
               items: [
                 { label: "IAM & bindings", link: "/gcp/security/iam" },
                 { label: "Secret Manager & KMS", link: "/gcp/security/secrets-kms" },
+                { label: "Federated identity", link: "/gcp/security/federated-identity" },
               ],
             },
             {

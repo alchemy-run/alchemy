@@ -221,14 +221,52 @@ export interface AggregateClient<A extends Aggregate.Any> {
   >;
 }
 
+/** How a command is sent: its idempotency key and the call's headers. */
+export interface CommandOptions extends CallOptions {
+  /** A resend with the same id returns the first receipt instead of deciding again. */
+  readonly commandId?: string;
+}
+
+/** The input and options after a command's target. The input may be left out when it has no required field. */
+type CommandArgs<Input> = {} extends Input
+  ? [input?: Input, options?: CommandOptions]
+  : [input: Input, options?: CommandOptions];
+
+/** The typed client of a command exposed in an Api: `bank.WithdrawMoney(target, input, options)`. */
+export type CommandClient<C extends Command.Any> =
+  C["rpc"] extends Rpc.Rpc<
+    infer _Tag,
+    infer Payload,
+    infer Success,
+    infer Error,
+    infer Middleware,
+    infer _Requires
+  >
+    ? Payload["Type"] extends { readonly target: infer Target; readonly input: infer Input }
+      ? (
+          target: Target,
+          ...args: CommandArgs<Input>
+        ) => Effect.Effect<
+          Success["Type"],
+          | Error["Type"]
+          | Middleware["error"]["Type"]
+          | Middleware["~ClientError"]
+          | RpcClientError.RpcClientError,
+          | Payload["EncodingServices"]
+          | Success["DecodingServices"]
+          | Error["DecodingServices"]
+          | Middleware["error"]["DecodingServices"]
+        >
+      : never
+    : never;
+
 /**
  * The typed client of an Api: commands as methods (`bank.WithdrawMoney(...)`),
  * views and aggregates as namespaces (`bank.AccountSummary.watch(...)`).
  */
-export type ApiClient<E extends Entry> = RpcClient.RpcClient<
-  Commands<E>["rpc"],
-  RpcClientError.RpcClientError
-> & {
+export type ApiClient<E extends Entry> = {
+  readonly [C in Commands<E> as C["tag"]]: CommandClient<C>;
+} & {
   readonly [V in Views<E> as V["viewName"]]: ViewClient<V>;
 } & {
   readonly [S in Streams<E> as S["streamName"]]: StreamClient<S>;
@@ -401,7 +439,7 @@ const declaredOnly = (rpc: Rpc.Any) => {
 interface CommandPayload {
   readonly target: string;
   readonly commandId?: string;
-  readonly [field: string]: unknown;
+  readonly input: object;
 }
 
 interface ReadPayload {
@@ -459,7 +497,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
         const declared = declaredOnly(entry.rpc);
         // Runs inside the command's middleware, so the context it provides
         // (the session's actor) travels with the command to its aggregate.
-        handlers[entry.tag] = ({ target, commandId, ...input }: CommandPayload) =>
+        handlers[entry.tag] = ({ target, commandId, input }: CommandPayload) =>
           declared.effect(
             aggregate.send(target, new entry(input), { commandId }).pipe(
               Effect.map((receipt) => ({
@@ -825,7 +863,12 @@ const nest = (entries: ReadonlyArray<Entry>, flat: Flat): unknown => {
   const client: Record<string, unknown> = {};
   for (const entry of entries) {
     if (entry.kind === "Command") {
-      client[entry.tag] = flat[entry.tag];
+      const send = flat[entry.tag]!;
+      client[entry.tag] = (
+        target: unknown,
+        input: object = {},
+        { commandId, ...options }: CommandOptions = {},
+      ) => send({ target, commandId, input }, options);
       continue;
     }
     const name = nameOf(entry);
@@ -1045,7 +1088,7 @@ const build = (
  * **Example:** A typed client
  * ```typescript
  * const bank = yield* CustomerApi.client;
- * const { reply } = yield* bank.DepositMoney({ target: accountId, amount: 1_000 });
+ * const { reply } = yield* bank.DepositMoney(accountId, { amount: 1_000 });
  * const summary = yield* bank.AccountSummary.get(accountId);
  * yield* bank.AccountSummary.watch(accountId).pipe(
  *   Stream.runForEach(({ state }) => Effect.log(state?.balance)),
@@ -1063,7 +1106,7 @@ const build = (
  *   Effect.provideService(effect, CurrentActor, system("payments-webhook")),
  * );
  * const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));
- * yield* bank.DepositMoney({ target: accountId, amount: 1_000 });
+ * yield* bank.DepositMoney(accountId, { amount: 1_000 });
  * ```
  *
  * @primitive

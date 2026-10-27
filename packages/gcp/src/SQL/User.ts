@@ -189,7 +189,7 @@ export type User = Resource<
  * ```typescript
  * const instance = yield* GCP.SQL.Instance("AppDb", {
  *   tier: "db-f1-micro",
- *   backupEnabled: false,
+ *   backup: { enabled: false },
  * });
  * const appUser = yield* GCP.SQL.User("AppUser", {
  *   instance: instance.instanceName,
