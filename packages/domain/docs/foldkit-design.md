@@ -1,6 +1,6 @@
 # Design: a Foldkit adapter for Domain
 
-Status: proposal, implemented in this PR.
+Status: implemented (experimental).
 
 ## The problem
 
@@ -14,14 +14,14 @@ Status: proposal, implemented in this PR.
 | View `watch` and `events` | Subscription that feeds the Model |
 | Story (given / when / then) | Story and Scene |
 
-The two halves meet only at the Api client, and each app writes the bridge by hand. The two Domain guides that show Foldkit show how much:
+Without an adapter, the two halves meet only at the Api client, and each app writes the bridge by hand. Before this adapter, the two Domain guides that showed Foldkit showed how much:
 
-- `domain/foldkit.mdx` writes one Command per Domain command, each with an `Effect.catch` that turns a typed Rejection into a string (`error._tag`). The Rejection's fields and the command's `reply` are lost.
-- `domain/foldkit.mdx` watches a View with `watch` and keeps only `state` (`({ state }) => ...`). The `cursor` that comes with it is dropped.
-- `domain/optimistic-updates.mdx` reads `events` from the start on every restart and drops `Read.CaughtUp` with `Read.isEvent`. A reconnect replays the whole history, and the page cannot tell "catching up" from "live".
-- Nothing carries `snapshot`'s `{ state, cursor }` into Flags, so the first paint has no data.
+- `domain/foldkit.mdx` wrote one Command per Domain command, each with an `Effect.catch` that turned a typed Rejection into a string (`error._tag`). The Rejection's fields and the command's `reply` were lost.
+- `domain/foldkit.mdx` watched a View with `watch` and kept only `state` (`({ state }) => ...`). The `cursor` that came with it was dropped.
+- `domain/optimistic-updates.mdx` read `events` from the start on every restart and dropped `Read.CaughtUp` with `Read.isEvent`. A reconnect replayed the whole history, and the page could not tell "catching up" from "live".
+- Nothing carried `snapshot`'s `{ state, cursor }` into Flags, so the first paint had no data.
 
-The guides also teach patterns that Foldkit's own conventions reject: `null` for absence instead of `Option`, `Succeeded` and `Failed` with no Command name, `GotBalance` for a Subscription fact (`Got*` is for child Submodel results), and `{ ...model }` instead of `modifyFields`.
+The guides also taught patterns that Foldkit's own conventions reject: `null` for absence instead of `Option`, `Succeeded` and `Failed` with no Command name, `GotBalance` for a Subscription fact (`Got*` is for child Submodel results), and `{ ...model }` instead of `modifyFields`.
 
 A proof of concept against production aggregates (Foldkit canary of foldkit/foldkit#1655, Domain beta.84, `Domain.InMemory` in the browser, 51 tests) cut each command's glue to one line and each live feed's to about 15 lines.
 
@@ -115,7 +115,7 @@ watchView(CustomerApi, "AccountSummary", {
 })
 ```
 
-A Subscription entry on `watch`. The app passes its own Message, so the app names the fact. `state: null` arrives as `Option.none()`. The cursor goes into the Model with the state. `onFailure` maps a typed read failure to an app Message. `onDefect` receives the full Cause of an unexpected read defect. Interrupt-only Causes end the read without a Message. `isEnabled` can stop the stream while offline. A key change restarts the stream; a new cursor does not (`keepAliveEquivalence`, `packages/foldkit/src/subscription/subscription.ts:56` on `main`). A restart reads a fresh Snapshot. A middleware or `validate` failure becomes a Message.
+A Subscription entry on `watch`. The app passes its own Message, so the app names the fact. `state: null` arrives as `Option.none()`. The cursor goes into the Model with the state. `onFailure` maps a typed read failure to an app Message. `onDefect` receives the full Cause of an unexpected read defect. Interrupt-only Causes end the read without a Message. `isEnabled` can stop the stream while offline. A key change restarts the stream; a new cursor does not (`keepAliveEquivalence` on the Foldkit Subscription). A restart reads a fresh Snapshot. A middleware or `validate` failure becomes a Message.
 
 This is the state source. Not every state change has an output event: the Kernel can evolve a View's state and emit nothing (for example `AccountOpened` in `Statement`), so state never comes from `events`.
 
