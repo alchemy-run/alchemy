@@ -105,7 +105,13 @@ const FEDERATION_ENV = {
   project: "ALCHEMY_GCP_WORKLOAD_IDENTITY_PROJECT",
 } as const;
 
-/** The attribute holding the IAM role ARN each AWS host type runs as. */
+/**
+ * The attribute holding the IAM role ARN each AWS host type runs as.
+ *
+ * TODO: don't hard-code AWS host types in the GCP package. The AWS package
+ * owns them; find a way for it to provide this, e.g. as a Layer the GCP
+ * binding reads at deploy time.
+ */
 const AWS_ROLE_ARN_ATTRIBUTE: Record<string, string> = {
   "AWS.Lambda.Function": "roleArn",
   "AWS.Lambda.WebFunction": "roleArn",
