@@ -92,14 +92,16 @@ const RECORD = "RECORD#";
 const OUTPUT = "OUTPUT";
 /** Sort key of a stage's deploy lease. */
 const LEASE = "LEASE";
-/** Partition key of the stack catalog. */
-const STACKS = "STACKS";
+/** Partition key of the stage catalog. */
+const CATALOG = "CATALOG";
 
 /** Escape the key separator out of a stack or stage name. */
 const part = (name: string) => name.replaceAll("%", "%25").replaceAll("#", "%23");
 
 const stagePk = (stack: string, stage: string) => `STAGE#${part(stack)}#${part(stage)}`;
-const stagesPk = (stack: string) => `STAGES#${part(stack)}`;
+/** The catalog sort key prefix of a stack's stages. */
+const catalogPrefix = (stack: string) => `STAGE#${part(stack)}#`;
+const catalogSk = (stack: string, stage: string) => `${catalogPrefix(stack)}${part(stage)}`;
 
 const S = (value: string): dynamodb.AttributeValue => ({ S: value });
 const N = (value: number): dynamodb.AttributeValue => ({ N: String(value) });
@@ -133,8 +135,7 @@ const toError = (cause: unknown) =>
  * STAGE#{stack}#{stage}   RECORD#{sha256(fqn)}   one resource's state
  * STAGE#{stack}#{stage}   OUTPUT                 the stack's output
  * STAGE#{stack}#{stage}   LEASE                  the deploy lease
- * STACKS                  STACK#{stack}          the stack catalog
- * STAGES#{stack}          STAGE#{stage}          the stage catalog
+ * CATALOG                 STAGE#{stack}#{stage}  the stage catalog
  * ```
  *
  * A deploy takes the stage's lease, then loads every record of the stage
@@ -229,8 +230,8 @@ interface HeldLease {
 const amortizeCheck = (
   checkLive: Effect.Effect<void, StateStoreError>,
   ttlMs: number,
+  lastOkAt: number | undefined,
 ): Effect.Effect<void, StateStoreError> => {
-  let lastOkAt: number | undefined;
   return Effect.suspend(() => {
     if (lastOkAt !== undefined && Date.now() - lastOkAt < ttlMs) {
       return Effect.void;
@@ -633,7 +634,10 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
       Effect.forkIn(leaseScope),
     );
 
-    return { checkLive: amortizeCheck(verify, LEASE_CHECK_TTL_MS) } satisfies HeldLease;
+    // The conditional put just proved the lease, so the first check is free.
+    return {
+      checkLive: amortizeCheck(verify, LEASE_CHECK_TTL_MS, Date.now()),
+    } satisfies HeldLease;
   });
 
   /** Load every record of a stage into a snapshot keyed by FQN. */
@@ -684,46 +688,40 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
     ),
   );
 
-  /** Enter the stage, and its stack, in the catalog `listStacks` reads. */
+  /**
+   * Enter the stage in the catalog `listStacks` and `listStages` read, once
+   * per stage per store.
+   */
   const register = (stack: string, stage: string) =>
     registered.get(
       `${stack}/${stage}`,
       use(({ table }) =>
-        dynamodb.batchWriteItem({
-          RequestItems: {
-            [table]: [
-              {
-                PutRequest: {
-                  Item: { PK: S(stagesPk(stack)), SK: S(`STAGE#${stage}`), name: S(stage) },
-                },
-              },
-              {
-                PutRequest: {
-                  Item: { PK: S(STACKS), SK: S(`STACK#${stack}`), name: S(stack) },
-                },
-              },
-            ],
+        dynamodb.putItem({
+          TableName: table,
+          Item: {
+            PK: S(CATALOG),
+            SK: S(catalogSk(stack, stage)),
+            stack: S(stack),
+            stage: S(stage),
           },
         }),
-      ).pipe(
-        Effect.flatMap((result) =>
-          Object.values(result.UnprocessedItems ?? {}).some((r) => (r?.length ?? 0) > 0)
-            ? Effect.fail(
-                new StateStoreError({
-                  message: `DynamoDB did not register state stage '${stack}/${stage}'`,
-                }),
-              )
-            : Effect.void,
-        ),
+      ).pipe(Effect.asVoid),
+    );
+
+  /** Every cataloged stage, of one stack or all of them, in one query. */
+  const catalog = (stack?: string) =>
+    queryPartition(CATALOG, stack === undefined ? "STAGE#" : catalogPrefix(stack)).pipe(
+      Effect.map((items) =>
+        items.flatMap((item) => {
+          const stack = str(item, "stack");
+          const stage = str(item, "stage");
+          return stack === undefined || stage === undefined ? [] : [{ stack, stage }];
+        }),
       ),
     );
 
   const listStages = (stack: string) =>
-    queryPartition(stagesPk(stack), "STAGE#").pipe(
-      Effect.map((items) =>
-        items.map((item) => str(item, "name")).filter((name) => name !== undefined),
-      ),
-    );
+    catalog(stack).pipe(Effect.map((entries) => entries.map((entry) => entry.stage)));
 
   /** Delete a stage's records, output, overflow objects and catalog entry. */
   const deleteStage = (stack: string, stage: string) =>
@@ -765,7 +763,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
             );
           }),
         );
-        yield* deleteItems([{ PK: stagesPk(stack), SK: `STAGE#${stage}` }]);
+        yield* deleteItems([{ PK: CATALOG, SK: catalogSk(stack, stage) }]);
         // A later write to the stage enters it in the catalog again.
         registered.entries.delete(`${stack}/${stage}`);
       }),
@@ -774,28 +772,11 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
   const state: StateService = {
     id: "dynamodb",
     getVersion: () => Effect.succeed(STATE_STORE_VERSION),
-    // The catalog keeps a stack whose stages a stage-only delete removed,
-    // so only stacks with a stage are listed.
+    // A stack is listed while it has a cataloged stage.
     listStacks: () =>
       verifyHeldLeases.pipe(
-        Effect.andThen(queryPartition(STACKS, "STACK#")),
-        Effect.flatMap((items) =>
-          Effect.forEach(
-            items.map((item) => str(item, "name")).filter((name) => name !== undefined),
-            (stack) =>
-              use(({ table }) =>
-                dynamodb.query({
-                  TableName: table,
-                  ConsistentRead: true,
-                  KeyConditionExpression: "PK = :pk",
-                  ExpressionAttributeValues: { ":pk": S(stagesPk(stack)) },
-                  Limit: 1,
-                }),
-              ).pipe(Effect.map((result) => ((result.Items?.length ?? 0) > 0 ? [stack] : []))),
-            { concurrency: 16 },
-          ),
-        ),
-        Effect.map((stacks) => stacks.flat()),
+        Effect.andThen(catalog()),
+        Effect.map((entries) => Array.from(new Set(entries.map((entry) => entry.stack)))),
       ),
     listStages: (stack) => verifyHeldLeases.pipe(Effect.andThen(listStages(stack))),
     get: (request) =>
@@ -855,7 +836,6 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
             Effect.flatMap((stages) =>
               Effect.forEach(stages, (found) => deleteStage(stack, found), { discard: true }),
             ),
-            Effect.andThen(deleteItems([{ PK: STACKS, SK: `STACK#${stack}` }])),
           )
         : deleteStage(stack, stage),
     list: (request) => guarded(request, (records) => Effect.succeed(Array.from(records.keys()))),
