@@ -312,6 +312,12 @@ export type Service = Resource<
     updateTime: string | undefined;
     /** Runtime service account email. */
     serviceAccount: string | undefined;
+    /**
+     * Numeric unique ID of the runtime service account: the `sub` of the
+     * Google ID tokens the host fetches. An AWS binding's IAM role trusts
+     * it, so the host reaches AWS without an access key.
+     */
+    serviceAccountUniqueId: string | undefined;
     /** True when Alchemy minted the per-host runtime service account. */
     managedServiceAccount: boolean;
     /** IAM roles bindings granted to the runtime service account. */
@@ -392,6 +398,29 @@ export type ServiceShape = Main<ServiceServices>;
  *       GCP.Redis.ReadWriteRedisHttp,
  *     ]),
  *   ),
+ * ) {}
+ * ```
+ *
+ * ### Calling AWS without keys
+ * An AWS binding gives the service an IAM role that trusts its runtime
+ * service account's Google ID tokens. The service assumes the role with
+ * `AssumeRoleWithWebIdentity`, so no AWS access key is created.
+ *
+ * **Example:** Send to an SQS queue
+ * ```typescript
+ * const jobs = yield* AWS.SQS.Queue("Jobs");
+ *
+ * export class Api extends GCP.Run.Service<Api>()(
+ *   "Api",
+ *   { main: import.meta.url },
+ *   Effect.gen(function* () {
+ *     const send = yield* AWS.SQS.SendMessage(jobs);
+ *     return {
+ *       fetch: send({ MessageBody: "hello" }).pipe(
+ *         Effect.as(HttpServerResponse.text("sent")),
+ *       ),
+ *     };
+ *   }).pipe(Effect.provide(AWS.SQS.SendMessageHttp)),
  * ) {}
  * ```
  *
@@ -739,7 +768,11 @@ const toAttrs = (
   service: cloudrun.GoogleCloudRunV2Service,
   project: string,
   region: string,
-  extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
+  extras: {
+    iamGrants?: AppliedIamGrant[];
+    codeHash?: string;
+    serviceAccountUniqueId?: string;
+  } = {},
 ): Service["Attributes"] => {
   const name = service.name ?? "";
   const parsed = parseName(name, region);
@@ -770,6 +803,7 @@ const toAttrs = (
       resourceName: name,
       serviceAccount: service.template?.serviceAccount,
     }),
+    serviceAccountUniqueId: extras.serviceAccountUniqueId,
     iamGrants: extras.iamGrants ?? [],
     codeHash: extras.codeHash,
   };
@@ -943,6 +977,7 @@ export const ServiceProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region, {
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
+        serviceAccountUniqueId: output?.serviceAccountUniqueId,
       });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
@@ -1149,6 +1184,7 @@ export const ServiceProvider = () =>
       return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
+        serviceAccountUniqueId: identity.uniqueId,
       });
     }),
 

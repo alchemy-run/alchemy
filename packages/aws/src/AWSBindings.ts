@@ -1,4 +1,5 @@
-import type { ResolvedCredentials } from "@distilled.cloud/aws/Credentials";
+import { createHash } from "node:crypto";
+import { fromWebToken, type ResolvedCredentials } from "@distilled.cloud/aws/Credentials";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
 import { Region, type RegionName } from "@distilled.cloud/aws/Region";
 import { AlchemyContext } from "alchemy/AlchemyContext";
@@ -7,14 +8,18 @@ import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { isResourceOfType, type ResourceLike } from "alchemy/Resource";
 import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
+import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import type * as rolldown from "rolldown";
 import { DEFAULT_LOCAL_ENDPOINT } from "./AuthProvider.ts";
 import { Credentials, makeAssumeRoleResolver } from "./Credentials.ts";
+import { AWSEnvironment } from "./Environment.ts";
 import { AccessKey } from "./IAM/AccessKey.ts";
 import type { PolicyStatement } from "./IAM/Policy.ts";
 import { Role } from "./IAM/Role.ts";
@@ -26,6 +31,10 @@ import { CurrentRegion } from "./Region.ts";
  *
  * - the host runs as an IAM role (Lambda, ECS, EC2, …): statements go on that
  *   role, and calls use its ambient credentials;
+ * - the host runs as a Google service account (Cloud Run, Cloud Functions):
+ *   Alchemy creates a Role that trusts that account's Google ID tokens, puts
+ *   the statements on the Role, and the host assumes it with
+ *   `AssumeRoleWithWebIdentity`. No key is created;
  * - any other host (a Cloudflare Worker, Cloud Run, a GKE pod): Alchemy
  *   creates an IAM User and AccessKey that may assume a Role, puts the
  *   statements on the Role, and binds the key into the host's env;
@@ -96,6 +105,15 @@ const KEY_ENV = {
 } as const;
 
 /**
+ * Env var holding the Role a Google-service-account host assumes with its
+ * ID token. Only {@link Bind} sets it, on that path only.
+ */
+const WEB_IDENTITY_ROLE_ENV = "ALCHEMY_AWS_WEB_IDENTITY_ROLE_ARN";
+
+/** The `aud` a host requests on the Google ID tokens it exchanges with STS. */
+const GOOGLE_ID_TOKEN_AUDIENCE = "sts.amazonaws.com";
+
+/**
  * Whether a host runs its code as an IAM role: Lambda, ECS, EC2,
  * AutoScaling, AppRunner, Batch, or a Kubernetes workload on an EKS cluster
  * (Pod Identity). Not a Lambda `MicrovmImage`: an image has no role of its
@@ -120,6 +138,40 @@ export const runsAsRole = (host: ResourceLike): boolean => {
       return false;
   }
 };
+
+/**
+ * Whether a host runs its code as a Google service account that can fetch ID
+ * tokens from the metadata server: Cloud Run and Cloud Functions. Not a GKE
+ * pod: its Workload Identity principal has no ID tokens. Deploy-time only.
+ */
+export const runsAsGoogleServiceAccount = (host: ResourceLike): boolean => {
+  switch (host.Type) {
+    case "GCP.Run.Service":
+    case "GCP.Run.Job":
+    case "GCP.Run.WorkerPool":
+    case "GCP.CloudFunctions.Function":
+      return true;
+    default:
+      return false;
+  }
+};
+
+/**
+ * The name of the Role a Google-service-account host assumes:
+ * `{stack}-{host}-{stage}-` plus a hash of the host's FQN, at most 64
+ * characters. Derived from the host alone so the host's env can name the
+ * Role without depending on it.
+ */
+const federatedRoleName = Effect.fn(function* (host: ResourceLike) {
+  const stack = yield* Effect.serviceOption(Stack);
+  const prefix = Option.isSome(stack)
+    ? `${stack.value.name}-${host.LogicalId}-${stack.value.stage}-`
+    : `${host.LogicalId}-`;
+  const hash = yield* Effect.sync(() =>
+    createHash("sha256").update(host.FQN).digest("hex").slice(0, 12),
+  );
+  return `${prefix.replaceAll(/[^a-zA-Z0-9-]/g, "-").slice(0, 64 - hash.length)}${hash}`;
+});
 
 /** An `AWS.EKS.Cluster`, or a cluster connection authenticating as `aws-eks`. */
 const isEksCluster = (cluster: unknown): boolean => {
@@ -148,6 +200,8 @@ const toOutput = (value: unknown) => (Output.isOutput(value) ? value : Output.li
  * the binding to its host labelled `Allow(<host>, <label>)`:
  *
  * - a host that runs as an IAM role takes the statements on that role;
+ * - a host that runs as a Google service account gets a Role that trusts
+ *   its ID tokens; the Role takes the statements;
  * - any other host gets an IAM User and AccessKey that may assume a Role;
  *   the Role takes the statements and the key is bound into the host's env.
  *
@@ -189,9 +243,66 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
         )(data);
       }
 
+      const id = host.LogicalId;
+      const runtime = (yield* CurrentRuntimeContext)!;
+
+      if (runsAsGoogleServiceAccount(host)) {
+        // The host's env names the Role by a name derived from the host, not
+        // by the Role's output: the Role's trust reads the host's service
+        // account, so an env reference back to the Role would be a cycle.
+        const roleName = yield* federatedRoleName(host);
+        const uniqueId = (host as unknown as { serviceAccountUniqueId: Output.Output<string> })
+          .serviceAccountUniqueId;
+        const role = yield* IamRole(`${id}Role`, {
+          roleName,
+          assumeRolePolicyDocument: {
+            Version: "2012-10-17",
+            Statement: [
+              {
+                Effect: "Allow",
+                Principal: { Federated: "accounts.google.com" },
+                Action: ["sts:AssumeRoleWithWebIdentity"],
+                Condition: {
+                  StringEquals: {
+                    // Google ID tokens carry the account's unique ID as
+                    // `sub` and `azp`; IAM reads `azp` as `aud` and the
+                    // requested audience as `oaud`.
+                    "accounts.google.com:sub": uniqueId,
+                    "accounts.google.com:aud": uniqueId,
+                    "accounts.google.com:oaud": GOOGLE_ID_TOKEN_AUDIENCE,
+                  },
+                },
+              },
+            ],
+          },
+        });
+        if (data.policyStatements !== undefined && data.policyStatements.length > 0) {
+          yield* (role as unknown as BindTarget).bind(
+            labelled("Allow", label),
+            host,
+            ...args,
+          )({ policyStatements: data.policyStatements });
+        }
+        yield* runtime.set(
+          WEB_IDENTITY_ROLE_ENV,
+          Output.fromEffect(
+            AWSEnvironment.use((env) =>
+              Effect.map(env, ({ accountId }) => `arn:aws:iam::${accountId}:role/${roleName}`),
+            ).pipe(Effect.orDie),
+          ) as Output.Output<string>,
+        );
+        yield* runtime.set(
+          KEY_ENV.region,
+          Output.fromEffect(CurrentRegion.pipe(Effect.orDie)) as Output.Output<string>,
+        );
+        for (const [key, value] of Object.entries(data.env ?? {})) {
+          yield* runtime.set(key, toOutput(value));
+        }
+        return;
+      }
+
       // The user may assume any role that trusts it; the role's trust policy
       // restricts assumption to this user, which avoids a User↔Role ARN cycle.
-      const id = host.LogicalId;
       const user = yield* IamUser(`${id}User`, {
         inlinePolicies: {
           AssumeRole: {
@@ -217,7 +328,6 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
         )({ policyStatements: data.policyStatements });
       }
 
-      const runtime = (yield* CurrentRuntimeContext)!;
       yield* runtime.set(KEY_ENV.accessKeyId, accessKey.accessKeyId);
       yield* runtime.set(KEY_ENV.secretAccessKey, accessKey.secretAccessKey);
       yield* runtime.set(KEY_ENV.roleArn, role.roleArn);
@@ -251,6 +361,60 @@ export const bindVpc = (label: TemplateStringsArray, ...args: unknown[]) =>
   });
 
 /**
+ * A Google ID token for {@link GOOGLE_ID_TOKEN_AUDIENCE}, fetched from the
+ * metadata server as the host's runtime service account. Tokens live an
+ * hour; a fresh one is fetched on every credential refresh.
+ */
+const googleIdToken = Effect.gen(function* () {
+  const client = (yield* HttpClient.HttpClient).pipe(HttpClient.filterStatusOk);
+  const response = yield* client.execute(
+    HttpClientRequest.get(
+      "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity",
+    ).pipe(
+      HttpClientRequest.setHeader("Metadata-Flavor", "Google"),
+      HttpClientRequest.setUrlParams({ audience: GOOGLE_ID_TOKEN_AUDIENCE, format: "full" }),
+    ),
+  );
+  return Redacted.make((yield* response.text).trim());
+}).pipe(Effect.provide(FetchHttpClient.layer));
+
+/**
+ * Resolve an operation on a host that runs as a Google service account: the
+ * Role {@link Bind} created for it is assumed with the host's Google ID token
+ * (`AssumeRoleWithWebIdentity`). Credentials are cached and re-assumed with a
+ * fresh token shortly before they expire.
+ */
+const withWebIdentity = Effect.fn(function* <Op>(
+  operation: Effect.Effect<Op, never, any>,
+  region?: Effect.Effect<Effect.Effect<string>, never, any>,
+) {
+  const runtime = yield* CurrentRuntimeContext;
+  const roleArn = runtime ? yield* runtime.get<string>(WEB_IDENTITY_ROLE_ENV) : undefined;
+  if (runtime === undefined || roleArn === undefined) {
+    return yield* operation as Effect.Effect<Op>;
+  }
+  const credentials = fromWebToken({
+    roleArn,
+    webIdentityToken: googleIdToken,
+    roleSessionName: "alchemy",
+    // STS is global; operations provide their own Region.
+    region: "us-east-1",
+  });
+  const callRegion =
+    region !== undefined
+      ? yield* region as Effect.Effect<Effect.Effect<string>>
+      : Effect.map(runtime.get<string>(KEY_ENV.region), (value) => value ?? "us-east-1");
+  return yield* (operation as Effect.Effect<Op>).pipe(
+    Effect.provide([
+      credentials,
+      Layer.succeed(Region, callRegion as Effect.Effect<RegionName>),
+      Endpoint.fromEnv(),
+      FetchHttpClient.layer,
+    ]),
+  );
+});
+
+/**
  * Resolve a distilled operation (or several, with `Effect.all`) with the
  * host's AWS credentials, once when the binding's layer is built: by
  * assuming the Role {@link Bind} created for this host if there is one,
@@ -271,6 +435,11 @@ export const withCredentials: <Op>(
   // A host running as an IAM role signs with its own credentials.
   if (globalThis.__ALCHEMY_HOST_IDENTITY__ === "AWS.IAM.Role")
     return yield* operation as Effect.Effect<Op>;
+  // A host running as a Google service account assumes its Role with an ID
+  // token; it never has a key, so the bundler drops that path.
+  if (globalThis.__ALCHEMY_HOST_IDENTITY__ === "GCP.IAM.ServiceAccount") {
+    return yield* withWebIdentity(operation, region);
+  }
   if (!globalThis.__ALCHEMY_RUNTIME__) {
     const host = yield* Binding.Host;
     if (region !== undefined && host !== undefined && !runsAsRole(host)) {
