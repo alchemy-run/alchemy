@@ -208,7 +208,7 @@ A typed rejection, like `InsufficientFunds`, marks the line `rejected` with its 
 
 ## Predict the outcome locally
 
-To show what the bank will do, run the aggregate's own rules in the browser. `Account.predict` gives the events and next state, or the rejection the bank would return. A view's `evolveLocal` folds those events like the server's view:
+To show what the bank will do, run the aggregate's own rules in the browser. `Account.predict` gives the events and next state, or the rejection the bank would return. `AccountSummary.evolve` folds those events like the server's view:
 
 ```typescript
 const outcome = Account.predict(account, new WithdrawMoney({ amount: 30 }), { id, now });
@@ -218,7 +218,7 @@ switch (outcome._tag) {
   case "Accepted": {
     const summary = outcome.events.reduce(
       (state, event, i) =>
-        AccountSummary.evolveLocal(state, {
+        AccountSummary.evolve(state, {
           name: "Account",
           event,
           source: Account.ref(id),

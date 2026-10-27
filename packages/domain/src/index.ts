@@ -106,7 +106,7 @@ export declare namespace View {
   /** An event a view emitted, with its state after it. */
   export type Entry<S, E, Id = string> = ViewModule.Entry<S, E, Id>;
   export type Page<E> = ViewModule.Page<E>;
-  /** What `MyView.evolveLocal` applies. */
+  /** What `MyView.evolve` applies. */
   export type LocalInput<Def, Key extends AggregateModule.Any> = ViewModule.LocalInput<Def, Key>;
 }
 /** A read model folded from events, per key. See {@link ViewModule.make}. */

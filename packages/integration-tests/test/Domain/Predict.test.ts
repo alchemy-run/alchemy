@@ -303,7 +303,7 @@ describe("Domain Aggregate.predict", () => {
   );
 });
 
-describe("Domain View.evolveLocal", () => {
+describe("Domain View.evolve", () => {
   it.live("predicted events folded by the view give the server's view state", () =>
     Effect.gen(function* () {
       const accounts = yield* Account;
@@ -320,7 +320,7 @@ describe("Domain View.evolveLocal", () => {
       if (local._tag !== "Accepted") return expect(local._tag).toBe("Accepted");
       const predicted = local.events.reduce(
         (state, event, index) =>
-          Balance.evolveLocal(state, {
+          Balance.evolve(state, {
             name: "Account",
             event,
             source: a1,
@@ -346,7 +346,7 @@ describe("Domain View.evolveLocal", () => {
       const local = Transfer.predict(Transfer.definition.initial, command, { id: "t-1", now });
       if (local._tag !== "Accepted") return expect(local._tag).toBe("Accepted");
       const fold = (key: string) =>
-        Flows.evolveLocal(null, {
+        Flows.evolve(null, {
           name: "Transfer",
           event: local.events[0]!,
           source: Transfer.ref("t-1"),

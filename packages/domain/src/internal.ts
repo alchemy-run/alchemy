@@ -107,7 +107,7 @@ export const judge = (
 type AnyHandler = (...args: ReadonlyArray<unknown>) => unknown;
 type HandlerMap = { readonly [key: string]: AnyHandler | Record<string, AnyHandler | undefined> };
 
-/** One input for a view's local evolve. @internal */
+/** One input for a view's evolve. @internal */
 export interface LocalViewInput {
   readonly name: string;
   readonly event: { readonly _tag: string };

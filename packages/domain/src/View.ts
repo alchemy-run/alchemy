@@ -438,8 +438,8 @@ export const make = <
     static readonly State = definition.state;
     /** Derived values, computed from a state when read. */
     static readonly computed = definition.computed ?? {};
-    /** Apply one input to one key's state, locally. */
-    static evolveLocal(state: unknown, input: LocalViewInput) {
+    /** Apply one input to one key's state, as the server's view does. */
+    static evolve(state: unknown, input: LocalViewInput) {
       return evolveView({ definition }, state, input);
     }
   } as unknown as ViewClass<
@@ -463,7 +463,7 @@ type LocalSourceInput<I> = I extends {
   ? { readonly name: N; readonly event: E; readonly source: R; readonly state?: S }
   : never;
 
-/** What {@link ViewClass.evolveLocal} applies: a source input, its envelope, and the key. */
+/** What {@link ViewClass.evolve} applies: a source input, its envelope, and the key. */
 export type LocalInput<Def, Key extends Aggregate.Any> = (Def extends {
   readonly from: infer From extends ReadonlyArray<unknown>;
 }
@@ -504,7 +504,7 @@ export interface ViewClass<
    * ```typescript
    * const next = outcome.events.reduce(
    *   (state, event, i) =>
-   *     AccountSummary.evolveLocal(state, {
+   *     AccountSummary.evolve(state, {
    *       name: "Account",
    *       event,
    *       source: Account.ref(id),
@@ -514,7 +514,7 @@ export interface ViewClass<
    * );
    * ```
    */
-  evolveLocal(state: St | null, input: LocalInput<Def, Key>): St | null;
+  evolve(state: St | null, input: LocalInput<Def, Key>): St | null;
   readonly "~state": St;
   readonly "~events": Out;
 }
