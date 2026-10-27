@@ -131,7 +131,7 @@ const BankInMemory = Bank.layer(BankHandlers).pipe(Layer.provide(Layer.mergeAll(
 const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(Layer.provideMerge(BankInMemory));
 
 const asCustomer = (id: string) =>
-  CustomerApi.testClient.pipe(Effect.provide(sessionClient(`customer:${id}`)));
+  CustomerApi.localClient.pipe(Effect.provide(sessionClient(`customer:${id}`)));
 
 it.live("only the owner may withdraw", () =>
   Effect.gen(function* () {
@@ -145,7 +145,7 @@ it.live("only the owner may withdraw", () =>
 );
 ```
 
-`testClient` (the same client as `localClient`) talks to the in-memory host directly. Use `Domain.protocolHttp` with a local HTTP server to cover the wire too.
+`localClient` talks to the in-memory host directly. Use `Domain.protocolHttp` with a local HTTP server to cover the wire too.
 
 ## Integration: the deployed stack
 

@@ -271,16 +271,10 @@ export interface ApiClass<
    * Build {@link Client} in process, like {@link localClient}, for the life of
    * the Layer. Code that uses `Client` runs the same over {@link layerClient}.
    */
-  readonly layerLocal: Layer.Layer<
+  readonly layerLocalClient: Layer.Layer<
     ClientKey<Name>,
     never,
     Model.Internals | MiddlewareServices<Entries> | MiddlewareClients<Entries>
-  >;
-  /** The same client as {@link localClient}, under the name tests use. */
-  readonly testClient: Effect.Effect<
-    ApiClient<Entries[number]>,
-    never,
-    Scope.Scope | Model.Internals | MiddlewareServices<Entries> | MiddlewareClients<Entries>
   >;
 }
 
@@ -750,8 +744,7 @@ const build = (
       Client,
       layerClient: Layer.effect(Client, client),
       localClient,
-      layerLocal: Layer.effect(Client, localClient),
-      testClient: localClient,
+      layerLocalClient: Layer.effect(Client, localClient),
     },
   );
 };

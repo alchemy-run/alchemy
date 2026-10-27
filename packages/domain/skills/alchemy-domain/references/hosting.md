@@ -61,7 +61,7 @@ const bank = yield* CustomerApi.localClient.pipe(Effect.provide(asSystem));   //
 yield* bank.DepositMoney({ target: accountId, amount });
 ```
 
-- Build `localClient` per request in a Worker. `layerLocal` provides `CustomerApi.Client` in process, for long-lived processes and scripts.
+- Build `localClient` per request in a Worker. `layerLocalClient` provides `CustomerApi.Client` in process, for long-lived processes and scripts.
 - Do not send a request to the Worker's own URL, and do not pass a verified secret through a header to `localClient` to be checked again.
 
 ## Live reads

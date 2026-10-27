@@ -428,7 +428,7 @@ const World = SessionLive.pipe(
 );
 
 const signedInAs = (customerId: string) =>
-  BankApi.testClient.pipe(Effect.provide(sessionClient(customerId)));
+  BankApi.localClient.pipe(Effect.provide(sessionClient(customerId)));
 
 const inBank = <A, E>(effect: Effect.Effect<A, E, Scope.Scope | Layer.Success<typeof World>>) =>
   effect.pipe(Effect.scoped, Effect.provide(World));
@@ -457,7 +457,7 @@ it.live("a customer registers, deposits, and reads only their own balance", () =
 );
 ```
 
-`testClient` calls the Api in the same process, through the real middleware. Each client is signed in as one customer, and someone else's balance comes back as `NotOwner`.
+`localClient` calls the Api in the same process, through the real middleware. Each client is signed in as one customer, and someone else's balance comes back as `NotOwner`.
 
 ```sh
 bun vitest run

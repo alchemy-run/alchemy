@@ -28,9 +28,9 @@ const BankInMemory = Bank.layer(BankHandlers).pipe(
 const World = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(Layer.provideMerge(BankInMemory));
 
 const asCustomer = (id: string) =>
-  CustomerApi.testClient.pipe(Effect.provide(sessionClient(`customer:${id}`)));
+  CustomerApi.localClient.pipe(Effect.provide(sessionClient(`customer:${id}`)));
 const asAgent = (id: string) =>
-  SupportApi.testClient.pipe(Effect.provide(sessionClient(`agent:${id}`)));
+  SupportApi.localClient.pipe(Effect.provide(sessionClient(`agent:${id}`)));
 
 /** Each test gets a fresh bank. */
 const inBank = <A, E>(effect: Effect.Effect<A, E, Scope.Scope | Layer.Success<typeof World>>) =>
@@ -138,7 +138,9 @@ it.live("a customer can only register themselves", () =>
 it.live("a request without a session is unauthorized", () =>
   inBank(
     Effect.gen(function* () {
-      const anonymous = yield* CustomerApi.testClient.pipe(Effect.provide(sessionClient("nobody")));
+      const anonymous = yield* CustomerApi.localClient.pipe(
+        Effect.provide(sessionClient("nobody")),
+      );
       const error = yield* anonymous
         .RegisterCustomer({
           target: CustomerId.make("c-1"),

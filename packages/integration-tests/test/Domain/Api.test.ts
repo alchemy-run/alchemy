@@ -97,31 +97,22 @@ describe("Domain Api", () => {
     }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(World, AuthorSessionLive))),
   );
 
-  it.live("layerLocal provides the Api's Client in process", () => {
-    // Written against `NotesApi.Client`, so it runs remotely (layerClient) or in process (layerLocal).
-    const writeAs = (author: string) =>
-      Effect.gen(function* () {
-        const notes = yield* NotesApi.Client;
-        return yield* notes.Write(
-          { target: "n-3", text: "shared code" },
-          { headers: { "x-author": author } },
-        );
-      });
+  it.live("layerLocalClient provides the Api's Client in process", () => {
+    // Written against `NotesApi.Client`, so it runs remotely (layerClient) or in process (layerLocalClient).
+    const writeAs = Effect.fn(function* (author: string) {
+      const notes = yield* NotesApi.Client;
+      return yield* notes.Write(
+        { target: "n-3", text: "shared code" },
+        { headers: { "x-author": author } },
+      );
+    });
     return writeAs("sam").pipe(
       Effect.map(({ reply }) => expect(reply).toEqual({ by: "sam" })),
-      Effect.provide(NotesApi.layerLocal),
-      Effect.provide(Layer.mergeAll(World, AuthorSessionLive)),
+      Effect.provide(
+        NotesApi.layerLocalClient.pipe(
+          Layer.provideMerge(Layer.mergeAll(World, AuthorSessionLive)),
+        ),
+      ),
     );
   });
-
-  it.live("testClient is the same in-process client", () =>
-    Effect.gen(function* () {
-      const notes = yield* NotesApi.testClient;
-      const { reply } = yield* notes.Write(
-        { target: "n-4", text: "still works" },
-        { headers: { "x-author": "sam" } },
-      );
-      expect(reply).toEqual({ by: "sam" });
-    }).pipe(Effect.scoped, Effect.provide(Layer.mergeAll(World, AuthorSessionLive))),
-  );
 });
