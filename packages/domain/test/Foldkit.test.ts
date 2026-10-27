@@ -6,6 +6,7 @@ import * as RpcClientError from "effect/rpc/RpcClientError";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import * as Foldkit from "../src/Foldkit.ts";
+import * as Domain from "../src/index.ts";
 import { Client, CounterApi, CounterId } from "./Counter.ts";
 
 const Counter = Foldkit.commands(CounterApi);
@@ -151,3 +152,62 @@ it.live("does not open a disabled watch", () =>
     Effect.provide(Client),
   ),
 );
+
+type FeedModel = { id: typeof CounterId.Type; cursor: Option.Option<number>; online: boolean };
+const feed = Foldkit.viewEvents(CounterApi, "Total", {
+  key: (model: FeedModel) => model.id,
+  cursor: (model) => model.cursor,
+  isEnabled: (model) => model.online,
+  onEntry: (entry) => `entry:${entry.envelope.seq}:${entry.envelope.commandId}`,
+  onCaughtUp: (cursor) => `caught:${cursor}`,
+  onFailure: (error) => `failed:${error._tag}`,
+});
+const dependencies = { key: target, cursor: Option.none<number>(), isEnabled: true };
+
+it.live("resumes from the latest Model cursor and preserves source command ids", () =>
+  Effect.gen(function* () {
+    const client = yield* CounterApi.Client;
+    const receipt = yield* client.Increment(target, { amount: 2 }, { commandId: "page:0" });
+    yield* client.Increment(target, { amount: 3 }, { commandId: "page:1" });
+    yield* client.Total.snapshot(target, { atLeast: { stream: receipt.stream, version: 2 } });
+    const messages = yield* feed
+      .dependenciesToStream(dependencies, () => ({ ...dependencies, cursor: Option.some(1) }))
+      .pipe(Stream.take(2), Stream.runCollect);
+    expect(messages).toEqual(["entry:2:page:1", "caught:2"]);
+  }).pipe(Effect.provide(Client)),
+);
+
+it.live("drops duplicate entries while allowing gaps in filtered feeds", () =>
+  Effect.gen(function* () {
+    const client = yield* CounterApi.Client;
+    const receipt = yield* client.Increment(target, { amount: 2 }, { commandId: "page:0" });
+    yield* client.Total.snapshot(target, { atLeast: receipt });
+    const frames = yield* client.Total.events(target).pipe(Stream.take(2), Stream.runCollect);
+    const entries = frames.filter(Domain.Read.isEvent);
+    const replay = entries.flatMap((entry) => [
+      entry,
+      entry,
+      { ...entry, envelope: { ...entry.envelope, seq: 5 } },
+    ]);
+    const source = Layer.succeed(CounterApi.Client, {
+      ...client,
+      Total: { ...client.Total, events: () => Stream.fromIterable(replay) },
+    });
+    const messages = yield* feed
+      .dependenciesToStream(dependencies, () => dependencies)
+      .pipe(Stream.runCollect, Effect.provide(source));
+    expect(messages).toEqual(["entry:1:page:0", "entry:5:page:0"]);
+  }).pipe(Effect.provide(Client)),
+);
+
+it("keeps the event stream alive across cursor changes", () => {
+  expect(feed.keepAliveEquivalence(dependencies, { ...dependencies, cursor: Option.some(5) })).toBe(
+    true,
+  );
+  expect(
+    feed.keepAliveEquivalence(dependencies, { ...dependencies, key: CounterId.make("two") }),
+  ).toBe(false);
+  expect(feed.keepAliveEquivalence(dependencies, { ...dependencies, isEnabled: false })).toBe(
+    false,
+  );
+});

@@ -11,6 +11,7 @@ import { defineMessageUnion, type MessageUnion } from "foldkit/message";
 import type * as Api from "./Api.ts";
 import type * as DomainCommand from "./Command.ts";
 import * as Key from "./Key.ts";
+import * as Read from "./Read.ts";
 import type * as View from "./View.ts";
 
 /** Per-call headers, resolved at execution time and excluded from replayable args. */
@@ -229,5 +230,106 @@ export function watchView(
             Stream.catch((error) => Stream.succeed(options.onFailure(error))),
           )
         : Stream.empty,
+  };
+}
+
+/** Callbacks for a resumable View output feed. The app stores the cursor after applying each entry. */
+export interface EventsOptions<Model, Message, V extends View.Any> {
+  readonly key: (model: Model) => ViewKey<V>;
+  readonly cursor: (model: Model) => Option.Option<number>;
+  readonly isEnabled?: (model: Model) => boolean;
+  readonly onEntry: (entry: View.Entry<View.StateOf<V>, View.EventOf<V>, ViewKey<V>>) => Message;
+  readonly onCaughtUp: (cursor: number) => Message;
+  readonly onFailure: (error: Api.ReadError<V["definition"]>) => Message;
+}
+
+/** Follow View output entries after the Model's cursor, without counting sequence gaps. */
+export function viewEvents<A extends Api.Any, Name extends Views<A>["viewName"], Model, Message>(
+  api: A,
+  name: Name,
+  options: EventsOptions<Model, Message, ViewNamed<A, Name>>,
+): {
+  readonly dependenciesSchema: Schema.Struct<{
+    key: Schema.Schema<ViewKey<ViewNamed<A, Name>>>;
+    cursor: Schema.Schema<Option.Option<number>>;
+    isEnabled: typeof Schema.Boolean;
+  }>;
+  readonly modelToDependencies: (model: Model) => {
+    key: ViewKey<ViewNamed<A, Name>>;
+    cursor: Option.Option<number>;
+    isEnabled: boolean;
+  };
+  readonly keepAliveEquivalence: (
+    left: { key: ViewKey<ViewNamed<A, Name>>; cursor: Option.Option<number>; isEnabled: boolean },
+    right: { key: ViewKey<ViewNamed<A, Name>>; cursor: Option.Option<number>; isEnabled: boolean },
+  ) => boolean;
+  readonly dependenciesToStream: (
+    dependencies: {
+      key: ViewKey<ViewNamed<A, Name>>;
+      cursor: Option.Option<number>;
+      isEnabled: boolean;
+    },
+    readDependencies: () => {
+      key: ViewKey<ViewNamed<A, Name>>;
+      cursor: Option.Option<number>;
+      isEnabled: boolean;
+    },
+  ) => Stream.Stream<Message, never, A["Client"]["Identifier"]>;
+};
+export function viewEvents(
+  api: Api.Any,
+  name: string,
+  options: EventsOptions<unknown, unknown, View.Any>,
+): unknown {
+  const view = api.entries.find(
+    (entry): entry is View.Any => entry.kind === "View" && entry.viewName === name,
+  )!;
+  const keySchema = Schema.toType(Key.idSchemaOf(view.definition.key));
+  const sameKey = Schema.toEquivalence(keySchema);
+  type Dependencies = { key: string; cursor: Option.Option<number>; isEnabled: boolean };
+  return {
+    dependenciesSchema: Schema.Struct({
+      key: keySchema,
+      cursor: Schema.Option(Schema.Number),
+      isEnabled: Schema.Boolean,
+    }),
+    modelToDependencies: (model: unknown): Dependencies => ({
+      key: options.key(model),
+      cursor: options.cursor(model),
+      isEnabled: options.isEnabled?.(model) ?? true,
+    }),
+    keepAliveEquivalence: (left: Dependencies, right: Dependencies) =>
+      sameKey(left.key, right.key) && left.isEnabled === right.isEnabled,
+    dependenciesToStream: (_: Dependencies, readDependencies: () => Dependencies) =>
+      Stream.suspend(() => {
+        const { key, cursor, isEnabled } = readDependencies();
+        if (!isEnabled) {
+          return Stream.empty;
+        }
+        let deliveredCursor = Option.getOrElse(cursor, () => 0);
+        return Stream.unwrap(
+          Effect.map(Effect.service(api.Client), (client) =>
+            (client as Record<string, Api.ViewClient<View.Any>>)[name].events(key, {
+              after: Option.getOrUndefined(cursor),
+            }),
+          ),
+        ).pipe(
+          Stream.filter((frame) => {
+            if (Read.isCaughtUp(frame)) {
+              return true;
+            }
+            const appliedCursor = Option.getOrElse(readDependencies().cursor, () => 0);
+            if (frame.envelope.seq <= Math.max(deliveredCursor, appliedCursor)) {
+              return false;
+            }
+            deliveredCursor = frame.envelope.seq;
+            return true;
+          }),
+          Stream.map((frame) =>
+            Read.isCaughtUp(frame) ? options.onCaughtUp(frame.cursor) : options.onEntry(frame),
+          ),
+          Stream.catch((error) => Stream.succeed(options.onFailure(error))),
+        );
+      }),
   };
 }
