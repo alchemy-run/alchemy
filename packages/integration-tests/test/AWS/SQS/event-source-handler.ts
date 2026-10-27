@@ -16,6 +16,11 @@ export class QueueEventSourceFunction extends AWS.Lambda.Function<AWS.Lambda.Fun
   "QueueEventSourceFunction",
 ) {}
 
+// Provided around `consumeQueueMessages` (not around the Function), so the
+// handler only sees it if Lambda keeps the services a listener was
+// registered with.
+export class ForwardPrefix extends Context.Service<ForwardPrefix, string>()("ForwardPrefix") {}
+
 export class SourceAndResultQueues extends Context.Service<
   SourceAndResultQueues,
   {
@@ -46,12 +51,13 @@ export default QueueEventSourceFunction.make(
       source,
       { batchSize: 10 },
       Effect.fn(function* (event) {
+        const prefix = yield* ForwardPrefix;
         yield* Stream.fromIterable(event.Records).pipe(
-          Stream.map((record) => ({ MessageBody: record.body })),
+          Stream.map((record) => ({ MessageBody: `${prefix}${record.body}` })),
           Stream.run(sink),
         );
       }),
-    );
+    ).pipe(Effect.provideService(ForwardPrefix, "forwarded:"));
 
     const sourceQueueUrl = yield* source.queueUrl;
     const sourceQueueArn = yield* source.queueArn;
