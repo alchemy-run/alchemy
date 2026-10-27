@@ -2,6 +2,7 @@ import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import { expect } from "@alchemy.run/test";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
+import * as resourcemanagerV1 from "@distilled.cloud/gcp/unstable/cloudresourcemanager_v1";
 import { adopt } from "alchemy/AdoptPolicy";
 import { State } from "alchemy/State";
 import * as Test from "alchemy/Test/Alchemy";
@@ -195,19 +196,21 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       // Strip Alchemy's ownership labels out of band and forget the state,
-      // leaving a project Alchemy doesn't own.
-      yield* resourcemanager.patchProjects({
-        name: created.name,
-        updateMask: "labels",
-        body: { name: created.name, labels: {}, etag: created.etag },
+      // leaving a project Alchemy doesn't own. v1 `projects.update` replaces
+      // labels; v3 `projects.patch` would only merge into them.
+      const foreign = yield* resourcemanagerV1.getProjects({ projectId: created.projectId });
+      yield* resourcemanagerV1.updateProjects({
+        projectId: created.projectId,
+        body: { ...foreign, labels: {} },
       });
-      yield* resourcemanager.getProjects({ name: created.name }).pipe(
+      const stripped = yield* resourcemanager.getProjects({ name: created.name }).pipe(
         Effect.repeat({
           schedule: Schedule.spaced("1 second"),
           until: (resource) => resource.labels?.["alchemy-id"] === undefined,
           times: 10,
         }),
       );
+      expect(stripped.labels?.["alchemy-id"]).toBeUndefined();
       yield* Effect.gen(function* () {
         const state = yield* yield* State;
         yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "Sandbox" });
