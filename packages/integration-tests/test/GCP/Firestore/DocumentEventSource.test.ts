@@ -4,6 +4,8 @@ import { makeObjectMedia } from "@alchemy.run/gcp/Storage/ObjectMedia";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
+import * as storage from "@distilled.cloud/gcp/storage_v1";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import DocumentEventsService, {
@@ -13,6 +15,8 @@ import DocumentEventsService, {
 } from "./fixtures/document-events.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
+
+class NotDeliveredYet extends Data.TaggedError("NotDeliveredYet") {}
 
 test.provider(
   "document changes reach an effect-native Function through Eventarc",
@@ -45,6 +49,25 @@ test.provider(
           }),
           Effect.map((downloaded) => JSON.parse(new TextDecoder().decode(downloaded.body))),
         );
+
+      // A new trigger starts delivering a while after Eventarc reports it
+      // ready: write warm-up items until one arrives.
+      yield* Effect.gen(function* () {
+        const id = `warmup-${yield* Effect.sync(() => crypto.randomUUID().slice(0, 8))}`;
+        yield* write(`items/${id}`, { warmup: true });
+        yield* Effect.sleep("20 seconds");
+        const { items = [] } = yield* storage.listObjects({
+          bucket: out.bucket,
+          prefix: marker("items", "created", `items/${id}`),
+        });
+        if (items.length === 0) return yield* new NotDeliveredYet();
+      }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "NotDeliveredYet",
+          schedule: Schedule.spaced("1 second"),
+          times: 15,
+        }),
+      );
 
       // Out of band: create, update and delete one item; write a nested log.
       yield* write("items/apple", { price: 1 });
