@@ -47,7 +47,12 @@ export type WorkloadIdentityPool = Resource<
   "GCP.IAM.WorkloadIdentityPool",
   WorkloadIdentityPoolProps,
   {
-    /** Full resource name `projects/{project}/locations/global/workloadIdentityPools/{id}`. */
+    /**
+     * Full resource name as GCP returns it, with the project number:
+     * `projects/{projectNumber}/locations/global/workloadIdentityPools/{id}`.
+     * Prefix it with `principalSet://iam.googleapis.com/` to grant roles to
+     * federated identities.
+     */
     name: string;
     /** Project that owns the pool. */
     project: string;
@@ -84,6 +89,18 @@ export type WorkloadIdentityPool = Resource<
  * });
  * ```
  *
+ * ### Impersonating a Service Account
+ * **Example:** Let one repository deploy as a service account
+ * ```typescript
+ * const deployer = yield* GCP.IAM.ServiceAccount("Deployer", {});
+ * yield* GCP.IAM.Member("GitHubDeployer", {
+ *   kind: "iam.serviceAccount",
+ *   name: deployer.name,
+ *   role: "roles/iam.workloadIdentityUser",
+ *   member: Output.interpolate`principalSet://iam.googleapis.com/${pool.name}/attribute.repository/my-org/my-repo`,
+ * });
+ * ```
+ *
  * @resource
  * @category IAM
  */
@@ -103,7 +120,9 @@ const toAttrs = (
   project: string,
   poolId: string,
 ): WorkloadIdentityPool["Attributes"] => ({
-  name: poolName(project, poolId),
+  // GCP returns the name with the project number, which `principalSet://`
+  // members require.
+  name: pool.name ?? poolName(project, poolId),
   project,
   workloadIdentityPoolId: poolId,
   displayName: pool.displayName || undefined,
