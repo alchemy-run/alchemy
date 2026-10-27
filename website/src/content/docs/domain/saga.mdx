@@ -9,7 +9,7 @@ A saga runs a process that spans several aggregates. An aggregate changes one in
 
 A saga is an [Effect workflow](https://effect.website/docs/workflow). Each step's result is stored, so a run that's interrupted resumes after its last finished step, and a run can wait hours or days for a signal or a timer. A policy usually decides when to start one.
 
-The bank's transfer is a saga: it debits one account, credits another, and refunds the debit if the credit fails.
+In the example bank, a transfer is a saga: it debits one account, credits another, and refunds the debit if the credit fails.
 
 <DAG
   nodes={[
@@ -40,7 +40,7 @@ Instead, it's a sequence of steps, each committed on its own: debit the source, 
 
 ## Undo with a new fact, not an erasure
 
-When a later step fails, the earlier ones have already happened. Their events are facts and can't be erased. So the saga undoes them the way a bank would, by recording another fact that reverses the effect: a debited transfer whose credit is refused is refunded, and the account's history shows the debit and the refund, one after the other.
+When a later step fails, the earlier ones have already happened. Their events are facts and can't be erased. So the saga undoes them the way a business would, by recording another fact that reverses the effect: a debited transfer whose credit is refused is refunded, and the account's history shows the debit and the refund, one after the other.
 
 <DAG
   nodes={[

@@ -6,7 +6,7 @@ import {
   type SqlExecutor,
 } from "./Format.ts";
 import { classifyTable, tableColumns } from "./Introspect.ts";
-import { quoteIdentifier, sqlLiteral, timestampPrefixMillis } from "./Utils.ts";
+import { bookkeepingColumns, quoteIdentifier, sqlLiteral, timestampPrefixMillis } from "./Utils.ts";
 
 /**
  * A row of applied history harvested from a foreign migration tool's table,
@@ -224,4 +224,4 @@ export const convertedRowInsertSql = (
   dialect: SqlExecutor["dialect"],
   row: ConvertedRow,
 ): string =>
-  `INSERT INTO ${quoteIdentifier(table, dialect)} (hash, created_at, name, applied_at) VALUES (${sqlLiteral(row.hash ?? "")}, ${sqlLiteral(row.createdAtMillis ?? null)}, ${sqlLiteral(row.name)}, ${sqlLiteral(row.appliedAt ?? null)});`;
+  `INSERT INTO ${quoteIdentifier(table, dialect)} (${bookkeepingColumns(dialect, "hash", "created_at", "name", "applied_at")}) VALUES (${sqlLiteral(row.hash ?? "", dialect)}, ${sqlLiteral(row.createdAtMillis ?? null, dialect)}, ${sqlLiteral(row.name, dialect)}, ${sqlLiteral(row.appliedAt ?? null, dialect)});`;

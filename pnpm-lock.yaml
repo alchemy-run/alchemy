@@ -4998,9 +4998,6 @@ importers:
       '@alchemy.run/gcp':
         specifier: workspace:*
         version: link:../../packages/gcp
-      '@alchemy.run/sql':
-        specifier: workspace:*
-        version: link:../../packages/sql
       '@distilled.cloud/gcp':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/gcp
@@ -10009,6 +10006,9 @@ importers:
       '@alchemy.run/redis':
         specifier: workspace:*
         version: link:../redis
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
@@ -38996,7 +38996,7 @@ snapshots:
 
   '@types/sax@1.2.7':
     dependencies:
-      '@types/node': 24.13.3
+      '@types/node': 26.6.5
 
   '@types/unist@2.0.11': {}
 

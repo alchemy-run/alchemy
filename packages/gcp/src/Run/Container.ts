@@ -235,7 +235,11 @@ const repositoryFor = Effect.fn(function* (id: string) {
 /** Containers bound by this container's own bindings, flattened. */
 export const boundContainersOf = (
   bindings: readonly ResourceBinding<GcpHostBinding>[],
-): BoundContainer[] => {
+): BoundContainer[] =>
+  flattenContainers(bindings.flatMap((binding) => binding.data?.containers ?? []));
+
+/** These containers and every sidecar they bind, once each by name. */
+export const flattenContainers = (containers: readonly BoundContainer[]): BoundContainer[] => {
   const seen = new Map<string, BoundContainer>();
   const visit = (container: BoundContainer) => {
     const name = container.spec.name ?? "";
@@ -243,11 +247,21 @@ export const boundContainersOf = (
     seen.set(name, container);
     for (const sidecar of container.sidecars ?? []) visit(sidecar);
   };
-  for (const binding of bindings) {
-    for (const container of binding.data?.containers ?? []) visit(container);
-  }
+  for (const container of containers) visit(container);
   return [...seen.values()];
 };
+
+/**
+ * A `GCP.Run.Container` listed in a revision template reaches the
+ * provider as its attributes (the engine resolves resource references in
+ * props).
+ */
+export const isContainerAttributes = (value: unknown): value is Container["Attributes"] =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as { spec?: unknown }).spec === "object" &&
+  Array.isArray((value as { iam?: unknown }).iam) &&
+  Array.isArray((value as { sidecars?: unknown }).sidecars);
 
 /** Names of the containers bound directly by these bindings. */
 export const directContainerNames = (bindings: readonly ResourceBinding<GcpHostBinding>[]) => [

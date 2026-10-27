@@ -1,6 +1,7 @@
 import {
   inlineSqlParams,
   MigrationError,
+  migrationError,
   runMigrations,
   type MigrationDialect,
   type NormalizedMigrationsInput,
@@ -99,14 +100,6 @@ const unsupportedEngine = (identifier: string, engine: string) =>
     message: `'${identifier}' runs ${engine || "an unknown engine"}; migrations support PostgreSQL, MySQL and MariaDB engines (including Aurora)`,
   });
 
-const toMigrationError =
-  (context: string) =>
-  <E extends { readonly _tag: string; readonly message?: string }>(cause: E) =>
-    new MigrationError({
-      message: `${context} failed: ${cause.message ?? cause._tag}`,
-      cause,
-    });
-
 // An auto-paused Serverless v2 writer resumes on the first request.
 const resumeRetry = {
   while: (e: { readonly _tag: string }) => e._tag === "DatabaseResumingException",
@@ -142,7 +135,7 @@ const makeDataApiExecutor = Effect.fn(function* (options: {
         formatRecordsAs: "JSON",
       }).pipe(
         Effect.retry(resumeRetry),
-        Effect.mapError(toMigrationError("Data API query")),
+        Effect.mapError(migrationError("Data API query")),
         Effect.flatMap((result) =>
           Effect.try({
             try: () =>
@@ -165,7 +158,7 @@ const makeDataApiExecutor = Effect.fn(function* (options: {
           database,
         }).pipe(
           Effect.retry(resumeRetry),
-          Effect.mapError(toMigrationError("Data API begin transaction")),
+          Effect.mapError(migrationError("Data API begin transaction")),
         );
         if (!transactionId) {
           return yield* new MigrationError({ message: "Data API returned no transaction id" });
@@ -181,7 +174,7 @@ const makeDataApiExecutor = Effect.fn(function* (options: {
           Effect.onError(() =>
             rollbackTransaction({ resourceArn, secretArn, transactionId }).pipe(Effect.ignore),
           ),
-          Effect.mapError(toMigrationError("Data API migration batch")),
+          Effect.mapError(migrationError("Data API migration batch")),
         );
       }),
   } satisfies SqlExecutor;
@@ -203,7 +196,7 @@ const makeRunnerExecutor = Effect.fn(function* (options: {
       const response = yield* invoke({
         FunctionName: functionArn,
         Payload: JSON.stringify(request),
-      }).pipe(Effect.mapError(toMigrationError(`Invoking migration runner ${functionArn}`)));
+      }).pipe(Effect.mapError(migrationError(`Invoking migration runner ${functionArn}`)));
       const body = response.Payload
         ? yield* response.Payload.pipe(
             Stream.decodeText(),
@@ -247,7 +240,7 @@ const makeRunnerExecutor = Effect.fn(function* (options: {
 const readSecretCredentials = Effect.fn(function* (secretArn: string) {
   const value = yield* secretsmanager
     .getSecretValue({ SecretId: secretArn })
-    .pipe(Effect.mapError(toMigrationError(`Reading secret ${secretArn}`)));
+    .pipe(Effect.mapError(migrationError(`Reading secret ${secretArn}`)));
   const secretString =
     value.SecretString === undefined
       ? "{}"

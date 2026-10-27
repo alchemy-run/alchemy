@@ -11,7 +11,7 @@ Events are the only thing an aggregate stores as its history. Its state, every v
 
 ## Events are the business's memory
 
-Businesses ran on events long before software. A bank's ledger is a list of things that happened, written in order and never erased: opened, deposited 100, withdrew 30. The balance at the bottom of the page is a sum of the lines above it. When the bank finds a mistake, it doesn't rub out a line; it writes a new one that corrects it.
+Businesses ran on events long before software. Take a bank's ledger. It's a list of things that happened, written in order and never erased: opened, deposited 100, withdrew 30. The balance at the bottom of the page is a sum of the lines above it. When the bank finds a mistake, it doesn't rub out a line; it writes a new one that corrects it.
 
 An event-sourced model keeps its history the same way. Each event is one line in the ledger of one aggregate instance. Everything else, the account's state, its statement, the customer's dashboard, is worked out from those lines. Because nothing is overwritten, you can always answer "how did it get like this?", and a question nobody thought to ask last year can be answered from history you already have.
 
@@ -32,7 +32,7 @@ An event-sourced model keeps its history the same way. Each event is one line in
 
 ## Find the events
 
-To find a business's events, ask its people to tell the story of their work as a series of things that happened, in order. "The customer registers. Their main account is opened. They deposit their pay. They withdraw cash. Late at night they withdraw again, and the account is frozen for review." Each sentence in the past tense is an event: `CustomerRegistered`, `AccountOpened`, `MoneyDeposited`, `MoneyWithdrawn`, `AccountFrozen`.
+To find a business's events, ask its people to tell the story of their work as a series of things that happened, in order. At a bank, it might go: "The customer registers. Their main account is opened. They deposit their pay. They withdraw cash. Late at night they withdraw again, and the account is frozen for review." Each sentence in the past tense is an event: `CustomerRegistered`, `AccountOpened`, `MoneyDeposited`, `MoneyWithdrawn`, `AccountFrozen`.
 
 Telling it as a story surfaces the things people care about, in their own words, and in the order they happen. The commands fall out next: for each event, ask what someone asked for to make it happen. The aggregates come after that: for each command, ask what has to be checked before it's allowed, and what state that check needs.
 
@@ -65,7 +65,7 @@ Events are created in exactly one place: an aggregate's `decide` handler, as its
 : [new MoneyWithdrawn({ amount: cmd.amount, balanceAfter: s.balance - cmd.amount })],
 ```
 
-The command declares which events it may record, so `decide` can't return anything else. Once they're committed, they're never changed or removed. A mistake is corrected the way a bank corrects one, with a new event that reverses it, so the history still shows both.
+The command declares which events it may record, so `decide` can't return anything else. Once they're committed, they're never changed or removed. A mistake is corrected the way an accountant corrects one, with a new event that reverses it, so the history still shows both.
 
 ## Record what readers will need
 

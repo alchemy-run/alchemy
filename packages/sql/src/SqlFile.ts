@@ -57,6 +57,30 @@ export const hashMigrations = (migrationsDir: string) =>
     }),
   );
 
+/**
+ * Apply `importFiles` (paths relative to `rootDir`): each file runs through
+ * `apply` once, and again only when its contents change. `previous` is the
+ * `importHashes` a prior deploy persisted; the result is the new
+ * `importHashes`, covering exactly the files still listed.
+ */
+export const applySqlImports = <E, R>(options: {
+  importFiles: ReadonlyArray<string> | undefined;
+  rootDir: string;
+  previous: Record<string, string> | undefined;
+  apply: (file: SqlFile) => Effect.Effect<void, E, R>;
+}) =>
+  Effect.gen(function* () {
+    const hashes: Record<string, string> = {};
+    for (const filePath of options.importFiles ?? []) {
+      const file = yield* readSqlFile(options.rootDir, filePath);
+      if (options.previous?.[filePath] !== file.hash) {
+        yield* options.apply(file);
+      }
+      hashes[filePath] = file.hash;
+    }
+    return hashes;
+  });
+
 export const hashImports = (importFiles: ReadonlyArray<string>, rootDir: string) =>
   Effect.gen(function* () {
     const hashes: Record<string, string> = {};

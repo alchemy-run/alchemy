@@ -1,13 +1,14 @@
 import {
   MigrationError,
+  migrationError,
   quoteIdentifier,
   resolveMigrations,
   runMigrations,
   type NormalizedMigrationsInput,
   type SqlExecutor,
   type StampedMigrationsState,
+  withPgClient,
 } from "@alchemy.run/sql/Migrations";
-import { importPg } from "@alchemy.run/sql/PostgresDriver";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -15,11 +16,7 @@ import type { Client } from "pg";
 import { generateDbAuthToken } from "../Connection/DbAuthToken.ts";
 import { dsqlIndexTarget, parseDsqlStatements, prepareDsqlStatements } from "./MigrationSql.ts";
 
-const migrationError = (cause: unknown) =>
-  new MigrationError({
-    message: `DSQL migration failed: ${cause instanceof Error ? cause.message : String(cause)}`,
-    cause,
-  });
+const dsqlError = migrationError("DSQL migration");
 
 /** Acquire a verified TLS connection using the deploy identity's admin token. */
 export const withDsqlClient = <A, E, R>(
@@ -32,36 +29,19 @@ export const withDsqlClient = <A, E, R>(
       hostname: endpoint,
       action: "DbConnectAdmin",
     });
-    return yield* Effect.acquireUseRelease(
-      Effect.tryPromise({
-        try: async () => {
-          const { Client } = await importPg();
-          const client = new Client({
-            host: endpoint,
-            port: 5432,
-            user: "admin",
-            database: "postgres",
-            password: Redacted.value(password),
-            ssl: { rejectUnauthorized: true },
-            connectionTimeoutMillis: 10_000,
-            // Client-side only: DSQL rejects a server-side `statement_timeout`.
-            query_timeout: 35_000,
-          });
-          // pg emits idle socket failures as events; the next query reports the
-          // unusable connection through the typed migration error channel.
-          client.on("error", () => {});
-          try {
-            await client.connect();
-          } catch (error) {
-            await client.end().catch(() => {});
-            throw error;
-          }
-          return client;
-        },
-        catch: migrationError,
-      }),
+    return yield* withPgClient(
+      {
+        host: endpoint,
+        port: 5432,
+        user: "admin",
+        database: "postgres",
+        password: Redacted.value(password),
+        ssl: { rejectUnauthorized: true },
+        connectionTimeoutMillis: 10_000,
+        // Client-side only: DSQL rejects a server-side `statement_timeout`.
+        query_timeout: 35_000,
+      },
       use,
-      (client) => Effect.promise(() => client.end().catch(() => {})),
     );
   });
 
@@ -80,7 +60,7 @@ export const makeDsqlMigrationExecutor = (
     Effect.tryPromise({
       try: async () =>
         (await client.query(sql, [...(params ?? [])])).rows as Array<Record<string, unknown>>,
-      catch: migrationError,
+      catch: dsqlError,
     }).pipe(
       Effect.retry({
         while: (error) => sqlState(error.cause) === "40001",

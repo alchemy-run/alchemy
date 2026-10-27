@@ -44,7 +44,14 @@ import {
   waitForOperation as waitForLongRunningOperation,
 } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
-import { boundContainersOf, directContainerNames } from "./Container.ts";
+import {
+  boundContainersOf,
+  directContainerNames,
+  flattenContainers,
+  isContainerAttributes,
+  type BoundContainer,
+  type Container,
+} from "./Container.ts";
 
 const DEFAULT_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 const MAX_NAME_LENGTH = 49;
@@ -162,8 +169,13 @@ export type ContainerSpec = {
    */
   livenessProbe?: Probe;
   /**
-   * Names of containers that must start, and pass their startup probe,
-   * before this one starts.
+   * Names of containers in the same revision that must start, and pass
+   * their startup probe, before this one starts. Without it, every
+   * container starts at once. It only orders startup: a dependency that
+   * crashes later doesn't stop this container.
+   *
+   * A container bound with `GCP.Run.bindContainer` or `GCP.Run.bindPort`
+   * is added for you.
    */
   dependsOn?: string[];
 };
@@ -180,8 +192,12 @@ export type RevisionScaling = {
 };
 
 export type RevisionTemplate = {
-  /** Containers that make up the revision. */
-  containers?: ContainerSpec[];
+  /**
+   * Containers that make up the revision. A `GCP.Run.Container` can be
+   * listed directly: its spec joins the revision, its bindings' roles go to
+   * the revision's service account, and the sidecars it binds join too.
+   */
+  containers?: (ContainerSpec | Container)[];
   /** Request timeout (e.g. `"300s"`). */
   timeout?: string;
   /** Max concurrent requests per instance. `0` uses the server default. */
@@ -519,6 +535,22 @@ export type ServiceShape = Main<ServiceServices>;
  * ```
  * The first container runs `main`; the rest deploy as sidecars.
  *
+ * **Example:** An image service with an Effect-native sidecar
+ * ```typescript
+ * const worker = yield* Worker; // a GCP.Run.Container
+ * const api = yield* GCP.Run.Service("api", {
+ *   template: {
+ *     containers: [
+ *       { image: proxyImage, ports: [{ containerPort: 8080 }], dependsOn: [worker.name] },
+ *       worker,
+ *     ],
+ *   },
+ * });
+ * ```
+ * A listed Container brings its bindings' roles and the sidecars it binds.
+ * `worker.name` is an Output that resolves to the container's name in the
+ * revision, so the proxy starts after it.
+ *
  * ### Effect-native Function with bindings
  * **Example:** Publish tweets to Pub/Sub, cache in Memorystore
  * ```typescript
@@ -702,9 +734,22 @@ const toId = (id: string, serviceId: string | undefined, existing?: string) =>
     );
   });
 
+/** `GCP.Run.Container`s listed in the template, as their resolved attributes. */
+const declaredContainersOf = (news: ServiceProps): BoundContainer[] =>
+  (news.template?.containers ?? []).filter(isContainerAttributes).map((container) => ({
+    spec: container.spec,
+    iam: container.iam,
+    sidecars: container.sidecars,
+  }));
+
 const desiredTemplate = (news: ServiceProps): cloudrun.GoogleCloudRunV2RevisionTemplate => {
   const template = news.template ?? {};
-  const [main = { image: DEFAULT_IMAGE }, ...rest] = template.containers ?? [];
+  // A listed `GCP.Run.Container` arrives resolved to its attributes, never
+  // as the resource the prop type names.
+  const containers = (template.containers ?? []).map((container): ContainerSpec =>
+    isContainerAttributes(container) ? container.spec : (container as ContainerSpec),
+  );
+  const [main = { image: DEFAULT_IMAGE }, ...rest] = containers;
   return {
     ...template,
     containers: [
@@ -1248,7 +1293,14 @@ export const ServiceProvider = () =>
       const hostBindings = bindings as ResourceBinding<GcpHostBinding>[];
       // Bound sidecars run as this service's account, so their bindings'
       // roles are granted to it.
-      const boundContainers = boundContainersOf(hostBindings);
+      // Bound sidecars, plus the sidecars of Containers listed in the
+      // template. Listed Containers are already in `template`.
+      const declaredContainers = declaredContainersOf(news);
+      const declaredNames = new Set(declaredContainers.map((container) => container.spec.name));
+      const boundContainers = flattenContainers([
+        ...boundContainersOf(hostBindings),
+        ...declaredContainers.flatMap((container) => container.sidecars),
+      ]).filter((container) => !declaredNames.has(container.spec.name));
       const identity = yield* resolveHostIdentity({
         project: env.project,
         hostType: HOST_TYPE,
@@ -1257,7 +1309,7 @@ export const ServiceProvider = () =>
         effectNative: news.main !== undefined,
         bindings: [
           ...hostBindings,
-          ...boundContainers.map((container) => ({
+          ...[...declaredContainers, ...boundContainers].map((container) => ({
             sid: `GCP.Run.Container(${container.spec.name})`,
             data: { iam: container.iam },
           })),

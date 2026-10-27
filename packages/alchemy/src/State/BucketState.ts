@@ -288,14 +288,27 @@ export const makeBucketState = (options: BucketStateOptions) =>
           Effect.gen(function* () {
             if (cursor.lost) return yield* Effect.fail(lostError(stack, stage));
             const existing = yield* readLease(key);
-            const observedAt = yield* Clock.currentTimeMillis;
-            const leaseLost =
-              existing === undefined ||
-              existing.record.token !== token ||
-              existing.record.expiresAt <= observedAt;
-            if (leaseLost) {
+            if (existing === undefined || existing.record.token !== token) {
               cursor.lost = true;
               return yield* Effect.fail(lostError(stack, stage));
+            }
+            const observedAt = yield* Clock.currentTimeMillis;
+            if (existing.record.expiresAt <= observedAt) {
+              // The lease lapsed without anyone taking it: a refresh queued
+              // behind a large deploy's writes missed its window. Take it
+              // back at the version we read, so a deploy that took it in
+              // the meantime wins and this one stops.
+              const reclaimed = yield* putLease(
+                key,
+                { token, expiresAt: observedAt + LEASE_TTL_MS },
+                { ifVersion: existing.version },
+              );
+              if (reclaimed === undefined) {
+                cursor.lost = true;
+                return yield* Effect.fail(lostError(stack, stage));
+              }
+              cursor.version = reclaimed;
+              return;
             }
             cursor.version = existing.version;
           }),
