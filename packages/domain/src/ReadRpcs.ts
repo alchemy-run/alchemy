@@ -15,15 +15,15 @@ import type * as View from "./View.ts";
  * @internal
  */
 
-// Lists every field of `Aggregate.Envelope`: the codec strips any field it doesn't name.
-export const EnvelopeSchema = Schema.Struct({
+// Typed as `Aggregate.Envelope`: the codec strips any field it doesn't name.
+export const EnvelopeSchema: Schema.Schema<Aggregate.Envelope> = Schema.Struct({
   id: Schema.String,
   stream: Schema.String,
   seq: Schema.Number,
   at: Schema.DateTimeUtc,
   commandId: Schema.String,
   correlationId: Schema.String,
-} satisfies { readonly [K in keyof Aggregate.Envelope]-?: Schema.Top });
+});
 
 /** Something an Api can expose for reading. */
 export type Readable = View.Any | Aggregate.Any | DomainStream.Any;
