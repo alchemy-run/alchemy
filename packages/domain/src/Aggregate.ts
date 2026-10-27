@@ -15,9 +15,10 @@ import * as RequestContext from "./RequestContext.ts";
 import type * as Telemetry from "./Telemetry.ts";
 
 /**
- * Instance type produced by a class.
+ * The instance type of a class: `InstanceOf<typeof NotOwner>` is `NotOwner`.
+ * Distributes over a union of classes.
  */
-export type Inst<C> = C extends abstract new (...args: any[]) => infer I ? I : never;
+export type InstanceOf<C> = C extends abstract new (...args: any[]) => infer I ? I : never;
 
 /**
  * Context passed to every `decide` handler.
@@ -87,11 +88,11 @@ type IdSchema = Schema.Top & { readonly Type: string; readonly Encoded: string }
 
 /** What `decide` returns for a command: events, a rejection, or an Effect of either. */
 export type Decision<C extends Command.Any> =
-  | ReadonlyArray<Inst<C["events"][number]>>
-  | Inst<C["rejects"][number]>
+  | ReadonlyArray<InstanceOf<C["events"][number]>>
+  | InstanceOf<C["rejects"][number]>
   | Effect.Effect<
-      ReadonlyArray<Inst<C["events"][number]>>,
-      Inst<C["rejects"][number]>,
+      ReadonlyArray<InstanceOf<C["events"][number]>>,
+      InstanceOf<C["rejects"][number]>,
       Command.ContextOf<C>
     >;
 
@@ -128,7 +129,7 @@ export interface Definition<
   readonly decide: {
     readonly [T in C[number]["tag"]]: (
       state: S["Type"],
-      command: Inst<ByTag<C[number], T>>,
+      command: InstanceOf<ByTag<C[number], T>>,
       ctx: DecideContext<Id["Type"]>,
     ) => Decision<ByTag<C[number], T>>;
   };
@@ -141,7 +142,7 @@ export interface Definition<
   readonly evolve: {
     readonly [T in E["tag"]]: (
       state: S["Type"],
-      event: Inst<ByTag<E, T>>,
+      event: InstanceOf<ByTag<E, T>>,
       envelope: Envelope<Id["Type"]>,
     ) => S["Type"];
   };
@@ -153,7 +154,7 @@ export interface Definition<
   readonly reply?: {
     readonly [T in ReplyTags<C[number]>]: (
       state: S["Type"],
-      events: ReadonlyArray<Inst<E>>,
+      events: ReadonlyArray<InstanceOf<E>>,
     ) => NonNullable<ByTag<C[number], T>["reply"]>["Type"];
   };
   /**
@@ -285,13 +286,13 @@ export interface Client<Def extends AnyDefinition> {
    * Requires the context the command's middleware provides (e.g. the current
    * actor): an Api's middleware provides it, other senders provide it.
    */
-  readonly send: <Cmd extends Inst<Def["commands"][number]>>(
+  readonly send: <Cmd extends InstanceOf<Def["commands"][number]>>(
     target: Target<Def>,
     command: Cmd,
     options?: SendOptions,
   ) => Effect.Effect<
-    Receipt<Inst<Def["events"][number]>, ReplyOf<CommandClassOf<Def, Cmd>>>,
-    Inst<CommandClassOf<Def, Cmd>["rejects"][number]>,
+    Receipt<InstanceOf<Def["events"][number]>, ReplyOf<CommandClassOf<Def, Cmd>>>,
+    InstanceOf<CommandClassOf<Def, Cmd>["rejects"][number]>,
     Command.ContextOf<CommandClassOf<Def, Cmd>>
   >;
   /**
@@ -303,7 +304,7 @@ export interface Client<Def extends AnyDefinition> {
    * Returns the command id to `unschedule` it by, and when it is due. Fails with `AlreadyExecuted` when the instance already handled a command
    * with that id.
    */
-  readonly schedule: <Cmd extends Inst<Schedulable<Def>>>(
+  readonly schedule: <Cmd extends InstanceOf<Schedulable<Def>>>(
     target: Target<Def>,
     command: Cmd,
     options: ScheduleOptions,
@@ -366,9 +367,9 @@ export type IdOf<A extends Any> = A["definition"]["id"]["Type"];
 /** The state type of an aggregate class. */
 export type StateOf<A extends Any> = A["definition"]["state"]["Type"];
 /** The event instance types of an aggregate class. */
-export type EventOf<A extends Any> = Inst<A["definition"]["events"][number]>;
+export type EventOf<A extends Any> = InstanceOf<A["definition"]["events"][number]>;
 /** The command instance types of an aggregate class. */
-export type CommandOf<A extends Any> = Inst<A["definition"]["commands"][number]>;
+export type CommandOf<A extends Any> = InstanceOf<A["definition"]["commands"][number]>;
 /** The requirement identifier of an aggregate class. */
 export type Identifier<A extends Any> = A extends Context.Key<infer I, unknown> ? I : never;
 

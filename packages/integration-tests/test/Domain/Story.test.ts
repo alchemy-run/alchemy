@@ -647,6 +647,20 @@ describe("Domain Story", () => {
         yield* client.Totals.get("c-1", { ...sam, atLeast, where: { total: { gt: 10 } } }),
       ).toBeNull();
       expect((yield* client.Totals.get("c-1", guest).pipe(Effect.flip))._tag).toBe("NotAnOperator");
+      // A snapshot is judged like a get, and its filter narrows the same way.
+      expect(yield* client.Totals.snapshot("c-1", { ...sam, atLeast })).toEqual({
+        state: { total: 3 },
+        cursor: "1",
+      });
+      expect(
+        (yield* client.Totals.snapshot("c-1", { ...sam, where: { total: { gt: 10 } } })).state,
+      ).toBeNull();
+      expect((yield* client.Totals.snapshot("c-1", guest).pipe(Effect.flip))._tag).toBe(
+        "NotAnOperator",
+      );
+      expect((yield* client.Totals.list("c-1", guest).pipe(Effect.flip))._tag).toBe(
+        "NotAnOperator",
+      );
       expect(yield* client.Counter.get("c-1", sam)).toEqual({ total: 3, capped: false });
       expect((yield* client.Counter.get("c-1", guest).pipe(Effect.flip))._tag).toBe(
         "NotAnOperator",

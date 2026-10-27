@@ -45,7 +45,7 @@ export interface Contract<
   readonly validate?: (
     request: Request<Ref>,
     state: St,
-  ) => Effect.Effect<void, Aggregate.Inst<Rejects[number]>, Middleware.Provides<Ms>>;
+  ) => Effect.Effect<void, Aggregate.InstanceOf<Rejects[number]>, Middleware.Provides<Ms>>;
 }
 
 /** The read contract a View or aggregate declares, widened. @internal */

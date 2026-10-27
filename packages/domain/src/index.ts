@@ -84,8 +84,8 @@ export declare namespace Aggregate {
   export type Envelope<Id = string> = AggregateModule.Envelope<Id>;
   export type SendOptions = AggregateModule.SendOptions;
   export type ScheduleOptions = AggregateModule.ScheduleOptions;
-  /** The instance type of a class. */
-  export type Inst<C> = AggregateModule.Inst<C>;
+  /** The instance type of a class: `InstanceOf<typeof NotOwner>` is `NotOwner`. */
+  export type InstanceOf<C> = AggregateModule.InstanceOf<C>;
 }
 /** A consistency boundary that decides commands. See {@link AggregateModule.make}. */
 export const Aggregate = AggregateModule.make;
@@ -123,6 +123,8 @@ export declare namespace View {
   /** An event a view emitted, with its state after it. */
   export type Entry<S, E, Id = string> = ViewModule.Entry<S, E, Id>;
   export type Page<E> = ViewModule.Page<E>;
+  /** A key's state and the cursor it is valid at. */
+  export type Snapshot<S> = ViewModule.Snapshot<S>;
 }
 /** A read model folded from events, per key. See {@link ViewModule.make}. */
 export const View = ViewModule.make;

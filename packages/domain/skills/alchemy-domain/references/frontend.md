@@ -82,6 +82,8 @@ export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) =
 
 Watch state with `View.watch(key)`, and watch emitted events with `View.events(key)` (e.g. statement lines). A failed `validate` ends the watch with its rejection.
 
+To show data at first paint, read `View.snapshot(key)` (on the server, or in `init`): it gives `{ state, cursor }` from one read. Start the feed with `View.events(key, { after: cursor })`, so a write between the two reads arrives once and none is missed.
+
 ## Tracing from the browser
 
 foldkit wraps every Command in a span, and Api calls carry the trace to the server (live reads too). Put a tracer in `resources` that exports to the app's own origin, and collect it in the server Worker with `Telemetry.relay`, which forwards it with the server's credentials:
