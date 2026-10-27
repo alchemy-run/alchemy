@@ -21,17 +21,13 @@ const project = yield* Entire.Project("app", {});
 const repo = yield* Entire.Repo("api", { projectId: project.id });
 ```
 
-`BranchProtection` owns the repository's rule set, and `RepoSettings`
-turns on trails and runners:
+Branch rules and the trail and runner settings are props of the
+repository. Leave one out and its current value is kept:
 
 ```typescript
-yield* Entire.BranchProtection("protection", {
-  repoId: repo.id,
-  rules: [{ ref: "HEAD", serverSideMergeOnly: true }],
-});
-
-yield* Entire.RepoSettings("settings", {
-  repoId: repo.id,
+const repo = yield* Entire.Repo("api", {
+  projectId: project.id,
+  branchProtection: [{ ref: "HEAD", serverSideMergeOnly: true }],
   runnersEnabled: true,
   autoRunOnPush: true,
 });
@@ -40,19 +36,21 @@ yield* Entire.RepoSettings("settings", {
 ## Agents
 
 An `Agent` runs Claude Code or Codex against the project's repositories,
-in an `Environment` sandbox. A `RepoSecret` holds the model-provider key
-its runs use:
+in an `Environment` sandbox. Its runs use the model-provider key set in
+the repository's `secrets`:
 
 ```typescript
+const repo = yield* Entire.Repo("api", {
+  projectId: project.id,
+  runnersEnabled: true,
+  secrets: {
+    api_key_anthropic: yield* Config.redacted("ANTHROPIC_API_KEY"),
+  },
+});
+
 const sandbox = yield* Entire.Environment("sandbox", {
   projectId: project.id,
   autoStopMinutes: 30,
-});
-
-yield* Entire.RepoSecret("anthropic", {
-  repoId: repo.id,
-  key: "api_key_anthropic",
-  value: yield* Config.redacted("ANTHROPIC_API_KEY"),
 });
 
 yield* Entire.Agent("reviewer", {

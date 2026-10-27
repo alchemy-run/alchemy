@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import type * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import {
   consistencySchedule,
@@ -47,7 +48,57 @@ export type RepoProps = {
    * @default the cell's cluster
    */
   clusterHost?: string;
+  /**
+   * Branch protection rules, one per ref pattern, each ref at most once.
+   * The repository has one rule set, so these replace any rules set
+   * elsewhere; `[]` clears them.
+   * @default unmanaged — existing rules are left as they are
+   */
+  branchProtection?: BranchProtectionRule[];
+  /**
+   * Whether Entire records trails for the repository.
+   * @default unmanaged — the current value is kept
+   */
+  trailsEnabled?: boolean;
+  /**
+   * Whether agent runners may run for the repository.
+   * @default unmanaged — the current value is kept
+   */
+  runnersEnabled?: boolean;
+  /**
+   * Whether runners start automatically on push. Requires `runnersEnabled`.
+   * @default unmanaged — the current value is kept
+   */
+  autoRunOnPush?: boolean;
+  /**
+   * Whether sessions of the repository may be shared by public link.
+   * @default unmanaged — the current value is kept
+   */
+  publicSharingEnabled?: boolean;
+  /**
+   * Model-provider API keys Entire's agent runners use, by key. Entire
+   * stores only `api_key_anthropic` and `api_key_openai`. Values are
+   * write-only: Entire never returns them, so every deploy writes them
+   * again. Keys left out are removed.
+   * @default unmanaged — existing keys are left as they are
+   */
+  secrets?: Partial<Record<RepoSecretKey, Redacted.Redacted<string>>>;
 };
+
+/** The model-provider keys Entire's runners read from a repository. */
+export type RepoSecretKey = "api_key_anthropic" | "api_key_openai";
+
+export interface BranchProtectionRule {
+  /** `HEAD` (the default branch) or a `refs/heads/` name; fnmatch wildcards are allowed. */
+  ref: string;
+  /**
+   * `true` lets the branch move only through a server-side merge by Entire,
+   * refusing every direct push (fast-forwards included). `false` protects
+   * it from force-pushes and deletion.
+   * @default false
+   */
+  serverSideMergeOnly?: boolean;
+}
 
 export type Repo = Resource<
   "Entire.Repo",
@@ -71,6 +122,14 @@ export type Repo = Resource<
     visibility: RepoVisibility;
     /** Git object hash format. */
     objectFormat: string;
+    /** The branch protection rules Entire stored, in order. */
+    branchProtection: { ref: string; serverSideMergeOnly: boolean }[];
+    trailsEnabled: boolean;
+    runnersEnabled: boolean;
+    autoRunOnPush: boolean;
+    publicSharingEnabled: boolean;
+    /** Secret keys that are set (values are never returned). */
+    secretKeys: RepoSecretKey[];
   },
   never,
   Providers
@@ -80,6 +139,10 @@ export type Repo = Resource<
  * A Git repository hosted on Entire, inside a {@link Project}. Agents push
  * to it, and Entire records their sessions, checkpoints and trails against
  * it.
+ *
+ * Branch protection, the trail and runner settings, and the model-provider
+ * keys are props of the repository. Each one you leave out is unmanaged:
+ * its current value is kept and reported in the attributes.
  *
  * `reconcile` returns once the repository is `active` and has reached its
  * cell. Delete waits until Core stops returning it.
@@ -105,9 +168,25 @@ export type Repo = Resource<
  * ### Protecting Branches
  * **Example:** Only server-side merges may update the default branch
  * ```typescript
- * yield* Entire.BranchProtection("api-protection", {
- *   repoId: repo.id,
- *   rules: [{ ref: "HEAD", serverSideMergeOnly: true }],
+ * const repo = yield* Entire.Repo("api", {
+ *   projectId: project.id,
+ *   branchProtection: [
+ *     { ref: "HEAD", serverSideMergeOnly: true },
+ *     { ref: "refs/heads/release/*" },
+ *   ],
+ * });
+ * ```
+ *
+ * ### Running Agents
+ * **Example:** Run agents on every push, with an Anthropic key
+ * ```typescript
+ * const repo = yield* Entire.Repo("api", {
+ *   projectId: project.id,
+ *   runnersEnabled: true,
+ *   autoRunOnPush: true,
+ *   secrets: {
+ *     api_key_anthropic: yield* Config.redacted("ANTHROPIC_API_KEY"),
+ *   },
  * });
  * ```
  *
@@ -122,20 +201,27 @@ export class RepoNotActive extends Data.TaggedError("RepoNotActive")<{
   readonly state: string;
 }> {}
 
-const toAttrs = (repo: Entire.repos.Repo | Entire.repos.CreatedRepo) => ({
+const coreAttrs = (repo: Entire.repos.Repo) => ({
   id: repo.id,
   repositoryId: typeof repo.repositoryId === "string" ? repo.repositoryId : undefined,
   name: repo.name,
   projectId: repo.owningProjectId,
   path: repo.path,
   clusterHost: repo.clusterHost,
-  apiUrl:
-    ("placements" in repo
-      ? repo.placements?.find((p) => p.id === repo.id)?.apiBaseUrl
-      : undefined) ?? undefined,
+  apiUrl: cellUrl(repo),
   visibility: (repo.visibility ?? "private") as RepoVisibility,
   objectFormat: repo.objectFormat ?? "sha1",
 });
+
+/** Base URL of the repository's own placement's cell. */
+const cellUrl = (repo: Entire.repos.Repo) =>
+  repo.placements?.find((p) => p.id === repo.id)?.apiBaseUrl;
+
+const normalizeRules = (rules: ReadonlyArray<{ ref: string; serverSideMergeOnly?: boolean }>) =>
+  rules.map((r) => ({ ref: r.ref, serverSideMergeOnly: r.serverSideMergeOnly ?? false }));
+
+const isSecretKey = (key: string): key is RepoSecretKey =>
+  key === "api_key_anthropic" || key === "api_key_openai";
 
 export const RepoProvider = () =>
   Provider.effect(
@@ -172,6 +258,32 @@ export const RepoProvider = () =>
           }),
         );
 
+      /**
+       * Everything Entire stores on the repository besides its identity:
+       * branch rules from Core, settings and secret keys from its cell.
+       */
+      const observe = Effect.fn(function* (repo: Entire.repos.Repo) {
+        const cell = client.cell(cellUrl(repo));
+        const meta = yield* cell(
+          retryCellNotFound(Entire.repoDetails.getRepoMeta({ repo_id: repo.id })),
+        );
+        const protection = yield* client.core(
+          Entire.repos.getBranchProtection({ repoId: repo.id }),
+        );
+        const secrets = yield* cell(
+          retryCellNotFound(Entire.repoSettings.listRepoSecrets({ repo_id: repo.id })),
+        );
+        return {
+          ...coreAttrs(repo),
+          branchProtection: normalizeRules(protection.rules),
+          trailsEnabled: meta.trails_enabled,
+          runnersEnabled: meta.runners_enabled,
+          autoRunOnPush: meta.auto_run_on_push,
+          publicSharingEnabled: meta.public_sharing_enabled,
+          secretKeys: (secrets.items ?? []).map((i) => i.secretKey).filter(isSecretKey),
+        };
+      });
+
       return {
         stables: ["id", "repositoryId", "projectId", "objectFormat"],
         // Repositories carry no labels; see Project.
@@ -193,11 +305,11 @@ export const RepoProvider = () =>
             const repo = yield* get(output.id).pipe(
               Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
             );
-            return repo ? toAttrs(repo) : undefined;
+            return repo ? yield* observe(repo) : undefined;
           }
           if (!olds?.projectId) return undefined;
           const found = yield* findByName(olds.projectId, yield* repoName(id, olds));
-          return found ? Unowned(toAttrs(found)) : undefined;
+          return found ? Unowned(yield* observe(found)) : undefined;
         }),
         reconcile: Effect.fn(function* ({ id, news, output }) {
           const name = yield* repoName(id, news);
@@ -221,7 +333,6 @@ export const RepoProvider = () =>
                 }),
               )
               .pipe(
-                retryCellNotFound,
                 retryPropagation,
                 Effect.catchTag("RepoNameInUse", () =>
                   awaitVisible(findByName(news.projectId, name), `repository ${name}`),
@@ -232,20 +343,90 @@ export const RepoProvider = () =>
             repo = yield* waitActive(repo.id);
           }
 
-          // Ready -- block until the repository has reached its cell, where
-          // its trails, settings and agents are addressed.
-          const apiUrl = repo.placements?.find((p) => p.id === repo!.id)?.apiBaseUrl;
-          yield* client.cell(apiUrl)(
-            retryCellNotFound(Entire.repoDetails.getRepoMeta({ repo_id: repo.id })),
-          );
-
           // Sync visibility against the observed value.
           const visibility = news.visibility ?? "private";
           if ((repo.visibility ?? "private") !== visibility) {
             yield* client.core(Entire.repos.setRepoVisibility({ repoId: repo.id, visibility }));
             repo = { ...repo, visibility };
           }
-          return toAttrs(repo);
+
+          // Observe the rest. This also blocks until the repository has
+          // reached its cell, where its settings and agents are addressed.
+          const observed = yield* observe(repo);
+          const repoId = repo.id;
+          const repo_id = repo.id;
+          const cell = client.cell(cellUrl(repo));
+
+          // Sync branch protection -- the rule set is owned whole.
+          let branchProtection = observed.branchProtection;
+          if (news.branchProtection !== undefined) {
+            const desired = normalizeRules(news.branchProtection);
+            if (JSON.stringify(desired) !== JSON.stringify(observed.branchProtection)) {
+              const stored = yield* client.core(
+                Entire.repos.setBranchProtection({ repoId, rules: desired }),
+              );
+              branchProtection = normalizeRules(stored.rules);
+            }
+          }
+
+          // Sync settings -- declared ones only, each group when it differs.
+          const settings = {
+            trailsEnabled: news.trailsEnabled ?? observed.trailsEnabled,
+            runnersEnabled: news.runnersEnabled ?? observed.runnersEnabled,
+            autoRunOnPush: news.autoRunOnPush ?? observed.autoRunOnPush,
+            publicSharingEnabled: news.publicSharingEnabled ?? observed.publicSharingEnabled,
+          };
+          if (settings.trailsEnabled !== observed.trailsEnabled) {
+            yield* cell(
+              Entire.repoSettings.updateRepoTrailSettings({
+                repo_id,
+                trails_enabled: settings.trailsEnabled,
+              }),
+            );
+          }
+          if (
+            settings.runnersEnabled !== observed.runnersEnabled ||
+            settings.autoRunOnPush !== observed.autoRunOnPush
+          ) {
+            yield* cell(
+              Entire.repoSettings.updateRepoRunnerSettings({
+                repo_id,
+                runners_enabled: settings.runnersEnabled,
+                auto_run_on_push: settings.autoRunOnPush,
+              }),
+            );
+          }
+          if (settings.publicSharingEnabled !== observed.publicSharingEnabled) {
+            yield* cell(
+              Entire.repoSettings.updateRepoPublicSharing({
+                repo_id,
+                enabled: settings.publicSharingEnabled,
+              }),
+            );
+          }
+
+          // Sync secrets -- values are unreadable, so declared keys are
+          // always written; observed keys left out are removed.
+          let secretKeys = observed.secretKeys;
+          if (news.secrets !== undefined) {
+            const declared = Object.entries(news.secrets).filter(
+              (entry): entry is [RepoSecretKey, Redacted.Redacted<string>] =>
+                isSecretKey(entry[0]) && entry[1] !== undefined,
+            );
+            for (const [secretKey, value] of declared) {
+              yield* cell(Entire.repoSettings.setRepoSecret({ repo_id, secretKey, value }));
+            }
+            const keep = new Set(declared.map(([key]) => key));
+            for (const secretKey of observed.secretKeys) {
+              if (keep.has(secretKey)) continue;
+              yield* cell(Entire.repoSettings.deleteRepoSecret({ repo_id, secretKey })).pipe(
+                Effect.catchTag("NotFound", () => Effect.void),
+              );
+            }
+            secretKeys = [...keep];
+          }
+
+          return { ...coreAttrs(repo), branchProtection, ...settings, secretKeys };
         }),
         delete: Effect.fn(function* ({ output }) {
           yield* client

@@ -10,16 +10,11 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const project = yield* Entire.Project("Project", {});
-    const repo = yield* Entire.Repo("Api", { projectId: project.id, name: "api" });
-
-    // The default branch moves only through Entire's server-side merge.
-    yield* Entire.BranchProtection("Protection", {
-      repoId: repo.id,
-      rules: [{ ref: "HEAD", serverSideMergeOnly: true }],
-    });
-
-    yield* Entire.RepoSettings("Settings", {
-      repoId: repo.id,
+    const repo = yield* Entire.Repo("Api", {
+      projectId: project.id,
+      name: "api",
+      // The default branch moves only through Entire's server-side merge.
+      branchProtection: [{ ref: "HEAD", serverSideMergeOnly: true }],
       trailsEnabled: true,
       runnersEnabled: true,
       autoRunOnPush: true,

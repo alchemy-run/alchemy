@@ -11,4 +11,4 @@ bun run destroy
 ```
 
 Push to `et/<project>/api` and open a Change; the reviewer's findings land on its trail. Give it a
-model key with `Entire.RepoSecret` (`api_key_anthropic`) before relying on its runs.
+model key in the repo's `secrets` (`api_key_anthropic`) before relying on its runs.

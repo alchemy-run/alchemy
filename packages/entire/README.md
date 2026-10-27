@@ -23,20 +23,16 @@ export default Alchemy.Stack(
   },
   Effect.gen(function* () {
     const project = yield* Entire.Project("app", {});
-    const repo = yield* Entire.Repo("api", { projectId: project.id });
-
-    yield* Entire.BranchProtection("protection", {
-      repoId: repo.id,
-      rules: [{ ref: "HEAD", serverSideMergeOnly: true }],
+    const repo = yield* Entire.Repo("api", {
+      projectId: project.id,
+      branchProtection: [{ ref: "HEAD", serverSideMergeOnly: true }],
+      runnersEnabled: true,
+      secrets: {
+        api_key_anthropic: yield* Config.redacted("ANTHROPIC_API_KEY"),
+      },
     });
 
     const sandbox = yield* Entire.Environment("sandbox", { projectId: project.id });
-
-    yield* Entire.RepoSecret("anthropic", {
-      repoId: repo.id,
-      key: "api_key_anthropic",
-      value: yield* Config.redacted("ANTHROPIC_API_KEY"),
-    });
 
     yield* Entire.Agent("reviewer", {
       projectId: project.id,

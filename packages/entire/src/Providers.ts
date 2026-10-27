@@ -5,15 +5,12 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { Agent, AgentProvider } from "./Agent.ts";
 import { EntireAuth } from "./AuthProvider.ts";
-import { BranchProtection, BranchProtectionProvider } from "./BranchProtection.ts";
 import * as Credentials from "./Credentials.ts";
 import { Environment, EnvironmentProvider } from "./Environment.ts";
 import { OidcBinding, OidcBindingProvider } from "./OidcBinding.ts";
 import { Org, OrgProvider } from "./Org.ts";
 import { Project, ProjectProvider } from "./Project.ts";
 import { Repo, RepoProvider } from "./Repo.ts";
-import { RepoSecret, RepoSecretProvider } from "./RepoSecret.ts";
-import { RepoSettings, RepoSettingsProvider } from "./RepoSettings.ts";
 import { ServiceAccount, ServiceAccountProvider } from "./ServiceAccount.ts";
 import { ServiceAccountGrant, ServiceAccountGrantProvider } from "./ServiceAccountGrant.ts";
 
@@ -24,8 +21,8 @@ export class Providers extends Provider.ProviderCollection<Providers>()("Entire"
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
 /**
- * Entire providers and credentials: orgs, projects, repositories and their
- * settings, service accounts with their OIDC bindings and grants, and
+ * Entire providers and credentials: orgs, projects, repositories (with their
+ * branch rules, settings and model keys), service accounts with their OIDC bindings and grants, and
  * agents with their environments. Registers the Entire AuthProvider so
  * `alchemy profile edit` can configure it.
  */
@@ -34,14 +31,11 @@ export const providers = () =>
     Providers,
     Provider.collection([
       Agent,
-      BranchProtection,
       Environment,
       OidcBinding,
       Org,
       Project,
       Repo,
-      RepoSecret,
-      RepoSettings,
       ServiceAccount,
       ServiceAccountGrant,
     ]),
@@ -49,14 +43,11 @@ export const providers = () =>
     Layer.provide(
       Layer.mergeAll(
         AgentProvider(),
-        BranchProtectionProvider(),
         EnvironmentProvider(),
         OidcBindingProvider(),
         OrgProvider(),
         ProjectProvider(),
         RepoProvider(),
-        RepoSecretProvider(),
-        RepoSettingsProvider(),
         ServiceAccountProvider(),
         ServiceAccountGrantProvider(),
       ),
