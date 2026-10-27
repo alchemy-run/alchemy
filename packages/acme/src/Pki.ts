@@ -1,12 +1,12 @@
 import { Jose } from "@distilled.cloud/acme";
 /**
  * Keys, PKCS#10 certificate requests and X.509 parsing for the ACME flow.
- * WebCrypto plus the tiny DER codec in `Der.ts` — no native code, so the
+ * WebCrypto plus the tiny DER codec in `alchemy/Util/Der` — no native code, so the
  * same code runs at deploy time and inside a Worker or Fly Service.
  */
+import * as Der from "alchemy/Util/Der";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import * as Der from "./Der.ts";
 import { PkiError } from "./Errors.ts";
 
 export type KeyAlgorithm = "ES256" | "RS256";
