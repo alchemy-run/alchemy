@@ -604,6 +604,15 @@ const envFingerprint = (env: cloudrun.GoogleCloudRunV2EnvVarList | undefined) =>
       .sort((left, right) => left.name.localeCompare(right.name)),
   );
 
+// Cloud Run reports an unnamed port as `http1`.
+const portsFingerprint = (ports: cloudrun.GoogleCloudRunV2ContainerPortList | undefined) =>
+  JSON.stringify(
+    (ports ?? []).map((port) => ({
+      name: port.name || "http1",
+      containerPort: port.containerPort ?? 0,
+    })),
+  );
+
 // Cloud Run gives a serving container without a startup probe this one.
 const DEFAULT_STARTUP_PROBE: cloudrun.GoogleCloudRunV2Probe = {
   tcpSocket: {},
@@ -689,18 +698,7 @@ const containerNeedsSync = (
     }
     if (
       container.ports !== undefined &&
-      JSON.stringify(
-        container.ports.map((port) => ({
-          name: port.name ?? "",
-          containerPort: port.containerPort ?? 0,
-        })),
-      ) !==
-        JSON.stringify(
-          (current.ports ?? []).map((port) => ({
-            name: port.name ?? "",
-            containerPort: port.containerPort ?? 0,
-          })),
-        )
+      portsFingerprint(container.ports) !== portsFingerprint(current.ports)
     ) {
       return true;
     }
