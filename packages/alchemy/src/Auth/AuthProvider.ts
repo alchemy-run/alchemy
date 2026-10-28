@@ -1,4 +1,5 @@
 import * as Config from "effect/Config";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -246,10 +247,19 @@ export interface AuthProviderImpl<
    */
   readonly configureMethods?: ReadonlyArray<ConfigureMethod>;
 
+  /**
+   * Re-authenticate, silently refreshing when the stored credentials allow.
+   * Returns the new config for the caller to save, or nothing when the
+   * provider already saved it through `updateConfig` (a silent refresh saves
+   * under the credentials lock, so the caller must not write it again).
+   * `reload` reads the stored config; run it under the lock before
+   * refreshing, since refresh tokens can be single-use.
+   */
   login(
     profileName: string,
     config: Config,
     updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
+    reload?: Effect.Effect<Config, AuthError>,
   ): Effect.Effect<Config | void, AuthError, R | Interaction>;
 
   logout(profileName: string, config: Config): Effect.Effect<void, AuthError, R | Interaction>;
@@ -297,9 +307,29 @@ export interface AuthProviderImpl<
 export interface AuthProvider<
   Config extends { method: string } = { method: string },
   Credentials = unknown,
-> extends AuthProviderImpl<Config, Credentials> {
+> extends Omit<AuthProviderImpl<Config, Credentials>, "read" | "details"> {
   readonly kind: "AuthProvider";
   readonly name: string;
+  /**
+   * {@link AuthProviderImpl.read} under the profile's credentials lock, with
+   * `loadConfig` run inside the lock. A silent refresh spends a single-use
+   * refresh token, so config loaded before the lock can hold a token that
+   * another process, or an earlier resolve in this one, already rotated.
+   */
+  read<E>(
+    profileName: string,
+    loadConfig: Effect.Effect<Config, E>,
+    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
+  ): Effect.Effect<Credentials, E | AuthError | NeedsReauth>;
+  /**
+   * {@link AuthProviderImpl.details} under the profile's credentials lock,
+   * with `loadConfig` run inside the lock, since details may refresh.
+   */
+  details<E>(
+    profileName: string,
+    loadConfig: Effect.Effect<Config, E>,
+    updateConfig?: (config: Config) => Effect.Effect<void, AuthError>,
+  ): Effect.Effect<ProviderDetails, E | AuthError | NeedsReauth, Interaction>;
   /** Log each environment contract once per built provider layer. */
   readonly logEnvironmentCredentials: (used: ReadonlyArray<string>) => Effect.Effect<void>;
   /**
@@ -325,7 +355,7 @@ export const AuthProvider =
   ) =>
     Effect.gen(function* () {
       // FileSystem/Path back the cross-process credentials lock that wraps
-      // `logout`/`read` below, so capture them with the impl's own services.
+      // `logout`/`read`/`details` below, so capture them with the impl's own services.
       //
       // `Effect.context()` snapshots the ENTIRE fiber context (the type
       // parameter only narrows the type), and `Effect.provideContext` makes
@@ -344,6 +374,14 @@ export const AuthProvider =
       const ctx = Context.omit(Interaction)(
         yield* Effect.context<FileSystem.FileSystem | Path.Path | R | ImplReq>(),
       ) as Context.Context<FileSystem.FileSystem | Path.Path | R | ImplReq>;
+      // `read` and `readEnvironment` resolve credentials for a caller that
+      // has already chosen its ConfigProvider (`resolveProviderConfig`
+      // checks `presentEnvironment` under it), so they read through that
+      // one, not the one ambient at REGISTRATION. The profile-command
+      // methods keep the snapshot: they run under the process environment,
+      // and `--env-file` reaches them only through it.
+      // SAFETY: as above, the assertion only restores the pre-omit type.
+      const resolveCtx = Context.omit(ConfigProvider.ConfigProvider)(ctx) as typeof ctx;
       const providers = yield* AuthProviders;
       const service = yield* Effect.isEffect(impl) ? impl : Effect.succeed(impl);
       // Validate the declared environment contract at registration so a
@@ -352,7 +390,7 @@ export const AuthProvider =
       const environment =
         service.environment === undefined
           ? []
-          : yield* Schema.decodeUnknownEffect(EnvironmentVariables)(service.environment).pipe(
+          : yield* Schema.decodeEffect(EnvironmentVariables)(service.environment).pipe(
               Effect.orDie,
             );
       if (service.readEnvironment !== undefined && environment.length === 0) {
@@ -396,19 +434,25 @@ export const AuthProvider =
             interactiveMutex,
             1,
           )(service.configure(profileName, currentConfig).pipe(Effect.provideContext(ctx))),
-        login: (profileName, config, updateConfig) =>
+        login: (profileName, config, updateConfig, reload) =>
           Semaphore.withPermits(
             interactiveMutex,
             1,
-          )(service.login(profileName, config, updateConfig).pipe(Effect.provideContext(ctx))),
+          )(
+            service
+              .login(profileName, config, updateConfig, reload)
+              .pipe(Effect.provideContext(ctx)),
+          ),
         logout: (profileName, config) =>
           withProfileCredentialsLock(profileName, service.logout(profileName, config)).pipe(
             Effect.provideContext(ctx),
           ),
-        details: (profileName, config, updateConfig) =>
+        details: (profileName, loadConfig, updateConfig) =>
           withProfileCredentialsLock(
             profileName,
-            service.details(profileName, config, updateConfig),
+            Effect.flatMap(loadConfig, (config) =>
+              service.details(profileName, config, updateConfig),
+            ),
           ).pipe(Effect.provideContext(ctx)),
         ...(service.configureWith === undefined
           ? {}
@@ -422,12 +466,12 @@ export const AuthProvider =
               ) => service.configureWith!(profileName, input).pipe(Effect.provideContext(ctx)),
               configureMethods: service.configureMethods,
             }),
-        read: (profileName, config, updateConfig) =>
+        read: (profileName, loadConfig, updateConfig) =>
           withProfileCredentialsLock(
             profileName,
-            service.read(profileName, config, updateConfig),
-          ).pipe(Effect.provideContext(ctx)),
-        readEnvironment: service.readEnvironment?.pipe(Effect.provideContext(ctx)),
+            Effect.flatMap(loadConfig, (config) => service.read(profileName, config, updateConfig)),
+          ).pipe(Effect.provideContext(resolveCtx)),
+        readEnvironment: service.readEnvironment?.pipe(Effect.provideContext(resolveCtx)),
         environment,
         configSchema: service.configSchema,
         decodeConfig: (profileName, config) =>
@@ -478,7 +522,7 @@ export const getAuthProvider = <
     registry[name] == null
       ? Effect.fail(
           AuthError.make({
-            message: `AuthProvider '${name}' is not registered. Make sure its layer has been provided.`,
+            message: `AuthProvider '${name}' is not registered. Install the package that provides it.`,
           }),
         )
       : Effect.succeed(

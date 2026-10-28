@@ -1,6 +1,6 @@
-import { build, exec } from "../../../scripts/package-build.ts";
+import { build, typescript } from "../../../scripts/package-build.ts";
 
 build(import.meta.dirname, {
-  exports: { worker: true },
-  steps: [exec("tsc", "-b")],
+  exports: { generate: true, worker: true },
+  steps: [typescript("-b")],
 });

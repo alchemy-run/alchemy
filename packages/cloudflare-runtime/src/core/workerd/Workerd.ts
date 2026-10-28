@@ -23,7 +23,8 @@ export type OutputSink = (chunk: string, stream: "stdout" | "stderr") => void;
 /** How a workerd process ended after it had finished starting. */
 export interface WorkerdExit {
   readonly exitCode: number | null;
-  readonly signal: NodeJS.Signals | null;
+  /** A signal name, or a number when Bun reports one it can't name. */
+  readonly signal: NodeJS.Signals | number | null;
   /** The last output workerd wrote to stderr before it exited. */
   readonly stderr: string;
 }
@@ -548,7 +549,7 @@ const ADDRESS_IN_USE_SUBTAG = "AddressInUse" as const;
 const classifyWorkerdError = (
   stderr: string | undefined,
   exitCode: number | null,
-  signal: NodeJS.Signals | null,
+  signal: NodeJS.Signals | number | null,
   configuredAddresses: Array<string>,
 ): ConfigError | SystemError => {
   const text = (stderr ?? "").trim();
@@ -573,19 +574,23 @@ const classifyWorkerdError = (
     });
   }
 
-  // Pattern: address-in-use comes through as a `kj::Exception`. The offending
-  // address was reported by the C++ backend; the Rust backend omits it.
-  if (/Address already in use/i.test(text)) {
-    const address = text.match(/toString\(\) = (\S+)/)?.[1];
+  // Pattern: address-in-use. The C++ server over kj sockets names the
+  // address; the Rust server names the socket; the C++ server over tokio
+  // sockets names neither.
+  const inUse = parseAddressInUse(text);
+  if (inUse) {
+    const { address, socket } = inUse;
     return ConfigError.make({
       subtag: ADDRESS_IN_USE_SUBTAG,
       message: address
         ? `The Workers runtime could not bind to ${address} (already in use).`
-        : configuredAddresses.length > 0
-          ? `The Workers runtime could not bind (address already in use). Configured listeners: ${configuredAddresses.join(", ")}.`
-          : "The Workers runtime could not bind to the requested address (already in use).",
+        : `The Workers runtime could not bind${socket ? ` socket "${socket}"` : ""} (address already in use).${
+            configuredAddresses.length > 0
+              ? ` Configured listeners: ${configuredAddresses.join(", ")}.`
+              : ""
+          }`,
       hint: "Pick a different port or stop the process using it.",
-      detail: { ...detail, address, configuredAddresses },
+      detail: { ...detail, address, socket, configuredAddresses },
     });
   }
 
@@ -594,6 +599,26 @@ const classifyWorkerdError = (
     message: "The Workers runtime failed to start.",
     detail,
   });
+};
+
+// `EADDRINUSE` on macOS and Linux; `WSAEADDRINUSE` on Windows, and
+// `WSAEACCES`, which workerd's bind (with `SO_REUSEADDR`) gets when the port's
+// holder has `SO_EXCLUSIVEADDRUSE`, as Node's servers do on Windows.
+// Ported from miniflare's `parseAddressInUse` (workers-sdk
+// packages/miniflare/src/runtime/structured-logs.ts).
+const ADDRESS_IN_USE_OS_ERRORS = ["48", "98", "10013", "10048"];
+
+export const parseAddressInUse = (
+  text: string,
+): { address?: string; socket?: string } | undefined => {
+  const bind = /(?:Socket \\?"(.+?)\\?": )?bind\(\): [^\n]*\(os error (\d+)\)/.exec(text);
+  if (bind !== null && ADDRESS_IN_USE_OS_ERRORS.includes(bind[2]!)) {
+    return bind[1] === undefined ? {} : { socket: bind[1] };
+  }
+  const kj = /Address already in use; toString\(\) = ([^;\s]+)/.exec(text);
+  if (kj !== null) return { address: kj[1] };
+  if (/Address already in use/i.test(text)) return {};
+  return undefined;
 };
 
 export const isAddressInUseError = (error: ConfigError | SystemError) => {

@@ -1,11 +1,14 @@
+import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, it } from "alchemy-test";
+import * as Clock from "effect/Clock";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
+import * as Ref from "effect/Ref";
 import * as Schema from "effect/Schema";
 import path from "pathe";
 import {
@@ -14,20 +17,26 @@ import {
   AuthProviderLayer,
   AuthProviders,
   getAuthProvider,
+  NeedsReauth,
 } from "@/Auth/AuthProvider.ts";
+import { inspectProvider } from "@/Auth/Inspect.ts";
 import {
   configFilePath,
+  credentialsDirPath,
   makeProviderProfileSchema,
   PROFILE_FORMAT,
+  profileCredentialsDirPath,
   profileDirPath,
   profileProviderFilePath,
   ProfileError,
   ProfileStore,
   ProfileStoreLive,
+  reloadProviderConfig,
   SuppressMissingProviderConfig,
   validateProfileName,
 } from "@/Auth/Profile.ts";
 import { resolveProfileName, resolveProviderConfig } from "@/Auth/Resolve.ts";
+import * as Interaction from "@/Interaction.ts";
 import { messageForCapabilities } from "@/Util/interactive.ts";
 
 const FAKE_PROVIDER = "FakeAuthProvider";
@@ -66,7 +75,7 @@ const FakeAuth = AuthProviderLayer<{ method: "stored" }, undefined>()(FAKE_PROVI
 const ENV_PROVIDER = "FakeEnvAuthProvider";
 
 /** A provider that supports both profile and environment credentials. */
-const FakeEnvAuth = AuthProviderLayer<{ method: "stored" }, string>()(ENV_PROVIDER, {
+const fakeEnvImpl = {
   configSchema: Schema.Struct({ method: Schema.Literal("stored") }),
   configure: () => Effect.succeed({ method: "stored" as const }),
   login: () => Effect.void,
@@ -75,10 +84,88 @@ const FakeEnvAuth = AuthProviderLayer<{ method: "stored" }, string>()(ENV_PROVID
   read: () => Effect.succeed("profile-credentials"),
   readEnvironment: Effect.succeed("environment-credentials"),
   environment: [{ name: "FAKE_ENV_TOKEN", required: true, secret: true }],
-});
+};
+
+const FakeEnvAuth = AuthProviderLayer<{ method: "stored" }, string>()(ENV_PROVIDER, fakeEnvImpl);
+
+const ROTATING_PROVIDER = "FakeRotatingAuthProvider";
+
+/**
+ * Refresh tokens are single-use, as with Cloudflare OAuth: refreshing
+ * persists a new token, and presenting a spent one revokes the grant.
+ */
+type RotationState = { readonly refreshes: number; readonly spent: ReadonlySet<string> };
+
+class Rotation extends Context.Service<Rotation, Ref.Ref<RotationState>>()("Test/Rotation") {}
+
+const RotationLive = Layer.effect(
+  Rotation,
+  Ref.make<RotationState>({ refreshes: 0, spent: new Set() }),
+);
+
+type RotatingConfig = { method: "oauth"; refresh: string; expires: number };
+
+const FakeRotatingAuth = AuthProviderLayer<RotatingConfig, string>()(
+  ROTATING_PROVIDER,
+  Effect.gen(function* () {
+    const rotation = yield* Rotation;
+    const rotate = Effect.fn(function* (
+      profileName: string,
+      config: RotatingConfig,
+      updateConfig?: (config: RotatingConfig) => Effect.Effect<void, AuthError>,
+    ) {
+      const now = yield* Clock.currentTimeMillis;
+      if (config.expires > now) return config.refresh;
+      const next = yield* Ref.modify(rotation, (state) =>
+        state.spent.has(config.refresh)
+          ? [undefined, state]
+          : [
+              `r${state.refreshes + 1}`,
+              { refreshes: state.refreshes + 1, spent: new Set([...state.spent, config.refresh]) },
+            ],
+      );
+      if (next === undefined) {
+        return yield* NeedsReauth.make({
+          provider: ROTATING_PROVIDER,
+          profile: profileName,
+          message: `refresh token ${config.refresh} was already used`,
+        });
+      }
+      yield* (
+        updateConfig?.({ method: "oauth", refresh: next, expires: now + 3_600_000 }) ?? Effect.void
+      );
+      return next;
+    });
+    return {
+      configSchema: Schema.Struct({
+        method: Schema.Literal("oauth"),
+        refresh: Schema.String,
+        expires: Schema.Number,
+      }),
+      configure: () => Effect.succeed({ method: "oauth" as const, refresh: "r0", expires: 0 }),
+      login: (
+        _profileName: string,
+        config: RotatingConfig,
+        _updateConfig?: (config: RotatingConfig) => Effect.Effect<void, AuthError>,
+        reload?: Effect.Effect<RotatingConfig, AuthError>,
+      ) => Effect.map(reload ?? Effect.succeed(config), (current) => ({ ...current, expires: 1 })),
+      logout: () => Effect.void,
+      details: (
+        profileName: string,
+        config: RotatingConfig,
+        updateConfig?: (config: RotatingConfig) => Effect.Effect<void, AuthError>,
+      ) =>
+        Effect.map(rotate(profileName, config, updateConfig), (token) => ({
+          lines: [{ key: "token", value: token }],
+        })),
+      read: rotate,
+    };
+  }),
+);
 
 const makeTestLayer = (config: Record<string, unknown> = {}) =>
-  Layer.mergeAll(ProfileStoreLive, FakeAuth, FakeEnvAuth).pipe(
+  Layer.mergeAll(ProfileStoreLive, FakeAuth, FakeEnvAuth, FakeRotatingAuth).pipe(
+    Layer.provideMerge(RotationLive),
     Layer.provideMerge(
       Layer.mergeAll(
         Layer.succeed(AuthProviders, {}),
@@ -248,6 +335,98 @@ it.live(
             entry.startsWith(".profiles-v0-"),
           ),
         ).toHaveLength(1);
+      }),
+    ),
+  { tags: ["unit", "local"], exclusive: true },
+);
+
+it.live(
+  "folds v0 credential sidecars into provider files",
+  () =>
+    withTempHome(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const profile = yield* ProfileStore;
+        const sidecars = profileCredentialsDirPath("legacy");
+        yield* fs.makeDirectory(sidecars, { recursive: true });
+        const sidecar = (name: string, contents: unknown) =>
+          fs.writeFileString(
+            path.join(sidecars, `${name}.json`),
+            typeof contents === "string" ? contents : JSON.stringify(contents),
+          );
+        // The earliest GitHub sidecar name.
+        yield* sidecar("gh-stored", { type: "stored", token: "ghp" });
+        // Axiom's v0 `apiToken` is now `token`.
+        yield* sidecar("axiom-stored", { type: "stored", apiToken: "xaat", orgId: "org" });
+        yield* sidecar("cloudflare-stored", {
+          credentialType: "apiToken",
+          apiToken: "cf",
+          accountId: "acct",
+        });
+        // Providers with several methods pick the sidecar by `method`.
+        yield* sidecar("railway-oauth", { accessToken: "rw" });
+        yield* sidecar("hetzner-stored", "{not-json");
+        yield* fs.writeFileString(
+          configFilePath(),
+          JSON.stringify({
+            version: 0,
+            profiles: {
+              legacy: {
+                GitHub: { method: "stored", storageKey: "gh" },
+                Axiom: { method: "stored" },
+                Cloudflare: { method: "stored" },
+                Railway: { method: "oauth" },
+                Neon: { method: "stored" },
+                Hetzner: { method: "stored" },
+              },
+            },
+          }),
+        );
+
+        const providers = (yield* profile.readManifest).profiles.legacy!.providers;
+        expect(providers.GitHub).toEqual({ method: "stored", token: "ghp" });
+        expect(providers.Axiom).toEqual({ method: "stored", token: "xaat", orgId: "org" });
+        expect(providers.Cloudflare).toEqual({
+          method: "stored",
+          credentialType: "apiToken",
+          apiToken: "cf",
+          accountId: "acct",
+        });
+        expect(providers.Railway).toEqual({ method: "oauth", accessToken: "rw" });
+        // A missing or unreadable sidecar keeps the manifest values; the
+        // original stays in the v0 backup.
+        expect(providers.Neon).toEqual({ method: "stored" });
+        expect(providers.Hetzner).toEqual({ method: "stored" });
+        expect(yield* fs.exists(credentialsDirPath())).toBe(false);
+      }),
+    ),
+  { tags: ["unit", "local"], exclusive: true },
+);
+
+it.live(
+  "drops a v0 Cloudflare entry whose sidecar is incomplete",
+  () =>
+    withTempHome(
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const profile = yield* ProfileStore;
+        const sidecars = profileCredentialsDirPath("legacy");
+        yield* fs.makeDirectory(sidecars, { recursive: true });
+        // The earliest Cloudflare sidecar name, missing its account.
+        yield* fs.writeFileString(
+          path.join(sidecars, "cf-stored.json"),
+          JSON.stringify({ credentialType: "apiToken", apiToken: "cf" }),
+        );
+        yield* fs.writeFileString(
+          configFilePath(),
+          JSON.stringify({
+            version: 0,
+            profiles: { legacy: { Cloudflare: { method: "stored" } } },
+          }),
+        );
+
+        const providers = (yield* profile.readManifest).profiles.legacy!.providers;
+        expect(providers.Cloudflare).toEqual({});
       }),
     ),
   { tags: ["unit", "local"], exclusive: true },
@@ -467,8 +646,7 @@ it.live(
     const messages: unknown[] = [];
     const run = withTempHome(
       Effect.gen(function* () {
-        const auth = yield* getAuthProvider(ENV_PROVIDER);
-        yield* AuthProvider()("OtherNoticeProvider", auth);
+        yield* AuthProvider<{ method: "stored" }, string>()("OtherNoticeProvider", fakeEnvImpl);
         const resolve = resolveProviderConfig(ENV_PROVIDER);
         yield* resolve.pipe(Effect.provideService(SuppressMissingProviderConfig, true));
         expect(messages).toEqual([]);
@@ -505,6 +683,91 @@ it.live(
       ),
     );
   },
+  { tags: ["unit", "local"], exclusive: true },
+);
+
+it.live(
+  "concurrent resolves of an expired credential refresh it once",
+  () =>
+    withTempHome(
+      Effect.gen(function* () {
+        const profile = yield* ProfileStore;
+        yield* profile.setProviderConfig("default", ROTATING_PROVIDER, {
+          method: "oauth",
+          refresh: "r0",
+          expires: 0,
+        });
+        // Each resolution loads the profile up front, as two processes
+        // (say `plan` and a state read) starting together would.
+        const first = yield* resolveProviderConfig<RotatingConfig, string>(ROTATING_PROVIDER);
+        const second = yield* resolveProviderConfig<RotatingConfig, string>(ROTATING_PROVIDER);
+
+        const tokens = yield* Effect.all([first.resolve, second.resolve], {
+          concurrency: "unbounded",
+        });
+
+        expect(tokens).toEqual(["r1", "r1"]);
+        expect((yield* Ref.get(yield* Rotation)).refreshes).toBe(1);
+        // A later resolve in the same process reads the rotated token too.
+        expect(yield* first.resolve).toBe("r1");
+        expect((yield* Ref.get(yield* Rotation)).refreshes).toBe(1);
+      }),
+    ),
+  { tags: ["unit", "local"], exclusive: true },
+);
+
+it.live(
+  "concurrent inspections of an expired credential refresh it once",
+  () =>
+    withTempHome(
+      Effect.gen(function* () {
+        const profile = yield* ProfileStore;
+        const registered = yield* AuthProviders;
+        const stale = { method: "oauth", refresh: "r0", expires: 0 };
+        yield* profile.setProviderConfig("default", ROTATING_PROVIDER, stale);
+        const persist = (updated: Record<string, unknown>) =>
+          profile
+            .setProviderConfig("default", ROTATING_PROVIDER, updated)
+            .pipe(Effect.mapError((cause) => AuthError.make({ message: cause.message, cause })));
+        // Both inspections start from the config read before either refresh,
+        // as two `alchemy profile show` processes started together would.
+        const inspect = inspectProvider("default", ROTATING_PROVIDER, stale, registered, persist);
+        const connections = yield* Effect.all([inspect, inspect], {
+          concurrency: "unbounded",
+        }).pipe(Effect.provide(Interaction.layerNonInteractive()));
+
+        expect(connections.map((c) => c.status)).toEqual(["connected", "connected"]);
+        expect((yield* Ref.get(yield* Rotation)).refreshes).toBe(1);
+      }),
+    ),
+  { tags: ["unit", "local"], exclusive: true },
+);
+
+it.live(
+  "login hands the provider a reload of the stored config",
+  () =>
+    withTempHome(
+      Effect.gen(function* () {
+        const profile = yield* ProfileStore;
+        yield* profile.setProviderConfig("default", ROTATING_PROVIDER, {
+          method: "oauth",
+          refresh: "r7",
+          expires: 0,
+        });
+        const auth = yield* getAuthProvider<RotatingConfig, string>(ROTATING_PROVIDER);
+
+        const refreshed = yield* auth
+          .login(
+            "default",
+            { method: "oauth", refresh: "r0", expires: 0 },
+            undefined,
+            reloadProviderConfig(profile, auth, "default"),
+          )
+          .pipe(Effect.provide(Interaction.layerNonInteractive()));
+
+        expect(refreshed).toMatchObject({ refresh: "r7" });
+      }),
+    ),
   { tags: ["unit", "local"], exclusive: true },
 );
 

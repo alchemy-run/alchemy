@@ -109,11 +109,19 @@ async function runUnderNode() {
   if (!supportsModuleHooks()) {
     process.stderr.write(
       `alchemy: node ${process.versions.node} is not supported. ` +
-        "Upgrade to node 24.11.1 or newer.\n",
+        "Upgrade to node 22.22.3, 24.11.1 or newer.\n",
     );
     process.exit(1);
   }
   NodeModule.enableCompileCache?.();
+  // `--fast-distilled` opts in to distilled's lazy service stubs (see
+  // register-oxc.js). The env var carries the choice to the loader and to
+  // every Node child alchemy starts with it (dev exec child, sidecar).
+  // Flags after a `--` separator belong to someone else.
+  const separator = args.indexOf("--");
+  if ((separator === -1 ? args : args.slice(0, separator)).includes("--fast-distilled")) {
+    process.env.ALCHEMY_FAST_DISTILLED = "1";
+  }
   const isCheckout = !(binDir.includes("/node_modules/") || binDir.includes("\\node_modules\\"));
   const register = isCheckout ? "register-dev-mode.js" : "register-oxc.js";
   await import(new URL(register, import.meta.url).href);
@@ -129,6 +137,7 @@ async function runUnderNode() {
 function supportsModuleHooks() {
   const [major = 0, minor = 0, patch = 0] = process.versions.node.split(".").map(Number);
   return (
+    (major === 22 && (minor > 22 || (minor === 22 && patch >= 3))) ||
     (major === 24 && (minor > 11 || (minor === 11 && patch >= 1))) ||
     (major === 25 && minor >= 1) ||
     major >= 26

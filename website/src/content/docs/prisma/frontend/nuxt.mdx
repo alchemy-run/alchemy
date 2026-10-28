@@ -40,7 +40,7 @@ rejects foreign presets. That build target still runs on Bun on Prisma.
 
 ```typescript
 // alchemy.run.ts
-import * as Prisma from "alchemy/Prisma";
+import * as Prisma from "@alchemy.run/prisma";
 
 export const Website = Prisma.Website.Nuxt("Website");
 ```
@@ -126,8 +126,7 @@ export const Website = Prisma.Website.Nuxt("Website", {
 });
 ```
 
-`Prisma.CustomDomain` requires the project's current default branch.
-Configure its returned DNS records yourself and check provisioning
+Configure the returned DNS records yourself and check provisioning
 status before cutover. See
 [Custom domains](/prisma/frontend/websites#custom-domains).
 

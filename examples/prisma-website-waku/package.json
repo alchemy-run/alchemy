@@ -16,6 +16,7 @@
     "build": "waku build"
   },
   "dependencies": {
+    "@alchemy.run/prisma": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "hono": "catalog:",
@@ -26,6 +27,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/node": "catalog:node24",

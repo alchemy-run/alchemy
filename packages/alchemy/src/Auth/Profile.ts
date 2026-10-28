@@ -23,6 +23,7 @@ import {
   profilesDirPath,
   rootDir,
 } from "./Paths.ts";
+import * as V0 from "./ProfileMigrationV0.ts";
 
 export {
   configFilePath,
@@ -109,34 +110,6 @@ export interface ProfileSelection {
   readonly name: string;
   readonly source: "configuration" | "default";
 }
-
-/** Only the released v0 centralized layout is migrated. */
-const V0ManifestSchema = Schema.StructWithRest(
-  Schema.Struct({
-    version: Schema.Literal(0),
-    profiles: Schema.Record(Schema.String, Schema.Unknown),
-  }),
-  [Schema.Record(Schema.String, Schema.Unknown)],
-);
-
-const LEGACY_CREDENTIAL_KEYS: Record<string, string | Record<string, string>> = {
-  AWS: "aws-stored",
-  Axiom: "axiom-stored",
-  Cloudflare: "cloudflare-stored",
-  Fly: "fly-stored",
-  GitHub: "github-stored",
-  Hetzner: "hetzner-stored",
-  Neon: "neon-stored",
-  Planetscale: {
-    stored: "planetscale-stored",
-    oauth: "planetscale-oauth",
-  },
-  Prisma: "prisma-stored",
-  Railway: {
-    stored: "railway-stored",
-    oauth: "railway-oauth",
-  },
-};
 
 export class ProfileError extends Schema.TaggedError<ProfileError>()("ProfileError", {
   message: Schema.String,
@@ -320,37 +293,18 @@ export const ProfileStoreLive = Layer.effect(
 
     const readLegacyProviderValues = (profile: string, provider: string, values: ProviderConfig) =>
       Effect.gen(function* () {
-        // Cloudflare's released OAuth grant is obsolete, but its stored API
-        // token and global API key formats still map exactly to the new
-        // provider-owned values schema.
-        if (provider === "Cloudflare" && values.method !== "stored") {
-          return { method: "oauth" };
-        }
-        const configuredKey = LEGACY_CREDENTIAL_KEYS[provider];
-        const key =
-          typeof configuredKey === "string"
-            ? configuredKey
-            : values.method === undefined
-              ? undefined
-              : configuredKey?.[values.method];
-        if (key === undefined) return values;
+        const plan = V0.planSidecar(provider, values);
+        if (plan._tag === "Inline") return plan.values;
 
-        const candidates = [key];
-        // The earliest GitHub sidecar used this shorter filename.
-        if (provider === "GitHub") candidates.push("gh-stored");
-        // The earliest Cloudflare sidecar used this shorter filename.
-        if (provider === "Cloudflare") candidates.push("cf-stored");
         let credentialFile: string | undefined;
-        for (const candidate of candidates) {
+        for (const candidate of plan.candidates) {
           const file = pathService.join(profileCredentialsDirPath(profile), `${candidate}.json`);
           if (yield* fs.exists(file)) {
             credentialFile = file;
             break;
           }
         }
-        if (credentialFile === undefined) {
-          return provider === "Cloudflare" ? {} : values;
-        }
+        if (credentialFile === undefined) return plan.fallback;
 
         const decoded = yield* Effect.result(
           decodeJson(credentialFile).pipe(
@@ -362,30 +316,9 @@ export const ProfileStoreLive = Layer.effect(
             `Could not decode legacy credentials from '${credentialFile}'; migrating the manifest values and preserving the sidecar in the v0 backup.`,
             decoded.failure,
           );
-          return provider === "Cloudflare" ? {} : values;
+          return plan.fallback;
         }
-        const credential = decoded.success;
-        const { type: _type, ...inline } = credential;
-        const normalizedInline =
-          provider === "Axiom" && inline.apiToken !== undefined
-            ? (({ apiToken, ...rest }) => ({ ...rest, token: apiToken }))(inline)
-            : inline;
-        const { storageKey: _storageKey, ...manifestValues } = values;
-        const migrated: ProviderConfig = {
-          ...manifestValues,
-          ...normalizedInline,
-        };
-        if (provider !== "Cloudflare") return migrated;
-        return migrated.credentialType === "apiKey" &&
-          typeof migrated.apiKey === "string" &&
-          typeof migrated.email === "string" &&
-          typeof migrated.accountId === "string"
-          ? migrated
-          : migrated.credentialType === "apiToken" &&
-              typeof migrated.apiToken === "string" &&
-              typeof migrated.accountId === "string"
-            ? migrated
-            : {};
+        return V0.mergeSidecar(provider, values, decoded.success);
       });
 
     /** Expand the released v0 store and preserve every original file. */
@@ -407,7 +340,7 @@ export const ProfileStoreLive = Layer.effect(
           // not need a compatibility path. Leave them untouched.
           if (Option.isSome(header) && header.value.version !== 0) return;
           const storedResult = yield* Effect.result(
-            Schema.decodeUnknownEffect(V0ManifestSchema)(jsonResult.success),
+            Schema.decodeUnknownEffect(V0.V0ManifestSchema)(jsonResult.success),
           );
           if (Result.isFailure(storedResult)) {
             yield* backupInvalidProfileFile(legacy, storedResult.failure);
@@ -446,10 +379,11 @@ export const ProfileStoreLive = Layer.effect(
                 Schema.decodeUnknownEffect(ProviderConfigSchema)(rawValues),
               );
               if (Result.isFailure(valuesResult)) {
-                if (provider === "Cloudflare") {
+                const fallback = V0.undecodableValues(provider);
+                if (fallback !== undefined) {
                   const target = profileProviderFilePath(name, provider);
                   if (!(yield* fs.exists(target))) {
-                    yield* writeProviderFile(name, provider, {});
+                    yield* writeProviderFile(name, provider, fallback);
                   }
                   continue;
                 }
@@ -732,6 +666,29 @@ export const ProfileStoreLive = Layer.effect(
     } satisfies ProfileStoreService;
   }),
 );
+
+/**
+ * Re-read a provider's stored configuration, failing only with
+ * {@link AuthError}. Silent refreshes rotate single-use refresh tokens, so
+ * {@link AuthProvider.read}/{@link AuthProvider.details} take this effect and
+ * run it under the profile's credentials lock instead of a config read before
+ * it.
+ */
+export const reloadProviderConfig = <Config extends { method: string }>(
+  store: ProfileStoreService,
+  auth: AuthProvider<Config>,
+  profileName: string,
+): Effect.Effect<Config, AuthError> =>
+  store.loadProviderConfig(auth, profileName).pipe(
+    Effect.mapError((cause) =>
+      cause._tag === "AuthError"
+        ? cause
+        : AuthError.make({
+            message: `Could not reload ${auth.name} configuration for profile '${profileName}'.`,
+            cause,
+          }),
+    ),
+  );
 
 /** The name of the currently selected profile. */
 export const currentProfileName: Effect.Effect<string, ProfileError | PlatformError, ProfileStore> =

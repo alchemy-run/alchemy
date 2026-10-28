@@ -150,7 +150,7 @@ export default function DevTerminal({ title = "~/my-app" }: { title?: string }) 
       }
     };
 
-    run();
+    void run();
     return () => {
       cancelRef.current = true;
     };

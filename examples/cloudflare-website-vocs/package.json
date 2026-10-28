@@ -15,6 +15,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/cloudflare": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "react": "catalog:react-rsc",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@cloudflare/unenv-preset": "catalog:",
     "@types/node": "catalog:node24",
     "@types/react": "catalog:",

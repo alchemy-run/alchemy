@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
@@ -22,7 +22,7 @@ export class OpencodeObject extends Cloudflare.DurableObject<OpencodeObject>()(
     const container = yield* OpencodeContainer;
 
     return Effect.gen(function* () {
-      const { fetch } = yield* container.getTcpPort(8080);
+      const port = yield* container.getTcpPort(8080);
 
       return {
         boot: () =>
@@ -30,7 +30,7 @@ export class OpencodeObject extends Cloudflare.DurableObject<OpencodeObject>()(
             const start = yield* Effect.sync(() => Date.now());
             yield* container.start({ enableInternet: true });
             yield* Effect.gen(function* () {
-              const health = yield* fetch(
+              const health = yield* port.fetch(
                 HttpClientRequest.get("http://container/global/health").pipe(
                   HttpClientRequest.setHeader("authorization", AUTH),
                 ),
@@ -43,7 +43,7 @@ export class OpencodeObject extends Cloudflare.DurableObject<OpencodeObject>()(
               }
               // A real write through the app — proves the server is
               // functional, not merely listening.
-              const session = yield* fetch(
+              const session = yield* port.fetch(
                 HttpClientRequest.post("http://container/session").pipe(
                   HttpClientRequest.setHeader("authorization", AUTH),
                   HttpClientRequest.bodyJsonUnsafe({}),

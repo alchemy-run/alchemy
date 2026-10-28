@@ -4,7 +4,7 @@
  * logging CLI so an action never renders two different hues.
  */
 import type { ApplyStatus } from "../../../Report.ts";
-import { theme, type GlyphName } from "../../CliKit/index.ts";
+import { theme, type GlyphName } from "../../../Util/Theme.ts";
 
 /** Every verb a plan row can carry (resource CRUD + namespace/action rollups). */
 export type PlanAction =

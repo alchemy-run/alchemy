@@ -1,4 +1,4 @@
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
@@ -16,14 +16,14 @@ export class RemoteObject extends Cloudflare.DurableObject<RemoteObject>()(
     const container = yield* RemoteContainer;
 
     return Effect.gen(function* () {
-      const { fetch } = yield* container.getTcpPort(8080);
+      const port = yield* container.getTcpPort(8080);
 
       return {
         boot: () =>
           Effect.gen(function* () {
             const start = yield* Effect.sync(() => Date.now());
             yield* container.start({ enableInternet: true });
-            yield* fetch(HttpClientRequest.get("http://container/")).pipe(
+            yield* port.fetch(HttpClientRequest.get("http://container/")).pipe(
               Effect.flatMap((r) => r.text),
               Effect.retry({
                 schedule: Schedule.min([

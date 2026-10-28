@@ -107,10 +107,9 @@ export const Service = <
   const tag = Context.Service<Self, (...args: any[]) => Effect.Effect<any>>(id);
   const callable = (...args: any[]) =>
     tag.use((f: (...a: any[]) => Effect.Effect<any>) =>
-      Effect.all(
-        args.map((arg) => (Effect.isEffect(arg) ? arg : Effect.succeed(arg))),
-        { concurrency: "unbounded" },
-      ).pipe(
+      Effect.forEach(args, (arg) => (Effect.isEffect(arg) ? arg : Effect.succeed(arg)), {
+        concurrency: "unbounded",
+      }).pipe(
         Effect.flatMap((resolved) =>
           f(...resolved).pipe(
             // Deploy-time data-plane routing: the client's calls must target
@@ -270,8 +269,9 @@ const wrapClientInvocations = (client: unknown, layer: Layer.Layer<any, any, nev
  *
  * Total: resolves to `undefined` when no host is ambient — a plan-time
  * {@link Service.execute} invoke, or a binding client provided directly in a
- * script/test outside any Function. Narrow it with `isWorker`/`isFunction`/
- * `isBindingHost` before calling `host.bind`; the guards reject `undefined`.
+ * script/test outside any Function. Providers narrow it before calling
+ * `host.bind` (e.g. Cloudflare's `isWorker`, or `AWSBindings.runsAsRole`);
+ * both reject `undefined`.
  */
 export const Host: Effect.Effect<ResourceLike | undefined> = Effect.serviceOption(
   Self as unknown as Context.Service<ResourceLike, ResourceLike>,

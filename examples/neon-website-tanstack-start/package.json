@@ -16,6 +16,7 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@alchemy.run/neon": "workspace:*",
     "@tanstack/react-router": "catalog:",
     "@tanstack/react-start": "catalog:",
     "alchemy": "workspace:*",
@@ -25,6 +26,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@tailwindcss/vite": "catalog:",
     "@types/react": "catalog:",
