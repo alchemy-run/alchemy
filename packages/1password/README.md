@@ -49,7 +49,8 @@ wait for the relevant quota window to reset before trying again.
 
 ## Development checks
 
-Run the mocked provider tests from the repository root:
+Run offline validation and the real SDK authentication-rejection test from the
+repository root:
 
 ```sh
 pnpm test:integration test/1password
@@ -57,11 +58,16 @@ pnpm test:integration test/1password
 
 Live tests are opt-in and read-only. Create an Environment containing
 `ALCHEMY_ONEPASSWORD_TEST=ready`, then set `ONEPASSWORD_TEST_LIVE=1` and
-`ONEPASSWORD_TEST_ENVIRONMENT_ID`. Export `OP_SERVICE_ACCOUNT_TOKEN` for the
-service-account check, or `ONEPASSWORD_TEST_DESKTOP_ACCOUNT` for the desktop
-check. The desktop test prompts for authorization. Neither test prints values
-or retries errors; the service-account test consumes API quota.
+`ONEPASSWORD_TEST_ENVIRONMENT_ID`. For service-account checks, export
+`OP_SERVICE_ACCOUNT_TOKEN` and set `ONEPASSWORD_TEST_REFERENCE` to an
+`op://vault/item/[section/]field` whose value is `ready`. The service account
+must have read access to both fixtures. These checks cover Environment reads,
+duplicate references, config precedence, and a partially failing reference batch.
+The fixture item must not have a field named `alchemy-audit-missing-field`.
 
-To opt into the vault-reference test, also set `ONEPASSWORD_TEST_REFERENCE` to
-an `op://vault/item/[section/]field` whose value is `ready`. The service account
-must have read access to that vault. No item is created or modified.
+For the desktop check, set `ONEPASSWORD_TEST_DESKTOP_ACCOUNT` and run locally
+without `OP_SERVICE_ACCOUNT_TOKEN`. This test prompts for authorization and is
+skipped in CI or when a service-account token would take precedence. Tests never
+change `CI`. Once live checks are enabled, missing required fixture configuration
+fails the run. No test prints secret values or retries errors; service-account
+checks consume API quota. No Environment or item is created or modified.
