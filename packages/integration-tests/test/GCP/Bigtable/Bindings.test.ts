@@ -198,11 +198,12 @@ describe.skipIf(!!process.env.FAST)(
             );
             const undeleted = yield* expectProbe<{ name?: string }>(baseUrl, "undelete");
             expect(undeleted.name).toBeDefined();
+            // Restoring: reads answer NotFound, then "still being created".
             yield* bigtable.getProjectsInstancesTables({ name: genTableName }).pipe(
               Effect.retry({
-                while: (error) => error._tag === "NotFound",
+                while: (error) => error._tag === "NotFound" || error._tag === "BadRequest",
                 schedule: Schedule.spaced("5 seconds"),
-                times: 24,
+                times: 36,
               }),
             );
 
