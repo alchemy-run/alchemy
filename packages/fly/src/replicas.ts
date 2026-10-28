@@ -39,6 +39,7 @@ import { deleteVolume, ensureVolumeGroup, getVolumeById, volumeGroupName } from 
 
 const WAIT_TIMEOUT_SECONDS = 8;
 const waitBackoff = Schedule.exponential("500 millis");
+const START_TIMEOUT = "180 seconds";
 const SERVICE_CHECK_NAME_PREFIX = "servicecheck-";
 
 export class ReplicaNotCreated extends Data.TaggedError("Fly.ReplicaNotCreated")<{
@@ -310,6 +311,25 @@ export const waitStarted = (appName: string, machineId: string) =>
       Effect.timeout("50 seconds"),
     );
 
+const waitSettled = (appName: string, machineId: string, version: string | undefined) =>
+  machines
+    .waitMachine({
+      app_name: appName,
+      machine_id: machineId,
+      instance_id: version,
+      state: "settled",
+      timeout: 60,
+    })
+    .pipe(
+      Retry.none,
+      Effect.retry({
+        times: 3,
+        schedule: waitBackoff,
+        while: (e) => e._tag === "GatewayTimeout" || e._tag === "MachineWaitTimeout",
+      }),
+      Effect.timeout(START_TIMEOUT),
+    );
+
 export const configuredCheckNames = (config: FlyMachineConfig | undefined) => [
   ...Object.keys(config?.checks ?? {}),
   ...(config?.services ?? []).flatMap((service) =>
@@ -487,7 +507,7 @@ const ensureLeasedStarted = Effect.fn(function* (
         error._tag === "Conflict" ||
         error._tag === "GatewayTimeout",
     }),
-    Effect.timeout("180 seconds"),
+    Effect.timeout(START_TIMEOUT),
   );
   return yield* waitHealthy(appName, started, healthTimeoutMs, expectedConfig ?? machine.config);
 });
@@ -1216,7 +1236,7 @@ const reconcileLeasedReplicas = Effect.fn(function* (
       const currentVersion = current.instance_id;
       const previous = current;
       const expected = { ...previous, config };
-      yield* leases.mutate(machineId, (lease_nonce) =>
+      const updated = yield* leases.mutate(machineId, (lease_nonce) =>
         machines
           .updateMachine({
             app_name: input.appName,
@@ -1229,6 +1249,8 @@ const reconcileLeasedReplicas = Effect.fn(function* (
           })
           .pipe(Effect.timeout("30 seconds")),
       );
+      // Fly serves the previous config until the new version settles, image pull included.
+      yield* leases.guard(waitSettled(input.appName, machineId, updated.instance_id));
       // Rolling opt-out removes generation metadata; observe that transition before startup.
       current = yield* leases.guard(
         Effect.gen(function* () {
