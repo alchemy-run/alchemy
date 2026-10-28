@@ -123,7 +123,7 @@ const HOUR = 60 * 60 * 1000;
  */
 const platform = () => {
   const clock = { now: 0 };
-  const hosted = InMemory.make({ manual: true, now: () => clock.now, catchUpWindow: HOUR });
+  const hosted = InMemory.make({ manual: true, now: () => clock.now });
   const services = Layer.mergeAll(
     Layer.effect(Reactions, Ref.make(0)),
     Layer.effect(Feed, Ref.make<ReadonlyArray<string>>([])),
@@ -226,7 +226,7 @@ describe("Domain catch-up", () => {
     }).pipe(Effect.provide(platform().services)),
   );
 
-  it.live("a view removed and added back receives only what it missed", () =>
+  it.live("a view removed, then added back with a new version, is rebuilt with everything", () =>
     Effect.gen(function* () {
       const bank = platform();
       yield* bank.deploy(WithView, OnDepositLive, deposit("a-1", 1));
@@ -235,6 +235,7 @@ describe("Domain catch-up", () => {
         WithView,
         OnDepositLive,
         bank.settle.pipe(Effect.andThen(amounts("a-1"))),
+        { versions: { Deposits: 1 } },
       );
       expect(result).toEqual([1, 2]);
     }).pipe(Effect.provide(platform().services)),

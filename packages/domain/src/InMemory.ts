@@ -1,4 +1,3 @@
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
@@ -7,7 +6,8 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import { WorkflowEngine } from "effect/workflow";
 import type * as Aggregate from "./Aggregate.ts";
 import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "./Aggregate.ts";
-import { earliest, laggingFrom, routeLive, type Routed } from "./CatchUp.ts";
+import * as Backfill from "./Backfill.ts";
+import { type Routed, targetId } from "./CatchUp.ts";
 import * as InMemoryWorkflows from "./InMemoryWorkflows.ts";
 import {
   type Accepted,
@@ -36,13 +36,6 @@ export interface Options {
   readonly manual?: boolean;
   /** Clock used to time-stamp commands. Defaults to `Date.now`. */
   readonly now?: () => number;
-  /**
-   * How much history each catch-up round replays (see `CatchUp`): a view or
-   * projection added after its sources recorded events receives them a window
-   * at a time, so events from many instances arrive roughly in the order they
-   * happened. Defaults to one hour.
-   */
-  readonly catchUpWindow?: Duration.Input;
 }
 
 /**
@@ -84,6 +77,16 @@ interface Timer {
   readonly fire: Effect.Effect<void>;
 }
 
+/** A function that builds each value once per argument. */
+const memo = <A>(make: (key: string) => A) => {
+  const made = new Map<string, A>();
+  return (key: string): A => {
+    let found = made.get(key);
+    if (found === undefined) made.set(key, (found = make(key)));
+    return found;
+  };
+};
+
 /**
  * Build an in-memory platform and its control surface.
  */
@@ -110,53 +113,132 @@ export const make = (
     if (!storage.has(key)) storage.set(key, make());
     return storage.get(key) as T;
   };
-  // Every source's instances and how to catch one up, as of the latest build.
-  const sources = new Map<
-    string,
-    {
-      readonly ids: () => ReadonlyArray<string>;
-      readonly catchUp: (id: string, until: number) => Effect.Effect<number | undefined>;
-    }
-  >();
-  const window = Duration.toMillis(Duration.fromInputUnsafe(options.catchUpWindow ?? "1 hour"));
-  /**
-   * Replay history to lagging consumers in rounds: each round replays every
-   * instance's events before `until`, and the next starts a window past the
-   * earliest event left. Its deliveries queue behind it, round by round.
-   */
-  const sweep = (targets: ReadonlyArray<string>): Effect.Effect<void> =>
-    Effect.gen(function* () {
-      let until = Number.NEGATIVE_INFINITY;
-      while (true) {
-        let next: number | undefined;
-        for (const source of sources.values()) {
-          for (const id of source.ids()) next = earliest(next, yield* source.catchUp(id, until));
-        }
-        if (next === undefined) return;
-        until = next + window;
-        for (const target of targets) {
-          if (!histories.get(target)?.complete)
-            histories.set(target, { complete: false, through: next });
-        }
-      }
-    });
-  // How much history has reached each consumer, by `CatchUp.targetId`.
-  const histories = new Map<string, { complete: boolean; through: number | undefined }>();
-  /** Mark `targets` complete once everything the sweep queued has been delivered. */
-  const finishers = new WeakSet<Effect.Effect<void>>();
-  const finish = (targets: ReadonlyArray<string>): Effect.Effect<void> => {
-    const finisher: Effect.Effect<void> = Effect.suspend(() =>
-      // Wait behind real work only: two finishers must not wait on each other.
-      pending.some((work) => !finishers.has(work))
-        ? enqueueWork([finish(targets)])
-        : Effect.sync(() => {
-            for (const target of targets)
-              histories.set(target, { complete: true, through: undefined });
-          }),
-    );
-    finishers.add(finisher);
-    return finisher;
+  // ---------------------------------------------------------------- backfill
+  // Every source instance, consumer key and directory node is an object with its
+  // own storage, kept across builds (deploys); its jobs run on the work queue.
+  const memoryStorage = (address: string, lock: Semaphore.Semaphore): Backfill.Storage => {
+    const data = stored(`bf:${address}`, () => new Map<string, unknown>());
+    return {
+      get: <A>(key: string) => Effect.sync(() => data.get(key) as A | undefined),
+      put: (entries) =>
+        Effect.sync(() => {
+          for (const [key, value] of Object.entries(entries)) data.set(key, value);
+        }),
+      delete: (keys) =>
+        Effect.sync(() => {
+          for (const key of keys) data.delete(key);
+        }),
+      list: <A>(options: { prefix: string; startAfter?: string; limit?: number }) =>
+        Effect.sync(() => {
+          const out: Array<readonly [string, A]> = [];
+          for (const key of [...data.keys()].sort()) {
+            if (!key.startsWith(options.prefix)) continue;
+            if (options.startAfter !== undefined && key <= options.startAfter) continue;
+            out.push([key, data.get(key) as A]);
+            if (options.limit !== undefined && out.length >= options.limit) break;
+          }
+          return out;
+        }),
+      exclusive: (effect) => lock.withPermits(1)(effect),
+    };
   };
+  // Queued jobs, by object and id: scheduling one already queued is a no-op.
+  const scheduled = new Set<string>();
+  const memoryJobs = (
+    address: string,
+    run: (id: string) => Effect.Effect<void>,
+  ): Backfill.Jobs => ({
+    schedule: (id, afterMillis) =>
+      Effect.suspend(() => {
+        const key = `${address}|${id}`;
+        // A job that waits (on code that doesn't know a target yet) waits on the clock.
+        if (afterMillis > 0)
+          return timer(
+            `bf|${key}`,
+            now() + afterMillis,
+            run(id).pipe(Effect.catchCause((cause) => Effect.sync(() => failures.push(cause)))),
+          );
+        if (scheduled.has(key)) return Effect.void;
+        scheduled.add(key);
+        return enqueueWork([
+          Effect.suspend(() => {
+            scheduled.delete(key);
+            return run(id).pipe(
+              Effect.catchCause((cause) => Effect.sync(() => failures.push(cause))),
+            );
+          }),
+        ]);
+      }),
+  });
+  const nodes = new Map<string, Backfill.Node>();
+  const node = (path: string): Backfill.Node => {
+    let found = nodes.get(path);
+    if (!found) {
+      const address = `node:${path}`;
+      const lock = stored(`lock:${address}`, () => Semaphore.makeUnsafe(1));
+      found = Backfill.makeNode(
+        memoryStorage(address, lock),
+        memoryJobs(address, (id) => node(path).run(id)),
+        net,
+        limits,
+      );
+      nodes.set(path, found);
+    }
+    return found;
+  };
+  // Every consumer in the model of the latest build, and the tuning: keys waiting on
+  // discovery ask again on the work queue, as soon as other work has run.
+  let model: ReadonlyArray<string> = [];
+  const limits: Backfill.Limits = { ...Backfill.defaultLimits, pollMillis: 0 };
+  // The source and consumer parts of each hosted entity, as of the latest build.
+  const sourceRoles = new Map<string, (id: string) => Backfill.Source>();
+  const consumerRoles = new Map<string, (key: string) => Backfill.Consumer>();
+  const consumerRole = (target: string, key: string) => {
+    const { kind, name } = Backfill.consumerOf(target);
+    return consumerRoles.get(`${kind}:${name}`)?.(key);
+  };
+  const net: Backfill.Network = {
+    node: {
+      register: (path, ref) => node(path).register(path, ref),
+      child: (path, child) => node(path).child(path, child),
+      news: (path, targets) => node(path).news(path, targets),
+      sweep: (path, target, phase) => node(path).sweep(path, target, phase),
+      report: (path, target, phase, child) => node(path).report(path, target, phase, child),
+      settled: (path, target, ref) => node(path).settled(path, target, ref),
+      phase: (path, target) => node(path).phase(path, target),
+      status: (path) => node(path).status(path),
+    },
+    source: {
+      // A source no longer in the model has nothing to give.
+      scan: (ref, target) =>
+        Effect.suspend(
+          () =>
+            sourceRoles.get(ref.source)?.(ref.id).scan(target) ??
+            Effect.succeed("discovered" as const),
+        ),
+      ready: (ref, target) =>
+        Effect.suspend(
+          () =>
+            sourceRoles.get(ref.source)?.(ref.id).ready(target) ??
+            Effect.succeed("settled" as const),
+        ),
+      pull: (ref, target, key, after) =>
+        Effect.suspend(
+          () =>
+            sourceRoles.get(ref.source)?.(ref.id).pull(target, key, after) ??
+            Effect.succeed({ deliveries: [], live: true }),
+        ),
+    },
+    consumer: {
+      source: (target, key, stream, ref) =>
+        Effect.suspend(() => consumerRole(target, key)?.source(target, stream, ref) ?? Effect.void),
+      ready: (target, key) =>
+        Effect.suspend(() => consumerRole(target, key)?.ready(target) ?? Effect.void),
+    },
+  };
+  /** List an instance in the directory; its first commit waits for it. */
+  const register = (ref: Backfill.SourceRef) =>
+    node(Backfill.leafOf(ref)).register(Backfill.leafOf(ref), ref);
 
   /** Fire every timer that is due on the platform's clock; each removes itself. */
   const fireDue: Effect.Effect<void> = Effect.suspend(() => {
@@ -300,6 +382,53 @@ export const make = (
             );
           return found;
         };
+        const sourceRole = memo((id: string) => {
+          const address = `source:${kit.name}/${id}`;
+          const role: Backfill.Source = Backfill.makeSource(
+            memoryStorage(address, lock),
+            memoryJobs(address, () => role.flush),
+            net,
+            {
+              ref: { source: kit.name, id },
+              targets: () => kit.targets,
+              model: () => model,
+              version: Effect.sync(() => instance(id).version),
+              routed: Effect.sync(() => instance(id).routed),
+              markLive: (target) =>
+                Effect.sync(() => {
+                  const current = instance(id);
+                  current.routed = { ...current.routed, [target]: current.version };
+                }),
+              rows: (after, limit, target) =>
+                Effect.sync(() =>
+                  Backfill.routeRows(
+                    kit.replay,
+                    id,
+                    kit.targets,
+                    target,
+                    instance(id)
+                      .events.filter((event) => event.envelope.seq > after)
+                      .slice(0, limit),
+                    (event) => event.envelope.seq,
+                  ),
+                ),
+              rowsAt: (seqs, target) =>
+                Effect.sync(() =>
+                  Backfill.routeRows(
+                    kit.replay,
+                    id,
+                    kit.targets,
+                    target,
+                    seqs.map((seq) => instance(id).events[seq - 1]!),
+                    (event) => event.envelope.seq,
+                  ).flatMap((row) => row.deliveries),
+                ),
+            },
+            limits,
+          );
+          return role;
+        });
+        sourceRoles.set(kit.name, sourceRole);
         // Callers hold `lock`.
         const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
           Effect.gen(function* () {
@@ -319,7 +448,9 @@ export const make = (
               link: meta.link,
             });
             if (result._tag === "Rejected") return result satisfies SendResult;
-            const live = routeLive(
+            if (current.version === 0) yield* register({ source: kit.name, id });
+            const live = yield* Backfill.routeCommit(
+              sourceRole(id),
               kit.targets,
               current.routed,
               current.version,
@@ -343,28 +474,9 @@ export const make = (
             };
             current.receipts.set(meta.commandId, sent);
             yield* announce(id);
-            yield* enqueue(live.deliveries, kit.deliver);
+            yield* enqueue(live.send, kit.deliver);
             return sent;
           });
-        sources.set(kit.name, {
-          ids: () => [...instances.keys()],
-          catchUp: (id, until) =>
-            lock.withPermits(1)(
-              Effect.suspend(() => {
-                const current = instance(id);
-                const from = laggingFrom(kit.targets, current.routed, current.version);
-                if (from === undefined) return Effect.succeed(undefined);
-                const result = kit.replay({
-                  id,
-                  routed: current.routed!,
-                  rows: current.events.filter((event) => event.envelope.seq > from),
-                  until,
-                });
-                current.routed = result.routed;
-                return enqueue(result.deliveries, kit.deliver).pipe(Effect.as(result.next));
-              }),
-            ),
-        });
         const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
           lock.withPermits(1)(commit(id, command, meta));
         const executed = (id: string, commandId: string) => instance(id).receipts.has(commandId);
@@ -443,18 +555,23 @@ export const make = (
                   commandId: `seed:${id}:${current.version}`,
                   now: now(),
                 });
-                const live = routeLive(
-                  kit.targets,
-                  current.routed,
-                  current.version,
-                  result.version,
-                  result.deliveries,
-                );
-                current.routed = live.routed;
-                current.state = result.state;
-                current.version = result.version;
-                current.events.push(...result.events);
-                return announce(id).pipe(Effect.andThen(enqueue(live.deliveries, kit.deliver)));
+                return Effect.gen(function* () {
+                  if (current.version === 0) yield* register({ source: kit.name, id });
+                  const live = yield* Backfill.routeCommit(
+                    sourceRole(id),
+                    kit.targets,
+                    current.routed,
+                    current.version,
+                    result.version,
+                    result.deliveries,
+                  );
+                  current.routed = live.routed;
+                  current.state = result.state;
+                  current.version = result.version;
+                  current.events.push(...result.events);
+                  yield* announce(id);
+                  yield* enqueue(live.send, kit.deliver);
+                });
               }),
             ),
         };
@@ -500,61 +617,112 @@ export const make = (
               Effect.tap((created) => Effect.sync(() => keys.set(key, created))),
             );
           });
-        sources.set(kit.name, {
-          ids: () => [...keys.keys()],
-          catchUp: (key, until) =>
-            lock.withPermits(1)(
-              Effect.gen(function* () {
-                const current = yield* get(key);
-                const snapshot = yield* SubscriptionRef.get(current.snapshot);
-                const from = laggingFrom(kit.targets, current.routed, snapshot.seq);
-                if (from === undefined) return undefined;
-                const entries = yield* SubscriptionRef.get(current.entries);
-                const result = kit.replay({
-                  id: key,
-                  routed: current.routed!,
-                  rows: entries.filter((entry) => entry.seq > from),
-                  until,
-                });
-                current.routed = result.routed;
-                yield* enqueue(result.deliveries, kit.deliver);
-                return result.next;
-              }),
-            ),
+        const target = targetId({
+          kind: "view",
+          name: kit.name,
+          ...(kit.generation > 0 ? { generation: kit.generation } : {}),
         });
+        /** Apply deliveries to a key and route what it emits. Callers hold `lock`. */
+        const apply = (key: string, deliveries: ReadonlyArray<Delivery>) =>
+          Effect.gen(function* () {
+            const current = yield* get(key);
+            const before = yield* SubscriptionRef.get(current.snapshot);
+            const result = kit.apply(key, before, deliveries);
+            if (!result.changed) return;
+            current.inputs.push(
+              ...deliveries.filter((d) => (before.checkpoints[d.source] ?? 0) < d.seq),
+            );
+            if (result.entries.length > 0) {
+              yield* SubscriptionRef.update(current.entries, (entries) => [
+                ...entries,
+                ...result.entries,
+              ]);
+            }
+            const live = yield* Backfill.routeCommit(
+              sourceRole(key),
+              kit.targets,
+              current.routed,
+              before.seq,
+              result.snapshot.seq,
+              result.downstream,
+            );
+            current.routed = live.routed;
+            yield* SubscriptionRef.set(current.snapshot, result.snapshot);
+            yield* enqueue(live.send, kit.deliver);
+          }).pipe(kit.observe(key, deliveries));
+        // As a consumer: buffers and merges history while a backfill runs.
+        const consumer = memo((key: string) => {
+          const address = `consumer:${target}/${key}`;
+          const role: Backfill.Consumer = Backfill.makeConsumer(
+            memoryStorage(address, lock),
+            memoryJobs(address, (id) => role.merge(id.slice("bf-merge:".length))),
+            net,
+            { key, target: () => target, apply: (deliveries) => apply(key, deliveries) },
+            limits,
+          );
+          return role;
+        });
+        consumerRoles.set(`view:${kit.name}`, consumer);
+        // As a source: other views and projections read its entries.
+        const sourceRole = memo((key: string) => {
+          const address = `source:${kit.name}/${key}`;
+          const entries = Effect.flatMap(get(key), (current) =>
+            SubscriptionRef.get(current.entries),
+          );
+          const role: Backfill.Source = Backfill.makeSource(
+            memoryStorage(address, lock),
+            memoryJobs(address, () => role.flush),
+            net,
+            {
+              ref: { source: kit.name, id: key },
+              targets: () => kit.targets,
+              model: () => model,
+              version: Effect.flatMap(get(key), (current) =>
+                Effect.map(SubscriptionRef.get(current.snapshot), (snapshot) => snapshot.seq),
+              ),
+              routed: Effect.map(get(key), (current) => current.routed),
+              markLive: (target) =>
+                Effect.gen(function* () {
+                  const current = yield* get(key);
+                  const { seq } = yield* SubscriptionRef.get(current.snapshot);
+                  current.routed = { ...current.routed, [target]: seq };
+                }),
+              rows: (after, limit, target) =>
+                Effect.map(entries, (all) =>
+                  Backfill.routeRows(
+                    kit.replay,
+                    key,
+                    kit.targets,
+                    target,
+                    all.filter((entry) => entry.seq > after).slice(0, limit),
+                    (entry) => entry.seq,
+                  ),
+                ),
+              rowsAt: (seqs, target) =>
+                Effect.map(entries, (all) =>
+                  Backfill.routeRows(
+                    kit.replay,
+                    key,
+                    kit.targets,
+                    target,
+                    seqs.map((seq) => all[seq - 1]!),
+                    (entry) => entry.seq,
+                  ).flatMap((row) => row.deliveries),
+                ),
+            },
+            limits,
+          );
+          return role;
+        });
+        sourceRoles.set(kit.name, sourceRole);
         return {
           receive: (key, deliveries) =>
-            lock.withPermits(1)(
-              Effect.gen(function* () {
-                const current = yield* get(key);
-                const result = kit.apply(
-                  key,
-                  yield* SubscriptionRef.get(current.snapshot),
-                  deliveries,
-                );
-                if (!result.changed) return;
-                const before = yield* SubscriptionRef.get(current.snapshot);
-                current.inputs.push(
-                  ...deliveries.filter((d) => (before.checkpoints[d.source] ?? 0) < d.seq),
-                );
-                if (result.entries.length > 0) {
-                  yield* SubscriptionRef.update(current.entries, (entries) => [
-                    ...entries,
-                    ...result.entries,
-                  ]);
-                }
-                const live = routeLive(
-                  kit.targets,
-                  current.routed,
-                  before.seq,
-                  result.snapshot.seq,
-                  result.downstream,
-                );
-                current.routed = live.routed;
-                yield* SubscriptionRef.set(current.snapshot, result.snapshot);
-                yield* enqueue(live.deliveries, kit.deliver);
-              }).pipe(kit.observe(key, deliveries)),
-            ),
+            Effect.gen(function* () {
+              // A key is listed as a source before it first applies anything.
+              if (!keys.has(key)) yield* register({ source: kit.name, id: key });
+              if (yield* consumer(key).admit(target, deliveries))
+                yield* lock.withPermits(1)(apply(key, deliveries));
+            }),
           read: (key) =>
             get(key).pipe(Effect.flatMap((current) => SubscriptionRef.get(current.snapshot))),
           changes: (key) =>
@@ -667,26 +835,53 @@ export const make = (
               }),
             );
           });
+        /** Accept a delivery into its key's log (once), then handle the log. */
+        const intake = (delivery: Delivery) =>
+          Effect.suspend(() => {
+            // For an earlier generation of the projection: nothing to run.
+            if ((delivery.target.generation ?? 0) < kit.generation) return Effect.void;
+            const p = partition(delivery.key);
+            if ((p.intake[delivery.source] ?? 0) >= delivery.seq) return Effect.void;
+            p.intake[delivery.source] = delivery.seq;
+            p.log.push({ position: p.log.length + 1, delivery, at: now() });
+            running++;
+            return Effect.forkDetach(
+              process(delivery.key, false).pipe(
+                Effect.catchCause((cause) =>
+                  Effect.sync(() => failures.push(cause)).pipe(
+                    Effect.andThen(Effect.logError(`projection ${kit.name} failed`, cause)),
+                  ),
+                ),
+                Effect.ensuring(Effect.sync(() => running--)),
+              ),
+            ).pipe(Effect.asVoid);
+          });
+        const target = targetId({
+          kind: "projection",
+          name: kit.name,
+          ...(kit.generation > 0 ? { generation: kit.generation } : {}),
+        });
+        // Buffers and merges history while a backfill runs.
+        const consumer = memo((key: string) => {
+          const address = `consumer:${target}/${key}`;
+          const role: Backfill.Consumer = Backfill.makeConsumer(
+            memoryStorage(address, partition(key).lock),
+            memoryJobs(address, (id) => role.merge(id.slice("bf-merge:".length))),
+            net,
+            {
+              key,
+              target: () => target,
+              apply: (deliveries) => Effect.forEach(deliveries, intake, { discard: true }),
+            },
+            limits,
+          );
+          return role;
+        });
+        consumerRoles.set(`projection:${kit.name}`, consumer);
         return {
           receive: (delivery) =>
-            Effect.suspend(() => {
-              // For an earlier generation of the projection: nothing to run.
-              if ((delivery.target.generation ?? 0) < kit.generation) return Effect.void;
-              const p = partition(delivery.key);
-              if ((p.intake[delivery.source] ?? 0) >= delivery.seq) return Effect.void;
-              p.intake[delivery.source] = delivery.seq;
-              p.log.push({ position: p.log.length + 1, delivery, at: now() });
-              running++;
-              return Effect.forkDetach(
-                process(delivery.key, false).pipe(
-                  Effect.catchCause((cause) =>
-                    Effect.sync(() => failures.push(cause)).pipe(
-                      Effect.andThen(Effect.logError(`projection ${kit.name} failed`, cause)),
-                    ),
-                  ),
-                  Effect.ensuring(Effect.sync(() => running--)),
-                ),
-              ).pipe(Effect.asVoid);
+            Effect.gen(function* () {
+              if (yield* consumer(delivery.key).admit(target, [delivery])) yield* intake(delivery);
             }),
           checkpoints: (key) => Effect.sync(() => ({ ...partition(key).checkpoints })),
         };
@@ -809,16 +1004,17 @@ export const make = (
         };
       }),
 
+    // A deploy that adds consumers tells the directory; it starts their backfill.
     start: (targets) =>
       Effect.suspend(() => {
-        for (const target of targets) {
-          if (!histories.get(target)?.complete)
-            histories.set(target, { complete: false, through: undefined });
-        }
-        return enqueueWork([sweep(targets), finish(targets)]);
+        model = targets;
+        return targets.length === 0 ? Effect.void : net.node.news("00", targets);
       }),
     history: (target) =>
-      Effect.sync(() => histories.get(target) ?? { complete: true, through: undefined }),
+      Effect.map(net.node.status(""), (status) => ({
+        complete: status.complete.includes(target),
+        through: undefined,
+      })),
   });
 
   return {

@@ -1,0 +1,1255 @@
+import * as Effect from "effect/Effect";
+import {
+  type ReplayInput,
+  type ReplayResult,
+  type Routed,
+  routeLive,
+  targetId,
+} from "./CatchUp.ts";
+import type { Delivery } from "./Platform.ts";
+
+/**
+ * Backfill: how a view or projection added after its sources recorded events
+ * (or rebuilt by bumping its version) receives their history, in timestamp
+ * order, without a central coordinator.
+ *
+ * Three roles, each a durable object that owns its own storage:
+ *
+ * - **Directory nodes** form a tree (fan-out 16) that lists every source
+ *   instance. A sweep for a consumer (a "target") runs down the tree and
+ *   reports back up, in three phases: discover, ready, complete.
+ * - **Sources** (aggregate instances, and view keys other consumers read) scan
+ *   their history once through the target's routing, index which events go to
+ *   which consumer key, and tell each key it has them as a source. Keys pull
+ *   from them, and when a key has pulled everything, the source switches it to
+ *   live delivery in the same step.
+ * - **Consumer keys** (view keys, projection keys) buffer what they receive
+ *   ordered by `(at, stream, seq)` and apply the earliest event whenever every
+ *   source still being pulled has an event buffered. That is a k-way merge of
+ *   their own sources: a total order by timestamp, local to each key.
+ *
+ * Every step does a bounded amount of work, records its progress before it
+ * answers, and is idempotent, so a crash, a retry or a redeploy at any point
+ * resumes where it left off. Every continuation is a scheduled job, never a
+ * nested call.
+ *
+ * @internal
+ */
+
+// ---------------------------------------------------------------- runtime
+
+/** A key-ordered store, as a Durable Object's storage is. */
+export interface Storage {
+  readonly get: <A>(key: string) => Effect.Effect<A | undefined>;
+  readonly put: (entries: Readonly<Record<string, unknown>>) => Effect.Effect<void>;
+  readonly delete: (keys: ReadonlyArray<string>) => Effect.Effect<void>;
+  /** Entries under `prefix`, in key order, after `startAfter`. */
+  readonly list: <A>(options: {
+    readonly prefix: string;
+    readonly startAfter?: string;
+    readonly limit?: number;
+  }) => Effect.Effect<ReadonlyArray<readonly [string, A]>>;
+  /** Run `effect` with every other call on this object held back. */
+  readonly exclusive: <A, E>(effect: Effect.Effect<A, E>) => Effect.Effect<A, E>;
+}
+
+/** Durable, at-least-once jobs on one object: a job with the same id replaces a pending one. */
+export interface Jobs {
+  readonly schedule: (id: string, afterMillis: number) => Effect.Effect<void>;
+}
+
+/** An instance listed in the directory: its source (aggregate or view) and id. */
+export interface SourceRef {
+  readonly source: string;
+  readonly id: string;
+}
+
+/** How far a sweep for a target has got, as a node knows it. */
+export type Phase = "unknown" | "discover" | "ready" | "complete";
+
+export interface NodeRpc {
+  readonly register: (path: string, ref: SourceRef) => Effect.Effect<void>;
+  readonly child: (path: string, child: string) => Effect.Effect<void>;
+  readonly news: (path: string, targets: ReadonlyArray<string>) => Effect.Effect<void>;
+  readonly sweep: (
+    path: string,
+    target: string,
+    phase: "discover" | "ready" | "complete",
+  ) => Effect.Effect<void>;
+  readonly report: (
+    path: string,
+    target: string,
+    phase: "discover" | "ready",
+    child: string,
+  ) => Effect.Effect<void>;
+  readonly settled: (path: string, target: string, ref: SourceRef) => Effect.Effect<void>;
+  readonly phase: (path: string, target: string) => Effect.Effect<Phase>;
+  readonly status: (path: string) => Effect.Effect<Status>;
+}
+
+/** What a source answers to `scan`. */
+export type ScanResult =
+  /** Its code doesn't know the target yet: call again once it runs the deployed code. */
+  | "stale"
+  /** It has more history to scan: call again. */
+  | "more"
+  /** Every key it feeds knows it as a source. */
+  | "discovered";
+
+export interface SourceRpc {
+  readonly scan: (ref: SourceRef, target: string) => Effect.Effect<ScanResult>;
+  /** Tell its keys discovery is complete. */
+  readonly ready: (ref: SourceRef, target: string) => Effect.Effect<ReadyResult>;
+  readonly pull: (
+    ref: SourceRef,
+    target: string,
+    key: string,
+    after: number,
+  ) => Effect.Effect<Pulled>;
+}
+
+/** A page a key pulled from a source. */
+export interface Pulled {
+  readonly deliveries: ReadonlyArray<Delivery>;
+  /** The source switched the key to live delivery: nothing more to pull. */
+  readonly live: boolean;
+}
+
+export interface ConsumerRpc {
+  readonly source: (
+    target: string,
+    key: string,
+    stream: string,
+    ref: SourceRef,
+  ) => Effect.Effect<void>;
+  readonly ready: (target: string, key: string) => Effect.Effect<void>;
+}
+
+/** How the roles reach each other. */
+export interface Network {
+  readonly node: NodeRpc;
+  readonly source: SourceRpc;
+  readonly consumer: ConsumerRpc;
+}
+
+/** What the root reports: the targets whose history has fully arrived, and those still running. */
+export interface Status {
+  readonly complete: ReadonlyArray<string>;
+  readonly running: ReadonlyArray<string>;
+}
+
+/** Tuning, in rows and calls per step. */
+export interface Limits {
+  /** History rows a source scans, or a key pulls, per call. */
+  readonly page: number;
+  /** Source instances a directory node handles per step, and calls it makes at once. */
+  readonly nodePage: number;
+  readonly concurrency: number;
+  /** Buffered rows a key applies per step. */
+  readonly apply: number;
+  /** How long to wait before calling a stale source again, in milliseconds. */
+  readonly staleRetryMillis: number;
+  /** How long a key without sources waits before asking whether discovery is complete again. */
+  readonly pollMillis: number;
+}
+
+export const defaultLimits: Limits = {
+  page: 100,
+  nodePage: 25,
+  concurrency: 5,
+  apply: 200,
+  staleRetryMillis: 30_000,
+  pollMillis: 5_000,
+};
+
+// ---------------------------------------------------------------- keys
+
+const enc = encodeURIComponent;
+const pad = (n: number, width: number) => String(Math.max(0, Math.floor(n))).padStart(width, "0");
+
+/** The depth of the directory tree's leaves: 16^4 of them. */
+export const DEPTH = 4;
+
+/** The leaf an instance is listed in: a prefix of the FNV-1a hash of its source and id. */
+export const leafOf = ({ source, id }: SourceRef): string => {
+  let hash = 0x811c9dc5;
+  for (const char of `${source}/${id}`) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0").slice(0, DEPTH);
+};
+
+const parentOf = (path: string) => path.slice(0, -1);
+const refKey = (ref: SourceRef) => `${enc(ref.source)}:${enc(ref.id)}`;
+
+/** A buffered delivery's place in a key's merge: timestamp, then stream, then seq. */
+export const orderKey = (target: string, delivery: Delivery) =>
+  `bf:b:${enc(target)}:${pad(delivery.envelope.at, 15)}:${enc(delivery.source)}:${pad(delivery.seq, 12)}`;
+
+// ---------------------------------------------------------------- outbox
+
+type Message =
+  | {
+      readonly kind: "source";
+      readonly target: string;
+      readonly key: string;
+      readonly stream: string;
+      readonly ref: SourceRef;
+    }
+  | { readonly kind: "ready"; readonly target: string; readonly key: string }
+  | { readonly kind: "settled"; readonly target: string; readonly ref: SourceRef };
+
+const OUTBOX_LEASE_MS = 60_000;
+
+/**
+ * A source's durable outbox of control messages: staged with the state change
+ * that produced them, sent in order, deleted once sent. One flush at a time.
+ */
+const outbox = (storage: Storage, jobs: Jobs, net: Network) => {
+  const send = (message: Message): Effect.Effect<void> => {
+    switch (message.kind) {
+      case "source":
+        return net.consumer.source(message.target, message.key, message.stream, message.ref);
+      case "ready":
+        return net.consumer.ready(message.target, message.key);
+      case "settled":
+        return net.node.settled(leafOf(message.ref), message.target, message.ref);
+    }
+  };
+  const acquire = storage.exclusive(
+    Effect.gen(function* () {
+      const held = yield* storage.get<number>("bf:q-lease");
+      const now = yield* Effect.sync(() => Date.now());
+      if (held !== undefined && held > now) return false;
+      yield* storage.put({ "bf:q-lease": now + OUTBOX_LEASE_MS });
+      return true;
+    }),
+  );
+  /** Send every staged message; `true` when the outbox is empty. */
+  const flush: Effect.Effect<boolean> = Effect.gen(function* () {
+    // Another flush holds the lease; it may stop before this one's rows: try again later.
+    if (!(yield* acquire)) return yield* Effect.as(jobs.schedule("bf-flush", 5_000), false);
+    return yield* Effect.gen(function* () {
+      while (true) {
+        const rows = yield* storage.list<Message>({ prefix: "bf:q:", limit: 50 });
+        if (rows.length === 0) return true;
+        for (const [key, message] of rows) {
+          yield* send(message);
+          yield* storage.delete([key]);
+        }
+      }
+    }).pipe(
+      // A send failed: the rest stay staged, and the backstop sends them later.
+      Effect.catchCause(() => Effect.as(jobs.schedule("bf-flush", 5_000), false)),
+      Effect.ensuring(storage.delete(["bf:q-lease"])),
+    );
+  });
+  return {
+    /** Stage messages; call inside the exclusive section that commits their cause. */
+    stage: (messages: ReadonlyArray<Message>) =>
+      Effect.gen(function* () {
+        if (messages.length === 0) return;
+        const last = ((yield* storage.get<number>("bf:q-seq")) ?? 0) + messages.length;
+        const rows: Record<string, Message> = { "bf:q-seq": last as never };
+        messages.forEach((message, index) => {
+          rows[`bf:q:${pad(last - messages.length + index + 1, 12)}`] = message;
+        });
+        yield* storage.put(rows);
+        // The backstop: sent even if this instance dies before a flush runs.
+        yield* jobs.schedule("bf-flush", 5_000);
+      }),
+    flush,
+  };
+};
+
+// ---------------------------------------------------------------- sources
+
+/** A source's progress through one target's backfill. */
+interface SourceState {
+  /** Every row up to this seq has been routed: by the scan, or by a commit after it. */
+  readonly scanned: number;
+  /** Discovery is complete everywhere. */
+  readonly ready: boolean;
+  /** Keys still pulling (not yet switched to live delivery). */
+  readonly pending: number;
+}
+
+/** What a source instance gives the protocol. */
+export interface SourceHost {
+  readonly ref: SourceRef;
+  /** The consumers this instance's code routes to (`CatchUp.targetId`). */
+  readonly targets: () => ReadonlyArray<string>;
+  /** Every consumer in the model this instance's code runs: a target outside it is from newer code. */
+  readonly model: () => ReadonlyArray<string>;
+  /** Its current version: the seq of its last event or entry. */
+  readonly version: Effect.Effect<number>;
+  readonly routed: Effect.Effect<Routed | undefined>;
+  /** Route `target` live from the current version on. Called holding the exclusive section. */
+  readonly markLive: (target: string) => Effect.Effect<void>;
+  /** Stored rows after `after`, routed to `target` only: each row's seq and its deliveries. */
+  readonly rows: (
+    after: number,
+    limit: number,
+    target: string,
+  ) => Effect.Effect<
+    ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>
+  >;
+  /** The deliveries to `target` of the rows at these seqs. */
+  readonly rowsAt: (
+    seqs: ReadonlyArray<number>,
+    target: string,
+  ) => Effect.Effect<ReadonlyArray<Delivery>>;
+}
+
+/** What a source answers to `ready`. */
+export type ReadyResult = "stale" | "pending" | "settled";
+
+/**
+ * A source instance's part of the protocol. Its host routes every commit's
+ * deliveries to a backfilling target through {@link Source.onCommit} (inside
+ * the commit's exclusive section) and serves `scan`, `ready` and `pull`.
+ */
+export const makeSource = (
+  storage: Storage,
+  jobs: Jobs,
+  net: Network,
+  host: SourceHost,
+  limits: Limits = defaultLimits,
+) => {
+  const queue = outbox(storage, jobs, net);
+  const stateKey = (target: string) => `bf:s:${enc(target)}`;
+  const keyKey = (target: string, key: string) => `bf:k:${enc(target)}:${enc(key)}`;
+  const keysPrefix = (target: string) => `bf:k:${enc(target)}:`;
+  const indexPrefix = (target: string, key: string) => `bf:r:${enc(target)}:${enc(key)}:`;
+  const getState = (target: string) => storage.get<SourceState>(stateKey(target));
+  const indexRow = (target: string, delivery: Delivery) => ({
+    [`${indexPrefix(target, delivery.key)}${pad(delivery.seq, 12)}`]: true,
+  });
+
+  /** Backfilling here: its cursor is behind. An instance with no cursors predates catch-up. */
+  const lagging = (target: string, routed: Routed | undefined, version: number) =>
+    routed !== undefined && (routed[target] ?? 0) < version;
+
+  const clear = (prefix: string) =>
+    Effect.gen(function* () {
+      while (true) {
+        const rows = yield* storage.list({ prefix, limit: 128 });
+        if (rows.length === 0) return;
+        yield* storage.delete(rows.map(([key]) => key));
+      }
+    });
+
+  /** Every key is live: the target is live here. Callers hold the exclusive section. */
+  const settle = (target: string, messages: Array<Message>) =>
+    Effect.gen(function* () {
+      yield* clear(keysPrefix(target));
+      yield* clear(`bf:r:${enc(target)}:`);
+      yield* storage.delete([stateKey(target)]);
+      yield* host.markLive(target);
+      messages.push({ kind: "settled", target, ref: host.ref });
+    });
+
+  /** Route deliveries to a scanned target by key: send to live keys, index for pulling ones. */
+  const route = (target: string, deliveries: ReadonlyArray<Delivery>, discovering: boolean) =>
+    Effect.gen(function* () {
+      const send: Array<Delivery> = [];
+      const messages: Array<Message> = [];
+      let added = 0;
+      for (const delivery of deliveries) {
+        const status = yield* storage.get<"pending" | "live">(keyKey(target, delivery.key));
+        if (status === "live") send.push(delivery);
+        else if (status === "pending") yield* storage.put(indexRow(target, delivery));
+        else if (discovering) {
+          // Found in history: the key pulls it, once it knows every source it has.
+          yield* storage.put({
+            [keyKey(target, delivery.key)]: "pending",
+            ...indexRow(target, delivery),
+          });
+          messages.push({
+            kind: "source",
+            target,
+            key: delivery.key,
+            stream: delivery.source,
+            ref: host.ref,
+          });
+          added += 1;
+        } else {
+          // A key this instance never fed: it has no history here, so it is live from now.
+          yield* storage.put({ [keyKey(target, delivery.key)]: "live" });
+          send.push(delivery);
+        }
+      }
+      return { send, messages, added };
+    });
+
+  return {
+    /**
+     * A commit's deliveries to `target`, which live routing withheld because
+     * the target is backfilling here. Returns those to send now. Call inside
+     * the commit's exclusive section, with the versions before and after it.
+     */
+    onCommit: (
+      target: string,
+      deliveries: ReadonlyArray<Delivery>,
+      before: number,
+      after: number,
+    ) =>
+      Effect.gen(function* () {
+        const state = yield* getState(target);
+        // The scan hasn't reached the rows before this commit: it will reach these too.
+        if (state === undefined || state.scanned < before) return [] as ReadonlyArray<Delivery>;
+        const { send, messages, added } = yield* route(target, deliveries, false);
+        yield* storage.put({
+          [stateKey(target)]: { ...state, scanned: after, pending: state.pending + added },
+        });
+        yield* queue.stage(messages);
+        return send as ReadonlyArray<Delivery>;
+      }),
+
+    scan: (target: string) =>
+      Effect.gen(function* () {
+        if (!host.model().includes(target)) return "stale" as ScanResult;
+        // In the model, but not fed by this instance: nothing to discover here.
+        if (!host.targets().includes(target)) return "discovered" as ScanResult;
+        const result = yield* storage.exclusive(
+          Effect.gen(function* () {
+            const version = yield* host.version;
+            const state = yield* getState(target);
+            if (state === undefined && !lagging(target, yield* host.routed, version))
+              return "discovered" as const;
+            const current: SourceState = state ?? { scanned: 0, ready: false, pending: 0 };
+            if (current.scanned >= version) return "discovered" as const;
+            const rows = yield* host.rows(current.scanned, limits.page, target);
+            const { messages, added } = yield* route(
+              target,
+              rows.flatMap((row) => row.deliveries),
+              true,
+            );
+            const scanned = rows.length > 0 ? rows[rows.length - 1]!.seq : version;
+            yield* storage.put({
+              [stateKey(target)]: { ...current, scanned, pending: current.pending + added },
+            });
+            yield* queue.stage(messages);
+            return scanned >= version ? ("discovered" as const) : ("more" as const);
+          }),
+        );
+        if (result !== "discovered") return result as ScanResult;
+        // Discovered only once every key it feeds has been told: a key's sources are
+        // complete when discovery is complete everywhere.
+        return ((yield* queue.flush) ? "discovered" : "more") as ScanResult;
+      }),
+
+    ready: (target: string) =>
+      Effect.gen(function* () {
+        if (!host.model().includes(target)) return "stale" as ReadyResult;
+        if (!host.targets().includes(target)) return "settled" as ReadyResult;
+        const result = yield* storage.exclusive(
+          Effect.gen(function* () {
+            const state = yield* getState(target);
+            if (state === undefined) return "settled" as const;
+            const messages: Array<Message> = [];
+            if (!state.ready) {
+              let after: string | undefined;
+              while (true) {
+                const rows = yield* storage.list<"pending" | "live">({
+                  prefix: keysPrefix(target),
+                  ...(after === undefined ? {} : { startAfter: after }),
+                  limit: 128,
+                });
+                if (rows.length === 0) break;
+                for (const [row, status] of rows) {
+                  if (status !== "pending") continue;
+                  const key = decodeURIComponent(row.slice(keysPrefix(target).length));
+                  messages.push({ kind: "ready", target, key });
+                }
+                after = rows[rows.length - 1]![0];
+              }
+            }
+            if (state.pending === 0) {
+              yield* settle(target, messages);
+              yield* queue.stage(messages);
+              return "settled" as const;
+            }
+            yield* storage.put({ [stateKey(target)]: { ...state, ready: true } });
+            yield* queue.stage(messages);
+            return "pending" as const;
+          }),
+        );
+        yield* queue.flush;
+        return result as ReadyResult;
+      }),
+
+    pull: (target: string, key: string, after: number) =>
+      Effect.gen(function* () {
+        const result: Pulled = yield* storage.exclusive(
+          Effect.gen(function* () {
+            const state = yield* getState(target);
+            const status = yield* storage.get<"pending" | "live">(keyKey(target, key));
+            // Settled, or already live: everything was handed over.
+            if (state === undefined || status !== "pending") return { deliveries: [], live: true };
+            const prefix = indexPrefix(target, key);
+            const rows = yield* storage.list({
+              prefix,
+              startAfter: `${prefix}${pad(after, 12)}`,
+              limit: limits.page,
+            });
+            const seqs = rows.map(([row]) => Number(row.slice(prefix.length)));
+            const deliveries = (yield* host.rowsAt(seqs, target)).filter((d) => d.key === key);
+            if (rows.length > 0) return { deliveries, live: false };
+            // Nothing after the key's cursor, so it holds everything: live from now,
+            // atomically with this answer. A lost answer is safe to ask again: a live
+            // key's pull answers live, and the key had everything up to its cursor.
+            yield* storage.put({ [keyKey(target, key)]: "live" });
+            const pending = state.pending - 1;
+            const messages: Array<Message> = [];
+            if (pending === 0 && state.ready) yield* settle(target, messages);
+            else yield* storage.put({ [stateKey(target)]: { ...state, pending } });
+            yield* queue.stage(messages);
+            return { deliveries, live: true };
+          }),
+        );
+        if (result.live) yield* queue.flush;
+        return result;
+      }),
+
+    /** The backstop job: send what is staged. */
+    flush: Effect.asVoid(queue.flush),
+  };
+};
+
+export type Source = ReturnType<typeof makeSource>;
+
+// ---------------------------------------------------------------- consumer keys
+
+/** A consumer key's view of one of its sources during a backfill. */
+interface Feed {
+  readonly ref: SourceRef | null;
+  /** The last seq pulled. */
+  readonly cursor: number;
+  /** Switched to live delivery: nothing more to pull. */
+  readonly live: boolean;
+  /** Deliveries from it waiting in the buffer. */
+  readonly buffered: number;
+}
+
+/** What a consumer key gives the protocol. */
+export interface ConsumerHost {
+  readonly key: string;
+  /** This consumer's target id in the code this instance runs. */
+  readonly target: () => string;
+  /**
+   * Apply deliveries in order, as the live path would. Called holding the
+   * exclusive section.
+   */
+  readonly apply: (deliveries: ReadonlyArray<Delivery>) => Effect.Effect<void>;
+}
+
+/**
+ * A consumer key's part of the protocol. Its host passes every delivery for
+ * the current target through {@link Consumer.admit} before applying it, and
+ * serves `source` and `ready`.
+ */
+export const makeConsumer = (
+  storage: Storage,
+  jobs: Jobs,
+  net: Network,
+  host: ConsumerHost,
+  limits: Limits = defaultLimits,
+) => {
+  const T = (target: string) => enc(target);
+  const backfillKey = (target: string) => `bf:c:${T(target)}`;
+  const doneKey = (target: string) => `bf:done:${T(target)}`;
+  const feedKey = (target: string, stream: string) => `bf:f:${T(target)}:${enc(stream)}`;
+  const feedsPrefix = (target: string) => `bf:f:${T(target)}:`;
+  /** Feeds still pulling with nothing buffered: the merge can't apply past them. */
+  const starvedKey = (target: string, stream: string) => `bf:x:${T(target)}:${enc(stream)}`;
+  const starvedPrefix = (target: string) => `bf:x:${T(target)}:`;
+  const pullingKey = (target: string, stream: string) => `bf:p:${T(target)}:${enc(stream)}`;
+  const pullingPrefix = (target: string) => `bf:p:${T(target)}:`;
+  const bufferPrefix = (target: string) => `bf:b:${T(target)}:`;
+  const jobId = (target: string) => `bf-merge:${target}`;
+
+  interface Backfill {
+    readonly ready: boolean;
+    /** The directory node to ask whether discovery is complete. */
+    readonly ask: string;
+  }
+
+  /** Start asking at a node two levels down, picked by the key: the asks spread out. */
+  const firstAsk = (target: string) => leafOf({ source: target, id: host.key }).slice(0, 2);
+
+  const begin = (target: string) =>
+    Effect.gen(function* () {
+      const existing = yield* storage.get<Backfill>(backfillKey(target));
+      if (existing) return existing;
+      const backfill: Backfill = { ready: false, ask: firstAsk(target) };
+      yield* storage.put({ [backfillKey(target)]: backfill });
+      yield* jobs.schedule(jobId(target), 0);
+      return backfill;
+    });
+
+  /** Record a feed's buffered count and whether it starves the merge. */
+  const putFeed = (target: string, stream: string, feed: Feed) =>
+    Effect.gen(function* () {
+      yield* storage.put({ [feedKey(target, stream)]: feed });
+      if (!feed.live) yield* storage.put({ [pullingKey(target, stream)]: true });
+      else yield* storage.delete([pullingKey(target, stream)]);
+      if (!feed.live && feed.buffered === 0)
+        yield* storage.put({ [starvedKey(target, stream)]: true });
+      else yield* storage.delete([starvedKey(target, stream)]);
+    });
+
+  /** Buffer deliveries in merge order. Callers hold the exclusive section. */
+  const buffer = (target: string, deliveries: ReadonlyArray<Delivery>, live: boolean) =>
+    Effect.gen(function* () {
+      for (const delivery of deliveries) {
+        const key = orderKey(target, delivery);
+        if ((yield* storage.get(key)) !== undefined) continue;
+        yield* storage.put({ [key]: delivery });
+        const feed = (yield* storage.get<Feed>(feedKey(target, delivery.source))) ?? {
+          ref: null,
+          cursor: 0,
+          // Arriving live from a source it never heard of: one with no history for this key.
+          live,
+          buffered: 0,
+        };
+        yield* putFeed(target, delivery.source, { ...feed, buffered: feed.buffered + 1 });
+      }
+    });
+
+  /** Ask the directory whether discovery is complete; climb toward the root past nodes that don't know. */
+  const askPhase = (target: string, backfill: Backfill) =>
+    Effect.gen(function* () {
+      const phase = yield* net.node.phase(backfill.ask, target);
+      return {
+        phase,
+        ask: phase === "unknown" && backfill.ask !== "" ? parentOf(backfill.ask) : backfill.ask,
+      };
+    });
+
+  /** Pull a page for each feed that starves the merge. */
+  const pullStarved = (target: string) =>
+    Effect.gen(function* () {
+      const starved = yield* storage.list({
+        prefix: starvedPrefix(target),
+        limit: limits.concurrency * 4,
+      });
+      const streams = starved.map(([row]) =>
+        decodeURIComponent(row.slice(starvedPrefix(target).length)),
+      );
+      yield* Effect.forEach(
+        streams,
+        (stream) =>
+          Effect.gen(function* () {
+            const feed = yield* storage.get<Feed>(feedKey(target, stream));
+            if (!feed || feed.live || feed.ref === null) return;
+            const pulled = yield* net.source.pull(feed.ref, target, host.key, feed.cursor);
+            yield* storage.exclusive(
+              Effect.gen(function* () {
+                const current = yield* storage.get<Feed>(feedKey(target, stream));
+                if (!current || current.cursor !== feed.cursor) return;
+                yield* buffer(target, pulled.deliveries, false);
+                const after = (yield* storage.get<Feed>(feedKey(target, stream)))!;
+                yield* putFeed(target, stream, {
+                  ...after,
+                  cursor: Math.max(after.cursor, ...pulled.deliveries.map((d) => d.seq)),
+                  live: pulled.live,
+                });
+              }),
+            );
+          }),
+        { concurrency: limits.concurrency, discard: true },
+      );
+      return streams.length;
+    });
+
+  /**
+   * Apply buffered deliveries in merge order while no pulling feed starves the
+   * merge. Once ready, with no feed left to pull and nothing buffered, the
+   * backfill is done and the key goes back to applying directly.
+   */
+  const applyBuffered = (target: string) =>
+    storage.exclusive(
+      Effect.gen(function* () {
+        const backfill = yield* storage.get<Backfill>(backfillKey(target));
+        if (!backfill) return "done" as const;
+        let applied = 0;
+        while (applied < limits.apply) {
+          if ((yield* storage.list({ prefix: starvedPrefix(target), limit: 1 })).length > 0)
+            return "starved" as const;
+          const [first] = yield* storage.list<Delivery>({ prefix: bufferPrefix(target), limit: 1 });
+          if (!first) break;
+          const [row, delivery] = first;
+          yield* host.apply([delivery]);
+          yield* storage.delete([row]);
+          const feed = (yield* storage.get<Feed>(feedKey(target, delivery.source)))!;
+          yield* putFeed(target, delivery.source, { ...feed, buffered: feed.buffered - 1 });
+          applied += 1;
+        }
+        if (applied >= limits.apply) return "more" as const;
+        if (!backfill.ready) return "waiting" as const;
+        if ((yield* storage.list({ prefix: pullingPrefix(target), limit: 1 })).length > 0)
+          return "starved" as const;
+        // Ready, every feed live and the buffer empty: done, atomically with the last apply.
+        for (const prefix of [feedsPrefix(target), starvedPrefix(target), pullingPrefix(target)]) {
+          while (true) {
+            const rows = yield* storage.list({ prefix, limit: 128 });
+            if (rows.length === 0) break;
+            yield* storage.delete(rows.map(([key]) => key));
+          }
+        }
+        yield* storage.delete([backfillKey(target)]);
+        yield* storage.put({ [doneKey(target)]: true });
+        return "done" as const;
+      }),
+    );
+
+  return {
+    /**
+     * Deliveries for `target` arriving at this key. `true`: apply them now, as
+     * usual. `false`: the key is backfilling, and they were buffered.
+     */
+    admit: (target: string, deliveries: ReadonlyArray<Delivery>) =>
+      Effect.gen(function* () {
+        const known = yield* storage.exclusive(
+          Effect.gen(function* () {
+            if (yield* storage.get(doneKey(target))) return "apply" as const;
+            if (!(yield* storage.get(backfillKey(target)))) return "unknown" as const;
+            yield* buffer(target, deliveries, true);
+            yield* jobs.schedule(jobId(target), 0);
+            return "buffered" as const;
+          }),
+        );
+        if (known !== "unknown") return known === "apply";
+        // A key's first delivery for this target: is a backfill still running?
+        const { phase } = yield* askPhase(target, { ready: false, ask: firstAsk(target) });
+        return yield* storage.exclusive(
+          Effect.gen(function* () {
+            if (yield* storage.get(doneKey(target))) return true;
+            if (phase === "complete" && !(yield* storage.get(backfillKey(target)))) {
+              yield* storage.put({ [doneKey(target)]: true });
+              return true;
+            }
+            yield* begin(target);
+            yield* buffer(target, deliveries, true);
+            yield* jobs.schedule(jobId(target), 0);
+            return false;
+          }),
+        );
+      }),
+
+    source: (target: string, stream: string, ref: SourceRef) =>
+      storage.exclusive(
+        Effect.gen(function* () {
+          if (target !== host.target()) return;
+          // A source that joined after this key finished (an instance listed late):
+          // take up the backfill again for it, rather than lose its history.
+          const reopened = (yield* storage.get(doneKey(target))) !== undefined;
+          if (reopened) {
+            const feed = yield* storage.get<Feed>(feedKey(target, stream));
+            if (feed) return;
+            yield* storage.delete([doneKey(target)]);
+            yield* storage.put({ [backfillKey(target)]: { ready: true, ask: firstAsk(target) } });
+            yield* jobs.schedule(jobId(target), 0);
+          }
+          yield* begin(target);
+          const feed = yield* storage.get<Feed>(feedKey(target, stream));
+          if (feed && feed.ref !== null) return;
+          // A feed first seen live (buffered) now turns out to have history: pull it.
+          yield* putFeed(target, stream, {
+            ref,
+            cursor: 0,
+            live: false,
+            buffered: feed?.buffered ?? 0,
+          });
+        }),
+      ),
+
+    ready: (target: string) =>
+      storage.exclusive(
+        Effect.gen(function* () {
+          if (target !== host.target()) return;
+          if (yield* storage.get(doneKey(target))) return;
+          const backfill = yield* begin(target);
+          if (!backfill.ready)
+            yield* storage.put({ [backfillKey(target)]: { ...backfill, ready: true } });
+          yield* jobs.schedule(jobId(target), 0);
+        }),
+      ),
+
+    /** The merge job for one target. */
+    merge: (target: string) =>
+      Effect.gen(function* () {
+        const backfill = yield* storage.get<Backfill>(backfillKey(target));
+        if (!backfill) return;
+        if (!backfill.ready) {
+          // No source has said discovery is complete: ask the directory.
+          const { phase, ask } = yield* askPhase(target, backfill);
+          const ready = phase === "ready" || phase === "complete";
+          yield* storage.exclusive(
+            Effect.gen(function* () {
+              const current = yield* storage.get<Backfill>(backfillKey(target));
+              if (current)
+                yield* storage.put({
+                  [backfillKey(target)]: { ...current, ready: current.ready || ready, ask },
+                });
+            }),
+          );
+          if (!ready)
+            return yield* jobs.schedule(
+              jobId(target),
+              ask === backfill.ask ? limits.pollMillis : 0,
+            );
+        }
+        const outcome = yield* applyBuffered(target);
+        if (outcome === "done") return;
+        if (outcome === "starved") yield* pullStarved(target);
+        if (outcome === "waiting") return;
+        yield* jobs.schedule(jobId(target), 0);
+      }),
+
+    /** Is a backfill of `target` still running on this key? */
+    backfilling: (target: string) =>
+      Effect.map(storage.get(backfillKey(target)), (backfill) => backfill !== undefined),
+  };
+};
+
+export type Consumer = ReturnType<typeof makeConsumer>;
+
+// ---------------------------------------------------------------- directory
+
+/** A node's progress through one phase of a target's sweep. */
+interface Sweep {
+  readonly phase: "discover" | "ready" | "complete";
+  /** The children told of this phase. */
+  readonly children: ReadonlyArray<string>;
+  readonly told: boolean;
+  /** Own instances: the last one listed, whether all are, and those to call again. */
+  readonly cursor: string | null;
+  readonly listed: boolean;
+  readonly pending: ReadonlyArray<SourceRef>;
+  /** Own instances are done with this phase. */
+  readonly own: boolean;
+  readonly reported: boolean;
+  /**
+   * Told of a later phase without having taken part in discovery (it linked
+   * after it): its own instances are caught up as late joiners, listed from
+   * here. `undefined` once all are listed.
+   */
+  readonly adopting?: string | null;
+}
+
+const PHASES = ["discover", "ready", "complete"] as const;
+
+/**
+ * A directory node: lists instances, links itself into its parent, and runs
+ * its part of each target's sweep.
+ */
+export const makeNode = (
+  storage: Storage,
+  jobs: Jobs,
+  net: Network,
+  limits: Limits = defaultLimits,
+) => {
+  const sweepKey = (target: string) => `sw:${enc(target)}`;
+  const getSweep = (target: string) => storage.get<Sweep>(sweepKey(target));
+  const reportPrefix = (target: string, phase: string) => `rp:${enc(target)}:${phase}:`;
+  const unsettledPrefix = (target: string) => `us:${enc(target)}:`;
+  const settledKey = (target: string, ref: SourceRef) => `st:${enc(target)}:${refKey(ref)}`;
+
+  /**
+   * Link this node into its parent, and so on up to the root, before answering:
+   * an instance's first commit waits for it, so every instance with an event
+   * can be reached from the root. Only a node's first registration pays for it.
+   */
+  const ensureLinked = (path: string) =>
+    Effect.gen(function* () {
+      if (path === "" || (yield* storage.get("linked"))) return;
+      yield* net.node.child(parentOf(path), path);
+      yield* storage.exclusive(storage.put({ linked: true, path }));
+    });
+
+  /** Every sweep this node takes part in. */
+  const sweeps = Effect.map(storage.list<Sweep>({ prefix: "sw:" }), (rows) =>
+    rows.map(([key, sweep]) => ({ target: decodeURIComponent(key.slice(3)), sweep })),
+  );
+  const latePrefix = (target: string) => `late:${enc(target)}:`;
+
+  /**
+   * An instance listed after this node's discovery for a target moved on: one
+   * created while the sweep runs (on code without the target, during a
+   * rollout). Catch it up on its own. Callers hold the exclusive section.
+   */
+  const join = (path: string, ref: SourceRef, key: string) =>
+    Effect.gen(function* () {
+      for (const { target, sweep } of yield* sweeps) {
+        if (sweep.phase === "discover" && !sweep.reported) {
+          // The listing reaches it, unless it has passed it already.
+          if (!sweep.listed && (sweep.cursor === null || key > sweep.cursor)) continue;
+          yield* storage.put({
+            [sweepKey(target)]: { ...sweep, pending: [...sweep.pending, ref], own: false },
+          });
+          yield* jobs.schedule(`step:${target}`, 0);
+          continue;
+        }
+        if (sweep.phase === "ready" && !sweep.reported)
+          yield* storage.put({ [`${unsettledPrefix(target)}${refKey(ref)}`]: ref });
+        yield* storage.put({ [`${latePrefix(target)}${refKey(ref)}`]: ref });
+        yield* jobs.schedule(`late:${target}`, 0);
+      }
+    });
+
+  /** Scan and ready the instances that joined late, a page at a time. */
+  const late = (path: string, target: string) =>
+    Effect.gen(function* () {
+      const sweep = yield* getSweep(target);
+      if (sweep?.adopting !== undefined) {
+        // List the own instances as late joiners first, a page per step.
+        const own = yield* storage.list<SourceRef>({
+          prefix: "i:",
+          ...(sweep.adopting === null ? {} : { startAfter: sweep.adopting }),
+          limit: limits.nodePage,
+        });
+        yield* storage.exclusive(
+          Effect.gen(function* () {
+            const current = yield* getSweep(target);
+            if (!current || current.adopting !== sweep.adopting) return;
+            for (const [, ref] of own) {
+              if (current.phase === "ready" && !current.reported)
+                yield* storage.put({ [`${unsettledPrefix(target)}${refKey(ref)}`]: ref });
+              yield* storage.put({ [`${latePrefix(target)}${refKey(ref)}`]: ref });
+            }
+            const { adopting: _, ...rest } = current;
+            yield* storage.put({
+              [sweepKey(target)]:
+                own.length < limits.nodePage
+                  ? rest
+                  : { ...current, adopting: own[own.length - 1]![0] },
+            });
+          }),
+        );
+        return yield* jobs.schedule(`late:${target}`, 0);
+      }
+      const rows = yield* storage.list<SourceRef>({
+        prefix: latePrefix(target),
+        limit: limits.nodePage,
+      });
+      let stale = false;
+      for (const [row, ref] of rows) {
+        const scanned = yield* net.source.scan(ref, target);
+        if (scanned === "stale") stale = true;
+        if (scanned !== "discovered") continue;
+        const ready = yield* net.source.ready(ref, target);
+        if (ready === "stale") {
+          stale = true;
+          continue;
+        }
+        yield* storage.exclusive(
+          Effect.gen(function* () {
+            yield* storage.delete([row]);
+            if (ready === "settled")
+              yield* storage.delete([`${unsettledPrefix(target)}${refKey(ref)}`]);
+            yield* settle(path, target);
+          }),
+        );
+      }
+      if (rows.length > 0)
+        yield* jobs.schedule(`late:${target}`, stale ? limits.staleRetryMillis : 0);
+    });
+
+  const begin = (path: string, target: string, phase: Sweep["phase"]) =>
+    Effect.gen(function* () {
+      const children = (yield* storage.list({ prefix: "c:" })).map(([key]) => key.slice(2));
+      const previous = yield* getSweep(target);
+      const adopting = phase !== "discover" && previous === undefined ? null : previous?.adopting;
+      yield* storage.put({
+        path,
+        [sweepKey(target)]: {
+          phase,
+          children,
+          told: false,
+          cursor: null,
+          listed: false,
+          pending: [],
+          own: phase === "complete",
+          reported: false,
+          ...(adopting === undefined ? {} : { adopting }),
+        } satisfies Sweep,
+      });
+      if (adopting !== undefined) yield* jobs.schedule(`late:${target}`, 0);
+      if (phase === "complete") {
+        yield* storage.put({ [`done:${enc(target)}`]: true });
+        if (path === "") {
+          const complete = (yield* storage.get<Array<string>>("complete")) ?? [];
+          if (!complete.includes(target)) yield* storage.put({ complete: [...complete, target] });
+        }
+      }
+      yield* jobs.schedule(`step:${target}`, 0);
+    });
+
+  /**
+   * Done with this phase here once the own instances and every child are (and,
+   * for `ready`, every own instance has settled): report to the parent, or at
+   * the root start the next phase. Callers hold the exclusive section.
+   */
+  const settle = (path: string, target: string) =>
+    Effect.gen(function* () {
+      const sweep = yield* getSweep(target);
+      if (!sweep || sweep.reported || !sweep.own || sweep.phase === "complete") return;
+      const reported = new Set(
+        (yield* storage.list({ prefix: reportPrefix(target, sweep.phase) })).map(([key]) =>
+          key.slice(reportPrefix(target, sweep.phase).length),
+        ),
+      );
+      if (sweep.children.some((child) => !reported.has(child))) return;
+      if (
+        sweep.phase === "ready" &&
+        (yield* storage.list({ prefix: unsettledPrefix(target), limit: 1 })).length > 0
+      )
+        return;
+      yield* storage.put({ [sweepKey(target)]: { ...sweep, reported: true } });
+      if (path !== "") return yield* jobs.schedule(`report:${target}`, 0);
+      yield* begin(path, target, sweep.phase === "discover" ? "ready" : "complete");
+    });
+
+  /** One step of a phase: tell the children, then handle a page of own instances. */
+  const step = (path: string, target: string) =>
+    Effect.gen(function* () {
+      const sweep = yield* getSweep(target);
+      if (!sweep) return;
+      // Children are told even after this node reported: a child that linked late
+      // takes part in the phase (its report is no longer waited for).
+      if (!sweep.told) {
+        yield* Effect.forEach(
+          sweep.children,
+          (child) => net.node.sweep(child, target, sweep.phase),
+          {
+            concurrency: limits.concurrency,
+            discard: true,
+          },
+        );
+        yield* storage.exclusive(
+          Effect.gen(function* () {
+            const current = yield* getSweep(target);
+            if (current?.phase === sweep.phase)
+              yield* storage.put({ [sweepKey(target)]: { ...current, told: true } });
+          }),
+        );
+      }
+      if (sweep.reported || sweep.own) return;
+      const listed =
+        sweep.pending.length > 0
+          ? []
+          : yield* storage.list<SourceRef>({
+              prefix: "i:",
+              ...(sweep.cursor === null ? {} : { startAfter: sweep.cursor }),
+              limit: limits.nodePage,
+            });
+      const batch = sweep.pending.length > 0 ? sweep.pending : listed.map(([, ref]) => ref);
+      const call = (ref: SourceRef): Effect.Effect<"done" | "more" | "stale" | "pending"> =>
+        sweep.phase === "discover"
+          ? Effect.map(net.source.scan(ref, target), (result) =>
+              result === "discovered" ? "done" : result,
+            )
+          : Effect.map(net.source.ready(ref, target), (result) =>
+              result === "settled" ? "done" : result,
+            );
+      const results = yield* Effect.forEach(
+        batch,
+        (ref) => Effect.map(call(ref), (result) => ({ ref, result })),
+        { concurrency: limits.concurrency },
+      );
+      const stale = results.some(({ result }) => result === "stale");
+      const next = yield* storage.exclusive(
+        Effect.gen(function* () {
+          const current = yield* getSweep(target);
+          if (!current || current.phase !== sweep.phase || current.reported) return undefined;
+          for (const { ref, result } of results) {
+            // Waiting on its keys: it reports `settled` when they are all live.
+            if (result === "pending" && !(yield* storage.get(settledKey(target, ref))))
+              yield* storage.put({ [`${unsettledPrefix(target)}${refKey(ref)}`]: ref });
+          }
+          const exhausted =
+            current.pending.length > 0 ? current.listed : listed.length < limits.nodePage;
+          const pending = results
+            .filter(({ result }) => result === "more" || result === "stale")
+            .map(({ ref }) => ref);
+          const updated: Sweep = {
+            ...current,
+            cursor: listed.length > 0 ? listed[listed.length - 1]![0] : current.cursor,
+            listed: exhausted,
+            pending,
+            own: exhausted && pending.length === 0,
+          };
+          yield* storage.put({ [sweepKey(target)]: updated });
+          yield* settle(path, target);
+          return updated;
+        }),
+      );
+      // Instances still on older code keep it while calls keep them busy: back off.
+      if (next && !next.own)
+        yield* jobs.schedule(`step:${target}`, stale ? limits.staleRetryMillis : 0);
+    });
+
+  return {
+    register: (path: string, ref: SourceRef) =>
+      Effect.gen(function* () {
+        yield* storage.exclusive(
+          Effect.gen(function* () {
+            const key = `i:${refKey(ref)}`;
+            const fresh = (yield* storage.get(key)) === undefined;
+            yield* storage.put({ path, [key]: ref });
+            if (fresh) yield* join(path, ref, key);
+          }),
+        );
+        yield* ensureLinked(path);
+      }),
+    child: (path: string, child: string) =>
+      Effect.gen(function* () {
+        yield* storage.exclusive(
+          Effect.gen(function* () {
+            const fresh = (yield* storage.get(`c:${child}`)) === undefined;
+            yield* storage.put({ path, [`c:${child}`]: true });
+            if (!fresh) return;
+            // Linked while sweeps run: it takes part in each one's current phase.
+            for (const { target, sweep } of yield* sweeps) {
+              // After this node reported, the child is still told, but not waited for.
+              const children = sweep.children.includes(child)
+                ? sweep.children
+                : [...sweep.children, child];
+              yield* storage.put({ [sweepKey(target)]: { ...sweep, children, told: false } });
+              yield* jobs.schedule(`step:${target}`, 0);
+            }
+          }),
+        );
+        yield* ensureLinked(path);
+      }),
+    news: (path: string, targets: ReadonlyArray<string>) =>
+      storage.exclusive(
+        Effect.gen(function* () {
+          const known = (yield* storage.get<Array<string>>("known")) ?? [];
+          const fresh = targets.filter((target) => !known.includes(target));
+          if (fresh.length === 0) return;
+          yield* storage.put({ path, known: [...known, ...fresh] });
+          if (path !== "") return yield* jobs.schedule("news", 0);
+          for (const target of fresh) yield* begin(path, target, "discover");
+        }),
+      ),
+    sweep: (path: string, target: string, phase: Sweep["phase"]) =>
+      storage.exclusive(
+        Effect.gen(function* () {
+          const current = yield* getSweep(target);
+          if (current && PHASES.indexOf(current.phase) >= PHASES.indexOf(phase)) return;
+          yield* begin(path, target, phase);
+        }),
+      ),
+    report: (path: string, target: string, phase: "discover" | "ready", child: string) =>
+      storage.exclusive(
+        Effect.gen(function* () {
+          const sweep = yield* getSweep(target);
+          if (!sweep || sweep.phase !== phase) return;
+          yield* storage.put({ [`${reportPrefix(target, phase)}${child}`]: true });
+          yield* settle(path, target);
+        }),
+      ),
+    settled: (path: string, target: string, ref: SourceRef) =>
+      storage.exclusive(
+        Effect.gen(function* () {
+          yield* storage.put({ path, [settledKey(target, ref)]: true });
+          yield* storage.delete([`${unsettledPrefix(target)}${refKey(ref)}`]);
+          yield* settle(path, target);
+        }),
+      ),
+    phase: (_path: string, target: string) =>
+      Effect.gen(function* () {
+        if (yield* storage.get(`done:${enc(target)}`)) return "complete" as Phase;
+        return ((yield* getSweep(target))?.phase ?? "unknown") as Phase;
+      }),
+    status: (_path: string) =>
+      Effect.gen(function* () {
+        const complete = (yield* storage.get<Array<string>>("complete")) ?? [];
+        const known = (yield* storage.get<Array<string>>("known")) ?? [];
+        return {
+          complete,
+          running: known.filter((target) => !complete.includes(target)),
+        } satisfies Status;
+      }),
+
+    /** Run a scheduled job by its id. */
+    run: (id: string) =>
+      Effect.gen(function* () {
+        const path = (yield* storage.get<string>("path")) ?? "";
+        const parent = parentOf(path);
+        if (id === "news")
+          return yield* net.node.news(parent, (yield* storage.get<Array<string>>("known")) ?? []);
+        const [kind, ...rest] = id.split(":");
+        const target = rest.join(":");
+        if (kind === "step") return yield* step(path, target);
+        if (kind === "late") return yield* late(path, target);
+        if (kind === "report") {
+          const sweep = yield* getSweep(target);
+          if (sweep?.reported && sweep.phase !== "complete")
+            yield* net.node.report(parent, target, sweep.phase, path);
+        }
+      }),
+  };
+};
+
+export type Node = ReturnType<typeof makeNode>;
+
+// ---------------------------------------------------------------- host glue
+
+/**
+ * Route a commit's deliveries (an aggregate's events, or a view key's entries):
+ * live to caught-up consumers, and through the backfill to lagging ones. Call
+ * inside the commit's exclusive section; returns what to send and the new cursors.
+ */
+export const routeCommit = (
+  source: Source,
+  targets: ReadonlyArray<string>,
+  routed: Routed | undefined,
+  before: number,
+  after: number,
+  deliveries: ReadonlyArray<Delivery>,
+) =>
+  Effect.gen(function* () {
+    const live = routeLive(targets, routed, before, after, deliveries);
+    const send = [...live.deliveries];
+    // An instance with no cursors predates catch-up: everything is live.
+    if (routed !== undefined) {
+      for (const target of targets) {
+        if ((routed[target] ?? 0) === before) continue;
+        const withheld = deliveries.filter((delivery) => targetId(delivery.target) === target);
+        send.push(...(yield* source.onCommit(target, withheld, before, after)));
+      }
+    }
+    return { send: send as ReadonlyArray<Delivery>, routed: live.routed };
+  });
+
+/** Route stored rows to one target only, as history: each row's seq and its deliveries. */
+export const routeRows = <Row>(
+  replay: (input: ReplayInput<Row>) => ReplayResult,
+  id: string,
+  targets: ReadonlyArray<string>,
+  target: string,
+  rows: ReadonlyArray<Row>,
+  seqOf: (row: Row) => number,
+) =>
+  rows.map((row) => ({
+    seq: seqOf(row),
+    deliveries: replay({
+      id,
+      routed: Object.fromEntries(
+        targets.map((t) => [t, t === target ? seqOf(row) - 1 : Number.MAX_SAFE_INTEGER]),
+      ),
+      rows: [row],
+      until: Number.POSITIVE_INFINITY,
+    }).deliveries,
+  }));
+
+/** A consumer's kind and name from its target id: `view:Name#2` is the view `Name`. */
+export const consumerOf = (target: string) => {
+  const [kind, rest] = target.split(/:(.*)/s) as [string, string];
+  return { kind: kind as "view" | "projection", name: rest.replace(/#\d+$/, "") };
+};
