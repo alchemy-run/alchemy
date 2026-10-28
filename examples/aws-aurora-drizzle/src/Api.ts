@@ -1,5 +1,5 @@
-import * as AWS from "alchemy/AWS";
-import * as Drizzle from "alchemy/Drizzle/Postgres";
+import * as AWS from "@alchemy.run/aws";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import { eq, sql } from "drizzle-orm";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -20,7 +20,6 @@ export default class Api extends AWS.Lambda.Function<Api>()(
       runtime: "nodejs22.x" as const,
       functionUrl: { authType: "AWS_IAM" as const },
       timeout: Duration.seconds(30),
-      build: { install: ["pg"] },
       env: {
         SCHEMA_VERSION: schemaVersion,
         NODE_EXTRA_CA_CERTS: "/var/runtime/ca-cert.pem",

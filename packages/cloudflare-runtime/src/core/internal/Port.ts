@@ -112,14 +112,22 @@ export interface Ports {
 }
 
 const HOSTS: Set<string> = new Set([
-  "0.0.0.0",
-  "::",
-  "0000:0000:0000:0000:0000:0000:0000:0000",
   "localhost",
   "127.0.0.1",
   "::1",
   "0000:0000:0000:0000:0000:0000:0000:0001",
 ]);
+
+/**
+ * Addresses a connect probe targets. A wildcard listener (`0.0.0.0`, `::`)
+ * accepts loopback connections, yet macOS lets a loopback bind succeed
+ * alongside it, so the bind probes alone would miss one. Connecting finds it
+ * without opening a wildcard listener of our own.
+ */
+const LOOPBACK_ADDRESSES = ["127.0.0.1", "::1"];
+
+/** Bounds a connect probe whose SYN goes unanswered (a filtered port). */
+const CONNECT_PROBE_TIMEOUT_MS = 500;
 
 interface PortsOptions {
   /** Prevents redundant lookups and helps with race conditions; should only be disabled for testing. */
@@ -204,9 +212,29 @@ export const make = (options: PortsOptions) =>
         });
         return Effect.sync(() => server.close());
       });
+    // Fails when something accepts connections on `host:port`. A refused or
+    // unroutable connection (no IPv6) leaves the port free.
+    const connect = (port: number, host: string) =>
+      Effect.callback<number, ConfigError>((resume) => {
+        const socket = NodeNet.connect({ port, host });
+        socket.setTimeout(CONNECT_PROBE_TIMEOUT_MS);
+        const settle = (effect: Effect.Effect<number, ConfigError>) => {
+          socket.destroy();
+          resume(effect);
+        };
+        socket.once("connect", () => addressInUseError(port).pipe(Effect.fail, settle));
+        socket.once("error", () => settle(Effect.succeed(port)));
+        socket.once("timeout", () => settle(Effect.succeed(port)));
+        return Effect.sync(() => socket.destroy());
+      });
+    const available = (port: number) =>
+      Effect.forEach(HOSTS, (host) => bind(port, host)).pipe(
+        Effect.andThen(Effect.forEach(LOOPBACK_ADDRESSES, (host) => connect(port, host))),
+        Effect.as(port),
+      );
     const cache = yield* Cache.makeWith(
       (port: number) =>
-        Effect.forEach(HOSTS, (host) => bind(port, host)).pipe(
+        available(port).pipe(
           Effect.as(true),
           Effect.orElseSucceed(() => false),
         ),
@@ -254,8 +282,7 @@ export const make = (options: PortsOptions) =>
     }, searchLock.withPermits(1));
     // Uncached availability probe across all local hosts — `waitFor` polls
     // with it, so the 30s negative cache must not poison the retries.
-    const probe = (port: number) =>
-      Effect.forEach(HOSTS, (host) => bind(port, host)).pipe(Effect.as(port));
+    const probe = available;
     return {
       find: Effect.fn(function* (port) {
         if (port === 0) {

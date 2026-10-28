@@ -242,7 +242,9 @@ Command.run(command, { version: "0.0.0" }).pipe(
   Effect.provide(NodeServices.layer),
   // Report failures on stderr: stdout is reserved for `$GITHUB_OUTPUT`.
   Effect.catchCause((cause) =>
-    Console.error(Cause.pretty(cause)).pipe(
+    cause.pipe(
+      Cause.pretty,
+      Console.error,
       Effect.andThen(Effect.sync(() => (process.exitCode = 1))),
     ),
   ),

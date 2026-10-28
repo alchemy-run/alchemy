@@ -21,7 +21,9 @@
     "react-dom": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@distilled.cloud/aws": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@opennextjs/aws": "catalog:",
@@ -29,7 +31,6 @@
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "alchemy": "workspace:*",
-    "alchemy-test": "workspace:*",
     "effect": "catalog:",
     "tailwindcss": "catalog:",
     "typescript": "catalog:nextjs"

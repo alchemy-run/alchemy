@@ -11,9 +11,9 @@ import {
 import { stringWidth } from "@alchemy.run/sigil/ansi";
 import { useEffect, useLayoutEffect, useRef, useState } from "@alchemy.run/sigil/react";
 import type { JSX, ReactNode } from "react";
-import { copyToClipboard, truncate } from "../../../Util/Terminal.ts";
+import { copyToClipboard } from "../../../Util/Terminal.ts";
 import { theme } from "../../../Util/Theme.ts";
-import type { AwaitExternalOptions, Choice, CycleChoice } from "../types.ts";
+import type { Choice, CycleChoice } from "../types.ts";
 import { useCliEnvironment, useGlyphs, useKeyGlyphs } from "./Environment.tsx";
 import { KeyBar, Spinner } from "./Feedback.tsx";
 import { Box, overflowListWindow } from "./Layout.tsx";
@@ -297,6 +297,8 @@ export function Menu<Value>({
 
 export interface TextFieldProps {
   readonly placeholder?: string;
+  /** Text Tab fills into the empty field, e.g. the prompt's default. */
+  readonly completion?: string;
   readonly initialValue?: string;
   readonly value?: string;
   readonly mask?: string;
@@ -381,6 +383,7 @@ const visibleWindow = (
  */
 export function TextField({
   placeholder,
+  completion,
   initialValue = "",
   value: controlledValue,
   mask,
@@ -390,7 +393,7 @@ export function TextField({
   active,
   ariaLabel,
 }: TextFieldProps) {
-  // Prompts are serialized by the CliKit runtime, so an enabled field owns
+  // Prompts are serialized by the Sigil renderer, so an enabled field owns
   // the input stream outright — no Sigil focus negotiation. (Coupling this to
   // useFocus({autoFocus}) silently disabled the field whenever any other
   // focusable was already mounted.)
@@ -441,7 +444,10 @@ export function TextField({
       else if (key.end || (key.ctrl && input === "e")) setCursor(chars.length);
       else if (key.meta && input === "b") setCursor(wordBoundaryLeft(chars, cursor));
       else if (key.meta && input === "f") setCursor(wordBoundaryRight(chars, cursor));
-      else if (!key.ctrl && !key.meta && !key.tab) {
+      else if (key.tab && completion !== undefined && chars.length === 0) {
+        const completed = toGraphemes(completion);
+        update(completed, completed.length);
+      } else if (!key.ctrl && !key.meta && !key.tab) {
         const inserted = toGraphemes(sanitizeTextInsert(input));
         if (inserted.length > 0) {
           update(
@@ -587,7 +593,20 @@ export const useCycleNavigation = (stateCounts: ReadonlyArray<number>) => {
   return { cursor, indices, move, setCursor, cycle } as const;
 };
 
-export interface ExternalWaitProps extends AwaitExternalOptions {
+export interface BrowserLoginWaitProps {
+  readonly message: string;
+  readonly waitingLabel: string;
+  readonly url: string;
+  /** Short code the user confirms on the login page. */
+  readonly code?: string;
+  readonly openFailed?: boolean;
+  /** Open the login URL again from the waiting screen. */
+  readonly onOpen?: () => Promise<void>;
+  /** Allow Enter to switch to manual code entry. */
+  readonly allowManualInput: boolean;
+  readonly inputLabel?: string;
+  readonly placeholder?: string;
+  readonly validate?: (value: string) => string | Error | undefined;
   readonly onSubmit: (value: string) => void;
   readonly onCancel: () => void;
 }
@@ -735,26 +754,25 @@ export function ChoiceGroup<Value>({
   );
 }
 
-/** Browser/OAuth waiting screen with URL controls and manual-entry fallback. */
-export function ExternalWait({
+/** Browser login waiting screen with URL controls and manual-entry fallback. */
+export function BrowserLoginWait({
   message,
   waitingLabel,
   url,
   code,
   openFailed = false,
   onOpen,
-  allowManualInput = true,
+  allowManualInput,
   inputLabel,
   placeholder,
   validate,
   onSubmit,
   onCancel,
-}: ExternalWaitProps) {
+}: BrowserLoginWaitProps) {
   const { stdout } = useStdout();
   const glyphs = useGlyphs();
   const keyGlyphs = useKeyGlyphs();
   const [manual, setManual] = useState(false);
-  const [showFull, setShowFull] = useState(false);
   const [copied, setCopied] = useState(false);
   const [browserFailed, setBrowserFailed] = useState(openFailed);
   const [error, setError] = useState<string>();
@@ -765,7 +783,6 @@ export function ExternalWait({
     },
     [],
   );
-  const { columns } = useTerminalSize();
   // Ctrl+C is handled centrally by the screen runner (SigilRuntime.run).
   useTerminalInput((input, key) => {
     if (manual) {
@@ -780,12 +797,11 @@ export function ExternalWait({
     else if (key.escape) onCancel();
     // Ctrl+C must fall through to the runner's cancel guard, not copy the URL.
     else if (key.ctrl || key.meta) return;
-    else if (shortcut === "u") setShowFull((current) => !current);
     else if (shortcut === "o" && onOpen !== undefined) {
       setBrowserFailed(false);
       void onOpen().catch(() => setBrowserFailed(true));
-    } else if (shortcut === "c" && (code ?? url) !== undefined) {
-      copyToClipboard(code ?? url!, stdout ?? process.stdout);
+    } else if (shortcut === "c") {
+      copyToClipboard(url, stdout ?? process.stdout);
       setCopied(true);
       clearTimeout(copiedTimer.current);
       copiedTimer.current = setTimeout(() => setCopied(false), 2000);
@@ -828,16 +844,8 @@ export function ExternalWait({
       message={message}
       keys={[
         ...(allowManualInput ? ([[keyGlyphs.enter, "enter code manually"]] as const) : []),
-        ...(url === undefined
-          ? []
-          : ([
-              ...(onOpen === undefined ? [] : ([["o", "open browser"]] as const)),
-              [
-                "c",
-                copied ? `${glyphs.success} copied` : code === undefined ? "copy URL" : "copy code",
-              ],
-              ["u", showFull ? "collapse URL" : "full URL"],
-            ] as const)),
+        ...(onOpen === undefined ? [] : ([["o", "open browser"]] as const)),
+        ["c", copied ? `${glyphs.success} copied` : "copy URL"],
         [keyGlyphs.escape, "cancel"],
       ]}
     >
@@ -856,9 +864,7 @@ export function ExternalWait({
             {glyphs.warning} Could not open the browser. Copy and open the URL manually.
           </Text>
         ) : null}
-        {url === undefined ? null : (
-          <Link href={url}>{showFull ? url : truncate(url, Math.max(24, columns - 8))}</Link>
-        )}
+        <Link href={url}>{url}</Link>
       </Box>
     </PromptFrame>
   );

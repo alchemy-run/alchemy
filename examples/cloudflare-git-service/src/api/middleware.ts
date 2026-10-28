@@ -1,3 +1,4 @@
+import * as Git from "@alchemy.run/git";
 /**
  * Who may call what. Native `HttpApiMiddleware` on the application's API,
  * git's and ours: REST, the wire, the raw reads, and the GitHub facade.
@@ -5,7 +6,6 @@
  * public one.
  */
 import { RuntimeContext } from "alchemy";
-import * as Git from "alchemy/Git";
 import * as Effect from "effect/Effect";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as HttpApiMiddleware from "effect/http-api/HttpApiMiddleware";

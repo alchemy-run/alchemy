@@ -5,7 +5,7 @@ import { AuthError } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore } from "../../Auth/Credentials.ts";
 import { inspectProvider, type ProviderConnection } from "../../Auth/Inspect.ts";
 import { withProfileCredentialsLock } from "../../Auth/Lock.ts";
-import { ProfileStore } from "../../Auth/Profile.ts";
+import { ProfileStore, reloadProviderConfig } from "../../Auth/Profile.ts";
 import type { Interaction } from "../../Interaction.ts";
 import { AlchemistInvalidInput, AlchemistNotFound } from "../Errors.ts";
 import { Progress } from "../Progress.ts";
@@ -139,7 +139,7 @@ export const get = Effect.fn("Alchemist.profile.get")(function* (input: {
                   }),
                 ),
               ),
-            )
+            ).pipe(Effect.provideService(ProfileStore, profiles))
           : Effect.succeed({
               name: provider,
               method: config.method ?? "unknown",
@@ -251,7 +251,7 @@ export const configure = Effect.fn("Alchemist.profile.configure")(function* (
   if (provider === undefined) {
     return yield* new AlchemistInvalidInput({
       field: "provider",
-      message: `Auth provider '${input.provider}' is not registered.`,
+      message: `Auth provider '${input.provider}' is not registered. Install the package that provides it.`,
     });
   }
   const connected = input.provider in stored.providers;
@@ -328,10 +328,25 @@ export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
   const profiles = yield* ProfileStore;
   const stored = yield* profiles.ensureProfile(input.profile);
   const registered = yield* registry(input);
-  const requested =
-    input.providers === undefined || input.providers.length === 0
-      ? Object.keys(stored.providers).sort()
-      : input.providers;
+  const connected = Object.keys(stored.providers).sort();
+  const requested: Array<string> = [];
+  for (const requestedName of input.providers ?? []) {
+    // `--provider aws` resolves to the connected `AWS`.
+    const name = connected.find((name) => name.toLowerCase() === requestedName.toLowerCase());
+    if (name === undefined || registered[name] === undefined) {
+      const available = connected.filter((name) => registered[name] !== undefined);
+      return yield* new AlchemistInvalidInput({
+        field: "providers",
+        message:
+          `Provider '${requestedName}' is not connected to profile '${input.profile}'. ` +
+          (available.length === 0
+            ? "No providers are connected."
+            : `Connected providers: ${available.join(", ")}.`),
+      });
+    }
+    if (!requested.includes(name)) requested.push(name);
+  }
+  if (requested.length === 0) requested.push(...connected);
   for (const name of requested) {
     const config = stored.providers[name];
     const provider = registered[name];
@@ -354,6 +369,7 @@ export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
             }),
           ),
         ),
+      reloadProviderConfig(profiles, provider, input.profile),
     );
     if (refreshed !== undefined) {
       yield* profiles.setProviderConfig(input.profile, name, refreshed);

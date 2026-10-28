@@ -1,5 +1,5 @@
-import * as Drizzle from "alchemy/Drizzle/Postgres";
-import * as Fly from "alchemy/Fly";
+import * as Drizzle from "@alchemy.run/drizzle/Postgres";
+import * as Fly from "@alchemy.run/fly";
 import { eq, sql } from "drizzle-orm";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -23,10 +23,6 @@ export default class Api extends Fly.Service<Api>()(
     region: "iad",
     port: API_PORT,
     guest: { cpuKind: "shared", cpus: 1, memoryMb: 256 },
-    // `pg` is CommonJS — bundling it breaks `Client` under Rolldown's
-    // interop. Install it into the image so `@effect/sql-pg` /
-    // `Drizzle.Postgres` load it with Node's CJS semantics.
-    build: { install: ["pg"] },
   },
   Effect.gen(function* () {
     const conn = yield* Fly.ConnectPostgres(Db);

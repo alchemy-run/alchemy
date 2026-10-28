@@ -33,7 +33,7 @@ not a Node container.
 
 ```typescript
 // alchemy.run.ts
-import * as Prisma from "alchemy/Prisma";
+import * as Prisma from "@alchemy.run/prisma";
 
 export const Website = Prisma.Website.Astro("Website");
 ```
@@ -150,8 +150,7 @@ export const Website = Prisma.Website.Astro("Website", {
 });
 ```
 
-`Prisma.CustomDomain` requires the app to be on the project's current
-default branch. Configure its returned `dnsRecords` yourself and verify
+Configure the returned `dnsRecords` yourself and verify
 status before routing traffic. See
 [Custom domains](/prisma/frontend/websites#custom-domains).
 

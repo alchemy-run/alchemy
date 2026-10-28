@@ -8,6 +8,7 @@ import type {
   DurableObjectNamespace as RuntimeDurableObject,
   QueueConsumer as RuntimeQueueConsumer,
   RuntimeServices,
+  RuntimeWorker,
 } from "@alchemy.run/cloudflare-runtime/core";
 import type * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -18,7 +19,7 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import * as FrameworkCore from "../core/index.ts";
 import { makeWakuCloudflareTarget } from "./cloudflare.ts";
 import { layer as wakuFrameworkLayer } from "./Waku.ts";
@@ -27,7 +28,7 @@ import { layer as wakuFrameworkLayer } from "./Waku.ts";
 // Structural mirror of alchemy's Worker source-provider contract.
 //
 // This module is loaded dynamically by alchemy's `loadSource` (see
-// `packages/alchemy/src/Cloudflare/Workers/Source.ts` — `WorkerSourceModule`,
+// `packages/cloudflare/src/Workers/Source.ts` — `WorkerSourceModule`,
 // `SourceProvider`, `SourceContext`, `DevContext`, `SourceBuildOutput`). The
 // contract is deliberately implemented STRUCTURALLY — no alchemy import — so
 // version skew degrades to a load-time `SourceProviderError` instead of a
@@ -98,6 +99,15 @@ export interface DevContext extends SourceContext {
     readonly hyperdrives: Record<string, Required<HyperdriveOrigin>>;
     readonly queueConsumers: Effect.Effect<Array<RuntimeQueueConsumer>>;
     readonly assets: RuntimeAssets | undefined;
+    /**
+     * The Worker's other runtime settings (crons, Workflows, tail consumers,
+     * Cache API, `request.cf`, zone, Access), spread whole into the runtime
+     * Worker.
+     */
+    readonly options: Pick<
+      RuntimeWorker,
+      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "zone" | "access"
+    >;
   };
   readonly runtimeContext: Context.Context<RuntimeServices>;
 }
@@ -128,6 +138,7 @@ export type SourceRequirements = FileSystem.FileSystem | Path.Path;
 /** Mirror of alchemy `Cloudflare/Workers/Source.SourceProvider` (narrowed E/R). */
 export interface SourceProvider {
   readonly ownsAssets: boolean;
+  readonly devAssetsBinding?: boolean;
   readonly build: (
     ctx: SourceContext,
   ) => Effect.Effect<SourceBuildOutput, WakuSourceError, SourceRequirements>;
@@ -501,7 +512,7 @@ const maybeReadString = Effect.fn(function* (file: string) {
   return yield* fs.readFileString(file).pipe(
     Effect.catchIf(
       (error) => error._tag === "PlatformError" && error.reason._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 });
@@ -680,6 +691,8 @@ export const makeWakuSourceProvider = (
     // Waku's assets are a build product (`dist/public`), not a props-level
     // directory — the provider reads and diffs them itself.
     ownsAssets: true,
+    // Dev runs the Worker in workerd with the Vite plugin's assets service.
+    devAssetsBinding: true,
 
     build: Effect.fn(function* (ctx) {
       const path = yield* Path.Path;
@@ -691,6 +704,7 @@ export const makeWakuSourceProvider = (
         module: integration.buildModule,
         rootDir,
         framework: integration.framework,
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           compatibilityDate: ctx.compatibility.date,
@@ -733,7 +747,7 @@ export const makeWakuSourceProvider = (
         [
           output.clientDirectory !== undefined
             ? readClientAssets(output.clientDirectory, assetsConfigOf(ctx.assets))
-            : Effect.succeed(undefined),
+            : Effect.undefined,
           hashWakuInput({
             rootDir,
             distDir,
@@ -791,6 +805,7 @@ export const makeWakuSourceProvider = (
           // from it exist in dev.
           ...(options.main !== undefined ? { main: options.main } : undefined),
           worker: {
+            ...ctx.worker.options,
             name: ctx.workerName,
             bindings: ctx.worker.bindings,
             durableObjectNamespaces: ctx.worker.durableObjectNamespaces,

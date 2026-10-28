@@ -30,6 +30,11 @@ export const RpcServerBun = RpcServer.layerServer(
           return new Response("Upgrade failed", { status: 400 });
         },
         websocket: {
+          // Bun closes sockets idle for 120s by default. A session can wait
+          // minutes on one provider call, and losing the parent link tears
+          // the sidecar down; the parent also sends heartbeats on its link.
+          // A dead peer still closes the socket at the TCP level.
+          idleTimeout: 0,
           open: (ws) => {
             if (ws.data && ws.data.type === "parent") {
               parentConnected();
@@ -51,13 +56,22 @@ export const RpcServerBun = RpcServer.layerServer(
             if (ws.data.type === "session") {
               ws.data.session.dispatch.close(code, reason);
             } else if (ws.data.type === "parent") {
+              // The sidecar exits with its parent; record why the link closed.
+              console.error(
+                `[alchemy sidecar] parent connection closed (code ${code}${reason ? `, ${reason}` : ""}); shutting down`,
+              );
               parentDisconnected();
             }
           },
         },
       }),
     );
-    yield* Effect.addFinalizer(() => Effect.sync(() => server.stop(true)));
+    // Fire and forget: awaiting `stop(true)` can outlive the process's own shutdown.
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        void server.stop(true);
+      }),
+    );
     return {
       url: `ws://${server.hostname}:${server.port}`,
     };

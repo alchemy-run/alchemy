@@ -25,7 +25,7 @@ Effect.gen(function* () {
 ## Query with Effect SQL
 
 ```typescript
-import * as SQL from "alchemy/SQL/LibSQL";
+import * as SQL from "@alchemy.run/sql/SQLite";
 
 const sql = yield* SQL.LibSQL(conn);
 
@@ -37,7 +37,7 @@ See [Effect SQL: libSQL](/sql/effect-sql/libsql).
 ## Query with Drizzle
 
 ```typescript
-import * as Drizzle from "alchemy/Drizzle/LibSQL";
+import * as Drizzle from "@alchemy.run/drizzle/LibSQL";
 
 const db = yield* Drizzle.LibSQL(conn);
 
@@ -46,10 +46,11 @@ const users = yield* db.select().from(Users);
 
 Pass `{ relations }` to use `db.query`. See [Drizzle: libSQL](/sql/drizzle/libsql).
 
-Both need `@effect/sql-libsql`:
+Effect SQL needs `@alchemy.run/sql` and Drizzle needs `@alchemy.run/drizzle`. Both need `@effect/sql-libsql`:
 
 ```sh
-pnpm add @effect/sql-libsql
+pnpm add @alchemy.run/sql @effect/sql-libsql      # Effect SQL
+pnpm add @alchemy.run/drizzle @effect/sql-libsql  # Drizzle
 ```
 
 ## Connect from AWS Lambda

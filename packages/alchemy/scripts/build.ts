@@ -1,9 +1,11 @@
-import { build, exec } from "../../../scripts/package-build.ts";
+import { build, typescript } from "../../../scripts/package-build.ts";
 
 build(import.meta.dirname, {
-  // Bootstrap modules are source inputs to the deployment bundler.
-  exports: { sourceOnly: ["./Runtime/Bootstrap/*"] },
+  // The shared bootstrap helpers every provider's `Bootstrap` imports stay source.
+  exports: {
+    sourceOnly: ["./Runtime/Bootstrap", "./Runtime/ManagedHttpShutdown"],
+  },
   thirdPartyLicenses: true,
   readme: true,
-  steps: [exec("tsc", "-b")],
+  steps: [typescript("-b")],
 });

@@ -1,4 +1,4 @@
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";

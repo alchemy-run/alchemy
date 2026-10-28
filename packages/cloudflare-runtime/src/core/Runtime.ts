@@ -82,7 +82,7 @@ export const RuntimeLive = Layer.effect(
           ? Effect.forEach([...new Set(names)], (scriptName) =>
               proxy.api.subscribe({ kind: "worker", scriptName }),
             )
-          : Effect.succeed(undefined);
+          : Effect.undefined;
       const [tails, streamingTails] = yield* Effect.all(
         [subscribeAll(worker.tails), subscribeAll(worker.streamingTails)],
         { concurrency: "unbounded" },
@@ -167,17 +167,25 @@ export const RuntimeLive = Layer.effect(
           { concurrency: "unbounded" },
         );
 
+      // FUSE privileges are decided once per runtime and
+      // resolve alongside the first image build or pull.
       const [, containerEngine] = yield* Effect.forEach(
         containers,
         Effect.fnUntraced(function* ({ className, container }) {
           if ("images" in container) {
-            containerOptions.set(className, {
-              images: yield* prepareNamedImages(className, container.images),
-            });
+            const [images, privileges] = yield* Effect.zip(
+              prepareNamedImages(className, container.images),
+              docker.getContainerPrivileges,
+              { concurrent: true },
+            );
+            containerOptions.set(className, { images, privileges });
           } else {
-            containerOptions.set(className, {
-              imageName: yield* prepareImage(className, container),
-            });
+            const [imageName, privileges] = yield* Effect.zip(
+              prepareImage(className, container),
+              docker.getContainerPrivileges,
+              { concurrent: true },
+            );
+            containerOptions.set(className, { imageName, privileges });
           }
         }),
         { concurrency: "unbounded", discard: true },

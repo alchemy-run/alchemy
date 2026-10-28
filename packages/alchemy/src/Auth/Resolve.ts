@@ -6,7 +6,8 @@ import * as Schema from "effect/Schema";
 import { UserFacingError } from "../UserFacingError.ts";
 import { loadConfigProvider } from "../Util/ConfigProvider.ts";
 import { AuthError, getAuthProvider, presentEnvironment } from "./AuthProvider.ts";
-import { ProfileStore, SuppressMissingProviderConfig } from "./Profile.ts";
+import { cacheUntilExpiry } from "./CredentialsCache.ts";
+import { ProfileStore, reloadProviderConfig, SuppressMissingProviderConfig } from "./Profile.ts";
 
 /**
  * Resolve the selected Alchemy profile after the command's dotenv provider is
@@ -86,7 +87,9 @@ export const resolveProviderConfig = <C extends { method: string } = any, Creden
       auth,
       profileName,
       config,
-      resolve: auth.read(profileName, config, (updated) =>
+      // Reload under the credentials lock on every resolve: a refresh
+      // rotates the stored token, so `config` goes stale after the first one.
+      resolve: auth.read(profileName, reloadProviderConfig(profile, auth, profileName), (updated) =>
         profile.setProviderConfig(profileName, providerName, updated).pipe(
           Effect.mapError((cause) =>
             AuthError.make({
@@ -105,9 +108,21 @@ export const resolveProviderConfig = <C extends { method: string } = any, Creden
  * runs on first use, outside the layer build, so the services it needs are
  * captured now and provided to it. Building the layer then never runs the
  * effect, e.g. never requires a configured profile.
+ *
+ * The `ConfigProvider` is a reference, so it is not part of `R`; capture it
+ * too. Otherwise the first use reads config through whatever provider is
+ * ambient there — e.g. a Function's init, which binds every key it loads into
+ * the Function's env and would ship the deployer's credentials (#1842).
  */
 export const deferUntilFirstUse = <A, E, R>(resolve: Effect.Effect<A, E, R>) =>
-  Effect.map(Effect.context<R>(), (context) => resolve.pipe(Effect.provideContext(context)));
+  Effect.map(
+    Effect.all([Effect.context<R>(), ConfigProvider.ConfigProvider]),
+    ([context, configProvider]) =>
+      resolve.pipe(
+        Effect.provideService(ConfigProvider.ConfigProvider, configProvider),
+        Effect.provideContext(context),
+      ),
+  );
 
 /**
  * A provider's credentials could not be resolved when a cloud operation first
@@ -144,6 +159,64 @@ export const orDieCredentialsUnavailable =
       ),
       Effect.orDie,
     );
+
+/**
+ * The credential recipe behind every provider's `fromAuthProvider` layer:
+ * {@link resolveProviderConfig}'s precedence, deferred until first use (so
+ * building provider layers never needs a configured profile), cached until
+ * shortly before the credentials expire (forever when `expiresAt` is omitted
+ * or returns `undefined`; failures are never cached, so a later `alchemy
+ * profile` login is picked up), and mapped onto the client's shape.
+ *
+ * A failed resolution fails with {@link CredentialsUnavailable}, which the
+ * engine reports as `CredentialsRequired`. `E` types that failure into the
+ * client SDK's own credentials channel (e.g. distilled's `ConfigError`), so
+ * users never see a new error type.
+ *
+ * ```ts
+ * export const fromAuthProvider = () =>
+ *   Layer.effect(
+ *     Credentials,
+ *     lazyCredentials<StripeResolvedCredentials, ConfigError>()(
+ *       STRIPE_AUTH_PROVIDER_NAME,
+ *       (creds) => ({ apiKey: creds.apiKey, apiBaseUrl: creds.apiBaseUrl }),
+ *     ),
+ *   );
+ * ```
+ */
+export const lazyCredentials = <Resolved, E = CredentialsUnavailable>() =>
+  Effect.fn("lazyCredentials")(function* <A>(
+    providerName: string,
+    toClient: (resolved: Resolved) => A,
+    options?: { readonly expiresAt?: (resolved: Resolved) => number | undefined },
+  ) {
+    const unavailable = (prefix: string) => (cause: { readonly message: string }) =>
+      CredentialsUnavailable.make({
+        provider: providerName,
+        message: `${prefix}${cause.message}`,
+        cause,
+      });
+    const resolve = yield* resolveProviderConfig<{ method: string }, Resolved>(providerName).pipe(
+      Effect.mapError(unavailable("")),
+      Effect.flatMap(({ profileName, resolve }) =>
+        resolve.pipe(
+          Effect.mapError(
+            unavailable(
+              `Failed to resolve ${providerName} credentials from ${
+                profileName === undefined ? "the environment" : `profile '${profileName}'`
+              }: `,
+            ),
+          ),
+        ),
+      ),
+      deferUntilFirstUse,
+    );
+    const cached = yield* cacheUntilExpiry(resolve, options?.expiresAt ?? (() => undefined));
+    // SAFETY: E is only the SDK channel the CredentialsUnavailable fails
+    // through; the engine matches its tag around every provider call.
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- see SAFETY above
+    return cached.pipe(Effect.map(toClient)) as Effect.Effect<A, E>;
+  });
 
 /** Let an explicit profile override configured selection without disturbing other keys. */
 export const withProfileOverride = (
