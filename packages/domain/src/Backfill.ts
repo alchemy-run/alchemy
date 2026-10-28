@@ -203,6 +203,21 @@ type Message =
 const OUTBOX_LEASE_MS = 60_000;
 
 /**
+ * How long before a failed send is tried again: past the ~20s a Durable Object
+ * must sit idle before it leaves the code it ran before a deploy, so retries to
+ * one still on older code don't keep it there.
+ */
+const RETRY_MS = 30_000;
+
+/** A target's generation: `view:Name#2` is 2. */
+const generationOf = (target: string) => Number(/#(\d+)$/.exec(target)?.[1] ?? 0);
+
+/** Refused by an instance still on older code; the sender tries again later. */
+class Stale extends Error {
+  override readonly name = "Stale";
+}
+
+/**
  * A source's durable outbox of control messages: staged with the state change
  * that produced them, sent in order, deleted once sent. One flush at a time.
  */
@@ -229,7 +244,7 @@ const outbox = (storage: Storage, jobs: Jobs, net: Network) => {
   /** Send every staged message; `true` when the outbox is empty. */
   const flush: Effect.Effect<boolean> = Effect.gen(function* () {
     // Another flush holds the lease; it may stop before this one's rows: try again later.
-    if (!(yield* acquire)) return yield* Effect.as(jobs.schedule("bf-flush", 5_000), false);
+    if (!(yield* acquire)) return yield* Effect.as(jobs.schedule("bf-flush", RETRY_MS), false);
     return yield* Effect.gen(function* () {
       while (true) {
         const rows = yield* storage.list<Message>({ prefix: "bf:q:", limit: 50 });
@@ -241,7 +256,7 @@ const outbox = (storage: Storage, jobs: Jobs, net: Network) => {
       }
     }).pipe(
       // A send failed: the rest stay staged, and the backstop sends them later.
-      Effect.catchCause(() => Effect.as(jobs.schedule("bf-flush", 5_000), false)),
+      Effect.catchCause(() => Effect.as(jobs.schedule("bf-flush", RETRY_MS), false)),
       Effect.ensuring(storage.delete(["bf:q-lease"])),
     );
   });
@@ -437,7 +452,8 @@ export const makeSource = (
         if (result !== "discovered") return result as ScanResult;
         // Discovered only once every key it feeds has been told: a key's sources are
         // complete when discovery is complete everywhere.
-        return ((yield* queue.flush) ? "discovered" : "more") as ScanResult;
+        // Not all could be told yet (one is still on older code, say): back off and ask again.
+        return ((yield* queue.flush) ? "discovered" : "stale") as ScanResult;
       }),
 
     ready: (target: string) =>
@@ -482,6 +498,11 @@ export const makeSource = (
 
     pull: (target: string, key: string, after: number) =>
       Effect.gen(function* () {
+        // On older code it knows nothing of the target: refuse, rather than answer "nothing more".
+        if (!host.model().includes(target))
+          return yield* Effect.die(
+            new Stale(`${host.ref.source}/${host.ref.id} does not know ${target} yet`),
+          );
         const result: Pulled = yield* storage.exclusive(
           Effect.gen(function* () {
             const state = yield* getState(target);
@@ -543,6 +564,8 @@ export interface ConsumerHost {
    * exclusive section.
    */
   readonly apply: (deliveries: ReadonlyArray<Delivery>) => Effect.Effect<void>;
+  /** Work an `apply` left for after its exclusive section commits (pushes, sends). */
+  readonly after?: Effect.Effect<void>;
 }
 
 /**
@@ -569,6 +592,15 @@ export const makeConsumer = (
   const pullingPrefix = (target: string) => `bf:p:${T(target)}:`;
   const bufferPrefix = (target: string) => `bf:b:${T(target)}:`;
   const jobId = (target: string) => `bf-merge:${target}`;
+  /**
+   * A message for another generation of this consumer. A newer one means this
+   * instance still runs older code: refuse it, so the sender tries again once
+   * it runs the deployed code. An older one is from a superseded backfill.
+   */
+  const stale = (target: string) =>
+    generationOf(target) > generationOf(host.target())
+      ? Effect.die(new Stale(`${host.key} runs ${host.target()}, not ${target} yet`))
+      : Effect.void;
 
   interface Backfill {
     readonly ready: boolean;
@@ -742,7 +774,7 @@ export const makeConsumer = (
     source: (target: string, stream: string, ref: SourceRef) =>
       storage.exclusive(
         Effect.gen(function* () {
-          if (target !== host.target()) return;
+          if (target !== host.target()) return yield* stale(target);
           // A source that joined after this key finished (an instance listed late):
           // take up the backfill again for it, rather than lose its history.
           const reopened = (yield* storage.get(doneKey(target))) !== undefined;
@@ -769,7 +801,7 @@ export const makeConsumer = (
     ready: (target: string) =>
       storage.exclusive(
         Effect.gen(function* () {
-          if (target !== host.target()) return;
+          if (target !== host.target()) return yield* stale(target);
           if (yield* storage.get(doneKey(target))) return;
           const backfill = yield* begin(target);
           if (!backfill.ready)
@@ -803,6 +835,7 @@ export const makeConsumer = (
             );
         }
         const outcome = yield* applyBuffered(target);
+        if (host.after) yield* host.after;
         if (outcome === "done") return;
         if (outcome === "starved") yield* pullStarved(target);
         if (outcome === "waiting") return;

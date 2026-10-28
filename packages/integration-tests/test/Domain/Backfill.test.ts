@@ -2,7 +2,7 @@ import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import { type Faults, noFaults, Sim } from "./Backfill.sim.ts";
 
-const TARGET = "view:V";
+const TARGET = "view:V#1";
 
 /**
  * Check what a finished simulation must hold:
@@ -220,5 +220,31 @@ describe("Domain backfill (simulated)", () => {
         yield* sim.run([...history(sim, 10, 20, 8), ...history(sim, 4, 8, 6, "new")]);
       }),
     { faults: { callBefore: 0.1, callAfter: 0.1, crash: 0.1 }, seeds: 300 },
+  );
+
+  scenario(
+    "consumer keys still on older code refuse messages until they run the deployed code",
+    (sim) =>
+      Effect.gen(function* () {
+        for (let k = 0; k < 4; k++) if (k % 2 === 0) sim.staleKeys.set(`k${k}`, sim.now + 200_000);
+        for (const commit of history(sim, 6, 30, 4)) yield* commit();
+        yield* sim.deploy();
+        yield* sim.run(history(sim, 6, 10, 4));
+      }),
+  );
+
+  scenario(
+    "stale keys, stale sources and faults together",
+    (sim) =>
+      Effect.gen(function* () {
+        sim.staleKeys.set("k1", sim.now + 150_000);
+        for (let i = 0; i < 30; i++) {
+          sim.now += 1;
+          yield* sim.commit(`A/s${i % 5}`, [`k${i % 4}`], i % 5 === 0 ? sim.now + 90_000 : 0);
+        }
+        yield* sim.deploy();
+        yield* sim.run(history(sim, 5, 10, 4));
+      }),
+    { faults: { callBefore: 0.05, callAfter: 0.05, crash: 0.05 }, seeds: 40 },
   );
 });

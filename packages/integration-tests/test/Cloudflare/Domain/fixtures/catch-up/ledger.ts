@@ -25,11 +25,26 @@ export class Deposits extends Domain.View("Deposits", {
   evolve: { Deposited: (s, e) => ({ amounts: [...s.amounts, e.amount] }) },
 }) {}
 
+/** Every deposit across every account, in the order the view applied them: one hot key. */
+export class Timeline extends Domain.View("Timeline", {
+  from: [Account],
+  key: Schema.String,
+  keyOf: { Deposited: () => "all" },
+  state: Schema.Struct({ entries: Schema.Array(Schema.String) }),
+  initial: { entries: [] },
+  evolve: {
+    Deposited: (s, e, { source }) => ({ entries: [...s.entries, `${source.id}:${e.amount}`] }),
+  },
+}) {}
+
 /** The first deploy: accounts only. */
 export class Before extends Domain.Model("Ledger", { aggregates: [Account] }) {}
 
 /** The second deploy adds the view; its history must reach it. */
-export class After extends Domain.Model("Ledger", { aggregates: [Account], views: [Deposits] }) {}
+export class After extends Domain.Model("Ledger", {
+  aggregates: [Account],
+  views: [Deposits, Timeline],
+}) {}
 
 /** The view redefined: it now records each deposit doubled. Rebuilt by bumping its version. */
 export class DoubledDeposits extends Domain.View("Deposits", {
@@ -43,5 +58,5 @@ export class DoubledDeposits extends Domain.View("Deposits", {
 /** The third deploy: the redefined view, at version 1. */
 export class Rebuilt extends Domain.Model("Ledger", {
   aggregates: [Account],
-  views: [DoubledDeposits],
+  views: [DoubledDeposits, Timeline],
 }) {}

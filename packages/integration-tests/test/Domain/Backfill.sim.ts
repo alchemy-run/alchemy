@@ -144,6 +144,8 @@ interface KeyData {
   readonly object: SimObject;
   readonly applied: Array<{ readonly delivery: Delivery; readonly backfilling: boolean }>;
   readonly checkpoints: Map<string, number>;
+  /** Runs code from before the target's generation until this time. */
+  staleUntil: number;
   role: Backfill.Consumer;
 }
 
@@ -247,7 +249,7 @@ export class Sim {
   ): Array<Delivery> {
     const stream = this.streamOf(source.ref);
     return event.keys.map((key) => ({
-      target: { kind: "view", name: "V" },
+      target: { kind: "view", name: "V", generation: 1 },
       key,
       source: stream,
       seq: event.seq,
@@ -319,6 +321,7 @@ export class Sim {
         object,
         applied: [],
         checkpoints: new Map(),
+        staleUntil: this.keyStaleUntil(key),
         role: undefined as never,
       };
       keyData.role = Backfill.makeConsumer(
@@ -327,7 +330,8 @@ export class Sim {
         this.net,
         {
           key,
-          target: () => this.target,
+          // Older code runs the previous generation of the consumer.
+          target: () => (this.now >= keyData.staleUntil ? this.target : "view:V"),
           apply: (deliveries) => Effect.sync(() => this.apply(keyData, deliveries, true)),
         },
         this.limits,
@@ -409,9 +413,17 @@ export class Sim {
     });
   }
 
+  /** Keys that run older code for a while: by key, until when. */
+  readonly staleKeys = new Map<string, number>();
+  private keyStaleUntil(key: string) {
+    return this.staleKeys.get(key) ?? 0;
+  }
+
   /** Deliver one queued live delivery. */
   private sendOne(delivery: Delivery) {
     const key = this.key(delivery.key);
+    // Older code refuses a newer generation's delivery (its apply dies); the sender retries.
+    if (this.now < key.staleUntil) return Effect.die(new Crash("key still on older code"));
     return key.role
       .admit(this.target, [delivery])
       .pipe(

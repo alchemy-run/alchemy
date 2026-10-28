@@ -1,6 +1,7 @@
 import type * as Aggregate from "@alchemy.run/domain/Aggregate";
 import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "@alchemy.run/domain/Aggregate";
-import { earliest, laggingFrom, routeLive, type Routed } from "@alchemy.run/domain/CatchUp";
+import * as Backfill from "@alchemy.run/domain/Backfill";
+import { type Routed, targetId } from "@alchemy.run/domain/CatchUp";
 import { isAfter, mergeCheckpoints } from "@alchemy.run/domain/InMemory";
 import { captureContext } from "@alchemy.run/domain/internal";
 import {
@@ -336,7 +337,7 @@ const connectTo = (namespace: Namespace) => (key: string, subscription: Subscrip
     return response;
   });
 
-// ---------------------------------------------------------------- catch-up
+// ---------------------------------------------------------------- backfill
 
 /** Delete every stored key under these prefixes, a batch at a time. */
 const clearPrefixes = (prefixes: ReadonlyArray<string>) =>
@@ -351,462 +352,118 @@ const clearPrefixes = (prefixes: ReadonlyArray<string>) =>
     }
   });
 
-/** Events (or view entries) an instance replays per transaction while catching up. */
-const CATCH_UP_PAGE = 100;
-
-/** Rows an instance replays per `catchUp` call; the directory calls it again for the rest. */
-const CATCH_UP_BUDGET = 500;
-
 /**
- * How much history each catch-up round replays: a consumer added later sees
- * many instances' events roughly in the order they happened, a window at a time.
+ * What the backfill protocol runs on in one Durable Object: its storage (an
+ * exclusive section is one transaction, with every other event held back),
+ * and its jobs as durable callbacks. Each step counts as progress, so a long
+ * backfill never exhausts a callback's retry budget.
  */
-const CATCH_UP_WINDOW_MS = 60 * 60 * 1000;
-
-/** What a `catchUp` call left: the earliest event past the round, and whether it ran out of budget. */
-interface CatchUpResult {
-  readonly next: number | undefined;
-  readonly pending: boolean;
-}
-
-/**
- * Replay an instance's history to its lagging consumers up to a round's
- * `until`, a page per transaction, delivering each page before the next.
- * `page` reads the rows after the lowest lagging cursor and replays them, or
- * answers `undefined` when nothing lags.
- */
-const catchUp = <E1, R1, E2, R2, E3, R3>(
-  outbox: {
-    readonly stage: (rows: ReadonlyArray<Delivery>) => Effect.Effect<void, E1, R1>;
-    readonly flush: Effect.Effect<void, E2, R2>;
-  },
-  model: ReadonlySet<string>,
-  targets: ReadonlyArray<string>,
-  page: (routed: Routed | undefined) => Effect.Effect<
-    | {
-        readonly version: number;
-        readonly rows: number;
-        readonly result: {
-          readonly deliveries: ReadonlyArray<Delivery>;
-          readonly routed: Routed;
-          readonly next: number | undefined;
-        };
-      }
-    | undefined,
-    E3,
-    R3
-  >,
+const backfillRuntime = (
+  run: (id: string) => Effect.Effect<void, never, DurableObjectState | RuntimeContext>,
 ) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
-    // A consumer this code doesn't know: it still runs the code from before the deploy that
-    // started the sweep, and keeps it until it has been idle. Ask to be called again.
-    if (!targets.every((target) => model.has(target)))
-      return { next: undefined, pending: true } satisfies CatchUpResult;
-    let replayed = 0;
-    while (true) {
-      const step = yield* exclusively(
-        Effect.gen(function* () {
-          const replay = yield* page(yield* state.storage.get<Routed>("routed"));
-          if (replay === undefined) return { done: true, next: undefined, rows: 0 };
-          yield* state.storage.transaction(
-            Effect.gen(function* () {
-              yield* state.storage.put("routed", replay.result.routed);
-              yield* outbox.stage(replay.result.deliveries);
-            }),
-          );
-          return {
-            // Stopped at the round's end, or replayed every row it had.
-            done: replay.result.next !== undefined || replay.rows < CATCH_UP_PAGE,
-            next: replay.result.next,
-            rows: replay.rows,
-          };
-        }),
-      );
-      // Deliver before answering, so a round's events land before the next round's. A
-      // consumer still on older code refuses them: they stay staged, and the outbox's
-      // backstop delivers them once it runs the deployed code.
-      yield* Effect.ignoreCause(outbox.flush);
-      replayed += step.rows;
-      if (step.done) return { next: step.next, pending: false } satisfies CatchUpResult;
-      if (replayed >= CATCH_UP_BUDGET)
-        return { next: undefined, pending: true } satisfies CatchUpResult;
-    }
+    const context = yield* captureContext<DurableObjectState | RuntimeContext>();
+    const provide = <A, E>(
+      effect: Effect.Effect<A, E, DurableObjectState | RuntimeContext>,
+    ): Effect.Effect<A, E> => Effect.provide(effect, context);
+    const storage: Backfill.Storage = {
+      get: <A>(key: string) => provide(state.storage.get<A>(key)),
+      put: (entries) =>
+        provide(
+          Object.keys(entries).length === 0
+            ? Effect.void
+            : state.storage.put(entries as Record<string, unknown>),
+        ),
+      delete: (keys) =>
+        provide(keys.length === 0 ? Effect.void : Effect.asVoid(state.storage.delete([...keys]))),
+      list: <A>(options: {
+        readonly prefix: string;
+        readonly startAfter?: string;
+        readonly limit?: number;
+      }) =>
+        provide(
+          state.storage
+            .list<A>({
+              prefix: options.prefix,
+              ...(options.startAfter === undefined ? {} : { startAfter: options.startAfter }),
+              ...(options.limit === undefined ? {} : { limit: options.limit }),
+            })
+            .pipe(Effect.map((rows) => [...rows.entries()])),
+        ),
+      exclusive: (effect) =>
+        provide(exclusively(state.storage.transaction(effect)).pipe(Effect.orDie)),
+    };
+    const callback = yield* makeCallback("domain:backfill", (job: { readonly id: string }) =>
+      run(job.id),
+    );
+    const jobs: Backfill.Jobs = {
+      schedule: (id, afterMillis) =>
+        provide(
+          Effect.gen(function* () {
+            const step = ((yield* state.storage.get<number>("bf:step")) ?? 0) + 1;
+            yield* state.storage.put("bf:step", step);
+            yield* callback.schedule(id, {
+              after: `${afterMillis} millis`,
+              payload: { id },
+              progress: step,
+            });
+          }).pipe(Effect.orDie),
+        ),
+    };
+    return { storage, jobs, provide };
   });
 
-// ---------------------------------------------------------------- directory
-
-/**
- * Durable Objects cannot be listed, so every source instance (an aggregate
- * instance, or a view key) lists itself in a directory when it first commits.
- * The directory is a tree of objects with a fan-out of 16: an instance's leaf
- * is the first {@link DIRECTORY_DEPTH} hex digits of a hash of its source and
- * id, so it is found without a lookup, and a node is created by the first
- * write to it, then links itself into its parent.
- *
- * Catching up a consumer added later runs over the tree in rounds. Each
- * isolate tells one random node of the model's consumers (`news`); a node
- * passes news up only the first time it hears it, so each node gets at most
- * one message per child, and the root starts a sweep. A round goes down the
- * tree (each node tells its children and catches up its own instances up to
- * the round's `until`), and reports come back up with the earliest event left.
- * The root then starts the next round a window past it, until none is left.
- *
- * Every step runs in its own alarm (a durable callback), so no call chain is
- * deeper than one hop and a crash resumes from stored progress. Every message
- * is idempotent: rounds and reports carry their sweep generation and round.
- */
-const DIRECTORY_DEPTH = 4;
-
-/** Instances a directory node catches up per alarm, and calls it makes at once. */
-const DIRECTORY_PAGE = 25;
-const DIRECTORY_CONCURRENCY = 5;
-
-/** An instance listed in the directory. */
-interface Registration {
-  readonly source: string;
-  readonly id: string;
-}
-
-/** What an instance needs of the directory. */
-interface Directory {
-  readonly register: (row: Registration) => Effect.Effect<void>;
-}
-
-/** The leaf an instance is listed in: a prefix of the FNV-1a hash of its source and id. */
-const leafOf = ({ source, id }: Registration) => {
-  let hash = 0x811c9dc5;
-  for (const char of `${source}/${id}`) {
-    hash ^= char.charCodeAt(0);
-    hash = Math.imul(hash, 0x01000193) >>> 0;
-  }
-  return hash.toString(16).padStart(8, "0").slice(0, DIRECTORY_DEPTH);
-};
-
-const parentOf = (path: string) => path.slice(0, -1);
-
-/** A directory node's progress through the current round of a sweep. */
-interface Sweep {
-  /** Bumped by the root whenever news brings a new consumer: older messages are ignored. */
-  readonly gen: number;
-  readonly round: number;
-  /** Replay events committed before this time, in epoch milliseconds. */
-  readonly until: number;
-  /** The model's consumers when the sweep started: an instance on older code asks to be called again. */
-  readonly targets: ReadonlyArray<string>;
-  /** The children told of this round, and their reports: the earliest event each has left. */
-  readonly children: ReadonlyArray<string>;
-  readonly told: boolean;
-  readonly reports: Readonly<Record<string, number | null>>;
-  /** This node's own instances: the last one listed, those to call again, the earliest event left. */
-  readonly cursor: string | null;
-  readonly listed: boolean;
-  readonly pending: ReadonlyArray<Registration>;
-  readonly earliest: number | null;
-  /** Every own instance has caught up to `until`. */
-  readonly own: boolean;
-  /** The round is reported to the parent (or, at the root, finished). */
-  readonly reported: boolean;
-}
-
-interface DirectoryJob {
-  readonly kind: "link" | "news" | "round" | "report";
-  readonly path: string;
-  /** For `report`: the round reported, as it was when it finished here. */
-  readonly report?: {
-    readonly gen: number;
-    readonly round: number;
-    readonly earliest: number | null;
-  };
-}
-
-/** A directory node, called by its path. */
-interface DirectoryNode {
-  /** At the root: the consumers whose history has fully arrived, and how far the running sweep is. */
-  readonly status: () => Effect.Effect<{
-    readonly complete: ReadonlyArray<string>;
-    readonly through: { readonly targets: ReadonlyArray<string>; readonly at: number } | undefined;
-  }>;
-  readonly register: (row: Registration) => Effect.Effect<void>;
-  readonly child: (child: string) => Effect.Effect<void>;
-  readonly news: (targets: ReadonlyArray<string>) => Effect.Effect<void>;
-  readonly round: (
-    gen: number,
-    round: number,
-    until: number,
-    targets: ReadonlyArray<string>,
-  ) => Effect.Effect<void>;
-  readonly report: (
-    gen: number,
-    round: number,
-    child: string,
-    earliest: number | null,
-  ) => Effect.Effect<void>;
-}
-
-const earliestOf = (values: ReadonlyArray<number | null | undefined>): number | null =>
-  values.reduce<number | null>(
-    (a, b) => (b === null || b === undefined ? a : (earliest(a ?? undefined, b) ?? null)),
-    null,
-  );
-
-const directoryObject = (deps: {
-  readonly node: (path: string) => DirectoryNode;
-  readonly catchUp: (
-    row: Registration,
-    until: number,
-    targets: ReadonlyArray<string>,
-  ) => Effect.Effect<CatchUpResult>;
-}) =>
+/** A directory node: one Durable Object per path in the tree. */
+const directoryObject = (net: Backfill.Network) =>
   Effect.gen(function* () {
-    const state = yield* DurableObjectState;
     return Effect.gen(function* () {
-      const sweepOf = state.storage.get<Sweep>("sweep");
-      const jobs = yield* makeCallback("domain:directory", (job: DirectoryJob) => run(job));
-      // Each step is progress, so a long sweep never exhausts the callback's retry budget.
-      const schedule = (job: DirectoryJob, after: Duration.Input = 0) =>
-        Effect.gen(function* () {
-          const step = ((yield* state.storage.get<number>("step")) ?? 0) + 1;
-          yield* state.storage.put("step", step);
-          yield* jobs.schedule(job.kind, { after, payload: job, progress: step });
-        });
-      /** Link a node into its parent the first time something is written to it. */
-      const link = (path: string) =>
-        Effect.gen(function* () {
-          if (path === "" || (yield* state.storage.get<boolean>("linked"))) return;
-          yield* state.storage.put("linked", true);
-          yield* schedule({ kind: "link", path });
-        });
-      /** Start a round: tell the children, then catch up this node's own instances. */
-      const begin = (
-        path: string,
-        gen: number,
-        round: number,
-        until: number,
-        targets: ReadonlyArray<string>,
-      ) =>
-        Effect.gen(function* () {
-          const children = [...(yield* state.storage.list({ prefix: "c:" })).keys()].map((key) =>
-            key.slice(2),
-          );
-          yield* state.storage.put("sweep", {
-            gen,
-            round,
-            until,
-            targets,
-            children,
-            told: false,
-            reports: {},
-            cursor: null,
-            listed: false,
-            pending: [],
-            earliest: null,
-            own: false,
-            reported: false,
-          } satisfies Sweep);
-          yield* schedule({ kind: "round", path });
-        });
-      /**
-       * A round is done here once the own instances and every child are: report
-       * it to the parent, or at the root start the next round, a window past
-       * the earliest event left, until none is.
-       */
-      const settle = (path: string, sweep: Sweep) =>
-        Effect.gen(function* () {
-          if (sweep.reported || !sweep.own) return;
-          if (sweep.children.some((child) => !(child in sweep.reports))) return;
-          yield* state.storage.put("sweep", { ...sweep, reported: true } satisfies Sweep);
-          const next = earliestOf([sweep.earliest, ...Object.values(sweep.reports)]);
-          if (path !== "") {
-            const report = { gen: sweep.gen, round: sweep.round, earliest: next };
-            return yield* schedule({ kind: "report", path, report });
-          }
-          // What the root reports to `history`: the consumers whose history has fully arrived.
-          const complete = (yield* state.storage.get<Array<string>>("complete")) ?? [];
-          if (next === null) {
-            yield* state.storage.put("complete", [
-              ...complete,
-              ...sweep.targets.filter((target) => !complete.includes(target)),
-            ]);
-            yield* state.storage.delete("through");
-          } else {
-            yield* state.storage.put("through", { targets: sweep.targets, at: next });
-          }
-          if (next !== null)
-            yield* begin(
-              path,
-              sweep.gen,
-              sweep.round + 1,
-              next + CATCH_UP_WINDOW_MS,
-              sweep.targets,
-            );
-        });
-      /** Apply `update` to the sweep if it is still the round `sweep` was read in. */
-      const update = (path: string, sweep: Sweep, update: (sweep: Sweep) => Sweep) =>
-        exclusively(
-          Effect.gen(function* () {
-            const latest = yield* sweepOf;
-            if (!latest || latest.gen !== sweep.gen || latest.round !== sweep.round) return;
-            const next = update(latest);
-            yield* state.storage.put("sweep", next);
-            yield* settle(path, next);
-            return next;
-          }),
-        );
-      /** One step of a round: tell the children, then catch up a page of own instances. */
-      const step = (path: string) =>
-        Effect.gen(function* () {
-          let sweep = yield* sweepOf;
-          if (!sweep || sweep.reported) return;
-          if (!sweep.told) {
-            const { gen, round, until, targets } = sweep;
-            yield* Effect.forEach(
-              sweep.children,
-              (child) => deps.node(child).round(gen, round, until, targets),
-              { concurrency: DIRECTORY_CONCURRENCY, discard: true },
-            );
-            const told = yield* update(path, sweep, (s) => ({ ...s, told: true }));
-            if (!told) return;
-            sweep = told;
-          }
-          if (sweep.own) return;
-          const listed =
-            sweep.pending.length > 0
-              ? []
-              : [
-                  ...(yield* state.storage.list<Registration>({
-                    prefix: "i:",
-                    ...(sweep.cursor === null ? {} : { startAfter: sweep.cursor }),
-                    limit: DIRECTORY_PAGE,
-                  })).entries(),
-                ];
-          const batch = sweep.pending.length > 0 ? sweep.pending : listed.map(([, row]) => row);
-          const { until, targets } = sweep;
-          const results = yield* Effect.forEach(
-            batch,
-            (row) =>
-              deps.catchUp(row, until, targets).pipe(Effect.map((result) => ({ row, result }))),
-            { concurrency: DIRECTORY_CONCURRENCY },
-          );
-          const pending = results.filter(({ result }) => result.pending).map(({ row }) => row);
-          const next = yield* update(path, sweep, (s) => {
-            const exhausted = s.pending.length > 0 ? s.listed : listed.length < DIRECTORY_PAGE;
-            return {
-              ...s,
-              cursor: listed.length > 0 ? listed[listed.length - 1]![0] : s.cursor,
-              listed: exhausted,
-              pending,
-              earliest: earliestOf([s.earliest, ...results.map(({ result }) => result.next)]),
-              own: exhausted && pending.length === 0,
-            };
-          });
-          // Instances asked to be called again: back off past the ~20s a Durable Object must
-          // sit idle before it leaves the code it ran before a deploy, so calls don't keep it there.
-          if (next && !next.own)
-            yield* schedule({ kind: "round", path }, sweep.pending.length > 0 ? "30 seconds" : 0);
-        });
-      const run = (
-        job: DirectoryJob,
-      ): Effect.Effect<void, unknown, DurableObjectState | RuntimeContext> =>
-        Effect.gen(function* () {
-          const parent = deps.node(parentOf(job.path));
-          if (job.kind === "link") return yield* parent.child(job.path);
-          if (job.kind === "news")
-            return yield* parent.news((yield* state.storage.get<Array<string>>("known")) ?? []);
-          if (job.kind === "round") return yield* step(job.path);
-          if (job.report) {
-            const { gen, round, earliest } = job.report;
-            yield* parent.report(gen, round, job.path, earliest);
-          }
-        });
+      let node: Backfill.Node | undefined;
+      const runtime = yield* backfillRuntime((id) => node!.run(id));
+      node = Backfill.makeNode(runtime.storage, runtime.jobs, net);
+      const role = node;
       return {
-        status: () =>
-          reportDefects(
-            Effect.gen(function* () {
-              return {
-                complete: (yield* state.storage.get<Array<string>>("complete")) ?? [],
-                through: yield* state.storage.get<{
-                  readonly targets: ReadonlyArray<string>;
-                  readonly at: number;
-                }>("through"),
-              };
-            }),
-          ),
-        register: (path: string, row: Registration) =>
-          reportDefects(
-            exclusively(
-              Effect.gen(function* () {
-                yield* state.storage.put(`i:${row.source}:${row.id}`, row);
-                yield* link(path);
-              }),
-            ),
-          ),
-        child: (path: string, child: string) =>
-          reportDefects(
-            exclusively(
-              Effect.gen(function* () {
-                yield* state.storage.put(`c:${child}`, true);
-                yield* link(path);
-              }),
-            ),
-          ),
+        register: (path: string, ref: Backfill.SourceRef) =>
+          reportDefects(role.register(path, ref)),
+        child: (path: string, child: string) => reportDefects(role.child(path, child)),
         news: (path: string, targets: ReadonlyArray<string>) =>
-          reportDefects(
-            exclusively(
-              Effect.gen(function* () {
-                const known = (yield* state.storage.get<Array<string>>("known")) ?? [];
-                const fresh = targets.filter((target) => !known.includes(target));
-                if (fresh.length === 0) return;
-                yield* state.storage.put("known", [...known, ...fresh]);
-                if (path !== "") return yield* schedule({ kind: "news", path });
-                // A new consumer: a new sweep, from a probe round that only finds the earliest event.
-                yield* begin(path, ((yield* sweepOf)?.gen ?? 0) + 1, 0, 0, targets);
-              }),
-            ),
-          ),
-        round: (
-          path: string,
-          gen: number,
-          round: number,
-          until: number,
-          targets: ReadonlyArray<string>,
-        ) =>
-          reportDefects(
-            exclusively(
-              Effect.gen(function* () {
-                const sweep = yield* sweepOf;
-                if (sweep && (sweep.gen > gen || (sweep.gen === gen && sweep.round >= round)))
-                  return;
-                yield* begin(path, gen, round, until, targets);
-              }),
-            ),
-          ),
-        report: (path: string, gen: number, round: number, child: string, at: number | null) =>
-          reportDefects(
-            exclusively(
-              Effect.gen(function* () {
-                const sweep = yield* sweepOf;
-                if (!sweep || sweep.gen !== gen || sweep.round !== round) return;
-                const next = { ...sweep, reports: { ...sweep.reports, [child]: at } };
-                yield* state.storage.put("sweep", next);
-                yield* settle(path, next);
-              }),
-            ),
-          ),
+          reportDefects(role.news(path, targets)),
+        sweep: (path: string, target: string, phase: "discover" | "ready" | "complete") =>
+          reportDefects(role.sweep(path, target, phase)),
+        report: (path: string, target: string, phase: "discover" | "ready", child: string) =>
+          reportDefects(role.report(path, target, phase, child)),
+        settled: (path: string, target: string, ref: Backfill.SourceRef) =>
+          reportDefects(role.settled(path, target, ref)),
+        phase: (path: string, target: string) => reportDefects(role.phase(path, target)),
+        status: (path: string) => reportDefects(role.status(path)),
       };
     });
   });
 
+/** The id an instance was listed under, saved so jobs that fire later find it. */
+const ID_KEY = "bf:id";
+
+/**
+ * List an instance in the directory before its first commit, so every
+ * instance with an event can be reached when a consumer is added later.
+ */
+const ensureRegistered = (net: Backfill.Network, ref: Backfill.SourceRef) =>
+  Effect.gen(function* () {
+    const state = yield* DurableObjectState;
+    if (yield* state.storage.get<boolean>("registered")) return;
+    yield* net.node.register(Backfill.leafOf(ref), ref);
+    yield* state.storage.put({ registered: true, [ID_KEY]: ref.id });
+  });
+
 const aggregateObject = (
   kit: AggregateKit,
-  directory: Directory,
-  model: () => ReadonlySet<string>,
+  net: Backfill.Network,
+  model: () => ReadonlyArray<string>,
 ) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
       const outbox = yield* queue<Delivery>("outbox", kit.deliver);
-      const registrations = yield* queue<Registration>("register", directory.register);
       const currentMeta = state.storage
         .get<{ state: Json | null; version: number }>("meta")
         .pipe(Effect.map((meta) => meta ?? { state: null, version: 0 }));
@@ -814,18 +471,73 @@ const aggregateObject = (
         state.storage
           .list<StoredEvent>({ prefix: "event:", start: `event:${pad(after + 1)}` })
           .pipe(Effect.map((rows) => [...rows.values()]));
+
+      // This instance as a backfill source: consumers added later pull its events.
+      let source: Backfill.Source | undefined;
+      const runtime = yield* backfillRuntime((id) =>
+        id === "bf-flush"
+          ? Effect.flatMap(state.storage.get<string>(ID_KEY), (stored) =>
+              stored === undefined ? Effect.void : sourceFor(stored).flush,
+            )
+          : Effect.void,
+      );
+      const sourceFor = (id: string): Backfill.Source =>
+        (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
+          ref: { source: kit.name, id },
+          targets: () => kit.targets,
+          model,
+          version: runtime.provide(Effect.map(currentMeta, (meta) => meta.version)),
+          routed: runtime.provide(state.storage.get<Routed>("routed")),
+          markLive: (target) =>
+            runtime.provide(
+              Effect.gen(function* () {
+                const { version } = yield* currentMeta;
+                const routed = yield* state.storage.get<Routed>("routed");
+                yield* state.storage.put("routed", { ...routed, [target]: version });
+              }),
+            ),
+          rows: (after, limit, target) =>
+            runtime.provide(
+              state.storage
+                .list<StoredEvent>({ prefix: "event:", start: `event:${pad(after + 1)}`, limit })
+                .pipe(
+                  Effect.map((rows) =>
+                    Backfill.routeRows(
+                      kit.replay,
+                      id,
+                      kit.targets,
+                      target,
+                      [...rows.values()],
+                      (event) => event.envelope.seq,
+                    ),
+                  ),
+                ),
+            ),
+          rowsAt: (seqs, target) =>
+            runtime.provide(
+              state.storage
+                .get<StoredEvent>(seqs.map((seq) => `event:${pad(seq)}`))
+                .pipe(
+                  Effect.map((rows) =>
+                    Backfill.routeRows(
+                      kit.replay,
+                      id,
+                      kit.targets,
+                      target,
+                      [...rows.values()],
+                      (event) => event.envelope.seq,
+                    ).flatMap((row) => row.deliveries),
+                  ),
+                ),
+            ),
+        }));
+
       // Callers run it `exclusively`.
       const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
         Effect.gen(function* () {
           const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
           if (duplicate) return { sent: duplicate, kick: false };
-          const current = (yield* state.storage.get<{
-            state: Json | null;
-            version: number;
-          }>("meta")) ?? {
-            state: null,
-            version: 0,
-          };
+          const current = yield* currentMeta;
           const result = yield* kit.handle({
             id,
             state: current.state,
@@ -839,14 +551,6 @@ const aggregateObject = (
             link: meta.link,
           });
           if (result._tag === "Rejected") return { sent: result as SendResult, kick: false };
-          const live = routeLive(
-            kit.targets,
-            yield* state.storage.get<Routed>("routed"),
-            current.version,
-            result.version,
-            result.deliveries,
-          );
-          const unregistered = !(yield* state.storage.get<boolean>("registered"));
           const sent: SendResult = {
             _tag: "Accepted",
             receipt: {
@@ -856,7 +560,7 @@ const aggregateObject = (
               reply: result.reply,
             },
           };
-          yield* state.storage.transaction(
+          const routed = yield* state.storage.transaction(
             Effect.gen(function* () {
               const events: Record<string, StoredEvent> = {};
               for (const event of result.events) events[`event:${pad(event.envelope.seq)}`] = event;
@@ -866,16 +570,20 @@ const aggregateObject = (
                 version: result.version,
               });
               yield* state.storage.put(`receipt:${meta.commandId}`, sent);
+              // Live to caught-up consumers; through the backfill to lagging ones.
+              const live = yield* Backfill.routeCommit(
+                sourceFor(id),
+                kit.targets,
+                yield* state.storage.get<Routed>("routed"),
+                current.version,
+                result.version,
+                result.deliveries,
+              );
               yield* state.storage.put("routed", live.routed);
-              yield* outbox.stage(live.deliveries);
-              // Listed in the directory, so a consumer added later can reach it.
-              if (unregistered) {
-                yield* state.storage.put("registered", true);
-                yield* registrations.stage([{ source: kit.name, id }]);
-              }
+              yield* outbox.stage(live.send);
+              return live.send;
             }),
           );
-          if (unregistered) yield* registrations.kick;
           const committed = { state: result.state, version: result.version };
           yield* broadcast(({ key, subscription }) =>
             Effect.gen(function* () {
@@ -888,10 +596,11 @@ const aggregateObject = (
               return yield* kit.push(key, subscription, committed, events);
             }),
           );
-          return { sent, kick: live.deliveries.length > 0 };
+          return { sent, kick: routed.length > 0 };
         });
       const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
         Effect.gen(function* () {
+          yield* ensureRegistered(net, { source: kit.name, id });
           const { sent, kick } = yield* exclusively(commit(id, command, meta));
           if (kick) yield* outbox.kick;
           return sent;
@@ -915,6 +624,7 @@ const aggregateObject = (
         }) =>
           Effect.gen(function* () {
             const key = `scheduled:${job.meta.commandId}`;
+            yield* ensureRegistered(net, { source: kit.name, id: job.id });
             const kick = yield* exclusively(
               Effect.gen(function* () {
                 // A job scheduled before tokens existed has none, and runs.
@@ -970,26 +680,11 @@ const aggregateObject = (
           ),
         state: () => reportDefects(currentMeta),
         after: (after: number) => reportDefects(eventsAfter(after)),
-        catchUp: (id: string, until: number, targets: ReadonlyArray<string>) =>
-          reportDefects(
-            catchUp(outbox, model(), targets, (routed) =>
-              Effect.gen(function* () {
-                const { version } = yield* currentMeta;
-                const from = laggingFrom(kit.targets, routed, version);
-                if (from === undefined) return undefined;
-                const rows = yield* state.storage.list<StoredEvent>({
-                  prefix: "event:",
-                  start: `event:${pad(from + 1)}`,
-                  limit: CATCH_UP_PAGE,
-                });
-                return {
-                  version,
-                  rows: rows.size,
-                  result: kit.replay({ id, routed: routed!, rows: [...rows.values()], until }),
-                };
-              }),
-            ),
-          ),
+        // The backfill protocol, as a source.
+        bfScan: (id: string, target: string) => reportDefects(sourceFor(id).scan(target)),
+        bfReady: (id: string, target: string) => reportDefects(sourceFor(id).ready(target)),
+        bfPull: (id: string, target: string, key: string, after: number) =>
+          reportDefects(sourceFor(id).pull(target, key, after)),
         // A live read of this instance: accept its WebSocket, then push on every commit.
         fetch: accept((id, subscription) =>
           Effect.gen(function* () {
@@ -1004,12 +699,11 @@ const aggregateObject = (
     });
   });
 
-const viewObject = (kit: ViewKit, directory: Directory, model: () => ReadonlySet<string>) =>
+const viewObject = (kit: ViewKit, net: Backfill.Network, model: () => ReadonlyArray<string>) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
       const outbox = yield* queue<Delivery>("outbox", kit.deliver);
-      const registrations = yield* queue<Registration>("register", directory.register);
       const stored = state.storage
         .get<ViewSnapshot>("snapshot")
         .pipe(Effect.map((s) => s ?? emptySnapshot));
@@ -1031,90 +725,169 @@ const viewObject = (kit: ViewKit, directory: Directory, model: () => ReadonlySet
                   .pipe(Effect.map((rows) => [...rows.values()])),
           ),
         );
+      const target = targetId({
+        kind: "view",
+        name: kit.name,
+        ...(kit.generation > 0 ? { generation: kit.generation } : {}),
+      });
+      // Pushes and sends an apply leaves for after its transaction commits.
+      let after: Array<Effect.Effect<void, never, DurableObjectState | RuntimeContext>> = [];
+
+      /**
+       * Apply deliveries to the key and route what it emits. Callers hold the
+       * exclusive section and its transaction.
+       */
+      const apply = (key: string, deliveries: ReadonlyArray<Delivery>) =>
+        Effect.gen(function* () {
+          yield* reset;
+          const before = yield* read;
+          const result = kit.apply(key, before, deliveries);
+          if (!result.changed) return;
+          const rows: Record<string, ViewEntry> = {};
+          for (const entry of result.entries) rows[`entry:${pad(entry.seq)}`] = entry;
+          // The key's immutable input log: every delivery it applied, in order.
+          const accepted = deliveries.filter((d) => (before.checkpoints[d.source] ?? 0) < d.seq);
+          const inputs = (yield* state.storage.get<number>("in-seq")) ?? 0;
+          const log: Record<string, Delivery> = {};
+          accepted.forEach((delivery, index) => {
+            log[`in:${pad(inputs + index + 1)}`] = delivery;
+          });
+          if (accepted.length > 0) yield* state.storage.put(log);
+          yield* state.storage.put("in-seq", inputs + accepted.length);
+          yield* state.storage.put("snapshot", result.snapshot);
+          if (result.entries.length > 0) yield* state.storage.put(rows);
+          const live = yield* Backfill.routeCommit(
+            sourceFor(key),
+            kit.targets,
+            yield* state.storage.get<Routed>("routed"),
+            before.seq,
+            result.snapshot.seq,
+            result.downstream,
+          );
+          yield* state.storage.put("routed", live.routed);
+          yield* outbox.stage(live.send);
+          after.push(
+            broadcast(({ key, subscription }) =>
+              Effect.gen(function* () {
+                // A subscriber behind this commit's first entry reads the gap from storage.
+                const first = result.entries[0]?.seq ?? Infinity;
+                const entries =
+                  subscription.mode === "events" && subscription.cursor < first - 1
+                    ? yield* entriesAfter(subscription.cursor)
+                    : result.entries;
+                return yield* kit.push(key, subscription, result.snapshot, entries);
+              }),
+            ),
+          );
+          if (live.send.length > 0) after.push(outbox.kick);
+        }).pipe(kit.observe(key, deliveries));
+      const flushAfter = Effect.suspend(() => {
+        const pending = after;
+        after = [];
+        return Effect.forEach(pending, (effect) => effect, { discard: true });
+      });
+
+      // This key as a backfill consumer (it buffers and merges history) and source.
+      let consumer: Backfill.Consumer | undefined;
+      let source: Backfill.Source | undefined;
+      const runtime = yield* backfillRuntime((id) =>
+        Effect.flatMap(state.storage.get<string>(ID_KEY), (key) => {
+          if (key === undefined) return Effect.void;
+          if (id === "bf-flush") return sourceFor(key).flush;
+          if (id.startsWith("bf-merge:"))
+            return consumerFor(key).merge(id.slice("bf-merge:".length));
+          return Effect.void;
+        }),
+      );
+      const consumerFor = (key: string): Backfill.Consumer =>
+        (consumer ??= Backfill.makeConsumer(runtime.storage, runtime.jobs, net, {
+          key,
+          target: () => target,
+          apply: (deliveries) => runtime.provide(Effect.orDie(apply(key, deliveries))),
+          after: runtime.provide(flushAfter),
+        }));
+      const sourceFor = (key: string): Backfill.Source =>
+        (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
+          ref: { source: kit.name, id: key },
+          targets: () => kit.targets,
+          model,
+          version: runtime.provide(Effect.map(read, (snapshot) => snapshot.seq)),
+          routed: runtime.provide(state.storage.get<Routed>("routed")),
+          markLive: (target) =>
+            runtime.provide(
+              Effect.gen(function* () {
+                const { seq } = yield* read;
+                const routed = yield* state.storage.get<Routed>("routed");
+                yield* state.storage.put("routed", { ...routed, [target]: seq });
+              }),
+            ),
+          rows: (after, limit, target) =>
+            runtime.provide(
+              state.storage
+                .list<ViewEntry>({ prefix: "entry:", start: `entry:${pad(after + 1)}`, limit })
+                .pipe(
+                  Effect.map((rows) =>
+                    Backfill.routeRows(
+                      kit.replay,
+                      key,
+                      kit.targets,
+                      target,
+                      [...rows.values()],
+                      (entry) => entry.seq,
+                    ),
+                  ),
+                ),
+            ),
+          rowsAt: (seqs, target) =>
+            runtime.provide(
+              state.storage
+                .get<ViewEntry>(seqs.map((seq) => `entry:${pad(seq)}`))
+                .pipe(
+                  Effect.map((rows) =>
+                    Backfill.routeRows(
+                      kit.replay,
+                      key,
+                      kit.targets,
+                      target,
+                      [...rows.values()],
+                      (entry) => entry.seq,
+                    ).flatMap((row) => row.deliveries),
+                  ),
+                ),
+            ),
+        }));
+
       return {
         receive: (key: string, deliveries: ReadonlyArray<Delivery>) =>
           reportDefects(
             Effect.gen(function* () {
-              const kick = yield* exclusively(
-                Effect.gen(function* () {
-                  yield* reset;
-                  const before = yield* read;
-                  const result = kit.apply(key, before, deliveries);
-                  if (!result.changed) return false;
-                  const live = routeLive(
-                    kit.targets,
-                    yield* state.storage.get<Routed>("routed"),
-                    before.seq,
-                    result.snapshot.seq,
-                    result.downstream,
-                  );
-                  const unregistered = !(yield* state.storage.get<boolean>("registered"));
-                  const rows: Record<string, ViewEntry> = {};
-                  for (const entry of result.entries) rows[`entry:${pad(entry.seq)}`] = entry;
-                  // The key's immutable input log: every delivery it applied, in order.
-                  const accepted = deliveries.filter(
-                    (d) => (before.checkpoints[d.source] ?? 0) < d.seq,
-                  );
-                  yield* state.storage.transaction(
-                    Effect.gen(function* () {
-                      const inputs = (yield* state.storage.get<number>("in-seq")) ?? 0;
-                      const log: Record<string, Delivery> = {};
-                      accepted.forEach((delivery, index) => {
-                        log[`in:${pad(inputs + index + 1)}`] = delivery;
-                      });
-                      yield* state.storage.put(log);
-                      yield* state.storage.put("in-seq", inputs + accepted.length);
-                      yield* state.storage.put("snapshot", result.snapshot);
-                      if (result.entries.length > 0) yield* state.storage.put(rows);
-                      yield* state.storage.put("routed", live.routed);
-                      yield* outbox.stage(live.deliveries);
-                      // Listed in the directory, so a consumer of this view added later can reach it.
-                      if (unregistered) {
-                        yield* state.storage.put("registered", true);
-                        yield* registrations.stage([{ source: kit.name, id: key }]);
-                      }
-                    }),
-                  );
-                  if (unregistered) yield* registrations.kick;
-                  yield* broadcast(({ key, subscription }) =>
-                    Effect.gen(function* () {
-                      // A subscriber behind this commit's first entry reads the gap from storage.
-                      const first = result.entries[0]?.seq ?? Infinity;
-                      const entries =
-                        subscription.mode === "events" && subscription.cursor < first - 1
-                          ? yield* entriesAfter(subscription.cursor)
-                          : result.entries;
-                      return yield* kit.push(key, subscription, result.snapshot, entries);
-                    }),
-                  );
-                  return live.deliveries.length > 0;
-                }).pipe(kit.observe(key, deliveries)),
-              );
-              if (kick) yield* outbox.kick;
+              yield* ensureRegistered(net, { source: kit.name, id: key });
+              // While a backfill runs, the key buffers deliveries and merges them in order.
+              if (!(yield* consumerFor(key).admit(target, deliveries))) return;
+              yield* exclusively(state.storage.transaction(apply(key, deliveries)));
+              yield* flushAfter;
             }),
           ),
         read: () => reportDefects(read),
         after: (after: number) => reportDefects(entriesAfter(after)),
-        catchUp: (key: string, until: number, targets: ReadonlyArray<string>) =>
+        // The backfill protocol, as a source and as a consumer.
+        bfScan: (key: string, target: string) => reportDefects(sourceFor(key).scan(target)),
+        bfReady: (key: string, target: string) => reportDefects(sourceFor(key).ready(target)),
+        bfPull: (key: string, target: string, consumerKey: string, after: number) =>
+          reportDefects(sourceFor(key).pull(target, consumerKey, after)),
+        bfFeed: (key: string, target: string, stream: string, ref: Backfill.SourceRef) =>
           reportDefects(
-            catchUp(outbox, model(), targets, (routed) =>
-              Effect.gen(function* () {
-                yield* reset;
-                const { seq } = yield* read;
-                const from = laggingFrom(kit.targets, routed, seq);
-                if (from === undefined) return undefined;
-                const rows = yield* state.storage.list<ViewEntry>({
-                  prefix: "entry:",
-                  start: `entry:${pad(from + 1)}`,
-                  limit: CATCH_UP_PAGE,
-                });
-                return {
-                  version: seq,
-                  rows: rows.size,
-                  result: kit.replay({ id: key, routed: routed!, rows: [...rows.values()], until }),
-                };
-              }),
-            ),
+            Effect.gen(function* () {
+              yield* ensureRegistered(net, { source: kit.name, id: key });
+              yield* consumerFor(key).source(target, stream, ref);
+            }),
+          ),
+        bfConsumerReady: (key: string, target: string) =>
+          reportDefects(
+            Effect.gen(function* () {
+              yield* ensureRegistered(net, { source: kit.name, id: key });
+              yield* consumerFor(key).ready(target);
+            }),
           ),
         // A live read of this key: accept its WebSocket, then push on every commit.
         fetch: accept((key, subscription) =>
@@ -1183,7 +956,7 @@ const emptyProjectionMeta: ProjectionMeta = {
 /** How long a failed or interrupted run waits before it is retried. */
 const PROJECTION_RETRY_MS = 10_000;
 
-const projectionObject = (kit: ProjectionKit) =>
+const projectionObject = (kit: ProjectionKit, net: Backfill.Network) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
@@ -1264,50 +1037,86 @@ const projectionObject = (kit: ProjectionKit) =>
       const callback = yield* makeCallback("domain:projection", () => drain);
       wake = (at) =>
         callback.schedule("drain", { at, payload: {} }).pipe(Effect.ignore) as Effect.Effect<void>;
+      /**
+       * Accept a delivery into the key's log, once. Callers hold the exclusive
+       * section and its transaction; `true` when it was new.
+       */
+      const intake = (key: string, delivery: Delivery) =>
+        Effect.gen(function* () {
+          const sent = delivery.target.generation ?? 0;
+          // For an earlier generation: sent by an instance still on older code.
+          if (sent < kit.generation) return false;
+          // Sent by newer code: fail, so the sender retries once this instance runs it.
+          if (sent > kit.generation) {
+            return yield* Effect.die(
+              new Error(`${kit.name} received generation ${sent} but runs ${kit.generation}`),
+            );
+          }
+          yield* reset;
+          const meta = yield* readMeta;
+          if ((meta.intake[delivery.source] ?? 0) >= delivery.seq) return false;
+          const position = meta.accepted + 1;
+          yield* state.storage.put(`in:${pad(position)}`, {
+            position,
+            delivery,
+            at: Date.now(),
+          } satisfies Accepted);
+          yield* state.storage.put("meta", {
+            ...meta,
+            key,
+            accepted: position,
+            intake: { ...meta.intake, [delivery.source]: delivery.seq },
+          } satisfies ProjectionMeta);
+          // The backstop: handled even if this instance dies before the drain runs.
+          yield* callback.schedule("drain", {
+            after: `${Math.max(waitMillis, PROJECTION_RETRY_MS)} millis`,
+            payload: {},
+          });
+          return true;
+        });
+      const target = targetId({
+        kind: "projection",
+        name: kit.name,
+        ...(kit.generation > 0 ? { generation: kit.generation } : {}),
+      });
+      // This key as a backfill consumer: it buffers and merges history in order.
+      let consumer: Backfill.Consumer | undefined;
+      const runtime = yield* backfillRuntime((id) =>
+        Effect.flatMap(state.storage.get<string>(ID_KEY), (key) =>
+          key !== undefined && id.startsWith("bf-merge:")
+            ? consumerFor(key).merge(id.slice("bf-merge:".length))
+            : Effect.void,
+        ),
+      );
+      const consumerFor = (key: string): Backfill.Consumer =>
+        (consumer ??= Backfill.makeConsumer(runtime.storage, runtime.jobs, net, {
+          key,
+          target: () => target,
+          apply: (deliveries) =>
+            runtime.provide(
+              Effect.orDie(Effect.forEach(deliveries, (d) => intake(key, d), { discard: true })),
+            ),
+          after: runtime.provide(state.waitUntil(drain.pipe(Effect.ignoreCause))),
+        }));
+      const keep = (key: string) => state.storage.put(ID_KEY, key);
       return {
         receive: (key: string, delivery: Delivery) =>
           reportDefects(
             Effect.gen(function* () {
-              const sent = delivery.target.generation ?? 0;
-              // For an earlier generation: sent by an instance still on older code.
-              if (sent < kit.generation) return;
-              // Sent by newer code: fail, so the sender retries once this instance runs it.
-              if (sent > kit.generation) {
-                return yield* Effect.die(
-                  new Error(`${kit.name} received generation ${sent} but runs ${kit.generation}`),
-                );
-              }
-              yield* exclusively(reset);
-              const accepted = yield* exclusively(
-                state.storage.transaction(
-                  Effect.gen(function* () {
-                    const meta = yield* readMeta;
-                    if ((meta.intake[delivery.source] ?? 0) >= delivery.seq) return false;
-                    const position = meta.accepted + 1;
-                    yield* state.storage.put(`in:${pad(position)}`, {
-                      position,
-                      delivery,
-                      at: Date.now(),
-                    } satisfies Accepted);
-                    yield* state.storage.put("meta", {
-                      ...meta,
-                      key,
-                      accepted: position,
-                      intake: { ...meta.intake, [delivery.source]: delivery.seq },
-                    } satisfies ProjectionMeta);
-                    // The backstop: handled even if this instance dies before the drain runs.
-                    yield* callback.schedule("drain", {
-                      after: `${Math.max(waitMillis, PROJECTION_RETRY_MS)} millis`,
-                      payload: {},
-                    });
-                    return true;
-                  }),
-                ),
-              );
+              yield* keep(key);
+              if (!(yield* consumerFor(key).admit(target, [delivery]))) return;
+              const accepted = yield* exclusively(state.storage.transaction(intake(key, delivery)));
               if (accepted) yield* state.waitUntil(drain.pipe(Effect.ignoreCause));
             }),
           ),
         checkpoints: () => reportDefects(readMeta.pipe(Effect.map((meta) => meta.checkpoints))),
+        // The backfill protocol, as a consumer.
+        bfFeed: (key: string, target: string, stream: string, ref: Backfill.SourceRef) =>
+          reportDefects(
+            keep(key).pipe(Effect.andThen(consumerFor(key).source(target, stream, ref))),
+          ),
+        bfConsumerReady: (key: string, target: string) =>
+          reportDefects(keep(key).pipe(Effect.andThen(consumerFor(key).ready(target)))),
       };
     });
   });
@@ -1447,41 +1256,64 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
     const inInit = <A, E>(effect: Effect.Effect<A, E, Worker>): Effect.Effect<A, E> =>
       Effect.provide(effect, init);
 
-    // The directory of source instances, and how to catch one up, by source name.
-    const catchUps = new Map<
-      string,
-      (id: string, until: number, targets: ReadonlyArray<string>) => Effect.Effect<CatchUpResult>
-    >();
     // Every consumer in the model this isolate runs, set once the model is built.
-    let model: ReadonlySet<string> = new Set();
+    let model: ReadonlyArray<string> = [];
     const current = () => model;
-    let directoryNamespace: Namespace | undefined;
-    const node = (path: string): DirectoryNode => {
-      const stub = () => directoryNamespace!.getByName(`node:${path}`);
-      return {
-        status: () => unwrapDefects(stub().status()),
-        register: (row) => unwrapDefects(stub().register(path, row)),
-        child: (child) => unwrapDefects(stub().child(path, child)),
-        news: (targets) => unwrapDefects(stub().news(path, targets)),
-        round: (gen, round, until, targets) =>
-          unwrapDefects(stub().round(path, gen, round, until, targets)),
-        report: (gen, round, child, earliest) =>
-          unwrapDefects(stub().report(path, gen, round, child, earliest)),
-      };
+    // The objects the backfill protocol reaches: directory nodes, sources by name,
+    // consumers by kind and name.
+    let directory: Namespace | undefined;
+    const sources = new Map<string, Namespace>();
+    const consumers = new Map<string, Namespace>();
+    const nodeStub = (path: string) => directory!.getByName(`node:${path}`);
+    const consumerStub = (target: string, key: string) => {
+      const { kind, name } = Backfill.consumerOf(target);
+      return consumers.get(`${kind}:${name}`)?.getByName(key);
     };
-    directoryNamespace = yield* inInit(
-      declare(
-        "DomainDirectory",
-        directoryObject({
-          node,
-          catchUp: (row, until, targets) =>
-            catchUps.get(row.source)?.(row.id, until, targets) ??
-            // A source no longer in the model has nothing to catch up.
-            Effect.succeed({ next: undefined, pending: false }),
-        }),
-      ),
-    );
-    const directory: Directory = { register: (row) => node(leafOf(row)).register(row) };
+    const net: Backfill.Network = {
+      node: {
+        register: (path, ref) => unwrapDefects(nodeStub(path).register(path, ref)),
+        child: (path, child) => unwrapDefects(nodeStub(path).child(path, child)),
+        news: (path, targets) => unwrapDefects(nodeStub(path).news(path, targets)),
+        sweep: (path, target, phase) => unwrapDefects(nodeStub(path).sweep(path, target, phase)),
+        report: (path, target, phase, child) =>
+          unwrapDefects(nodeStub(path).report(path, target, phase, child)),
+        settled: (path, target, ref) => unwrapDefects(nodeStub(path).settled(path, target, ref)),
+        phase: (path, target) => unwrapDefects(nodeStub(path).phase(path, target)),
+        status: (path) => unwrapDefects(nodeStub(path).status(path)),
+      },
+      source: {
+        // A source no longer in the model has nothing to give.
+        scan: (ref, target) => {
+          const namespace = sources.get(ref.source);
+          return namespace
+            ? unwrapDefects(namespace.getByName(ref.id).bfScan(ref.id, target))
+            : Effect.succeed("discovered" as const);
+        },
+        ready: (ref, target) => {
+          const namespace = sources.get(ref.source);
+          return namespace
+            ? unwrapDefects(namespace.getByName(ref.id).bfReady(ref.id, target))
+            : Effect.succeed("settled" as const);
+        },
+        pull: (ref, target, key, after) => {
+          const namespace = sources.get(ref.source);
+          return namespace
+            ? unwrapDefects(namespace.getByName(ref.id).bfPull(ref.id, target, key, after))
+            : Effect.succeed({ deliveries: [], live: true });
+        },
+      },
+      consumer: {
+        source: (target, key, stream, ref) => {
+          const stub = consumerStub(target, key);
+          return stub ? unwrapDefects(stub.bfFeed(key, target, stream, ref)) : Effect.void;
+        },
+        ready: (target, key) => {
+          const stub = consumerStub(target, key);
+          return stub ? unwrapDefects(stub.bfConsumerReady(key, target)) : Effect.void;
+        },
+      },
+    };
+    directory = yield* inInit(declare("DomainDirectory", directoryObject(net)));
 
     // The first Domain call in each isolate tells one random directory node of
     // the model's consumers: a deploy that adds one starts its catch-up.
@@ -1506,11 +1338,9 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           Effect.gen(function* () {
             const namespace = yield* declare(
               `${aggregate.aggregateName}Aggregate`,
-              aggregateObject(kit, directory, current),
+              aggregateObject(kit, net, current),
             );
-            catchUps.set(aggregate.aggregateName, (id, until, targets) =>
-              unwrapDefects(namespace.getByName(id).catchUp(id, until, targets)),
-            );
+            sources.set(aggregate.aggregateName, namespace);
             return {
               send: (id, command, meta) =>
                 announce.pipe(
@@ -1585,13 +1415,9 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       view: (view, kit) =>
         inInit(
           Effect.gen(function* () {
-            const namespace = yield* declare(
-              `${view.viewName}View`,
-              viewObject(kit, directory, current),
-            );
-            catchUps.set(view.viewName, (key, until, targets) =>
-              unwrapDefects(namespace.getByName(key).catchUp(key, until, targets)),
-            );
+            const namespace = yield* declare(`${view.viewName}View`, viewObject(kit, net, current));
+            sources.set(view.viewName, namespace);
+            consumers.set(`view:${view.viewName}`, namespace);
             const read = (key: string) =>
               announce.pipe(
                 Effect.andThen(unwrapDefects<ViewSnapshot>(namespace.getByName(key).read())),
@@ -1634,8 +1460,9 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           Effect.gen(function* () {
             const namespace = yield* declare(
               `${projection.projectionName}Projection`,
-              projectionObject(kit),
+              projectionObject(kit, net),
             );
+            consumers.set(`projection:${projection.projectionName}`, namespace);
             return {
               receive: (delivery) =>
                 unwrapDefects(namespace.getByName(delivery.key).receive(delivery.key, delivery)),
@@ -1676,24 +1503,22 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           }),
         ),
       history: (target) =>
-        node("")
-          .status()
-          .pipe(
-            Effect.map(({ complete, through }) => ({
-              complete: complete.includes(target),
-              through: through?.targets.includes(target) ? through.at : undefined,
-            })),
-          ),
+        net.node.status("").pipe(
+          Effect.map(({ complete }) => ({
+            complete: complete.includes(target),
+            through: undefined,
+          })),
+        ),
       start: (targets) =>
         Effect.sync(() => {
-          model = new Set(targets);
+          model = targets;
           if (targets.length === 0) return;
           news = Effect.suspend(() => {
             // A random node two levels down: the burst after a deploy spreads over 256 of them.
             const path = Math.floor(Math.random() * 256)
               .toString(16)
               .padStart(2, "0");
-            return node(path).news(targets);
+            return net.node.news(path, targets);
           });
         }),
       policy: (policy, kit) =>

@@ -66,6 +66,21 @@ const deposits = (url: string, account: string, expected: ReadonlyArray<number>)
     }),
   );
 
+/** Poll the timeline (one key fed by every account) until it holds `count` entries. */
+const timeline = (url: string, count: number) =>
+  call(url, "GET", "/timeline").pipe(
+    Effect.map((body) => (JSON.parse(body) as { entries: ReadonlyArray<string> } | null)?.entries),
+    Effect.catchIf(
+      (e) => e._tag === "NotYet" && e.status === 404 && e.body === "Not Found",
+      () => Effect.succeed(undefined),
+    ),
+    Effect.repeat({
+      schedule: Schedule.spaced("2 seconds"),
+      until: (entries) => (entries?.length ?? 0) >= count,
+      times: 60,
+    }),
+  );
+
 /**
  * Poll the view's history until it reports every earlier event has reached it.
  * The directory answers it, not the view's objects: a Durable Object keeps its
@@ -125,6 +140,12 @@ for (const dev of [true, false]) {
             expect(yield* deposits(url, account, amounts)).toEqual(amounts);
           }
 
+          // One key fed by every account merges their history in the order it was committed.
+          const committed = Object.entries(history).flatMap(([account, amounts]) =>
+            amounts.map((amount) => `${account}:${amount}`),
+          );
+          expect(yield* timeline(url, committed.length)).toEqual(committed);
+
           // Caught up, it receives new deposits live, after the history.
           yield* deposit(url, "a-1", 30);
           expect(yield* deposits(url, "a-1", [10, 20, 30])).toEqual([10, 20, 30]);
@@ -158,6 +179,14 @@ for (const dev of [true, false]) {
           for (const [account, amounts] of Object.entries(doubled)) {
             expect(yield* deposits(url, account, amounts)).toEqual(amounts);
           }
+          // The timeline was not rebuilt: it kept its history in order, and received the
+          // new deposits live (live deliveries from different accounts arrive in any order).
+          const after = yield* timeline(url, committed.length + 3);
+          expect(after?.slice(0, committed.length + 1)).toEqual([...committed, "a-1:30"]);
+          expect([...(after?.slice(committed.length + 1) ?? [])].sort()).toEqual([
+            "a-2:6",
+            "a-4:4",
+          ]);
 
           yield* stack.destroy();
         }),

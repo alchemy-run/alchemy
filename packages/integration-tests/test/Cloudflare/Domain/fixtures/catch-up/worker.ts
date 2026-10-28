@@ -5,7 +5,7 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { Account, Deposit, type Deposits, type DoubledDeposits } from "./ledger.ts";
+import { Account, Deposit, type Deposits, type DoubledDeposits, type Timeline } from "./ledger.ts";
 
 /**
  * The Ledger Worker's routes, on whichever model a deploy hosts:
@@ -15,10 +15,12 @@ import { Account, Deposit, type Deposits, type DoubledDeposits } from "./ledger.
 export const ledgerWorker = (
   version: string,
   deposits?: typeof Deposits | typeof DoubledDeposits,
+  timelineView?: typeof Timeline,
 ) =>
   Effect.gen(function* () {
     const accounts = yield* Account;
     const view = deposits ? yield* deposits : undefined;
+    const timeline = timelineView ? yield* timelineView : undefined;
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
@@ -27,6 +29,9 @@ export const ledgerWorker = (
         if (path[1] === "deposits" && view) {
           const state = yield* view.query(Account.ref(path[2]!));
           return yield* HttpServerResponse.json(Option.getOrNull(state));
+        }
+        if (path[1] === "timeline" && timeline) {
+          return yield* HttpServerResponse.json(Option.getOrNull(yield* timeline.query("all")));
         }
         if (path[1] === "history" && view) {
           const { complete, through } = yield* view.history;
