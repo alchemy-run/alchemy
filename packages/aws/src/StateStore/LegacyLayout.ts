@@ -177,11 +177,14 @@ export const readLegacyStage = Effect.fn(function* (
           ),
         );
       }).pipe(
-        // A response without its body is a transport hiccup: read again.
+        // A response without its body is a transport hiccup, and a key
+        // just listed can briefly read as missing: read again. Deletes are
+        // denied while the stage is fenced, so a key that stays missing
+        // was deleted by something the fence doesn't stop.
         Effect.retry({
-          while: (error) => error._tag === "EmptyBody",
-          schedule: Schedule.spaced("500 millis"),
-          times: 3,
+          while: (error) => error._tag === "EmptyBody" || error._tag === "NoSuchKey",
+          schedule: Schedule.spaced("1 second"),
+          times: 4,
         }),
         Effect.catchTag("EmptyBody", () =>
           Effect.fail(new LegacyStateError({ message: `S3 state object '${key}' has no body` })),

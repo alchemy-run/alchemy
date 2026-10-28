@@ -111,27 +111,37 @@ const rollback = (storage: Storage, options?: Parameters<typeof rollbackToS3>[1]
 const migrateCommand = (stage: string) => `alchemy state migrate --stack ${STACK} --stage ${stage}`;
 
 /**
- * Raw object access to a stage, as a version of alchemy from before the
- * S3 store took a lease would do it. A bucket policy can take a while to
- * apply everywhere, so this waits for the deny to take effect.
+ * A moved stage, as a version of alchemy from before the S3 store took a
+ * lease would see it: the bucket policy denies every access to its
+ * objects. Writes and deletes are denied from the fence on, so they are
+ * refused at once; the read deny is a later policy update, which S3 can
+ * take minutes to enforce everywhere, so it is checked in the policy.
  */
-const deniedRawAccess = (storage: Storage, stage: string) => {
-  const Key = `${PREFIX}/${STACK}/${stage}/${b.fqn}.json`;
-  const denied = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(Effect.flip, Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 45 }));
-  return Effect.all([
-    denied(s3.getObject({ Bucket: storage.legacyBucketName, Key })).pipe(
-      Effect.tapError(() =>
-        s3.getBucketPolicy({ Bucket: storage.legacyBucketName }).pipe(
-          Effect.tap((r) => Effect.logError(`bucket policy while reads were allowed: ${r.Policy}`)),
-          Effect.ignore,
-        ),
-      ),
-    ),
-    denied(s3.putObject({ Bucket: storage.legacyBucketName, Key, Body: "{}" })),
-    denied(s3.deleteObject({ Bucket: storage.legacyBucketName, Key })),
-  ]);
-};
+const deniedRawAccess = (storage: Storage, stage: string) =>
+  Effect.gen(function* () {
+    const Bucket = storage.legacyBucketName;
+    const Key = `${PREFIX}/${STACK}/${stage}/${b.fqn}.json`;
+    const policy = JSON.parse((yield* s3.getBucketPolicy({ Bucket })).Policy ?? "{}") as {
+      Statement?: Array<{
+        Sid?: string;
+        Effect?: string;
+        Action?: string[];
+        Resource?: string | string[];
+      }>;
+    };
+    const migrated = (policy.Statement ?? []).find(
+      (statement) => statement.Sid === "AlchemyStateMigrated",
+    );
+    expect(migrated?.Effect).toBe("Deny");
+    expect(migrated?.Action).toEqual(["s3:GetObject", "s3:PutObject", "s3:DeleteObject"]);
+    expect([migrated?.Resource].flat()).toContain(
+      `arn:aws:s3:::${Bucket}/${PREFIX}/${STACK}/${stage}/*`,
+    );
+    const denied = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      effect.pipe(Effect.flip, Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }));
+    yield* denied(s3.putObject({ Bucket, Key, Body: "{}" }));
+    yield* denied(s3.deleteObject({ Bucket, Key }));
+  });
 
 const legacyKeys = (storage: Storage, stage: string) =>
   s3
@@ -392,7 +402,9 @@ test.provider(
       const stage = "rerun";
       yield* Effect.gen(function* () {
         yield* seedS3(storage, stage);
-        yield* migrate(storage);
+        expect(yield* migrate(storage)).toEqual([
+          { stack: STACK, stage, status: "migrated", records: 2 },
+        ]);
         yield* Effect.scoped(
           Effect.gen(function* () {
             // A deploy on DynamoDB holds the stage while the migration runs again.
@@ -551,7 +563,9 @@ test.provider(
       const stage = "rollback-interrupted";
       yield* Effect.gen(function* () {
         yield* seedS3(storage, stage);
-        yield* migrate(storage);
+        expect(yield* migrate(storage)).toEqual([
+          { stack: STACK, stage, status: "migrated", records: 2 },
+        ]);
 
         const interrupted = yield* rollback(storage, {
           afterStep: () => Effect.fail(new StateStoreError({ message: "stopped after switching" })),

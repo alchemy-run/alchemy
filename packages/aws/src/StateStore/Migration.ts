@@ -32,7 +32,10 @@ import {
  *    still ours. This write is the switch: the DynamoDB store refuses a
  *    stage the S3 store has until it is there.
  * 6. Deny reads of the stage's objects too, so any older version fails at
- *    its first read instead of deploying from the copy left behind.
+ *    its first read instead of deploying from the copy left behind. S3 can
+ *    take minutes to enforce this second policy update everywhere; writes
+ *    stay denied throughout, so an older version that reads the copy in
+ *    that window still can't record anything.
  *
  * A failure at any step leaves the S3 copy authoritative and, once fenced,
  * unchanged, so running the migration again converges. The S3 objects
