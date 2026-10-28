@@ -1,5 +1,3 @@
-import type * as SDK from "@1password/sdk";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import packageJson from "../../package.json" with { type: "json" };
@@ -12,36 +10,14 @@ import {
 } from "../Errors.ts";
 import type { OnePasswordOptions } from "../SecretsProvider.ts";
 
-type Sdk = Pick<
-  typeof SDK,
-  | "DesktopAuth"
-  | "RateLimitExceededError"
-  | "AuthExpiredError"
-  | "DesktopSessionExpiredError"
-  | "Secrets"
-> & {
-  readonly createClient: (config: Parameters<typeof SDK.createClient>[0]) => Promise<{
-    readonly environments: Pick<SDK.Client["environments"], "getVariables">;
-    readonly secrets: Pick<SDK.Client["secrets"], "resolveAll">;
-  }>;
-};
-
-/** Internal I/O boundary: importing a provider or discovering auth never loads the SDK. */
-export const OnePasswordSdk = Context.Reference<{ readonly load: () => Promise<Sdk> }>(
-  "1passwordSdk",
-  {
-    defaultValue: () => ({ load: () => import("@1password/sdk") }),
-  },
-);
-
 export const loadSecrets = Effect.fn("1password.loadSecrets")(function* (
   options: OnePasswordOptions,
   credentials: OnePasswordResolvedCredentials,
 ) {
   const { environmentId, references } = options;
-  const boundary = yield* OnePasswordSdk;
+  // Keep discovery offline: load the SDK only when this layer reads secrets.
   const sdk = yield* Effect.tryPromise({
-    try: () => boundary.load(),
+    try: () => import("@1password/sdk"),
     catch: () =>
       new OnePasswordSecretsError({ environmentId, operation: "initialize", reason: "SdkError" }),
   }).pipe(
