@@ -5,7 +5,7 @@
 //   node scripts/sync-exports.ts           rewrite the package.json files
 //   node scripts/sync-exports.ts --check   fail if any of them is out of date, or
 //                                          if package source or an example
-//                                          imports another package's internal/
+//                                          imports another package's internal
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Command, Flag } from "effect/cli";
@@ -34,7 +34,7 @@ const command = Command.make(
   {
     check: Flag.Boolean("check").pipe(
       Flag.withDescription(
-        "Fail if any export map is out of date, or if package source or an example imports another package's internal/",
+        "Fail if any export map is out of date, or if package source or an example imports another package's internal",
       ),
       Flag.withDefault(false),
     ),
@@ -70,13 +70,13 @@ const command = Command.make(
           ),
         );
       }
-      // Published packages block `internal/`, so only tests may reach into it.
+      // Published packages block `internal/` and `internal.ts`, so only tests may reach into them.
       const found = yield* run(
         "git",
         [
           "grep",
           "-nE",
-          String.raw`"@alchemy\.run/[a-z-]+/([^"]*/)?internal/`,
+          String.raw`"@alchemy\.run/[a-z-]+/([^"]*/)?internal[/"]`,
           "--",
           "packages/*/src",
           "examples",
@@ -85,7 +85,9 @@ const command = Command.make(
       );
       if (found === 0) {
         return yield* Effect.fail(
-          new Error("Package source and examples must not import another package's internal/."),
+          new Error(
+            "Package source and examples must not import another package's internal/ or internal.ts.",
+          ),
         );
       }
       yield* Console.log("Package exports are up to date.");
