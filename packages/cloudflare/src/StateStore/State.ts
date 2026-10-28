@@ -733,7 +733,13 @@ const observeServedVersion = (accountId: string, scriptName: string, domain?: st
         Effect.catchTag("SubdomainNotFound", () => Effect.undefined),
       );
       if (url === undefined) return undefined;
-      return (yield* checkStateStoreVersion(url, scriptName, accountId)).observed;
+      const { observed } = yield* checkStateStoreVersion(url, scriptName, accountId);
+      // The edge can keep answering for a Worker that was just deleted, so
+      // only the API decides that it exists.
+      if (observed === undefined || !(yield* isStateStoreAvailable(accountId, scriptName))) {
+        return undefined;
+      }
+      return observed;
     }).pipe(Effect.mapError(existenceUnknown(scriptName)));
     return yield* refuseNewerStore(scriptName, observed);
   });
