@@ -123,7 +123,7 @@ export const stageContainerArtifacts = (
               return Effect.fail(error);
             return Effect.gen(function* () {
               const winner = yield* store.get(recordKey);
-              if (!winner) return yield* Effect.fail(error);
+              if (!winner) return yield* error;
               return { etag: winner.etag };
             });
           }),

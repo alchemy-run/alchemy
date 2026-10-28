@@ -340,7 +340,7 @@ const PublicationReceipt = Schema.Struct({
   transactionId: Schema.String,
   revision: Schema.String,
   root: Schema.toType(Node.DeployPointer),
-  workers: Schema.Array(Schema.toType(Node.DeployPointer)),
+  workers: Node.DeployPointer.pipe(Schema.toType, Schema.Array),
   objects: Schema.Array(
     Schema.Struct({
       key: Schema.String,
@@ -478,8 +478,8 @@ const checkActivation = (store: Store, value: ManagementGraph) =>
         source.script_name !== candidate.scriptName
       )
         return yield* fail("drift", "Celld source candidate identity does not match its content.");
-      let expected = source;
-      let actual = ordered[index]!.manifest;
+      let expected: Node.Manifest = source;
+      let actual: Node.Manifest = ordered[index]!.manifest;
       if (index === 0) {
         const sourceMetadata = yield* decode(
           Schema.Record(Schema.String, Schema.Unknown),
@@ -503,12 +503,14 @@ const checkActivation = (store: Store, value: ManagementGraph) =>
           );
         // Class and feature ordering is immaterial; duplicates or extra entries still fail.
         actual = {
+          // oxlint-disable-next-line typescript/no-misused-spread -- decoded JSON manifests are plain objects
           ...actual,
           do_classes: [...actual.do_classes].sort(),
           sqlite_classes: [...actual.sqlite_classes].sort(),
           required_features: [...(actual.required_features ?? [])].sort(),
         };
         expected = {
+          // oxlint-disable-next-line typescript/no-misused-spread -- decoded JSON manifests are plain objects
           ...source,
           do_classes: [...new Set([...source.do_classes, ...APPLICATION_OPERATOR_CLASSES])].sort(),
           sqlite_classes: [
@@ -820,7 +822,7 @@ export const makeLocalFleetManagement = (
               "Private Celld D1 operation failed; inspect durable state before retrying a mutation.",
           }),
       ),
-      Effect.provide(Layer.succeed(FetchHttpClient.RequestInit, { redirect: "manual" })),
+      Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
     );
   return {
     reload,

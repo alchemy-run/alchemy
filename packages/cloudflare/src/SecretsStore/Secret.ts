@@ -151,14 +151,14 @@ export const SecretProviderLive = () =>
           })
           .pipe(
             Effect.catchTags({
-              SecretNotFound: () => Effect.succeed(undefined),
-              StoreNotFound: () => Effect.succeed(undefined),
+              SecretNotFound: () => Effect.undefined,
+              StoreNotFound: () => Effect.undefined,
             }),
           );
       }
       if (!observed) {
         observed = yield* findSecretByName({ accountId, storeId, name }).pipe(
-          Effect.catchTag("StoreNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("StoreNotFound", () => Effect.undefined),
         );
       }
 
@@ -181,7 +181,7 @@ export const SecretProviderLive = () =>
               },
             ],
           })
-          .pipe(Effect.catchTag("SecretNameAlreadyExists", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("SecretNameAlreadyExists", () => Effect.undefined));
         if (created) {
           const secret = created.result[0]!;
           // Freshly created secrets report "pending" until Cloudflare
@@ -272,8 +272,8 @@ export const SecretProviderLive = () =>
               comment: secret.comment ?? undefined,
             })),
             Effect.catchTags({
-              SecretNotFound: () => Effect.succeed(undefined),
-              StoreNotFound: () => Effect.succeed(undefined),
+              SecretNotFound: () => Effect.undefined,
+              StoreNotFound: () => Effect.undefined,
             }),
           );
       }
@@ -288,7 +288,7 @@ export const SecretProviderLive = () =>
         accountId: olds.store.accountId,
         storeId: olds.store.storeId,
         name,
-      }).pipe(Effect.catchTag("StoreNotFound", () => Effect.succeed(undefined)));
+      }).pipe(Effect.catchTag("StoreNotFound", () => Effect.undefined));
       if (!match) return undefined;
       // Secrets carry no ownership signal (Cloudflare doesn't expose
       // tags on store secrets), so a name match is not proof we own

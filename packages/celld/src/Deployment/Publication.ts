@@ -50,7 +50,7 @@ const ReceiptSchema = Schema.Struct({
   revision: Schema.String,
   transactionId: Schema.String,
   root: Schema.toType(Node.DeployPointer),
-  workers: Schema.Array(Schema.toType(Node.DeployPointer)),
+  workers: Node.DeployPointer.pipe(Schema.toType, Schema.Array),
   objects: Schema.Array(ObjectSchema),
 });
 const StepSchema = Schema.Struct({
@@ -66,8 +66,8 @@ const JournalSchema = Schema.Struct({
   revision: Schema.String,
   transactionId: Schema.String,
   root: Schema.toType(Node.DeployPointer),
-  workers: Schema.Array(Schema.toType(Node.DeployPointer)),
-  previous: Schema.Array(Schema.toType(Node.DeployPointer)),
+  workers: Node.DeployPointer.pipe(Schema.toType, Schema.Array),
+  previous: Node.DeployPointer.pipe(Schema.toType, Schema.Array),
   retainedObjects: Schema.Array(ObjectSchema),
   receiptBefore: Schema.optional(Schema.Struct({ body: Schema.String, etag: Schema.String })),
   steps: Schema.Array(StepSchema),
@@ -272,7 +272,7 @@ const checkGraph = (options: PublishApplicationOptions) =>
     for (const prepared of all) {
       const metadata = yield* validate(
         Schema.Struct({
-          bindings: Schema.optional(Schema.Array(Schema.Unknown)),
+          bindings: Schema.Unknown.pipe(Schema.Array, Schema.optional),
         }),
         prepared.manifest.raw_metadata,
       );
@@ -459,7 +459,7 @@ const planPublication = (
     for (const prepared of all) {
       const metadata = yield* validate(
         Schema.Struct({
-          bindings: Schema.optional(Schema.Array(Schema.Unknown)),
+          bindings: Schema.Unknown.pipe(Schema.Array, Schema.optional),
         }),
         prepared.manifest.raw_metadata,
       );
@@ -780,7 +780,7 @@ export const publishApplication = <E = never, R = never>(
       Effect.catchTag("Celld.FleetStorageError", (error) =>
         Effect.gen(function* () {
           if (error.reason === "transport" && !(yield* store.get(APPLICATION_LOCK_KEY))) return;
-          return yield* Effect.fail(error);
+          return yield* error;
         }),
       ),
     );

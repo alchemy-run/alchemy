@@ -94,7 +94,7 @@ export const EnvironmentsKeystore = Resource<EnvironmentsKeystore>(
 export class EnvironmentsKeystoreNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsKeystoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, environmentId: string, keystoreId: string) =>
@@ -208,7 +208,7 @@ export const EnvironmentsKeystoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsKeystoreNotResolved({ name });
+        return yield* new EnvironmentsKeystoreNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, organizationId, environmentId);

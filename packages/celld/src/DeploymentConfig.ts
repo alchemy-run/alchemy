@@ -68,11 +68,9 @@ export const validateBindingNames = (options: {
       ...(options.assets?.binding ? [options.assets.binding] : []),
     ]) {
       if (!/^[A-Za-z_$][A-Za-z0-9_$]{0,127}$/.test(name) || names.has(name)) {
-        return yield* Effect.fail(
-          new CelldBindingConflict({
-            message: `Invalid or duplicate Celld environment binding '${name}'. Bindings must be JavaScript identifiers of at most 128 ASCII characters.`,
-          }),
-        );
+        return yield* new CelldBindingConflict({
+          message: `Invalid or duplicate Celld environment binding '${name}'. Bindings must be JavaScript identifiers of at most 128 ASCII characters.`,
+        });
       }
       names.add(name);
     }

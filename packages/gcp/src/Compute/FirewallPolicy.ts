@@ -257,7 +257,7 @@ const projectParent = (project: string) =>
         ? normalizeParent(resource.parent)
         : undefined,
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const resolveParent = (news: FirewallPolicyProps, output: { parent?: string } | undefined) =>
@@ -404,7 +404,7 @@ const toAttrs = (policy: compute.FirewallPolicy, project: string): FirewallPolic
 const getById = (firewallPolicy: string) =>
   compute
     .getFirewallPolicies({ firewallPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findByShortName = (parentId: string, shortName: string) =>
   compute.listFirewallPolicies
@@ -417,7 +417,7 @@ const findByShortName = (parentId: string, shortName: string) =>
       Stream.filter((policy) => policy.shortName === shortName),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)[0]),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
 
 const observe = (firewallPolicyId: string | undefined, parentId: string, shortName: string) =>
@@ -663,7 +663,7 @@ export const FirewallPolicyProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         const createdId = inserted !== undefined ? idFromOperation(inserted) : "";
         current = yield* awaitResource(

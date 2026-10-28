@@ -112,13 +112,13 @@ export const InstancesMaterializedView = Resource<InstancesMaterializedView>(
 export class MaterializedViewNotResolved extends Data.TaggedError(
   "GCP.Bigtable.MaterializedViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MaterializedViewStillExists extends Data.TaggedError(
   "GCP.Bigtable.MaterializedViewStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, materializedViewId: string | undefined, existing?: string) =>
@@ -145,12 +145,14 @@ const toAttrs = (view: bigtable.MaterializedView, project: string) => {
 const getByName = (name: string) =>
   bigtable
     .getProjectsInstancesMaterializedViews({ name, view: "FULL" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view ? Effect.succeed(view) : Effect.fail(new MaterializedViewNotResolved({ name })),
+      view
+        ? Effect.succeed(view)
+        : Effect.fail(new MaterializedViewNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.MaterializedViewNotResolved",
@@ -162,7 +164,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
-      view === undefined ? Effect.void : Effect.fail(new MaterializedViewStillExists({ name })),
+      view === undefined
+        ? Effect.void
+        : Effect.fail(new MaterializedViewStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Bigtable.MaterializedViewStillExists",
@@ -279,7 +283,7 @@ export const InstancesMaterializedViewProvider = () =>
               times: 8,
               schedule: Schedule.spaced("5 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
@@ -307,7 +311,7 @@ export const InstancesMaterializedViewProvider = () =>
         yield* waitForOperation(patched);
         current = yield* getByName(name);
         if (current === undefined) {
-          return yield* new MaterializedViewNotResolved({ name });
+          return yield* new MaterializedViewNotResolved({ resourceName: name });
         }
       }
 

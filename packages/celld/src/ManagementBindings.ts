@@ -1,21 +1,18 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
 import { ApplicationActivation } from "./Application.ts";
 import { DeploymentError } from "./Deployment/Objects.ts";
 import { FleetManagement, FleetManagementError } from "./Management.ts";
 import { FleetOperator, OperatorError } from "./OperatorClient.ts";
 
 const management = Effect.serviceOption(FleetManagement).pipe(
-  Effect.flatMap((service) =>
-    Option.isSome(service)
-      ? Effect.succeed(service.value)
-      : Effect.fail(
-          new FleetManagementError({
-            reason: "configuration",
-            message: "The fleet host must provide private management transport.",
-          }),
-        ),
+  Effect.flatMap(Effect.fromOption),
+  Effect.mapError(
+    () =>
+      new FleetManagementError({
+        reason: "configuration",
+        message: "The fleet host must provide private management transport.",
+      }),
   ),
 );
 

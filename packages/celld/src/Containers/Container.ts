@@ -180,7 +180,10 @@ export const Container = <Self, Shape extends object = {}>() => {
     id: string,
     props: ImageContainerProps | GeneratedContainerProps = {},
   ): ContainerClass<Self, Shape, ContainerApplication<Self>> {
+    // Tags are minted per declared container id, so they can't be static classes.
+    // oxlint-disable-next-line effecttsgo/service-not-as-class
     const tag = Context.Service<Self, ContainerInstance<Shape>>(`Celld.Container<${id}>`);
+    // oxlint-disable-next-line effecttsgo/service-not-as-class
     const application = Context.Service<ContainerApplication<Self>, ContainerProgramProps>(
       `Celld.ContainerProgram<${id}>`,
     );

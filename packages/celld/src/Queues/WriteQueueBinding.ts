@@ -58,11 +58,9 @@ export const WriteQueueBinding = Layer.effect(
     return Effect.fn(function* (queue: Queue, options: WriteQueueOptions = {}) {
       const delay = options.deliveryDelay;
       if (delay !== undefined && (!Number.isInteger(delay) || delay < 0 || delay > 86400)) {
-        return yield* Effect.fail(
-          new QueueConfigurationError({
-            message: "Celld producer deliveryDelay must be an integer between 0 and 86400",
-          }),
-        );
+        return yield* new QueueConfigurationError({
+          message: "Celld producer deliveryDelay must be an integer between 0 and 86400",
+        });
       }
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* host.bind`${queue}`({

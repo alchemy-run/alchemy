@@ -1,7 +1,7 @@
 import type { Input } from "alchemy/Input";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
-import type { Fleet, FleetProps } from "./Fleet.ts";
+import type { FleetProps } from "./Fleet.ts";
 
 /**
  * The S3-compatible bucket backing a fleet, as `celld` consumes it.

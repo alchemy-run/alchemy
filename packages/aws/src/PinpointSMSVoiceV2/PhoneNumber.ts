@@ -199,7 +199,7 @@ export const PhoneNumberProvider = () =>
           .describePhoneNumbers({ PhoneNumberIds: [phoneNumberId] })
           .pipe(
             retrySmsVoiceThrottled,
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
         return result?.PhoneNumbers?.find((p) => p.PhoneNumberId === phoneNumberId);
       });
@@ -314,7 +314,7 @@ export const PhoneNumberProvider = () =>
                 (info) =>
                   toAttrs(info).pipe(
                     // Tolerate a number missing its ID — drop it.
-                    Effect.catchTag("SmsVoicePhoneNumberMissing", () => Effect.succeed(undefined)),
+                    Effect.catchTag("SmsVoicePhoneNumberMissing", () => Effect.undefined),
                   ),
                 { concurrency: 5 },
               ),

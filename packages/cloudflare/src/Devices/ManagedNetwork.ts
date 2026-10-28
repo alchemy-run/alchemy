@@ -221,7 +221,7 @@ type ObservedNetwork = {
 const observeNetwork = (accountId: string, networkId: string) =>
   zeroTrust
     .getDeviceNetwork({ accountId, networkId })
-    .pipe(Effect.catchTag("DeviceNetworkNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("DeviceNetworkNotFound", () => Effect.undefined));
 
 /**
  * Find a managed network by exact name. Names are unique per account.

@@ -284,6 +284,7 @@ export const reviveRpcStubErrors = <Shape>(
         const result = member.apply(target, args);
         return Effect.isEffect(result)
           ? asEffectOrStream(
+              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- an untyped remote stub's result; failures are revived below
               (result as Effect.Effect<unknown, unknown>).pipe(Effect.mapError(revive)),
             )
           : result;
@@ -573,13 +574,11 @@ export const makeFetchRpcStub = <Shape>(options: {
               .pipe(Effect.mapError((cause) => new RpcCallError({ method: prop, cause })));
 
             if (response.status < 200 || response.status >= 300) {
-              return yield* Effect.fail(
-                new RpcCallError({
-                  method: prop,
-                  cause: `HTTP ${response.status}`,
-                  status: response.status,
-                }),
-              );
+              return yield* new RpcCallError({
+                method: prop,
+                cause: `HTTP ${response.status}`,
+                status: response.status,
+              });
             }
 
             const headers = response.headers as Record<string, string | undefined>;

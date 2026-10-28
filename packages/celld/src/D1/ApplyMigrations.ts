@@ -70,13 +70,11 @@ export const validateD1History = (
       if (!seen.has(index)) conflicts.push(records[index]?.name ?? "missing local history");
     }
     if (conflicts.length > 0)
-      return yield* Effect.fail(
-        new MigrationHistoryConflictError({
-          table,
-          unmatched: conflicts,
-          message: `Migration history in '${table}' conflicts with local files; refusing to apply SQL.`,
-        }),
-      );
+      return yield* new MigrationHistoryConflictError({
+        table,
+        unmatched: conflicts,
+        message: `Migration history in '${table}' conflicts with local files; refusing to apply SQL.`,
+      });
   });
 
 /**
@@ -88,11 +86,9 @@ export const applyD1MigrationRecords = (options: MigrationOptions) =>
   Effect.gen(function* () {
     if (options.records.length === 0) return;
     if (options.table === RECEIPTS || options.table === GUARD) {
-      return yield* Effect.fail(
-        new MigrationError({
-          message: "The selected migration table is reserved by the Celld migration executor.",
-        }),
-      );
+      return yield* new MigrationError({
+        message: "The selected migration table is reserved by the Celld migration executor.",
+      });
     }
     const scope = yield* d1Scope(options.databaseId);
     const address = { scope, name: options.databaseId };
@@ -166,12 +162,10 @@ export const applyD1MigrationRecords = (options: MigrationOptions) =>
       query: (sql, params) =>
         Effect.gen(function* () {
           if (params?.length)
-            return yield* Effect.fail(
-              new MigrationError({
-                message:
-                  "Registry queries must supply literal SQL for transactional precondition capture.",
-              }),
-            );
+            return yield* new MigrationError({
+              message:
+                "Registry queries must supply literal SQL for transactional precondition capture.",
+            });
           if (sql === `SELECT name FROM ${quoted(options.table)};`) {
             const rows = yield* observe(
               `SELECT name, hash FROM ${quoted(options.table)} ORDER BY id;`,
@@ -192,7 +186,7 @@ export const applyD1MigrationRecords = (options: MigrationOptions) =>
       batch: (statements) =>
         Effect.gen(function* () {
           // The shared introspector tolerates failed probes; migrations must not.
-          if (readFailure) return yield* Effect.fail(readFailure);
+          if (readFailure) return yield* readFailure;
           const columns = yield* observe(
             `SELECT * FROM pragma_table_info(${sqlLiteral(options.table)});`,
           );
@@ -244,7 +238,7 @@ export const applyD1MigrationRecords = (options: MigrationOptions) =>
                 : yield* query(
                     `SELECT name FROM ${quoted(RECEIPTS)} WHERE name = ${sqlLiteral(receipt)};`,
                   );
-            if (applied.length !== 1) return yield* Effect.fail(migrationError(outcome.failure));
+            if (applied.length !== 1) return yield* migrationError(outcome.failure);
           }
           uncertain = false;
           guards = [];
@@ -260,7 +254,7 @@ export const applyD1MigrationRecords = (options: MigrationOptions) =>
       yield* options.store
         .delete(key, { ifMatch: lock.etag })
         .pipe(Effect.mapError(migrationError));
-    if (Result.isFailure(result)) return yield* Effect.fail(result.failure);
+    if (Result.isFailure(result)) return yield* result.failure;
   });
 
 /** Resolve shared SQL layouts and hashes, then acquire the lock before reading history. */
@@ -284,11 +278,9 @@ export const runD1Migrations = (options: {
           hashes[layout === "flat" ? record.name : `${record.name}/migration.sql`] !== record.hash,
       )
     ) {
-      return yield* Effect.fail(
-        new MigrationError({
-          message: "Migration files changed while being read; no SQL was applied.",
-        }),
-      );
+      return yield* new MigrationError({
+        message: "Migration files changed while being read; no SQL was applied.",
+      });
     }
     const storage = yield* FleetStorage;
     const store = yield* storage(options.connection);

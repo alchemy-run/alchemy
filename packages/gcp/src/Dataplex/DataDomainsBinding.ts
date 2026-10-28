@@ -113,9 +113,9 @@ const toAttrs = (binding: dataplex.GoogleCloudDataplexV1DataDomainBinding, proje
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : retryQuota(dataplex.getProjectsLocationsDataDomainsBindings({ name })).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
 
 const listAtParent = (parent: string) =>
@@ -206,7 +206,7 @@ export const DataDomainsBindingProvider = () =>
             dataDomainBindingId,
             body: { resource: news.resource },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -214,7 +214,7 @@ export const DataDomainsBindingProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataplexNotResolved({ name });
+        return yield* new DataplexNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -229,7 +229,7 @@ export const DataDomainsBindingProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

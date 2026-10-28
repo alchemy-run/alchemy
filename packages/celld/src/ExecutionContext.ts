@@ -42,9 +42,7 @@ export const fromExecutionContext = (ctx: cf.ExecutionContext): WorkerExecutionC
   waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const context = yield* Effect.context<R>();
-      yield* Effect.sync(() =>
-        ctx.waitUntil(Effect.runPromise(effect.pipe(Effect.provide(context)))),
-      );
+      yield* Effect.sync(() => ctx.waitUntil(Effect.runPromiseWith(context)(effect)));
     }),
 });
 
@@ -64,14 +62,12 @@ export const deferredExecutionContext: WorkerExecutionContextService = {
     throw new Error("WorkerExecutionContext.raw is only available inside a request handler");
   },
   waitUntil: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- defers to the live per-event context
     liveExecutionContext.pipe(Effect.flatMap((live) => live.waitUntil(effect))) as Effect.Effect<
       void,
       never,
       R | RuntimeContext
     >,
   get props() {
-    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- defers to the live per-event context
     return liveExecutionContext.pipe(Effect.flatMap((live) => live.props)) as Effect.Effect<
       Record<string, unknown>,
       never,

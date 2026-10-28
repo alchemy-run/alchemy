@@ -10,13 +10,11 @@ export const workerBuildOptions = (
 ): Effect.Effect<WorkerBuildOptions, DeploymentError> =>
   Effect.gen(function* () {
     if (options?.output?.codeSplitting !== undefined && options.output.codeSplitting !== false) {
-      return yield* Effect.fail(
-        new DeploymentError({
-          reason: "unsupported",
-          message:
-            "Celld requires a single JavaScript bundle; build.output.codeSplitting must be false.",
-        }),
-      );
+      return yield* new DeploymentError({
+        reason: "unsupported",
+        message:
+          "Celld requires a single JavaScript bundle; build.output.codeSplitting must be false.",
+      });
     }
     return {
       ...options,

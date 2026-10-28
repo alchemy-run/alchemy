@@ -85,12 +85,15 @@ const defineWorkflow = <Input, Result, E, R, InitE, InitR>(
       const fn = yield* impl;
       yield* host.export(name, {
         kind: "Celld.WorkflowExport",
+        // The merged context satisfies every service the run captured.
+        /* oxlint-disable effecttsgo/unsafe-effect-type-assertion */
         run: (input: unknown) =>
           Effect.context<WorkflowRunServices>().pipe(
             Effect.flatMap((runtime) =>
               fn(input as Input).pipe(Effect.provide(Context.merge(captured, runtime))),
             ),
           ) as Effect.Effect<Result, E, WorkflowRunServices>,
+        /* oxlint-enable effecttsgo/unsafe-effect-type-assertion */
       } satisfies WorkflowExport);
       return makeWorkflowHandle<Input, Result>(name, () => {
         const binding: NativeWorkflow<Input, Result> | undefined = env[name];
@@ -100,7 +103,7 @@ const defineWorkflow = <Input, Result, E, R, InitE, InitR>(
     }),
   );
 
-function makeWorkflow<Self>(): typeof defineWorkflow;
+function makeWorkflow<_Self>(): typeof defineWorkflow;
 function makeWorkflow<Input, Result, E, R, InitE, InitR>(
   name: string,
   impl: Effect.Effect<(input: Input) => Effect.Effect<Result, E, R>, InitE, InitR>,

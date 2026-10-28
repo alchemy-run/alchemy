@@ -102,9 +102,10 @@ export const FetchBinding = Layer.effect(
           throw new Error(`Missing Celld service binding '${name}'`);
         return binding;
       };
-      const fetch = fromNativeFetcher({
+      const fetcher = fromNativeFetcher({
         fetch: (request, init) => native().fetch(request, init),
-      }).fetch;
+      });
+      const fetch = fetcher.fetch.bind(fetcher);
       return yield* Effect.sync(
         () => Object.defineProperty(fetch, "raw", { get: native }) as ServiceFetch,
       );

@@ -540,6 +540,7 @@ export const bindWorker = <Shape = {}>(
       // unless the Application is activated and `worker` is its root. Its
       // bound key is derived from the expression (closure source included),
       // so the runtime never reads it back — it reads `fleetUrl` below.
+      // oxlint-disable-next-line effecttsgo/floating-effect -- only registering the activation check; its accessor is never read
       yield* Output.all(
         app.revision,
         app.workerName,
@@ -597,14 +598,12 @@ export const bindWorker = <Shape = {}>(
       Effect.gen(function* () {
         const [url, secret] = yield* Effect.all([FleetUrl, Secret]);
         if (url === undefined || secret === undefined) {
-          return yield* Effect.fail(
-            new WorkerUnreachable({
-              message:
-                `Celld worker '${target.LogicalId}' is not reachable from this ` +
-                "host — the fleet connection is bound at deploy time and " +
-                "only readable at runtime inside the deployed caller.",
-            }),
-          );
+          return yield* new WorkerUnreachable({
+            message:
+              `Celld worker '${target.LogicalId}' is not reachable from this ` +
+              "host — the fleet connection is bound at deploy time and " +
+              "only readable at runtime inside the deployed caller.",
+          });
         }
         const requestUrl = new URL(request.url, "http://alchemy-rpc");
         const method = `${request.method} ${requestUrl.pathname}`;
@@ -618,15 +617,13 @@ export const bindWorker = <Shape = {}>(
           .pipe(Effect.mapError((cause) => new RpcCallError({ method, cause })));
         if (response.status >= 300) {
           const body = yield* response.text.pipe(Effect.orElseSucceed(() => ""));
-          return yield* Effect.fail(
-            new RpcCallError({
-              method,
-              cause: new Error(
-                `worker gateway returned ${response.status}${body ? `: ${body.slice(0, 256)}` : ""}`,
-              ),
-              status: response.status,
-            }),
-          );
+          return yield* new RpcCallError({
+            method,
+            cause: new Error(
+              `worker gateway returned ${response.status}${body ? `: ${body.slice(0, 256)}` : ""}`,
+            ),
+            status: response.status,
+          });
         }
         return response;
       });

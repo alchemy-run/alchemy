@@ -73,18 +73,14 @@ export const computeFleetMigrations = ({
     const classNames = new Set<string>();
     for (const binding of current) {
       if (classes[binding.name] !== undefined) {
-        return yield* Effect.fail(
-          new CelldMigrationConflictError({
-            message: `Duplicate Durable Object binding '${binding.name}'.`,
-          }),
-        );
+        return yield* new CelldMigrationConflictError({
+          message: `Duplicate Durable Object binding '${binding.name}'.`,
+        });
       }
       if (classNames.has(binding.className)) {
-        return yield* Effect.fail(
-          new CelldMigrationConflictError({
-            message: `Durable Object class '${binding.className}' is declared by more than one binding — each binding needs its own class name.`,
-          }),
-        );
+        return yield* new CelldMigrationConflictError({
+          message: `Durable Object class '${binding.className}' is declared by more than one binding — each binding needs its own class name.`,
+        });
       }
       classes[binding.name] = binding.className;
       classNames.add(binding.className);
@@ -113,18 +109,14 @@ export const computeFleetMigrations = ({
     // destroy the wrong namespace's data.
     for (const renamed of renamedClasses) {
       if (deletedClasses.includes(renamed.to)) {
-        return yield* Effect.fail(
-          new CelldMigrationConflictError({
-            message: `Ambiguous migration: class '${renamed.to}' is both the target of a rename (from '${renamed.from}') and deleted by another binding. Split this into two deploys.`,
-          }),
-        );
+        return yield* new CelldMigrationConflictError({
+          message: `Ambiguous migration: class '${renamed.to}' is both the target of a rename (from '${renamed.from}') and deleted by another binding. Split this into two deploys.`,
+        });
       }
       if (deletedClasses.includes(renamed.from)) {
-        return yield* Effect.fail(
-          new CelldMigrationConflictError({
-            message: `Ambiguous migration: class '${renamed.from}' is both renamed to '${renamed.to}' and deleted. Split this into two deploys.`,
-          }),
-        );
+        return yield* new CelldMigrationConflictError({
+          message: `Ambiguous migration: class '${renamed.from}' is both renamed to '${renamed.to}' and deleted. Split this into two deploys.`,
+        });
       }
     }
 
@@ -167,94 +159,6 @@ export interface WranglerRenderOptions {
   /** Upload an already-flat JavaScript entry without invoking esbuild. */
   readonly noBundle?: boolean;
 }
-
-const renderBindings = (bindings: readonly CelldBinding[]) => {
-  const kv = bindings.filter((binding) => binding.type === "kv_namespace");
-  const d1 = bindings.filter((binding) => binding.type === "d1");
-  const r2 = bindings.filter((binding) => binding.type === "r2_bucket");
-  const workflows = bindings.filter((binding) => binding.type === "workflow");
-  const services = bindings.filter((binding) => binding.type === "service");
-  const loaders = bindings.filter((binding) => binding.type === "worker_loader");
-  return {
-    ...(kv.length
-      ? {
-          kv_namespaces: kv.map((b) => ({
-            binding: b.name,
-            id: b.namespaceId,
-          })),
-        }
-      : {}),
-    ...(d1.length
-      ? {
-          d1_databases: d1.map((b) => ({
-            binding: b.name,
-            database_id: b.id,
-            database_name: b.databaseName ?? b.id,
-          })),
-        }
-      : {}),
-    ...(r2.length
-      ? {
-          r2_buckets: r2.map((b) => ({
-            binding: b.name,
-            bucket_name: b.bucketName,
-          })),
-        }
-      : {}),
-    ...(workflows.length
-      ? {
-          workflows: workflows.map((b) => ({
-            binding: b.name,
-            name: b.workflowName,
-            class_name: b.className,
-          })),
-        }
-      : {}),
-    ...(services.length
-      ? {
-          services: services.map((b) => ({
-            binding: b.name,
-            service: b.service,
-            ...(b.entrypoint ? { entrypoint: b.entrypoint } : {}),
-          })),
-        }
-      : {}),
-    ...(loaders.length ? { worker_loaders: loaders.map((b) => ({ binding: b.name })) } : {}),
-  };
-};
-
-const renderQueues = (options: WranglerRenderOptions) => {
-  const producers = (options.bindings ?? []).filter((binding) => binding.type === "queue");
-  const consumers = options.queueConsumers ?? [];
-  return producers.length || consumers.length
-    ? {
-        queues: {
-          ...(producers.length
-            ? {
-                producers: producers.map((b) => ({
-                  binding: b.name,
-                  queue: b.queueName,
-                  delivery_delay: b.deliveryDelay,
-                })),
-              }
-            : {}),
-          ...(consumers.length
-            ? {
-                consumers: consumers.map((c) => ({
-                  queue: c.queue,
-                  max_batch_size: c.maxBatchSize,
-                  max_batch_timeout: c.maxBatchTimeout,
-                  max_retries: c.maxRetries,
-                  dead_letter_queue: c.deadLetterQueue,
-                  max_concurrency: c.maxConcurrency,
-                  retry_delay: c.retryDelay,
-                })),
-              }
-            : {}),
-        },
-      }
-    : {};
-};
 
 /** Render only configuration keys accepted by Celld v0.5.0. */
 export const renderWranglerJson = (options: WranglerRenderOptions): string =>

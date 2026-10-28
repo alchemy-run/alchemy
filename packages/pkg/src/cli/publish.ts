@@ -58,7 +58,7 @@ export const publish = Effect.fn("publish")(function* (options: PublishOptions) 
 
   const dir = path.resolve(options.cwd, options.dir);
   const manifestText = yield* fs.readFileString(path.join(dir, MANIFEST_FILE));
-  const manifest = yield* Schema.decodeUnknownEffect(ManifestJson)(manifestText);
+  const manifest = yield* Schema.decodeEffect(ManifestJson)(manifestText);
   if (manifest.registry !== registry) {
     return yield* new PublishError({
       message: `artifact was packed for ${manifest.registry}, not ${registry}`,

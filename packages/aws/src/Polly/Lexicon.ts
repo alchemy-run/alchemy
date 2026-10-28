@@ -3,11 +3,17 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class LexiconNotReady extends Data.TaggedError("LexiconNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface LexiconProps {
   /**
@@ -154,7 +160,7 @@ export const LexiconProvider = () =>
 
       const getOne = (name: string) =>
         retryTransient(polly.getLexicon({ Name: name })).pipe(
-          Effect.catchTag("LexiconNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("LexiconNotFoundException", () => Effect.undefined),
         );
 
       const waitForContent = (name: string, desired: string) =>
@@ -174,9 +180,9 @@ export const LexiconProvider = () =>
             }
             yield* Effect.sleep("500 millis");
           }
-          return yield* Effect.fail(
-            new Error(`Polly lexicon '${name}' did not converge to the desired content`),
-          );
+          return yield* new LexiconNotReady({
+            message: `Polly lexicon '${name}' did not converge to the desired content`,
+          });
         });
 
       const waitUntilGone = (name: string) =>
@@ -192,9 +198,9 @@ export const LexiconProvider = () =>
             }
             yield* Effect.sleep("500 millis");
           }
-          return yield* Effect.fail(
-            new Error(`Polly lexicon '${name}' is still observable after deletion`),
-          );
+          return yield* new LexiconNotReady({
+            message: `Polly lexicon '${name}' is still observable after deletion`,
+          });
         });
 
       return {

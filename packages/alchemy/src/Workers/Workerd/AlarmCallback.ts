@@ -24,7 +24,7 @@ import { ActiveStorageTransactions } from "./DurableObjectTransactionContext.ts"
 
 // The engine's own Durable Object state service is part of every invocation;
 // it is engine-specific, so the registry only sees it as an opaque service.
-type InvocationServices = RuntimeContext | Scope.Scope | any;
+type InvocationServices = any;
 interface RetryPolicy {
   readonly delay: number;
   readonly maxAttempts: number;
@@ -88,12 +88,10 @@ const activePass = (storage: cf.DurableObjectStorage, callback: string) =>
     const current = yield* CurrentAlarmPass;
     const pass = current?.storage === storage ? current : undefined;
     if (pass !== undefined && !pass.active) {
-      return yield* Effect.fail(
-        new CallbackError({
-          callback,
-          message: "The alarm callback invocation has already finished",
-        }),
-      );
+      return yield* new CallbackError({
+        callback,
+        message: "The alarm callback invocation has already finished",
+      });
     }
     return pass;
   });

@@ -18,7 +18,6 @@ import { HttpServer, safeHttpEffect } from "alchemy/Http";
 import { reifyBoundConfigProvider } from "alchemy/Runtime";
 import { entrypointLayer, resolveProgram, stackFromEnv } from "alchemy/Runtime/Bootstrap";
 import * as ConfigProvider from "effect/ConfigProvider";
-import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -87,7 +86,7 @@ const captureServer = (dispatch: Deferred.Deferred<Dispatch>) =>
         const context = yield* Effect.context<any>();
         const safe = safeHttpEffect(handler as any);
         const run: Dispatch = (webRequest) =>
-          Effect.runPromise(
+          Effect.runPromiseWith(context)(
             Effect.gen(function* () {
               const request = HttpServerRequest.fromWeb(webRequest);
               const scope = yield* Scope.make();
@@ -107,7 +106,7 @@ const captureServer = (dispatch: Deferred.Deferred<Dispatch>) =>
               const response = yield* Deferred.await(out);
               yield* Scope.close(scope, Exit.void);
               return response;
-            }).pipe(Effect.provideContext(context as Context.Context<never>)),
+            }),
           );
         yield* Deferred.succeed(dispatch, run);
       }) as any,

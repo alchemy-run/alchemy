@@ -97,10 +97,9 @@ export const task = <A, E, R, RetryR = never>(
       isNativeTerminal: (error): error is NonRetryableError => error instanceof NonRetryableError,
       identity: { workflow: event.workflowName, instanceId: event.instanceId },
       terminalFailure: (message) =>
-        Effect.runPromise(
-          Effect.sync(() => new NonRetryableError(terminalFailureMessage(message))),
-        ),
+        Promise.resolve(new NonRetryableError(terminalFailureMessage(message))),
       effect: (context: WorkflowStepContextData) =>
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the attempt layer provides every step service except the scope
         effect.pipe(Effect.provide(provideAttempt(context))) as Effect.Effect<A, E, Scope.Scope>,
       native: (callback, run) =>
         step.do(
@@ -116,6 +115,7 @@ export const task = <A, E, R, RetryR = never>(
                       typeof delay === "function"
                         ? (input: { ctx: WorkflowStepContextData; error: Error }) =>
                             run(
+                              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the attempt layer provides every delay service except the scope
                               delay(input).pipe(
                                 Effect.provide(provideAttempt(input.ctx)),
                               ) as Effect.Effect<string | number, never, Scope.Scope>,

@@ -224,7 +224,7 @@ const getByName = (project: string, region: string, instantSnapshotGroup: string
       region,
       instantSnapshotGroup,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitReady = (project: string, region: string, instantSnapshotGroupName: string) =>
   getByName(project, region, instantSnapshotGroupName).pipe(
@@ -380,7 +380,7 @@ export const RegionInstantSnapshotGroupProvider = () =>
               sourceConsistencyGroup: desiredSource,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitRegionOperation(env.project, region, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -420,7 +420,7 @@ export const RegionInstantSnapshotGroupProvider = () =>
           instantSnapshotGroup: output.instantSnapshotGroupName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

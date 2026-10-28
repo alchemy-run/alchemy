@@ -106,12 +106,10 @@ export const handleManagementRequest = (
     yield* encode(event);
     const request = yield* decode(Request, event);
     if (!connection.bucket || request.bucket !== connection.bucket.uri)
-      return yield* Effect.fail(
-        new FleetManagementError({
-          reason: "configuration",
-          message: "Management runner is bound to a different fleet bucket.",
-        }),
-      );
+      return yield* new FleetManagementError({
+        reason: "configuration",
+        message: "Management runner is bound to a different fleet bucket.",
+      });
     if (request.operation === "reload" || request.operation === "activate") {
       const graph = yield* decode(ManagementGraph, request.input);
       const value =
@@ -203,12 +201,10 @@ export const makeManagementClient = (
   ) =>
     Effect.gen(function* () {
       if (!connection.bucket)
-        return yield* Effect.fail(
-          new FleetManagementError({
-            reason: "configuration",
-            message: "Fleet connection must include its backing bucket.",
-          }),
-        );
+        return yield* new FleetManagementError({
+          reason: "configuration",
+          message: "Fleet connection must include its backing bucket.",
+        });
       const transport = yield* transportFor(connection);
       const payload = yield* encode({
         version: 1,
@@ -218,7 +214,7 @@ export const makeManagementClient = (
       });
       const body = yield* transport(connection, payload);
       const envelope = yield* decode(Response, yield* parse(body));
-      if (!envelope.ok) return yield* Effect.fail(new FleetManagementError(envelope.error));
+      if (!envelope.ok) return yield* new FleetManagementError(envelope.error);
       return yield* decode(schema, envelope.value);
     });
   const d1 = <A>(effect: Effect.Effect<A, FleetManagementError>) =>
@@ -262,13 +258,10 @@ export const makeLambdaTransport = Effect.gen(function* () {
           functionArn,
         )
       )
-        return yield* Effect.fail(
-          new FleetManagementError({
-            reason: "configuration",
-            message:
-              "Fleet hostState must include an IAM managementFunctionArn and backing bucket.",
-          }),
-        );
+        return yield* new FleetManagementError({
+          reason: "configuration",
+          message: "Fleet hostState must include an IAM managementFunctionArn and backing bucket.",
+        });
       const response = yield* LambdaSdk.invoke({
         FunctionName: functionArn,
         InvocationType: "RequestResponse",
@@ -286,13 +279,11 @@ export const makeLambdaTransport = Effect.gen(function* () {
         ),
       );
       if (response.StatusCode !== 200 || response.FunctionError || !response.Payload)
-        return yield* Effect.fail(
-          new FleetManagementError({
-            reason: "transport",
-            message:
-              "Celld management runner did not return a successful synchronous response; mutation outcome may be ambiguous.",
-          }),
-        );
+        return yield* new FleetManagementError({
+          reason: "transport",
+          message:
+            "Celld management runner did not return a successful synchronous response; mutation outcome may be ambiguous.",
+        });
       const chunks = yield* Stream.runCollect(response.Payload).pipe(
         Effect.mapError(
           () =>
@@ -368,8 +359,8 @@ export interface ManagementRunnerProps {
 /** Compose into EcsFleet and persist only its functionArn in hostState.managementFunctionArn. */
 export const ManagementRunner = (
   id: string,
-  props: InputProps<Omit<ManagementRunnerProps, "partition">> &
-    Pick<ManagementRunnerProps, "partition">,
+  props: InputProps<Omit<ManagementRunnerProps, "partition" | "minimumNodes">> &
+    Pick<ManagementRunnerProps, "partition" | "minimumNodes">,
 ) =>
   Effect.gen(function* () {
     const main = yield* Effect.sync(() => import.meta.url);
@@ -403,12 +394,10 @@ export const executeManagementRequest = (event: unknown) =>
     const region = yield* Config.String("AWS_REGION");
     const minimumNodes = yield* Config.Number("CELLD_MANAGEMENT_MINIMUM_NODES");
     if (!/^[a-z0-9][a-z0-9.-]{1,61}[a-z0-9]$/.test(bucketName))
-      return yield* Effect.fail(
-        new FleetManagementError({
-          reason: "configuration",
-          message: "Invalid management runner bucket configuration.",
-        }),
-      );
+      return yield* new FleetManagementError({
+        reason: "configuration",
+        message: "Invalid management runner bucket configuration.",
+      });
     const credentials = yield* yield* Credentials;
     const http = yield* HttpClient.HttpClient;
     const connection: FleetConnection = {
@@ -442,16 +431,14 @@ export const executeManagementRequest = (event: unknown) =>
     );
     return yield* handleManagementRequest(event, connection, management);
   }).pipe(
-    Effect.catch(() =>
-      Effect.succeed({
-        ok: false as const,
-        error: {
-          reason: "configuration" as const,
-          message:
-            "Private Celld management runner is not configured or cannot access its backing store.",
-        },
-      }),
-    ),
+    Effect.orElseSucceed(() => ({
+      ok: false as const,
+      error: {
+        reason: "configuration" as const,
+        message:
+          "Private Celld management runner is not configured or cannot access its backing store.",
+      },
+    })),
   );
 
 /** The runner's HTTP client: node requests never follow redirects. */

@@ -235,7 +235,7 @@ export const defaultTemplateBundle = (): TemplateBundle => ({
 export const Template = Resource<Template>("GCP.Integrations.Template");
 
 export class TemplateNotResolved extends Data.TaggedError("GCP.Integrations.TemplateNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, templateId: string) =>
@@ -272,10 +272,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : integrations
         .getProjectsLocationsTemplates({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const TemplateProvider = () =>
   Provider.succeed(Template, {
@@ -372,7 +372,7 @@ export const TemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TemplateNotResolved({ name });
+        return yield* new TemplateNotResolved({ resourceName: name });
       }
 
       const currentName = withProjectId(current.name ?? name, env.project);

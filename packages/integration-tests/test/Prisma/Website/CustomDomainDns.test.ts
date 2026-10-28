@@ -6,9 +6,8 @@ import { resolve4, resolveNs, Resolver } from "node:dns/promises";
  * reports, Prisma activates the domain and serves HTTPS on it, and destroy
  * removes both the records and the Prisma domain.
  *
- * The website's implicit Project attaches the App to the project's current
- * default branch, which Prisma requires for custom domains. Prisma verifies
- * the hostname's CNAME on registration, so the composite publishes it first.
+ * Prisma verifies the hostname's CNAME on registration, so the composite
+ * publishes it first.
  */
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
@@ -17,7 +16,7 @@ import * as Prisma from "@alchemy.run/prisma";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as dns from "@distilled.cloud/cloudflare/dns";
-import { getDomain, getProject } from "@distilled.cloud/prisma/management";
+import { getDomain, getProject, getService } from "@distilled.cloud/prisma/management";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -253,6 +252,88 @@ test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
     tags: [
       "provider:prisma",
       "provider:prisma:customdomain",
+      "provider:prisma:website",
+      "provider:cloudflare",
+      "provider:cloudflare:dns",
+      "live",
+    ],
+    timeout: 900_000,
+  },
+);
+
+test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
+  "attaches a custom domain to an App on a non-default Branch",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const zoneId = yield* resolveZoneId;
+      const hostname = `prisma-preview-${stack.stage.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}.${ZONE}`;
+      const cwd = yield* cloneFixture(fixtureDir, {
+        prefix: "alchemy-prisma-preview-dns-",
+        tempRoot,
+        entries: ["src", "build.sh"],
+      });
+
+      const branchStack = Effect.gen(function* () {
+        const project = yield* Prisma.Project("Project", { createDatabase: false });
+        const branch = yield* Prisma.Branch("Preview", { project, gitName: "preview" });
+        return { project, branch };
+      });
+      // The Branch exists before the site resolves it by git name.
+      yield* stack.deploy(branchStack);
+
+      const deployed = yield* stack.deploy(
+        Effect.gen(function* () {
+          const { project, branch } = yield* branchStack;
+          const site = yield* Prisma.Website.StaticSite("Site", {
+            cwd,
+            command: "bash build.sh",
+            shell: true,
+            outdir: "dist",
+            project,
+            branchGitName: "preview",
+            domain: { name: hostname, dns: Cloudflare.DNS.Adapter() },
+          });
+          return { project, branch, site };
+        }),
+      );
+      const { project, branch, site } = deployed;
+      const domain = site.domain!;
+
+      expect(branch.isDefault).toBe(false);
+      expect(domain.appId).toBe(site.compute!.appId);
+      expect(domain.hostname).toBe(hostname);
+
+      const app = yield* getService({ serviceId: site.compute!.appId });
+      expect(app.data.branchId).toBe(branch.branchId);
+      const registered = yield* getDomain({ domainId: domain.customDomainId });
+      expect(registered.data.appId).toBe(site.compute!.appId);
+      expect(trimDot(registered.data.hostname)).toBe(hostname);
+
+      yield* stack.destroy();
+
+      expect(
+        yield* getDomain({ domainId: domain.customDomainId }).pipe(
+          Effect.as("found" as const),
+          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+        ),
+      ).toBe("gone");
+      expect(
+        yield* getProject({ id: project.projectId }).pipe(
+          Effect.as("found" as const),
+          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+        ),
+      ).toBe("gone");
+      const leftover = yield* dns.listRecords
+        .items({ zoneId, name: { exact: hostname } })
+        .pipe(Stream.runCollect);
+      expect(Array.from(leftover)).toEqual([]);
+    }),
+  {
+    tags: [
+      "provider:prisma",
+      "provider:prisma:customdomain",
+      "provider:prisma:branch",
       "provider:prisma:website",
       "provider:cloudflare",
       "provider:cloudflare:dns",

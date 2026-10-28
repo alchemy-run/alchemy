@@ -270,8 +270,7 @@ export const ensureBootstrap = (store: Store, props: BootstrapProps) =>
       yield* conditionalPut(store, namedKey, yield* encode(prepared.pointer)).pipe(
         Effect.catchTag("Celld.FleetStorageError", (error) =>
           Effect.gen(function* () {
-            if (error.reason !== "conflict" || !(yield* store.get(namedKey)))
-              return yield* Effect.fail(error);
+            if (error.reason !== "conflict" || !(yield* store.get(namedKey))) return yield* error;
           }),
         ),
       );
@@ -281,7 +280,7 @@ export const ensureBootstrap = (store: Store, props: BootstrapProps) =>
         Effect.catchTag("Celld.FleetStorageError", (error) =>
           Effect.gen(function* () {
             if (error.reason !== "conflict" || !(yield* store.get(ROOT_POINTER_KEY)))
-              return yield* Effect.fail(error);
+              return yield* error;
           }),
         ),
       );

@@ -143,7 +143,6 @@ export function createWorkerEntrypointWrapper(
               headers: { [HEADER_ERROR_STACK]: "true" },
             });
           }
-          // oxlint-disable no-console
           console.error("Error calling fetch", error);
           throw error;
         }
@@ -315,7 +314,6 @@ export function createDurableObjectWrapper(
         );
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (maybeFn as (...args: Array<unknown>) => any).apply(instance, args);
     };
   }
@@ -357,7 +355,6 @@ export function createWorkflowEntrypointWrapper(
         );
       }
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       return (maybeFn as (...args: Array<unknown>) => any).apply(instance, args);
     };
   }

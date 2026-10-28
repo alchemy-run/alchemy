@@ -46,7 +46,7 @@ const readGcloud = (config: Omit<Extract<GcpAuthConfig, { method: "gcloud" }>, "
     const auth = yield* getAuthProvider<GcpAuthConfig, GcpResolvedCredentials>(
       GCP_AUTH_PROVIDER_NAME,
     );
-    return yield* auth.read("default", { method: "gcloud", ...config });
+    return yield* auth.read("default", Effect.succeed({ method: "gcloud" as const, ...config }));
   });
 
 /**

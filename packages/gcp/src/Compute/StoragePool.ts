@@ -231,7 +231,7 @@ const toAttrs = (pool: compute.StoragePool, project: string): StoragePool["Attri
 const getByName = (project: string, zone: string, storagePool: string) =>
   compute
     .getStoragePools({ project, zone, storagePool })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitPoolReady = (project: string, zone: string, storagePoolName: string) =>
   getByName(project, zone, storagePoolName).pipe(
@@ -405,7 +405,7 @@ export const StoragePoolProvider = () =>
               performanceProvisioningType: news.performanceProvisioningType,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitZoneOperation(env.project, zone, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -498,7 +498,7 @@ export const StoragePoolProvider = () =>
           storagePool: output.storagePoolName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

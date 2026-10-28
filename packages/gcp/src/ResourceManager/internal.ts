@@ -77,18 +77,14 @@ const parentOf = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag(["NotFound", "Forbidden", "ProjectNotFound"], () =>
-          Effect.succeed(undefined),
-        ),
+        Effect.catchTag(["NotFound", "Forbidden", "ProjectNotFound"], () => Effect.undefined),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag(["NotFound", "Forbidden", "FolderNotFound"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag(["NotFound", "Forbidden", "FolderNotFound"], () => Effect.undefined),
         )
-      : Effect.succeed(undefined);
+      : Effect.undefined;
 
 export const tryResolveParent = () =>
   Effect.gen(function* () {

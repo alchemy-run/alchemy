@@ -54,11 +54,9 @@ export const validateConsumerSettings = (settings: ConsumerSettings = {}) =>
     ] as const;
     for (const [key, value, min, max] of limits) {
       if (value !== undefined && (!Number.isInteger(value) || value < min || value > max)) {
-        return yield* Effect.fail(
-          new QueueConfigurationError({
-            message: `Celld consumer ${key} must be an integer between ${min} and ${max}`,
-          }),
-        );
+        return yield* new QueueConfigurationError({
+          message: `Celld consumer ${key} must be an integer between ${min} and ${max}`,
+        });
       }
     }
   });
@@ -109,11 +107,9 @@ export const claimConsumer = (host: object, queue: string) =>
   Effect.gen(function* () {
     const declarations = consumers.get(host) ?? new Set<string>();
     if (declarations.has(queue)) {
-      return yield* Effect.fail(
-        new QueueConfigurationError({
-          message: `Queue '${queue}' has multiple consumer declarations on this Worker; declare settings and the listener together with consumeQueueMessages.`,
-        }),
-      );
+      return yield* new QueueConfigurationError({
+        message: `Queue '${queue}' has multiple consumer declarations on this Worker; declare settings and the listener together with consumeQueueMessages.`,
+      });
     }
     declarations.add(queue);
     consumers.set(host, declarations);

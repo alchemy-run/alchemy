@@ -127,7 +127,8 @@ export const validScriptName = (name: string) =>
   /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(name) && !["queues", "images"].includes(name);
 export const validDeploymentPath = (name: string) =>
   name.length > 0 &&
-  [...name].every((character) => character.charCodeAt(0) > 32 && character.charCodeAt(0) !== 127) &&
+  // No control characters, spaces or DEL (an astral character's lead surrogate is above them).
+  !/[\u0000-\u0020\u007f]/.test(name) &&
   !/[\\:%?#]/.test(name) &&
   name.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 const validScope = (name: string) =>
@@ -583,7 +584,7 @@ export const stageDeployment = (store: Store, prepared: PreparedDeployment) =>
       yield* ensureImmutable(store, manifestKey, prepared.candidate.body).pipe(
         Effect.catchTag("Celld.FleetStorageError", (error) =>
           Effect.gen(function* () {
-            if (error.reason !== "conflict") return yield* Effect.fail(error);
+            if (error.reason !== "conflict") return yield* error;
             const concurrent = yield* store.get(manifestKey);
             if (
               !concurrent ||
@@ -592,7 +593,7 @@ export const stageDeployment = (store: Store, prepared: PreparedDeployment) =>
                 prepared.manifest,
               ))
             )
-              return yield* Effect.fail(error);
+              return yield* error;
           }),
         ),
       );

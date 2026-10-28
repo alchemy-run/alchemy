@@ -240,7 +240,7 @@ export const AppProvider = () =>
 const getApp = (accountId: string, appId: string) =>
   flagship
     .getApp({ accountId, appId })
-    .pipe(Effect.catchTag("FlagshipAppNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("FlagshipAppNotFound", () => Effect.undefined));
 
 /**
  * Find an app by exact name. If several apps carry the same name, pick the

@@ -83,11 +83,11 @@ export const InsightProvider = () =>
         securityhub.getInsights({ InsightArns: [arn] }).pipe(
           Effect.map((r) => r.Insights?.[0]),
           Effect.catchTags({
-            ResourceNotFoundException: () => Effect.succeed(undefined),
+            ResourceNotFoundException: () => Effect.undefined,
             // The whole hub may be disabled — the insight is gone too.
-            InvalidAccessException: () => Effect.succeed(undefined),
+            InvalidAccessException: () => Effect.undefined,
             // Security Hub reports an unknown insight ARN as invalid input.
-            InvalidInputException: () => Effect.succeed(undefined),
+            InvalidInputException: () => Effect.undefined,
           }),
         );
 

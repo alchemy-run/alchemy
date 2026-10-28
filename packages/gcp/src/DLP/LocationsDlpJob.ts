@@ -149,7 +149,7 @@ export const LocationsDlpJob = Resource<LocationsDlpJob>("GCP.DLP.LocationsDlpJo
 export class LocationsDlpJobNotResolved extends Data.TaggedError(
   "GCP.DLP.LocationsDlpJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, jobId: string, risk = false) =>
@@ -231,10 +231,10 @@ const toAttrs = (job: dlp.GooglePrivacyDlpV2DlpJob, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsLocationsDlpJobs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listType = (parent: string, type: "INSPECT_JOB" | "RISK_ANALYSIS_JOB") =>
   collectPages(
@@ -351,7 +351,7 @@ export const LocationsDlpJobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LocationsDlpJobNotResolved({ name });
+        return yield* new LocationsDlpJobNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

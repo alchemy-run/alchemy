@@ -41,7 +41,7 @@ export const GetNodeStateRequest = /*@__PURE__*/ S.suspend(() =>
   identifier: "GetNodeStateRequest",
 }) as any as S.Schema<GetNodeStateRequest>;
 
-export type DocumentMap = { [key: string]: unknown | undefined };
+export type DocumentMap = { [key: string]: unknown };
 export const DocumentMap = /*@__PURE__*/ S.Record(
   S.String,
   S.Unknown,
@@ -245,8 +245,8 @@ export const NodeState = /*@__PURE__*/ S.suspend(() =>
     drainPins: S.optional(DocumentList),
     deployment: S.optional(DeploymentState),
     error: S.optional(S.String),
-    allocator: S.optional(S.NullOr(AllocatorStats)),
-    libc_malloc: S.optional(S.NullOr(LibcMallocStats)),
+    allocator: AllocatorStats.pipe(S.NullOr, S.optional),
+    libc_malloc: LibcMallocStats.pipe(S.NullOr, S.optional),
   }),
 ).annotate({ identifier: "NodeState" }) as any as S.Schema<NodeState>;
 

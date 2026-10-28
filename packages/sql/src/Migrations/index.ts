@@ -7,6 +7,19 @@ export {
 } from "./Convert.ts";
 export { detectLayout, type MigrationLayout } from "./Detect.ts";
 export {
+  makeStatementExecutor,
+  migrationError,
+  probeExecutor,
+  retryLogin,
+  rowsFromCells,
+  withMySqlConnection,
+  withMySqlExecutor,
+  withPgClient,
+  withPgExecutor,
+  type ConnectOptions,
+  type Rows,
+} from "./Executors.ts";
+export {
   describeRewrittenHistory,
   DrizzleV0LayoutError,
   MigrationError,
@@ -30,6 +43,8 @@ export {
 } from "./Records.ts";
 export {
   applyMigrations,
+  migrationAttributesOf,
+  type MigrationAttributes,
   classifyMigrationHistory,
   diffMigrations,
   migrationsAttrs,
@@ -46,3 +61,9 @@ export {
   type ResolvedMigrations,
   type StampedMigrationsState,
 } from "./Registry.ts";
+export {
+  scanSqlScript,
+  splitSqlScript,
+  type ScannedStatement,
+  type ScriptDialect,
+} from "./Script.ts";

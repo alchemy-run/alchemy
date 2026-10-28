@@ -320,7 +320,7 @@ export const readApplication = (props: ApplicationResourceProps, owner: Applicat
       receipt,
       recovery,
       () => Effect.void,
-    ).pipe(Effect.catch(() => Effect.succeed(undefined)));
+    ).pipe(Effect.catch(() => Effect.undefined));
   });
 
 /** Resume owned publication before checking old receipt ETags, then activate even on a graph no-op. @internal */

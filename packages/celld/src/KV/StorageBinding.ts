@@ -47,7 +47,7 @@ export const storageBinding = (resource: {
   FQN: string;
   fleetId: Output<string>;
   fleetUrl: Output<string>;
-}): Input<StorageBinding> => ({
+}): { readonly [K in keyof StorageBinding]: Input<StorageBinding[K]> } => ({
   resource: resource.FQN,
   fleetId: resource.fleetId,
   fleetUrl: resource.fleetUrl,

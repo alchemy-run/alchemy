@@ -269,7 +269,7 @@ export const WatermarkProvider = () =>
 const getWatermark = (accountId: string, watermarkId: string) =>
   stream
     .getWatermark({ accountId, identifier: watermarkId })
-    .pipe(Effect.catchTag("WatermarkNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("WatermarkNotFound", () => Effect.undefined));
 
 /**
  * Find a watermark by exact name. Names are not unique — if several

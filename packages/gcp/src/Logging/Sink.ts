@@ -210,7 +210,7 @@ export type Sink = Resource<
 export const Sink = Resource<Sink>("GCP.Logging.Sink");
 
 export class SinkNotResolved extends Data.TaggedError("GCP.Logging.SinkNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -326,9 +326,7 @@ const toAttrs = (sink: logging.LogSink, project: string) => {
 };
 
 const getByName = (name: string) =>
-  logging
-    .getSinks({ sinkName: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  logging.getSinks({ sinkName: name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toCreateBody = (sinkId: string, props: SinkProps, description: string): logging.LogSink => ({
   name: sinkId,
@@ -405,7 +403,7 @@ export const SinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SinkNotResolved({ name });
+        return yield* new SinkNotResolved({ resourceName: name });
       }
 
       const desiredDisabled = news.disabled === true;

@@ -165,6 +165,7 @@ export const durableObjectStub = (
       // Stub methods only run inside a deployed Worker, where the bridge
       // provides the RuntimeContext the native fetch is colored with.
       fetch: (request: HttpClientRequest.HttpClientRequest) =>
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases RuntimeContext, which the bridge provides at call time
         fetcher.fetch(request) as Effect.Effect<HttpClientResponse.HttpClientResponse, unknown>,
       base: {
         fetch: (request: HttpServerRequest.HttpServerRequest) => fetcher.fetch(request),

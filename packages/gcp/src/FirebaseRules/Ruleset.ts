@@ -121,7 +121,7 @@ export type Ruleset = Resource<
 export const Ruleset = Resource<Ruleset>("GCP.FirebaseRules.Ruleset");
 
 export class RulesetNotResolved extends Data.TaggedError("GCP.FirebaseRules.RulesetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (ruleset: firebaserules.Ruleset, project: string) => {
@@ -218,7 +218,7 @@ export const RulesetProvider = () =>
 
       if (current === undefined) {
         return yield* new RulesetNotResolved({
-          name: output?.name ?? `${parent}/rulesets`,
+          resourceName: output?.name ?? `${parent}/rulesets`,
         });
       }
 

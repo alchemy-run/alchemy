@@ -151,7 +151,7 @@ export const CollectionsDataStoresControl = Resource<CollectionsDataStoresContro
 export class CollectionsDataStoresControlNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoresControlNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (control: discoveryengine.GoogleCloudDiscoveryengineV1Control, project: string) => {
@@ -196,10 +196,10 @@ const toBody = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsCollectionsDataStoresControls({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const CollectionsDataStoresControlProvider = () =>
   Provider.succeed(CollectionsDataStoresControl, {
@@ -264,7 +264,7 @@ export const CollectionsDataStoresControlProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CollectionsDataStoresControlNotResolved({ name });
+        return yield* new CollectionsDataStoresControlNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;

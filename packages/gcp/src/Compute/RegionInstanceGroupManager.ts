@@ -408,7 +408,7 @@ const getByName = (project: string, region: string, instanceGroupManager: string
       region,
       instanceGroupManager,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilPresent = (project: string, region: string, managerName: string) =>
   getByName(project, region, managerName).pipe(
@@ -427,9 +427,7 @@ const waitUntilPresent = (project: string, region: string, managerName: string) 
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag("GCP.Compute.RegionInstanceGroupManagerNotResolved", () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag("GCP.Compute.RegionInstanceGroupManagerNotResolved", () => Effect.undefined),
   );
 
 const waitUntilGone = (project: string, region: string, managerName: string) =>
@@ -454,7 +452,7 @@ const waitUntilGone = (project: string, region: string, managerName: string) =>
 const getInstanceGroup = (project: string, region: string, instanceGroup: string) =>
   compute
     .getRegionInstanceGroups({ project, region, instanceGroup })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const syncNamedPorts = (
   project: string,
@@ -637,7 +635,7 @@ export const RegionInstanceGroupManagerProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
@@ -750,7 +748,7 @@ export const RegionInstanceGroupManagerProvider = () =>
           instanceGroupManager: output.managerName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

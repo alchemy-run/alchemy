@@ -155,19 +155,15 @@ export const CelldWorkerProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output, session, bindings }) {
       if (!news.bucket || !news.fleetUrl || !news.fleetSecret || !news.fleetId) {
-        return yield* Effect.fail(
-          new WorkerNotConnected({
-            message: `Celld.Worker '${id}' requires Celld.Fleet.layer(Cells) on its implementation layer.`,
-          }),
-        );
+        return yield* new WorkerNotConnected({
+          message: `Celld.Worker '${id}' requires Celld.Fleet.layer(Cells) on its implementation layer.`,
+        });
       }
       if (!isSupportedCelldVersion(news.celldVersion ?? DEFAULT_CELLD_VERSION)) {
-        return yield* Effect.fail(
-          new DeploymentError({
-            reason: "unsupported",
-            message: `Celld.Worker deploys to Celld ${CELLD_RUNTIME_SERIES}.x fleets; got ${news.celldVersion}.`,
-          }),
-        );
+        return yield* new DeploymentError({
+          reason: "unsupported",
+          message: `Celld.Worker deploys to Celld ${CELLD_RUNTIME_SERIES}.x fleets; got ${news.celldVersion}.`,
+        });
       }
       const collected = collectBindings(bindings);
       yield* validateStorageBindings(news, [
@@ -215,20 +211,17 @@ export const CelldWorkerProvider = () =>
         hostState: news.hostState,
       });
       const platform = containerHost.platform;
+      const fs = yield* FileSystem.FileSystem;
       const containerImages =
         platform === undefined
           ? { containers: [], images: [], fenceImage: undefined }
-          : yield* Effect.gen(function* () {
-              const fs = yield* FileSystem.FileSystem;
-              const archiveDirectory = yield* fs.makeTempDirectoryScoped({
+          : yield* prepareContainerImages({
+              declarations: containerHost.declarations,
+              platform,
+              archiveDirectory: yield* fs.makeTempDirectoryScoped({
                 prefix: "alchemy-celld-images-",
-              });
-              return yield* prepareContainerImages({
-                declarations: containerHost.declarations,
-                platform,
-                archiveDirectory,
-              }).pipe(Effect.provide(DockerLive));
-            });
+              }),
+            }).pipe(Effect.provide(DockerLive));
       yield* assertContainerUpdateSafe(
         output?.preparedContainers ?? [],
         containerImages.containers,

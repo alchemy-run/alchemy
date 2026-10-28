@@ -148,14 +148,14 @@ export const fromDurableObjectState = (state: cf.DurableObjectState): DurableObj
     get props() {
       return capabilities.props;
     },
-    waitUntil: native.waitUntil,
-    blockConcurrencyWhile: native.blockConcurrencyWhile,
+    waitUntil: native.waitUntil.bind(native),
+    blockConcurrencyWhile: native.blockConcurrencyWhile.bind(native),
     acceptWebSocket: (socket, tags) => native.acceptWebSocket(fromNativeWebSocket(socket.ws), tags),
-    getWebSockets: native.getWebSockets,
-    getTags: native.getTags,
-    setWebSocketAutoResponse: native.setWebSocketAutoResponse,
-    getWebSocketAutoResponse: native.getWebSocketAutoResponse,
-    getWebSocketAutoResponseTimestamp: native.getWebSocketAutoResponseTimestamp,
+    getWebSockets: native.getWebSockets.bind(native),
+    getTags: native.getTags.bind(native),
+    setWebSocketAutoResponse: native.setWebSocketAutoResponse.bind(native),
+    getWebSocketAutoResponse: native.getWebSocketAutoResponse.bind(native),
+    getWebSocketAutoResponseTimestamp: native.getWebSocketAutoResponseTimestamp.bind(native),
     abort: (reason) => Effect.sync(() => state.abort(reason)),
   };
 };
@@ -179,9 +179,7 @@ export const fromNativeFacets = (get: () => NativeDurableObjectFacets): DurableO
           fromNativeWorkerEntrypoint<Shape>(
             get().get(name, () => {
               const options = getStartupOptions();
-              return Effect.isEffect(options)
-                ? Effect.runPromise(options.pipe(Effect.provide(context)))
-                : options;
+              return Effect.isEffect(options) ? Effect.runPromiseWith(context)(options) : options;
             }),
           ),
         catch: facetFailure("get"),

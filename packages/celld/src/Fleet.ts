@@ -192,7 +192,7 @@ const makeFleetContext = (id: string): BaseRuntimeContext => ({
   Type: FleetTypeId,
   id,
   env: {},
-  get: () => Effect.succeed(undefined),
+  get: () => Effect.undefined,
   set: (key) => Effect.succeed(key),
 });
 
@@ -203,7 +203,7 @@ const makeFleetContext = (id: string): BaseRuntimeContext => ({
 export type FleetClass = {
   /** Select a fleet for declarations in this Layer's scope. */
   layer<E, R>(ref: Effect.Effect<Fleet, E, R>): Layer.Layer<CurrentFleet, E, R>;
-  <Self>(): {
+  <_Self>(): {
     <const Id extends string>(
       id: Id,
       props?: InputProps<FleetProps>,
@@ -366,11 +366,9 @@ export const FleetProvider = () =>
     reconcile: ({ id, news }) =>
       Effect.gen(function* () {
         if (news.bucket === undefined || news.fleetUrl === undefined) {
-          return yield* Effect.fail(
-            new FleetNotComposed({
-              message: `Celld.Fleet '${id}' has no composed host state — is a Celld.Host Layer in the stack's providers?`,
-            }),
-          );
+          return yield* new FleetNotComposed({
+            message: `Celld.Fleet '${id}' has no composed host state — is a Celld.Host Layer in the stack's providers?`,
+          });
         }
         return {
           fleetUrl: news.fleetUrl,

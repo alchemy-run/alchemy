@@ -7,6 +7,7 @@
  * @internal
  */
 import * as Cause from "effect/Cause";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as Exit from "effect/Exit";
@@ -14,6 +15,11 @@ import * as FiberSet from "effect/FiberSet";
 import * as Result from "effect/Result";
 import * as Scope from "effect/Scope";
 import { encodeRpcError } from "../Rpc.ts";
+
+/** The raw value a native `step.do` rejected with, decoded back into a Cause below. */
+class NativeStepRejection extends Data.TaggedError("NativeStepRejection")<{
+  readonly error: unknown;
+}> {}
 
 /** The workflow run a step failure belongs to. */
 export interface WorkflowIdentity {
@@ -391,9 +397,9 @@ export const runWorkflowTask = <A, E, C>(options: {
       };
       return yield* Effect.tryPromise({
         try: () => options.native(callback, run),
-        catch: (error) => error,
+        catch: (error) => new NativeStepRejection({ error }),
       }).pipe(
-        Effect.catch((error) =>
+        Effect.catch(({ error }) =>
           failure &&
           error instanceof Error &&
           error.name === "Error" &&

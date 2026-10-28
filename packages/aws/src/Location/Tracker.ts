@@ -5,10 +5,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toTagRecord } from "./internal.ts";
+
+export class TrackerUnexpectedResponse extends Data.TaggedError("TrackerUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type PositionFiltering = "TimeBased" | "DistanceBased" | "AccuracyBased";
 
@@ -101,7 +107,7 @@ const createTrackerName = (id: string, props: { trackerName?: string | undefined
 const readTracker = Effect.fn(function* (trackerName: string) {
   const found = yield* location
     .describeTracker({ TrackerName: trackerName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!found) return undefined;
   return {
     trackerName: found.TrackerName,
@@ -169,7 +175,9 @@ export const TrackerProvider = () =>
               .pipe(Effect.catchTag("ConflictException", () => Effect.void));
             state = yield* readTracker(trackerName);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created tracker ${trackerName}`));
+              return yield* new TrackerUnexpectedResponse({
+                message: `failed to read created tracker ${trackerName}`,
+              });
             }
           }
 
@@ -206,9 +214,9 @@ export const TrackerProvider = () =>
 
           const final = yield* readTracker(trackerName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled tracker ${trackerName}`),
-            );
+            return yield* new TrackerUnexpectedResponse({
+              message: `failed to read reconciled tracker ${trackerName}`,
+            });
           }
           return final;
         }),

@@ -109,7 +109,7 @@ const getObject = (Bucket: string, Key: string) =>
   s3.getObject({ Bucket, Key }).pipe(
     Effect.map((object) => object.Body),
     Effect.catchTag("NoSuchKey", () => Effect.succeed(null)),
-    Effect.flatMap((body) => (body === null ? Effect.succeed(undefined) : readBody(body))),
+    Effect.flatMap((body) => (body === null ? Effect.undefined : readBody(body))),
   );
 
 /**
@@ -176,14 +176,12 @@ export const makeQueueTransport = Effect.gen(function* () {
       },
     });
     if ((started.tasks ?? []).length === 0)
-      return yield* Effect.fail(
-        new FleetManagementError({
-          reason: "configuration",
-          message: `Could not start the Celld management task: ${
-            started.failures?.map((failure) => failure.reason).join(", ") || "no task started"
-          }.`,
-        }),
-      );
+      return yield* new FleetManagementError({
+        reason: "configuration",
+        message: `Could not start the Celld management task: ${
+          started.failures?.map((failure) => failure.reason).join(", ") || "no task started"
+        }.`,
+      });
   });
 
   /** Poll for the reply; cancel the request if no runner claims it in time. */
@@ -196,17 +194,15 @@ export const makeQueueTransport = Effect.gen(function* () {
       const now = yield* Clock.currentTimeMillis;
       if (claimedAt === undefined && now - startedAt > CLAIM_DEADLINE_MS) {
         if (yield* claim(Bucket, id, owner))
-          return yield* Effect.fail(
-            new FleetManagementError({
-              reason: "transport",
-              message:
-                "No Celld management runner picked up the request in time; nothing was executed.",
-            }),
-          );
+          return yield* new FleetManagementError({
+            reason: "transport",
+            message:
+              "No Celld management runner picked up the request in time; nothing was executed.",
+          });
         claimedAt = now;
       }
       if (claimedAt !== undefined && now - claimedAt > EXECUTION_DEADLINE_MS)
-        return yield* Effect.fail(ambiguous("Celld management request timed out"));
+        return yield* ambiguous("Celld management request timed out");
       yield* Effect.sleep(POLL_INTERVAL);
     }
   });
@@ -216,12 +212,10 @@ export const makeQueueTransport = Effect.gen(function* () {
       const Bucket = bucketOf(connection);
       const state = connection.hostState?.managementQueue as ManagementQueueState | undefined;
       if (Bucket === undefined || typeof state?.queueUrl !== "string")
-        return yield* Effect.fail(
-          new FleetManagementError({
-            reason: "configuration",
-            message: "Fleet hostState must include a managementQueue and backing bucket.",
-          }),
-        );
+        return yield* new FleetManagementError({
+          reason: "configuration",
+          message: "Fleet hostState must include a managementQueue and backing bucket.",
+        });
       const [id, owner] = yield* Effect.sync(() => [crypto.randomUUID(), crypto.randomUUID()]);
       yield* s3.putObject({
         Bucket,
@@ -305,15 +299,13 @@ const drainManagementQueue = Effect.gen(function* () {
           }
         : yield* decodeJson(request).pipe(
             Effect.flatMap(executeManagementRequest),
-            Effect.catch(() =>
-              Effect.succeed({
-                ok: false as const,
-                error: {
-                  reason: "configuration" as const,
-                  message: "Invalid queued Celld management request.",
-                },
-              }),
-            ),
+            Effect.orElseSucceed(() => ({
+              ok: false as const,
+              error: {
+                reason: "configuration" as const,
+                message: "Invalid queued Celld management request.",
+              },
+            })),
           );
     yield* s3.putObject({
       Bucket,

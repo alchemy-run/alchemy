@@ -236,8 +236,8 @@ export const AccountApiTokenProvider = () =>
             .pipe(
               Effect.map((token) => token),
               Effect.catchTags({
-                InvalidRoute: () => Effect.succeed(undefined),
-                TokenNotFound: () => Effect.succeed(undefined),
+                InvalidRoute: () => Effect.undefined,
+                TokenNotFound: () => Effect.undefined,
               }),
             )
         : undefined;
@@ -329,8 +329,8 @@ export const AccountApiTokenProvider = () =>
         .pipe(
           Effect.map((token) => buildAttributes(token, output.value, output.accountId)),
           Effect.catchTags({
-            InvalidRoute: () => Effect.succeed(undefined),
-            TokenNotFound: () => Effect.succeed(undefined),
+            InvalidRoute: () => Effect.undefined,
+            TokenNotFound: () => Effect.undefined,
           }),
         );
     }),

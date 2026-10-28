@@ -351,23 +351,23 @@ export const composeEcsFleet = (
             tags: props.tags,
           })
         : undefined;
-      const discovery = capacity
+      const namespace = capacity
         ? undefined
-        : yield* Effect.gen(function* () {
-            const namespace = yield* CloudMap.PrivateDnsNamespace("Discovery", {
-              name: `${stack.stage}-${id}.celld.internal`.toLowerCase(),
-              vpc: vpcId,
-              tags: props.tags,
-            });
-            const service = yield* CloudMap.Service("FleetRecord", {
-              name: "fleet",
-              namespaceId: namespace.namespaceId,
-              dnsRecords: [{ type: "A", ttl: "10 seconds" }],
-              healthCheckCustomConfig: { failureThreshold: 1 },
-              tags: props.tags,
-            });
-            return { namespace, service };
+        : yield* CloudMap.PrivateDnsNamespace("Discovery", {
+            name: `${stack.stage}-${id}.celld.internal`.toLowerCase(),
+            vpc: vpcId,
+            tags: props.tags,
           });
+      const discovery = namespace && {
+        namespace,
+        service: yield* CloudMap.Service("FleetRecord", {
+          name: "fleet",
+          namespaceId: namespace.namespaceId,
+          dnsRecords: [{ type: "A", ttl: "10 seconds" }],
+          healthCheckCustomConfig: { failureThreshold: 1 },
+          tags: props.tags,
+        }),
+      };
       const fleetUrl =
         privateIngress?.fleetUrl ??
         Output.interpolate`http://${discovery!.service.serviceName}.${discovery!.namespace.namespaceName}:${String(CELLD_PUBLIC_PORT)}`;

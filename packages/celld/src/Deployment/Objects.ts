@@ -114,7 +114,7 @@ export const conditionalPut = (
       return Effect.gen(function* () {
         const observed = yield* store.get(key);
         if (observed && (yield* equalBytes(observed.body, body))) return { etag: observed.etag };
-        return yield* Effect.fail(error);
+        return yield* error;
       });
     }),
   );

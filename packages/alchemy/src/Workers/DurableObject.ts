@@ -79,7 +79,7 @@ export const resolveDurableObjectNamespace = <Namespace extends DurableObjectNam
   ]).pipe(
     Effect.flatMap(([env, phase]): Effect.Effect<Namespace | undefined> => {
       if (env === undefined || phase === "plan") {
-        return Effect.succeed(undefined);
+        return Effect.undefined;
       }
       const ns: unknown = env[namespace];
       if (!ns) {
@@ -291,13 +291,11 @@ export const makeDurableObjectDeclaration = (
         });
 
       if (Effect.isEffect(propsOrImpl)) {
-        return effectClass(
-          make(
-            classForm
-              ? (propsOrImpl as DurableObjectExport["constructor"])
-              : propsOrImpl.pipe(Effect.map(Effect.succeed)),
-          ),
-        );
+        const impl = classForm
+          ? (propsOrImpl as DurableObjectExport["constructor"])
+          : propsOrImpl.pipe(Effect.map(Effect.succeed));
+        const made = make(impl);
+        return effectClass(made);
       }
       return class extends effectClass(tag as Effect.Effect<any, never, any>) {
         static make = (constructor: DurableObjectExport["constructor"]) =>

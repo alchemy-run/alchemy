@@ -120,7 +120,7 @@ export const AgentsFlowsPage = Resource<AgentsFlowsPage>("GCP.Dialogflow.AgentsF
 export class AgentsFlowsPageNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsFlowsPageNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (page: dialogflow.GoogleCloudDialogflowCxV3Page, project: string) => {
@@ -139,10 +139,10 @@ const toAttrs = (page: dialogflow.GoogleCloudDialogflowCxV3Page, project: string
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsFlowsPages({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, flow: string, hinted?: string) =>
   Effect.gen(function* () {
@@ -247,7 +247,7 @@ export const AgentsFlowsPageProvider = () =>
 
       if (current === undefined) {
         return yield* new AgentsFlowsPageNotResolved({
-          name: output?.name ?? `${flow}/pages/${news.pageId ?? "unknown"}`,
+          resourceName: output?.name ?? `${flow}/pages/${news.pageId ?? "unknown"}`,
         });
       }
 

@@ -49,13 +49,11 @@ export const catalogOwner = (fqn: string, instanceId: string) =>
 export const fleetConnection = (props: FleetResourceProps) =>
   Effect.gen(function* () {
     if (!props.fleetId || !props.fleetUrl || !props.bucket?.uri) {
-      return yield* Effect.fail(
-        new ResourceCatalogError({
-          reason: "configuration",
-          message:
-            "Persistent Celld resources require captured Fleet connection material. Provide Celld.Fleet.layer(Cells).",
-        }),
-      );
+      return yield* new ResourceCatalogError({
+        reason: "configuration",
+        message:
+          "Persistent Celld resources require captured Fleet connection material. Provide Celld.Fleet.layer(Cells).",
+      });
     }
     return {
       fleetId: props.fleetId,
@@ -98,12 +96,10 @@ const observe = (store: Store, kind: CatalogKind, physicalId: string) =>
     if (!object) return undefined;
     const record = yield* decodeRecord(object.body);
     if (record.kind !== kind || record.physicalId !== physicalId) {
-      return yield* Effect.fail(
-        new ResourceCatalogError({
-          reason: "invalid-record",
-          message: "Catalog key and resource identity disagree; refusing to overwrite it.",
-        }),
-      );
+      return yield* new ResourceCatalogError({
+        reason: "invalid-record",
+        message: "Catalog key and resource identity disagree; refusing to overwrite it.",
+      });
     }
     return { record, etag: object.etag };
   });
@@ -139,12 +135,10 @@ const refuseNativeData = (store: Store, desired: CatalogRecord) =>
     const prefixes = yield* nativeResourcePrefixes(desired.kind, desired.physicalId);
     for (const prefix of prefixes) {
       if ((yield* store.list(prefix)).length !== 0) {
-        return yield* Effect.fail(
-          new ResourceCatalogError({
-            reason: "unmanaged-data",
-            message: `Celld ${desired.kind} '${desired.physicalId}' has native state without an Alchemy claim. Automatic adoption is unsafe and is not supported.`,
-          }),
-        );
+        return yield* new ResourceCatalogError({
+          reason: "unmanaged-data",
+          message: `Celld ${desired.kind} '${desired.physicalId}' has native state without an Alchemy claim. Automatic adoption is unsafe and is not supported.`,
+        });
       }
     }
   });

@@ -118,8 +118,7 @@ export const processEvent = <T, Build extends WorkerBuild<any, any>>(
  */
 export const toRpcEffect = (result: unknown): Effect.Effect<unknown, unknown, any> =>
   Effect.isEffect(result)
-    ? // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped RPC dispatcher result; failures are encoded by handleRpcExit
-      (result as Effect.Effect<unknown, unknown, any>)
+    ? (result as Effect.Effect<unknown, unknown, any>)
     : Effect.succeed(result);
 
 /**

@@ -63,12 +63,10 @@ export const assertContainerUpdateSafe = (
     for (const old of previous) {
       const desired = next.find((entry) => entry.class_name === old.class_name);
       if (!desired || !deepEqual(old, desired)) {
-        return yield* Effect.fail(
-          new ContainerUpdateRequiresQuiescence({
-            className: old.class_name,
-            message: `Changing or removing Celld container class '${old.class_name}' requires management quiescence and eviction of native cached containers; dropping the isolate is insufficient`,
-          }),
-        );
+        return yield* new ContainerUpdateRequiresQuiescence({
+          className: old.class_name,
+          message: `Changing or removing Celld container class '${old.class_name}' requires management quiescence and eviction of native cached containers; dropping the isolate is insufficient`,
+        });
       }
     }
   });
@@ -86,22 +84,18 @@ export const validateContainerDeclarations = (declarations: readonly ContainerDe
         (declaration.ociRuntime !== undefined && !declaration.ociRuntime.trim()) ||
         ("image" in declaration ? !declaration.image.trim() : !declaration.main.trim())
       ) {
-        return yield* Effect.fail(
-          new ContainerConfigurationError({
-            message: "Invalid Celld container declaration",
-          }),
-        );
+        return yield* new ContainerConfigurationError({
+          message: "Invalid Celld container declaration",
+        });
       }
       const previous = classes.get(declaration.className);
       const { name: _name, ...props } = declaration;
       if (previous) {
         const { name: _previousName, ...oldProps } = previous;
         if (!deepEqual(props, oldProps)) {
-          return yield* Effect.fail(
-            new ContainerConfigurationError({
-              message: `Durable Object '${declaration.className}' cannot own two different container declarations`,
-            }),
-          );
+          return yield* new ContainerConfigurationError({
+            message: `Durable Object '${declaration.className}' cannot own two different container declarations`,
+          });
         }
       } else {
         classes.set(declaration.className, declaration);
@@ -133,44 +127,36 @@ export const validateContainerHost = (options: {
       options.hostState?.capabilities?.containers !== true ||
       configuration?.capacity === "fargate"
     ) {
-      return yield* Effect.fail(
-        new ContainerConfigurationError({
-          message:
-            "Celld containers require a container-capable host; Fargate cannot run native containers.",
-        }),
-      );
+      return yield* new ContainerConfigurationError({
+        message:
+          "Celld containers require a container-capable host; Fargate cannot run native containers.",
+      });
     }
     for (const declaration of declarations) {
       if (
         !options.doClasses.includes(declaration.className) ||
         !options.sqliteClasses.includes(declaration.className)
       ) {
-        return yield* Effect.fail(
-          new ContainerConfigurationError({
-            message: `Container '${declaration.name}' must name a same-script SQLite Durable Object class: '${declaration.className}'.`,
-          }),
-        );
+        return yield* new ContainerConfigurationError({
+          message: `Container '${declaration.name}' must name a same-script SQLite Durable Object class: '${declaration.className}'.`,
+        });
       }
       if (
         declaration.ociRuntime !== undefined &&
         declaration.ociRuntime !== "runc" &&
         declaration.ociRuntime !== configuration?.containerRuntime
       ) {
-        return yield* Effect.fail(
-          new ContainerConfigurationError({
-            message: `Container OCI runtime '${declaration.ociRuntime}' is not configured on this host.`,
-          }),
-        );
+        return yield* new ContainerConfigurationError({
+          message: `Container OCI runtime '${declaration.ociRuntime}' is not configured on this host.`,
+        });
       }
     }
     const architecture = configuration?.cpuArchitecture ?? configuration?.architecture;
     if (architecture !== "ARM64" && architecture !== "X86_64") {
-      return yield* Effect.fail(
-        new ContainerConfigurationError({
-          message:
-            "Container publication requires the host configuration's ARM64 or X86_64 CPU architecture.",
-        }),
-      );
+      return yield* new ContainerConfigurationError({
+        message:
+          "Container publication requires the host configuration's ARM64 or X86_64 CPU architecture.",
+      });
     }
     const platform: "linux/arm64" | "linux/amd64" =
       architecture === "ARM64" ? "linux/arm64" : "linux/amd64";

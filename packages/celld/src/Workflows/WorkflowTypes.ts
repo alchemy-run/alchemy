@@ -9,6 +9,7 @@ export class WorkflowError extends Data.TaggedError("Celld.Workflows.WorkflowErr
 }> {}
 
 /** Fail a durable task without further native retries. Celld recognizes this name. */
+// oxlint-disable-next-line effecttsgo/extends-native-error -- Celld matches this native Error by name across the step boundary
 export class NonRetryableError extends Error {
   constructor(message: string) {
     super(message);

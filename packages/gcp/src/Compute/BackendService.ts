@@ -245,7 +245,7 @@ export const BackendService = Resource<BackendService>("GCP.Compute.BackendServi
 export class BackendServiceNotResolved extends Data.TaggedError(
   "GCP.Compute.BackendServiceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const rfc1035 = (name: string): string => {
@@ -394,7 +394,7 @@ const sameLogConfig = (
 const getByName = (project: string, name: string) =>
   compute
     .getBackendServices({ project, backendService: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, name: string) =>
   getByName(project, name).pipe(
@@ -520,7 +520,7 @@ export const BackendServiceProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current =
           inserted !== undefined
@@ -529,7 +529,7 @@ export const BackendServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BackendServiceNotResolved({ name });
+        return yield* new BackendServiceNotResolved({ resourceName: name });
       }
 
       const timeoutChanged = (current.timeoutSec ?? DEFAULT_TIMEOUT_SEC) !== timeoutSec;
@@ -613,7 +613,7 @@ export const BackendServiceProvider = () =>
           .pipe(Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)));
         current = yield* awaitResource(env.project, name);
         if (current === undefined) {
-          return yield* new BackendServiceNotResolved({ name });
+          return yield* new BackendServiceNotResolved({ resourceName: name });
         }
       }
 

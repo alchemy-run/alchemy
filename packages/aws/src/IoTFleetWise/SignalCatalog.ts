@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -17,6 +18,13 @@ import {
   syncFleetWiseTags,
   toFleetWiseTagList,
 } from "./internal.ts";
+
+export class SignalCatalogUnexpectedResponse extends Data.TaggedError(
+  "SignalCatalogUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface SignalCatalogProps {
   /**
@@ -124,7 +132,7 @@ export const SignalCatalogProvider = () =>
       const readCatalog = Effect.fn(function* (name: string) {
         return yield* iotfleetwise.getSignalCatalog({ name }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -183,7 +191,11 @@ export const SignalCatalogProvider = () =>
             observed = yield* readCatalog(name).pipe(
               Effect.flatMap((catalog) =>
                 catalog === undefined
-                  ? Effect.fail(new Error(`Signal catalog '${name}' not found`))
+                  ? Effect.fail(
+                      new SignalCatalogUnexpectedResponse({
+                        message: `Signal catalog '${name}' not found`,
+                      }),
+                    )
                   : Effect.succeed(catalog),
               ),
               retryObservation,

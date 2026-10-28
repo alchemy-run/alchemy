@@ -146,9 +146,7 @@ export const fromNativeWorkerLoader = (get: () => NativeWorkerLoader): WorkerLoa
           fromNativeLoadedWorker(
             get().get(name, () => {
               const code = getCode();
-              return Effect.isEffect(code)
-                ? Effect.runPromise(code.pipe(Effect.provide(context)))
-                : code;
+              return Effect.isEffect(code) ? Effect.runPromiseWith(context)(code) : code;
             }),
           ),
         catch: failure("get"),

@@ -56,7 +56,7 @@ export const makeS3Store = (
 
     const get: Store["get"] = Effect.fn(function* (key) {
       const result = yield* S3.getObject({ Bucket: name, Key: key }).pipe(
-        Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+        Effect.catchTag("NoSuchKey", () => Effect.undefined),
         Effect.mapError((error) => failure(`Cannot read Celld object '${key}'.`, error)),
         Effect.provide(services),
       );
@@ -124,7 +124,7 @@ export const makeS3Store = (
         Key: key,
         IfMatch: condition?.ifMatch,
       }).pipe(
-        Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+        Effect.catchTag("NoSuchKey", () => Effect.undefined),
         Effect.mapError((error) => failure(`Cannot delete Celld object '${key}'.`, error)),
         Effect.provide(services),
       );

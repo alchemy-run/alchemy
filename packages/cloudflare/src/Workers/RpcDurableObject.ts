@@ -14,8 +14,6 @@ import * as Layer from "effect/Layer";
 import type { Rpc, RpcGroup } from "effect/rpc";
 import * as RpcClient from "effect/rpc/RpcClient";
 import * as RpcClientError from "effect/rpc/RpcClientError";
-import * as RpcSerialization from "effect/rpc/RpcSerialization";
-import * as RpcServer from "effect/rpc/RpcServer";
 import {
   DurableObject,
   type DurableObjectGetDurableObjectOptions,

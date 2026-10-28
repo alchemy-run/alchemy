@@ -94,7 +94,7 @@ export const Namespace = Resource<Namespace>("GCP.ServiceDirectory.Namespace");
 export class NamespaceNotResolved extends Data.TaggedError(
   "GCP.ServiceDirectory.NamespaceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -160,7 +160,7 @@ const toAttrs = (namespace: servicedirectory.Namespace, project: string, region:
 const getByName = (name: string) =>
   servicedirectory
     .getProjectsLocationsNamespaces({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listNamespacesAt = (parent: string, project: string, region: string) =>
   Effect.gen(function* () {
@@ -280,7 +280,7 @@ export const NamespaceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NamespaceNotResolved({ name });
+        return yield* new NamespaceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

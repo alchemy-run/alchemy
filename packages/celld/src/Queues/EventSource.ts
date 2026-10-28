@@ -112,7 +112,7 @@ export const processQueueBatch = <Body, R>(batch: MessageBatch<Body>, process: P
         ),
       ),
     ),
-    Effect.catchCause(() => Effect.void),
+    Effect.ignoreCause,
   );
 
 /**

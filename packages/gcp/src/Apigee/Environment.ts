@@ -169,7 +169,7 @@ export type Environment = Resource<
 export const Environment = Resource<Environment>("GCP.Apigee.Environment");
 
 export class EnvironmentNotResolved extends Data.TaggedError("GCP.Apigee.EnvironmentNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, environmentId: string) =>
@@ -201,7 +201,7 @@ const toAttrs = (environment: apigee.GoogleCloudApigeeV1Environment, organizatio
 const getByName = (name: string) =>
   apigee
     .getOrganizationsEnvironments({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const EnvironmentProvider = () =>
   Provider.succeed(Environment, {
@@ -273,11 +273,7 @@ export const EnvironmentProvider = () =>
         for (const organization of orgs) {
           const org = yield* apigee
             .getOrganizations({ name: organization })
-            .pipe(
-              Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () =>
-                Effect.succeed(undefined),
-              ),
-            );
+            .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
           for (const environmentId of org?.environments ?? []) {
             const existing = yield* getByName(`${organization}/environments/${environmentId}`);
             if (existing !== undefined && hasOwnershipMarker(existing.description)) {
@@ -322,7 +318,7 @@ export const EnvironmentProvider = () =>
               nodeConfig: news.nodeConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           yield* waitForOperation(operation);
         }
@@ -330,7 +326,7 @@ export const EnvironmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentNotResolved({ name });
+        return yield* new EnvironmentNotResolved({ resourceName: name });
       }
 
       const observedProperties = propertiesToRecord(current.properties);
@@ -372,9 +368,7 @@ export const EnvironmentProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsEnvironments({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

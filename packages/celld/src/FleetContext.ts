@@ -100,7 +100,7 @@ export const withFleet = <R extends ResourceLike<string, FleetResourceProps>>(
       Provider: resource.Provider,
       Self: resource.Self,
       Aliases: resource.Aliases,
-      ref: resource.ref,
+      ref: resource.ref.bind(resource),
     },
     Effectable.Prototype({
       label: `FleetResource<${resource.Type}>`,

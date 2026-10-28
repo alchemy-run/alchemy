@@ -100,9 +100,7 @@ export const ApplicationProvider = () =>
       const getApplication = Effect.fn(function* (name: string) {
         const response = yield* codedeploy
           .getApplication({ applicationName: name })
-          .pipe(
-            Effect.catchTag("ApplicationDoesNotExistException", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("ApplicationDoesNotExistException", () => Effect.undefined));
         return response?.application;
       });
 
@@ -177,11 +175,7 @@ export const ApplicationProvider = () =>
                   Value,
                 })),
               })
-              .pipe(
-                Effect.catchTag("ApplicationAlreadyExistsException", () =>
-                  Effect.succeed(undefined),
-                ),
-              );
+              .pipe(Effect.catchTag("ApplicationAlreadyExistsException", () => Effect.undefined));
             application = yield* getApplication(name);
           }
 

@@ -53,16 +53,14 @@ export interface SecretsProps {
  * @product Actions
  */
 export const Secrets = ({ owner, repository, environment, secrets }: SecretsProps) =>
-  Effect.all(
-    Object.entries(secrets).map(([name, value]) =>
-      Secret(name, {
-        owner,
-        repository,
-        environment,
-        name,
-        value: liftValue(value),
-      }),
-    ),
+  Effect.forEach(Object.entries(secrets), ([name, value]) =>
+    Secret(name, {
+      owner,
+      repository,
+      environment,
+      name,
+      value: liftValue(value),
+    }),
   );
 
 // Accepts a plain string, an existing `Redacted<string>`, or a lazy `Input`
