@@ -321,6 +321,18 @@ describe.skipIf(!!process.env.FAST)(
         "restores a deleted table as the host",
         (_stack) =>
           Effect.gen(function* () {
+            // The grant lives in the table's IAM policy, which deleting the table drops.
+            const policy = yield* bigtable
+              .getIamPolicyProjectsInstancesTables({ resource: trashName, body: {} })
+              .pipe(
+                Effect.retry({
+                  while: (error) => error._tag === "TableInTransition",
+                  schedule: Schedule.spaced("5 seconds"),
+                  times: 12,
+                }),
+              );
+            expect(hostRoles(policy)).toEqual(["roles/bigtable.editor"]);
+
             // Refused ("still being created") until the new table settles.
             yield* bigtable.deleteProjectsInstancesTables({ name: trashName }).pipe(
               Effect.retry({
@@ -358,17 +370,6 @@ describe.skipIf(!!process.env.FAST)(
                 times: 36,
               }),
             );
-
-            const policy = yield* bigtable
-              .getIamPolicyProjectsInstancesTables({ resource: trashName, body: {} })
-              .pipe(
-                Effect.retry({
-                  while: (error) => error._tag === "TableInTransition",
-                  schedule: Schedule.spaced("5 seconds"),
-                  times: 12,
-                }),
-              );
-            expect(hostRoles(policy)).toEqual(["roles/bigtable.editor"]);
 
             // A restored table comes back deletion-protected, which would block
             // deleting the instance on destroy.
