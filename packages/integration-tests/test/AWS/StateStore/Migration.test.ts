@@ -118,7 +118,7 @@ const migrateCommand = (stage: string) => `alchemy state migrate --stack ${STACK
 const deniedRawAccess = (storage: Storage, stage: string) => {
   const Key = `${PREFIX}/${STACK}/${stage}/${b.fqn}.json`;
   const denied = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(Effect.flip, Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }));
+    effect.pipe(Effect.flip, Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }));
   return Effect.all([
     denied(s3.getObject({ Bucket: storage.legacyBucketName, Key })),
     denied(s3.putObject({ Bucket: storage.legacyBucketName, Key, Body: "{}" })),
@@ -266,7 +266,7 @@ test.provider(
                     .putObject({ Bucket, Key, Body: "{}" })
                     .pipe(
                       Effect.flip,
-                      Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }),
+                      Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
                     );
                   yield* s3.deleteObject({ Bucket, Key }).pipe(Effect.flip);
                   yield* s3.getObject({ Bucket, Key });

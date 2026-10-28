@@ -13,9 +13,11 @@ import * as Alchemy from "alchemy";
 import * as Alchemist from "alchemy/Alchemist";
 import { StateStoreError, type ResourceState, type StateService } from "alchemy/State";
 import * as Cause from "effect/Cause";
+import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Logger from "effect/Logger";
+import * as Redacted from "effect/Redacted";
 import * as References from "effect/References";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -493,8 +495,22 @@ const withCI =
 /** Run as a CI deploy would. */
 const inCI = withCI("true");
 
-/** Run as a deploy from a laptop would, where a missing store is created on first use. */
-const outsideCI = withCI(undefined);
+/**
+ * Build and use a store with `CI` set to `ci` in its config. The store
+ * reads `CI` through the config it is built with, not `process.env`.
+ */
+const withCIConfig =
+  (ci: boolean) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.gen(function* () {
+      const ambient = yield* ConfigProvider.ConfigProvider;
+      return yield* effect.pipe(
+        Effect.provideService(
+          ConfigProvider.ConfigProvider,
+          ConfigProvider.orElse(ConfigProvider.fromUnknown({ CI: String(ci) }), ambient),
+        ),
+      );
+    });
 
 const bucketExists = (bucketName: string) =>
   s3.headBucket({ Bucket: bucketName }).pipe(
@@ -614,7 +630,7 @@ test.provider(
 
       yield* removeBucket;
       yield* Effect.gen(function* () {
-        const inCi = yield* inCI(Effect.exit(write));
+        const inCi = yield* withCIConfig(true)(Effect.exit(write));
         expect(Exit.isFailure(inCi)).toBe(true);
         if (Exit.isFailure(inCi)) {
           expect(Cause.pretty(inCi.cause)).toContain(
@@ -625,7 +641,7 @@ test.provider(
         expect(yield* bucketExists(overflowBucketName)).toBe(false);
 
         // Outside CI the first write creates it, though this record doesn't overflow.
-        yield* outsideCI(write);
+        yield* withCIConfig(false)(write);
         expect(yield* bucketExists(overflowBucketName)).toBe(true);
         yield* Effect.scoped(
           Effect.flatMap(makeDynamoDBState(options), (state) =>
@@ -635,8 +651,7 @@ test.provider(
       }).pipe(Effect.ensuring(removeBucket));
       yield* stack.destroy();
     }),
-  // Exclusive: sets `CI` on the process.
-  { tags: [...tags, "provider:aws:s3"], timeout: 120_000, exclusive: true },
+  { tags: [...tags, "provider:aws:s3"], timeout: 120_000 },
 );
 
 test.provider(
@@ -660,7 +675,7 @@ test.provider(
 
       yield* teardown;
       yield* Effect.gen(function* () {
-        yield* outsideCI(
+        yield* withCIConfig(false)(
           Effect.scoped(
             Effect.flatMap(
               makeDynamoDBState({ name, kmsKeyId: keyArn, migrateFrom: false }),
@@ -675,7 +690,8 @@ test.provider(
         const encryption = yield* s3.getBucketEncryption({ Bucket: bucket });
         const rule = encryption.ServerSideEncryptionConfiguration?.Rules?.[0];
         expect(rule?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("aws:kms");
-        expect(rule?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID).toBe(keyArn);
+        const keyId = rule?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID;
+        expect(Redacted.isRedacted(keyId) ? Redacted.value(keyId) : keyId).toBe(keyArn);
 
         // Teardown lifts the protection to delete it.
         const torn = yield* teardown;
@@ -684,8 +700,7 @@ test.provider(
       }).pipe(Effect.ensuring(teardown.pipe(Effect.ignore)));
       yield* stack.destroy();
     }),
-  // Exclusive: sets `CI` on the process.
-  { tags: [...tags, "provider:aws:s3", "provider:aws:kms"], timeout: 240_000, exclusive: true },
+  { tags: [...tags, "provider:aws:s3", "provider:aws:kms"], timeout: 240_000 },
 );
 
 test.provider(
