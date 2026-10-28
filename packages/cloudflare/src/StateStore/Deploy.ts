@@ -328,6 +328,41 @@ export const stateStoreSecretsExist = Effect.fn(function* ({
   return new Set(Array.from(found, (secret) => secret.name)).size === names.size;
 });
 
+/**
+ * Whether a store that may hold state has lost its encryption key: its Worker
+ * exists, so it served state encrypted with a key, but the key is gone. A
+ * listing can lag a create, so the key must be missing from several reads.
+ */
+export const encryptionKeyLost = Effect.fn(function* ({
+  accountId,
+  scriptName,
+}: {
+  accountId: string;
+  scriptName: string;
+}) {
+  const hasWorker = yield* workers.getScriptSetting({ accountId, scriptName }).pipe(
+    Effect.as(true),
+    Effect.catchTag(["WorkerNotFound", "InvalidRoute", "WorkerHasNoVersions"], () =>
+      Effect.succeed(false),
+    ),
+  );
+  if (!hasWorker) return false;
+  const name = stateStoreSecretName(EncryptionKeySecretName, scriptName);
+  const listed = Effect.gen(function* () {
+    const store = yield* secretsStore.listStores.items({ accountId }).pipe(Stream.runHead);
+    if (Option.isNone(store)) return false;
+    return yield* secretsStore.listStoreSecrets.items({ accountId, storeId: store.value.id }).pipe(
+      Stream.filter((secret) => secret.name === name),
+      Stream.runHead,
+      Effect.map(Option.isSome),
+    );
+  });
+  const found = yield* listed.pipe(
+    Effect.repeat({ until: (found) => found, schedule: Schedule.spaced("2 seconds"), times: 3 }),
+  );
+  return !found;
+});
+
 /** The account's Secrets Store (Cloudflare allows one), created when missing. */
 const ensureSecretsStore = Effect.fn(function* (accountId: string) {
   const first = secretsStore.listStores

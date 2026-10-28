@@ -309,24 +309,38 @@ test.provider(
 );
 
 test.provider(
-  "a store missing its encryption key gets a new one and keeps its auth token",
+  "a store that lost its encryption key gets a new one only when approved",
   () =>
     Effect.gen(function* () {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const workerName = storeWorker("no-key");
       yield* teardownStateStore({ workerName });
 
-      yield* open({ workerName });
+      const state = yield* open({ workerName });
+      yield* state.set({ stack: "no-key", stage: "test", fqn: "a", value: record("a") });
       const { token } = yield* observeSecrets(accountId, workerName);
 
       yield* deleteSecret(accountId, workerName, EncryptionKeySecretName);
+      const uploaded = yield* scriptModifiedOn(accountId, workerName);
 
-      const healed = yield* bootstrap({ workerName });
+      // The store held state under the lost key: with nobody to confirm,
+      // nothing changes.
+      expectFailure(
+        yield* Effect.exit(bootstrap({ workerName })),
+        `Cloudflare State Store '${workerName}' has lost its encryption key`,
+      );
+      expect(yield* observeSecrets(accountId, workerName)).toEqual({ token, key: [] });
+      expect(yield* scriptModifiedOn(accountId, workerName)).toEqual(uploaded);
+
+      // `force` approves a new key; the token is kept.
+      const restarted = yield* bootstrap({ workerName, force: true });
       const secrets = yield* observeSecrets(accountId, workerName);
       expect(secrets.key).toHaveLength(1);
       expect(secrets.token).toEqual(token);
-      yield* healed.set({ stack: "no-key", stage: "test", fqn: "a", value: record("a") });
-      expect(yield* healed.get({ stack: "no-key", stage: "test", fqn: "a" })).toEqual(record("a"));
+      yield* restarted.set({ stack: "no-key", stage: "test", fqn: "b", value: record("b") });
+      expect(yield* restarted.get({ stack: "no-key", stage: "test", fqn: "b" })).toEqual(
+        record("b"),
+      );
 
       yield* teardownStateStore({ workerName });
     }),

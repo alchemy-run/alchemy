@@ -39,6 +39,7 @@ import {
 } from "./CredentialsFile.ts";
 import {
   deployStateStoreWorker,
+  encryptionKeyLost,
   findSecretSharingWorker,
   observeStateStoreDomain,
   stateStoreSecretsExist,
@@ -138,9 +139,14 @@ export const state = (options: CloudflareStateOptions = {}) =>
                   label: `Updating Cloudflare State Store '${scriptName}'`,
                   detail: `v${observed ?? "unknown"} → v${expected}`,
                 },
-                deployStateStore({ accountId, scriptName, domain, profileName, isCI }).pipe(
-                  Effect.flatMap(makeCloudflareStateStore),
-                ),
+                deployStateStore({
+                  accountId,
+                  scriptName,
+                  domain,
+                  profileName,
+                  isCI,
+                  force: false,
+                }).pipe(Effect.flatMap(makeCloudflareStateStore)),
               );
             }).pipe(withStateBootstrapEvents(scriptName));
             return yield* Provisioning.upgradeOutdated({ ...store, observed, expected }, upgrade);
@@ -285,7 +291,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
         {
           label: `${serving ? "Updating" : "Deploying"} Cloudflare State Store '${scriptName}'`,
         },
-        deployStateStore({ accountId, scriptName, domain, profileName, isCI }).pipe(
+        deployStateStore({ accountId, scriptName, domain, profileName, isCI, force }).pipe(
           Effect.flatMap(makeCloudflareStateStore),
         ),
       );
@@ -437,14 +443,29 @@ const deployStateStore = ({
   domain,
   profileName,
   isCI,
+  force,
 }: {
   accountId: string;
   scriptName: string;
   domain: string | undefined;
   profileName: string;
   isCI: boolean;
+  /** Approves replacing a lost encryption key without asking. */
+  force: boolean;
 }) =>
   Effect.gen(function* () {
+    if (
+      (yield* encryptionKeyLost({ accountId, scriptName })) &&
+      !(force || (yield* confirmNewEncryptionKey(scriptName, isCI)))
+    ) {
+      return yield* new StateStoreError({
+        message:
+          `Cloudflare State Store '${scriptName}' has lost its encryption key, so the state ` +
+          `it holds can no longer be decrypted. Nothing was changed. To start over with a new ` +
+          `key, which leaves that state unreadable, run 'alchemy state bootstrap' in a ` +
+          `terminal and confirm, or pass --force with --backend.`,
+      });
+    }
     const { url, authToken } = yield* deployStateStoreWorker({ accountId, scriptName, domain });
     // Cloudflare's worker upload is eventually consistent: the edge can keep
     // serving the previous version for several seconds. Wait until `/version`
@@ -466,6 +487,21 @@ const deployStateStore = ({
     }),
     recordStateStoreOp("deploy"),
   );
+
+/** Ask before giving a store that lost its encryption key a new one. Never in CI. */
+const confirmNewEncryptionKey = (scriptName: string, isCI: boolean) =>
+  Effect.gen(function* () {
+    const interaction = yield* Effect.serviceOption(Interaction.Interaction);
+    if (isCI || Option.isNone(interaction)) return false;
+    return yield* interaction.value.prompt
+      .confirm({
+        message:
+          `Cloudflare State Store '${scriptName}' has lost its encryption key, so its state ` +
+          `can't be decrypted. Create a new key and start with an empty store?`,
+        initialValue: false,
+      })
+      .pipe(Effect.orElseSucceed(() => false));
+  });
 
 /** The stack Alchemy versions before direct deploys deployed the store through. */
 const LEGACY_BOOTSTRAP_STACK = "CloudflareStateStore";
