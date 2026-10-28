@@ -1126,10 +1126,7 @@ export const ServiceProvider = () =>
               projectId,
               environmentId,
               name,
-              source: initialSource,
-              ...(sourceRepo !== undefined && props.branch !== undefined
-                ? { branch: props.branch }
-                : {}),
+              ...(sourceRepo === undefined ? { source: initialSource } : {}),
             }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
             current = created ?? (yield* findByName(projectId, name));
           }
@@ -1154,6 +1151,7 @@ export const ServiceProvider = () =>
                 source: initialSource,
               })
             : yield* waitForInstance(environmentId, current.id);
+          const attachRepoLast = sourceRepo !== undefined && instance?.source?.repo == null;
 
           const publicDomain = props.publicDomain !== false;
           let domain: ServiceDomainRecord | undefined;
@@ -1213,7 +1211,7 @@ export const ServiceProvider = () =>
           const instanceDelta = instanceSettingsDelta({
             instance,
             sourceImage,
-            sourceRepo,
+            sourceRepo: attachRepoLast ? undefined : sourceRepo,
             registryCredentials: undefined,
             props: {
               ...props,
@@ -1255,7 +1253,7 @@ export const ServiceProvider = () =>
             });
           let region = yield* placeRegion();
 
-          if (sourceRepo !== undefined) {
+          if (sourceRepo !== undefined && !attachRepoLast) {
             const branchChanged = yield* syncBranch({
               projectId,
               environmentId,
@@ -1278,12 +1276,14 @@ export const ServiceProvider = () =>
             }
           }
 
-          yield* syncAutoUpdates({
-            projectId,
-            environmentId,
-            serviceId: current.id,
-            enabled: props.autoUpdates,
-          });
+          if (!attachRepoLast) {
+            yield* syncAutoUpdates({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+              enabled: props.autoUpdates,
+            });
+          }
 
           const envChanged = yield* syncEnv({
             projectId,
@@ -1309,6 +1309,29 @@ export const ServiceProvider = () =>
             serviceId: current.id,
             mounts: bound.mounts,
           });
+
+          if (attachRepoLast && sourceRepo !== undefined) {
+            yield* serviceInstanceUpdate({
+              environmentId,
+              serviceId: current.id,
+              input: { source: { repo: sourceRepo } },
+            });
+            yield* syncBranch({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+              repo: sourceRepo,
+              branch: props.branch,
+            });
+            yield* syncAutoUpdates({
+              projectId,
+              environmentId,
+              serviceId: current.id,
+              enabled: props.autoUpdates,
+            });
+            needsDeploy = true;
+            instance = (yield* getInstance(environmentId, current.id)) ?? instance;
+          }
 
           const uploadSource = hostedMain !== undefined || localContext !== undefined;
           const latestOk = deployReady(instance?.latestDeployment?.status);
