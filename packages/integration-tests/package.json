@@ -8,6 +8,8 @@
     "test": "alchemy-test"
   },
   "devDependencies": {
+    "@1password/sdk": "catalog:",
+    "@alchemy.run/1password": "workspace:*",
     "@alchemy.run/acme": "workspace:*",
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/axiom": "workspace:*",
