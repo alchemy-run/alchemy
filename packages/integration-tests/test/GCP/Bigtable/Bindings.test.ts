@@ -175,7 +175,14 @@ describe.skipIf(!!process.env.FAST)(
             expect(children.missingSchemaBundle).not.toEqual("succeeded");
 
             // Last: delete the table out of band and bring it back.
-            yield* bigtable.deleteProjectsInstancesTables({ name: genTableName });
+            // Refused ("still being created") while the schema changes above apply.
+            yield* bigtable.deleteProjectsInstancesTables({ name: genTableName }).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "BadRequest",
+                schedule: Schedule.spaced("5 seconds"),
+                times: 24,
+              }),
+            );
             const undeleted = yield* expectProbe<{ name?: string }>(baseUrl, "undelete");
             expect(undeleted.name).toBeDefined();
             yield* bigtable.getProjectsInstancesTables({ name: genTableName }).pipe(
