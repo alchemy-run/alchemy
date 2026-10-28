@@ -7,6 +7,7 @@ import {
   Cache,
   D1,
   DispatchNamespace,
+  Flagship,
   Hyperdrive,
   Images,
   KvNamespace,
@@ -62,6 +63,7 @@ export const layerLocalBindings = () =>
     Cache.CacheLive,
     D1.D1Live,
     DispatchNamespace.DispatchNamespaceLive,
+    Flagship.FlagshipLive,
     Hyperdrive.HyperdriveLive,
     Images.ImagesLive,
     KvNamespace.KvNamespaceLive,
@@ -81,6 +83,7 @@ export type BindingServices =
   | Cache.Cache
   | D1.D1
   | DispatchNamespace.DispatchNamespace
+  | Flagship.Flagship
   | Hyperdrive.Hyperdrive
   | Images.Images
   | KvNamespace.KvNamespace
