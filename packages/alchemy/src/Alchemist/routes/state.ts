@@ -166,21 +166,26 @@ export const teardown = Effect.fn("Alchemist.state.teardown")(function* (source:
   return yield* run({ name: source.name }).pipe(Effect.provide(context), isolated);
 });
 
-/** Move stages into a state store from the one it replaces, or back. */
+/**
+ * Move stages into a state store from the one it replaces, or back. The
+ * configured source migrates exactly the store the project's entrypoint
+ * configures, options included.
+ */
 export const migrate = Effect.fn("Alchemist.state.migrate")(function* (
-  source: ProviderSource & {
-    readonly stack?: string;
-    readonly stage?: string;
-    readonly rollback?: boolean;
-  },
+  source: StateSource,
+  request: State.StateMigrationRequest = {},
 ) {
-  const { run, context } = yield* lifecycleOperation(source, "migrate");
-  return yield* run({
-    name: source.name,
-    stack: source.stack,
-    stage: source.stage,
-    rollback: source.rollback,
-  }).pipe(Effect.provide(context), isolated);
+  return yield* Effect.scoped(
+    Effect.gen(function* () {
+      const resolved = yield* store(source);
+      if (resolved.migrate === undefined) {
+        return yield* new State.StateStoreError({
+          message: `The ${source._tag === "Provider" ? `'${source.backend}'` : "configured"} state store does not replace another store, so it has nothing to migrate`,
+        });
+      }
+      return { stages: yield* resolved.migrate(request) };
+    }),
+  );
 });
 
 /** Past log entries from a state store, oldest first. */

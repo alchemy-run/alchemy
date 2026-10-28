@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 import * as AWS from "@alchemy.run/aws";
 import { makeDynamoDBState, makeS3State } from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
+import { createOverflowBucketName } from "@alchemy.run/aws/StateStore/DynamoDBState";
+import { openLegacyBucket } from "@alchemy.run/aws/StateStore/LegacyLayout";
 import { migrateToDynamoDB, rollbackToS3 } from "@alchemy.run/aws/StateStore/Migration";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -14,6 +16,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 
 const { test, deploy, destroy } = Test.make({ providers: AWS.providers() });
 
@@ -91,6 +94,36 @@ const seedS3 = (storage: Storage, stage: string) =>
     }),
   );
 
+/** Lift the bucket policy a migration writes, so the stack can empty and delete the bucket. */
+const release = (storage: Storage) =>
+  openLegacyBucket(storage.legacyBucketName).pipe(Effect.ignore);
+
+const migrate = (storage: Storage, options?: Parameters<typeof migrateToDynamoDB>[1]) =>
+  Effect.scoped(
+    Effect.flatMap(stores(storage).dynamodb, (state) => migrateToDynamoDB(state, options)),
+  );
+
+const rollback = (storage: Storage, options?: Parameters<typeof rollbackToS3>[1]) =>
+  Effect.scoped(Effect.flatMap(stores(storage).dynamodb, (state) => rollbackToS3(state, options)));
+
+const migrateCommand = (stage: string) => `alchemy state migrate --stack ${STACK} --stage ${stage}`;
+
+/**
+ * Raw object access to a stage, as a version of alchemy from before the
+ * S3 store took a lease would do it. Bucket policies take a few seconds to
+ * apply, so this waits for the deny to take effect.
+ */
+const deniedRawAccess = (storage: Storage, stage: string) => {
+  const Key = `${PREFIX}/${STACK}/${stage}/${b.fqn}.json`;
+  const denied = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    effect.pipe(Effect.flip, Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }));
+  return Effect.all([
+    denied(s3.getObject({ Bucket: storage.legacyBucketName, Key })),
+    denied(s3.putObject({ Bucket: storage.legacyBucketName, Key, Body: "{}" })),
+    denied(s3.deleteObject({ Bucket: storage.legacyBucketName, Key })),
+  ]);
+};
+
 const legacyKeys = (storage: Storage, stage: string) =>
   s3
     .listObjectsV2({ Bucket: storage.legacyBucketName, Prefix: `${PREFIX}/${STACK}/${stage}/` })
@@ -103,52 +136,53 @@ test.provider(
       yield* stack.destroy();
       const storage = yield* stack.deploy(Storage);
       const stage = "refuse-then-migrate";
-      yield* seedS3(storage, stage);
+      yield* Effect.gen(function* () {
+        yield* seedS3(storage, stage);
 
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          const state = yield* stores(storage).dynamodb;
-          const refused = yield* state.get({ stack: STACK, stage, fqn: a.fqn }).pipe(Effect.flip);
-          expect(refused).toBeInstanceOf(StateStoreError);
-          expect(refused.requires?.command).toBe("alchemy state migrate --backend aws");
-          // Reads that take no lease still see the S3 copy.
-          expect(yield* state.getOutput({ stack: STACK, stage })).toEqual(output);
-          expect(yield* state.listStages(STACK)).toContain(stage);
-        }),
-      );
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const state = yield* stores(storage).dynamodb;
+            const refused = yield* state.get({ stack: STACK, stage, fqn: a.fqn }).pipe(Effect.flip);
+            expect(refused).toBeInstanceOf(StateStoreError);
+            expect(refused.requires?.command).toBe(migrateCommand(stage));
+            // Reads that take no lease still see the S3 copy.
+            expect(yield* state.getOutput({ stack: STACK, stage })).toEqual(output);
+            expect(yield* state.listStages(STACK)).toContain(stage);
+          }),
+        );
 
-      const migrated = yield* Effect.scoped(
-        Effect.flatMap(stores(storage).dynamodb, (state) => migrateToDynamoDB(state)),
-      );
-      expect(migrated).toEqual([{ stack: STACK, stage, status: "migrated", records: 2 }]);
+        expect(yield* migrate(storage)).toEqual([
+          { stack: STACK, stage, status: "migrated", records: 2 },
+        ]);
 
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          const state = yield* stores(storage).dynamodb;
-          expect(yield* state.get({ stack: STACK, stage, fqn: a.fqn })).toEqual(a);
-          expect([...(yield* state.list({ stack: STACK, stage }))].sort()).toEqual([
-            "Parent/ResourceA",
-            "ResourceB",
-          ]);
-          expect(yield* state.getOutput({ stack: STACK, stage })).toEqual(output);
-        }),
-      );
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const state = yield* stores(storage).dynamodb;
+            expect(yield* state.get({ stack: STACK, stage, fqn: a.fqn })).toEqual(a);
+            expect([...(yield* state.list({ stack: STACK, stage }))].sort()).toEqual([
+              "Parent/ResourceA",
+              "ResourceB",
+            ]);
+            expect(yield* state.getOutput({ stack: STACK, stage })).toEqual(output);
+          }),
+        );
 
-      // The S3 copy is kept, and fenced: an older alchemy can't take it.
-      expect(yield* legacyKeys(storage, stage)).toHaveLength(4);
-      const fenced = yield* Effect.scoped(
-        Effect.flatMap(stores(storage).s3, (state) =>
-          state.set({ stack: STACK, stage, fqn: a.fqn, value: a }),
-        ),
-      ).pipe(Effect.flip);
-      expect(fenced.message).toContain("another deploy holds the S3 state lock");
+        // The S3 copy is kept, and closed to every older version: the
+        // lease-taking ones and the ones from before the lease.
+        expect(yield* legacyKeys(storage, stage)).toHaveLength(4);
+        yield* deniedRawAccess(storage, stage);
+        const older = yield* Effect.scoped(
+          Effect.flatMap(stores(storage).s3, (state) =>
+            state.set({ stack: STACK, stage, fqn: a.fqn, value: a }),
+          ),
+        ).pipe(Effect.flip);
+        expect(older).toBeInstanceOf(StateStoreError);
 
-      // Running it again finds nothing left to move.
-      const again = yield* Effect.scoped(
-        Effect.flatMap(stores(storage).dynamodb, (state) => migrateToDynamoDB(state)),
-      );
-      expect(again).toEqual([{ stack: STACK, stage, status: "already-migrated" }]);
-
+        // Running it again finds nothing left to move.
+        expect(yield* migrate(storage)).toEqual([
+          { stack: STACK, stage, status: "already-migrated" },
+        ]);
+      }).pipe(Effect.ensuring(release(storage)));
       yield* stack.destroy();
     }),
   { tags, timeout: 180_000 },
@@ -161,44 +195,43 @@ test.provider(
       yield* stack.destroy();
       const storage = yield* stack.deploy(Storage);
       const stage = "interrupted";
-      yield* seedS3(storage, stage);
+      yield* Effect.gen(function* () {
+        yield* seedS3(storage, stage);
 
-      for (const failAt of ["fenced", "copied"] as const) {
-        const interrupted = yield* Effect.scoped(
-          Effect.flatMap(stores(storage).dynamodb, (state) =>
-            migrateToDynamoDB(state, {
-              afterStep: (step) =>
-                step === failAt
-                  ? Effect.fail(new StateStoreError({ message: `stopped after ${step}` }))
-                  : Effect.void,
-            }),
-          ),
-        ).pipe(Effect.flip);
-        expect(interrupted.message).toBe(`stopped after ${failAt}`);
+        for (const failAt of ["fenced", "copied"] as const) {
+          const interrupted = yield* migrate(storage, {
+            afterStep: (step) =>
+              step === failAt
+                ? Effect.fail(new StateStoreError({ message: `stopped after ${step}` }))
+                : Effect.void,
+          });
+          expect(interrupted).toEqual([
+            { stack: STACK, stage, status: "failed", reason: `stopped after ${failAt}` },
+          ]);
 
-        // Not committed: the stage is still refused, and still fenced in S3.
-        const refused = yield* Effect.scoped(
-          Effect.flatMap(stores(storage).dynamodb, (state) =>
-            state.get({ stack: STACK, stage, fqn: a.fqn }),
-          ),
-        ).pipe(Effect.flip);
-        expect(refused.requires?.command).toBe("alchemy state migrate --backend aws");
-        const fenced = yield* Effect.scoped(
-          Effect.flatMap(stores(storage).s3, (state) => state.list({ stack: STACK, stage })),
-        ).pipe(Effect.flip);
-        expect(fenced.message).toContain("another deploy holds the S3 state lock");
-      }
+          // Not committed: the stage is still refused, and still fenced in S3.
+          const refused = yield* Effect.scoped(
+            Effect.flatMap(stores(storage).dynamodb, (state) =>
+              state.get({ stack: STACK, stage, fqn: a.fqn }),
+            ),
+          ).pipe(Effect.flip);
+          expect(refused.requires?.command).toBe(migrateCommand(stage));
+          const fenced = yield* Effect.scoped(
+            Effect.flatMap(stores(storage).s3, (state) => state.list({ stack: STACK, stage })),
+          ).pipe(Effect.flip);
+          expect(fenced.message).toContain("moved to a DynamoDB state store");
+        }
 
-      const finished = yield* Effect.scoped(
-        Effect.flatMap(stores(storage).dynamodb, (state) => migrateToDynamoDB(state)),
-      );
-      expect(finished).toEqual([{ stack: STACK, stage, status: "migrated", records: 2 }]);
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          const state = yield* stores(storage).dynamodb;
-          expect(yield* state.get({ stack: STACK, stage, fqn: b.fqn })).toEqual(b);
-        }),
-      );
+        expect(yield* migrate(storage)).toEqual([
+          { stack: STACK, stage, status: "migrated", records: 2 },
+        ]);
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const state = yield* stores(storage).dynamodb;
+            expect(yield* state.get({ stack: STACK, stage, fqn: b.fqn })).toEqual(b);
+          }),
+        );
+      }).pipe(Effect.ensuring(release(storage)));
       yield* stack.destroy();
     }),
   { tags, timeout: 180_000 },
@@ -211,32 +244,126 @@ test.provider(
       yield* stack.destroy();
       const storage = yield* stack.deploy(Storage);
       const stage = "blocked";
-      yield* seedS3(storage, stage);
+      yield* Effect.gen(function* () {
+        yield* seedS3(storage, stage);
 
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          // An older alchemy, mid-deploy.
-          const deploying = yield* stores(storage).s3;
-          yield* deploying.list({ stack: STACK, stage });
-          const result = yield* Effect.scoped(
-            Effect.flatMap(stores(storage).dynamodb, (state) => migrateToDynamoDB(state)),
-          );
-          expect(result).toHaveLength(1);
-          expect(result[0]?.status).toBe("blocked");
-          // The deploy keeps its lease and can still write.
-          yield* deploying.set({
-            stack: STACK,
-            stage,
-            fqn: "ResourceC",
-            value: resource("ResourceC", {}),
-          });
-        }),
-      );
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            // An older alchemy, mid-deploy.
+            const deploying = yield* stores(storage).s3;
+            yield* deploying.list({ stack: STACK, stage });
+            const result = yield* migrate(storage);
+            expect(result).toHaveLength(1);
+            expect(result[0]?.status).toBe("blocked");
+            // The deploy keeps its lease and can still write.
+            yield* deploying.set({
+              stack: STACK,
+              stage,
+              fqn: "ResourceC",
+              value: resource("ResourceC", {}),
+            });
+          }),
+        );
 
-      const moved = yield* Effect.scoped(
-        Effect.flatMap(stores(storage).dynamodb, (state) => migrateToDynamoDB(state)),
-      );
-      expect(moved).toEqual([{ stack: STACK, stage, status: "migrated", records: 3 }]);
+        expect(yield* migrate(storage)).toEqual([
+          { stack: STACK, stage, status: "migrated", records: 3 },
+        ]);
+      }).pipe(Effect.ensuring(release(storage)));
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 180_000 },
+);
+
+test.provider(
+  "running the migration again takes no lease on stages already moved",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(Storage);
+      const stage = "rerun";
+      yield* Effect.gen(function* () {
+        yield* seedS3(storage, stage);
+        yield* migrate(storage);
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            // A deploy on DynamoDB holds the stage while the migration runs again.
+            const deploying = yield* stores(storage).dynamodb;
+            yield* deploying.list({ stack: STACK, stage });
+            expect(yield* migrate(storage)).toEqual([
+              { stack: STACK, stage, status: "already-migrated" },
+            ]);
+            yield* deploying.set({ stack: STACK, stage, fqn: b.fqn, value: b });
+          }),
+        );
+      }).pipe(Effect.ensuring(release(storage)));
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 180_000 },
+);
+
+test.provider(
+  "a migrated stage that is destroyed stays destroyed instead of reverting to its S3 copy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(Storage);
+      const stage = "destroyed";
+      yield* Effect.gen(function* () {
+        yield* seedS3(storage, stage);
+        yield* migrate(storage);
+
+        // What `alchemy destroy` ends with.
+        yield* Effect.scoped(
+          Effect.flatMap(stores(storage).dynamodb, (state) =>
+            state.deleteStack({ stack: STACK, stage }),
+          ),
+        );
+
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const state = yield* stores(storage).dynamodb;
+            expect(yield* state.listStages(STACK)).not.toContain(stage);
+            expect(yield* state.getOutput({ stack: STACK, stage })).toBeUndefined();
+            // Deploying the stage again starts it empty, not refused.
+            expect(yield* state.list({ stack: STACK, stage })).toEqual([]);
+            yield* state.set({ stack: STACK, stage, fqn: b.fqn, value: b });
+          }),
+        );
+
+        expect(yield* migrate(storage)).toEqual([
+          { stack: STACK, stage, status: "already-migrated" },
+        ]);
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const state = yield* stores(storage).dynamodb;
+            expect(yield* state.list({ stack: STACK, stage })).toEqual([b.fqn]);
+            expect(yield* state.listStages(STACK)).toContain(stage);
+          }),
+        );
+      }).pipe(Effect.ensuring(release(storage)));
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 180_000 },
+);
+
+test.provider(
+  "a stage that starts in DynamoDB is fenced in S3 against teammates still on the S3 store",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(Storage);
+      const stage = "native-fenced";
+      yield* Effect.gen(function* () {
+        yield* Effect.scoped(
+          Effect.flatMap(stores(storage).dynamodb, (state) =>
+            state.set({ stack: STACK, stage, fqn: a.fqn, value: a }),
+          ),
+        );
+        const older = yield* Effect.scoped(
+          Effect.flatMap(stores(storage).s3, (state) => state.list({ stack: STACK, stage })),
+        ).pipe(Effect.flip);
+        expect(older.message).toContain("moved to a DynamoDB state store");
+      }).pipe(Effect.ensuring(release(storage)));
       yield* stack.destroy();
     }),
   { tags, timeout: 180_000 },
@@ -250,59 +377,96 @@ test.provider(
       const storage = yield* stack.deploy(Storage);
       const moved = "moved";
       const native = "native";
-      yield* seedS3(storage, moved);
-      yield* Effect.scoped(
-        Effect.flatMap(stores(storage).dynamodb, (state) => migrateToDynamoDB(state)),
-      );
+      yield* Effect.gen(function* () {
+        yield* seedS3(storage, moved);
+        yield* migrate(storage);
 
-      // Writes after the migration, and a stage that started in DynamoDB.
-      const c = resource("ResourceC", { value: "c" });
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          const state = yield* stores(storage).dynamodb;
-          yield* state.delete({ stack: STACK, stage: moved, fqn: b.fqn });
-          yield* state.set({ stack: STACK, stage: moved, fqn: c.fqn, value: c });
-          yield* state.set({ stack: STACK, stage: native, fqn: a.fqn, value: a });
-        }),
-      );
+        // Writes after the migration, and a stage that started in DynamoDB.
+        const c = resource("ResourceC", { value: "c" });
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const state = yield* stores(storage).dynamodb;
+            yield* state.delete({ stack: STACK, stage: moved, fqn: b.fqn });
+            yield* state.set({ stack: STACK, stage: moved, fqn: c.fqn, value: c });
+            yield* state.set({ stack: STACK, stage: native, fqn: a.fqn, value: a });
+          }),
+        );
 
-      const rolledBack = yield* Effect.scoped(
-        Effect.flatMap(stores(storage).dynamodb, (state) => rollbackToS3(state)),
-      );
-      expect([...rolledBack].sort((x, y) => x.stage.localeCompare(y.stage))).toEqual([
-        { stack: STACK, stage: moved, status: "rolled-back", records: 2 },
-        { stack: STACK, stage: native, status: "rolled-back", records: 1 },
-      ]);
+        const rolledBack = yield* rollback(storage);
+        expect([...rolledBack].sort((x, y) => x.stage.localeCompare(y.stage))).toEqual([
+          { stack: STACK, stage: moved, status: "rolled-back", records: 2 },
+          { stack: STACK, stage: native, status: "rolled-back", records: 1 },
+        ]);
 
-      // An older alchemy has its stages back, with the writes it missed.
-      yield* Effect.scoped(
-        Effect.gen(function* () {
-          const state = yield* stores(storage).s3;
-          expect([...(yield* state.list({ stack: STACK, stage: moved }))].sort()).toEqual([
-            "Parent/ResourceA",
-            "ResourceC",
-          ]);
-          expect(yield* state.get({ stack: STACK, stage: moved, fqn: c.fqn })).toEqual(c);
-          expect(yield* state.getOutput({ stack: STACK, stage: moved })).toEqual(output);
-          expect(yield* state.get({ stack: STACK, stage: native, fqn: a.fqn })).toEqual(a);
-          yield* state.set({ stack: STACK, stage: native, fqn: b.fqn, value: b });
-        }),
-      );
+        // An older alchemy has its stages back, with the writes it missed.
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const state = yield* stores(storage).s3;
+            expect([...(yield* state.list({ stack: STACK, stage: moved }))].sort()).toEqual([
+              "Parent/ResourceA",
+              "ResourceC",
+            ]);
+            expect(yield* state.get({ stack: STACK, stage: moved, fqn: c.fqn })).toEqual(c);
+            expect(yield* state.getOutput({ stack: STACK, stage: moved })).toEqual(output);
+            expect(yield* state.get({ stack: STACK, stage: native, fqn: a.fqn })).toEqual(a);
+            yield* state.set({ stack: STACK, stage: native, fqn: b.fqn, value: b });
+          }),
+        );
 
-      // And the DynamoDB store refuses them until they are migrated again.
-      const refused = yield* Effect.scoped(
-        Effect.flatMap(stores(storage).dynamodb, (state) =>
-          state.list({ stack: STACK, stage: native }),
-        ),
-      ).pipe(Effect.flip);
-      expect(refused.requires?.command).toBe("alchemy state migrate --backend aws");
-      const items = yield* dynamodb.query({
-        TableName: storage.tableName,
-        ConsistentRead: true,
-        KeyConditionExpression: "PK = :pk",
-        ExpressionAttributeValues: { ":pk": { S: `STAGE#${STACK}#${moved}` } },
-      });
-      expect(items.Items ?? []).toEqual([]);
+        // And the DynamoDB store refuses them until they are migrated again.
+        const refused = yield* Effect.scoped(
+          Effect.flatMap(stores(storage).dynamodb, (state) =>
+            state.list({ stack: STACK, stage: native }),
+          ),
+        ).pipe(Effect.flip);
+        expect(refused.requires?.command).toBe(migrateCommand(native));
+        const items = yield* dynamodb.query({
+          TableName: storage.tableName,
+          ConsistentRead: true,
+          KeyConditionExpression: "PK = :pk",
+          ExpressionAttributeValues: { ":pk": { S: `STAGE#${STACK}#${moved}` } },
+        });
+        expect(items.Items ?? []).toEqual([]);
+      }).pipe(Effect.ensuring(release(storage)));
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 180_000 },
+);
+
+test.provider(
+  "a rollback that stops after switching a stage back finishes on the next run",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(Storage);
+      const stage = "rollback-interrupted";
+      yield* Effect.gen(function* () {
+        yield* seedS3(storage, stage);
+        yield* migrate(storage);
+
+        const interrupted = yield* rollback(storage, {
+          afterStep: () => Effect.fail(new StateStoreError({ message: "stopped after switching" })),
+        });
+        expect(interrupted).toEqual([
+          { stack: STACK, stage, status: "failed", reason: "stopped after switching" },
+        ]);
+        // Switched back, but still fenced until the cleanup runs.
+        const fenced = yield* Effect.scoped(
+          Effect.flatMap(stores(storage).s3, (state) => state.list({ stack: STACK, stage })),
+        ).pipe(Effect.flip);
+        expect(fenced.message).toContain("moved to a DynamoDB state store");
+
+        expect(yield* rollback(storage)).toEqual([{ stack: STACK, stage, status: "rolled-back" }]);
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const state = yield* stores(storage).s3;
+            expect([...(yield* state.list({ stack: STACK, stage }))].sort()).toEqual([
+              "Parent/ResourceA",
+              "ResourceB",
+            ]);
+          }),
+        );
+      }).pipe(Effect.ensuring(release(storage)));
       yield* stack.destroy();
     }),
   { tags, timeout: 180_000 },
@@ -333,11 +497,9 @@ test.provider(
       );
       const alchemist = Alchemist.layer();
       const awsStore = { _tag: "Provider", backend: "aws", name } as const;
+      const s3Store = { _tag: "Provider", backend: "aws-s3", name } as const;
       const teardown = Effect.all(
-        [
-          Alchemist.State.teardown(awsStore),
-          Alchemist.State.teardown({ _tag: "Provider", backend: "aws-s3", name } as const),
-        ],
+        [Alchemist.State.teardown(awsStore), Alchemist.State.teardown(s3Store)],
         { discard: true },
       ).pipe(Effect.provide(alchemist));
 
@@ -349,7 +511,7 @@ test.provider(
       expect(Exit.isFailure(refused)).toBe(true);
       if (Exit.isFailure(refused)) {
         expect(Cause.pretty(refused.cause)).toContain(
-          `alchemy state migrate --backend aws --name ${name}`,
+          "alchemy state migrate --stack StateMigrationStack --stage",
         );
       }
 
@@ -363,13 +525,13 @@ test.provider(
       expect(Redacted.value(second.secret)).toBe(Redacted.value(first.secret));
 
       yield* destroy(OnDynamoDB);
+      // Tearing down the DynamoDB store keeps the S3 store it replaced.
       const torn = yield* Alchemist.State.teardown(awsStore).pipe(Effect.provide(alchemist));
-      expect(torn.deleted).toEqual(
-        expect.arrayContaining([
-          `alchemy-state-${name}`,
-          `alchemy-state-${name}-${accountId}-${region}-an`,
-        ]),
+      expect([...torn.deleted].sort()).toEqual(
+        [`alchemy-state-${name}`, createOverflowBucketName(accountId, region, name)].sort(),
       );
+      const tornS3 = yield* Alchemist.State.teardown(s3Store).pipe(Effect.provide(alchemist));
+      expect(tornS3.deleted).toEqual([`alchemy-state-${name}-${accountId}-${region}-an`]);
     }),
   { tags, timeout: 300_000 },
 );

@@ -142,10 +142,9 @@ Address it from the CLI with `--name`:
 alchemy state list --backend cloudflare --name team-a
 ```
 
-`AWS.state({ name })` does the same with a separate DynamoDB table
-(`alchemy-state-<name>-<account>-<region>-an`). Pass `bucketName` to
-choose the full bucket name yourself. `GCP.state({ name })` uses
-`alchemy-state-<name>-<project>`.
+`AWS.state({ name })` does the same with a separate DynamoDB table,
+`alchemy-state-<name>`; pass `tableName` to choose the full table name
+yourself. `GCP.state({ name })` uses `alchemy-state-<name>-<project>`.
 
 ## AWS state store
 
@@ -164,33 +163,37 @@ Alchemy.Stack(
 );
 ```
 
-A DynamoDB item holds at most 400 KB. A record larger than `overflowThreshold` (300 KiB by default) is written to an S3 overflow bucket, `alchemy-state-overflow-<account>-<region>-an`, and its item keeps the object's key. The bucket is created the first time a record needs it.
+A DynamoDB item holds at most 400 KB. A record larger than `overflowThreshold` (300 KiB by default) is written to an S3 overflow bucket, `alchemy-state-overflow-<account>-<region>-an`, and its item keeps the object's key.
 
-The store creates its table on first use, except in CI. Provision the table and its overflow bucket ahead of time with:
+The store creates its table, with deletion protection, and the overflow bucket on first use, except in CI. Provision them ahead of time with:
 
 ```sh
 alchemy state bootstrap --backend aws --profile <your-ci-profile>
 ```
 
-`AWS.state({ name: "team-a" })` uses a separate table, `alchemy-state-team-a`.
+`AWS.state({ name: "team-a" })` uses a separate table, `alchemy-state-team-a`. `kmsKeyId` encrypts the table and the overflow bucket with your own KMS key.
+
+The credentials that deploy need DynamoDB access to the table and S3 access to the overflow bucket. The first deploy of a stage also lists the old S3 store's bucket, to check the stage isn't still there; `migrateFrom: false` skips that.
 
 ### Migrating from the S3 store
 
-Earlier versions kept AWS state in an S3 bucket, `alchemy-state-<account>-<region>-an`. A stage still there fails to deploy until you move it:
+Earlier versions kept AWS state in an S3 bucket, `alchemy-state-<account>-<region>-an`. A stage still there fails to deploy until you move it. Run this in the project, so it migrates the store your entrypoint configures:
 
 ```sh
-alchemy state migrate --backend aws --profile <your-profile>
+alchemy state migrate --profile <your-profile>
 ```
 
-The command moves every stage, or the ones `--stack` and `--stage` select. It locks each moved stage in S3 for good, so an older alchemy, say in a CI job you haven't upgraded, fails at that lock instead of deploying from the old copy. The S3 objects stay where they are.
+The command moves every stage, or the ones `--stack` and `--stage` select. It closes each moved stage's S3 objects in the bucket policy, so every older alchemy, say in a CI job you haven't upgraded, fails at its first read instead of deploying from the old copy. The S3 objects stay where they are. A stage you create in DynamoDB afterwards is locked in S3 too, so a teammate still on the S3 store can't create it a second time.
 
 A stage another deploy is running is skipped and reported. Run the command again once that deploy finishes; it picks up where it stopped, including after a crash.
 
 To go back to an older alchemy, move the stages back first:
 
 ```sh
-alchemy state migrate --backend aws --rollback
+alchemy state migrate --rollback
 ```
+
+Roll back with the version you migrated with, before downgrading. State written by a newer version may use fields an older one can't read.
 
 ### Keeping state in S3
 

@@ -40,6 +40,9 @@ const OUTPUT_FILE = "__stack_output__.json";
  * the lock outlives the objects it was guarding; the store deletes it on
  * close.
  */
+/** The lease token `alchemy state migrate` leaves on a stage it moved to DynamoDB. */
+const MIGRATED_TOKEN = "migrated:dynamodb";
+
 const LEASE_FILE = "__lease__.json";
 
 /** How long a lease stays valid without a refresh. */
@@ -240,6 +243,11 @@ export const makeBucketState = (options: BucketStateOptions) =>
         if (version === undefined) {
           const existing = yield* readLease(key);
           const stillHeld = existing === undefined || existing.record.expiresAt > now;
+          if (existing?.record.token === MIGRATED_TOKEN) {
+            return yield* new StateStoreError({
+              message: `${heldError(stack, stage).message}: the stage moved to a DynamoDB state store. Deploy it with a version of alchemy that has AWS.state() on DynamoDB, or run 'alchemy state migrate --rollback' with that version to move it back.`,
+            });
+          }
           if (stillHeld) {
             return yield* Effect.fail(heldError(stack, stage));
           }

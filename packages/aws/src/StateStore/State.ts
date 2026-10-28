@@ -505,13 +505,23 @@ export const stateEnvironment = () =>
 
 /**
  * Create the state bucket with its secure defaults, or converge an existing
- * one to them: what first use of {@link state} does.
+ * one to them: what first use of {@link state} does. With `kmsKeyId`,
+ * objects are encrypted with that KMS key.
  */
 export const provisionStateBucket = (
   bucket: string,
   region: string,
+  kmsKeyId?: string,
 ): Effect.Effect<void, StateStoreError, S3Deps> =>
-  ensureStateBucket(bucket, region, {}).pipe(
+  ensureStateBucket(
+    bucket,
+    region,
+    kmsKeyId === undefined
+      ? {}
+      : {
+          encryption: { sseAlgorithm: "aws:kms", kmsMasterKeyId: kmsKeyId, bucketKeyEnabled: true },
+        },
+  ).pipe(
     Effect.mapError(
       (cause) =>
         new StateStoreError({

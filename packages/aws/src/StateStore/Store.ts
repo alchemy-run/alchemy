@@ -63,18 +63,20 @@ const usesS3 = (options: StateOptions) =>
  * ### Migrating from the S3 State Store
  * Earlier versions kept state in an S3 bucket,
  * `alchemy-state-<accountId>-<region>-an`. A stage still there is refused
- * until it is moved:
+ * until it is moved. In the project, so the store the entrypoint
+ * configures is the one migrated:
  *
  * ```sh
- * alchemy state migrate --backend aws --profile <your-profile>
+ * alchemy state migrate --profile <your-profile>
  * ```
  *
  * The command moves every stage, or those `--stack` and `--stage` select.
- * Each moved stage is locked in S3 for good, so an older alchemy fails at
- * its lock instead of deploying from the old copy; the S3 objects are
- * kept. A stage another deploy holds is reported and skipped: run the
- * command again once it finishes. `--rollback` moves stages back to S3
- * for going back to an older version.
+ * The bucket policy closes each moved stage's S3 objects, so every older
+ * alchemy fails at its first read instead of deploying from the old copy;
+ * the objects are kept. A stage another deploy holds is reported and
+ * skipped: run the command again once it finishes. `--rollback`, run with
+ * the same version, moves stages back to S3 before going back to an older
+ * one.
  *
  * ### Keeping State in S3
  * **Example:** The S3 store

@@ -160,34 +160,6 @@ export interface StateStoreLifecycle {
   readonly tailLogs?: (
     input: StateStoreTarget,
   ) => Stream.Stream<StateStoreLogEntry, ContributionFailure, ContributionServices>;
-  /**
-   * Move stages into the store from the one it replaces, or back with
-   * `rollback`. Idempotent: run it again to finish what a failure or a
-   * blocked stage left.
-   */
-  readonly migrate?: (
-    input: StateStoreTarget & {
-      /** Only this stack's stages. */
-      readonly stack?: string;
-      /** Only stages of this name. */
-      readonly stage?: string;
-      /** Move stages back to the store this one replaces. */
-      readonly rollback?: boolean;
-    },
-  ) => Effect.Effect<StateStoreMigration, ContributionFailure, ContributionServices>;
-}
-
-export interface StateStoreMigration {
-  readonly stages: ReadonlyArray<{
-    readonly stack: string;
-    readonly stage: string;
-    /** e.g. `migrated`, `already-migrated`, `rolled-back` or `blocked`. */
-    readonly status: string;
-    /** Records moved. */
-    readonly records?: number;
-    /** Why a stage was not moved. */
-    readonly reason?: string;
-  }>;
 }
 
 export interface StateStoreBootstrap {

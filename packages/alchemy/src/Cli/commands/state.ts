@@ -309,9 +309,10 @@ const teardownCommand = Command.make(
 const migrateCommand = Command.make(
   "migrate",
   {
+    main: config,
     envFile,
     profile,
-    backend: lifecycleBackend,
+    backend,
     name: storeName,
     stack: Flag.String("stack").pipe(
       Flag.withDescription("Only migrate this stack's stages"),
@@ -330,12 +331,7 @@ const migrateCommand = Command.make(
   },
   instrumentCommand("state.migrate")(
     Effect.fn(function* ({ stack, stage, rollback, ...args }) {
-      const result = yield* AlchemistState.migrate({
-        ...lifecycleSource(args),
-        stack,
-        stage,
-        rollback,
-      });
+      const result = yield* AlchemistState.migrate(source(args), { stack, stage, rollback });
       if (result.stages.length === 0) {
         yield* Interaction.info("No stages to migrate.");
         return;
@@ -347,18 +343,24 @@ const migrateCommand = Command.make(
           `${entry.stack}/${entry.stage}: ${entry.status}${detail === "" ? "" : ` (${detail})`}`,
         );
       }
-      const blocked = result.stages.filter((entry) => entry.status === "blocked");
-      if (blocked.length > 0) {
+      const unfinished = result.stages.filter(
+        (entry) => entry.status === "blocked" || entry.status === "failed",
+      );
+      if (unfinished.length > 0) {
         return yield* new UserInputError({
-          message: `${blocked.length} stage(s) are held by another deploy. Run the command again once they finish.`,
+          message: `${unfinished.length} stage(s) did not move. Run the command again once the deploys holding them finish, or fix the failures above.`,
         });
       }
       yield* Interaction.success(
-        `${rollback ? "Rolled back" : "Migrated"} the ${args.backend} state store`,
+        rollback ? "Rolled back the state store" : "Migrated the state store",
       );
     }),
   ),
-).pipe(Command.withDescription("Move stages into a state store from the one it replaces"));
+).pipe(
+  Command.withDescription(
+    "Move stages into the configured state store from the one it replaces (or --backend)",
+  ),
+);
 
 const logsCommand = Command.make(
   "logs",

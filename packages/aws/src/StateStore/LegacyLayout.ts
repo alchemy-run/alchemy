@@ -5,6 +5,7 @@ import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
 /**
@@ -30,11 +31,19 @@ const OUTPUT_FILE = "__stack_output__.json";
 const LEASE_FILE = "__lease__.json";
 
 /**
- * The token of the lease a migrated stage keeps forever. Every S3 state
- * store reads a lease that expires in the future as held by another
- * deploy, so no version can write the stage again.
+ * The token of the lease a migrated stage keeps forever. Every S3 store
+ * since 2.0.0-beta.84 reads a lease that expires in the future as held by
+ * another deploy. Earlier versions take no lease; the bucket policy
+ * {@link setStageAccess} writes stops those.
  */
 export const FENCE_TOKEN = "migrated:dynamodb";
+
+/** How a state store's error says another deploy holds a stage's lease. */
+export const HELD_PREFIX = "another deploy holds";
+
+/** Whether a state store failed because another deploy holds the stage. */
+export const isLeaseHeld = (error: { readonly message: string }) =>
+  error.message.startsWith(HELD_PREFIX);
 
 /** Maximum number of keys S3 accepts in one DeleteObjects call. */
 const DELETE_BATCH_SIZE = 1000;
@@ -155,8 +164,14 @@ export const readLegacyStage = Effect.fn(function* (
     (key) =>
       readText(location.bucket, key).pipe(
         Effect.flatMap((object) =>
+          // Listed but gone: something is writing the stage. Copying the
+          // rest would leave a resource untracked.
           object === undefined
-            ? Effect.succeed([])
+            ? Effect.fail(
+                new LegacyStateError({
+                  message: `S3 state object '${key}' was deleted while '${stack}/${stage}' was being read; another deploy is writing it`,
+                }),
+              )
             : canonical(object.text, key).pipe(
                 Effect.map((text) => [
                   [decodeFqn(key.slice(prefix.length).replace(/\.json$/, "")), text] as const,
@@ -284,6 +299,8 @@ export const fenceLegacyStage = (
         Effect.catchTag(["PreconditionFailed", "ConditionalRequestConflict"], () =>
           Effect.succeed(undefined),
         ),
+        // No S3 store has ever written here: there is nothing to fence.
+        Effect.catchTag("NoSuchBucket", () => Effect.succeed<FenceResult>({ fenced: true })),
       );
   });
   // A lost condition means another writer got there first: look again.
@@ -314,3 +331,144 @@ export const unfenceLegacyStage = (location: LegacyLocation, stack: string, stag
     ),
   );
 };
+
+/**
+ * What the bucket policy lets every principal do with a stage's objects:
+ *
+ * - `open`: what IAM allows.
+ * - `fenced`: no writes or deletes, while the stage is copied.
+ * - `migrated`: no reads, writes or deletes. A version of alchemy that takes
+ *   no lease fails at its first read, before it deploys anything.
+ */
+export type StageAccess = "open" | "fenced" | "migrated";
+
+const FENCED_SID = "AlchemyStateFenced";
+const MIGRATED_SID = "AlchemyStateMigrated";
+const DENIED_ACTIONS = {
+  [FENCED_SID]: ["s3:PutObject", "s3:DeleteObject"],
+  [MIGRATED_SID]: ["s3:GetObject", "s3:PutObject", "s3:DeleteObject"],
+} as const;
+
+/** S3's limit on the size of a bucket policy. */
+const MAX_POLICY_BYTES = 20 * 1024;
+
+interface PolicyStatement {
+  readonly Sid?: string;
+  readonly Resource?: string | ReadonlyArray<string>;
+  readonly [key: string]: unknown;
+}
+
+const asArray = <T>(value: T | ReadonlyArray<T> | undefined): ReadonlyArray<T> =>
+  value === undefined ? [] : Array.isArray(value) ? value : [value as T];
+
+/** The bucket's policy statements; none when it has no policy or no bucket. */
+const readPolicy = (bucket: string) =>
+  s3.getBucketPolicy({ Bucket: bucket }).pipe(
+    Effect.map((result) => result.Policy),
+    Effect.catchTag(["NoSuchBucketPolicy", "NoSuchBucket"], () => Effect.succeed(undefined)),
+    Effect.flatMap((text) =>
+      Effect.try({
+        try: () =>
+          (text === undefined ? {} : JSON.parse(text)) as {
+            Version?: string;
+            Statement?: PolicyStatement | ReadonlyArray<PolicyStatement>;
+          },
+        catch: () =>
+          new LegacyStateError({ message: `The bucket policy of '${bucket}' is not valid JSON` }),
+      }),
+    ),
+    Effect.map((policy) => ({
+      version: policy.Version ?? "2012-10-17",
+      statements: asArray(policy.Statement),
+    })),
+  );
+
+// Policy edits are read-modify-write; one at a time per process.
+const policyLock = Semaphore.makeUnsafe(1);
+
+/**
+ * Set what the bucket policy allows on one stage, keeping every statement
+ * alchemy doesn't own.
+ */
+export const setStageAccess = (
+  location: LegacyLocation,
+  stack: string,
+  stage: string,
+  access: StageAccess,
+) =>
+  Semaphore.withPermits(
+    policyLock,
+    1,
+  )(
+    Effect.gen(function* () {
+      const arn = `arn:aws:s3:::${location.bucket}/${stagePrefix(location, stack, stage)}*`;
+      const { version, statements } = yield* readPolicy(location.bucket);
+      const resources = (sid: string) =>
+        new Set(asArray(statements.find((statement) => statement.Sid === sid)?.Resource));
+      const fenced = resources(FENCED_SID);
+      const migrated = resources(MIGRATED_SID);
+      const current: StageAccess = migrated.has(arn)
+        ? "migrated"
+        : fenced.has(arn)
+          ? "fenced"
+          : "open";
+      if (current === access) return;
+      fenced.delete(arn);
+      migrated.delete(arn);
+      if (access === "fenced") fenced.add(arn);
+      if (access === "migrated") migrated.add(arn);
+      const deny = (sid: keyof typeof DENIED_ACTIONS, arns: Set<string>) =>
+        arns.size === 0
+          ? []
+          : [
+              {
+                Sid: sid,
+                Effect: "Deny",
+                Principal: "*",
+                Action: DENIED_ACTIONS[sid],
+                Resource: Array.from(arns).sort(),
+              },
+            ];
+      const next = [
+        ...statements.filter(
+          (statement) => statement.Sid !== FENCED_SID && statement.Sid !== MIGRATED_SID,
+        ),
+        ...deny(FENCED_SID, fenced),
+        ...deny(MIGRATED_SID, migrated),
+      ];
+      if (next.length === 0) {
+        yield* s3.deleteBucketPolicy({ Bucket: location.bucket });
+        return;
+      }
+      const text = JSON.stringify({ Version: version, Statement: next });
+      if (new TextEncoder().encode(text).length > MAX_POLICY_BYTES) {
+        return yield* new LegacyStateError({
+          message: `The bucket policy of '${location.bucket}' has no room to fence '${stack}/${stage}' (S3 allows 20 KB). Migrate fewer stages at a time, or remove statements alchemy doesn't own.`,
+        });
+      }
+      yield* s3.putBucketPolicy({ Bucket: location.bucket, Policy: text });
+    }),
+  );
+
+/** Remove every statement {@link setStageAccess} wrote, so the bucket can be emptied. */
+export const openLegacyBucket = (bucket: string) =>
+  Semaphore.withPermits(
+    policyLock,
+    1,
+  )(
+    Effect.gen(function* () {
+      const { version, statements } = yield* readPolicy(bucket);
+      const kept = statements.filter(
+        (statement) => statement.Sid !== FENCED_SID && statement.Sid !== MIGRATED_SID,
+      );
+      if (kept.length === statements.length) return;
+      if (kept.length === 0) {
+        yield* s3.deleteBucketPolicy({ Bucket: bucket });
+      } else {
+        yield* s3.putBucketPolicy({
+          Bucket: bucket,
+          Policy: JSON.stringify({ Version: version, Statement: kept }),
+        });
+      }
+    }),
+  );
