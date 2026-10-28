@@ -607,10 +607,7 @@ are the index.
 Don't worry: none of this touches your code unless you ask for it.
 Stubs load only when Node resolves with the `distilled-lazy` export
 condition (`node --conditions=distilled-lazy`). Plain Node and every
-bundler get the normal full module. The Alchemy CLI turns the
-condition on, and it's a big part of why Alchemy is now so much
-lighter. It's built for our own tooling, and you probably shouldn't run
-it in production. But you can totally do it too, mannnnnnnn.
+bundler get the normal full module.
 
 ### Importing a whole provider
 
@@ -661,3 +658,16 @@ These shipped in `@distilled.cloud/*` `1.0.0-rc.16`.
 `instanceof`, `_tag`, `Effect.catchTag` and the TypeScript types for
 errors work as before.
 :::
+
+## Try meta tree shaking in Alchemy
+
+The Alchemy CLI ships with meta tree shaking turned off. To opt in,
+pass `--fast-distilled`, or set `ALCHEMY_FAST_DISTILLED=1`:
+
+```sh
+alchemy deploy --fast-distilled
+```
+
+The flag makes the CLI load distilled with the `distilled-lazy`
+condition, so every provider your app imports starts as a stub. It
+applies under Node. Under Bun it has no effect.
