@@ -9,6 +9,7 @@ import { Query } from "@distilled.cloud/core/query";
 import { GraphQLLive, Railway as RailwayApi } from "@distilled.cloud/railway";
 import * as PgClient from "@effect/sql-pg/PgClient";
 import * as Alchemy from "alchemy";
+import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -19,10 +20,10 @@ import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { PostgresFn } from "./fixtures/async-postgres-fn.ts";
 import PostgresApi, { Db, Site } from "./fixtures/postgres-api.ts";
-import { suitePartition } from "./suiteProject.ts";
+import { suitePartition, suiteProject } from "./suiteProject.ts";
 import { waitUntilVolumeGone } from "./waitUntilVolumeGone.ts";
 
-const { test } = Test.make({ providers: Railway.providers() });
+const { test, deploy, destroy } = Test.make({ providers: Railway.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
@@ -89,6 +90,7 @@ const readVolumeInstance = Query.fn((id: string) => {
     volumeId: volume.volumeId,
     mountPath: volume.mountPath,
     serviceId: volume.serviceId,
+    name: volume.volume.name,
   };
 });
 
@@ -282,6 +284,74 @@ test.provider(
       "live",
     ],
     timeout: 120_000,
+  },
+);
+
+const POSTGRES_17_IMAGE = "ghcr.io/railwayapp-templates/postgres-ssl:17";
+
+// A database created by another stack on a newer major than the default,
+// standing in for one made from Railway's Postgres template.
+const AdoptSourceStack = Alchemy.Stack(
+  "RailwayPostgresAdoptSource",
+  { providers: Railway.providers(), state: Alchemy.localState() },
+  Effect.gen(function* () {
+    const { project, environment } = yield* suitePartition;
+    const db = yield* Railway.Postgres("Source", {
+      project,
+      environment,
+      image: POSTGRES_17_IMAGE,
+    });
+    return { environmentId: environment.environmentId, db };
+  }),
+);
+
+test.provider(
+  "adopting postgres without image keeps its image and volume name",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      yield* destroy(AdoptSourceStack);
+
+      const source = yield* deploy(AdoptSourceStack);
+      const sourceVolume = yield* readVolumeInstance(source.db.volumeInstanceId);
+
+      const adopted = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Railway.Postgres("Db", {
+            project: suiteProject,
+            environment: { environmentId: source.environmentId },
+            name: source.db.name,
+          }).pipe(adopt(true));
+        }),
+      );
+
+      expect(adopted.serviceId).toEqual(source.db.serviceId);
+      expect(adopted.volumeId).toEqual(source.db.volumeId);
+
+      const instance = yield* readServiceInstance(source.environmentId, source.db.serviceId);
+      expect(instance.image).toEqual(POSTGRES_17_IMAGE);
+      const volume = yield* readVolumeInstance(source.db.volumeInstanceId);
+      expect(volume.name).toEqual(sourceVolume.name);
+
+      const rows = yield* selectOne(adopted.publicConnectionUri);
+      expect(firstOk(rows)).toEqual(1);
+
+      yield* stack.destroy();
+      yield* destroy(AdoptSourceStack);
+
+      const gone = yield* waitUntilServiceGone(source.db.serviceId);
+      expect(gone).toEqual("gone");
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:railway",
+      "provider:railway:postgres",
+      "provider:railway:project",
+      "provider:railway:projectenvironment",
+      "provider:railway:service",
+      "live",
+    ],
+    timeout: 240_000,
   },
 );
 
