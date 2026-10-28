@@ -21,7 +21,11 @@ import { FleetStorage, type Store } from "./FleetStorage.ts";
 import type { FleetBucket } from "./Host.ts";
 import * as Node from "./Protocol/node.ts";
 import type { Providers } from "./Providers.ts";
-import { CELLD_RUNTIME_SERIES, isSupportedCelldVersion } from "./RuntimeVersion.ts";
+import {
+  CELLD_RUNTIME_SERIES,
+  isSupportedCelldVersion,
+  supportedDeploymentFeatures,
+} from "./RuntimeVersion.ts";
 
 export interface BootstrapProps {
   /** Existing backing bucket; no Fleet or compute dependency is required. */
@@ -100,7 +104,7 @@ export const prepareBootstrap = (props: BootstrapProps) =>
     });
   });
 
-const observeRoot = (store: Store) =>
+const observeRoot = (store: Store, runtimeVersion: string) =>
   Effect.gen(function* () {
     const object = yield* store.get(ROOT_POINTER_KEY);
     if (!object) return undefined;
@@ -140,22 +144,11 @@ const observeRoot = (store: Store) =>
       );
     if (new Set(manifest.modules.map((module) => module.name)).size !== manifest.modules.length)
       return yield* refuse("invalid-record", "Existing root repeats module paths.");
-    const supported = [
-      "assets-v1",
-      "containers-v1",
-      "cron-v1",
-      "d1-v1",
-      "kv-v1",
-      "queues-v1",
-      "sqlite-vec-v1",
-      "r2-v1",
-      "wasm-v1",
-      "workflows-v1",
-    ];
+    const supported = supportedDeploymentFeatures(runtimeVersion);
     if (manifest.required_features?.some((feature) => !supported.includes(feature)))
       return yield* refuse(
         "unsupported",
-        `Existing root requires runtime features unsupported by Celld ${CELLD_RUNTIME_SERIES}.`,
+        `Existing root requires runtime features unsupported by Celld ${runtimeVersion}.`,
       );
     for (const module of manifest.modules) {
       if (
@@ -249,7 +242,7 @@ export const readBootstrap = (store: Store, props: BootstrapProps) =>
         "unsupported",
         "Bootstrap descriptor differs; runtime or bucket migration must be performed explicitly.",
       );
-    const root = yield* observeRoot(store);
+    const root = yield* observeRoot(store, props.runtimeVersion);
     if (!root) return undefined;
     return {
       ...props,
@@ -264,7 +257,7 @@ export const readBootstrap = (store: Store, props: BootstrapProps) =>
 export const ensureBootstrap = (store: Store, props: BootstrapProps) =>
   Effect.gen(function* () {
     const prepared = yield* prepareBootstrap(props);
-    yield* observeRoot(store);
+    yield* observeRoot(store, props.runtimeVersion);
     yield* ensureImmutable(
       store,
       BOOTSTRAP_MARKER_KEY,

@@ -19,6 +19,28 @@ export const DEFAULT_CELLD_IMAGE =
 export const isSupportedCelldVersion = (version: string) =>
   version === CELLD_RUNTIME_SERIES || version.startsWith(`${CELLD_RUNTIME_SERIES}.`);
 
+/**
+ * Deployment features a release of the supported series serves. A root that
+ * requires anything else fails on the fleet's nodes, so it is refused.
+ */
+export const supportedDeploymentFeatures = (version: string): readonly string[] => [
+  "assets-v1",
+  "containers-v1",
+  "cron-v1",
+  "d1-v1",
+  "kv-v1",
+  "queues-v1",
+  "sqlite-vec-v1",
+  "r2-v1",
+  "wasm-v1",
+  "workflows-v1",
+  // Python Worker bundles arrived in 0.6.3.
+  ...(patchOf(version) >= 3 ? ["python-workers-v1"] : []),
+];
+
+/** The patch release of a series version; a bare series is its first release. */
+const patchOf = (version: string) => Number.parseInt(version.split(".")[2] ?? "0", 10) || 0;
+
 /** Public Worker traffic; the peer/operator listener must remain private. */
 export const CELLD_PUBLIC_PORT = 8080;
 /** Private peer and operator listener. */

@@ -96,6 +96,27 @@ describe("Celld startup Bootstrap", { tags: ["unit", "local", "provider:celld"] 
     }),
   );
 
+  test.effect("serves a Python Worker root only on runtimes that support it", () =>
+    Effect.gen(function* () {
+      const fake = yield* makeStore;
+      const prepared = yield* app();
+      yield* stageDeployment(fake.store, prepared);
+      const manifestKey = `${prepared.pointer.prefix}/manifest.json`;
+      const manifest = yield* decode(Node.Manifest, fake.objects.get(manifestKey)!.body);
+      yield* fake.store.put(
+        manifestKey,
+        yield* encode({ ...manifest, required_features: ["python-workers-v1"] }),
+      );
+      yield* fake.store.put("deploy/current.json", yield* encode(prepared.pointer));
+      const refused = yield* Effect.result(
+        ensureBootstrap(fake.store, { ...props, runtimeVersion: "0.6.2" }),
+      );
+      expect(Result.isFailure(refused)).toBe(true);
+      const ready = yield* ensureBootstrap(fake.store, { ...props, runtimeVersion: "0.6.3" });
+      expect(ready.root).toEqual(prepared.pointer);
+    }),
+  );
+
   test.effect("preserves a competing application root during first initialization", () =>
     Effect.gen(function* () {
       const fake = yield* makeStore;
