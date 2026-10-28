@@ -67,6 +67,17 @@ export const AuditMarkers = GCP.Storage.Bucket("AuditMarkers", {
   forceDestroy: true,
 });
 
+/**
+ * The tag a call that must not succeed fails with. Unlike `outcome`,
+ * `Forbidden` is a value here: Bigtable answers it for children that don't
+ * exist, to hide whether they do.
+ */
+const refusal = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.map(() => "succeeded" as string),
+    Effect.catch((error) => Effect.succeed(error._tag as string)),
+  );
+
 export default class BigtableBindingsHost extends GCP.Function<BigtableBindingsHost>()(
   "BigtableBindingsHost",
   { main: import.meta.url, invokerIamDisabled: true },
@@ -139,12 +150,12 @@ export default class BigtableBindingsHost extends GCP.Function<BigtableBindingsH
           ),
         ),
         // The table isn't deleted, so there is nothing to undelete.
-        undelete: outcome(undelete({ body: {} })),
+        undelete: refusal(undelete({ body: {} })),
         tableChildren: Effect.all({
           authorizedViews: listAuthorizedViews(),
-          missingAuthorizedView: outcome(getAuthorizedView({ authorizedView: "none" })),
+          missingAuthorizedView: refusal(getAuthorizedView({ authorizedView: "none" })),
           schemaBundles: listSchemaBundles(),
-          missingSchemaBundle: outcome(getSchemaBundle({ schemaBundle: "none" })),
+          missingSchemaBundle: refusal(getSchemaBundle({ schemaBundle: "none" })),
         }),
         instance: Effect.all({
           appProfiles: listAppProfiles(),

@@ -25,7 +25,7 @@ export const FAIL_ONCE = "fail-once";
 
 /**
  * Effect-native Cloud Run service working a Cloud Tasks queue, recording
- * each task as `<body>/<executionCount>.json`.
+ * each attempt as `<body>/<retryCount>.json`.
  * Deployed from {@link ../QueueEventSource.test.ts}.
  */
 export default class QueueWorker extends GCP.Function<QueueWorker>()(
@@ -43,7 +43,7 @@ export default class QueueWorker extends GCP.Function<QueueWorker>()(
       Effect.gen(function* () {
         const body = new TextDecoder().decode(task.body);
         yield* putObject({
-          name: `${body}/${task.executionCount}.json`,
+          name: `${body}/${task.retryCount}.json`,
           body: JSON.stringify({ ...task, body, headers: undefined }),
         }).pipe(Effect.orDie);
         if (body === FAIL_ONCE && !failed.has(task.taskName)) {

@@ -172,8 +172,8 @@ describe.skipIf(!!process.env.FAST)(
               missingAuthorizedView: string;
               missingSchemaBundle: string;
             }>(baseUrl, "tableChildren");
-            expect(children.missingAuthorizedView).toEqual("NotFound");
-            expect(children.missingSchemaBundle).toEqual("NotFound");
+            expect(children.missingAuthorizedView).not.toEqual("succeeded");
+            expect(children.missingSchemaBundle).not.toEqual("succeeded");
 
             const policy = yield* bigtable.getIamPolicyProjectsInstancesTables({
               resource: genTableName,

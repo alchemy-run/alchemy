@@ -71,33 +71,37 @@ test.provider(
       );
 
       // Out of band: create, update and delete one item; write a nested log.
-      yield* write("items/apple", { price: 1 });
-      expect(yield* read(marker("items", "created", "items/apple"))).toMatchObject({
+      // Ids are fresh per run: the database id (and its data) can outlive a destroy.
+      const run = yield* Effect.sync(() => crypto.randomUUID().slice(0, 8));
+      const item = `items/apple-${run}`;
+      const log = `logs/${run}/entries/one`;
+      yield* write(item, { price: 1 });
+      expect(yield* read(marker("items", "created", item))).toMatchObject({
         kind: "created",
-        document: "items/apple",
+        document: item,
         value: { price: 1 },
-        params: { itemId: "apple" },
+        params: { itemId: `apple-${run}` },
       });
-      yield* write("items/apple", { price: 2 });
-      expect(yield* read(marker("items", "updated", "items/apple"))).toMatchObject({
+      yield* write(item, { price: 2 });
+      expect(yield* read(marker("items", "updated", item))).toMatchObject({
         kind: "updated",
         value: { price: 2 },
         oldValue: { price: 1 },
         updatedFields: ["price"],
       });
       yield* firestore.deleteProjectsDatabasesDocuments({
-        name: `${out.database}/documents/items/apple`,
+        name: `${out.database}/documents/${item}`,
       });
-      expect(yield* read(marker("items", "deleted", "items/apple"))).toMatchObject({
+      expect(yield* read(marker("items", "deleted", item))).toMatchObject({
         kind: "deleted",
         oldValue: { price: 2 },
       });
 
-      yield* write("logs/2026/entries/one", { level: "info" });
-      expect(yield* read(marker("logs", "created", "logs/2026/entries/one"))).toMatchObject({
+      yield* write(log, { level: "info" });
+      expect(yield* read(marker("logs", "created", log))).toMatchObject({
         kind: "created",
         value: { level: "info" },
-        params: { path: "2026/entries/one" },
+        params: { path: `${run}/entries/one` },
       });
 
       yield* stack.destroy();
