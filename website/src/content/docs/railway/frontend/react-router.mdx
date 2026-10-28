@@ -1,6 +1,6 @@
 ---
 title: React Router
-description: Deploy React Router v7 (framework mode) to Railway with Railway.Website.ReactRouter — SSR on a container Service, client assets in the image, and React Router's own Vite dev server under alchemy dev.
+description: Deploy React Router v8 (framework mode) to Railway with Railway.Website.ReactRouter — SSR on a container Service, client assets in the image, and React Router's own Vite dev server under alchemy dev.
 sidebar:
   order: 7
 ---
@@ -10,7 +10,7 @@ import PackageManagers from "../../../../components/PackageManagers.astro";
 export const devDeps = "@alchemy.run/frontend-frameworks";
 
 `Railway.Website.ReactRouter` deploys a
-[React Router](https://reactrouter.com) v7 app in framework mode to
+[React Router](https://reactrouter.com) v8 app in framework mode to
 Railway. React Router builds through Vite, so Alchemy runs your
 project's own build: the SSR server plus client assets run on one
 [`Railway.Service`](/railway/compute/services). Alchemy creates a
@@ -83,7 +83,7 @@ Stack):
 
 ```typescript
 // alchemy.run.ts
-import * as Railway from "alchemy/Railway";
+import * as Railway from "@alchemy.run/railway";
 
 export const Website = Railway.Website.ReactRouter("Website");
 ```

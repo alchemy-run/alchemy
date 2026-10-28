@@ -10,6 +10,7 @@ import * as HttpApiSecurity from "effect/http-api/HttpApiSecurity";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import { UserFacingError } from "../UserFacingError.ts";
 
 /**
  * Resource-state payload shape on the wire.
@@ -78,13 +79,32 @@ const ResourceKey = Schema.Struct({
   fqn: Schema.String,
 });
 
+/**
+ * The store failed to serve a request: which operation, and the kind of
+ * failure (its tag). Never the failure's message, which can carry state; the
+ * Worker logs the full cause. Without it, any failure behind the auth
+ * middleware was encoded as its `Unauthorized` and surfaced as a bare 500.
+ */
+export class StateStoreFailure extends Schema.TaggedError<StateStoreFailure>()(
+  "StateStoreFailure",
+  { operation: Schema.String, reason: Schema.String },
+  { httpApiStatus: 500 },
+) {
+  readonly [UserFacingError] = true;
+  override get message() {
+    return `State store failed to ${this.operation} (${this.reason}); its logs have the cause`;
+  }
+}
+
 export const ListStacks = HttpApiEndpoint.get("listStacks", "/state/stacks", {
   success: Schema.Array(Schema.String),
+  error: StateStoreFailure,
 });
 
 export const ListStages = HttpApiEndpoint.get("listStages", "/state/stacks/:stack/stages", {
   params: StackParams,
   success: Schema.Array(Schema.String),
+  error: StateStoreFailure,
 });
 
 export const ListResources = HttpApiEndpoint.get(
@@ -93,6 +113,7 @@ export const ListResources = HttpApiEndpoint.get(
   {
     params: StackStage,
     success: Schema.Array(Schema.String),
+    error: StateStoreFailure,
   },
 );
 
@@ -102,6 +123,7 @@ export const GetState = HttpApiEndpoint.get(
   {
     params: ResourceKey,
     success: Schema.UndefinedOr(ResourceStateSchema),
+    error: StateStoreFailure,
   },
 );
 
@@ -112,6 +134,7 @@ export const SetState = HttpApiEndpoint.put(
     params: ResourceKey,
     payload: ResourceStateSchema,
     success: ResourceStateSchema,
+    error: StateStoreFailure,
   },
 );
 
@@ -121,6 +144,7 @@ export const DeleteState = HttpApiEndpoint.delete(
   {
     params: ResourceKey,
     success: HttpApiSchema.NoContent,
+    error: StateStoreFailure,
   },
 );
 
@@ -128,6 +152,7 @@ export const DeleteStack = HttpApiEndpoint.delete("deleteStack", "/state/stacks/
   params: StackParams,
   query: OptionalStageQuery,
   success: HttpApiSchema.NoContent,
+  error: StateStoreFailure,
 });
 
 export const GetReplacedResources = HttpApiEndpoint.get(
@@ -136,6 +161,7 @@ export const GetReplacedResources = HttpApiEndpoint.get(
   {
     params: StackStage,
     success: Schema.Array(ResourceStateSchema),
+    error: StateStoreFailure,
   },
 );
 
@@ -145,6 +171,7 @@ export const GetStackOutput = HttpApiEndpoint.get(
   {
     params: StackStage,
     success: Schema.UndefinedOr(ResourceStateSchema),
+    error: StateStoreFailure,
   },
 );
 
@@ -155,6 +182,7 @@ export const SetStackOutput = HttpApiEndpoint.put(
     params: StackStage,
     payload: ResourceStateSchema,
     success: ResourceStateSchema,
+    error: StateStoreFailure,
   },
 );
 

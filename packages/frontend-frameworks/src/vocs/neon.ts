@@ -12,7 +12,7 @@ import { isInsideDevChild, runDevChild } from "../core/DevChild.ts";
 import { FrameworkError, type FrameworkDevOptions } from "../core/Framework.ts";
 import { Framework } from "../core/Framework.ts";
 import { finishNeonOutput, makeNeonTarget } from "../core/NeonServe.ts";
-import { make as makeNode, makeNodeTarget, type VocsNodeFrameworkOptions } from "./node.ts";
+import { makeNodeTarget, type VocsNodeFrameworkOptions } from "./node.ts";
 import { make as makeVocsLayer } from "./Vocs.ts";
 
 // Preserve config imports and closures; only the dev-only Vite loader is removed.
@@ -96,7 +96,6 @@ export default target;
 export const make = Effect.fn(function* (options: VocsNodeFrameworkOptions = {}) {
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
-  const node = yield* makeNode(options);
   const services = Layer.mergeAll(
     Layer.succeed(FileSystem.FileSystem)(fs),
     Layer.succeed(Path.Path)(path),

@@ -1,4 +1,4 @@
-import * as Fly from "alchemy/Fly";
+import * as Fly from "@alchemy.run/fly";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

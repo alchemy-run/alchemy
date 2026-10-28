@@ -1,4 +1,4 @@
-import { Sfn, StateMachine } from "alchemy/AWS/StepFunctions";
+import { Sfn, StateMachine } from "@alchemy.run/aws/StepFunctions";
 import * as Effect from "effect/Effect";
 import { SaveDigest, Summarize } from "./Summarize.ts";
 

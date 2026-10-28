@@ -5,8 +5,8 @@ description: Provider-neutral MySQL schemas, Effect-native Drizzle queries, and 
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const deps = `drizzle-orm@1.0.0-rc.5-ab785fc @effect/sql-mysql2 mysql2`;
-export const devDeps = `drizzle-kit@1.0.0-rc.5-ab785fc`;
+export const deps = `@alchemy.run/drizzle drizzle-orm@1.0.0-rc.5 @effect/sql-mysql2`;
+export const devDeps = `drizzle-kit@1.0.0-rc.5`;
 
 `Drizzle.MySQL` provides typed, Effect-native queries for compatible MySQL databases, independently of where your application runs. Choose a database in [SQL databases](/sql/databases) and supply its connection through your runtime's binding or configuration.
 
@@ -48,7 +48,7 @@ export const relations = defineRelations({ Users, Posts }, (t) => ({
 
 ```typescript
 // src/queries.ts
-import * as Drizzle from "alchemy/Drizzle/MySQL";
+import * as Drizzle from "@alchemy.run/drizzle/MySQL";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
 import { relations, Users } from "./schema.ts";

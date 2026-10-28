@@ -15,6 +15,7 @@
     "test": "bun test"
   },
   "dependencies": {
+    "@alchemy.run/railway": "workspace:*",
     "@tanstack/react-router": "catalog:",
     "@tanstack/react-start": "catalog:",
     "alchemy": "workspace:*",
@@ -24,6 +25,7 @@
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@distilled.cloud/railway": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@tailwindcss/vite": "catalog:",

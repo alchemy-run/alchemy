@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
  * projects.
  *
  * The default export satisfies alchemy's `WorkerSourceModule` contract
- * (`packages/alchemy/src/Cloudflare/Workers/Source.ts`) **structurally**:
+ * (`packages/cloudflare/src/Workers/Source.ts`) **structurally**:
  * the `Source*` shapes below mirror alchemy's `SourceProvider` /
  * `SourceContext` / `SourceBuildOutput` interfaces rather than importing
  * them, so this package carries no dependency on alchemy. Version skew
@@ -40,7 +40,7 @@ import type { PlatformError } from "effect/PlatformError";
 import * as Redacted from "effect/Redacted";
 import type * as Scope from "effect/Scope";
 import { glob } from "tinyglobby";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import { makeCloudflareTarget } from "./cloudflare.ts";
 import { make as makeNuxt, type NuxtOptions } from "./Nuxt.ts";
 
@@ -48,7 +48,7 @@ const PROVIDER = "@alchemy.run/frontend-frameworks/nuxt/source";
 
 // ─────────────────────────────────────────────────────────────────────
 // Structural mirror of alchemy's Worker source contract
-// (packages/alchemy/src/Cloudflare/Workers/Source.ts). Do not import
+// (packages/cloudflare/src/Workers/Source.ts). Do not import
 // alchemy here — the contract is structural by design.
 // ─────────────────────────────────────────────────────────────────────
 
@@ -148,6 +148,7 @@ type SourceServices = FileSystem.FileSystem | Path.Path;
 /** Mirror of alchemy's `SourceProvider` (structural). */
 export interface SourceProvider {
   readonly ownsAssets: boolean;
+  readonly devAssetsBinding?: boolean;
   readonly build: (
     ctx: SourceContext,
   ) => Effect.Effect<SourceBuildOutput, SourceError, SourceServices>;
@@ -333,7 +334,7 @@ const hashDirectory = Effect.fnUntraced(function* (cwd: string, memo: NuxtMemoOp
             ]),
             (file) => (file ? NodePath.relative(cwd, file) : undefined),
           )
-        : Effect.succeed(undefined),
+        : Effect.undefined,
     ],
     { concurrency: "unbounded" },
   );
@@ -412,7 +413,7 @@ const maybeReadString = (fs: FileSystem.FileSystem, file: string) =>
     .readFileString(file)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
       ),
     );
 
@@ -561,11 +562,14 @@ export const makeNuxtSource = (options: NuxtSourceOptions): SourceProvider => {
   });
   return {
     ownsAssets: true,
+    // The dev platform proxy serves the public directory to `ASSETS`.
+    devAssetsBinding: true,
     build: Effect.fnUntraced(function* (ctx) {
       const output = yield* runBuildChild({
         module: import.meta.url,
         rootDir,
         framework: "nuxt",
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir,
           compatibilityDate: ctx.compatibility.date,
