@@ -7,8 +7,9 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { expectAuditEntry } from "../auditLogs.ts";
-import { expectProbe } from "../bindingHost.ts";
+import { callProbe, expectProbe } from "../bindingHost.ts";
 import BigtableBindingsHost, {
+  Trash,
   AuditMarkers,
   Db,
   GenBackup,
@@ -31,6 +32,7 @@ let clusterName: string;
 let tableName: string;
 let genTableName: string;
 let backupName: string;
+let trashName: string;
 
 const hostRoles = (policy: bigtable.Policy) =>
   (policy.bindings ?? [])
@@ -81,6 +83,7 @@ describe.skipIf(!!process.env.FAST)(
               table: (yield* Rows).name,
               genTable: (yield* GenRows).name,
               backup: (yield* GenBackup).name,
+              trash: (yield* Trash).name,
             };
           }),
         );
@@ -92,6 +95,7 @@ describe.skipIf(!!process.env.FAST)(
         tableName = out.table;
         genTableName = out.genTable;
         backupName = out.backup;
+        trashName = out.trash;
       }),
       { timeout: 900_000 },
     );
@@ -156,7 +160,7 @@ describe.skipIf(!!process.env.FAST)(
 
     const live = { tags: ["provider:gcp", "provider:gcp:bigtable", "live"], timeout: 600_000 };
 
-    describe("GenerateTableConsistencyToken / CheckTableConsistency / DropTableRowRange / ModifyTableColumnFamilies / UndeleteTable / ListTableAuthorizedViews / GetTableAuthorizedView / ListTableSchemaBundles / GetTableSchemaBundle", () => {
+    describe("GenerateTableConsistencyToken / CheckTableConsistency / DropTableRowRange / ModifyTableColumnFamilies / ListTableAuthorizedViews / GetTableAuthorizedView / ListTableSchemaBundles / GetTableSchemaBundle", () => {
       test.provider(
         "manages the table as the host, granted on the table only",
         (_stack) =>
@@ -176,38 +180,6 @@ describe.skipIf(!!process.env.FAST)(
             }>(baseUrl, "tableChildren");
             expect(children.missingAuthorizedView).not.toEqual("succeeded");
             expect(children.missingSchemaBundle).not.toEqual("succeeded");
-
-            // Last: delete the table out of band and bring it back.
-            // Refused ("still being created") while the schema changes above apply.
-            yield* bigtable.deleteProjectsInstancesTables({ name: genTableName }).pipe(
-              Effect.retry({
-                while: (error) => error._tag === "TableInTransition",
-                schedule: Schedule.spaced("5 seconds"),
-                times: 24,
-              }),
-            );
-            // Deletion is asynchronous: wait until the table reads as gone.
-            yield* bigtable.getProjectsInstancesTables({ name: genTableName }).pipe(
-              Effect.flatMap(() => Effect.fail(new StillExists())),
-              Effect.retry({
-                // Bigtable answers "still being created" for any table in transition.
-                while: (error) =>
-                  error._tag === "StillExists" || error._tag === "TableInTransition",
-                schedule: Schedule.spaced("3 seconds"),
-                times: 40,
-              }),
-              Effect.catchTag("NotFound", () => Effect.void),
-            );
-            const undeleted = yield* expectProbe<{ name?: string }>(baseUrl, "undelete");
-            expect(undeleted.name).toBeDefined();
-            // Restoring: reads answer NotFound, then "still being created".
-            yield* bigtable.getProjectsInstancesTables({ name: genTableName }).pipe(
-              Effect.retry({
-                while: (error) => error._tag === "NotFound" || error._tag === "TableInTransition",
-                schedule: Schedule.spaced("5 seconds"),
-                times: 36,
-              }),
-            );
 
             const policy = yield* bigtable.getIamPolicyProjectsInstancesTables({
               resource: genTableName,
@@ -340,6 +312,65 @@ describe.skipIf(!!process.env.FAST)(
             }
           }),
         { tags: ["provider:gcp", "live"], timeout: 900_000 },
+      );
+    });
+
+    // Last: deleting and restoring a table leaves it in transition for a while.
+    describe("UndeleteTable", () => {
+      test.provider(
+        "restores a deleted table as the host",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Refused ("still being created") until the new table settles.
+            yield* bigtable.deleteProjectsInstancesTables({ name: trashName }).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "TableInTransition",
+                schedule: Schedule.spaced("5 seconds"),
+                times: 24,
+              }),
+            );
+            // Deletion is asynchronous: wait until the table reads as gone.
+            yield* bigtable.getProjectsInstancesTables({ name: trashName }).pipe(
+              Effect.flatMap(() => Effect.fail(new StillExists())),
+              Effect.retry({
+                // Bigtable answers "still being created" for any table in transition.
+                while: (error) =>
+                  error._tag === "StillExists" || error._tag === "TableInTransition",
+                schedule: Schedule.spaced("3 seconds"),
+                times: 40,
+              }),
+              Effect.catchTag("NotFound", () => Effect.void),
+            );
+            // Bigtable may still see the table for a few seconds after reads stop.
+            const undeleted = yield* callProbe<{ name?: string }>(baseUrl, "undelete").pipe(
+              Effect.repeat({
+                schedule: Schedule.spaced("5 seconds"),
+                until: (outcome) => outcome.ok || outcome.error._tag !== "Conflict",
+                times: 24,
+              }),
+            );
+            expect(undeleted.ok).toBe(true);
+            // Restoring: reads answer NotFound, then "still being created".
+            yield* bigtable.getProjectsInstancesTables({ name: trashName }).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "NotFound" || error._tag === "TableInTransition",
+                schedule: Schedule.spaced("5 seconds"),
+                times: 36,
+              }),
+            );
+
+            const policy = yield* bigtable
+              .getIamPolicyProjectsInstancesTables({ resource: trashName, body: {} })
+              .pipe(
+                Effect.retry({
+                  while: (error) => error._tag === "TableInTransition",
+                  schedule: Schedule.spaced("5 seconds"),
+                  times: 12,
+                }),
+              );
+            expect(hostRoles(policy)).toEqual(["roles/bigtable.editor"]);
+          }),
+        live,
       );
     });
   },

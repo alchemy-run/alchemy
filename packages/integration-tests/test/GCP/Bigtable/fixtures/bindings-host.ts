@@ -45,6 +45,15 @@ export const GenRows = Effect.gen(function* () {
   });
 });
 
+/** Table only `UndeleteTable` binds; the test deletes it out of band first. */
+export const Trash = Effect.gen(function* () {
+  const instance = yield* Db;
+  return yield* GCP.Bigtable.Table("Trash", {
+    instance: instance.name,
+    columnFamilies: { cf: { gcRule: { maxNumVersions: 1 } } },
+  });
+});
+
 /** A backup of {@link GenRows} the copy, restore and backup-read bindings use. */
 export const GenBackup = Effect.gen(function* () {
   const instance = yield* Db;
@@ -102,7 +111,7 @@ export default class BigtableBindingsHost extends GCP.Function<BigtableBindingsH
     const generateToken = yield* B.GenerateTableConsistencyToken(GenRows);
     const dropRowRange = yield* B.DropTableRowRange(GenRows);
     const modifyColumnFamilies = yield* B.ModifyTableColumnFamilies(GenRows);
-    const undelete = yield* B.UndeleteTable(GenRows);
+    const undelete = yield* B.UndeleteTable(Trash);
     const listAuthorizedViews = yield* B.ListTableAuthorizedViews(GenRows);
     const getAuthorizedView = yield* B.GetTableAuthorizedView(GenRows);
     const listSchemaBundles = yield* B.ListTableSchemaBundles(GenRows);
