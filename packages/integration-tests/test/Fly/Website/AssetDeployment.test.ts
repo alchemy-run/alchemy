@@ -20,10 +20,7 @@ test.provider(
     Effect.gen(function* () {
       const path = yield* Path.Path;
       const fixture = (version: "v1" | "v2") =>
-        path.resolve(
-          import.meta.dirname,
-          `../../../../alchemy/test/AWS/Website/fixtures/asset-deployment-${version}`,
-        );
+        path.resolve(import.meta.dirname, `../../AWS/Website/fixtures/asset-deployment-${version}`);
 
       yield* stack.destroy();
 
