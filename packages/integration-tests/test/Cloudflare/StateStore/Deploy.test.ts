@@ -19,6 +19,7 @@ import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Alchemist from "alchemy/Alchemist";
+import { AlchemyContext } from "alchemy/AlchemyContext";
 import { currentProfileName } from "alchemy/Auth/Profile";
 import { checkHttpStateStoreAuth, makeHttpStateStore } from "alchemy/State/HttpStateStore";
 import { State } from "alchemy/State/State";
@@ -442,6 +443,8 @@ test.provider(
  * version differs from its own.
  */
 const OLD_ALCHEMY = "2.0.0-beta.84";
+/** The store version that release deploys. */
+const OLD_STATE_STORE_VERSION = 7;
 
 const oldAlchemyDir = fileURLToPath(
   new URL(`../../../.alchemy/old-alchemy/${OLD_ALCHEMY}/`, import.meta.url),
@@ -562,7 +565,7 @@ test.provider(
       // State written to the old Worker.
       const profile = yield* currentProfileName;
       const credentials = yield* loginWithCloudflare(profile, true, workerName, accountId);
-      expect(yield* servedVersion(credentials.url)).toBeLessThan(STATE_STORE_VERSION);
+      expect(yield* servedVersion(credentials.url)).toBe(OLD_STATE_STORE_VERSION);
       const legacy = yield* makeHttpStateStore({ ...credentials, id: "legacy" });
       yield* legacy.set({ stack: "old", stage: "test", fqn: "a", value: record("a") });
 
@@ -582,6 +585,57 @@ test.provider(
       expect(`${old.stdout}${old.stderr}`).toContain("409");
       expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
       expect(yield* scriptModifiedOn(accountId, workerName)).toEqual(upgradedOn);
+
+      yield* teardownStateStore({ workerName });
+    }),
+  { tags, timeout: 600_000 },
+);
+
+test.provider(
+  "a stack opening a store an older Alchemy deployed upgrades it in place only when approved",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const name = storeName("v7");
+      const workerName = `alchemy-state-store-${name}`;
+      yield* teardownStateStore({ workerName });
+
+      const deployed = yield* oldBootstrap(name);
+      expect({
+        exitCode: deployed.exitCode,
+        output: deployed.exitCode === 0 ? "" : deployed.stderr,
+      }).toEqual({ exitCode: 0, output: "" });
+      const secrets = yield* observeSecrets(accountId, workerName);
+      const profile = yield* currentProfileName;
+      const credentials = yield* loginWithCloudflare(profile, true, workerName, accountId);
+      expect(yield* servedVersion(credentials.url)).toBe(OLD_STATE_STORE_VERSION);
+      const legacy = yield* makeHttpStateStore({ ...credentials, id: "legacy" });
+      yield* legacy.set({ stack: "v7", stage: "test", fqn: "a", value: record("a") });
+
+      // Without `--yes` (and nobody to confirm), the deploy stops and says so.
+      const unapproved = yield* Effect.exit(open({ name }));
+      expectFailure(
+        unapproved,
+        `is out of date (expected v${STATE_STORE_VERSION}, observed v${OLD_STATE_STORE_VERSION})`,
+      );
+      expect(yield* servedVersion(credentials.url)).toBe(OLD_STATE_STORE_VERSION);
+      expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
+
+      // With `--yes`, it upgrades the store in place.
+      const context = yield* Effect.serviceOption(AlchemyContext);
+      const upgraded = yield* open({ name }).pipe(
+        Effect.provideService(AlchemyContext, {
+          dotAlchemy: Option.isSome(context) ? context.value.dotAlchemy : ".alchemy",
+          dev: false,
+          adopt: false,
+          updateStateStore: true,
+        }),
+      );
+      expect(yield* eventuallyServes(credentials.url, STATE_STORE_VERSION)).toBe(
+        STATE_STORE_VERSION,
+      );
+      expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
+      expect(yield* upgraded.get({ stack: "v7", stage: "test", fqn: "a" })).toEqual(record("a"));
 
       yield* teardownStateStore({ workerName });
     }),
