@@ -165,21 +165,27 @@ export const readLegacyStage = Effect.fn(function* (
   const records = yield* Effect.forEach(
     recordKeys,
     (key) =>
-      s3.getObject({ Bucket: location.bucket, Key: key }).pipe(
-        Effect.flatMap((result) =>
-          result.Body === undefined
-            ? Effect.fail(new EmptyBody())
-            : Stream.mkString(Stream.decodeText(result.Body)).pipe(
-                Effect.map((text) => ({ text })),
-              ),
-        ),
+      Effect.gen(function* () {
+        const result = yield* s3.getObject({ Bucket: location.bucket, Key: key });
+        if (result.Body === undefined) return yield* new EmptyBody();
+        return yield* Stream.mkString(Stream.decodeText(result.Body)).pipe(
+          Effect.mapError(
+            (cause) =>
+              new LegacyStateError({
+                message: `Failed to read S3 state object '${key}': ${cause}`,
+              }),
+          ),
+        );
+      }).pipe(
         // A response without its body is a transport hiccup: read again.
         Effect.retry({
           while: (error) => error._tag === "EmptyBody",
           schedule: Schedule.spaced("500 millis"),
           times: 3,
         }),
-        Effect.catchTag("EmptyBody", () => Effect.succeed(undefined)),
+        Effect.catchTag("EmptyBody", () =>
+          Effect.fail(new LegacyStateError({ message: `S3 state object '${key}' has no body` })),
+        ),
         Effect.catchTag("NoSuchKey", (error) =>
           Effect.fail(
             // Listed but gone: something is writing the stage. Copying the
@@ -189,14 +195,12 @@ export const readLegacyStage = Effect.fn(function* (
             }),
           ),
         ),
-        Effect.flatMap((object) =>
-          object === undefined
-            ? Effect.fail(new LegacyStateError({ message: `S3 state object '${key}' has no body` }))
-            : canonical(object.text, key).pipe(
-                Effect.map((text) => [
-                  [decodeFqn(key.slice(prefix.length).replace(/\.json$/, "")), text] as const,
-                ]),
-              ),
+        Effect.flatMap((text) =>
+          canonical(text, key).pipe(
+            Effect.map((canonicalText) => [
+              [decodeFqn(key.slice(prefix.length).replace(/\.json$/, "")), canonicalText] as const,
+            ]),
+          ),
         ),
       ),
     { concurrency: 16 },
