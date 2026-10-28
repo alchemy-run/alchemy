@@ -133,7 +133,16 @@ export const toDocumentEvent = (pattern: string, event: CloudEvent): DocumentEve
     ArrayBuffer.isView(event.data) ? (event.data as Uint8Array) : new Uint8Array(),
   );
   const document = (event.subject ?? "").replace(/^documents\//, "");
-  const kind = event.type.split(".").at(-1) as DocumentEvent["kind"];
+  // A `written` trigger delivers `….written`; name the change it carries.
+  const type = event.type.split(".").at(-1);
+  const kind: DocumentEvent["kind"] =
+    type === "created" || type === "updated" || type === "deleted"
+      ? type
+      : data.oldValue === undefined
+        ? "created"
+        : data.value === undefined
+          ? "deleted"
+          : "updated";
   return {
     kind,
     document,

@@ -167,13 +167,24 @@ describe.skipIf(!!process.env.FAST)(
             );
             expect(added.name).toEqual(genTableName);
             expect(Object.keys(added.columnFamilies ?? {}).sort()).toEqual(["cf", "extra"]);
-            expect(yield* expectProbe<string>(baseUrl, "undelete")).not.toEqual("succeeded");
             const children = yield* expectProbe<{
               missingAuthorizedView: string;
               missingSchemaBundle: string;
             }>(baseUrl, "tableChildren");
             expect(children.missingAuthorizedView).not.toEqual("succeeded");
             expect(children.missingSchemaBundle).not.toEqual("succeeded");
+
+            // Last: delete the table out of band and bring it back.
+            yield* bigtable.deleteProjectsInstancesTables({ name: genTableName });
+            const undeleted = yield* expectProbe<{ name?: string }>(baseUrl, "undelete");
+            expect(undeleted.name).toBeDefined();
+            yield* bigtable.getProjectsInstancesTables({ name: genTableName }).pipe(
+              Effect.retry({
+                while: (error) => error._tag === "NotFound",
+                schedule: Schedule.spaced("5 seconds"),
+                times: 24,
+              }),
+            );
 
             const policy = yield* bigtable.getIamPolicyProjectsInstancesTables({
               resource: genTableName,

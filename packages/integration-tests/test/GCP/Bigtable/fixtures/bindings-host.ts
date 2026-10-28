@@ -149,8 +149,8 @@ export default class BigtableBindingsHost extends GCP.Function<BigtableBindingsH
             }),
           ),
         ),
-        // The table isn't deleted, so there is nothing to undelete.
-        undelete: refusal(undelete({ body: {} })),
+        // The test deletes the table out of band first.
+        undelete: undelete({ body: {} }),
         tableChildren: Effect.all({
           authorizedViews: listAuthorizedViews(),
           missingAuthorizedView: refusal(getAuthorizedView({ authorizedView: "none" })),
