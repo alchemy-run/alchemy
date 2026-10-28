@@ -502,8 +502,8 @@ export const updateIamMembership = (options: {
         error._tag === "IamPolicyEtagMismatch" ||
         // A just-created service account the policy service can't see yet.
         error._tag === "IamMemberNotFound" ||
-        // A Bigtable table being created, restored or deleted.
-        error._tag === "TableInTransition" ||
+        // A Bigtable table still being created (or restored, or deleted).
+        error._tag === "TableStillCreating" ||
         (error._tag === "BadRequest" && /does not exist/i.test(error.message ?? "")),
       // ~60s total: long enough for a new service account to propagate.
       times: 6,

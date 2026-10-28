@@ -326,7 +326,7 @@ describe.skipIf(!!process.env.FAST)(
               .getIamPolicyProjectsInstancesTables({ resource: trashName, body: {} })
               .pipe(
                 Effect.retry({
-                  while: (error) => error._tag === "TableInTransition",
+                  while: (error) => error._tag === "TableStillCreating",
                   schedule: Schedule.spaced("5 seconds"),
                   times: 12,
                 }),
@@ -336,7 +336,7 @@ describe.skipIf(!!process.env.FAST)(
             // Refused ("still being created") until the new table settles.
             yield* bigtable.deleteProjectsInstancesTables({ name: trashName }).pipe(
               Effect.retry({
-                while: (error) => error._tag === "TableInTransition",
+                while: (error) => error._tag === "TableStillCreating",
                 schedule: Schedule.spaced("5 seconds"),
                 times: 24,
               }),
@@ -347,7 +347,7 @@ describe.skipIf(!!process.env.FAST)(
               Effect.retry({
                 // Bigtable answers "still being created" for any table in transition.
                 while: (error) =>
-                  error._tag === "StillExists" || error._tag === "TableInTransition",
+                  error._tag === "StillExists" || error._tag === "TableStillCreating",
                 schedule: Schedule.spaced("3 seconds"),
                 times: 40,
               }),
@@ -372,7 +372,7 @@ describe.skipIf(!!process.env.FAST)(
             // Restoring: reads answer NotFound, then "still being created".
             yield* bigtable.getProjectsInstancesTables({ name: trashName }).pipe(
               Effect.retry({
-                while: (error) => error._tag === "NotFound" || error._tag === "TableInTransition",
+                while: (error) => error._tag === "NotFound" || error._tag === "TableStillCreating",
                 schedule: Schedule.spaced("5 seconds"),
                 times: 36,
               }),
