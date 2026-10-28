@@ -3,8 +3,9 @@ title: Setup
 description: Provision a Celld fleet and publish a Worker graph through Alchemy APIs.
 ---
 
-import { Code } from "@astrojs/starlight/components";
-import { effectVersion } from "../../../versions";
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+export const pkgs = `alchemy@latest @alchemy.run/celld@latest @alchemy.run/aws@latest effect @effect/platform-bun`;
 
 Celld embeds V8 on your infrastructure. This guide uses the ECS Fargate host,
 an S3-compatible backing bucket, and an Alchemy `Application` publication.
@@ -12,12 +13,12 @@ It does not invoke Wrangler or `celld deploy`.
 
 ## Prepare the deployment environment
 
-Install Alchemy and Effect in a Bun project and configure an
+Install Alchemy and Effect and configure an
 [Alchemy profile](/environments/profiles) with AWS credentials. The deploying
 identity needs permissions for the host's ECS, networking, IAM, object storage,
 and management resources. New fleets run the digest-pinned Celld 0.6.3 image.
 
-<Code code={`bun add alchemy @alchemy.run/celld @alchemy.run/aws "effect@${effectVersion}" "@effect/platform-bun@${effectVersion}"`} lang="sh" />
+<PackageManagers add={pkgs} />
 
 The Alchemy CLI performs provisioning and publication; you do not need a
 separate Celld deployment CLI.

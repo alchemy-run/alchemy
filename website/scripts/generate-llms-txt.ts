@@ -442,6 +442,23 @@ const SECTIONS: Section[] = [
     pages: { directory: "railway/frontend" },
   },
   {
+    heading: "Celld — start here",
+    intro: "Celld embeds V8 on your own infrastructure: overview and fleet setup on the ECS host.",
+    pages: { slugs: ["celld/index", "celld/setup"] },
+  },
+  {
+    heading: "Celld — Compute",
+    pages: { directory: "celld/compute" },
+  },
+  {
+    heading: "Celld — APIs",
+    pages: { directory: "celld/apis" },
+  },
+  {
+    heading: "Celld — Data",
+    pages: { directory: "celld/data" },
+  },
+  {
     heading: "PlanetScale",
     intro:
       "Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.",
