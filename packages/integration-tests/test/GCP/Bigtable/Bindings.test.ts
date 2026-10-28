@@ -181,7 +181,7 @@ describe.skipIf(!!process.env.FAST)(
             // Refused ("still being created") while the schema changes above apply.
             yield* bigtable.deleteProjectsInstancesTables({ name: genTableName }).pipe(
               Effect.retry({
-                while: (error) => error._tag === "BadRequest",
+                while: (error) => error._tag === "TableInTransition",
                 schedule: Schedule.spaced("5 seconds"),
                 times: 24,
               }),
@@ -190,7 +190,9 @@ describe.skipIf(!!process.env.FAST)(
             yield* bigtable.getProjectsInstancesTables({ name: genTableName }).pipe(
               Effect.flatMap(() => Effect.fail(new StillExists())),
               Effect.retry({
-                while: (error) => error._tag === "StillExists",
+                // Bigtable answers "still being created" for any table in transition.
+                while: (error) =>
+                  error._tag === "StillExists" || error._tag === "TableInTransition",
                 schedule: Schedule.spaced("3 seconds"),
                 times: 40,
               }),
@@ -201,7 +203,7 @@ describe.skipIf(!!process.env.FAST)(
             // Restoring: reads answer NotFound, then "still being created".
             yield* bigtable.getProjectsInstancesTables({ name: genTableName }).pipe(
               Effect.retry({
-                while: (error) => error._tag === "NotFound" || error._tag === "BadRequest",
+                while: (error) => error._tag === "NotFound" || error._tag === "TableInTransition",
                 schedule: Schedule.spaced("5 seconds"),
                 times: 36,
               }),
