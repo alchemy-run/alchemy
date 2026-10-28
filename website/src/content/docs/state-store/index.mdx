@@ -102,10 +102,11 @@ Subsequent runs detect the existing Worker and use it.
 
 In CI (`CI=true`) a missing store fails the run instead: a deploy there
 should find its store provisioned, not create one as a side effect.
-Provision it once ahead of time:
+Provision it once ahead of time. Without `--backend`, the command
+provisions the store your `alchemy.run.ts` configures:
 
 ```sh
-alchemy state bootstrap --backend cloudflare --profile <your-ci-profile>
+alchemy state bootstrap --profile <your-ci-profile>
 ```
 
 `AWS.state()` behaves the same way: it creates its S3 bucket on first
