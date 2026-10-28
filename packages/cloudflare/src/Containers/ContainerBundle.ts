@@ -220,12 +220,14 @@ export const buildFinalDockerfile = (
     "",
     "WORKDIR /app",
     ...(installStep ? [installStep, ""] : []),
-    "COPY index.mjs /app/index.mjs",
+    // Linked copies don't depend on the layers below them, so the registry
+    // exporter reuses cached base layers instead of downloading them first.
+    "COPY --link index.mjs /app/index.mjs",
     // Copy any additional rolldown chunks (`chunk-XXX.js`,
     // `BunServices-YYY.js`, …). The glob matches zero or more files;
     // non-trivial bundles always emit at least one chunk, minimal
     // bundles emit none and the COPY no-ops.
-    "COPY *.js /app/",
+    "COPY --link *.js /app/",
     "EXPOSE 3000",
     `ENTRYPOINT ["${runtimeBin}", "/app/index.mjs"]`,
     "",

@@ -151,7 +151,9 @@ RUN apt-get install -y ffmpeg`,
       const lines = dockerfile.split("\n");
       expect(lines[0]).toBe("FROM oven/bun:1");
       expect(lines[1]).toBe("RUN apt-get install -y ffmpeg");
-      expect(dockerfile).toContain("COPY index.mjs /app/index.mjs");
+      // Linked copies let the registry exporter reuse cached base layers.
+      expect(dockerfile).toContain("COPY --link index.mjs /app/index.mjs");
+      expect(dockerfile).toContain("COPY --link *.js /app/");
       expect(dockerfile).toContain('ENTRYPOINT ["bun", "/app/index.mjs"]');
     });
 
