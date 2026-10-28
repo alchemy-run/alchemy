@@ -1,12 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as transcoder from "@distilled.cloud/gcp/transcoder_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import TranscoderBindingsHost from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -46,7 +46,7 @@ const waitUntilJobGone = (name: string) =>
     }),
   );
 
-describe.skipIf(!dockerAvailable || !!process.env.FAST)(
+describe.skipIf(!!process.env.FAST)(
   "Transcoder Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:transcoder", "provider:gcp:run", "live"],

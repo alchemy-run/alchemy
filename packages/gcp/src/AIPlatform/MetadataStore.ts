@@ -103,13 +103,13 @@ export const MetadataStore = Resource<MetadataStore>("GCP.AIPlatform.MetadataSto
 export class MetadataStoreNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MetadataStoreStillExists extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoreStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, metadataStoreId: string) =>
@@ -134,7 +134,7 @@ const toAttrs = (store: aiplatform.GoogleCloudAiplatformV1MetadataStore, project
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsMetadataStores({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listPage = (parent: string) =>
   aiplatform.listProjectsLocationsMetadataStores.pages({ parent, pageSize: 100 }).pipe(
@@ -149,7 +149,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (store): store is aiplatform.GoogleCloudAiplatformV1MetadataStore => store !== undefined,
-      () => new MetadataStoreNotResolved({ name }),
+      () => new MetadataStoreNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.MetadataStoreNotResolved",
@@ -162,7 +162,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (store) => store === undefined,
-      () => new MetadataStoreStillExists({ name }),
+      () => new MetadataStoreStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -257,7 +257,7 @@ export const MetadataStoreProvider = () =>
               dataplexConfig: news.dataplexConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -279,7 +279,7 @@ export const MetadataStoreProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

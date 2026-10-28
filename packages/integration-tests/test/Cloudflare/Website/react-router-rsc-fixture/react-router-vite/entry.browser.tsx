@@ -34,7 +34,6 @@ createFromReadableStream<RSCServerPayload>(getRSCStream()).then((payload) => {
         <RSCHydratedRouter createFromReadableStream={createFromReadableStream} payload={payload} />
       </StrictMode>,
       {
-        // @ts-expect-error - no types for this yet
         formState,
       },
     );

@@ -282,7 +282,7 @@ const hasDrift = (live: ga.EndpointGroup, news: EndpointGroupProps): boolean => 
 const describeEndpointGroup = Effect.fn(function* (endpointGroupArn: string) {
   return yield* withGaRegion(ga.describeEndpointGroup({ EndpointGroupArn: endpointGroupArn })).pipe(
     Effect.map((r) => r.EndpointGroup),
-    Effect.catchTag("EndpointGroupNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("EndpointGroupNotFoundException", () => Effect.undefined),
   );
 });
 

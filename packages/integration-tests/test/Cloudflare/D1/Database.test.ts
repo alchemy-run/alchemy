@@ -1,11 +1,11 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { hashMigrations } from "@alchemy.run/sql/SqlFile";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { expect } from "alchemy-test";
 import { State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -879,6 +879,60 @@ test.provider(
 
       yield* stack.destroy();
       yield* waitForDatabaseToBeDeleted(database.databaseId, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:d1", "live"] },
+);
+
+test.provider(
+  "re-imports SQL that D1 already holds after a seed rollback",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectory({ prefix: "alchemy-d1-reimport-" });
+      const seedPath = path.join(dir, "seed.sql");
+      const seed = (mode: string) =>
+        fs.writeFileString(
+          seedPath,
+          [
+            "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);",
+            `INSERT OR REPLACE INTO settings (key, value) VALUES ('mode', '${mode}');`,
+          ].join("\n"),
+        );
+      const deploy = stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.D1.Database("ReimportDatabase", { importFiles: [seedPath] });
+        }),
+      );
+      const mode = (databaseId: string) =>
+        queryAll<{ value: string }>(
+          accountId,
+          databaseId,
+          "SELECT value FROM settings WHERE key = 'mode';",
+        );
+
+      yield* stack.destroy();
+
+      yield* seed("v1");
+      const v1 = yield* deploy;
+      expect(yield* mode(v1.databaseId)).toEqual([{ value: "v1" }]);
+
+      yield* seed("v2");
+      const v2 = yield* deploy;
+      expect(v2.databaseId).toEqual(v1.databaseId);
+      expect(yield* mode(v2.databaseId)).toEqual([{ value: "v2" }]);
+
+      // Rolling back re-imports SQL whose etag D1 already holds: `init`
+      // returns no upload URL and the import has already completed.
+      yield* seed("v1");
+      const rolledBack = yield* deploy;
+      expect(rolledBack.databaseId).toEqual(v1.databaseId);
+      expect(rolledBack.importHashes[seedPath]).toEqual(v1.importHashes[seedPath]);
+      expect(yield* mode(rolledBack.databaseId)).toEqual([{ value: "v1" }]);
+
+      yield* stack.destroy();
+      yield* waitForDatabaseToBeDeleted(v1.databaseId, accountId);
     }).pipe(logLevel),
   { tags: ["provider:cloudflare", "provider:cloudflare:d1", "live"] },
 );

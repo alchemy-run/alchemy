@@ -8,7 +8,12 @@ import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
-import { type ListenerAction, serializeActions } from "./common.ts";
+import {
+  attributeDelta,
+  type ListenerAction,
+  observedAttributes,
+  serializeActions,
+} from "./common.ts";
 import type { LoadBalancer, LoadBalancerArn } from "./LoadBalancer.ts";
 import type { TargetGroup, TargetGroupArn } from "./TargetGroup.ts";
 
@@ -89,6 +94,11 @@ export interface Listener extends Resource<
     port: number;
     /** The protocol for connections (e.g. `HTTP`, `HTTPS`, `TCP`, `TLS`). */
     protocol: string;
+    /**
+     * The live values of the keys declared in `attributes`. Undeclared
+     * attributes are left out so AWS defaults never register as drift.
+     */
+    attributes?: Record<string, string>;
   },
   never,
   Providers
@@ -231,6 +241,17 @@ const desiredMutualAuth = (
       }
     : undefined;
 
+// The observed values of the declared attribute keys; skips the call when
+// nothing is declared.
+const readListenerAttributes = Effect.fn(function* (
+  listenerArn: string,
+  declared: Record<string, string> | undefined,
+) {
+  if (!declared || Object.keys(declared).length === 0) return undefined;
+  const observed = yield* elbv2.describeListenerAttributes({ ListenerArn: listenerArn });
+  return observedAttributes(declared, observed.Attributes);
+});
+
 export const ListenerProvider = () =>
   Provider.succeed(Listener, {
     stables: ["listenerArn", "loadBalancerArn"],
@@ -240,7 +261,7 @@ export const ListenerProvider = () =>
         return { action: "replace" } as const;
       }
     }),
-    read: Effect.fn(function* ({ output }) {
+    read: Effect.fn(function* ({ olds, output }) {
       if (!output) {
         return undefined;
       }
@@ -248,9 +269,15 @@ export const ListenerProvider = () =>
         .describeListeners({
           ListenerArns: [output.listenerArn],
         })
-        .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.undefined));
       const listener = described?.Listeners?.[0];
       if (!listener?.ListenerArn) {
+        return undefined;
+      }
+      const attributes = yield* readListenerAttributes(output.listenerArn, olds?.attributes).pipe(
+        Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(null)),
+      );
+      if (attributes === null) {
         return undefined;
       }
       return {
@@ -259,6 +286,7 @@ export const ListenerProvider = () =>
         targetGroupArn: defaultForwardTargetGroup(listener.DefaultActions) ?? output.targetGroupArn,
         port: listener.Port!,
         protocol: listener.Protocol!,
+        attributes,
       };
     }),
     // Listeners belong to a load balancer; describeListeners requires a
@@ -319,7 +347,7 @@ export const ListenerProvider = () =>
           .describeListeners({
             ListenerArns: [output.listenerArn],
           })
-          .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.undefined));
         listener = described?.Listeners?.[0];
       }
       if (!listener?.ListenerArn) {
@@ -329,8 +357,8 @@ export const ListenerProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              LoadBalancerNotFoundException: () => Effect.succeed(undefined),
-              ListenerNotFoundException: () => Effect.succeed(undefined),
+              LoadBalancerNotFoundException: () => Effect.undefined,
+              ListenerNotFoundException: () => Effect.undefined,
             }),
           );
         listener = listed?.Listeners?.find((l) => l.Port === news.port);
@@ -369,17 +397,19 @@ export const ListenerProvider = () =>
 
       const listenerArn = listener.ListenerArn!;
 
-      // Sync attributes — always apply when desired attrs are non-empty; AWS
-      // rejects an empty list anyway (same convention as LoadBalancer and
-      // TargetGroup attributes).
-      if (news.attributes && Object.keys(news.attributes).length > 0) {
-        yield* elbv2.modifyListenerAttributes({
+      // Sync attributes — diff the observed values of the declared keys
+      // against desired and apply only the delta.
+      let attributes = yield* readListenerAttributes(listenerArn, news.attributes);
+      const attributeChanges = attributeDelta(news.attributes, attributes);
+      if (attributeChanges.length > 0) {
+        const modified = yield* elbv2.modifyListenerAttributes({
           ListenerArn: listenerArn,
-          Attributes: Object.entries(news.attributes).map(([Key, Value]) => ({
-            Key,
-            Value,
-          })),
+          Attributes: attributeChanges,
         });
+        attributes = {
+          ...attributes,
+          ...observedAttributes(news.attributes, modified.Attributes),
+        };
       }
 
       // Sync additional SNI certificates — observed ↔ desired. The default
@@ -392,7 +422,7 @@ export const ListenerProvider = () =>
         const desiredSni = new Set(certs.slice(1));
         const observedCerts = yield* elbv2
           .describeListenerCertificates({ ListenerArn: listenerArn })
-          .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.undefined));
         const observedSni = (observedCerts?.Certificates ?? [])
           .filter((c) => !c.IsDefault && c.CertificateArn)
           .map((c) => c.CertificateArn!);
@@ -419,6 +449,7 @@ export const ListenerProvider = () =>
         targetGroupArn: defaultForwardTargetGroup(defaultActions),
         port: listener.Port ?? news.port,
         protocol: listener.Protocol ?? desiredProtocol,
+        attributes,
       };
     }),
     delete: Effect.fn(function* ({ output }) {

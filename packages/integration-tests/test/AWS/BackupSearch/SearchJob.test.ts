@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { SearchJob } from "@alchemy.run/aws/BackupSearch";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as backupsearch from "@distilled.cloud/aws/backupsearch";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

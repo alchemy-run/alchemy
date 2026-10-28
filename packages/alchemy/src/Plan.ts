@@ -10,7 +10,13 @@ import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import { asEffect } from ".//Util/types.ts";
 import { isAction, type ActionLike } from "./Action.ts";
-import { AdoptPolicy, OwnedBySomeoneElse, stripUnowned, Unowned } from "./AdoptPolicy.ts";
+import {
+  AdoptPolicy,
+  OwnedBySomeoneElse,
+  stripUnowned,
+  Unowned,
+  UnverifiableReplacement,
+} from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
 import {
   Artifacts,
@@ -191,6 +197,8 @@ export interface Replace<R extends ResourceLike = ResourceLike> extends ApplyNod
   props: any;
   deleteFirst: boolean;
   restart?: boolean;
+  /** Ownership probe of the replacement's physical identity, run before any mutation. */
+  deferredAdoption?: { adopt: boolean };
   state:
     | CreatingResourceState
     | CreatedResourceState
@@ -483,8 +491,9 @@ const makePlan = <A>(
       stack: stackName,
       stage: stage,
     });
-    const oldResources = yield* Effect.all(
-      resourceFqns.map((fqn) => state.get({ stack: stackName, stage: stage, fqn })),
+    const oldResources = yield* Effect.forEach(
+      resourceFqns,
+      (fqn) => state.get({ stack: stackName, stage: stage, fqn }),
       { concurrency: "unbounded" },
     );
 
@@ -804,7 +813,7 @@ const makePlan = <A>(
                     newBindings,
                   })
                   .pipe(providePlanScope(resource, oldState.instanceId))
-              : Effect.succeed(undefined);
+              : Effect.undefined;
 
             // A present `diff.stables` is authoritative for this update and
             // overrides `provider.stables`. We only fall back to the
@@ -921,16 +930,15 @@ const makePlan = <A>(
           }
           const nested = new Set(ancestors).add(input);
           if (Array.isArray(input)) {
-            return yield* Effect.all(
-              input.map((item) => resolveInput(item, nested)),
-              { concurrency: "unbounded" },
-            );
+            return yield* Effect.forEach(input, (item) => resolveInput(item, nested), {
+              concurrency: "unbounded",
+            });
           }
           return Object.fromEntries(
-            yield* Effect.all(
-              Object.entries(input).map(([key, value]) =>
+            yield* Effect.forEach(
+              Object.entries(input),
+              ([key, value]) =>
                 resolveInput(value, nested).pipe(Effect.map((value) => [key, value])),
-              ),
               { concurrency: "unbounded" },
             ),
           );
@@ -1005,7 +1013,7 @@ const makePlan = <A>(
             ? expr
             : yield* resolveOutput(Output.asOutput(expr.f(upstream)) as Output.Expr<any>);
         } else if (Output.isAllExpr(expr)) {
-          return yield* Effect.all(expr.outs.map(resolveOutput), {
+          return yield* Effect.forEach(expr.outs, resolveOutput, {
             concurrency: "unbounded",
           });
         } else if (Output.isLiteralExpr(expr)) {
@@ -1174,23 +1182,32 @@ const makePlan = <A>(
     //
     // Actions don't have bindings, so for action upstreams we use only
     // prop edges (which collapse to `newUpstreamDependencies` lookups).
-    const computeDownstream = (upFqn: string): string[] => {
-      const downstream: string[] = [];
-      for (const [downFqn, upstreams] of Object.entries(rawUpstreamDependencies)) {
+    //
+    // The edges are inverted in one pass (in `rawUpstreamDependencies` order,
+    // so each downstream list keeps that order) — scanning every node's
+    // upstream list per node was quadratic in resource count (#2400).
+    const directDownstream = new Map<string, string[]>();
+    for (const [downFqn, upstreams] of Object.entries(rawUpstreamDependencies)) {
+      const propDeps = new Set(newUpstreamDependencies[downFqn]);
+      for (const upFqn of upstreams) {
         if (downFqn === upFqn) continue;
-        if (!upstreams.includes(upFqn)) continue;
-        const isPropEdge = (newUpstreamDependencies[downFqn] ?? []).includes(upFqn);
-        if (isPropEdge) {
-          downstream.push(downFqn);
-          continue;
-        }
         // Binding-only edge — exclude when both endpoints sit inside
         // the same SCC of the combined graph.
-        if (combinedCycleMembers.has(upFqn) && combinedCycleMembers.has(downFqn)) {
+        if (
+          !propDeps.has(upFqn) &&
+          combinedCycleMembers.has(upFqn) &&
+          combinedCycleMembers.has(downFqn)
+        ) {
           continue;
         }
+        let downstream = directDownstream.get(upFqn);
+        if (!downstream) directDownstream.set(upFqn, (downstream = []));
         downstream.push(downFqn);
       }
+    }
+
+    const computeDownstream = (upFqn: string): string[] => {
+      const downstream = [...(directDownstream.get(upFqn) ?? [])];
       if (selected) {
         for (const row of historicalRows(persistedRows.get(upFqn))) {
           for (const dep of row.downstream ?? []) {
@@ -1477,11 +1494,16 @@ const makePlan = <A>(
           renamedFrom,
           adoptionBlocked: reusesMigratedFqn ? "migrated-fqn" : undefined,
           deferredAdoption:
-            node.action === "create" &&
-            provider.read &&
+            (provider.read || provider.observe) &&
             !reusesMigratedFqn &&
-            ((oldState === undefined && !isResolved(news)) ||
-              (oldState?.status === "creating" && oldState.attr === undefined))
+            // A replacement targets a new physical identity, which may belong
+            // to someone else — admit it like a fresh create.
+            (node.action === "replace" ||
+              (node.action === "create" &&
+                // Plan reads resolved props itself; without `read`, Apply
+                // admits them through `observe`.
+                ((oldState === undefined && (!isResolved(news) || !provider.read)) ||
+                  (oldState?.status === "creating" && oldState.attr === undefined))))
               ? { adopt: adoptThis }
               : undefined,
         }) as any as T;
@@ -1507,7 +1529,16 @@ const makePlan = <A>(
         // `output` is undefined (as it is here), so handing them
         // unresolved exprs crashes. Skip the probe — same behavior as
         // a read that found nothing — and re-drive the create.
-        if (provider.read && !reusesMigratedFqn && isResolved(oldState.props)) {
+        //
+        // A checkpoint whose unresolved props were stripped (`propsIncomplete`)
+        // can't identify the attempt at all: a lookup could match a different
+        // resource. Skip it too and let the diff below decide.
+        if (
+          provider.read &&
+          !reusesMigratedFqn &&
+          !oldState.propsIncomplete &&
+          isResolved(oldState.props)
+        ) {
           const attr = yield* provider
             .read({
               id,
@@ -1804,8 +1835,9 @@ const makePlan = <A>(
     // interrupt-only for any other reason) that can be a bare interruption,
     // hiding the InvalidReferenceError or provider error that actually
     // broke the plan.
-    const diffExits = yield* Effect.all(
-      resources.map((resource) => Effect.exit(Effect.tap(diffResource(resource), resourcePlanned))),
+    const diffExits = yield* Effect.forEach(
+      resources,
+      (resource) => Effect.exit(Effect.tap(diffResource(resource), resourcePlanned)),
       { concurrency: "unbounded" },
     );
     const diffFailures = diffExits.filter(Exit.isFailure);
@@ -1877,7 +1909,7 @@ const makePlan = <A>(
         if (excluded && (bindingEvidence || incompleteHistory)) {
           return yield* Effect.die(
             new UnsafeSelectionBoundary({
-              message: `Cannot replace or collect old generations of '${fqn}' while '${excluded[0]}' is unselected. ${bindingEvidence ? `Historical binding-cycle dependencies recorded on '${bindingEvidence}'` : `Historical dependencies missing from '${incompleteHistory}'`} cannot be proven safe; run a full deployment.`,
+              message: `Cannot replace or collect old generations of '${fqn}' while '${String(excluded[0])}' is unselected. ${bindingEvidence ? `Historical binding-cycle dependencies recorded on '${bindingEvidence}'` : `Historical dependencies missing from '${incompleteHistory}'`} cannot be proven safe; run a full deployment.`,
             }),
           );
         }
@@ -1901,7 +1933,7 @@ const makePlan = <A>(
               new UnsafeSelectionBoundary({
                 message: `Cannot reconcile '${fqn}' with incomplete historical downstream metadata while persisted nodes are unselected: ${excludedRows
                   .map(([id]) => id)
-                  .sort()
+                  .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
                   .join(", ")}. Select them or run a full deployment.`,
               }),
             );
@@ -1934,7 +1966,7 @@ const makePlan = <A>(
             new UnsafeSelectionBoundary({
               message: `Cannot discard the last historical binding evidence while persisted nodes are unselected: ${excludedRows
                 .map(([fqn]) => fqn)
-                .sort()
+                .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
                 .join(", ")}. Select them or run a full deployment.`,
             }),
           );
@@ -1958,13 +1990,13 @@ const makePlan = <A>(
       );
 
     const actionGraph = Object.fromEntries(
-      (yield* Effect.all(
-        actions.map((action) =>
+      (yield* Effect.forEach(
+        actions,
+        (action) =>
           diffAction(action).pipe(
             Effect.map((node) => [action.FQN, node] as const),
             Effect.tap(actionPlanned),
           ),
-        ),
         { concurrency: "unbounded" },
       )) as ReadonlyArray<readonly [string, ActionApply]>,
     ) as Plan["actions"];
@@ -2027,6 +2059,35 @@ const makePlan = <A>(
       }
     }
 
+    // A delete-first replacement in a cycle deletes its previous generation
+    // before precreate, which runs on unresolved props. While its identity is
+    // unresolved, only the provider's `observe` can check ownership before
+    // that delete. Without it, refuse here — before apply touches anything —
+    // unless adoption is allowed.
+    for (const [fqn, node] of Object.entries(resourceGraph)) {
+      if (
+        node.action === "replace" &&
+        node.deleteFirst &&
+        cycleMembers.has(fqn) &&
+        !node.provider.observe &&
+        node.deferredAdoption?.adopt === false &&
+        !isResolved(node.props) &&
+        // A resumed replacement already holds its precreated identity.
+        !(node.state.status === "replacing" && !node.restart && node.state.attr !== undefined)
+      ) {
+        return yield* new UnverifiableReplacement({
+          message:
+            `Cannot replace resource '${fqn}' (${node.resource.Type}): ` +
+            "it must be deleted before its replacement is pre-created, but " +
+            "the replacement's identity depends on outputs that are not " +
+            "resolved yet, so its ownership cannot be checked first. Re-run " +
+            "with `--adopt` (or wrap the effect in `adopt(true)`) to replace it anyway.",
+          resourceType: node.resource.Type,
+          logicalId: node.resource.LogicalId,
+        });
+      }
+    }
+
     // Both orphan passes (task rows below, resource rows further down)
     // examine every persisted row of this stack instance.
     const persistedFqns = selected ? [] : yield* state.list({ stack: stackName, stage });
@@ -2084,12 +2145,12 @@ const makePlan = <A>(
     });
 
     const actionDeletions: Plan["actionDeletions"] = Object.fromEntries(
-      (yield* Effect.all(
-        persistedFqns.map((fqn) =>
+      (yield* Effect.forEach(
+        persistedFqns,
+        (fqn) =>
           diffActionDeletion(fqn).pipe(
             Effect.tap((entry) => actionDeletionPlanned(entry ?? undefined)),
           ),
-        ),
         { concurrency: "unbounded" },
       )).filter((v): v is NonNullable<typeof v> => !!v),
     );
@@ -2204,10 +2265,9 @@ const makePlan = <A>(
     });
 
     const deletions = Object.fromEntries(
-      (yield* Effect.all(
-        deletionCandidates.map((fqn) =>
-          diffDeletion(fqn).pipe(Effect.tap((entry) => deletionPlanned(entry ?? undefined))),
-        ),
+      (yield* Effect.forEach(
+        deletionCandidates,
+        (fqn) => diffDeletion(fqn).pipe(Effect.tap((entry) => deletionPlanned(entry ?? undefined))),
         { concurrency: "unbounded" },
       )).filter((v) => !!v),
     );

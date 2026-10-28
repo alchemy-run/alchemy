@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { Image, type ImageProps } from "@alchemy.run/aws/ECR/Image";
 import { Repository } from "@alchemy.run/aws/ECR/Repository";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ecr from "@distilled.cloud/aws/ecr";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -245,6 +245,60 @@ test.provider(
       yield* assertRepositoryDeleted(first.repositoryName);
       yield* assertRepositoryDeleted(moved.repositoryName);
     }),
+  { tags: ["provider:aws", "provider:aws:ecr", "live"], timeout: 120_000 },
+);
+
+test.provider(
+  "files excluded by .dockerignore do not change the image tag",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      yield* stack.destroy();
+
+      const context = yield* fs.makeTempDirectoryScoped({
+        prefix: "alchemy-ecr-image-dockerignore-",
+      });
+      yield* fs.copy(fixtureDir, context);
+      yield* fs.writeFileString(path.join(context, ".dockerignore"), "node_modules\n");
+      const ignored = path.join(context, "node_modules", "pkg");
+      yield* fs.makeDirectory(ignored, { recursive: true });
+      yield* fs.writeFileString(path.join(ignored, "index.js"), "first\n");
+
+      const program = Effect.gen(function* () {
+        const repository = yield* Repository("IgnoreRepository", {});
+        return yield* Image("IgnoreImage", {
+          repositoryUri: repository.repositoryUri,
+          context,
+        });
+      });
+
+      const first = yield* stack.deploy(program);
+
+      // A local install rewrites ignored files Docker never receives.
+      yield* fs.writeFileString(path.join(ignored, "index.js"), "second\n");
+      yield* fs.writeFileString(path.join(ignored, "extra.js"), "extra\n");
+      expect((yield* stack.plan(program)).resources.IgnoreImage?.action).toBe("noop");
+      const second = yield* stack.deploy(program);
+      expect(second.imageTag).toBe(first.imageTag);
+      expect(second.digest).toBe(first.digest);
+
+      // Files Docker does receive still rebuild the image.
+      yield* fs.writeFileString(path.join(context, "hello.txt"), "kept and changed\n");
+      expect((yield* stack.plan(program)).resources.IgnoreImage?.action).toBe("update");
+      const third = yield* stack.deploy(program);
+      expect(third.imageTag).not.toBe(first.imageTag);
+      expect(third.digest).not.toBe(first.digest);
+      expect(
+        (yield* ecr.describeImages({
+          repositoryName: third.repositoryName,
+          imageIds: [{ imageTag: third.imageTag }],
+        })).imageDetails?.[0]?.imageDigest,
+      ).toBe(third.digest);
+
+      yield* stack.destroy();
+      yield* assertRepositoryDeleted(first.repositoryName);
+    }).pipe(Effect.scoped),
   { tags: ["provider:aws", "provider:aws:ecr", "live"], timeout: 120_000 },
 );
 

@@ -344,7 +344,7 @@ const getByName = (name: string) =>
       name,
       view: "WASM_PLUGIN_VIEW_FULL",
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const WasmPluginProvider = () =>
   Provider.succeed(WasmPlugin, {
@@ -440,7 +440,7 @@ export const WasmPluginProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -495,7 +495,7 @@ export const WasmPluginProvider = () =>
       yield* Effect.gen(function* () {
         const operation = yield* networkservices
           .deleteProjectsLocationsWasmPlugins({ name: output.name })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation !== undefined) {
           yield* waitForOperation(operation, { notFoundOk: true });
         }

@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/gcp",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.84",
   "description": "Google Cloud resources, Cloud Run, Cloud Functions and GKE for Alchemy.",
   "keywords": [
     "alchemy",
@@ -1023,6 +1023,9 @@
     "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
     "@alchemy.run/redis": "workspace:*",
+    "@alchemy.run/sql": "workspace:*",
+    "@distilled.cloud/aws": "workspace:*",
+    "@distilled.cloud/aws4signer": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
     "@distilled.cloud/gcp": "workspace:*",
     "rolldown": "catalog:"

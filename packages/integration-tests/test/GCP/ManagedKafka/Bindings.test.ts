@@ -1,12 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as kafka from "@distilled.cloud/gcp/managedkafka_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import KafkaBindingsHost, { Brokers, Connect, Events, Schemas } from "./fixtures/bindings-host.ts";
 import { releaseKafkaClusterSlot, takeKafkaClusterSlot } from "./quota.ts";
 
@@ -65,7 +65,7 @@ const expectScopedGrant = (role: string, name: string) =>
     expect(grants).toHaveLength(4);
   });
 
-describe.skipIf(!dockerAvailable || !runLifecycle)(
+describe.skipIf(!runLifecycle)(
   "ManagedKafka Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:managedkafka", "provider:gcp:run", "live"],

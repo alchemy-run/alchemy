@@ -145,7 +145,7 @@ export type Run = ProcessesRun;
 export class ProcessesRunNotResolved extends Data.TaggedError(
   "GCP.DataLineage.ProcessesRunNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (process: string, runId: string) => `${process}/runs/${runId}`;
@@ -175,10 +175,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : datalineage
         .getProjectsLocationsProcessesRuns({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ProcessesRunProvider = () =>
   Provider.succeed(ProcessesRun, {
@@ -271,7 +271,7 @@ export const ProcessesRunProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ProcessesRunNotResolved({ name });
+        return yield* new ProcessesRunNotResolved({ resourceName: name });
       }
 
       const resolvedName = current.name ?? name;
@@ -309,7 +309,7 @@ export const ProcessesRunProvider = () =>
           name: output.name,
           allowMissing: true,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

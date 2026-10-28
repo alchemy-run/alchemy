@@ -157,7 +157,7 @@ export const AgentsTool = Resource<AgentsTool>("GCP.Dialogflow.AgentsTool");
 export class AgentsToolNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsToolNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_FUNCTION_SPEC: ToolFunctionSpec = {
@@ -220,10 +220,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsTools({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   dialogflow.listProjectsLocationsAgentsTools.pages({ parent, pageSize: 100 }).pipe(
@@ -243,7 +243,7 @@ const findByDisplayName = (parent: string, displayName: string) =>
     Stream.filter((tool) => tool.displayName === displayName),
     Stream.runHead,
     Effect.map((option) => (option._tag === "Some" ? option.value : undefined)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const toBody = (
@@ -341,7 +341,7 @@ export const AgentsToolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentsToolNotResolved({ name });
+        return yield* new AgentsToolNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

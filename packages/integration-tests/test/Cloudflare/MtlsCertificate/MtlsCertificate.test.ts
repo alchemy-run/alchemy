@@ -1,11 +1,11 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import type { InferEnv } from "@alchemy.run/cloudflare/Workers/InferEnv";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as mtls from "@distilled.cloud/cloudflare/mtls-certificates";
 import * as workers from "@distilled.cloud/cloudflare/workers";
-import { describe, expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import { poll } from "alchemy/Util/poll";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -130,6 +130,72 @@ describe.sequential(
           mtlsCertificateId: replaced.mtlsCertificateId,
         });
         expect(actual.id).toEqual(replaced.mtlsCertificateId);
+
+        yield* stack.destroy();
+
+        yield* waitForDelete(accountId, replaced.mtlsCertificateId);
+      }).pipe(logLevel),
+    );
+
+    // Regression for #2359: with an explicit name the replacement shares the
+    // old certificate's name. Cloudflare rejects duplicate names, so the
+    // replacement deletes first and uploads the new PEM instead of adopting
+    // the old certificate by name.
+    test.provider("replaces a named certificate when the PEM changes", (stack) =>
+      Effect.gen(function* () {
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const name = `alchemy-mtls-named-${stack.stage}`.toLowerCase();
+
+        yield* stack.destroy();
+
+        const original = yield* stack.deploy(
+          Cloudflare.MtlsCertificate.MtlsCertificate("NamedReplaceCert", {
+            name,
+            ca: true,
+            certificates: CA_CERT_1,
+          }),
+        );
+
+        const replacePlan = yield* stack.plan(
+          Cloudflare.MtlsCertificate.MtlsCertificate("NamedReplaceCert", {
+            name,
+            ca: true,
+            certificates: CA_CERT_2,
+          }),
+        );
+        const replaceChange = replacePlan.resources.NamedReplaceCert!;
+        expect(replaceChange.action).toEqual("replace");
+        if (replaceChange.action === "replace") expect(replaceChange.deleteFirst).toBe(true);
+
+        const replaced = yield* stack.deploy(
+          Cloudflare.MtlsCertificate.MtlsCertificate("NamedReplaceCert", {
+            name,
+            ca: true,
+            certificates: CA_CERT_2,
+          }),
+        );
+
+        expect(replaced.name).toEqual(name);
+        expect(replaced.mtlsCertificateId).not.toEqual(original.mtlsCertificateId);
+        expect(replaced.serialNumber).not.toEqual(original.serialNumber);
+
+        yield* waitForDelete(accountId, original.mtlsCertificateId);
+
+        const actual = yield* mtls.getMtlsCertificate({
+          accountId,
+          mtlsCertificateId: replaced.mtlsCertificateId,
+        });
+        expect(actual.certificates?.trim()).toEqual(CA_CERT_2.trim());
+
+        // State now matches the cloud, so a redeploy is a noop.
+        const plan = yield* stack.plan(
+          Cloudflare.MtlsCertificate.MtlsCertificate("NamedReplaceCert", {
+            name,
+            ca: true,
+            certificates: CA_CERT_2,
+          }),
+        );
+        expect(plan.resources.NamedReplaceCert!.action).toEqual("noop");
 
         yield* stack.destroy();
 

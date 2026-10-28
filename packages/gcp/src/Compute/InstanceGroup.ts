@@ -251,7 +251,7 @@ const toAttrs = (group: compute.InstanceGroup, project: string) => {
 const getByName = (project: string, zone: string, instanceGroup: string) =>
   compute
     .getInstanceGroups({ project, zone, instanceGroup })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listMembers = (project: string, zone: string, instanceGroup: string) =>
   compute.listInstancesInstanceGroups
@@ -393,7 +393,7 @@ export const InstanceGroupProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
@@ -413,7 +413,7 @@ export const InstanceGroupProvider = () =>
             times: 8,
             schedule: Schedule.exponential("250 millis"),
           }),
-          Effect.catchTag("GCP.Compute.InstanceGroupNotResolved", () => Effect.succeed(undefined)),
+          Effect.catchTag("GCP.Compute.InstanceGroupNotResolved", () => Effect.undefined),
         );
       }
 
@@ -498,7 +498,7 @@ export const InstanceGroupProvider = () =>
           instanceGroup: output.instanceGroupName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void

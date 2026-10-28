@@ -36,6 +36,7 @@ import {
   type DurableFunctionProps,
 } from "./DurableFunction.ts";
 import { Function } from "./Function.ts";
+import { qualifierOf } from "./QualifiedArn.ts";
 
 type WorkflowNames<W> = W extends Workflow.Workflow<infer Name, any, any, any> ? Name : never;
 
@@ -238,10 +239,15 @@ export const DurableFunctionEngine = <
             });
           }
           const functionName = yield* fn.functionName;
+          // Runs start on the host's alias when it sets one.
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the host provides RuntimeContext at runtime
+          const qualifier = yield* qualifierOf(fn).bind(
+            `${fn.LogicalId}.qualifier`,
+          ) as Effect.Effect<Effect.Effect<string>>;
           const calls = makeCalls(
             (effect) => effect.pipe(Effect.provide(context)),
             functionName,
-            "$LATEST",
+            qualifier,
           );
           for (const workflow of host.workflows) routes.set(workflow._tag, calls);
         }
@@ -302,7 +308,7 @@ const makeWorkflowRunner = <ROut, E, RIn>(
       functionName
         ? Effect.succeed(functionName)
         : Effect.die(new Error("AWS_LAMBDA_FUNCTION_NAME is not set")),
-      version,
+      Effect.succeed(version),
     );
     const engine = makeEngine({
       route: (workflowName) =>
@@ -350,7 +356,7 @@ const makeWorkflowRunner = <ROut, E, RIn>(
           return yield* Effect.die(new Error(`Workflow ${workflow._tag} suspended unexpectedly`));
         }
         return yield* encodeResult(workflow, result.exit);
-      }) as Effect.Effect<string, never, never>;
+      });
   }) as Effect.Effect<
     DurableFunctionImpl<WorkflowInvocation, string>,
     E,
@@ -433,17 +439,17 @@ const unwrap = (value: string | Redacted.Redacted<string> | undefined) =>
 const makeCalls = (
   provide: <A, E>(effect: Effect.Effect<A, E, LambdaServices>) => Effect.Effect<A, E>,
   functionName: Effect.Effect<string>,
-  qualifier: string,
+  qualifier: Effect.Effect<string>,
 ): Calls => {
   const run = <A, E>(effect: Effect.Effect<A, E, LambdaServices>) =>
     provide(effect).pipe(Effect.orDie);
   return {
     start: (executionName, invocation) =>
-      Effect.flatMap(functionName, (FunctionName) =>
+      Effect.flatMap(Effect.all([functionName, qualifier]), ([FunctionName, Qualifier]) =>
         run(
           Lambda.invoke({
             FunctionName,
-            Qualifier: qualifier,
+            Qualifier,
             InvocationType: "Event",
             DurableExecutionName: executionName,
             Payload: JSON.stringify(invocation),
@@ -609,7 +615,7 @@ const makeEngine = (options: {
           const result = arn
             ? yield* readResult(calls, workflow as Workflow.AnyWithProps, arn)
             : undefined;
-          return result ?? new Workflow.Suspended({});
+          return result ?? Workflow.Suspended.make({});
         }
         // A child workflow: wait for it here, with durable waits between checks.
         for (let check = 0; ; check++) {
@@ -636,7 +642,7 @@ const makeEngine = (options: {
         const arn = yield* calls.find(executionNameOf(workflow._tag, executionId));
         if (!arn) return Option.none();
         const result = yield* readResult(calls, workflow as Workflow.AnyWithProps, arn);
-        return Option.some(result ?? new Workflow.Suspended({}));
+        return Option.some(result ?? Workflow.Suspended.make({}));
       }),
 
     // A run waiting on a signal is woken with an interrupt, so its

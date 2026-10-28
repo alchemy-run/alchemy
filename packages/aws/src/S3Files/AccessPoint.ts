@@ -160,7 +160,7 @@ export const AccessPointProvider = () =>
       const observe = (accessPointId: string) =>
         s3files
           .getAccessPoint({ accessPointId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const toAttributes = (ap: s3files.GetAccessPointResponse) => ({
         accessPointId: ap.accessPointId,
@@ -287,7 +287,7 @@ export const AccessPointProvider = () =>
                 clientToken,
                 tags: toTagList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             live =
               created !== undefined
                 ? yield* observe(created.accessPointId)

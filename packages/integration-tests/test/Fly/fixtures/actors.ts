@@ -1,6 +1,6 @@
-import { expect } from "alchemy-test";
-import type { ScratchStack } from "alchemy/Test/Alchemy";
-import { scratchStack } from "alchemy/Test/Core";
+import { expect } from "@alchemy.run/test";
+import type { ScratchStack } from "@alchemy.run/test/Alchemy";
+import { scratchStack } from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import { throughProxy } from "./transport.ts";
 

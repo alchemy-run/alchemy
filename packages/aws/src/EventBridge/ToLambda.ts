@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import type { Function as LambdaFunction } from "../Lambda/Function.ts";
 import { Permission as LambdaPermission } from "../Lambda/Permission.ts";
+import { qualifiedArnOf, qualifiedNameOf } from "../Lambda/QualifiedArn.ts";
 import type { EventBus } from "./EventBus.ts";
 import { Rule, type RuleProps, type RuleTarget } from "./Rule.ts";
 
@@ -56,7 +57,7 @@ export const toLambda = (
       targets: [
         {
           Id: `${fn.LogicalId}Target`,
-          Arn: fn.functionArn as any,
+          Arn: qualifiedArnOf(fn) as any,
           Input: props.Input,
           InputPath: props.InputPath,
           InputTransformer: props.InputTransformer,
@@ -72,7 +73,7 @@ export const toLambda = (
     if (!globalThis.__ALCHEMY_RUNTIME__) {
       yield* LambdaPermission(`${routeId}${fn.LogicalId}InvokePermission`, {
         action: "lambda:InvokeFunction",
-        functionName: fn.functionName,
+        functionName: qualifiedNameOf(fn),
         principal: "events.amazonaws.com",
         sourceArn: rule.ruleArn as any,
       }).pipe(Effect.asVoid);

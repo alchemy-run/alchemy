@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { AccessPolicy } from "@alchemy.run/aws/OpenSearchServerless";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as aoss from "@distilled.cloud/aws/opensearchserverless";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";

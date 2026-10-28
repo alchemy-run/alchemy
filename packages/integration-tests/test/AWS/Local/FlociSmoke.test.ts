@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 /**
  * Floci local-emulator smoke test.
  *
@@ -33,25 +32,14 @@ import * as AWS from "@alchemy.run/aws";
 import { Table } from "@alchemy.run/aws/DynamoDB";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { Queue } from "@alchemy.run/aws/SQS";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 
 const FLOCI_ENDPOINT = "http://localhost:4566";
-
-// skipIf gate: floci runs as a Docker container. `docker info` proves the
-// daemon is reachable (a mere `docker --version` would pass with the daemon
-// down). Sync probe at collection time — skipIf needs a plain boolean.
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
 
 const providers = AWS.providers();
 
@@ -103,7 +91,7 @@ const rawS3GetBucket = Effect.fn(function* (bucketName: string) {
 /** Region segment of an ARN (`arn:aws:sqs:REGION:ACCOUNT:name`). */
 const regionOfArn = (arn: string) => arn.split(":")[3]!;
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "deploys S3 + SQS + DynamoDB into floci and destroys them",
   (stack) =>
     Effect.gen(function* () {

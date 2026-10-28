@@ -1,6 +1,7 @@
 import { gunzipSync } from "node:zlib";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
@@ -24,19 +25,26 @@ import { Permission as LambdaPermission } from "./Permission.ts";
 export const isCloudWatchLogsEvent = (event: any): event is CloudWatchLogsEvent =>
   typeof event?.awslogs?.data === "string";
 
+/** A CloudWatch Logs subscription payload could not be decoded. */
+export class CloudWatchLogsDecodeError extends Data.TaggedError("CloudWatchLogsDecodeError")<{
+  message: string;
+  cause?: unknown;
+}> {}
+
 /**
  * Decode the gzipped, base64-encoded CloudWatch Logs subscription payload.
  */
 export const decodeCloudWatchLogsEvent = (
   event: CloudWatchLogsEvent,
-): Effect.Effect<LogsSubscriptionPayload, Error> =>
+): Effect.Effect<LogsSubscriptionPayload, CloudWatchLogsDecodeError> =>
   Effect.try({
     try: () =>
       JSON.parse(
         gunzipSync(Buffer.from(event.awslogs.data, "base64")).toString(),
       ) as LogsSubscriptionPayload,
     catch: (cause) =>
-      new Error("failed to decode CloudWatch Logs subscription payload", {
+      new CloudWatchLogsDecodeError({
+        message: "failed to decode CloudWatch Logs subscription payload",
         cause,
       }),
   });
@@ -97,7 +105,7 @@ export const LogGroupEventSource = Layer.effect(
           Effect.gen(function* () {
             yield* Permission(`AWS.Logs.InvokePermission(${logGroup.LogicalId})`, {
               action: "lambda:InvokeFunction",
-              functionName: host.functionName,
+              functionName: Lambda.qualifiedNameOf(host),
               principal: "logs.amazonaws.com",
               sourceArn: Output.interpolate`${logGroup.logGroupArn}:*`,
             });
@@ -105,7 +113,7 @@ export const LogGroupEventSource = Layer.effect(
               logGroupName: logGroup.logGroupName,
               filterName: props.filterName,
               filterPattern: props.filterPattern ?? "",
-              destinationArn: host.functionArn,
+              destinationArn: Lambda.qualifiedArnOf(host),
             });
           }),
         );

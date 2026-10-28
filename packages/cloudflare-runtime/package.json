@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/cloudflare-runtime",
-  "version": "2.0.0-beta.83",
+  "version": "2.0.0-beta.84",
   "description": "Cloudflare Workers local runtime and build plugins for Alchemy.",
   "keywords": [
     "alchemy",
@@ -725,7 +725,7 @@
     "test:vite": "vitest run --project vite",
     "test:workers-shared": "vitest run --project 'workers-shared-*'",
     "test:workflows-shared": "vitest run --project workflows-shared",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsrs --noEmit"
   },
   "dependencies": {
     "@alchemy.run/node-utils": "workspace:*",

@@ -323,7 +323,7 @@ export type Table = Resource<
 export const Table = Resource<Table>("GCP.BigQuery.Table");
 
 export class TableNotResolved extends Data.TaggedError("GCP.BigQuery.TableNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 /** `view` and `externalDataConfiguration` were both set; a table is one kind. */
@@ -565,7 +565,7 @@ const getByRef = (projectId: string, datasetId: string, tableId: string) =>
       tableId,
       view: "FULL",
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toTableBody = (
   projectId: string,
@@ -754,7 +754,7 @@ export const TableProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TableNotResolved({ name });
+        return yield* new TableNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

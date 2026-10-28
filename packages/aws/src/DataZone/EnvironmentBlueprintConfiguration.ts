@@ -1,4 +1,6 @@
 import * as datazone from "@distilled.cloud/aws/datazone";
+import * as lf from "@distilled.cloud/aws/lakeformation";
+import { Region } from "@distilled.cloud/aws/Region";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -6,6 +8,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import type { RegionID } from "../Region.ts";
 
 /**
  * Lake Formation provisioning configuration for a blueprint.
@@ -89,6 +92,14 @@ export interface EnvironmentBlueprintConfiguration extends Resource<
     provisioningRoleArn: string | undefined;
     /** The ARN of the manage-access role. */
     manageAccessRoleArn: string | undefined;
+    /**
+     * Lake Formation administrator entries this configuration is responsible
+     * for: the provisioning and manage-access roles, per enabled region,
+     * wherever the role was not already an administrator. DataZone makes both
+     * roles administrators when it deploys an environment; delete removes
+     * these entries again.
+     */
+    lakeFormationAdmins?: LakeFormationAdminEntry[];
   }
 > {}
 
@@ -173,6 +184,45 @@ const retryWhileRoleAssumeFails = <A, E extends { _tag: string }, R>(
     schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(10)]),
   });
 
+/** A Lake Formation administrator entry in one region's catalog. */
+export interface LakeFormationAdminEntry {
+  /** The administrator principal (an IAM role ARN). */
+  principal: string;
+  /** The region whose Data Catalog lists the administrator. */
+  region: string;
+}
+
+/** Run a Lake Formation call against a specific region's catalog. */
+const inRegion = (region: string) =>
+  Effect.provideService(Region, Effect.succeed(region as RegionID));
+
+const isLakeFormationAdmin = Effect.fn(function* (roleArn: string, region: string) {
+  const { DataLakeSettings: settings } = yield* lf.getDataLakeSettings({}).pipe(inRegion(region));
+  return (settings?.DataLakeAdmins ?? []).some((p) => p.DataLakePrincipalIdentifier === roleArn);
+});
+
+/**
+ * Remove `roleArn` from the region's Lake Formation administrators. Left
+ * behind, the entry dangles once the role is deleted and Lake Formation
+ * rejects every later administrator write in the region as an invalid
+ * principal.
+ */
+const removeLakeFormationAdmin = Effect.fn(function* (roleArn: string, region: string) {
+  const { DataLakeSettings: settings = {} } = yield* lf
+    .getDataLakeSettings({})
+    .pipe(inRegion(region));
+  const admins = settings.DataLakeAdmins ?? [];
+  if (!admins.some((p) => p.DataLakePrincipalIdentifier === roleArn)) return;
+  yield* lf
+    .putDataLakeSettings({
+      DataLakeSettings: {
+        ...settings,
+        DataLakeAdmins: admins.filter((p) => p.DataLakePrincipalIdentifier !== roleArn),
+      },
+    })
+    .pipe(inRegion(region));
+});
+
 export const EnvironmentBlueprintConfigurationProvider = () =>
   Provider.effect(
     EnvironmentBlueprintConfiguration,
@@ -213,8 +263,8 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              ResourceNotFoundException: () => Effect.succeed(undefined),
-              AccessDeniedException: () => Effect.succeed(undefined),
+              ResourceNotFoundException: () => Effect.undefined,
+              AccessDeniedException: () => Effect.undefined,
             }),
           );
       });
@@ -237,11 +287,11 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
             : olds?.environmentBlueprint
               ? yield* resolveBlueprint(domainId, olds.environmentBlueprint).pipe(
                   Effect.catchTags({
-                    "AWS.DataZone.EnvironmentBlueprintNotFound": () => Effect.succeed(undefined),
+                    "AWS.DataZone.EnvironmentBlueprintNotFound": () => Effect.undefined,
                     // the domain itself may already be gone (reported as
                     // NotFound or as AccessDenied — auth precedes existence)
-                    ResourceNotFoundException: () => Effect.succeed(undefined),
-                    AccessDeniedException: () => Effect.succeed(undefined),
+                    ResourceNotFoundException: () => Effect.undefined,
+                    AccessDeniedException: () => Effect.undefined,
                   }),
                 )
               : undefined;
@@ -266,6 +316,7 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
             enabledRegions: [...(config.enabledRegions ?? [])],
             provisioningRoleArn: config.provisioningRoleArn,
             manageAccessRoleArn: config.manageAccessRoleArn,
+            lakeFormationAdmins: output?.lakeFormationAdmins,
           };
         }),
 
@@ -289,6 +340,33 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
                 name: output.environmentBlueprintName,
               }
             : yield* resolveBlueprint(domainId, news.environmentBlueprint);
+
+          // The (role, region) administrator entries DataZone may add for
+          // this configuration.
+          const roles = [news.provisioningRoleArn, news.manageAccessRoleArn].filter(
+            (role): role is string => role !== undefined,
+          );
+          const candidates = roles.flatMap((principal) =>
+            news.enabledRegions.map((region) => ({ principal, region })),
+          );
+          const same = (a: LakeFormationAdminEntry) => (b: LakeFormationAdminEntry) =>
+            a.principal === b.principal && a.region === b.region;
+          const previous = output?.lakeFormationAdmins ?? [];
+
+          // Release entries for roles or regions no longer configured.
+          for (const entry of previous.filter((e) => !candidates.some(same(e)))) {
+            yield* removeLakeFormationAdmin(entry.principal, entry.region);
+          }
+
+          // Observe, before DataZone can add it, where each role is not yet an
+          // administrator — those entries are ours to remove.
+          const lakeFormationAdmins = yield* Effect.filter(candidates, (entry) =>
+            previous.some(same(entry))
+              ? Effect.succeed(true)
+              : isLakeFormationAdmin(entry.principal, entry.region).pipe(
+                  Effect.map((admin) => !admin),
+                ),
+          );
 
           // PutEnvironmentBlueprintConfiguration is a true upsert — one call
           // converges greenfield, update, and adoption alike.
@@ -314,6 +392,7 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
             enabledRegions: [...(config.enabledRegions ?? news.enabledRegions)],
             provisioningRoleArn: config.provisioningRoleArn,
             manageAccessRoleArn: config.manageAccessRoleArn,
+            lakeFormationAdmins,
           };
         }),
 
@@ -324,6 +403,13 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
               environmentBlueprintIdentifier: output.environmentBlueprintId,
             })
             .pipe(
+              // Environments created from the configuration may still be
+              // deleting; DataZone refuses until they are gone.
+              Effect.retry({
+                while: (e) => e._tag === "EnvironmentBlueprintConfigurationInUse",
+                schedule: Schedule.spaced("5 seconds"),
+                times: 24,
+              }),
               Effect.catchTags({
                 ResourceNotFoundException: () => Effect.void,
                 // deleting a configuration whose domain is already gone
@@ -331,6 +417,9 @@ export const EnvironmentBlueprintConfigurationProvider = () =>
                 AccessDeniedException: () => Effect.void,
               }),
             );
+          for (const entry of output.lakeFormationAdmins ?? []) {
+            yield* removeLakeFormationAdmin(entry.principal, entry.region);
+          }
         }),
       });
     }),

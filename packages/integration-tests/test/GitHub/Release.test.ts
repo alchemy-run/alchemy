@@ -1,13 +1,13 @@
 import * as GitHub from "@alchemy.run/github";
-import { GitHubCredentials } from "@alchemy.run/github/Credentials";
-import { Octokit } from "@alchemy.run/github/Octokit";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Repos from "@distilled.cloud/github/repos";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { gh, scopedToOwner } from "./scope.ts";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
@@ -40,36 +40,24 @@ const release = (fixture: string, props: Omit<GitHub.ReleaseProps, "owner" | "re
 
 const getRelease = (fixture: string, releaseId: number) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: () =>
-        octokit.rest.repos.getRelease({
-          owner,
-          repo: `alchemy-effect-pr-1577-release-${fixture}`,
-          release_id: releaseId,
-        }),
-      catch: (error) => error as Error & { status?: number },
-    }).pipe(
-      Effect.map(({ data }) => data),
-      Effect.catchIf(
-        (error) => error.status === 404,
-        () => Effect.succeed(undefined),
-      ),
-    );
+    return yield* gh(
+      Repos.getRelease({
+        owner,
+        repo: `alchemy-effect-pr-1577-release-${fixture}`,
+        release_id: releaseId,
+      }),
+    ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
   });
 
 const assertDeleted = (fixture: string, releaseId: number) =>
   Effect.gen(function* () {
     expect(yield* getRelease(fixture, releaseId)).toBeUndefined();
-    const octokit = yield* Octokit;
-    const { data } = yield* Effect.tryPromise({
-      try: () =>
-        octokit.rest.repos.listReleases({
-          owner,
-          repo: `alchemy-effect-pr-1577-release-${fixture}`,
-        }),
-      catch: (error) => error as Error,
-    });
+    const data = yield* gh(
+      Repos.listReleases({
+        owner,
+        repo: `alchemy-effect-pr-1577-release-${fixture}`,
+      }),
+    );
     expect(data).toEqual([]);
   });
 
@@ -205,42 +193,10 @@ test.provider(
         }),
       );
       const name = "alchemy-effect-pr-1577-release-list";
-      const credentials = yield* yield* GitHubCredentials;
       const provider = yield* Provider.findProvider(GitHub.Release);
       // list() enumerates /user/repos; confine it to this suite's fixture.
       const all = yield* provider.list().pipe(
-        Effect.provideService(
-          GitHubCredentials,
-          Effect.succeed({
-            ...credentials,
-            octokit: (override) => {
-              const octokit = credentials.octokit(override);
-              octokit.hook.before("request", (options) => {
-                const url = new URL(options.url, "https://api.github.com");
-                if (url.pathname === "/user/repos") {
-                  url.pathname = `/orgs/${owner}/repos`;
-                  options.url = url.toString();
-                }
-                if (
-                  url.origin !== "https://api.github.com" ||
-                  (url.pathname !== `/orgs/${owner}/repos` &&
-                    url.pathname !== `/repos/${owner}/${name}/releases`)
-                ) {
-                  throw new Error(`Unsafe Release list request: ${url}`);
-                }
-              });
-              octokit.hook.after("request", (response, options) => {
-                const url = new URL(options.url, "https://api.github.com");
-                if (url.pathname === `/orgs/${owner}/repos`) {
-                  response.data = (response.data as Array<{ name: string }>).filter(
-                    (repo) => repo.name === name,
-                  );
-                }
-              });
-              return octokit;
-            },
-          }),
-        ),
+        scopedToOwner(owner, { repository: name, path: "releases" }),
         // Repository listings are eventually consistent for fresh fixtures.
         Effect.repeat({
           schedule: Schedule.spaced("2 seconds"),

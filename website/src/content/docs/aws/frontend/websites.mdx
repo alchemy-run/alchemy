@@ -31,7 +31,7 @@ integration on top.
   apps on a streaming Lambda; your `vite.config.ts` loads natively.
 - [`Nuxt`](/aws/frontend/nuxt) — Nuxt apps built through nitro's
   `node` preset; your `nuxt.config.ts` loads natively.
-- [`ReactRouter`](/aws/frontend/react-router) — React Router v7 in
+- [`ReactRouter`](/aws/frontend/react-router) — React Router v8 in
   framework mode, built through your own `vite build`.
 - [`SvelteKit`](/aws/frontend/sveltekit) — SvelteKit apps with a
   wrangler-free in-memory AWS adapter; your `vite.config.ts` loads
@@ -50,7 +50,8 @@ integration on top.
   sites (or a site plus an API), routed at the edge.
 
 Every resource shares the same surface: `domain` (ACM certificate +
-Route 53 records), server configuration (`timeout`, `env`,
+Route 53 records, or records on another
+[DNS host](/infrastructure-as-code/dns-adapters)), server configuration (`timeout`, `env`,
 `maxConcurrencyPerEnvironment`, `maxEnvironments`), `assets`, `edge`
 customizations, and `invalidation`.
 All builds are memoized by content-hashing the input files — an

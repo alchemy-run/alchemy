@@ -2,15 +2,34 @@ import * as acm from "@distilled.cloud/aws/acm";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import { deepEqual, isResolved } from "alchemy/Diff";
+import type { DnsRecord } from "alchemy/DNS/Adapter";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
+
+export class CertificateNotReady extends Data.TaggedError("CertificateNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CertificateUnexpectedResponse extends Data.TaggedError(
+  "CertificateUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CertificateOperationFailed extends Data.TaggedError("CertificateOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface CertificateProps {
   /**
@@ -37,6 +56,23 @@ export interface CertificateProps {
    * pending.
    */
   hostedZoneId?: string;
+  /**
+   * Who publishes the DNS validation records (with `validationMethod:
+   * "DNS"`).
+   *
+   * - `"route53"` — the provider upserts them into Route 53
+   *   ({@link hostedZoneId}, or the inferred public zone) and waits for
+   *   issuance.
+   * - `"external"` — the provider only waits until ACM has computed the
+   *   records and returns the certificate `PENDING_VALIDATION` with
+   *   `domainValidationOptions` filled in. Publish them yourself — e.g.
+   *   through a DNS adapter with {@link validationRecordsOf} — and wait for
+   *   issuance with `AWS.ACM.CertificateValidation`. This is what AWS
+   *   composites do for a `domain.dns` outside Route 53.
+   *
+   * @default "route53"
+   */
+  dnsValidation?: "route53" | "external";
   /**
    * Requested key algorithm.
    */
@@ -176,12 +212,32 @@ const resolveEffectiveSans = (
 };
 
 /**
+ * ACM refused to issue the certificate because a CAA record on the domain
+ * does not authorize Amazon. Alchemy never writes CAA records itself — add
+ * the records named in the message at the zone apex and redeploy.
+ */
+export class CertificateCaaError extends Data.TaggedError("CertificateCaaError")<{
+  readonly certificateArn: string;
+  readonly domainName: string;
+}> {
+  override get message() {
+    return (
+      `ACM could not issue ${this.certificateArn} for ${this.domainName}: a CAA record on the domain does not authorize Amazon (CAA_ERROR). ` +
+      `Add CAA records at the zone apex — \`0 issue "amazon.com"\` and \`0 issue "amazonaws.com"\` (plus the same with \`issuewild\` for wildcard names) — then redeploy.`
+    );
+  }
+}
+
+/**
  * An ACM certificate for CloudFront and other AWS endpoints.
  *
  * `Certificate` requests an ACM certificate in `us-east-1`, which is the
- * region required for CloudFront viewer certificates. When `hostedZoneId` is
- * provided for DNS validation, the provider creates or updates the Route 53
- * validation records and waits for the certificate to be issued.
+ * region required for CloudFront viewer certificates. With DNS validation,
+ * the provider creates or updates the Route 53 validation records
+ * (`hostedZoneId`, or the inferred public zone) and waits for the
+ * certificate to be issued. With `dnsValidation: "external"` the records
+ * are published elsewhere — e.g. through a DNS adapter — and
+ * `AWS.ACM.CertificateValidation` waits for issuance.
  * ### Requesting Certificates
  * **Example:** DNS-Validated Certificate
  * ```typescript
@@ -208,6 +264,27 @@ const resolveEffectiveSans = (
  *   domainName: "www.example.com",
  *   hostedZoneId: "Z1234567890",
  *   export: "ENABLED",
+ * });
+ * ```
+ *
+ * **Example:** Certificate Validated Through Another DNS Host
+ * ```typescript
+ * // DNS lives in Cloudflare: publish ACM's validation CNAMEs through the
+ * // Cloudflare DNS adapter, then wait for issuance. AWS composites do this
+ * // for you when `domain.dns` is set.
+ * const cert = yield* Certificate("WebsiteCertificate", {
+ *   domainName: "www.example.com",
+ *   dnsValidation: "external",
+ * });
+ * const dns = yield* DNS.resolve(Cloudflare.DNS.Adapter());
+ * yield* dns.records("WebsiteCertificateValidation", {
+ *   records: cert.domainValidationOptions.pipe(
+ *     Output.map(validationRecordsOf),
+ *   ),
+ *   retain: true,
+ * });
+ * const issued = yield* CertificateValidation("WebsiteCertificateIssued", {
+ *   certificateArn: cert.certificateArn,
  * });
  * ```
  *
@@ -239,7 +316,7 @@ export const CertificateProvider = () =>
       const describeCertificate = Effect.fn(function* (certificateArn: string) {
         return yield* acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
           Effect.map((response) => response.Certificate),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           withCertRegion(regionOfCertificateArn(certificateArn)),
         );
       });
@@ -306,43 +383,22 @@ export const CertificateProvider = () =>
               validations.length === 0 ||
               validations.some((option) => option.ResourceRecord === undefined)
             ) {
-              return Effect.fail(new Error("CertificateValidationRecordPending"));
+              return Effect.fail(
+                new CertificateNotReady({ message: "CertificateValidationRecordPending" }),
+              );
             }
             return Effect.succeed(detail!);
           }),
           Effect.retry({
             while: (error) =>
-              error instanceof Error && error.message === "CertificateValidationRecordPending",
+              error._tag === "CertificateNotReady" &&
+              error.message === "CertificateValidationRecordPending",
             schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
           }),
         );
       });
 
-      const waitForIssued = Effect.fn(function* (certificateArn: string) {
-        return yield* describeCertificate(certificateArn).pipe(
-          Effect.flatMap((detail) => {
-            if (!detail?.CertificateArn) {
-              return Effect.fail(new Error("CertificateNotFound"));
-            }
-            if (detail.Status === "ISSUED") {
-              return Effect.succeed(detail);
-            }
-            if (isTerminalFailure(detail.Status)) {
-              return Effect.fail(
-                new Error(
-                  `Certificate issuance failed with status ${detail.Status}${detail.FailureReason ? ` (${detail.FailureReason})` : ""}`,
-                ),
-              );
-            }
-            return Effect.fail(new Error("CertificatePendingValidation"));
-          }),
-          Effect.retry({
-            while: (error) =>
-              error instanceof Error && error.message === "CertificatePendingValidation",
-            schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
-          }),
-        );
-      });
+      const waitForIssued = (certificateArn: string) => waitForCertificateIssued(certificateArn);
 
       const upsertValidationRecords = Effect.fn(function* (
         hostedZoneId: string,
@@ -521,7 +577,12 @@ export const CertificateProvider = () =>
               acm
                 .requestCertificate({
                   DomainName: news.domainName,
-                  SubjectAlternativeNames: news.subjectAlternativeNames,
+                  // ACM rejects an empty list (min length 1) — composites
+                  // pass `[]` for a domain without aliases.
+                  SubjectAlternativeNames:
+                    news.subjectAlternativeNames && news.subjectAlternativeNames.length > 0
+                      ? news.subjectAlternativeNames
+                      : undefined,
                   ValidationMethod: news.validationMethod ?? defaultValidationMethod,
                   KeyAlgorithm: news.keyAlgorithm,
                   Options:
@@ -536,29 +597,35 @@ export const CertificateProvider = () =>
                   Tags: createTagsList(desiredTags),
                 })
                 .pipe(
-                  Effect.flatMap((response) =>
-                    response.CertificateArn
-                      ? describeCertificate(response.CertificateArn).pipe(
-                          Effect.map((detail) => detail!),
-                        )
-                      : Effect.fail(new Error("requestCertificate returned no certificate ARN")),
+                  Effect.flatMap(
+                    Effect.fnUntraced(function* (response) {
+                      if (!response.CertificateArn) {
+                        return yield* new CertificateUnexpectedResponse({
+                          message: "requestCertificate returned no certificate ARN",
+                        });
+                      }
+                      return (yield* describeCertificate(response.CertificateArn))!;
+                    }),
                   ),
                 ),
             );
           }
 
           if (!certificate?.CertificateArn) {
-            return yield* Effect.fail(new Error("Failed to obtain ACM certificate"));
+            return yield* new CertificateOperationFailed({
+              message: "Failed to obtain ACM certificate",
+            });
           }
 
           const certificateArn = certificate.CertificateArn;
           yield* session.note(certificateArn);
 
           // Sync DNS validation: ensure validation records are upserted and
-          // the cert reaches `ISSUED`. The zone is the explicit
-          // `hostedZoneId` when given; otherwise the most specific public
-          // zone containing `domainName` is inferred. When neither yields a
-          // zone, validation is left to the caller (external DNS) and the
+          // the cert reaches `ISSUED`. With `dnsValidation: "external"` the
+          // caller publishes them (a DNS adapter). Otherwise the zone is
+          // the explicit `hostedZoneId` when given, or the most specific
+          // public zone containing `domainName`; when neither yields a zone,
+          // validation is left to the caller (external DNS) and the
           // certificate is returned pending — the pre-inference behavior.
           // For an already-issued cert this is a fast-path: we only wait
           // for validation records when the cert isn't already issued.
@@ -566,12 +633,18 @@ export const CertificateProvider = () =>
             (news.validationMethod ?? defaultValidationMethod) === "DNS" &&
             certificate.Status !== "ISSUED"
           ) {
-            const validationZoneId =
-              news.hostedZoneId ?? (yield* findPublicHostedZoneId(news.domainName));
-            if (validationZoneId !== undefined) {
-              const withRecords = yield* waitForValidationRecords(certificateArn);
-              yield* upsertValidationRecords(validationZoneId, withRecords);
-              certificate = yield* waitForIssued(certificateArn);
+            if (news.dnsValidation === "external") {
+              // The caller publishes the records: surface them on the
+              // attributes and return pending.
+              certificate = yield* waitForValidationRecords(certificateArn);
+            } else {
+              const validationZoneId =
+                news.hostedZoneId ?? (yield* findPublicHostedZoneId(news.domainName));
+              if (validationZoneId !== undefined) {
+                const withRecords = yield* waitForValidationRecords(certificateArn);
+                yield* upsertValidationRecords(validationZoneId, withRecords);
+                certificate = yield* waitForIssued(certificateArn);
+              }
             }
           }
 
@@ -662,10 +735,11 @@ export const waitForRoute53Change = Effect.fn(function* (changeId: string) {
       Effect.flatMap((changeInfo) =>
         changeInfo.Status === "INSYNC"
           ? Effect.succeed(changeInfo)
-          : Effect.fail(new Error("Route53ChangePending")),
+          : Effect.fail(new CertificateNotReady({ message: "Route53ChangePending" })),
       ),
       Effect.retry({
-        while: (error) => error instanceof Error && error.message === "Route53ChangePending",
+        while: (error) =>
+          error._tag === "CertificateNotReady" && error.message === "Route53ChangePending",
         schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
       }),
     );
@@ -734,6 +808,94 @@ const toAttrs = (
   issuedAt: detail.IssuedAt,
   notAfter: detail.NotAfter,
 });
+
+/**
+ * The DNS validation records of a certificate's `domainValidationOptions`,
+ * shaped for a DNS adapter's `records(...)` (or any `RecordList`). A
+ * wildcard and its apex (`*.example.com` + `example.com`) share one CNAME,
+ * so records are deduped by type + name.
+ *
+ * **Example:**
+ * ```typescript
+ * const cert = yield* AWS.ACM.Certificate("Cert", {
+ *   domainName: "app.example.com",
+ *   dnsValidation: "external",
+ * });
+ * yield* Cloudflare.DNS.RecordList("CertValidation", {
+ *   records: cert.domainValidationOptions.pipe(
+ *     Output.map(AWS.ACM.validationRecordsOf),
+ *   ),
+ * });
+ * ```
+ */
+export const validationRecordsOf = (
+  domainValidationOptions: acm.DomainValidation[] | undefined,
+): DnsRecord[] => [
+  ...new Map(
+    (domainValidationOptions ?? []).flatMap((option) =>
+      option.ResourceRecord
+        ? [
+            [
+              `${option.ResourceRecord.Type}:${option.ResourceRecord.Name.toLowerCase()}`,
+              {
+                name: option.ResourceRecord.Name,
+                type: option.ResourceRecord.Type as DnsRecord["type"],
+                value: option.ResourceRecord.Value,
+              },
+            ] as const,
+          ]
+        : [],
+    ),
+  ).values(),
+];
+
+/**
+ * Describe a certificate in its own region; `undefined` when it is gone.
+ * @internal shared with `CertificateValidation`
+ */
+export const describeCertificateDetail = (certificateArn: string) =>
+  acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
+    Effect.map((response) => response.Certificate),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+    withCertRegion(regionOfCertificateArn(certificateArn)),
+  );
+
+/**
+ * Poll a certificate until ACM issues it (bounded: 10s × 60). Fails with
+ * {@link CertificateCaaError} on `CAA_ERROR`, and with an error naming the
+ * status on any other terminal failure.
+ * @internal shared with `CertificateValidation`
+ */
+export const waitForCertificateIssued = (certificateArn: string) =>
+  describeCertificateDetail(certificateArn).pipe(
+    Effect.flatMap(
+      Effect.fnUntraced(function* (detail) {
+        if (!detail?.CertificateArn) {
+          return yield* new CertificateUnexpectedResponse({ message: "CertificateNotFound" });
+        }
+        if (detail.Status === "ISSUED") {
+          return detail;
+        }
+        if (isTerminalFailure(detail.Status)) {
+          if (detail.FailureReason === "CAA_ERROR") {
+            return yield* new CertificateCaaError({
+              certificateArn,
+              domainName: detail.DomainName ?? "",
+            });
+          }
+          return yield* new CertificateOperationFailed({
+            message: `Certificate issuance failed with status ${detail.Status}${detail.FailureReason ? ` (${detail.FailureReason})` : ""}`,
+          });
+        }
+        return yield* new CertificateNotReady({ message: "CertificatePendingValidation" });
+      }),
+    ),
+    Effect.retry({
+      while: (error) =>
+        error._tag === "CertificateNotReady" && error.message === "CertificatePendingValidation",
+      schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
+    }),
+  );
 
 const isTerminalFailure = (status: acm.CertificateStatus | undefined) =>
   status === "FAILED" || status === "VALIDATION_TIMED_OUT";

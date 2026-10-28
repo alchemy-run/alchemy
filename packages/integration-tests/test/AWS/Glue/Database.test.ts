@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Database } from "@alchemy.run/aws/Glue";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as glue from "@distilled.cloud/aws/glue";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

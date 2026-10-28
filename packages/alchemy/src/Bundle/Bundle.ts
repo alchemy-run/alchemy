@@ -13,6 +13,7 @@ import { ResourceContext } from "../ResourceContext.ts";
 import { StackContext } from "../StackContext.ts";
 import { sha256, sha256Object } from "../Util/sha256.ts";
 import { bundleAnalyzerPlugin, type BundleAnalyzerPluginOptions } from "./BundleAnalyzerPlugin.ts";
+import { namespaceImportPlugin } from "./NamespaceImportPlugin.ts";
 import { purePlugin, type PurePluginOptions } from "./PurePlugin.ts";
 import { rawPlugin } from "./RawPlugin.ts";
 import { unreachableChunksPlugin } from "./UnreachableChunksPlugin.ts";
@@ -185,9 +186,18 @@ const ALCHEMY_MODULE_TYPES: NonNullable<rolldown.InputOptions["moduleTypes"]> = 
  * framework flags win over any caller-provided keys) and
  * {@link ALCHEMY_MODULE_TYPES} into the caller's `moduleTypes` (caller
  * keys win, so an extension can be remapped or disabled per bundle).
+ *
+ * Also enables `experimental.lazyBarrel` unless the caller sets it, so a
+ * runtime importing one service from `@alchemy.run/aws` (a barrel of every
+ * AWS service) compiles that service, not all of them. See
+ * {@link namespaceImportPlugin} for `import * as AWS`.
  */
 const withAlchemyDefine = (inputOptions: rolldown.InputOptions): rolldown.InputOptions => ({
   ...inputOptions,
+  experimental: {
+    lazyBarrel: true,
+    ...inputOptions.experimental,
+  },
   transform: {
     ...inputOptions.transform,
     define: {
@@ -405,11 +415,12 @@ const watchResolved =
         Effect.gen(function* () {
           // Hold a build permit until the watcher's initial build settles.
           yield* buildPermits.take(1);
+          const context = yield* Effect.context();
           let initialBuildSettled = false;
           const settleInitialBuild = () => {
             if (initialBuildSettled) return;
             initialBuildSettled = true;
-            Effect.runFork(buildPermits.release(1));
+            Effect.runForkWith(context)(buildPermits.release(1));
           };
           const watcher = yield* Effect.promise(() => createWatcher(settleInitialBuild)).pipe(
             Effect.onError(() => Effect.sync(settleInitialBuild)),
@@ -444,14 +455,12 @@ const watchResolved =
     );
 
 const ENTRY_PREFIX = "\0virtual:alchemy-entry:";
-// oxlint-disable-next-line no-control-regex
 const ENTRY_REGEX = /^\0virtual:alchemy-entry:/;
 /**
  * Ids the `resolveId` hook looks at: the virtual entry ids themselves, plus
  * bare package specifiers (not starting with `.`, `/` or `\0`) so an
  * unresolvable import in a generated entry fails the build (below).
  */
-// oxlint-disable-next-line no-control-regex
 const ENTRY_OR_BARE_REGEX = /^(?:\0virtual:alchemy-entry:|[^./\0])/;
 
 export const virtualEntryPlugin = Effect.gen(function* () {
@@ -563,6 +572,7 @@ async function builtInPlugins(extra?: BundleExtraOptions): Promise<rolldown.Roll
     extra?.bundleAnalyzer
       ? await bundleAnalyzerPlugin(extra.bundleAnalyzer === true ? {} : extra.bundleAnalyzer)
       : undefined,
+    namespaceImportPlugin(),
     extra?.pure !== false ? purePlugin(extra?.pure ?? {}) : undefined,
     rawPlugin(),
     unreachableChunksPlugin(),

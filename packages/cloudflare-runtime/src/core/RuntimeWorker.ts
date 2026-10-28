@@ -172,6 +172,12 @@ export interface Assets {
   redirects?: string;
   htmlHandling?: "auto-trailing-slash" | "force-trailing-slash" | "drop-trailing-slash" | "none";
   notFoundHandling?: "none" | "404-page" | "single-page-application";
+  /**
+   * URL path prefix the assets are served under (`assets.base_path`), e.g.
+   * `/subpath` serves `public/test.txt` at `/subpath/test.txt`. The Asset
+   * Worker normalizes relative values and 404s requests outside the prefix.
+   */
+  basePath?: string;
   runWorkerFirst?: Array<string> | boolean;
   serveDirectly?: boolean;
 }

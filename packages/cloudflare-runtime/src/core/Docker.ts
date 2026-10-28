@@ -219,7 +219,7 @@ export const DockerLive = Layer.effect(
         stderr: "pipe",
         detached: false,
       }).pipe(
-        spawner.spawn,
+        (command) => spawner.spawn(command),
         Effect.flatMap((child) =>
           child.stdout.pipe(
             Stream.decodeText,
@@ -367,7 +367,7 @@ export const DockerLive = Layer.effect(
         stderr: "pipe",
         detached: false,
       }).pipe(
-        spawner.spawn,
+        (command) => spawner.spawn(command),
         Effect.flatMap((child) =>
           Effect.all(
             {

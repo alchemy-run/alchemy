@@ -2,6 +2,7 @@ import * as organizations from "@distilled.cloud/aws/organizations";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -11,6 +12,11 @@ import {
   retryOrganizations,
   updateResourceTags,
 } from "./common.ts";
+
+export class RootUnexpectedResponse extends Data.TaggedError("RootUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type RootId = string;
 export type RootArn = string;
@@ -147,12 +153,15 @@ export const RootProvider = () =>
             );
             return attrs.filter((attr): attr is Root["Attributes"] => attr !== undefined);
           }),
-        diff: Effect.fn(function* ({ olds, news }) {
+        diff: Effect.fn(function* ({ olds, news, output }) {
           if (!isResolved(news)) return;
-          if (olds?.rootId !== news?.rootId) {
+          // `rootId` and `name` only select which root to adopt. Adding,
+          // removing, or pinning one that matches the adopted root is a noop;
+          // only a selector pointing at a different root replaces.
+          if (news.rootId !== undefined && news.rootId !== (output?.rootId ?? olds?.rootId)) {
             return { action: "replace" } as const;
           }
-          if (olds?.name !== news?.name) {
+          if (news.name !== undefined && news.name !== (output?.rootName ?? olds?.name)) {
             return { action: "replace" } as const;
           }
         }),
@@ -171,13 +180,11 @@ export const RootProvider = () =>
             name: news.name,
           });
           if (!root) {
-            return yield* Effect.fail(
-              new Error(
-                output?.rootId
-                  ? `organization root '${output.rootId}' not found`
-                  : "organization root not found",
-              ),
-            );
+            return yield* new RootUnexpectedResponse({
+              message: output?.rootId
+                ? `organization root '${output.rootId}' not found`
+                : "organization root not found",
+            });
           }
 
           // Sync tags — diff observed cloud tags against desired. Using

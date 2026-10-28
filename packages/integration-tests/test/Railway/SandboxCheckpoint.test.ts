@@ -1,14 +1,14 @@
 import * as Railway from "@alchemy.run/railway";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Query } from "@distilled.cloud/core/query";
 import {
   Railway as RailwayApi,
   type SandboxCheckpoint as RailwaySandboxCheckpoint,
 } from "@distilled.cloud/railway";
-import { expect } from "alchemy-test";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { State, type UpdatingReourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import { suitePartition } from "./suiteProject.ts";

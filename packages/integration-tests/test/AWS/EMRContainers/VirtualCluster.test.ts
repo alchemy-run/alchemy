@@ -2,11 +2,11 @@ import * as AWS from "@alchemy.run/aws";
 import { Cluster } from "@alchemy.run/aws/EKS";
 import { VirtualCluster } from "@alchemy.run/aws/EMRContainers";
 import { Role } from "@alchemy.run/aws/IAM";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as emrc from "@distilled.cloud/aws/emr-containers";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

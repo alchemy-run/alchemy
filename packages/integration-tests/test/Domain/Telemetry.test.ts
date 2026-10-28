@@ -1,6 +1,6 @@
 import * as Domain from "@alchemy.run/domain";
 import { Story } from "@alchemy.run/domain/Story";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -89,7 +89,9 @@ const AuditDebitsLive = AuditDebits.toLayer(
     const ledgers = yield* Ledger;
     return Effect.fn(function* ({ source }) {
       yield* ledgers.send("main", new Audit({ wallet: source.id }));
-      yield* ledgers.schedule("main", new Remind(), { after: "1 hour" });
+      yield* ledgers
+        .schedule("main", new Remind(), { after: "1 hour" })
+        .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
     });
   }),
 );
@@ -159,7 +161,7 @@ class Reviewed extends Domain.Model("TelemetryReviews", {
 
 const reviewStory = Story.make(Reviewed, {
   layer: Layer.mergeAll(ReviewDebitsLive, ReviewLive, MovementsLive),
-  externalSystems: [Scorer],
+  stub: [Scorer],
 });
 
 const story = Story.make(Bank, { layer: Layer.mergeAll(AuditDebitsLive) });
@@ -277,6 +279,7 @@ describe("Domain telemetry", () => {
         Story.clock("2026-01-01T00:00:00Z"),
         Story.given(alice, new Opened({ balance: 100 })),
         Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
+        Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
         Story.then(ledger, new Audited({ wallet: "alice" })),
         Story.clock("2026-01-01T01:00:00Z"),
         Story.then(ledger, new Reminded()),
@@ -299,8 +302,9 @@ describe("Domain telemetry", () => {
       yield* reviewStory(
         Story.given(alice, new Opened({ balance: 100 })),
         Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
-        Story.expectCall(Scorer.score, { wallet: "alice" }),
-        Story.resolve(Scorer.score, { risk: 0.9 }),
+        Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
+        Story.call(Scorer.score, { wallet: "alice" }),
+        Story.succeed(Scorer.score, { risk: 0.9 }),
         Story.then(ledger, new Audited({ wallet: "alice" })),
         Story.saga(Review, "alice", { _tag: "Completed", result: undefined }),
       ).pipe(Effect.withTracer(tracer));
@@ -333,8 +337,9 @@ describe("Domain telemetry", () => {
       yield* reviewStory(
         Story.given(alice, new Opened({ balance: 100 })),
         Story.when(alice, new Debit({ amount: 40, note: Redacted.make("rent") })),
-        Story.expectCall(Scorer.score, { wallet: "alice" }),
-        Story.resolve(Scorer.score, { risk: 0.1 }),
+        Story.then(alice, new Debited({ amount: 40, note: Redacted.make("rent") })),
+        Story.call(Scorer.score, { wallet: "alice" }),
+        Story.succeed(Scorer.score, { risk: 0.1 }),
       ).pipe(Effect.withTracer(tracer));
 
       const debit = one("Domain.decide Wallet.Debit");

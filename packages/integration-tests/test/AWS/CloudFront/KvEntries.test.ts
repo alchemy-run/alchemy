@@ -1,11 +1,11 @@
 import * as AWS from "@alchemy.run/aws";
-import { KeyValueStore, KvEntries } from "@alchemy.run/aws/CloudFront";
+import { KeyValueStore, KvEntries, KvRoutesUpdate } from "@alchemy.run/aws/CloudFront";
 import { extractValue, withKvsRegion } from "@alchemy.run/aws/CloudFront/common";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as kvs from "@distilled.cloud/aws/cloudfront-keyvaluestore";
-import { describe, expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
@@ -95,6 +95,55 @@ describe(
             "/": "/index.html",
             "/about": "/about-v2.html",
             "/contact": "/contact.html",
+          });
+
+          yield* stack.destroy();
+          yield* assertKeyValueStoreDeleted(deployed.store.keyValueStoreName);
+        }),
+      { timeout: 120_000 },
+    );
+
+    test.provider(
+      "delete without purge leaves keys it does not own",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+
+          // A Router's layout: the `routes` table and its inline route
+          // metadata share the router namespace.
+          const router = (withMetadata: boolean) =>
+            Effect.gen(function* () {
+              const store = yield* KeyValueStore("SharedStore", {
+                comment: "kv-entries shared namespace",
+              });
+              yield* KvRoutesUpdate("Routes", {
+                store: store.keyValueStoreArn,
+                namespace: "router",
+                key: "routes",
+                entry: "url,router:29e7,,/api",
+              });
+              if (withMetadata) {
+                yield* KvEntries("Metadata", {
+                  store: store.keyValueStoreArn,
+                  namespace: "router",
+                  entries: { "29e7:metadata": "{}" },
+                });
+              }
+              return { store };
+            });
+
+          const deployed = yield* stack.deploy(router(true));
+          const store = deployed.store.keyValueStoreArn;
+          yield* assertEntries(store, "router", {
+            routes: JSON.stringify(["url,router:29e7,,/api"]),
+            "29e7:metadata": "{}",
+          });
+
+          // Removing the last inline route deletes the KvEntries; the
+          // routes table must survive.
+          yield* stack.deploy(router(false));
+          yield* assertEntries(store, "router", {
+            routes: JSON.stringify(["url,router:29e7,,/api"]),
           });
 
           yield* stack.destroy();

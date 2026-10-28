@@ -488,7 +488,7 @@ const toAttrs = (instance: compute.Instance, project: string) => {
 const getByName = (project: string, zone: string, instance: string) =>
   compute
     .getInstances({ project, zone, instance })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilGone = (project: string, zone: string, instanceName: string) =>
   getByName(project, zone, instanceName).pipe(

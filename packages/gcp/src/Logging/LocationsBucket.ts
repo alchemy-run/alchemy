@@ -185,11 +185,11 @@ export const LocationsBucket = Resource<LocationsBucket>("GCP.Logging.LocationsB
 export class LocationsBucketNotResolved extends Data.TaggedError(
   "GCP.Logging.LocationsBucketNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LocationsBucketFailed extends Data.TaggedError("GCP.Logging.LocationsBucketFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -237,9 +237,7 @@ const toAttrs = (bucket: logging.LogBucket, parent: string, location: string) =>
 };
 
 const getByName = (name: string) =>
-  logging
-    .getLocationsBuckets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  logging.getLocationsBuckets({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const undelete = (name: string) =>
   logging
@@ -250,16 +248,16 @@ const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const bucket = yield* getByName(name);
     if (bucket === undefined || isDeletedBucket(bucket)) {
-      return yield* new LocationsBucketNotResolved({ name });
+      return yield* new LocationsBucketNotResolved({ resourceName: name });
     }
     if (bucket.lifecycleState === "FAILED") {
       return yield* new LocationsBucketFailed({
-        name,
+        resourceName: name,
         state: bucket.lifecycleState,
       });
     }
     if (isPendingBucket(bucket.lifecycleState)) {
-      return yield* new LocationsBucketNotResolved({ name });
+      return yield* new LocationsBucketNotResolved({ resourceName: name });
     }
     return bucket;
   }).pipe(
@@ -273,7 +271,9 @@ const waitUntilActive = (name: string) =>
 const waitUntilDeleted = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((bucket) =>
-      isDeletedBucket(bucket) ? Effect.void : Effect.fail(new LocationsBucketNotResolved({ name })),
+      isDeletedBucket(bucket)
+        ? Effect.void
+        : Effect.fail(new LocationsBucketNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Logging.LocationsBucketNotResolved",
@@ -394,7 +394,7 @@ export const LocationsBucketProvider = () =>
       }
 
       if (isDeletedBucket(current)) {
-        return yield* new LocationsBucketNotResolved({ name });
+        return yield* new LocationsBucketNotResolved({ resourceName: name });
       }
 
       const desiredLocked = news.locked === true;

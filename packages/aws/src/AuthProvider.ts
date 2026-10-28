@@ -254,37 +254,27 @@ export const getAccountId = ({
 export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>()(
   AWS_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
-    const interaction = Interaction.accessors;
-
     const loginStored = Effect.fn(function* () {
-      const accessKeyId = yield* interaction.prompt
-        .text({
-          message: "AWS Access Key ID",
-          validate: (v) => (v.length === 0 ? "Required" : undefined),
-        })
-        .pipe(mapPromptCancellation);
+      const accessKeyId = yield* Interaction.text({
+        message: "AWS Access Key ID",
+        validate: (v) => (v.length === 0 ? "Required" : undefined),
+      }).pipe(mapPromptCancellation);
 
-      const secretAccessKey = yield* interaction.prompt
-        .password({
-          message: "AWS Secret Access Key",
-          validate: (v) => (v.length === 0 ? "Required" : undefined),
-        })
-        .pipe(mapPromptCancellation);
+      const secretAccessKey = yield* Interaction.password({
+        message: "AWS Secret Access Key",
+        validate: (v) => (v.length === 0 ? "Required" : undefined),
+      }).pipe(mapPromptCancellation);
 
-      const sessionToken = yield* interaction.prompt
-        .password({
-          message: "AWS Session Token (optional; press Enter to skip)",
-          placeholder: "(none)",
-        })
-        .pipe(mapPromptCancellation);
+      const sessionToken = yield* Interaction.password({
+        message: "AWS Session Token (optional; press Enter to skip)",
+        placeholder: "(none)",
+      }).pipe(mapPromptCancellation);
 
-      const region = yield* interaction.prompt
-        .text({
-          message: "AWS Region",
-          placeholder: "us-east-1",
-          defaultValue: "us-east-1",
-        })
-        .pipe(mapPromptCancellation);
+      const region = yield* Interaction.text({
+        message: "AWS Region",
+        placeholder: "us-east-1",
+        defaultValue: "us-east-1",
+      }).pipe(mapPromptCancellation);
 
       const accountId = yield* getAccountId({
         accessKeyId: Redacted.make(accessKeyId),
@@ -293,7 +283,7 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
         region,
       });
 
-      yield* interaction.output.success("AWS credentials saved.");
+      yield* Interaction.success("AWS credentials saved.");
 
       return {
         method: "stored" as const,
@@ -306,68 +296,66 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
     });
 
     const configureInteractive = () =>
-      interaction.prompt
-        .select({
-          message: "AWS authentication method",
-          options,
-        })
-        .pipe(
-          Effect.flatMap((method) =>
-            Match.value(method).pipe(
-              Match.when("sso", () =>
-                Effect.gen(function* () {
-                  const ssoProfile = yield* interaction.prompt.text({
-                    message: "AWS profile name (from ~/.aws/config)",
-                    placeholder: "default",
-                    defaultValue: "default",
-                  });
-                  const authorizationMethod = yield* interaction.prompt.select({
-                    message: "AWS SSO authorization method",
-                    options: [
-                      {
-                        value: "oauth" as const,
-                        label: "Browser OAuth",
-                        description: "authorize in this device's browser",
-                      },
-                      {
-                        value: "device" as const,
-                        label: "Device code",
-                        description: "authorize with a short code on any device",
-                      },
-                    ],
-                  });
+      Interaction.select({
+        message: "AWS authentication method",
+        options,
+      }).pipe(
+        Effect.flatMap((method) =>
+          Match.value(method).pipe(
+            Match.when("sso", () =>
+              Effect.gen(function* () {
+                const ssoProfile = yield* Interaction.text({
+                  message: "AWS profile name (from ~/.aws/config)",
+                  placeholder: "default",
+                  defaultValue: "default",
+                });
+                const authorizationMethod = yield* Interaction.select({
+                  message: "AWS SSO authorization method",
+                  options: [
+                    {
+                      value: "oauth" as const,
+                      label: "Browser OAuth",
+                      description: "authorize in this device's browser",
+                    },
+                    {
+                      value: "device" as const,
+                      label: "Device code",
+                      description: "authorize with a short code on any device",
+                    },
+                  ],
+                });
 
-                  const config = {
-                    method: "sso" as const,
-                    ssoProfile: ssoProfile ?? "default",
-                    authorizationMethod,
-                  };
+                const config = {
+                  method: "sso" as const,
+                  ssoProfile: ssoProfile ?? "default",
+                  authorizationMethod,
+                };
 
-                  yield* loginSSO(config, authorizationMethod);
+                yield* loginSSO(config, authorizationMethod);
 
-                  return config;
-                }),
-              ),
-              Match.when("console-login", () =>
-                Effect.gen(function* () {
-                  const loginProfile = yield* interaction.prompt.text({
-                    message: "AWS profile name (from ~/.aws/config)",
-                    placeholder: "default",
-                    defaultValue: "default",
-                  });
-                  const config = {
-                    method: "console-login" as const,
-                    loginProfile: loginProfile ?? "default",
-                  };
-                  yield* loginConsole(config);
-                  return config;
-                }),
-              ),
-              Match.when("stored", () => loginStored()),
-              Match.exhaustive,
+                return config;
+              }),
             ),
+            Match.when("console-login", () =>
+              Effect.gen(function* () {
+                const loginProfile = yield* Interaction.text({
+                  message: "AWS profile name (from ~/.aws/config)",
+                  placeholder: "default",
+                  defaultValue: "default",
+                });
+                const config = {
+                  method: "console-login" as const,
+                  loginProfile: loginProfile ?? "default",
+                };
+                yield* loginConsole(config);
+                return config;
+              }),
+            ),
+            Match.when("stored", () => loginStored()),
+            Match.exhaustive,
           ),
-        );
+        ),
+      );
 
     // The declared requirements are the union of the interactive path
     // (ChildProcessSpawner for `aws sso login`) and `configureWith`'s
@@ -714,29 +702,23 @@ export const AwsAuth = AuthProviderLayer<AwsAuthConfig, AwsResolvedCredentials>(
     const logout = (_profileName: string, config: AwsAuthConfig) =>
       Match.value(config).pipe(
         Match.when({ method: "sso" }, (config) =>
-          interaction.output
-            .info(`AWS: running 'aws sso logout --profile ${config.ssoProfile}'...`)
-            .pipe(
-              Effect.zip(runSsoCommand("logout", config.ssoProfile)),
-              Effect.zip(clearDistilledSsoCache(config.ssoProfile)),
-              Effect.match({
-                onSuccess: () => interaction.output.success("AWS: SSO logout complete"),
-                onFailure: (e) =>
-                  interaction.output.warning(`AWS: SSO logout failed: \`${e.message}\``),
-              }),
-            ),
+          Interaction.info(`AWS: running 'aws sso logout --profile ${config.ssoProfile}'...`).pipe(
+            Effect.zip(runSsoCommand("logout", config.ssoProfile)),
+            Effect.zip(clearDistilledSsoCache(config.ssoProfile)),
+            Effect.match({
+              onSuccess: () => Interaction.success("AWS: SSO logout complete"),
+              onFailure: (e) => Interaction.warning(`AWS: SSO logout failed: \`${e.message}\``),
+            }),
+          ),
         ),
         Match.when({ method: "console-login" }, (config) =>
-          interaction.output
-            .info(`AWS: running 'aws logout --profile ${config.loginProfile}'...`)
-            .pipe(
-              Effect.zip(runAws(["logout", "--profile", config.loginProfile])),
-              Effect.match({
-                onSuccess: () => interaction.output.success("AWS: console logout complete"),
-                onFailure: (e) =>
-                  interaction.output.warning(`AWS: console logout failed: \`${e.message}\``),
-              }),
-            ),
+          Interaction.info(`AWS: running 'aws logout --profile ${config.loginProfile}'...`).pipe(
+            Effect.zip(runAws(["logout", "--profile", config.loginProfile])),
+            Effect.match({
+              onSuccess: () => Interaction.success("AWS: console logout complete"),
+              onFailure: (e) => Interaction.warning(`AWS: console logout failed: \`${e.message}\``),
+            }),
+          ),
         ),
         Match.when({ method: "stored" }, () => Effect.void),
         Match.exhaustive,
@@ -928,8 +910,6 @@ const loginSSO = (
   Effect.scoped(
     Effect.gen(function* () {
       const interaction = yield* Interaction.Interaction;
-      const services = yield* Effect.context<ChildProcessSpawner>();
-      const runOpenUrl = Effect.runPromiseWith(services);
       const authorizationUrl = yield* Deferred.make<string>();
       const deviceCode = yield* Deferred.make<string>();
       const stdout = yield* Ref.make("");
@@ -1014,28 +994,16 @@ const loginSSO = (
               ),
             )
           : undefined;
-      const openFailed = yield* Interaction.openUrl(url).pipe(
-        Effect.as(false),
-        Effect.orElseSucceed(() => true),
-      );
-      yield* Fiber.join(processFiber).pipe(
-        Effect.raceFirst(
-          interaction.prompt
-            .awaitExternal({
-              message: "AWS authorization",
-              waitingLabel:
-                authorizationMethod === "device"
-                  ? "waiting for device authorization (up to 5 minutes)…"
-                  : "waiting for browser authorization (up to 5 minutes)…",
-              url,
-              code,
-              openFailed,
-              onOpen: () => runOpenUrl(Interaction.openUrl(url)),
-              allowManualInput: false,
-            })
-            .pipe(Effect.asVoid),
-        ),
-      );
+      yield* Interaction.browserLogin({
+        provider: "AWS",
+        waitingLabel:
+          authorizationMethod === "device"
+            ? "waiting for device authorization (up to 5 minutes)…"
+            : "waiting for browser authorization (up to 5 minutes)…",
+        url,
+        code,
+        waitFor: Fiber.join(processFiber),
+      });
       yield* interaction.output.success("AWS SSO: login complete");
     }),
   );
@@ -1052,8 +1020,6 @@ const loginConsole = (config: Extract<AwsAuthConfig, { method: "console-login" }
   Effect.scoped(
     Effect.gen(function* () {
       const interaction = yield* Interaction.Interaction;
-      const services = yield* Effect.context<ChildProcessSpawner>();
-      const runOpenUrl = Effect.runPromiseWith(services);
       const existing = yield* DistilledAuth.loadProfile(config.loginProfile).pipe(
         Effect.orElseSucceed(() => undefined),
       );
@@ -1124,24 +1090,12 @@ const loginConsole = (config: Extract<AwsAuthConfig, { method: "console-login" }
           ),
         ),
       );
-      const openFailed = yield* Interaction.openUrl(url).pipe(
-        Effect.as(false),
-        Effect.orElseSucceed(() => true),
-      );
-      yield* Fiber.join(processFiber).pipe(
-        Effect.raceFirst(
-          interaction.prompt
-            .awaitExternal({
-              message: "AWS authorization",
-              waitingLabel: "waiting for browser authorization (up to 10 minutes)…",
-              url,
-              openFailed,
-              onOpen: () => runOpenUrl(Interaction.openUrl(url)),
-              allowManualInput: false,
-            })
-            .pipe(Effect.asVoid),
-        ),
-      );
+      yield* Interaction.browserLogin({
+        provider: "AWS",
+        waitingLabel: "waiting for browser authorization (up to 10 minutes)…",
+        url,
+        waitFor: Fiber.join(processFiber),
+      });
       if (existing?.region === undefined) {
         yield* runAws(["configure", "set", "region", region, "--profile", config.loginProfile]);
       }

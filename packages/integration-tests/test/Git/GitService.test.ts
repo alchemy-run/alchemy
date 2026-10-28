@@ -10,8 +10,8 @@
  */
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { GitApi, type Oid } from "@alchemy.run/git/Api";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpApiClient from "effect/http-api/HttpApiClient";
 import * as HttpClient from "effect/http/HttpClient";

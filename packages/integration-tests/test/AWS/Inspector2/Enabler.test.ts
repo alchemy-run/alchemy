@@ -1,10 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import { CisScanConfiguration } from "@alchemy.run/aws/Inspector2/CisScanConfiguration";
 import { Enabler } from "@alchemy.run/aws/Inspector2/Enabler";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as inspector2 from "@distilled.cloud/aws/inspector2";
-import { describe, expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";

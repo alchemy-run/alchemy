@@ -90,7 +90,7 @@ export type Envgroup = Resource<
 export const Envgroup = Resource<Envgroup>("GCP.Apigee.Envgroup");
 
 export class EnvgroupNotResolved extends Data.TaggedError("GCP.Apigee.EnvgroupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, envgroupId: string) =>
@@ -112,7 +112,7 @@ const toAttrs = (group: apigee.GoogleCloudApigeeV1EnvironmentGroup, organization
 const getByName = (name: string) =>
   apigee
     .getOrganizationsEnvgroups({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const EnvgroupProvider = () =>
   Provider.succeed(Envgroup, {
@@ -168,7 +168,7 @@ export const EnvgroupProvider = () =>
               hostnames: desiredHostnames,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           yield* waitForOperation(operation);
         }
@@ -176,7 +176,7 @@ export const EnvgroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvgroupNotResolved({ name });
+        return yield* new EnvgroupNotResolved({ resourceName: name });
       }
 
       if (!sameStringList(current.hostnames, desiredHostnames)) {
@@ -195,9 +195,7 @@ export const EnvgroupProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsEnvgroups({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

@@ -17,7 +17,7 @@ import { readTranslateTags, syncTranslateTags } from "./internal.ts";
  * malformed input file or an S3 URI the caller cannot read.
  */
 export class ParallelDataFailed extends Data.TaggedError("ParallelDataFailed")<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly message: string | undefined;
 }> {}
 
@@ -26,7 +26,7 @@ export class ParallelDataFailed extends Data.TaggedError("ParallelDataFailed")<{
  * polling window.
  */
 export class ParallelDataNotConverged extends Data.TaggedError("ParallelDataNotConverged")<{
-  readonly name: string;
+  readonly resourceName: string;
   readonly status: string | undefined;
 }> {}
 
@@ -144,7 +144,7 @@ export const ParallelDataProvider = () =>
       const getOne = Effect.fn(function* (name: string) {
         return yield* translate
           .getParallelData({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // The import runs asynchronously (CREATING/UPDATING → ACTIVE|FAILED);
@@ -163,10 +163,10 @@ export const ParallelDataProvider = () =>
         );
         const props = final?.ParallelDataProperties;
         if (props?.Status === "FAILED") {
-          return yield* new ParallelDataFailed({ name, message: props.Message });
+          return yield* new ParallelDataFailed({ resourceName: name, message: props.Message });
         }
         if (props?.Status !== "ACTIVE") {
-          return yield* new ParallelDataNotConverged({ name, status: props?.Status });
+          return yield* new ParallelDataNotConverged({ resourceName: name, status: props?.Status });
         }
         return props;
       });
@@ -275,7 +275,7 @@ export const ParallelDataProvider = () =>
           // Deletion is asynchronous (DELETING) — wait until gone so a
           // replacement can immediately reuse the name.
           yield* translate.getParallelData({ Name: output.parallelDataName }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             Effect.repeat({
               schedule: Schedule.spaced("5 seconds"),
               until: (r): boolean => r === undefined,

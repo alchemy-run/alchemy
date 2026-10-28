@@ -1,12 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as rma from "@distilled.cloud/gcp/rapidmigrationassessment_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import RmaBindingsHost, { OnPrem } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -44,7 +44,7 @@ const hostProjectGrants = Effect.gen(function* () {
     .map((binding) => [binding.role, binding.condition]);
 });
 
-describe.skipIf(!dockerAvailable || !runLifecycle)(
+describe.skipIf(!runLifecycle)(
   "RapidMigrationAssessment Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:rapidmigrationassessment", "provider:gcp:run", "live"],

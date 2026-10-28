@@ -1,4 +1,4 @@
-import type { EmitterWebhookEvent, EmitterWebhookEventName } from "@octokit/webhooks";
+import type { WebhookEvents } from "@distilled.cloud/github/webhooks";
 import { sanitizeKey } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
@@ -21,11 +21,10 @@ export interface RepositoryRef {
 }
 
 /**
- * The bare GitHub webhook event names (e.g. `push`, `pull_request`), sourced
- * from `@octokit/webhooks`. Excludes the `event.action` emitter variants
- * (e.g. `pull_request.opened`) — webhooks are configured by bare event name.
+ * The GitHub webhook event names (e.g. `push`, `pull_request`): the values of
+ * the `X-GitHub-Event` header. Webhooks are configured by these names.
  */
-export type GitHubEventName = Exclude<EmitterWebhookEventName, `${string}.${string}`>;
+export type GitHubEventName = keyof WebhookEvents;
 
 /**
  * Names selectable in {@link RepositoryEventSourceProps.events}: every bare
@@ -36,14 +35,19 @@ export type GitHubEventName = Exclude<EmitterWebhookEventName, `${string}.${stri
 export type WebhookEventName = GitHubEventName | "*";
 
 /**
- * A single GitHub webhook delivery — Octokit's `EmitterWebhookEvent`, a
- * complete discriminated union of `{ id, name, payload }` keyed on `name`
- * with a fully-typed `payload` per event. `Name` narrows the union to the
- * events the subscriber selected, so `switch (event.name)` exhaustively
- * narrows `event.payload`.
+ * A single GitHub webhook delivery: a discriminated union of
+ * `{ id, name, payload }` keyed on `name`, with a fully-typed `payload` per
+ * event. `Name` narrows the union to the events the subscriber selected, so
+ * `switch (event.name)` exhaustively narrows `event.payload`.
  */
-export type WebhookEvent<Name extends GitHubEventName = GitHubEventName> =
-  EmitterWebhookEvent<Name>;
+export type WebhookEvent<Name extends GitHubEventName = GitHubEventName> = {
+  [N in Name]: {
+    /** The delivery's `X-GitHub-Delivery` id. */
+    readonly id: string;
+    readonly name: N;
+    readonly payload: WebhookEvents[N];
+  };
+}[Name];
 
 /**
  * The set of event names a handler can observe given the `events` it
@@ -65,11 +69,10 @@ export interface RepositoryEventSourceProps<
   events?: E;
 
   /**
-   * Secret used to verify each delivery's `HMAC-SHA256` signature. When set,
-   * the event source provisions the webhook with this secret and the runtime
-   * rejects deliveries whose `X-Hub-Signature-256` header doesn't match.
-   * Strongly recommended — without it, anyone who learns the delivery URL can
-   * forge events.
+   * Secret used to verify each delivery's `HMAC-SHA256` signature. The event
+   * source provisions the webhook with this secret and the runtime rejects
+   * deliveries whose `X-Hub-Signature-256` header doesn't match. When omitted,
+   * a random secret is generated at deploy and bound onto the host.
    */
   secret?: Redacted.Redacted<string>;
 

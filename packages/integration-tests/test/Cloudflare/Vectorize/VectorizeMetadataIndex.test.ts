@@ -1,9 +1,9 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as vectorize from "@distilled.cloud/cloudflare/vectorize";
-import { describe, expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import { poll } from "alchemy/Util/poll";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";

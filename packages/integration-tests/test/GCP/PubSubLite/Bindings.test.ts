@@ -1,11 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import { currentProject, runLifecycle } from "./common.ts";
 import PubSubLiteBindingsHost, {
   COMMITTED_OFFSET,
@@ -49,7 +49,7 @@ const expectedGrants = [
 // 2024 ... will not be able to access the service" (reason
 // DEPRECATED_FOR_UNUSED_CUSTOMERS, typed `PubSubLiteTurnedDown`). Only an
 // allow-listed project can run this (GCP_TEST_PUBSUBLITE=1).
-describe.skipIf(!dockerAvailable || !runLifecycle)(
+describe.skipIf(!runLifecycle)(
   "PubSubLite Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:pubsublite", "provider:gcp:run", "live"],

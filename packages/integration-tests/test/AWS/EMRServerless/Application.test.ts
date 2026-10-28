@@ -1,10 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import { Application } from "@alchemy.run/aws/EMRServerless";
 import { Role } from "@alchemy.run/aws/IAM";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as emr from "@distilled.cloud/aws/emr-serverless";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

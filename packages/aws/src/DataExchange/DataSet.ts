@@ -127,7 +127,7 @@ export const DataSetProvider = () =>
       const getById = Effect.fn(function* (dataSetId: string) {
         return yield* dataexchange
           .getDataSet({ DataSetId: dataSetId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       /**

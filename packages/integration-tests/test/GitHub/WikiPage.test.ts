@@ -9,12 +9,12 @@ import {
   wikiRepository,
   type WikiRepository,
 } from "@alchemy.run/github/WikiPage";
+import { layer } from "@alchemy.run/test";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { layer } from "alchemy-test";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import { exec } from "alchemy/Util/exec";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

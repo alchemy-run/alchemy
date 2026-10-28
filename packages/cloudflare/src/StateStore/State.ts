@@ -13,7 +13,7 @@ import {
   type HttpStateStoreCredentials,
 } from "alchemy/State/HttpStateStore";
 import * as Provisioning from "alchemy/State/Provisioning";
-import { State, type StateService, StateStoreError } from "alchemy/State/State";
+import { State, StateStoreError } from "alchemy/State/State";
 import { recordStateStoreInit, recordStateStoreOp } from "alchemy/Telemetry/Metrics";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
@@ -23,7 +23,6 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import * as Access from "../Access.ts";
@@ -106,7 +105,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
               url,
               scriptName,
               accountId,
-            );
+            ).pipe(Effect.mapError(existenceUnknown(scriptName)));
             if (observed === undefined) return yield* deployMissing;
 
             const httpState = yield* ensureAccess({ url, authToken });
@@ -158,7 +157,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
           // silently read/write state in the wrong account, so discard it
           // and fall through to re-derivation from the current account.
           if (isStateStoreCredentialsStale(credentials, accountId)) {
-            yield* Interaction.accessors.output.info(
+            yield* Interaction.info(
               `Cloudflare State Store credentials were minted for a different ` +
                 `Cloudflare account; re-deriving for the current account.`,
             );
@@ -243,7 +242,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
 
       const serving = yield* isStateStoreServing(accountId, scriptName, domain);
       if (serving && !force) {
-        yield* Interaction.accessors.output.info(
+        yield* Interaction.info(
           `Worker '${scriptName}' already exists; adopting and refreshing credentials. ` +
             `Use --force to redeploy.`,
         );
@@ -254,7 +253,13 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           accountId,
           domain,
         );
-        const { matches } = yield* checkStateStoreVersion(credentials.url, scriptName, accountId);
+        // The store answered just now, so a failed check here only means
+        // redeploying it over its own remote state.
+        const { matches } = yield* checkStateStoreVersion(
+          credentials.url,
+          scriptName,
+          accountId,
+        ).pipe(Effect.orElseSucceed(() => unknownVersion));
         if (matches) return yield* makeCloudflareStateStore(credentials);
       }
       return yield* interaction.task(
@@ -317,7 +322,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
     });
 
     // 1. Delete the state-store Worker.
-    yield* Interaction.accessors.output.info(`Deleting state store worker '${scriptName}'...`);
+    yield* Interaction.info(`Deleting state store worker '${scriptName}'...`);
     yield* workers.deleteScript({ accountId, scriptName, force: true }).pipe(
       Effect.asVoid,
       Effect.catchTag("WorkerNotFound", () =>
@@ -345,7 +350,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
         );
       const ours = secrets.filter((s) => ourSecretNames.has(s.name));
       for (const secret of ours) {
-        yield* Interaction.accessors.output.info(`Deleting secret '${secret.name}'...`);
+        yield* Interaction.info(`Deleting secret '${secret.name}'...`);
         yield* SecretsStore.deleteStoreSecret({
           accountId,
           storeId: store.id,
@@ -360,7 +365,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
       }
       const remaining = secrets.length - ours.length;
       if (deleteEmptyStore && remaining === 0) {
-        yield* Interaction.accessors.output.info(`Deleting empty secrets store '${store.id}'...`);
+        yield* Interaction.info(`Deleting empty secrets store '${store.id}'...`);
         yield* SecretsStore.deleteStore({
           accountId,
           storeId: store.id,
@@ -370,7 +375,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
           Effect.catchTag(["StoreNotFound", "NotFound", "InvalidAccountId"], () => Effect.void),
         );
       } else if (remaining > 0) {
-        yield* Interaction.accessors.output.info(
+        yield* Interaction.info(
           `Secrets store '${store.id}' still has ${remaining} other ` +
             `secret(s); leaving it in place.`,
         );
@@ -381,9 +386,7 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
     const credStore = yield* CredentialsStore;
     yield* deleteStoreCredentials(credStore, profileName, scriptName).pipe(Effect.ignore);
 
-    yield* Interaction.accessors.output.success(
-      `Cloudflare State Store '${scriptName}' torn down.`,
-    );
+    yield* Interaction.success(`Cloudflare State Store '${scriptName}' torn down.`);
   }).pipe(
     Effect.withSpan("state_store.teardown", {
       attributes: {
@@ -444,15 +447,14 @@ const resolveAccountId = (pinned: string | undefined) =>
       return (yield* yield* CloudflareEnvironment.CloudflareEnvironment).accountId;
     }
     yield* workers.getSubdomain({ accountId: pinned }).pipe(
-      Effect.catch((cause) =>
-        Effect.fail(
+      Effect.mapError(
+        (cause) =>
           new StateStoreError({
             message:
               `The Cloudflare State Store is pinned to account ${pinned}, but the current ` +
               `credentials can't access it. Log in to that account or change \`accountId\`.`,
             cause,
           }),
-        ),
       ),
     );
     return pinned;
@@ -581,19 +583,17 @@ export const loginWithCloudflare = Effect.fn("state_store.login", {
 );
 
 const isStateStoreAvailable = (accountId: string, scriptName: string) =>
-  Effect.gen(function* () {
-    return yield* workers.getScriptSetting({ accountId, scriptName }).pipe(
-      Effect.map((setting) => setting !== undefined),
-      Effect.catchTags({
-        WorkerNotFound: () => Effect.succeed(false),
-        InvalidRoute: () => Effect.succeed(false),
-        // A worker that exists but has no versions (a previous deploy was
-        // interrupted before any content upload) can't serve — treat it
-        // as absent so bootstrap redeploys it.
-        WorkerHasNoVersions: () => Effect.succeed(false),
-      }),
-    );
-  });
+  workers.getScriptSetting({ accountId, scriptName }).pipe(
+    Effect.map((setting) => setting !== undefined),
+    Effect.catchTags({
+      WorkerNotFound: () => Effect.succeed(false),
+      InvalidRoute: () => Effect.succeed(false),
+      // A worker that exists but has no versions (a previous deploy was
+      // interrupted before any content upload) can't serve — treat it
+      // as absent so bootstrap redeploys it.
+      WorkerHasNoVersions: () => Effect.succeed(false),
+    }),
+  );
 
 /**
  * Whether cached credentials point at where the store serves now: its
@@ -608,24 +608,47 @@ const servesOn = (url: string, domain: string | undefined) =>
  * Does this account have a *functioning* state-store worker,
  * verified by checking the /version endpoint
  *
+ * `false` means the lookups succeeded and found no store. A lookup that
+ * fails, such as one the credentials aren't permitted to make, fails this
+ * check: a missing store is bootstrapped, and bootstrapping over a live
+ * store replaces its auth token and encryption key.
  */
 const isStateStoreServing = (accountId: string, scriptName: string, domain?: string) =>
   Effect.gen(function* () {
     // Ask the API whether the domain is attached before resolving it, so a
     // lookup before the first deploy can't leave a cached NXDOMAIN behind.
-    if (
-      domain !== undefined &&
-      (yield* observeStateStoreDomain({ accountId, scriptName, domain })) === undefined
-    ) {
-      return false;
-    }
-    const url = yield* stateStoreUrl({ accountId, scriptName, domain }).pipe(
-      Effect.orElseSucceed(() => undefined),
-    );
-    if (url === undefined) return false;
-    const { observed } = yield* checkStateStoreVersion(url, scriptName, accountId);
-    return observed !== undefined;
+    const attached =
+      domain === undefined ||
+      (yield* observeStateStoreDomain({ accountId, scriptName, domain }).pipe(
+        // Another Worker owning the domain fails as itself, not as an unknown.
+        Effect.mapError((e) =>
+          e._tag === "StateStoreError" ? e : existenceUnknown(scriptName)(e),
+        ),
+      )) !== undefined;
+    if (!attached) return false;
+    return yield* Effect.gen(function* () {
+      const url = yield* stateStoreUrl({ accountId, scriptName, domain }).pipe(
+        // Without a workers.dev subdomain, nothing can serve the store.
+        Effect.catchTag("SubdomainNotFound", () => Effect.undefined),
+      );
+      if (url === undefined) return false;
+      const { observed } = yield* checkStateStoreVersion(url, scriptName, accountId);
+      return observed !== undefined;
+    }).pipe(Effect.mapError(existenceUnknown(scriptName)));
   });
+
+const existenceUnknown =
+  (scriptName: string) =>
+  (cause: Error & { readonly _tag: string }): StateStoreError =>
+    new StateStoreError({
+      message:
+        `Could not determine whether Cloudflare State Store '${scriptName}' exists, ` +
+        `so it was left untouched: ${cause.message}. ` +
+        (cause._tag === "Forbidden"
+          ? `Check that the Cloudflare credentials can read Workers scripts (Workers Scripts Read).`
+          : `Run the command again.`),
+      cause,
+    });
 
 const makeCloudflareStateStore = Effect.fn(function* ({
   url,
@@ -655,11 +678,12 @@ export class StateStoreVersionNotReady extends Data.TaggedError("StateStoreVersi
 
 const waitForStateStoreVersion = (url: string, scriptName: string, accountId: string) =>
   Effect.gen(function* () {
+    // Right after a deploy the store may not answer yet: keep polling.
     const { matches, expected, observed } = yield* checkStateStoreVersion(
       url,
       scriptName,
       accountId,
-    );
+    ).pipe(Effect.orElseSucceed(() => unknownVersion));
     if (!matches) {
       return yield* new StateStoreVersionNotReady({ expected, observed });
     }
@@ -688,9 +712,9 @@ const checkStateStoreVersion = Effect.fn("state_store.check_version", {
   // The /version route may 404 transiently after a fresh deploy
   // while Cloudflare propagates the new script to the edge, and may
   // also surface transport-level blips on cold workers.dev hosts.
-  // Retry the probe itself for ~10s before giving up — only after
-  // exhausting that budget do we collapse to `undefined` and let
-  // the caller treat it as a version mismatch.
+  // Retry the probe itself for ~10s before giving up. `observed` is
+  // `undefined` only when the worker is confirmed absent; a probe that
+  // still fails after that budget fails the check.
   const result = yield* client.version.getVersion().pipe(
     Effect.catchTag("HttpClientError", (e) =>
       // if we get a 404 here, it means we assumed the worker shoudl exist, but it does not
@@ -700,7 +724,7 @@ const checkStateStoreVersion = Effect.fn("state_store.check_version", {
             Effect.flatMap((isAvailable) =>
               // if the worker is available, then we should assume it was recently created and retry by propagating the error
               // otherwise, return undefined (we don't know the version, there is no worker)
-              isAvailable ? Effect.fail(e) : Effect.succeed(undefined),
+              isAvailable ? Effect.fail(e) : Effect.undefined,
             ),
           )
         : Effect.fail(e),
@@ -708,7 +732,6 @@ const checkStateStoreVersion = Effect.fn("state_store.check_version", {
     Effect.retry({
       schedule: Schedule.max([Schedule.spaced("250 millis"), Schedule.recurs(40)]),
     }),
-    Effect.orElseSucceed(() => undefined),
   );
   const matches = result?.version === STATE_STORE_VERSION;
   yield* Effect.annotateCurrentSpan({
@@ -722,6 +745,13 @@ const checkStateStoreVersion = Effect.fn("state_store.check_version", {
     observed: result?.version,
   };
 });
+
+/** A version check that failed, for callers that read it as an outdated store. */
+const unknownVersion = {
+  matches: false,
+  expected: STATE_STORE_VERSION,
+  observed: undefined,
+} as const;
 
 /**
  * Tiny ES-module worker that reads `env.SECRET.get()` and echoes it

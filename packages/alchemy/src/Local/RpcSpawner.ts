@@ -4,6 +4,7 @@ import type * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -33,6 +34,10 @@ export class RpcSpawner extends Context.Service<
     readonly url: string;
   }
 >()("alchemy/Local/RpcSpawner") {}
+
+class InvalidServerEntryUrl extends Data.TaggedError("InvalidServerEntryUrl")<{
+  cause: unknown;
+}> {}
 
 /**
  * The spawner forks one child per distinct `serverEntryUrl`. Stack-specific
@@ -69,10 +74,17 @@ const SidecarLogLineSchema = Schema.Struct({
  */
 export const LOGS_PATH = "/logs";
 
-export const make = Effect.fn(function* ({
-  profile,
-  envFile,
-}: Pick<RpcServerEnvironment, "profile" | "envFile">) {
+/** Options for the {@link RpcSpawner} that forks sidecar processes. */
+export type RpcSpawnerOptions = Pick<RpcServerEnvironment, "profile" | "envFile"> & {
+  /**
+   * Prefixes of environment variables withheld from sidecar processes (and,
+   * through them, from their own children). Sidecars otherwise inherit this
+   * process's entire environment.
+   */
+  readonly omitEnv?: ReadonlyArray<string>;
+};
+
+export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: RpcSpawnerOptions) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
   const scope = yield* Effect.scope;
   const cache = yield* Cache.make({
@@ -148,10 +160,12 @@ export const make = Effect.fn(function* ({
         // As a group leader the kill also reaps the sidecar's own children
         // (workerd, emulators) instead of orphaning them.
         env: {
+          ...(omitEnv.length > 0 ? yield* inheritedEnv(omitEnv) : {}),
           [RPC_SERVER_ENVIRONMENT_KEY]: JSON.stringify(environment),
           ...pipedColorEnv(),
         },
-        extendEnv: true,
+        // With variables to withhold, the full environment is built above.
+        extendEnv: omitEnv.length === 0,
       },
     );
     const handle = yield* spawner.spawn(command);
@@ -273,7 +287,7 @@ export const make = Effect.fn(function* ({
       const entry = yield* Effect.result(
         Effect.try({
           try: () => new URL(decoded.success.serverEntryUrl),
-          catch: (cause) => cause,
+          catch: (cause) => new InvalidServerEntryUrl({ cause }),
         }),
       );
       if (entry._tag === "Failure" || entry.success.protocol !== "file:") {
@@ -289,7 +303,17 @@ export const make = Effect.fn(function* ({
   });
 });
 
-export const layerServer = (environment: Pick<RpcServerEnvironment, "profile" | "envFile">) =>
+/** This process's environment without the variables matching `omitEnv`. */
+const inheritedEnv = (omitEnv: ReadonlyArray<string>) =>
+  Effect.sync(() =>
+    Object.fromEntries(
+      Object.entries(process.env).filter(
+        ([key]) => !omitEnv.some((prefix) => key.startsWith(prefix)),
+      ),
+    ),
+  );
+
+export const layerServer = (environment: RpcSpawnerOptions) =>
   Layer.effect(RpcSpawner, make(environment)).pipe(
     // `/logs` is deliberately long-lived. On shutdown the exec child still
     // owns that response while this scope owns the exec child, so waiting for

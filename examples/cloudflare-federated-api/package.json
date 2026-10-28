@@ -21,6 +21,6 @@
     "effect": "catalog:"
   },
   "devDependencies": {
-    "alchemy-test": "workspace:*"
+    "@alchemy.run/test": "workspace:*"
   }
 }

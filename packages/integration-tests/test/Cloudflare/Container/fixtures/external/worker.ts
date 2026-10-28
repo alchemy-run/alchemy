@@ -3,7 +3,7 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
-import { ExternalContainerObject } from "./object.ts";
+import { ExternalContainerObject, InlineDockerfileContainerObject } from "./object.ts";
 
 // Report failures in the response body, so a test that times out waiting
 // for the container shows why instead of a bare 500.
@@ -18,6 +18,7 @@ export default class ExternalContainerWorker extends Cloudflare.Worker<ExternalC
   },
   Effect.gen(function* () {
     const objects = yield* ExternalContainerObject;
+    const inlineObjects = yield* InlineDockerfileContainerObject;
 
     return {
       fetch: Effect.gen(function* () {
@@ -26,6 +27,11 @@ export default class ExternalContainerWorker extends Cloudflare.Worker<ExternalC
 
         if (url.pathname === "/hello") {
           const text = yield* objects.getByName("default").hello().pipe(Effect.orDie);
+          return HttpServerResponse.text(text);
+        }
+
+        if (url.pathname === "/inline") {
+          const text = yield* inlineObjects.getByName("default").hello().pipe(Effect.orDie);
           return HttpServerResponse.text(text);
         }
 

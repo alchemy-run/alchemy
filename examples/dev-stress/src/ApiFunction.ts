@@ -56,17 +56,16 @@ export default class ApiFunction extends Lambda.Function<ApiFunction>()(
 
     // Produce → deliver → consume, so the suite can prove the event-source
     // glue survives every reload it inflicts on the stack.
-    yield* SQS.consumeQueueMessages(queue, (records) =>
-      records.pipe(
-        Stream.mapEffect((record) => {
+    yield* SQS.consumeQueueMessages(
+      queue,
+      Effect.fn(function* (event) {
+        for (const record of event.Records) {
           const parsed = JSON.parse(record.body) as { id: string };
-          return putItem({
+          yield* putItem({
             Item: { id: { S: `msg:${parsed.id}` }, body: { S: record.body } },
           });
-        }),
-        Stream.runDrain,
-        Effect.orDie,
-      ),
+        }
+      }),
     );
 
     return {

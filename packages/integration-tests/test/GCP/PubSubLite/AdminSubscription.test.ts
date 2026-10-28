@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as pubsublite from "@distilled.cloud/gcp/pubsublite_v1";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { logLevel, currentProject, runLifecycle, waitUntilGone, zone } from "./common.ts";
 

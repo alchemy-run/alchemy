@@ -263,7 +263,7 @@ const ensureSecretsStore = Effect.fn(function* (accountId: string) {
     .createStore({ accountId, name: "default_secrets_store" })
     .pipe(
       // A concurrent bootstrap created it first.
-      Effect.catchTag("MaximumStoresExceeded", () => Effect.succeed(undefined)),
+      Effect.catchTag("MaximumStoresExceeded", () => Effect.undefined),
     );
   if (created) return created.id;
   const raced = yield* first;
@@ -302,7 +302,7 @@ const ensureSecret = Effect.fn(function* ({
     })
     .pipe(
       // A concurrent bootstrap created it first; keep theirs.
-      Effect.catchTag("SecretNameAlreadyExists", () => Effect.succeed(undefined)),
+      Effect.catchTag("SecretNameAlreadyExists", () => Effect.undefined),
     );
   if (!created) return undefined;
   const secret = created.result[0]!;

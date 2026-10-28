@@ -14,7 +14,7 @@ import {
   stateCustomDomains,
   stateWorkerDomain,
 } from "@alchemy.run/cloudflare/Workers/WorkerProvider";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import { deepEqual } from "alchemy/Diff";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";

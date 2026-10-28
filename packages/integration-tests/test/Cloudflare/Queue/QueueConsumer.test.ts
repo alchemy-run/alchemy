@@ -1,12 +1,12 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import { generateLocalId, isLiveId } from "@alchemy.run/cloudflare/LocalRuntime";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as queues from "@distilled.cloud/cloudflare/queues";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
 import type { CreatedResourceState } from "alchemy/State/ResourceState";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { MinimumLogLevel } from "effect/References";

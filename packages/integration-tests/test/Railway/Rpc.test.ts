@@ -1,7 +1,7 @@
 import * as Railway from "@alchemy.run/railway";
 import { RPC_PATH_PREFIX, RPC_TOKEN_HEADER } from "@alchemy.run/railway/rpc-token";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

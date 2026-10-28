@@ -1,3 +1,4 @@
+import { GraphQLLive } from "@distilled.cloud/github/GraphQL";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Provider from "alchemy/Provider";
@@ -11,6 +12,7 @@ import { Environment, EnvironmentProvider } from "./Environment.ts";
 import { Issue, IssueProvider } from "./Issue.ts";
 import { Label, LabelProvider } from "./Label.ts";
 import { Milestone, MilestoneProvider } from "./Milestone.ts";
+import { PersonalAccessToken, PersonalAccessTokenProvider } from "./PersonalAccessToken.ts";
 import { PullRequest, PullRequestProvider } from "./PullRequest.ts";
 import { Release, ReleaseProvider } from "./Release.ts";
 import { Repository, RepositoryProvider } from "./Repository.ts";
@@ -21,7 +23,7 @@ import { Variable, VariableProvider } from "./Variable.ts";
 import { Webhook, WebhookProvider } from "./Webhook.ts";
 import { WikiPage, WikiPageProvider } from "./WikiPage.ts";
 
-export { GitHubCredentials } from "./Credentials.ts";
+export { Credentials } from "./Credentials.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("GitHub") {}
 
@@ -55,6 +57,7 @@ export const providers = (options?: ProvidersOptions) =>
       Label,
       Milestone,
       Issue,
+      PersonalAccessToken,
       PullRequest,
       Release,
       Repository,
@@ -75,6 +78,7 @@ export const providers = (options?: ProvidersOptions) =>
         LabelProvider(),
         MilestoneProvider(),
         IssueProvider(),
+        PersonalAccessTokenProvider(),
         PullRequestProvider(),
         ReleaseProvider(),
         RepositoryProvider(),
@@ -86,6 +90,7 @@ export const providers = (options?: ProvidersOptions) =>
         WikiPageProvider(),
       ),
     ),
+    Layer.provideMerge(GraphQLLive),
     Layer.provideMerge(Credentials.fromAuthProvider(options)),
     Layer.provideMerge(makeGitHubAuth(options)),
     Layer.provideMerge(ProfileStoreLive),

@@ -1,12 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as documentai from "@distilled.cloud/gcp/documentai_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import DocumentAIBindingsHost, { Invoice, InvoiceV1, OcrBind } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -43,7 +43,7 @@ const expectProjectGrants = Effect.gen(function* () {
   ]);
 });
 
-describe.skipIf(!dockerAvailable || !!process.env.FAST)(
+describe.skipIf(!!process.env.FAST)(
   "DocumentAI Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:documentai", "provider:gcp:run", "live"],

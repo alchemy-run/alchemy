@@ -1,12 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as redis from "@distilled.cloud/gcp/redis_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import RedisBindingsHost, { Acl, Cache, WRITTEN_VALUE, slow } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -37,7 +37,7 @@ const hostProjectGrants = Effect.gen(function* () {
     .map((binding) => [binding.role, binding.condition?.expression]);
 });
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "Redis Bindings",
   { tags: ["provider:gcp", "provider:gcp:redis", "provider:gcp:run", "live"] },
   () => {

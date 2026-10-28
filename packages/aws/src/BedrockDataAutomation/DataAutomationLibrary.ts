@@ -131,7 +131,7 @@ export const DataAutomationLibraryProvider = () =>
       const observeLibrary = Effect.fn(function* (libraryArn: string) {
         return yield* bda.getDataAutomationLibrary({ libraryArn }).pipe(
           Effect.map((r) => r.library),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

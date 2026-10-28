@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { assert, describe, expect, it } from "alchemy-test";
+import { assert, describe, expect, it } from "@alchemy.run/test";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

@@ -89,7 +89,7 @@ export const ReservationGroup = Resource<ReservationGroup>(
 export class ReservationGroupNotResolved extends Data.TaggedError(
   "GCP.BigQueryReservation.ReservationGroupNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, reservationGroupId: string) =>
@@ -109,7 +109,7 @@ const toAttrs = (current: bigqueryreservation.ReservationGroup, project: string)
 const getByName = (name: string) =>
   bigqueryreservation
     .getProjectsLocationsReservationGroups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwnedAt = (project: string, location: string) =>
   bigqueryreservation.listProjectsLocationsReservationGroups
@@ -205,7 +205,7 @@ export const ReservationGroupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ReservationGroupNotResolved({ name });
+        return yield* new ReservationGroupNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);

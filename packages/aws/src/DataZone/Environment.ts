@@ -1,3 +1,5 @@
+import * as athena from "@distilled.cloud/aws/athena";
+import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import * as datazone from "@distilled.cloud/aws/datazone";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -6,6 +8,7 @@ import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { deleteGlueDatabase } from "../Glue/internal.ts";
 import { unredact } from "./internal.ts";
 
 /**
@@ -178,8 +181,8 @@ export const EnvironmentProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              ResourceNotFoundException: () => Effect.succeed(undefined),
-              AccessDeniedException: () => Effect.succeed(undefined),
+              ResourceNotFoundException: () => Effect.undefined,
+              AccessDeniedException: () => Effect.undefined,
             }),
           );
       });
@@ -193,8 +196,8 @@ export const EnvironmentProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              ResourceNotFoundException: () => Effect.succeed(undefined),
-              AccessDeniedException: () => Effect.succeed(undefined),
+              ResourceNotFoundException: () => Effect.undefined,
+              AccessDeniedException: () => Effect.undefined,
             }),
           );
         const summary = (found?.items ?? []).find(
@@ -228,6 +231,31 @@ export const EnvironmentProvider = () =>
             times: 60,
           }),
         );
+      });
+
+      // DataZone's data-lake blueprint stack retains its Glue databases,
+      // Athena workgroup, and log group (CloudFormation DELETE_SKIPPED), so
+      // deleting the environment leaks them. Read their names from the
+      // environment's provisioned resources and delete them once it is gone.
+      const deleteRetainedResources = Effect.fn(function* (
+        resources: ReadonlyArray<datazone.Resource>,
+      ) {
+        const valueOf = (name: string) => resources.find((r) => r.name === name)?.value;
+        for (const name of ["glueProducerDBName", "glueConsumerDBName"]) {
+          const database = valueOf(name);
+          if (database) yield* deleteGlueDatabase(database, undefined);
+        }
+        const workGroup = valueOf("athenaWorkGroupName");
+        if (workGroup) {
+          yield* athena.deleteWorkGroup({ WorkGroup: workGroup, RecursiveDeleteOption: true });
+        }
+        // arn:aws:logs:{region}:{account}:log-group:{name}:*
+        const logGroup = valueOf("logGroupArn")?.split(":")[6];
+        if (logGroup) {
+          yield* logs
+            .deleteLogGroup({ logGroupName: logGroup })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.void));
+        }
       });
 
       const failIfDeploymentFailed = Effect.fn(function* (
@@ -377,7 +405,7 @@ export const EnvironmentProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           // wait out any in-flight transition first — deleting a CREATING
           // environment is rejected with a conflict.
-          yield* waitForSettled(output.domainId, output.environmentId);
+          const env = yield* waitForSettled(output.domainId, output.environmentId);
           yield* datazone
             .deleteEnvironment({
               domainIdentifier: output.domainId,
@@ -392,6 +420,7 @@ export const EnvironmentProvider = () =>
               }),
             );
           yield* waitForGone(output.domainId, output.environmentId);
+          yield* deleteRetainedResources(env?.provisionedResources ?? []);
         }),
       });
     }),

@@ -1,7 +1,7 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { Story } from "@alchemy.run/domain/Story";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Headers from "effect/http/Headers";
@@ -237,7 +237,9 @@ describe("Domain Projection", () => {
     Effect.gen(function* () {
       yield* story(
         Story.when(sam, new Deposit({ amount: 50 })),
+        Story.then(sam, new Deposited({ amount: 50, balance: 50 })),
         Story.when(p1, new Send({ from: "sam-1", to: "kim-1", amount: 20 })),
+        Story.then(p1, new Sent({ from: "sam-1", to: "kim-1", amount: 20 })),
       );
       const ledger = yield* Ledger;
       const rows = yield* ledger.rows;
@@ -260,10 +262,13 @@ describe("Domain Projection", () => {
   it.effect("appends to a stream, once per input", () =>
     story(
       Story.when(sam, new Deposit({ amount: 50 })),
+      Story.then(sam, new Deposited({ amount: 50, balance: 50 })),
       Story.streamed(WalletCard, sam, new BalanceChanged({ owner: "sam", balance: 50 })),
       Story.when(sam, new Deposit({ amount: 25 })),
+      Story.then(sam, new Deposited({ amount: 25, balance: 75 })),
       Story.streamed(WalletCard, sam, new BalanceChanged({ owner: "sam", balance: 75 })),
       Story.when(kim, new Deposit({ amount: 1 })),
+      Story.then(kim, new Deposited({ amount: 1, balance: 1 })),
       Story.streamed(WalletCard, sam),
     ).pipe(Effect.provide(Ledger.memory)),
   );
@@ -271,8 +276,10 @@ describe("Domain Projection", () => {
   it.effect("a keyed policy runs per route, over two sources", () =>
     story(
       Story.when(sam, new Deposit({ amount: 150 })),
+      Story.then(sam, new Deposited({ amount: 150, balance: 150 })),
       Story.then(Review.ref("sam-1"), new Flagged({ reason: "Deposited" })),
       Story.when(p1, new Send({ from: "sam-1", to: "kim-1", amount: 120 })),
+      Story.then(p1, new Sent({ from: "sam-1", to: "kim-1", amount: 120 })),
       Story.then(Review.ref("sam-1"), new Flagged({ reason: "Sent:out" })),
       Story.then(Review.ref("kim-1"), new Flagged({ reason: "Sent:in" })),
     ).pipe(Effect.provide(Ledger.memory)),
@@ -302,7 +309,7 @@ describe("Domain Projection", () => {
     Effect.gen(function* () {
       const wallets = yield* Wallet;
       const receipt = yield* wallets.send(sam, new Deposit({ amount: 40 }));
-      const api = yield* WalletApi.testClient;
+      const api = yield* WalletApi.clientInProcess;
       const asSam = { headers: { "x-viewer": "sam" } };
       const latest = yield* api.WalletCard.peek("sam-1", {
         ...asSam,
@@ -315,6 +322,7 @@ describe("Domain Projection", () => {
       expect(refused._tag).toBe("NotYours");
       yield* wallets.send(sam, new Deposit({ amount: 2 }));
       const all = yield* api.WalletCard.events("sam-1", asSam).pipe(
+        Stream.filter(Domain.Read.isEvent),
         Stream.take(2),
         Stream.runCollect,
       );

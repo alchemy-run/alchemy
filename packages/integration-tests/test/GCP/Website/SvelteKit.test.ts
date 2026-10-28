@@ -1,10 +1,9 @@
 import * as GCP from "@alchemy.run/gcp";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
 import { expectUrlContains } from "../../Cloudflare/Utils/Http.ts";
-import { dockerAvailable } from "../bindingHost.ts";
 import {
   assertSiteGone,
   awsFixture,
@@ -20,7 +19,7 @@ const { test } = Test.make({ providers: GCP.providers() });
 const fixtureDir = awsFixture("sveltekit-app");
 const fixtureEntries = [".gitignore", "package.json", "src", "static"];
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "SvelteKit: deploy, GET page and API route, destroy, gone",
   (stack) =>
     Effect.gen(function* () {

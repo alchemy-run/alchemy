@@ -193,7 +193,7 @@ Alchemy.Stack(
 );
 ```
 
-It is imported from `@alchemy.run/sql/PostgresState` rather than the `State` barrel because it depends on the optional `pg` driver, which must stay out of bundled worker code. Install `pg` and `@effect/sql-pg` to use it.
+It is imported from `@alchemy.run/sql/PostgresState` rather than the `State` barrel because it depends on the optional `@effect/sql-pg` driver, which must stay out of bundled worker code. Install `@effect/sql-pg` to use it.
 
 ## State and lifecycle
 
@@ -219,7 +219,7 @@ For tests, Alchemy provides an in-memory state store so tests don't
 touch the filesystem:
 
 ```typescript
-import * as TestState from "alchemy/Test/TestState";
+import * as TestState from "@alchemy.run/test/TestState";
 
 // Seed with existing resource state
 const state = TestState.state({
@@ -229,7 +229,7 @@ const state = TestState.state({
 });
 ```
 
-The test harness (`alchemy/Test/Bun` and `alchemy/Test/Vitest`)
+The test harness (`@alchemy.run/test/Bun` and `@alchemy.run/test/Vitest`)
 handles state setup automatically.
 
 ## Writing your own state store

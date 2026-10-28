@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { inMemoryState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

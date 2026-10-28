@@ -1,12 +1,14 @@
 import * as GitHub from "@alchemy.run/github";
-import { GitHubCredentials } from "@alchemy.run/github/Credentials";
-import { Octokit } from "@alchemy.run/github/Octokit";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Issues from "@distilled.cloud/github/issues";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import * as Stream from "effect/Stream";
+import { scopedToOwner } from "./scope.ts";
+import { gh } from "./scope.ts";
 
 const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
 if (!["alchemy-run-test", "alchemy-run-test-2"].includes(owner)) {
@@ -40,17 +42,16 @@ const fixture = (name: string, props: Omit<GitHub.MilestoneProps, "owner" | "rep
 
 const listMilestones = (fixture: string) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: () =>
-        octokit.paginate(octokit.rest.issues.listMilestones, {
+    return yield* gh(
+      Stream.runCollect(
+        Issues.listMilestones.items({
           owner,
           repo: repositoryName(fixture),
           state: "all",
           per_page: 100,
         }),
-      catch: (error) => error as Error,
-    });
+      ),
+    );
   });
 
 const verifyDeleted = (fixture: string) =>
@@ -173,24 +174,8 @@ test.provider(
           description: "For list test",
         }),
       );
-      const credentials = yield* yield* GitHubCredentials;
-      const client = credentials.octokit({ baseUrl: undefined });
-      client.hook.before("request", (options) => {
-        const url = new URL(options.url, "https://api.github.com");
-        if (url.pathname === "/user/repos") {
-          url.pathname = `/orgs/${owner}/repos`;
-          options.url = url.toString();
-        }
-      });
       const provider = yield* Provider.findProvider(GitHub.Milestone);
-      const allMilestones = yield* provider
-        .list()
-        .pipe(
-          Effect.provideService(
-            GitHubCredentials,
-            Effect.succeed({ ...credentials, octokit: () => client }),
-          ),
-        );
+      const allMilestones = yield* provider.list().pipe(scopedToOwner(owner));
       const found = allMilestones.find((milestone) => milestone.nodeId === created.nodeId);
       expect(found).toBeDefined();
       expect(found?.title).toBe(created.title);

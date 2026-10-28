@@ -1,5 +1,5 @@
 import * as Hetzner from "@alchemy.run/hetzner";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 
 describe(
   "Hetzner.Website prop surfaces",

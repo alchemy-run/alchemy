@@ -10,6 +10,7 @@ import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
 import { toWireHours } from "alchemy/Util/Duration";
 import type * as lambda from "aws-lambda";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -19,6 +20,18 @@ import * as EffectStream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+
+export class KinesisStreamInvalidProps extends Data.TaggedError("KinesisStreamInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class KinesisStreamUnexpectedResponse extends Data.TaggedError(
+  "KinesisStreamUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type StreamRecord = lambda.KinesisStreamRecord;
 
@@ -234,9 +247,11 @@ export interface Stream extends Resource<
  * yield* Kinesis.consumeStreamRecords(
  *   stream,
  *   {},
- *   Effect.fn(function* (record) {
- *     const data = new TextDecoder().decode(record.data);
- *     yield* Effect.log(`Received: ${data}`);
+ *   Effect.fn(function* (event) {
+ *     for (const record of event.Records) {
+ *       const data = Buffer.from(record.kinesis.data, "base64").toString("utf8");
+ *       yield* Effect.log(`Received: ${data}`);
+ *     }
  *   }),
  * );
  * ```
@@ -281,7 +296,11 @@ const getStreamMode = (props: StreamProps): kinesis.StreamModeDetails => ({
 
 const assertProvisionedProps = (props: StreamProps) =>
   props.streamMode === "PROVISIONED" && props.shardCount === undefined
-    ? Effect.fail(new Error(`streamMode "PROVISIONED" requires shardCount to be set`))
+    ? Effect.fail(
+        new KinesisStreamInvalidProps({
+          message: `streamMode "PROVISIONED" requires shardCount to be set`,
+        }),
+      )
     : Effect.void;
 
 const toTagRecord = (tags: Array<{ Key: string; Value?: string }> | undefined) =>
@@ -346,7 +365,7 @@ const readStream = Effect.fn(function* ({
       StreamName: streamName,
       StreamARN: streamArn,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
   if (!response) {
     return undefined;
@@ -361,7 +380,7 @@ const readStream = Effect.fn(function* ({
     .listTagsForResource({
       ResourceARN: summary.StreamARN,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!tagsResponse) {
     return undefined;
   }
@@ -369,7 +388,7 @@ const readStream = Effect.fn(function* ({
     .getResourcePolicy({
       ResourceARN: summary.StreamARN,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
   return toAttrs({
     summary,
@@ -499,7 +518,9 @@ export const StreamProvider = () =>
 
             state = yield* readStream({ streamName, streamArn });
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created stream ${streamName}`));
+              return yield* new KinesisStreamUnexpectedResponse({
+                message: `failed to read created stream ${streamName}`,
+              });
             }
           }
 
@@ -516,7 +537,9 @@ export const StreamProvider = () =>
             yield* session.note(`Updated stream mode to ${desiredMode}`);
             state = yield* readStream({ streamName, streamArn });
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to re-read stream ${streamName}`));
+              return yield* new KinesisStreamUnexpectedResponse({
+                message: `failed to re-read stream ${streamName}`,
+              });
             }
           }
 
@@ -692,7 +715,9 @@ export const StreamProvider = () =>
           // actually in the cloud after all sync steps.
           const final = yield* readStream({ streamName, streamArn });
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled stream ${streamName}`));
+            return yield* new KinesisStreamUnexpectedResponse({
+              message: `failed to read reconciled stream ${streamName}`,
+            });
           }
           return final;
         }),

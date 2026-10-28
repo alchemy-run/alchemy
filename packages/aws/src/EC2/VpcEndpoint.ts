@@ -18,6 +18,13 @@ import type { SecurityGroupId } from "./SecurityGroup.ts";
 import type { SubnetId } from "./Subnet.ts";
 import type { VpcId } from "./Vpc.ts";
 
+export class VpcEndpointUnexpectedResponse extends Data.TaggedError(
+  "VpcEndpointUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type VpcEndpointId<ID extends string = string> = `vpce-${ID}`;
 export const VpcEndpointId = <ID extends string>(id: ID): ID & VpcEndpointId<ID> =>
   `vpce-${id}` as ID & VpcEndpointId<ID>;
@@ -323,7 +330,11 @@ export const VpcEndpointProvider = () =>
           Effect.flatMap((ep) =>
             ep
               ? Effect.succeed(ep)
-              : Effect.fail(new Error(`VPC Endpoint ${vpcEndpointId} not found`)),
+              : Effect.fail(
+                  new VpcEndpointUnexpectedResponse({
+                    message: `VPC Endpoint ${vpcEndpointId} not found`,
+                  }),
+                ),
           ),
         );
 

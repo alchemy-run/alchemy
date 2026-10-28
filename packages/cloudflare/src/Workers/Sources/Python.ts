@@ -7,7 +7,6 @@ import { sha256 } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as ChildProcess from "effect/process/ChildProcess";
-import * as Stream from "effect/Stream";
 import path from "pathe";
 import { convertPathToPattern, glob } from "tinyglobby";
 import type { SourceContext, SourceProvider } from "../Source.ts";

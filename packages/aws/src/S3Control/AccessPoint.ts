@@ -219,7 +219,7 @@ const retryWhileAccessPointPropagates = <A, E extends { _tag: string }, R>(
  * poisons the owning bucket's delete with `BucketHasAccessPointsAttached`).
  */
 class AccessPointNotYetDeleted extends Data.TaggedError("AccessPointNotYetDeleted")<{
-  readonly name: string;
+  readonly resourceName: string;
 }> {}
 
 /**
@@ -256,7 +256,7 @@ export const AccessPointProvider = () =>
       const observeAccessPoint = (accountId: string, name: string) =>
         s3control
           .getAccessPoint({ AccountId: accountId, Name: name })
-          .pipe(Effect.catchTag("NoSuchAccessPoint", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchAccessPoint", () => Effect.undefined));
 
       const observedTags = (accountId: string, arn: string) =>
         s3control.listTagsForResource({ AccountId: accountId, ResourceArn: arn }).pipe(
@@ -426,7 +426,9 @@ export const AccessPointProvider = () =>
                 live === undefined
                   ? Effect.void
                   : deleteOnce.pipe(
-                      Effect.flatMap(() => Effect.fail(new AccessPointNotYetDeleted({ name }))),
+                      Effect.flatMap(() =>
+                        Effect.fail(new AccessPointNotYetDeleted({ resourceName: name })),
+                      ),
                     ),
               ),
             ),

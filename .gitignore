@@ -26,6 +26,7 @@ wrangler.jsonc
 smoke
 .svelte-kit
 .astro
+.vinext
 .wrangler
 
 *.tgz
@@ -60,7 +61,6 @@ packages/cloudflare-runtime/src/rolldown/out/
 .turbo
 coverage
 test-results
-.external
 .bundle-benchmark
 packages/alchemy/docs
 .sonda
@@ -99,3 +99,8 @@ examples/cloudflare-worker/src/scratch.ts
 
 # pkg pack output (CI artifact hand-off)
 .pkg
+
+# Scoped copies of the Neon website examples made by test/Neon/Website (exampleRoot)
+examples/neon-website-*-*/
+!examples/neon-website-react-router/
+!examples/neon-website-tanstack-start/

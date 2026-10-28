@@ -168,7 +168,7 @@ export const LicenseConfigurationProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const found = yield* licensemanager
           .getLicenseConfiguration({ LicenseConfigurationArn: arn })
-          .pipe(Effect.catchTag("LicenseConfigurationNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("LicenseConfigurationNotFound", () => Effect.undefined));
         if (found === undefined || !isLive(found.Status)) return undefined;
         return found;
       });

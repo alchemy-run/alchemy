@@ -3,8 +3,8 @@ import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as iam from "@distilled.cloud/aws/iam";
 import type { Region } from "@distilled.cloud/aws/Region";
-import * as route53 from "@distilled.cloud/aws/route-53";
 import { deepEqual, isResolved } from "alchemy/Diff";
+import type { DnsConfig } from "alchemy/DNS/Adapter";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -22,11 +22,11 @@ import type { HttpClient } from "effect/http/HttpClient";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { Certificate } from "../ACM/Certificate.ts";
 import { ScalableTarget } from "../ApplicationAutoScaling/ScalableTarget.ts";
 import { ScalingPolicy } from "../ApplicationAutoScaling/ScalingPolicy.ts";
 import { Service as CloudMapService } from "../CloudMap/Service.ts";
 import type { Credentials } from "../Credentials.ts";
+import { domainCertificate, isRoute53Dns, resolveDomainDns } from "../CustomDomain.ts";
 import {
   SecurityGroup,
   type SecurityGroupId,
@@ -52,7 +52,6 @@ import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogReten
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
-import { Record as Route53Record } from "../Route53/Record.ts";
 import type { ClusterArn } from "./Cluster.ts";
 import {
   attachTaskBindings,
@@ -166,9 +165,19 @@ export interface ServiceDomainConfig {
   /**
    * ARN of an existing ACM certificate (in the service's region) for the
    * HTTPS/TLS listener. When omitted, a DNS-validated `AWS.ACM.Certificate`
-   * is composed in the matching Route 53 hosted zone.
+   * is composed in the matching Route 53 hosted zone (or through
+   * {@link dns}).
    */
   cert?: string;
+  /**
+   * DNS host for the certificate validation and alias records (see
+   * [DNS Adapters](/infrastructure-as-code/dns-adapters)). Omitted: Route
+   * 53 (a matching public hosted zone must exist; alias `A` + `AAAA`
+   * records). Pass `Cloudflare.DNS.Adapter()` or `Hetzner.DNS.Adapter()`
+   * for a domain whose DNS lives there — each name gets a `CNAME` to the
+   * load balancer and the certificate is validated through that host.
+   */
+  dns?: DnsConfig;
 }
 
 /**
@@ -208,12 +217,14 @@ export interface ServiceLoadBalancerConfig {
   /**
    * Owned-only: point a custom domain at the composed load balancer.
    *
-   * A matching Route 53 hosted zone must exist (looked up by walking the
-   * domain's labels); alias A + AAAA records are composed for the domain and
-   * every alias. Unless {@link ServiceDomainConfig.cert} supplies an
-   * existing certificate ARN, a DNS-validated `AWS.ACM.Certificate` is
-   * composed in the service's region and attached to the HTTPS listener
-   * (the default listener becomes `443/https`). The service `url` prefers
+   * By default a matching Route 53 hosted zone must exist (looked up by
+   * walking the domain's labels) and alias A + AAAA records are composed for
+   * the domain and every alias; set {@link ServiceDomainConfig.dns} to
+   * `Cloudflare.DNS.Adapter()` for a domain whose DNS lives in Cloudflare.
+   * Unless {@link ServiceDomainConfig.cert} supplies an existing certificate
+   * ARN, a DNS-validated `AWS.ACM.Certificate` is composed in the service's
+   * region and attached to the HTTPS listener (the default listener becomes
+   * `443/https`). The service `url` prefers
    * the domain.
    */
   domain?: string | ServiceDomainConfig;
@@ -1121,6 +1132,21 @@ export interface ServiceRuntimeContext extends HostRuntimeContext {
  * });
  * ```
  *
+ * **Example:** Domain on Cloudflare DNS
+ * ```typescript
+ * // The certificate is validated through the Cloudflare zone and each
+ * // name gets a CNAME to the load balancer. Requires
+ * // `Cloudflare.providers()` in the stack.
+ * const svc = yield* Service("Api", {
+ *   cluster,
+ *   image: "my-org/api:latest",
+ *   port: 3000,
+ *   loadBalancer: {
+ *     domain: { name: "api.example.com", dns: Cloudflare.DNS.Adapter() },
+ *   },
+ * });
+ * ```
+ *
  * ### Network Load Balancers
  * **Example:** TCP Service Behind an NLB
  * ```typescript
@@ -1449,7 +1475,7 @@ interface ManagedSgPort {
  */
 const managedSgIngress = (
   staticPorts: ManagedSgPort[],
-  dynamicPort: number | unknown | undefined,
+  dynamicPort: unknown,
 ): SecurityGroupRuleData[] => {
   const rulesOf = (entries: ManagedSgPort[]): SecurityGroupRuleData[] => {
     const seen = new Set<string>();
@@ -1717,9 +1743,13 @@ const composeManagedIngress = (
     let certificateArn: string | undefined = props.certificateArn;
     const domainNames = domain !== undefined ? [domain.name, ...(domain.aliases ?? [])] : [];
     const domainZones = new Map<string, string>();
+    // Route 53 (the default) needs a matching hosted zone up front; other
+    // DNS hosts (e.g. Cloudflare) infer their zone at reconcile time.
+    const usesRoute53 = domain !== undefined && isRoute53Dns(domain.dns);
+    const pinnedZoneId = domain?.dns?.zone as string | undefined;
     if (domain !== undefined) {
-      for (const name of domainNames) {
-        const zoneId = yield* findPublicHostedZoneId(name);
+      for (const name of usesRoute53 ? domainNames : []) {
+        const zoneId = pinnedZoneId ?? (yield* findPublicHostedZoneId(name));
         if (zoneId === undefined) {
           return yield* new ServiceHostedZoneNotFound({
             serviceId: id,
@@ -1735,13 +1765,18 @@ const composeManagedIngress = (
         // DNS-validated certificate in the service's own region (an ALB/NLB
         // listener requires an in-region certificate).
         const { region } = yield* AWSEnvironment.current;
-        const certificate = yield* Certificate("Certificate", {
-          domainName: domain.name,
-          subjectAlternativeNames: domain.aliases,
-          hostedZoneId: domainZones.get(domain.name)!,
-          region,
-          tags: props.tags,
-        });
+        const certificate = yield* domainCertificate(
+          "Certificate",
+          {
+            domainName: domain.name,
+            subjectAlternativeNames: domain.aliases,
+            ...(usesRoute53 ? { hostedZoneId: domainZones.get(domain.name)! } : {}),
+            region,
+            tags: props.tags,
+          },
+          domain.dns,
+        );
+        // Resolves once the certificate is issued.
         certificateArn = certificate.certificateArn as unknown as string;
       }
     }
@@ -2087,20 +2122,24 @@ const composeManagedIngress = (
     // ── domain: alias records pointing at the owned load balancer ───────
     if (domain !== undefined && alb !== undefined) {
       for (const name of domainNames) {
-        const zoneId = domainZones.get(name)!;
         const sanitizedName = name.replaceAll(/[^a-zA-Z0-9-]/g, "-");
-        for (const recordType of ["A", "AAAA"] as const) {
-          yield* Route53Record(`Domain-${sanitizedName}-${recordType}`, {
-            hostedZoneId: zoneId,
-            name,
-            type: recordType,
-            aliasTarget: {
+        const dns = yield* resolveDomainDns(
+          usesRoute53 ? undefined : domain.dns,
+          domainZones.get(name),
+        );
+        // Route 53: alias `A` + `AAAA` (`Domain-{name}-A` / `-AAAA`);
+        // other hosts: a single CNAME to the load balancer.
+        yield* dns.alias(`Domain-${sanitizedName}`, {
+          name,
+          ipv6: true,
+          target: {
+            hostname: alb.dnsName,
+            route53Alias: {
               hostedZoneId: alb.canonicalHostedZoneId,
-              dnsName: alb.dnsName,
               evaluateTargetHealth: false,
             },
-          });
-        }
+          },
+        });
       }
     }
 
@@ -2421,7 +2460,7 @@ const observeServiceConvergence = (input: {
         cluster: input.clusterArn,
         services: [input.serviceName],
       })
-      .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
     const service = described?.services?.find(
       (candidate) => candidate.serviceName === input.serviceName && candidate.status !== "INACTIVE",
     );
@@ -2587,6 +2626,19 @@ const waitForServiceConvergence = (input: {
   );
 };
 
+/** Keep image resolution, drift detection and dev watching on the same inputs. */
+export const serviceImageInput = (props: ServiceProps) => {
+  const imageProps = props as ImageOwningServicePropsBase;
+  const source = props as ImageSourceLike;
+  return {
+    source,
+    platform: taskImagePlatform(imageProps.runtimePlatform),
+    port: imageProps.port,
+    isExternal: imageProps.isExternal,
+    bootstrap: makeBunBootstrap(source.handler ?? "default"),
+  };
+};
+
 export const ServiceProvider = () =>
   Provider.effect(
     Service,
@@ -2679,7 +2731,7 @@ export const ServiceProvider = () =>
           .describeLoadBalancers({
             LoadBalancerArns: [ingress.loadBalancerArn],
           })
-          .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
         const dnsName = described?.LoadBalancers?.[0]?.DNSName;
         if (!dnsName) {
           return undefined;
@@ -2835,13 +2887,13 @@ export const ServiceProvider = () =>
         // already-attached ARNs; a `LimitExceededException` means the
         // policy was NOT attached, so it propagates and fails the deploy
         // rather than silently shipping a role with missing permissions.
-        yield* Effect.all(
-          (news.taskRoleManagedPolicyArns ?? []).map((policyArn) =>
+        yield* Effect.forEach(
+          news.taskRoleManagedPolicyArns ?? [],
+          (policyArn) =>
             iam.attachRolePolicy({
               RoleName: taskRoleName,
               PolicyArn: policyArn,
             }),
-          ),
           { concurrency: "unbounded" },
         );
 
@@ -2885,20 +2937,15 @@ export const ServiceProvider = () =>
           retention: news.logging?.retention,
         });
 
-        const source = news as ImageSourceLike;
         const resolved = yield* imageSource.resolve({
+          ...serviceImageInput(news),
           id,
-          source,
           repositoryName,
           repositoryUri:
             output?.repositoryUri && output.repositoryName === repositoryName
               ? output.repositoryUri
               : undefined,
           tags,
-          platform: taskImagePlatform(news.runtimePlatform),
-          port: news.port,
-          isExternal: news.isExternal,
-          bootstrap: makeBunBootstrap(source.handler ?? "default"),
           session,
         });
 
@@ -3096,15 +3143,7 @@ export const ServiceProvider = () =>
           // surface drift as an update; without this a bootstrap or code-only
           // change would silently no-op until `--force`.
           if (output?.code && taskRefOf(news) === undefined) {
-            const imageNews = news as ImageOwningServicePropsBase;
-            const source = news as ImageSourceLike;
-            const hash = yield* imageSource.hash({
-              source,
-              platform: taskImagePlatform(imageNews.runtimePlatform),
-              port: imageNews.port,
-              isExternal: imageNews.isExternal,
-              bootstrap: makeBunBootstrap(source.handler ?? "default"),
-            });
+            const hash = yield* imageSource.hash(serviceImageInput(news));
             if (hash !== undefined && hash !== output.code.hash) {
               return { action: "update" } as const;
             }
@@ -3127,7 +3166,7 @@ export const ServiceProvider = () =>
               services: [serviceName],
               include: ["TAGS"],
             })
-            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
           const service = described?.services?.[0];
           if (!service?.serviceArn) {
             return undefined;
@@ -3253,7 +3292,7 @@ export const ServiceProvider = () =>
               services: [serviceName],
               include: ["TAGS"],
             })
-            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
           const observed = described?.services?.find(
             (s) =>
               s.serviceName === serviceName && s.status !== "INACTIVE" && s.status !== "DRAINING",

@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { AccountSettings } from "@alchemy.run/aws/SES";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as sesv2 from "@distilled.cloud/aws/sesv2";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
@@ -15,7 +15,7 @@ const getSuppressedReasons = sesv2
 // up front and restore it on scope close so the test leaves the account exactly
 // as it found it, even if an assertion fails mid-way. Deleting the resource is
 // a no-op (it leaves settings in place), so the restore MUST be explicit.
-// `exclusive` because this mutates process-global account state.
+// The "aws:ses-account" label keeps other SES account-singleton tests out.
 test.provider(
   "manages the account suppression list in place",
   (stack) =>
@@ -57,7 +57,7 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:ses", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "aws:ses-account",
   },
 );
 

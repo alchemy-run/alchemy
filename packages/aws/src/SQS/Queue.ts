@@ -292,14 +292,18 @@ class QueueStillExists extends Data.TaggedError("QueueStillExists")<{
  *
  * ### Event Sources
  * Process messages from a queue using a Lambda event source mapping.
- * Messages are automatically deleted after successful processing.
+ * Messages are deleted once the handler succeeds; any listed in
+ * `batchItemFailures` are retried.
  *
  * **Example:** Process queue messages
  * ```typescript
  * // init
- * yield* SQS.consumeQueueMessages(queue,
- *   Effect.fn(function* (message) {
- *     yield* Effect.log(`Received: ${message.body}`);
+ * yield* SQS.consumeQueueMessages(
+ *   queue,
+ *   Effect.fn(function* (event) {
+ *     for (const message of event.Records) {
+ *       yield* Effect.log(`Received: ${message.body}`);
+ *     }
  *   }),
  * );
  * ```
@@ -448,7 +452,7 @@ export const QueueProvider = () =>
         const queueArn = `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
         let queueUrl = yield* sqs.getQueueUrl({ QueueName: queueName }).pipe(
           Effect.map((r) => r.QueueUrl),
-          Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(undefined)),
+          Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
         );
 
         if (queueUrl === undefined) {
@@ -511,7 +515,7 @@ export const QueueProvider = () =>
                       const queueArn = `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
                       return { queueName, queueUrl, queueArn };
                     }),
-                    Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(undefined)),
+                    Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
                   ),
               { concurrency: 10 },
             );
@@ -522,13 +526,13 @@ export const QueueProvider = () =>
           const queueName = output?.queueName ?? (yield* createQueueName(id, olds ?? {}));
           const url = yield* sqs.getQueueUrl({ QueueName: queueName }).pipe(
             Effect.map((r) => r.QueueUrl),
-            Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(undefined)),
+            Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
           );
           if (!url) return undefined;
           const queueArn = `arn:aws:sqs:${region}:${accountId}:${queueName}` as const;
           const tagsResp = yield* sqs.listQueueTags({ QueueUrl: url }).pipe(
             Effect.map((r) => r.Tags ?? {}),
-            Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(undefined)),
+            Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
           );
           if (tagsResp === undefined) return undefined;
           const attrs = {
@@ -684,7 +688,7 @@ export const QueueProvider = () =>
           // can be removed, so we untag removed keys; internal tags are never
           // user-removable so they survive.
           const desiredTags: Record<string, string> = {
-            ...(news.tags ?? {}),
+            ...news.tags,
             ...internalTags,
           };
           const currentTags: Record<string, string> = {};

@@ -33,13 +33,14 @@ export const STATE_STORE_SCRIPT_NAME = DEFAULT_STATE_STORE_NAME;
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
  */
-// TODO: bump to 8 before release. The Worker's typed `StateStoreFailure`
-// responses and secret read retry change its runtime behaviour.
-export const STATE_STORE_VERSION = 7 as const;
+// v8: failures behind the auth middleware answer as a typed `StateStoreFailure`
+// (v7 encoded them through `Unauthorized`'s schema and answered a bare 500),
+// FQNs longer than 100 URI-encoded chars are routed, and secret reads retry.
+export const STATE_STORE_VERSION = 8 as const;
 
 /**
  * Hard-coded OTLP/HTTP endpoints. Point at the public ingest relay
- * defined in `stacks/otel.ts` (bound to `otel.alchemy.run`), which
+ * defined in `stacks/src/otel.ts` (bound to `otel.alchemy.run`), which
  * forwards to Axiom with the bearer token attached server-side. Hard-
  * coded on purpose: the worker has no env-var plumbing and the relay
  * is account-level infra that lives outside any single deploy.
@@ -101,15 +102,14 @@ const failed =
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, StateStoreFailure, R> =>
     effect.pipe(
       Effect.tapError((error) => Effect.logError(`State store ${operation} failed`, error)),
-      Effect.mapError(
-        (error) =>
-          new StateStoreFailure({
-            operation,
-            reason:
-              typeof error === "object" && error !== null && "_tag" in error
-                ? String(error._tag)
-                : "UnknownError",
-          }),
+      Effect.mapError((error) =>
+        StateStoreFailure.make({
+          operation,
+          reason:
+            typeof error === "object" && error !== null && "_tag" in error
+              ? String(error._tag)
+              : "UnknownError",
+        }),
       ),
     );
 
@@ -332,11 +332,19 @@ export default Worker(
         // file-response surface is stubbed.
         Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
         HttpRouter.toHttpEffect,
+        // An FQN travels as one URI-encoded path segment, and the router's
+        // default 100-char cap on a parameter left a longer one unrouted.
+        Effect.provideService(HttpRouter.RouterConfig, { maxParamLength: MAX_PARAM_LENGTH }),
         // Effect.provide(TelemetryLive),
       ),
     };
   }).pipe(Effect.provide(Layer.mergeAll(ReadSecretBinding))),
 );
+
+/**
+ * Longest path parameter the worker routes, within a Cloudflare URL's 16 KiB.
+ */
+const MAX_PARAM_LENGTH = 16_384;
 
 /**
  * Stub `HttpPlatform` for the worker. The state-store API never

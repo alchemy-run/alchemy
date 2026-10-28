@@ -8,7 +8,7 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const pkgs = `alchemy@latest @alchemy.run/gcp effect @effect/platform-bun @effect/platform-node`;
+export const pkgs = `alchemy@latest @alchemy.run/gcp@latest effect @effect/platform-bun @effect/platform-node`;
 
 In this part you install Alchemy, create a Stack with a Cloud Storage
 Bucket, and deploy it to your Google Cloud project.
@@ -79,8 +79,9 @@ Point Alchemy at your project once:
 bun alchemy profile edit --add GCP
 ```
 
-Choose **Service account JSON**, pick the key file, and pick a default
-region. The choice is saved to your `default`
+Choose **gcloud login**, pick a gcloud configuration and sign in with your
+Google account. (**Service account JSON** works too, with a
+key file.) The choice is saved to your `default`
 [profile](/environments/profiles).
 
 ## Add a Bucket

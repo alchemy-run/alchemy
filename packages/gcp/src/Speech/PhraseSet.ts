@@ -131,7 +131,7 @@ export type PhraseSet = Resource<
 export const PhraseSet = Resource<PhraseSet>("GCP.Speech.PhraseSet");
 
 export class PhraseSetNotResolved extends Data.TaggedError("GCP.Speech.PhraseSetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const phraseSetNameOf = (project: string, location: string, phraseSetId: string) =>
@@ -223,7 +223,7 @@ export const PhraseSetProvider = () =>
 
       if (current === undefined) {
         return yield* new PhraseSetNotResolved({
-          name: name || phraseSetNameOf(env.project, location, phraseSetId),
+          resourceName: name || phraseSetNameOf(env.project, location, phraseSetId),
         });
       }
 

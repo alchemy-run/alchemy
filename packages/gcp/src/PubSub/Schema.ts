@@ -108,7 +108,7 @@ export type Schema = Resource<
 export const Schema = Resource<Schema>("GCP.PubSub.Schema");
 
 export class SchemaNotResolved extends Data.TaggedError("GCP.PubSub.SchemaNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const canonicalName = (name: string) => name.split("@")[0] ?? name;
@@ -149,7 +149,7 @@ const toAttrs = (schema: pubsub.Pubsub_Schema, project: string) => {
 const getByName = (name: string) =>
   pubsub
     .getProjectsSchemas({ name: canonicalName(name), view: "FULL" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const definitionsEqual = (left: string | undefined, right: string | undefined) => {
   const a = (left ?? "").trim();
@@ -234,7 +234,7 @@ export const SchemaProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SchemaNotResolved({ name });
+        return yield* new SchemaNotResolved({ resourceName: name });
       }
 
       if (!definitionsEqual(current.definition, news.definition)) {

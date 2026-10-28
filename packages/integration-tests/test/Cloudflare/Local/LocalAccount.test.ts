@@ -1,7 +1,7 @@
 import { LOCAL_ACCOUNT_ID, localAccountId } from "@alchemy.run/cloudflare/LocalAccount";
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { ProfileStore, type ProviderConfig } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";

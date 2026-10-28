@@ -108,7 +108,7 @@ export const TenantResourceAssociationProvider = () =>
       const listResources = Effect.fn(function* (tenantName: string) {
         const pages = yield* sesv2.listTenantResources.pages({ TenantName: tenantName }).pipe(
           Stream.runCollect,
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
         if (pages === undefined) return undefined;
         return Array.from(pages).flatMap((page) => page.TenantResources ?? []);

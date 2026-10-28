@@ -3,7 +3,7 @@ import * as durableObjectsApi from "@distilled.cloud/cloudflare/durable-objects"
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
 import * as Artifacts from "alchemy/Artifacts";
 import { havePropsChanged, isResolved, stripEffects } from "alchemy/Diff";
@@ -14,16 +14,13 @@ import { type ResourceBinding } from "alchemy/Resource";
 import { isRedactedMarker } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { cachedFunction } from "alchemy/Util/cached-function";
-import { initialCwd } from "alchemy/Util/Node";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import { isHttpClientError } from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -234,13 +231,20 @@ const toPreviewWire = (value: unknown): unknown => {
   return value;
 };
 
+const previewVerbatimFields = new Set(["json", "algorithm", "keyJwk", "props"]);
+
 /** Convert Alchemy's binding array into wrangler's Preview `env` map. */
 const bindingsToPreviewEnv = (bindings: WorkerBinding[]): Record<string, unknown> => {
   const env: Record<string, unknown> = {};
   for (const binding of bindings) {
     const { name, ...rest } = binding as unknown as { name?: unknown } & Record<string, unknown>;
     if (typeof name !== "string") continue;
-    env[name] = toPreviewWire(rest);
+    env[name] = Object.fromEntries(
+      Object.entries(rest).map(([k, v]) => [
+        toPreviewWireKey(k),
+        previewVerbatimFields.has(k) ? v : toPreviewWire(v),
+      ]),
+    );
   }
   return env;
 };
@@ -698,6 +702,25 @@ const getScriptSettings = (
   });
 
 /**
+ * Look up a dispatch-namespace script, or `undefined` when it or its
+ * namespace does not exist. The settings endpoint answers a missing
+ * namespace with an untyped 500, so check existence here first.
+ */
+const findDispatchNamespaceScript = (
+  accountId: string,
+  dispatchNamespace: string,
+  scriptName: string,
+) =>
+  wfp
+    .getDispatchNamespaceScript({ accountId, dispatchNamespace, scriptName })
+    .pipe(
+      Effect.catchTag(
+        ["DispatchNamespaceNotFound", "DispatchNamespaceScriptNotFound"],
+        () => Effect.undefined,
+      ),
+    );
+
+/**
  * Deploy-time binding validation rejects an upload whose bindings
  * reference a resource Cloudflare can't see (each resource type has
  * its own typed not-found error, verified against the live API).
@@ -762,6 +785,17 @@ const cachedWorkerId = (value: string | undefined, scriptName: string): string |
   value !== undefined && value !== "" && value !== scriptName && !value.startsWith("dev:")
     ? value
     : undefined;
+
+/**
+ * Whether `output` is a precreate stub that uploaded nothing: a version,
+ * preview, or dispatch-namespace worker's provisional row (`workerId: ""`).
+ * Its `workerName` names no script this resource wrote. Without a recorded
+ * namespace it can't even say which endpoint the attempt targeted — a
+ * dispatch stub's namespace may still have been unresolved — so the
+ * account-level script of that name proves nothing (#2533).
+ */
+const isUnscopedStub = (output: Worker["Attributes"]): boolean =>
+  output.workerId === "" && !output.namespace;
 
 export class WorkerIdNotFound extends Data.TaggedError("WorkerIdNotFound")<{
   scriptName: string;
@@ -1013,10 +1047,9 @@ const resolveMetadataHashValue = (value: unknown): Effect.Effect<MetadataHashVal
       return resolved.toISOString();
     }
     if (Array.isArray(resolved)) {
-      return yield* Effect.all(
-        resolved.map((item) => resolveMetadataHashValue(item)),
-        { concurrency: "unbounded" },
-      );
+      return yield* Effect.forEach(resolved, (item) => resolveMetadataHashValue(item), {
+        concurrency: "unbounded",
+      });
     }
     if (Predicate.isObject(resolved)) {
       // Only plain objects round-trip predictably. A class instance would
@@ -1025,12 +1058,12 @@ const resolveMetadataHashValue = (value: unknown): Effect.Effect<MetadataHashVal
       if (prototype !== Object.prototype && prototype !== null) {
         return undefined;
       }
-      const entries = yield* Effect.all(
-        Object.entries(resolved).map(([key, nested]) =>
+      const entries = yield* Effect.forEach(
+        Object.entries(resolved),
+        ([key, nested]) =>
           resolveMetadataHashValue(nested).pipe(
             Effect.map((materializedNested) => [key, materializedNested] as const),
           ),
-        ),
         { concurrency: "unbounded" },
       );
       return Object.fromEntries(entries.filter(([, nested]) => nested !== undefined));
@@ -1156,8 +1189,6 @@ export const LiveWorkerProvider = () =>
   Provider.effect(
     Worker,
     Effect.gen(function* () {
-      const path = yield* Path.Path;
-
       const bundler = yield* WorkerBundle;
       const stack = yield* Stack;
       const dotAlchemy = yield* dotAlchemyDirectory;
@@ -1349,12 +1380,12 @@ export const LiveWorkerProvider = () =>
           // Detach what's no longer wanted. Use the live list so we
           // don't try to delete domains we no longer track.
           const toRemove = liveAll.filter((d) => !desiredSet.has(d.hostname));
-          yield* Effect.all(
-            toRemove.map((d) =>
+          yield* Effect.forEach(
+            toRemove,
+            (d) =>
               workers
                 .deleteDomain({ accountId, domainId: d.id })
                 .pipe(Effect.catchTag("DomainNotFound", () => Effect.void)),
-            ),
             { concurrency: "unbounded" },
           );
 
@@ -1439,7 +1470,7 @@ export const LiveWorkerProvider = () =>
             return { hostname, id: res.id ?? "", zoneId: res.zoneId ?? zoneId };
           });
 
-          const applied = yield* Effect.all(desired.map(attachDomain), {
+          const applied = yield* Effect.forEach(desired, attachDomain, {
             concurrency: "unbounded",
           });
           return applied;
@@ -1571,7 +1602,10 @@ export const LiveWorkerProvider = () =>
         for (const zoneId of zoneIds) {
           const entrypoint = yield* rulesets
             .getPhasForZone({ zoneId, rulesetPhase: "http_request_dynamic_redirect" })
-            .pipe(Effect.orElseSucceed(() => undefined));
+            // Only a missing entrypoint means no rules yet. Any other failure must
+            // stop here: the PUT below replaces the whole phase, so reading it as
+            // empty would delete every other rule in the zone.
+            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
           const existingRules = entrypoint?.rules ?? [];
           const ourDesired = desired
             .filter((hostname) => params.zoneIdByHostname.get(hostname) === zoneId)
@@ -1661,7 +1695,10 @@ export const LiveWorkerProvider = () =>
               : [];
           const entrypoint = yield* rulesets
             .getPhasForZone({ zoneId, rulesetPhase: "http_request_late_transform" })
-            .pipe(Effect.orElseSucceed(() => undefined));
+            // Only a missing entrypoint means no rules yet. Any other failure must
+            // stop here: the PUT below replaces the whole phase, so reading it as
+            // empty would delete every other rule in the zone.
+            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
           const existingRules = entrypoint?.rules ?? [];
           const isOurs = (rule: { description?: string | null }) =>
             (rule.description ?? "").startsWith(prefix);
@@ -1777,8 +1814,9 @@ export const LiveWorkerProvider = () =>
           return Effect.succeed([] as Worker["Attributes"]["routes"]);
         }
 
-        const routesByZone = Effect.all(
-          uniqueZoneIds.map((zoneId) =>
+        const routesByZone = Effect.forEach(
+          uniqueZoneIds,
+          (zoneId) =>
             workers.listRoutes({ zoneId }).pipe(
               Effect.map((response): Worker["Attributes"]["routes"] =>
                 (response.result ?? []).flatMap((route) =>
@@ -1796,7 +1834,6 @@ export const LiveWorkerProvider = () =>
               ),
               Effect.orElseSucceed(() => []),
             ),
-          ),
           // Bounded: this issues one request per zone, so a Worker with routes
           // spread across many zones would otherwise burst the account's whole
           // API budget in a single tick (#926).
@@ -1852,12 +1889,12 @@ export const LiveWorkerProvider = () =>
           const liveByKey = new Map(liveAll.map((route) => [routeKey(route), route]));
 
           const toRemove = liveAll.filter((route) => !desiredKeys.has(routeKey(route)));
-          yield* Effect.all(
-            toRemove.map((route) =>
+          yield* Effect.forEach(
+            toRemove,
+            (route) =>
               workers
                 .deleteRoute({ zoneId: route.zoneId, routeId: route.id })
                 .pipe(Effect.catchTag("RouteNotFound", () => Effect.void)),
-            ),
             { concurrency: "unbounded" },
           );
 
@@ -1928,7 +1965,7 @@ export const LiveWorkerProvider = () =>
             };
           });
 
-          return yield* Effect.all(desired.map(attachRoute), { concurrency: "unbounded" });
+          return yield* Effect.forEach(desired, attachRoute, { concurrency: "unbounded" });
         });
 
       const createAlchemyWorkerTags = (id: string) => [
@@ -2007,12 +2044,11 @@ export const LiveWorkerProvider = () =>
                 params.observedNamespaces.some((ns) => ns.script === script)));
           const settings = yield* getScriptSettings(params.accountId, script, undefined).pipe(
             Effect.catchTags({
-              WorkerNotFound: (error) =>
-                knownSource ? Effect.fail(error) : Effect.succeed(undefined),
+              WorkerNotFound: (error) => (knownSource ? Effect.fail(error) : Effect.undefined),
               WorkerHasNoVersions: (error) =>
                 knownSource || params.sources.includes(script)
                   ? Effect.fail(error)
-                  : Effect.succeed(undefined),
+                  : Effect.undefined,
             }),
           );
           if (
@@ -2082,7 +2118,7 @@ export const LiveWorkerProvider = () =>
                         binding.scriptName != null &&
                         binding.scriptName !== script)),
                 )
-                  ? Effect.succeed(undefined)
+                  ? Effect.undefined
                   : Effect.fail(error),
               ),
             );
@@ -2112,6 +2148,17 @@ export const LiveWorkerProvider = () =>
         );
         return namespaces;
       };
+
+      const isSecretBinding = (binding: { type: string }) =>
+        binding.type === "secret_text" || binding.type === "secret_key";
+
+      const getSecretNames = (
+        bindings: readonly { type: string; name: string }[] | null | undefined,
+      ) =>
+        (bindings ?? [])
+          .filter(isSecretBinding)
+          .map((binding) => binding.name)
+          .sort();
 
       const getExpectedDurableObjectClassNames = (
         bindings: readonly WorkerBinding[] | undefined,
@@ -2252,7 +2299,7 @@ export const LiveWorkerProvider = () =>
           if (props.script !== undefined) {
             const [assets, bundleHash] = yield* Effect.all(
               [
-                opts.skipAssetsRead ? Effect.succeed(undefined) : prepareAssets(props.assets),
+                opts.skipAssetsRead ? Effect.undefined : prepareAssets(props.assets),
                 hashScript(props.script),
               ],
               { concurrency: "unbounded" },
@@ -2286,7 +2333,7 @@ export const LiveWorkerProvider = () =>
           }
           const [assets, bundle] = yield* Effect.all(
             [
-              opts.skipAssetsRead ? Effect.succeed(undefined) : prepareAssets(props.assets),
+              opts.skipAssetsRead ? Effect.undefined : prepareAssets(props.assets),
               prepareBundle(id, fqn, props),
             ],
             { concurrency: "unbounded" },
@@ -2948,7 +2995,7 @@ export const LiveWorkerProvider = () =>
           .getPreview({ accountId, workerId: parentName, previewId: previewName })
           .pipe(
             Effect.catchTags({
-              PreviewNotFound: () => Effect.succeed(undefined),
+              PreviewNotFound: () => Effect.undefined,
               WorkerNotFound: () =>
                 Effect.fail(
                   new WorkerPreviewConfigError({
@@ -3060,8 +3107,9 @@ export const LiveWorkerProvider = () =>
               deploymentId: "latest",
             })
             .pipe(
-              Effect.catchTag(["PreviewNotFound", "PreviewDeploymentNotFound"], () =>
-                Effect.succeed(undefined),
+              Effect.catchTag(
+                ["PreviewNotFound", "PreviewDeploymentNotFound"],
+                () => Effect.undefined,
               ),
             );
           const oldTag = latest?.migrationTag ?? undefined;
@@ -3934,6 +3982,37 @@ export const LiveWorkerProvider = () =>
             hash,
           } satisfies Worker["Attributes"];
         }
+        // Cloudflare keeps a secret binding that a script upload omits, even
+        // with an empty `keep_bindings`, so a secret dropped from `env` would
+        // stay bound. Delete the secrets an earlier deploy uploaded and this
+        // one did not; secrets set outside Alchemy (`wrangler secret put`,
+        // the dashboard) are left alone. State written before `secretNames`
+        // existed falls back to the previous `env`. Deletes run only after a
+        // full upload: each one deploys a new version at 100%, which would
+        // end a gradual rollout, so a rollout keeps owning the removed names.
+        const uploadedSecretNames = getSecretNames(metadata.bindings);
+        const previousSecretNames =
+          output?.secretNames ??
+          Object.entries(olds?.env ?? {}).flatMap(([key, value]) =>
+            secretTextFromEnvValue(value) === undefined ? [] : [key],
+          );
+        const removedSecretNames = previousSecretNames.filter(
+          (secretName) => !uploadedSecretNames.includes(secretName),
+        );
+        if (versionId === undefined) {
+          const liveSecretNames = getSecretNames(settings.bindings);
+          for (const secretName of removedSecretNames) {
+            if (!liveSecretNames.includes(secretName)) continue;
+            yield* session.note(`Deleting removed secret ${secretName} ...`, { kind: "status" });
+            yield* workers
+              .deleteScriptSecret({ accountId, scriptName: name, secretName })
+              .pipe(Effect.catchTag("SecretNotFound", () => Effect.void));
+          }
+        }
+        const secretNames =
+          versionId === undefined
+            ? uploadedSecretNames
+            : [...new Set([...uploadedSecretNames, ...removedSecretNames])].sort();
         const issuesEnabled = observability.issues?.enabled ?? false;
         if (
           versionId === undefined &&
@@ -4220,6 +4299,7 @@ export const LiveWorkerProvider = () =>
           versionId,
           deploymentId,
           affinityZoneIds,
+          secretNames,
           hash,
         } satisfies Worker["Attributes"];
       });
@@ -4258,8 +4338,9 @@ export const LiveWorkerProvider = () =>
           return assets.hash !== output.hash?.assets;
         }
         const read = yield* prepareAssets(assets).pipe(
-          Effect.catchTag(["PlatformError", "AssetTooLargeError", "TooManyAssetsError"], () =>
-            Effect.succeed(undefined),
+          Effect.catchTag(
+            ["PlatformError", "AssetTooLargeError", "TooManyAssetsError"],
+            () => Effect.undefined,
           ),
         );
         return read === undefined || read.hash !== output.hash?.assets;
@@ -4418,9 +4499,10 @@ export const LiveWorkerProvider = () =>
                       ? [
                           {
                             accountId,
-                            // Practically always present; an empty value
-                            // is healed by the per-script read.
-                            workerId: script.tag ?? "",
+                            // Practically always present. Fall back to the
+                            // name (healed by the per-script read), never
+                            // the "" that marks an unuploaded stub.
+                            workerId: script.tag ?? script.id,
                             workerName: script.id,
                             namespace: undefined,
                             logpush: script.logpush ?? undefined,
@@ -4661,6 +4743,34 @@ export const LiveWorkerProvider = () =>
             }
           }
         }),
+        observe: Effect.fn(function* ({ id, news }) {
+          // The script precreate (or, for a dispatch-namespace worker,
+          // reconcile) writes to. A version/preview worker uploads to its
+          // parent's script and claims none of its own.
+          if (news.version?.parent != null || news.preview?.of != null) return undefined;
+          // Neither name nor namespace can be checked until it resolves.
+          if (!isResolved(news.name) || !isResolved(news.namespace)) return Unresolved;
+          const { accountId } = yield* yield* CloudflareEnvironment;
+          const name = yield* createWorkerName(id, news.name);
+          const namespace = resolveNamespaceName(news.namespace);
+          if (
+            namespace !== undefined &&
+            (yield* findDispatchNamespaceScript(accountId, namespace, name)) === undefined
+          ) {
+            return undefined;
+          }
+          const settings = yield* getScriptSettings(accountId, name, namespace).pipe(
+            Effect.catchTags({
+              WorkerNotFound: () => Effect.undefined,
+              WorkerHasNoVersions: () => Effect.undefined,
+              DispatchNamespaceScriptNotFound: () => Effect.undefined,
+              DispatchNamespaceNotFound: () => Effect.undefined,
+            }),
+          );
+          if (settings === undefined) return undefined;
+          const observed = { workerName: name };
+          return hasAlchemyWorkerTags(id, settings.tags ?? []) ? observed : Unowned(observed);
+        }),
         precreate: Effect.fn(function* ({ id, news, session, bindings }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
           yield* assertCloudflareTelemetryCompatibility(news as WorkerProps, bindings);
@@ -4712,7 +4822,11 @@ export const LiveWorkerProvider = () =>
               // workers are dispatched by name, never bound circularly).
               workerId: "",
               workerName: name,
-              namespace: typeof news.namespace === "string" ? news.namespace : undefined,
+              // Recorded only once resolved: cleanup deletes from this
+              // namespace, and must not fall back to the account endpoint.
+              namespace: isResolved(news.namespace)
+                ? resolveNamespaceName(news.namespace)
+                : undefined,
               logpush: undefined,
               url: undefined,
               tags: undefined,
@@ -4782,10 +4896,10 @@ export const LiveWorkerProvider = () =>
             // script as `DispatchNamespaceScriptNotFound` (and a missing
             // namespace as `DispatchNamespaceNotFound`).
             Effect.catchTags({
-              WorkerNotFound: () => Effect.succeed(undefined),
-              WorkerHasNoVersions: () => Effect.succeed(undefined),
-              DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
-              DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+              WorkerNotFound: () => Effect.undefined,
+              WorkerHasNoVersions: () => Effect.undefined,
+              DispatchNamespaceScriptNotFound: () => Effect.undefined,
+              DispatchNamespaceNotFound: () => Effect.undefined,
             }),
           );
           let durableObjectNamespaces = getDurableObjects(existingSettings?.bindings);
@@ -4793,8 +4907,8 @@ export const LiveWorkerProvider = () =>
           let placeholder: { tag?: string | null } | undefined;
           if (existingSettings) {
             // Engine has already cleared this resource for write via
-            // `read` + AdoptPolicy. Either we own it (matching tags) or
-            // the user opted in to a takeover (`--adopt` / `adopt(true)`).
+            // `observe` or `read` + AdoptPolicy. Either we own it (matching
+            // tags) or the user opted in to a takeover (`--adopt` / `adopt(true)`).
             yield* Effect.logInfo(`Cloudflare Worker precreate: reusing existing ${name}`);
           } else {
             yield* session.note("Pre-creating worker...", { kind: "status" });
@@ -4935,9 +5049,7 @@ export const LiveWorkerProvider = () =>
                 })
                 .pipe(
                   Effect.map(() => output),
-                  Effect.catchTag(["WorkerNotFound", "VersionNotFound"], () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag(["WorkerNotFound", "VersionNotFound"], () => Effect.undefined),
                 );
             }
             if (output?.previewOf !== undefined || olds?.preview?.of != null) {
@@ -4948,10 +5060,13 @@ export const LiveWorkerProvider = () =>
                 .getPreview({ accountId, workerId: output.previewOf, previewId: output.previewId })
                 .pipe(
                   Effect.map(() => output),
-                  Effect.catchTag(["WorkerNotFound", "PreviewNotFound"], () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag(["WorkerNotFound", "PreviewNotFound"], () => Effect.undefined),
                 );
+            }
+            if (output !== undefined && isUnscopedStub(output)) {
+              // Nothing was uploaded, and the endpoint it would have been
+              // uploaded to is unknown — there is nothing to observe.
+              return undefined;
             }
             const workerName = output?.workerName ?? (yield* createWorkerName(id, olds?.name));
             const dispatchNamespace = output?.namespace ?? resolveNamespaceName(olds?.namespace);
@@ -4961,6 +5076,12 @@ export const LiveWorkerProvider = () =>
             // domains, or cron triggers — read only the script settings from
             // the dispatch-namespace endpoint.
             if (dispatchNamespace) {
+              const script = yield* findDispatchNamespaceScript(
+                accountId,
+                dispatchNamespace,
+                workerName,
+              );
+              if (script === undefined) return undefined;
               const settings = yield* getScriptSettings(accountId, workerName, dispatchNamespace);
               yield* Effect.logInfo(
                 `Cloudflare Worker read: found ${workerName} in dispatch namespace ${dispatchNamespace}`,
@@ -4972,24 +5093,12 @@ export const LiveWorkerProvider = () =>
                 // the dispatch-namespace script endpoint.
                 workerId:
                   cachedWorkerId(output?.workerId, workerName) ??
-                  (yield* wfp
-                    .getDispatchNamespaceScript({
-                      accountId,
-                      dispatchNamespace,
-                      scriptName: workerName,
-                    })
-                    .pipe(
-                      Effect.flatMap((r) =>
-                        r.script?.tag != null
-                          ? Effect.succeed(r.script.tag)
-                          : Effect.fail(
-                              new WorkerIdNotFound({
-                                scriptName: workerName,
-                                message: `Cloudflare Worker: dispatch-namespace script '${workerName}' has no immutable ID in its metadata`,
-                              }),
-                            ),
-                      ),
-                    )),
+                  (script.script?.tag != null
+                    ? script.script.tag
+                    : yield* new WorkerIdNotFound({
+                        scriptName: workerName,
+                        message: `Cloudflare Worker: dispatch-namespace script '${workerName}' has no immutable ID in its metadata`,
+                      })),
                 workerName,
                 namespace: dispatchNamespace,
                 logpush: settings.logpush ?? undefined,
@@ -5041,7 +5150,7 @@ export const LiveWorkerProvider = () =>
                   })
                   .pipe(
                     Effect.map(() => output.versionId),
-                    Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)),
+                    Effect.catchTag("VersionNotFound", () => Effect.undefined),
                   )
               : undefined;
             const observeDomains = shouldObserveWorkerDomains(olds, output);
@@ -5129,7 +5238,15 @@ export const LiveWorkerProvider = () =>
               // (a getPhas call per known zone on every read); carry the
               // cleanup list forward like any other stable cache.
               affinityZoneIds: output?.affinityZoneIds,
+              // Which secrets Alchemy uploaded is provider-managed state: the
+              // live list also holds secrets set outside Alchemy.
+              secretNames: output?.secretNames,
               versionId: uploadedVersionId,
+              // The deployment that put the recorded version live, carried
+              // forward while that version still exists — re-listing
+              // deployments on every read only to echo state back would
+              // cost a request per Worker per plan.
+              deploymentId: uploadedVersionId ? output?.deploymentId : undefined,
             } satisfies Worker["Attributes"];
 
             // Centralized ownership decision: the engine routes `read`'s
@@ -5147,10 +5264,10 @@ export const LiveWorkerProvider = () =>
               // The dispatch-namespace endpoints report the same conditions as
               // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
               Effect.catchTags({
-                WorkerNotFound: () => Effect.succeed(undefined),
-                WorkerHasNoVersions: () => Effect.succeed(undefined),
-                DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
-                DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+                WorkerNotFound: () => Effect.undefined,
+                WorkerHasNoVersions: () => Effect.undefined,
+                DispatchNamespaceScriptNotFound: () => Effect.undefined,
+                DispatchNamespaceNotFound: () => Effect.undefined,
               }),
             ),
         ),
@@ -5211,10 +5328,10 @@ export const LiveWorkerProvider = () =>
               schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(6)]),
             }),
             Effect.catchTags({
-              WorkerNotFound: () => Effect.succeed(undefined),
-              WorkerHasNoVersions: () => Effect.succeed(undefined),
-              DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
-              DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+              WorkerNotFound: () => Effect.undefined,
+              WorkerHasNoVersions: () => Effect.undefined,
+              DispatchNamespaceScriptNotFound: () => Effect.undefined,
+              DispatchNamespaceNotFound: () => Effect.undefined,
             }),
           );
           yield* Effect.logInfo(
@@ -5300,6 +5417,12 @@ export const LiveWorkerProvider = () =>
               .pipe(Effect.catchTag(["PreviewNotFound", "WorkerNotFound"], () => Effect.void));
             return;
           }
+          if (isUnscopedStub(output)) {
+            yield* Effect.logWarning(
+              `Cloudflare Worker delete: ${output.workerName} was never uploaded, or its dispatch namespace was never recorded; skipping. An interrupted upload into a dispatch namespace may need manual cleanup.`,
+            );
+            return;
+          }
           yield* Effect.logInfo(`Cloudflare Worker delete: deleting ${output.workerName}`);
           // Workers for Platforms user workers have no custom domains; delete
           // the script straight out of its dispatch namespace.
@@ -5368,12 +5491,12 @@ export const LiveWorkerProvider = () =>
           // expensive, so trust the persisted route ids (refreshed by
           // `read`) and tolerate already-deleted routes.
           if (output.routes?.length) {
-            yield* Effect.all(
-              output.routes.map((route) =>
+            yield* Effect.forEach(
+              output.routes,
+              (route) =>
                 workers
                   .deleteRoute({ zoneId: route.zoneId, routeId: route.id })
                   .pipe(Effect.catchTag("RouteNotFound", () => Effect.void)),
-              ),
               { concurrency: "unbounded" },
             );
           }

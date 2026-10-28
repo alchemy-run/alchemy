@@ -1,18 +1,24 @@
 ---
 title: External System
-description: Declare the outside systems your model calls, implement them with Layers, and turn their events into commands.
+description: Declare the outside systems your model calls in the model's own language, implement them with Layers, and turn their events into commands.
 ---
 
 import DAG from "../../../components/DAG.astro";
 
-An external system is a service outside the model that its policies call, such as a payment processor or a fraud scorer. The model declares the calls it makes, with their arguments and results, and nothing about the vendor behind them. A Layer supplies the vendor, so production, tests and stories can each use a different one.
+An external system is a service outside the model that its policies call, such as a payment processor or a fraud scorer. The model declares the calls it makes, in its own words, with their arguments and results, and nothing about the vendor behind them. A Layer supplies the vendor, so production, tests and stories can each use a different one.
 
-The bank declares two: `FraudCheck` and `Payments`.
+This chapter starts with why the model keeps outside systems at arm's length, then declares one, implements it, calls it, and turns events from outside into commands.
+
+## Keep the outside world at the edge
+
+Every vendor has its own language. A payment processor talks about payment intents, charges, balance transactions and webhooks. A fraud vendor talks about risk signals and decision codes. None of those words belong to your model. If they leak into the model, the model starts speaking two languages, and changing vendor means rewriting rules.
+
+DDD's answer is a translation layer at the edge, sometimes called an **anti-corruption layer**. The model says what it needs in its own terms: "refund this settlement", "score this withdrawal". A small adapter outside the model turns that into whatever the vendor's API wants, and turns the vendor's answer back into the model's terms.
 
 <DAG
   nodes={[
     { id: "policy", label: "SettlementRefund", type: "calls refund", kind: "policy", col: 0, row: 0 },
-    { id: "payments", label: "Payments", type: "what the model asks for", kind: "external", col: 1, row: 0 },
+    { id: "payments", label: "Payments", type: "in the bank's words", kind: "external", col: 1, row: 0 },
     { id: "stripe", label: "StripePayments", type: "Layer · production", col: 2, row: 0 },
     { id: "story", label: "Story", type: "you answer each call", col: 2, row: 1 },
   ]}
@@ -24,19 +30,15 @@ The bank declares two: `FraudCheck` and `Payments`.
   caption="The model depends on the declaration. Production and tests plug in different implementations."
 />
 
-It works in the other direction too: events from outside, like a webhook from Stripe, become commands.
+A `Domain.ExternalSystem` is that edge, written down. It names the calls the model makes and nothing else. The example bank declares two: `FraudCheck` and `Payments`.
+
+It works in the other direction too. News from outside, like a webhook saying a payment settled, crosses the same edge and becomes a command in the model's language.
 
 ## Declare an external system
 
 A `Domain.ExternalSystem` lists the calls you make to one outside system, with their arguments and results. It's an Effect service, like a `Context.Service`: policies `yield*` it, and a Layer implements it.
 
-```typescript
-// packages/domain/src/Settlement/Payments.external.ts
-import * as Domain from "@alchemy.run/domain";
-import * as Schema from "effect/Schema";
-import { Cents } from "../Money.ts";
-
-/** The external payment processor. */
+```typescript title="packages/domain/src/Settlement/Payments.external.ts"
 export class Payments extends Domain.ExternalSystem("Payments", {
   refund: {
     args: { settlementId: Schema.String, amount: Cents },
@@ -45,19 +47,55 @@ export class Payments extends Domain.ExternalSystem("Payments", {
 }) {}
 ```
 
-## Implement it with a Layer
+Name each call after what the model wants done, not after the vendor endpoint that does it. `refund` is a request in the model's own language. `createRefundForPaymentIntent` would be Stripe's language leaking in.
 
-An adapter is a Layer that implements every call. Swap it for another vendor, or a fake, without touching the model.
+Keep the arguments and results to what the model uses. The fraud check returns a risk score, because that's all the fraud policy decides on; the dozens of other fields the vendor sends stay in the adapter.
+
+```typescript title="packages/domain/src/Fraud/FraudCheck.external.ts"
+export class FraudCheck extends Domain.ExternalSystem("FraudCheck", {
+  score: { args: { accountId: AccountId, amount: Cents }, success: { risk: Schema.Number } },
+}) {}
+```
+
+## Declare its errors
+
+When the vendor can refuse, declare the error with `error:`. The call's Effect then fails with that type, so a policy handles it like any typed error.
 
 ```typescript
-// packages/server/src/Settlement/StripePayments.ts
-import { Payments } from "@bank/domain/Settlement/Payments.external";
-import * as Effect from "effect/Effect";
+class RefundDeclined extends Domain.Rejection("RefundDeclined", { reason: Schema.String }) {}
 
-/**
- * A stand-in adapter for a payment processor. Swap it for a Stripe HTTP
- * adapter in production.
- */
+export class Payments extends Domain.ExternalSystem("Payments", {
+  refund: {
+    args: { settlementId: Schema.String, amount: Cents },
+    success: { refundId: Schema.String },
+    error: RefundDeclined,
+  },
+}) {}
+```
+
+When the vendor can refuse in several ways, list each error. The call fails with any of them, and a policy handles each one by its tag:
+
+```typescript
+class CardFrozen extends Domain.Rejection("CardFrozen") {}
+
+export class Payments extends Domain.ExternalSystem("Payments", {
+  refund: {
+    args: { settlementId: Schema.String, amount: Cents },
+    success: { refundId: Schema.String },
+    error: [RefundDeclined, CardFrozen],
+  },
+}) {}
+```
+
+A `Schema.Union([RefundDeclined, CardFrozen])` declares the same errors.
+
+Declare the refusals the model has an answer for, in its own words. A declined refund is a business outcome a policy can act on. A timeout or a 500 from the vendor isn't; it's a failure, and the policy that made the call runs again.
+
+## Implement it with a Layer
+
+An adapter is a Layer that implements every call. It's the only code that knows the vendor, so swapping vendor, or using a fake, never touches the model.
+
+```typescript title="packages/server/src/Settlement/StripePayments.ts"
 export const StripePayments = Payments.toLayer(
   Effect.succeed({
     refund: ({ settlementId }) => Effect.succeed({ refundId: `re_${settlementId}` }),
@@ -65,24 +103,15 @@ export const StripePayments = Payments.toLayer(
 );
 ```
 
+This one is a stand-in. A production adapter calls the vendor's HTTP API, maps its response onto `{ refundId }`, and maps its refusals onto the declared errors.
+
+Adapters live in the server package, next to the platform, because they reach the network. The domain package only holds the declaration. See [Project layout](/domain/project-layout).
+
 ## Call it from a policy
 
 A policy uses it like any other service. This one refunds money that settled on an account that had already closed.
 
-```typescript
-// packages/domain/src/Settlement/SettlementRefund.policy.ts
-import * as Domain from "@alchemy.run/domain";
-import * as Effect from "effect/Effect";
-import { Account } from "../Account/Account.aggregate.ts";
-import { SettlementOnClosedAccount } from "../Account/RecordSettlement.command.ts";
-import { Payments } from "./Payments.external.ts";
-
-/** Whenever money settles on a closed account, refund it. */
-export class SettlementRefund extends Domain.Policy("SettlementRefund", {
-  from: Account,
-  on: [SettlementOnClosedAccount],
-}) {}
-
+```typescript title="packages/domain/src/Settlement/SettlementRefund.policy.ts"
 export const SettlementRefundLive = SettlementRefund.toLayer(
   Effect.gen(function* () {
     const payments = yield* Payments;
@@ -93,32 +122,15 @@ export const SettlementRefundLive = SettlementRefund.toLayer(
 );
 ```
 
-Provide the adapters where you host the model, next to the platform: see [Domain Model](/domain/model#host-it-in-memory).
+A policy can run more than once for the same event, so the call it makes can arrive twice. Pass the vendor something that identifies the request, here the `settlementId`, and have the adapter use it as the vendor's idempotency key. However many times it's asked, the money is refunded once. See [Make it safe to run twice](/domain/policy#make-it-safe-to-run-twice).
+
+Provide the adapters where you host the model, next to the platform: see [Domain Model](/domain/model#run-it).
 
 ## Turn outside events into commands
 
-Money arrives from Stripe as webhook events. Each successful payment becomes a `RecordSettlement`, a command that reports a fact and so never rejects.
+Money arrives from Stripe as webhook events. Each successful payment becomes a `RecordSettlement`, in the model's words. It reports a fact that already happened outside the model, so it declares no rejections.
 
-```typescript
-// packages/domain/src/Account/RecordSettlement.command.ts
-import * as Domain from "@alchemy.run/domain";
-import * as Schema from "effect/Schema";
-import { Cents } from "../Money.ts";
-import { AccountId } from "./Account.id.ts";
-
-export class SettlementReceived extends Domain.Event("SettlementReceived", {
-  settlementId: Schema.String,
-  amount: Cents,
-  balanceAfter: Cents,
-}) {}
-
-/** Money settled on an account that is no longer open; `SettlementRefund` returns it. */
-export class SettlementOnClosedAccount extends Domain.Event("SettlementOnClosedAccount", {
-  settlementId: Schema.String,
-  amount: Cents,
-}) {}
-
-/** Reports a fact that already happened, so it never rejects. */
+```typescript title="packages/domain/src/Account/RecordSettlement.command.ts"
 export class RecordSettlement extends Domain.Command("RecordSettlement", {
   target: AccountId,
   input: { settlementId: Schema.String, amount: Cents },
@@ -126,70 +138,30 @@ export class RecordSettlement extends Domain.Command("RecordSettlement", {
 }) {}
 ```
 
-`Stripe.consumeEvents` receives the webhooks, checks their signatures, and sends the command. The payment's id is the command id, so a webhook delivered twice settles once.
+The account can't refuse money that has already settled, so it records what the settlement means for it. An open account records `SettlementReceived` with its new balance. A closed one records `SettlementOnClosedAccount`, and `SettlementRefund` sends the money back.
 
-```typescript
-// packages/server/src/Settlement/StripeSettlements.ts
-import { Account } from "@bank/domain/Account/Account.aggregate";
-import { AccountId } from "@bank/domain/Account/Account.id";
-import { RecordSettlement } from "@bank/domain/Account/RecordSettlement.command";
-import * as Stripe from "@alchemy.run/stripe";
-import * as Effect from "effect/Effect";
+The webhook handler is the adapter for this direction. It receives each event, checks its signature, picks out what the model cares about, and sends the command:
 
-/**
- * Card top-ups settle through Stripe. Every `payment_intent.succeeded` whose
- * metadata names an account becomes a `RecordSettlement`, a command that
- * never rejects (money that settled on a closed account is refunded by
- * `SettlementRefund`).
- *
- * `consumeEvents` provisions the Stripe webhook endpoint pointed at this
- * Worker, binds its signing secret, and verifies every delivery. The payment
- * intent id is the command id, so a redelivered event is a no-op.
- */
-export const StripeSettlements = Effect.gen(function* () {
-  const accounts = yield* Account;
-  yield* Stripe.consumeEvents(
-    "Settlements",
-    { events: [Stripe.PaymentIntentSucceeded] },
-    Effect.fn(function* (event) {
-      const intent = event.object;
-      const accountId = intent.metadata?.accountId;
-      if (!accountId) return;
-      yield* accounts.send(
-        AccountId.make(accountId),
-        new RecordSettlement({ settlementId: intent.id, amount: intent.amount_received }),
-        { commandId: `settlement:${intent.id}` },
-      );
-    }),
+```typescript title="packages/server/src/Settlement/StripeSettlements.ts"
+Effect.fn(function* (event) {
+  const intent = event.object;
+  const accountId = intent.metadata?.accountId;
+  if (!accountId) return;
+  yield* accounts.send(
+    AccountId.make(accountId),
+    new RecordSettlement({ settlementId: intent.id, amount: intent.amount_received }),
+    { commandId: `settlement:${intent.id}` },
   );
-});
+}),
 ```
+
+`Stripe.consumeEvents` receives the webhooks and checks their signatures before this handler runs. The payment's id becomes the command id, so a webhook Stripe delivers twice settles once.
 
 ## Test external system calls
 
-In a story, an external system call waits until you resolve it. `expectCall` checks what was asked, and `resolve` answers it. With several calls waiting, name each one; see [Answer several calls](/domain/testing-models#answer-several-calls).
+In a story, an external system call waits until you answer it. That puts every outcome of the outside world under your control: the refund that succeeds, the one that's declined, and the one whose connection breaks.
 
-```typescript
-// packages/domain/test/settlements.test.ts
-import { it } from "@effect/vitest";
-import { Story } from "@alchemy.run/domain/Story";
-import { Account } from "../src/Account/Account.aggregate.ts";
-import { AccountClosed } from "../src/Account/CloseAccount.command.ts";
-import { AccountOpened } from "../src/Account/OpenAccount.command.ts";
-import { RecordSettlement, SettlementOnClosedAccount } from "../src/Account/RecordSettlement.command.ts";
-import * as Layer from "effect/Layer";
-import { Bank, BankHandlers } from "../src/Bank.model.ts";
-import { MemoryLedgerStore } from "../src/Ledger/LedgerStore.ts";
-import { CustomerId } from "../src/Customer/Customer.id.ts";
-import { FraudCheck } from "../src/Fraud/FraudCheck.external.ts";
-import { Payments } from "../src/Settlement/Payments.external.ts";
-
-const story = Story.make(Bank, {
-  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
-  externalSystems: [FraudCheck, Payments],
-});
-const account = Account.ref("a-1");
-
+```typescript title="packages/domain/test/settlements.test.ts"
 it.effect("money that settles on a closed account is refunded", () =>
   story(
     Story.given(
@@ -199,14 +171,23 @@ it.effect("money that settles on a closed account is refunded", () =>
     ),
     Story.when(account, new RecordSettlement({ settlementId: "st_1", amount: 500 })),
     Story.then(account, new SettlementOnClosedAccount({ settlementId: "st_1", amount: 500 })),
-    Story.expectCall(Payments.refund, { settlementId: "st_1", amount: 500 }),
-    Story.resolve(Payments.refund, { refundId: "re_1" }),
+    Story.call(Payments.refund, { settlementId: "st_1", amount: 500 }),
+    Story.succeed(Payments.refund, { refundId: "re_1" }),
   ),
 );
 ```
 
-`Story.make` replaces every external system you list with one you control. A story fails if a call is left unresolved, so every outside call is accounted for.
+`Story.call` checks what was asked, and must come first; `succeed` answers it. `fail` answers with the operation's declared error instead; see [Fail a call](/domain/testing-models#fail-a-call).
 
-:::note
-See how a policy uses one in [Policy](/domain/policy#call-an-external-system).
-:::
+The story runner lists the systems it fakes in `stub`:
+
+```typescript title="packages/domain/test/settlements.test.ts"
+const story = Story.make(Bank, {
+  layer: BankHandlers.pipe(Layer.provide(MemoryLedgerStore)),
+  stub: [FraudCheck, Payments],
+});
+```
+
+A system you leave out of `stub` is called for real through the Layer you provide, and the story checks what each call was sent and returned; see [Assert real calls](/domain/testing-models#assert-real-calls). A story fails if any call is left unanswered or unasserted, so every outside call is accounted for.
+
+Next, [Api](/domain/api): what the model publishes to its own clients.

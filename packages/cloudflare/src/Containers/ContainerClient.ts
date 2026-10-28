@@ -128,8 +128,13 @@ export interface ContainerClient {
   destroy(error?: unknown): Effect.Effect<void, ContainerError, RuntimeContext>;
   /** Signal the container's main process. */
   signal(signo: number): Effect.Effect<void, ContainerError, RuntimeContext>;
-  /** Wait for the container to exit, preserving failures in the Effect error channel. */
-  monitor(): Effect.Effect<void, ContainerError, RuntimeContext>;
+  /**
+   * Wait for the container to exit, preserving failures in the Effect error channel.
+   * Cloudflare often reports a failed start here rather than from `start`, so a start
+   * it had no instance for fails with `NoContainerInstanceError` and a rate-limited one
+   * with `ContainerRateLimitedError`, as `start` does.
+   */
+  monitor(): Effect.Effect<void, ContainerStartError, RuntimeContext>;
   /** Running image and labels, or null when stopped. */
   inspect(): Effect.Effect<ContainerInfo | null, ContainerError, RuntimeContext>;
   /** A port inside the container whose requests wait until it accepts connections. */
@@ -198,10 +203,12 @@ const REQUEST_RETRIES = 3;
 
 // Native classifies the same message phrases via `isErrorOfType`.
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e)).toLowerCase();
+// Native does not match the second phrase: Cloudflare sends it when the
+// application is at its `max_instances` cap.
 const isNoInstanceError = (e: unknown) =>
   errorText(e).includes(
     "there is no container instance that can be provided to this durable object",
-  );
+  ) || errorText(e).includes("maximum number of running container instances exceeded");
 const isRateLimitedError = (e: unknown) =>
   errorText(e).includes("you are requesting too many containers per second");
 
@@ -404,25 +411,24 @@ export const fromContainer = (
 
   // A single readiness probe: any response (even non-2xx) proves the port
   // accepts connections. A process that has exited is a crash, not "not ready".
-  const probePort = (container: cf.Container, port: number) =>
-    Effect.tryPromise({
+  const probePort = (container: cf.Container, port: number) => {
+    const notReady = (cause: unknown) =>
+      container.running
+        ? new ContainerError({ message: `Container port ${port} is not ready`, cause })
+        : new ContainerCrashedError({
+            message: `Container exited while waiting for port ${port}`,
+            cause,
+          });
+    return Effect.tryPromise({
       try: () =>
         httpSchemePort(container.getTcpPort(port)).fetch("http://containerstarthealthcheck"),
-      catch: (cause) => cause,
+      catch: notReady,
     }).pipe(
       Effect.timeout(READINESS_PROBE_TIMEOUT),
       Effect.asVoid,
-      Effect.catch((cause) =>
-        Effect.fail(
-          container.running
-            ? new ContainerError({ message: `Container port ${port} is not ready`, cause })
-            : new ContainerCrashedError({
-                message: `Container exited while waiting for port ${port}`,
-                cause,
-              }),
-        ),
-      ),
+      Effect.mapError((error) => (error._tag === "TimeoutError" ? notReady(error) : error)),
     );
+  };
 
   const waitForPort = (port: number) =>
     Effect.gen(function* () {
@@ -492,7 +498,10 @@ export const fromContainer = (
     start,
     destroy: (error) => callAsync((container) => container.destroy(error)),
     signal: (signo) => call((container) => container.signal(signo)),
-    monitor: () => callAsync((container) => container.monitor()),
+    monitor: () =>
+      Effect.flatMap(attached, (container) =>
+        Effect.tryPromise({ try: () => container.monitor(), catch: classifyStartError }),
+      ),
     inspect: () => callAsync((container) => container.inspect()),
     getTcpPort,
     exec: (cmd, options) =>

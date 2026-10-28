@@ -105,9 +105,6 @@ export const LibSQLLayer = <E = never, R = never>(
 ) =>
   // Derive SqlClient from the single LibsqlClient build so both tags share
   // one per-execution client.
-  Layer.effect(
-    Sql.SqlClient,
-    Effect.gen(function* () {
-      return yield* LibsqlClient.LibsqlClient;
-    }),
-  ).pipe(Layer.provideMerge(Layer.effect(LibsqlClient.LibsqlClient, LibSQL(source, config))));
+  Layer.effect(Sql.SqlClient, LibsqlClient.LibsqlClient).pipe(
+    Layer.provideMerge(Layer.effect(LibsqlClient.LibsqlClient, LibSQL(source, config))),
+  );

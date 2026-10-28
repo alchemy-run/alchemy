@@ -928,28 +928,23 @@ export type ServiceRuntimeContext = FlyHostRuntimeContext;
  * ) {}
  * ```
  *
- * **Example:** Install `pg` unbundled
- * `pg` is CommonJS. Rolldown's interop turns `Client` into a namespace.
- * Install it into the image so `@effect/sql-pg` / `Drizzle.Postgres` load
- * it with Node's CJS semantics — same `build.install` as Lambda.
+ * **Example:** Install a native package unbundled
+ * `build.install` runs `npm install` in the image for packages that
+ * cannot be bundled, such as native addons — same `build.install` as
+ * Lambda.
  * ```typescript
  * export default class Api extends Fly.Service<Api>()(
  *   "Api",
  *   {
  *     main: import.meta.url,
  *     port: 3000,
- *     build: { install: ["pg"] },
+ *     build: { install: ["sharp"] },
  *   },
  *   Effect.gen(function* () {
- *     const conn = yield* Fly.ConnectPostgres(Db);
- *     const db = yield* Drizzle.Postgres(conn.connectionString);
  *     return {
- *       fetch: Effect.gen(function* () {
- *         const rows = yield* db.execute("select 1 as ok");
- *         return HttpServerResponse.json({ rows });
- *       }),
+ *       fetch: Effect.succeed(HttpServerResponse.text("hello")),
  *     };
- *   }).pipe(Effect.provide(Fly.ConnectPostgresHttp)),
+ *   }),
  * ) {}
  * ```
  *
@@ -1064,7 +1059,7 @@ export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRu
   });
 
 export class ServiceNotCreated extends Data.TaggedError("Fly.ServiceNotCreated")<{
-  name: string;
+  resourceName: string;
   appName: string;
 }> {}
 
@@ -1234,9 +1229,6 @@ const configDrifted = (
     !sameStatics(config?.statics, desired.statics)
   );
 };
-
-const portsOf = (services: FlyMachineService[] | undefined) =>
-  (services ?? []).flatMap((service) => service.ports ?? []);
 
 const withPort = (base: string, port: number, standard: number) =>
   port === standard ? base : `${base}:${port}`;
@@ -1587,7 +1579,7 @@ export const ServiceProvider = () =>
         stables: ["appName"],
         nuke: { dependsOn: ["Fly.App"] },
 
-        diff: Effect.fn(function* ({ id, news, output }) {
+        diff: Effect.fn(function* ({ news, output }) {
           if (news === undefined) return;
           const shape = news as Partial<Pick<ServiceProps, "app" | "public" | "network">>;
           const ownsApp = shape.app === undefined;
@@ -1841,7 +1833,9 @@ export const ServiceProvider = () =>
               buildConfig({ image: imageRef, guest, env, services, mounts, metadata, statics }),
           }).pipe(
             Effect.catchTag("Fly.ReplicaNotCreated", (error) =>
-              Effect.fail(new ServiceNotCreated({ name: error.name, appName: error.appName })),
+              Effect.fail(
+                new ServiceNotCreated({ resourceName: error.resourceName, appName: error.appName }),
+              ),
             ),
           );
           return toAttrs(set, codeHash, {

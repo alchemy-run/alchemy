@@ -4,6 +4,7 @@ import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { isResourceOfType, Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -12,6 +13,12 @@ import { localAccountId } from "../LocalAccount.ts";
 import { generateLocalId } from "../LocalRuntime.ts";
 import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
+import { abortMultipartUploads } from "./internal/MultipartUploads.ts";
+
+export class BucketOperationFailed extends Data.TaggedError("BucketOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export const isBucket = (value: any): value is Bucket =>
   isResourceOfType(value, "Cloudflare.R2.Bucket");
@@ -242,6 +249,18 @@ export type BucketProps = {
    */
   locks?: BucketLockRule[];
   /**
+   * Whether R2 Local Uploads is enabled. Uploads from clients far from the
+   * bucket's region are written near the client first and replicated to the
+   * bucket asynchronously. Toggling it updates the bucket in place.
+   *
+   * Not available for jurisdiction-restricted buckets: enabling it on a
+   * bucket whose `jurisdiction` is not `"default"` fails the deploy.
+   *
+   * A bucket that never declared `localUploads` keeps whatever setting it
+   * has. Drop `localUploads` after declaring it to disable it.
+   */
+  localUploads?: boolean;
+  /**
    * Allow alchemy to delete every object in the bucket when the bucket
    * itself is deleted.
    *
@@ -251,6 +270,12 @@ export type BucketProps = {
    * `BucketNotEmpty` and both the bucket and its objects survive. Set this
    * to `true` for buckets whose contents are disposable (caches, previews,
    * test fixtures).
+   *
+   * Incomplete multipart uploads also hold a bucket. Only R2's S3 API can
+   * abort them, so alchemy aborts them only when it is authenticated with
+   * an API token that may write the bucket's objects (it never creates a
+   * token). Otherwise destroying fails with `BucketNotEmpty`: abort them,
+   * or add an `abortMultipartUploadsTransition` lifecycle rule, first.
    *
    * `alchemy unsafe nuke` empties buckets regardless, since it is an
    * explicitly operator-confirmed account teardown.
@@ -277,6 +302,11 @@ export type Bucket = Resource<
      * (omitted from the props).
      */
     locks: Bucket.LockRule[] | undefined;
+    /**
+     * Whether Local Uploads is enabled. `undefined` while `localUploads` is
+     * unmanaged (omitted from the props).
+     */
+    localUploads: boolean | undefined;
     /**
      * Hostname of the bucket's Cloudflare-managed `r2.dev` domain.
      * Set only while `publicAccess` is enabled; `undefined` when
@@ -547,6 +577,22 @@ export type Bucket = Resource<
  * });
  * ```
  *
+ * ### Local Uploads
+ *
+ * Local Uploads writes uploaded objects near the client and replicates them
+ * to the bucket's region asynchronously, cutting upload latency for clients
+ * far from the bucket. It is not available for jurisdiction-restricted
+ * buckets. See the
+ * [Cloudflare R2 docs](https://developers.cloudflare.com/r2/buckets/local-uploads/)
+ * for details.
+ *
+ * **Example:** Enable Local Uploads
+ * ```typescript
+ * const uploads = yield* Cloudflare.R2.Bucket("Uploads", {
+ *   localUploads: true,
+ * });
+ * ```
+ *
  * ### Deleting a Bucket
  *
  * R2 refuses to delete a bucket that still has objects in it, and alchemy
@@ -704,7 +750,7 @@ export const ProviderLive = () =>
               )
         ).pipe(
           Effect.map((response) => response.domains.map(toCustomDomainAttributes)),
-          Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchBucket", () => Effect.undefined),
         );
       });
 
@@ -718,9 +764,9 @@ export const ProviderLive = () =>
           const { accountId } = yield* yield* CloudflareEnvironment;
           const observed = yield* listCustomDomains(bucketName, jurisdiction);
           if (!observed) {
-            return yield* Effect.fail(
-              new Error(`Cannot reconcile custom domains for missing R2 bucket "${bucketName}"`),
-            );
+            return yield* new BucketOperationFailed({
+              message: `Cannot reconcile custom domains for missing R2 bucket "${bucketName}"`,
+            });
           }
           const observedByDomain = new Map(observed.map((domain) => [domain.domain, domain]));
           const desiredDomains = new Set(desired.map((domain) => domain.name));
@@ -851,7 +897,7 @@ export const ProviderLive = () =>
           // The hostname exists whether or not public access is on; a
           // disabled domain serves 401, so only report it while enabled.
           Effect.map((response) => (response.enabled ? response.domain : undefined)),
-          Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchBucket", () => Effect.undefined),
         );
       });
 
@@ -1097,6 +1143,33 @@ export const ProviderLive = () =>
           return desiredRules;
         });
 
+      const reconcileLocalUploads = Effect.fn(function* (
+        bucketName: string,
+        jurisdiction: Bucket.Jurisdiction,
+        desired: boolean,
+      ) {
+        // Local Uploads has no jurisdiction-scoped endpoint: Cloudflare does
+        // not offer it on jurisdiction-restricted buckets, so such a bucket
+        // is always disabled (reconcile refuses `true` up front).
+        if (jurisdiction !== "default") return false;
+        const { accountId } = yield* yield* CloudflareEnvironment;
+        const observed = yield* r2.getBucketLocalUploads({ accountId, bucketName }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "NoSuchBucket",
+            schedule: r2BucketEndpointConsistencySchedule,
+          }),
+        );
+        if (observed.enabled === desired) return desired;
+        // The PUT response omits `enabled`; a successful PUT applied `desired`.
+        yield* r2.putBucketLocalUploads({ accountId, bucketName, enabled: desired }).pipe(
+          Effect.retry({
+            while: (e) => e._tag === "NoSuchBucket",
+            schedule: r2BucketEndpointConsistencySchedule,
+          }),
+        );
+        return desired;
+      });
+
       return {
         stables: ["bucketName", "accountId"],
         list: () =>
@@ -1113,7 +1186,6 @@ export const ProviderLive = () =>
                   // An account not entitled to a jurisdiction rejects the list
                   // route with `Forbidden` ("Access Denied") or `InvalidRoute`
                   // — there are simply no buckets there, so treat as empty.
-                  // @ts-expect-error
                   Effect.catchTag(["InvalidRoute", "Forbidden"], () => Effect.succeed([])),
                 ),
               { concurrency: jurisdictions.length },
@@ -1176,6 +1248,7 @@ export const ProviderLive = () =>
                     lifecycleRules,
                     cors,
                     locks: undefined,
+                    localUploads: undefined,
                     publicDomain,
                   };
                 }).pipe(
@@ -1199,6 +1272,7 @@ export const ProviderLive = () =>
                       lifecycleRules: [] as Bucket.LifecycleRule[],
                       cors: [] as Bucket.CorsRule[],
                       locks: undefined,
+                      localUploads: undefined,
                       publicDomain: undefined,
                     }),
                   ),
@@ -1249,6 +1323,9 @@ export const ProviderLive = () =>
           if ((olds.publicAccess ?? false) !== (news.publicAccess ?? false)) {
             return { action: "update" } as const;
           }
+          if (olds.localUploads !== news.localUploads) {
+            return { action: "update" } as const;
+          }
         }),
         reconcile: Effect.fn(function* ({ id, news = {}, olds, output }) {
           const { accountId } = yield* yield* CloudflareEnvironment;
@@ -1257,6 +1334,16 @@ export const ProviderLive = () =>
           const name = output?.bucketName ?? (yield* createBucketName(id, news.name));
           const acct = output?.accountId ?? accountId;
           const jurisdiction = output?.jurisdiction ?? news.jurisdiction ?? "default";
+
+          // Refuse before creating anything, so a rejected deploy leaves no
+          // bucket behind.
+          if (news.localUploads === true && jurisdiction !== "default") {
+            return yield* new LocalUploadsUnsupported({
+              bucketName: name,
+              jurisdiction,
+              message: `R2 Local Uploads is not available for jurisdiction-restricted bucket "${name}" (jurisdiction "${jurisdiction}")`,
+            });
+          }
 
           // Observe — fetch the bucket. R2 reports a deleted bucket as
           // `NoSuchBucket`; tolerate that so the reconciler falls
@@ -1267,7 +1354,7 @@ export const ProviderLive = () =>
               bucketName: name,
               jurisdiction,
             })
-            .pipe(Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchBucket", () => Effect.undefined));
 
           // Ensure — create if missing. R2 reports a concurrent create
           // (or partial state-persistence failure) as
@@ -1365,6 +1452,16 @@ export const ProviderLive = () =>
               ? yield* reconcileLockRules(attrs.bucketName, attrs.jurisdiction, news.locks ?? [])
               : undefined;
 
+          // Like locks, Local Uploads is managed only once the props name it.
+          const localUploads =
+            news.localUploads !== undefined || olds?.localUploads !== undefined
+              ? yield* reconcileLocalUploads(
+                  attrs.bucketName,
+                  attrs.jurisdiction,
+                  news.localUploads ?? false,
+                )
+              : undefined;
+
           const publicDomain = yield* reconcileManagedDomain(
             attrs.bucketName,
             attrs.jurisdiction,
@@ -1377,12 +1474,14 @@ export const ProviderLive = () =>
             lifecycleRules,
             cors,
             locks,
+            localUploads,
             publicDomain,
           };
         }),
         delete: Effect.fn(function* ({ olds = {}, output, force }) {
-          yield* Effect.all(
-            (output.domains ?? []).map((domain) =>
+          yield* Effect.forEach(
+            output.domains ?? [],
+            (domain) =>
               r2
                 .deleteBucketDomainCustom({
                   accountId: output.accountId,
@@ -1391,7 +1490,6 @@ export const ProviderLive = () =>
                   jurisdiction: output.jurisdiction,
                 })
                 .pipe(Effect.catchTag(["DomainNotFound", "NoSuchBucket"], () => Effect.void)),
-            ),
             { concurrency: "unbounded" },
           );
 
@@ -1424,9 +1522,8 @@ export const ProviderLive = () =>
           // A writer that outlives the emptying pass (a Durable Object's
           // alarm finishing a job while the stack tears down) can land an
           // object between the sweep and the delete: re-empty and retry,
-          // bounded. Incomplete multipart uploads also hold a bucket; those
-          // only a lifecycle rule clears, and the refusal then stands.
-          yield* deleteBucket.pipe(
+          // bounded.
+          const deleteEmptied = deleteBucket.pipe(
             Effect.catchTag("BucketNotEmpty", (error) =>
               Effect.sleep("2 seconds").pipe(
                 Effect.andThen(emptyBucket(output.bucketName, output.jurisdiction)),
@@ -1437,6 +1534,48 @@ export const ProviderLive = () =>
               while: (error) => error._tag === "BucketNotEmpty",
               times: 5,
             }),
+          );
+          yield* deleteBucket.pipe(
+            // Incomplete multipart uploads also hold a bucket, and the
+            // object listing doesn't show them. Only R2's S3 API can abort
+            // them, which works when alchemy is authenticated with an API
+            // token — try that once, best effort, then re-empty and retry.
+            Effect.catchTag("BucketNotEmpty", () =>
+              Effect.gen(function* () {
+                const result = yield* abortMultipartUploads(
+                  output.accountId,
+                  output.bucketName,
+                  output.jurisdiction,
+                );
+                if ("aborted" in result && result.aborted > 0) {
+                  yield* Effect.logInfo(
+                    `Aborted ${result.aborted} incomplete multipart upload(s) in R2 bucket ${output.bucketName}`,
+                  );
+                }
+                yield* emptyBucket(output.bucketName, output.jurisdiction);
+                yield* deleteEmptied.pipe(
+                  Effect.catchTag("BucketNotEmpty", (error) =>
+                    Effect.fail(
+                      new BucketNotEmpty({
+                        bucketName: output.bucketName,
+                        message:
+                          `${error.message} forceDestroy deleted every object, so incomplete ` +
+                          `multipart uploads are likely holding it` +
+                          ("skipped" in result
+                            ? `, and alchemy could not abort them (${result.skipped}). `
+                            : `. `) +
+                          `Only R2's S3 API can abort them: authenticate alchemy with a ` +
+                          `Cloudflare API token that has the "Workers R2 Storage Write" ` +
+                          `permission and destroy again. Or add a lifecycle rule ` +
+                          `{ abortMultipartUploadsTransition: { condition: { type: "Age", ` +
+                          `maxAge: 86400 } } } and retry once R2 has applied it; R2 aborts ` +
+                          `them on its own after 7 days.`,
+                      }),
+                    ),
+                  ),
+                );
+              }),
+            ),
           );
         }),
         read: Effect.fn(function* ({ id, output, olds }) {
@@ -1461,9 +1600,10 @@ export const ProviderLive = () =>
                 lifecycleRules: output?.lifecycleRules ?? [],
                 cors: output?.cors ?? [],
                 locks: output?.locks,
+                localUploads: output?.localUploads,
                 publicDomain: output?.publicDomain,
               })),
-              Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchBucket", () => Effect.undefined),
             );
         }),
       };
@@ -1510,6 +1650,7 @@ export const ProviderLocal = () =>
         lifecycleRules: [],
         cors: [],
         locks: undefined,
+        localUploads: undefined,
         publicDomain: undefined,
       };
     }),
@@ -1529,6 +1670,25 @@ export const BucketProvider = () =>
 // sub-resource endpoints (custom domains, lifecycle) accept it. Retry only
 // that narrow `NoSuchBucket` lag here; not-found sub-resources are still
 // treated as terminal for idempotent deletes.
+/**
+ * Local Uploads was requested on a jurisdiction-restricted bucket, which
+ * Cloudflare does not support.
+ */
+/**
+ * A `forceDestroy` delete emptied the bucket, but R2 still refuses to delete
+ * it — usually because incomplete multipart uploads hold it.
+ */
+class BucketNotEmpty extends Data.TaggedError("BucketNotEmpty")<{
+  bucketName: string;
+  message: string;
+}> {}
+
+export class LocalUploadsUnsupported extends Data.TaggedError("LocalUploadsUnsupported")<{
+  bucketName: string;
+  jurisdiction: Bucket.Jurisdiction;
+  message: string;
+}> {}
+
 const r2BucketEndpointConsistencySchedule = Schedule.max([
   Schedule.exponential(100),
   Schedule.recurs(5),

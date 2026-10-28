@@ -36,6 +36,7 @@ import { createRedirectsFromAstroRoutes, printAsRedirects } from "@astrojs/under
 import type { AstroConfig, AstroIntegration, IntegrationResolvedRoute } from "astro";
 import { passthroughImageService, sessionDrivers } from "astro/config";
 import type * as vite from "vite";
+import { usesCloudflareCacheProvider } from "./cache.ts";
 import { createConfigPlugin } from "./config-plugin.ts";
 import { NODE_ENVIRONMENTS } from "./environments.ts";
 import { buildAssetsHeadersContent } from "./headers.ts";
@@ -167,7 +168,7 @@ type SessionConfigLike =
   | {
       // Astro types `entrypoint` as optional `any` (it comes from a
       // `z.instanceof(URL)` schema), though its config validation requires it.
-      driver?: string | { entrypoint?: unknown } | undefined;
+      driver?: string | { entrypoint?: string | URL } | undefined;
       cookie?: unknown;
       ttl?: unknown;
     }
@@ -305,6 +306,11 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
       "astro:config:setup": ({ command, config, updateConfig, logger }) => {
         const isTypeGenPhase = command === "build" || command === "sync";
         const userOptimizeDeps = config.vite?.optimizeDeps;
+        // Route caching through Workers Cache (mirrors upstream's
+        // `needsWorkerCache`). The provider module is pre-bundled with the
+        // rest of the server runtime so dev does not re-optimize on first use.
+        const needsWorkerCache = usesCloudflareCacheProvider(config);
+        const cacheProviderEntrypoint = config.cache?.provider?.entrypoint;
 
         // Zero-config sessions (mirrors upstream): default the session
         // driver to Cloudflare KV against `sessionKVBindingName` when the
@@ -442,6 +448,9 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
                           "astro/virtual-modules/transitions-swap-functions.js",
                           "astro/virtual-modules/transitions-types.js",
                           "astro/components",
+                          ...(needsWorkerCache && typeof cacheProviderEntrypoint === "string"
+                            ? [cacheProviderEntrypoint]
+                            : []),
                           ...(Array.isArray(userOptimizeDeps?.include)
                             ? userOptimizeDeps.include
                             : []),
@@ -485,7 +494,7 @@ export function distilledCloudflare(options: DistilledCloudflareOptions = {}): A
               createConfigPlugin({
                 sessionKVBindingName,
                 compileImageConfig: null,
-                cacheProviderEnabled: false,
+                cacheProviderEnabled: needsWorkerCache,
               }),
             ],
           },

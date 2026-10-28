@@ -9,7 +9,7 @@ import { encodeTypeSize, hashObject, makeSha1 } from "@alchemy.run/git/Protocol/
 import { packHeader } from "@alchemy.run/git/Protocol/PackWriter";
 import { scanPart } from "@alchemy.run/git/Protocol/PartialScan";
 import * as Zlib from "@alchemy.run/git/Protocol/Zlib";
-import { describe, expect, test } from "alchemy-test";
+import { describe, expect, test } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import { concat } from "../harness/pack.ts";
 

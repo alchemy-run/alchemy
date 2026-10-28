@@ -1,13 +1,13 @@
 import { createHash } from "node:crypto";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import * as queues from "@distilled.cloud/cloudflare/queues";
 import * as r2 from "@distilled.cloud/cloudflare/r2";
 import * as Retry from "@distilled.cloud/cloudflare/Retry";
-import { expect } from "alchemy-test";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -158,7 +158,7 @@ test.provider(
   {
     tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "cloudflare:event-subscriptions",
   },
 );
 
@@ -305,7 +305,7 @@ test.provider(
       "live",
     ],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "cloudflare:event-subscriptions",
   },
 );
 
@@ -343,7 +343,7 @@ test.provider(
       "live",
     ],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "cloudflare:event-subscriptions",
   },
 );
 
@@ -451,7 +451,7 @@ test.provider(
       "live",
     ],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "cloudflare:event-subscriptions",
   },
 );
 
@@ -499,6 +499,6 @@ test.provider.skipIf(process.env.CLOUDFLARE_TEST_SUPER_SLURPER_COMPLETION !== "1
       "live",
     ],
     timeout: 120_000,
-    exclusive: true,
+    exclusive: "cloudflare:event-subscriptions",
   },
 );

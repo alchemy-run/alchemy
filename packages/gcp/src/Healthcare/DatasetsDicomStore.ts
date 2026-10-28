@@ -125,7 +125,7 @@ export const DatasetsDicomStore = Resource<DatasetsDicomStore>("GCP.Healthcare.D
 export class DatasetsDicomStoreNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsDicomStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const datasetOf = (dataset: string, project: string, location: string) =>
@@ -151,10 +151,10 @@ const toAttrs = (store: healthcare.DicomStore, project: string, region: string) 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsDicomStores({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetsDicomStoreProvider = () =>
   Provider.succeed(DatasetsDicomStore, {
@@ -236,7 +236,7 @@ export const DatasetsDicomStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatasetsDicomStoreNotResolved({ name });
+        return yield* new DatasetsDicomStoreNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

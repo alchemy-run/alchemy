@@ -1,10 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import { Budget, type BudgetCostTypes } from "@alchemy.run/aws/Budgets/Budget";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import { defaultStage } from "@alchemy.run/test/Core";
 import * as budgets from "@distilled.cloud/aws/budgets";
-import { expect } from "alchemy-test";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
-import { defaultStage } from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";

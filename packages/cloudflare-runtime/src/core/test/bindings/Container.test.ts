@@ -5,7 +5,6 @@ import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as DurableObjectNamespace from "../../bindings/DurableObjectNamespace.ts";
 import type { ContainerImage } from "../../Docker.ts";
-import { isDockerAvailable } from "../helpers/docker.ts";
 import { getFixture } from "../helpers/fixture.ts";
 import { localRuntimeLayer, startTestWorker } from "../helpers/runtime.ts";
 
@@ -55,12 +54,10 @@ export default {
 layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
   "Container binding",
   (it) => {
-    const test = it.effect.skipIf(!isDockerAvailable());
-
     let i = 0;
     const nextIndex = () => i++;
 
-    test(
+    it.effect(
       "recovers from interruptions",
       () =>
         Effect.gen(function* () {
@@ -81,7 +78,7 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
       { concurrent: true },
     );
 
-    test(
+    it.effect(
       "builds a container image and proxies requests to it via ctx.container",
       () =>
         testContainer({
@@ -93,7 +90,7 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
       { concurrent: true },
     );
 
-    test(
+    it.effect(
       "proxies requests to multiple containers",
       () =>
         Effect.forEach(
@@ -113,7 +110,7 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
       { concurrent: true },
     );
 
-    test(
+    it.effect(
       "injects configured environment variables into the container",
       () =>
         testContainer({
@@ -129,7 +126,7 @@ layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
       { concurrent: true },
     );
 
-    test(
+    it.effect(
       "pulls an existing image by imageUri and proxies requests to it",
       () => {
         // A public image with an HTTP server that exposes a port and serves a stable
@@ -194,7 +191,7 @@ const canPassFuseDevice = process.platform !== "linux" || existsSync("/dev/fuse"
 layer(localRuntimeLayer, { excludeTestServices: true, timeout: 30_000 })(
   "Container FUSE privileges",
   (it) => {
-    it.effect.skipIf(!isDockerAvailable() || !canPassFuseDevice)(
+    it.effect.skipIf(!canPassFuseDevice)(
       "gives both image shapes CAP_SYS_ADMIN and /dev/fuse",
       () => {
         const image = { dockerfile: "Dockerfile", context: getFixture("container-fuse") };

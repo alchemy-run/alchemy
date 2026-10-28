@@ -137,8 +137,8 @@ export const ReserveProvider = () =>
             // Plan-gated zones (no Cache Reserve subscription) and
             // partial/deleted zones reject the route; skip them.
             Effect.catchTags({
-              SettingUnavailableForPlan: () => Effect.succeed(undefined),
-              InvalidRoute: () => Effect.succeed(undefined),
+              SettingUnavailableForPlan: () => Effect.undefined,
+              InvalidRoute: () => Effect.undefined,
             }),
           ),
         { concurrency: 10 },
@@ -162,7 +162,7 @@ export const ReserveProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* cache.getCacheReserve({ zoneId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
@@ -206,8 +206,8 @@ export const ReserveProvider = () =>
       // dropped so the setting no longer exists), nothing to restore.
       const observed = yield* cache.getCacheReserve({ zoneId }).pipe(
         Effect.catchTags({
-          InvalidRoute: () => Effect.succeed(undefined),
-          SettingUnavailableForPlan: () => Effect.succeed(undefined),
+          InvalidRoute: () => Effect.undefined,
+          SettingUnavailableForPlan: () => Effect.undefined,
         }),
       );
       if (observed === undefined) return;

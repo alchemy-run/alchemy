@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Group } from "@alchemy.run/aws/ResourceGroups";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as resourcegroups from "@distilled.cloud/aws/resource-groups";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";

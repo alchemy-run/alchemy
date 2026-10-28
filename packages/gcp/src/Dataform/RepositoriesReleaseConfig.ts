@@ -179,7 +179,7 @@ export const RepositoriesReleaseConfig = Resource<RepositoriesReleaseConfig>(
 export class RepositoriesReleaseConfigNotResolved extends Data.TaggedError(
   "GCP.Dataform.RepositoriesReleaseConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (repository: string, releaseConfigId: string) =>
@@ -221,10 +221,10 @@ const toAttrs = (config: dataform.ReleaseConfig, project: string, region: string
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataform
         .getProjectsLocationsRepositoriesReleaseConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const isOwnedConfig = (config: dataform.ReleaseConfig) =>
   hasAlchemyLabelMap(config.codeCompilationConfig?.vars);
@@ -320,7 +320,7 @@ export const RepositoriesReleaseConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RepositoriesReleaseConfigNotResolved({ name });
+        return yield* new RepositoriesReleaseConfigNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

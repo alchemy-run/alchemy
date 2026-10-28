@@ -41,7 +41,7 @@ export const RetrieveCustomerTaxIdHttp = Layer.effect(
       }) {
         return yield* auth(
           GetCustomerTaxIdsById({
-            ...(request ?? {}),
+            ...request,
             id: yield* id,
             customer: yield* customer,
           }),

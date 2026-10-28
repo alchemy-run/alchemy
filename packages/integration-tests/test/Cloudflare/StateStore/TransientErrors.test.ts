@@ -1,6 +1,6 @@
 import { EdgeSessionError } from "@alchemy.run/cloudflare/EdgeSession";
 import { isTransientEdgeSessionError } from "@alchemy.run/cloudflare/StateStore/State";
-import { describe, expect, it } from "alchemy-test";
+import { describe, expect, it } from "@alchemy.run/test";
 
 /**
  * Predicate coverage for the edge-preview secret-read retry policy, added in

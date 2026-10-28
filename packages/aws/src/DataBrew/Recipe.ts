@@ -166,7 +166,7 @@ export const RecipeProvider = () =>
       const observeWorking = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeRecipe({ Name: name, RecipeVersion: "LATEST_WORKING" })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const publishedVersions = Effect.fn(function* (name: string) {
@@ -309,14 +309,14 @@ export const RecipeProvider = () =>
                 Name: name,
                 RecipeVersions: versions,
               }),
-            ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           }
           yield* retryWhileConflict(
             databrew.deleteRecipeVersion({
               Name: name,
               RecipeVersion: "LATEST_WORKING",
             }),
-          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         }),
       });
     }),

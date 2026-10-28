@@ -1,11 +1,11 @@
 import { expect } from "bun:test";
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import * as Test from "alchemy/Test/Bun";
+import * as Test from "@alchemy.run/test/Bun";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import Stack from "../alchemy.run.ts";
 
-const request = (url: string, init?: RequestInit) =>
+const requestOnce = (url: string, init?: RequestInit) =>
   Effect.tryPromise(async () => {
     const response = await fetch(url, {
       ...init,
@@ -17,6 +17,19 @@ const request = (url: string, init?: RequestInit) =>
       body: await response.text(),
     };
   });
+
+// A fresh workers.dev URL can flap between serving and a 404 (or 5xx) while
+// it propagates across the edge, even after a first successful response, so
+// ride out those statuses. Assertions on a deliberate 404 use `requestOnce`.
+const request = (url: string, init?: RequestInit) =>
+  requestOnce(url, init).pipe(
+    Effect.flatMap((response) =>
+      response.status === 404 || response.status >= 500
+        ? Effect.fail(new Error(`${url} answered ${response.status}`))
+        : Effect.succeed(response),
+    ),
+    Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
+  );
 
 const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Cloudflare.providers(),
@@ -65,7 +78,7 @@ test(
       expect(head.status).toBe(200);
       expect(head.body).toBe("");
     }
-    expect((yield* request(url + "/not-prerendered")).status).toBe(404);
+    expect((yield* requestOnce(url + "/not-prerendered")).status).toBe(404);
   }),
   { timeout: 120_000 },
 );

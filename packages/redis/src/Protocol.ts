@@ -1,10 +1,10 @@
-import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as Queue from "effect/Queue";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import { CommandError, ProtocolError, type UrlMissing } from "./Errors.ts";
 import { encodeCommand, Parser, type Arg, type Reply } from "./Resp.ts";
+import type { RuntimeContext } from "./RuntimeContext.ts";
 
 export const DEFAULT_PORT = 6379;
 export const TLS_PORT = 6380;
@@ -242,7 +242,18 @@ const expectStatus = (reply: Reply, command: string): Effect.Effect<void, Comman
     return Effect.void;
   }
   return Effect.fail(
-    commandError(command, new ProtocolError({ message: `expected OK, got ${String(reply)}` })),
+    commandError(
+      command,
+      new ProtocolError({
+        message: `expected OK, got ${
+          typeof reply === "object" && reply !== null
+            ? JSON.stringify(reply, (_key, value: unknown) =>
+                typeof value === "bigint" ? value.toString() : value,
+              )
+            : String(reply)
+        }`,
+      }),
+    ),
   );
 };
 

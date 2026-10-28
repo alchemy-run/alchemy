@@ -234,7 +234,7 @@ export const ObservabilityDestinationProvider = () =>
       return observed ? Unowned(toAttributes(observed, acct)) : undefined;
     }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ id, news, olds, output }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       // Prefer the deployed name: regenerating would target a different
       // resource if the generator's output for this id ever drifts.
@@ -242,6 +242,10 @@ export const ObservabilityDestinationProvider = () =>
       // Inputs have been resolved to concrete values by Plan.
       const url = news.url as string;
       const headers = unwrapRedacted(news.headers ?? {});
+      // Cloudflare masks header values on read, so the last values we know
+      // were applied stand in for them: the previous props, or what create
+      // just sent.
+      let appliedHeaders = olds?.headers ? unwrapRedacted(olds.headers) : undefined;
       const enabled = news.enabled ?? true;
 
       // 1. Observe — the slug cached on `output` is a hint, not a
@@ -282,6 +286,7 @@ export const ObservabilityDestinationProvider = () =>
               }),
             ),
           );
+        appliedHeaders = headers;
         const createdSlug = created.slug;
         observed = isObservedDestination(created)
           ? created
@@ -294,7 +299,7 @@ export const ObservabilityDestinationProvider = () =>
       if (
         observed.enabled !== enabled ||
         observed.configuration.url !== url ||
-        !sameHeaders(observed.configuration.headers, headers)
+        !sameHeaders(observed.configuration.headers, headers, appliedHeaders)
       ) {
         const patched = yield* workers
           .patchObservabilityDestination({
@@ -406,17 +411,28 @@ const freshObserved = (accountId: string, slug: string) =>
  * injects a `content-type: application/json` header of its own — ignore
  * it unless the user explicitly pinned one, so an empty desired set is
  * not perpetually "dirty".
+ *
+ * Cloudflare masks header values as `null` in its responses, so only the
+ * header names are observable. A masked value is compared against the
+ * last values known to be applied instead; without them (adoption) it
+ * cannot be verified and counts as drift.
  */
-const sameHeaders = (observed: Record<string, unknown>, desired: Record<string, string>) => {
-  const normalized = Object.fromEntries(
-    Object.entries(observed)
-      .filter(([key]) => key !== "content-type" || "content-type" in desired)
-      .map(([key, value]) => [key, String(value)]),
+const sameHeaders = (
+  observed: Record<string, unknown>,
+  desired: Record<string, string>,
+  applied: Record<string, string> | undefined,
+) => {
+  const keys = Object.keys(observed).filter(
+    (key) => key !== "content-type" || "content-type" in desired,
   );
-  const keys = Object.keys(normalized);
   return (
     keys.length === Object.keys(desired).length &&
-    keys.every((key) => normalized[key] === desired[key])
+    keys.every((key) => {
+      const value = observed[key];
+      return value == null
+        ? applied !== undefined && applied[key] === desired[key]
+        : (typeof value === "string" ? value : JSON.stringify(value)) === desired[key];
+    })
   );
 };
 

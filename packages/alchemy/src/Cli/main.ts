@@ -17,8 +17,8 @@ import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import packageJson from "../../package.json" with { type: "json" };
+import * as Interaction from "../Interaction.ts";
 import { checkLatestVersion } from "./checkVersion.ts";
-import * as CliKit from "./CliKit/index.ts";
 import {
   compatibilityCommand,
   compatibilityCommands,
@@ -107,7 +107,7 @@ const commands = await Promise.all(
   commandMetadata.map(([name, description]) =>
     loadEveryCommand || name === requestedCommand
       ? loadCommand(name)
-      : placeholderCommand(name, description),
+      : Promise.resolve(placeholderCommand(name, description)),
   ),
 );
 
@@ -121,6 +121,21 @@ const NoInput = GlobalFlag.Setting("no-input")({
   flag: Flag.Boolean("no-input").pipe(
     Flag.withDescription(
       "Disable prompts and the interactive TUI (plain output; commands needing input fail)",
+    ),
+    Flag.withDefault(false),
+  ),
+});
+
+/**
+ * `--fast-distilled` loads distilled SDKs through their lazy service stubs
+ * under Node. The launcher (`bin/cli.js`) reads it from argv before any
+ * module loads and passes it on as `ALCHEMY_FAST_DISTILLED=1`; this
+ * registration exists so the parser accepts the flag.
+ */
+const FastDistilled = GlobalFlag.Setting("fast-distilled")({
+  flag: Flag.Boolean("fast-distilled").pipe(
+    Flag.withDescription(
+      "Load distilled SDK operations on first use (Node only; lowers startup memory)",
     ),
     Flag.withDefault(false),
   ),
@@ -144,7 +159,7 @@ const root = Command.make("alchemy", {}, () =>
       compatibilityCommand(name as CompatibilityCommand),
     ),
   ]),
-  Command.withGlobalFlags([NoInput]),
+  Command.withGlobalFlags([NoInput, FastDistilled]),
 );
 
 /**
@@ -181,13 +196,7 @@ const services = Layer.mergeAll(
   Layer.succeed(ArtifactStore, createArtifactStore()),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
-  Layer.provide(
-    Layer.provideMerge(
-      Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction),
-      CliKit.layer(),
-    ),
-    PlatformServices,
-  ),
+  Layer.provide(Layer.provideMerge(selectCliServices(), Interaction.layer()), PlatformServices),
   // Debug run log under ~/.alchemy/logs — the console noise floor stays at
   // Info, but full causes and auth-flow breadcrumbs land in the file so
   // support can ask users for it.

@@ -3,10 +3,16 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
+
+export class FunctionUnexpectedResponse extends Data.TaggedError("FunctionUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface FunctionProps {
   /**
@@ -56,10 +62,6 @@ export interface Function extends Resource<
      * Deployment stage for the function.
      */
     stage: cloudfront.FunctionStage;
-    /**
-     * Current status.
-     */
-    status: string;
     /**
      * Last modified time.
      */
@@ -111,7 +113,7 @@ export const FunctionProvider = () =>
             Name: name,
             Stage: stage,
           })
-          .pipe(Effect.catchTag("NoSuchFunctionExists", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchFunctionExists", () => Effect.undefined));
       });
 
       const getCurrent = Effect.fn(function* (name: string) {
@@ -129,9 +131,9 @@ export const FunctionProvider = () =>
 
       const publish = Effect.fn(function* (name: string, etag: string | undefined) {
         if (!etag) {
-          return yield* Effect.fail(
-            new Error(`CloudFront Function '${name}' is missing an ETag for publish`),
-          );
+          return yield* new FunctionUnexpectedResponse({
+            message: `CloudFront Function '${name}' is missing an ETag for publish`,
+          });
         }
         yield* cloudfront.publishFunction({
           Name: name,
@@ -353,7 +355,6 @@ const toAttrs = (
   runtime: summary.FunctionConfig.Runtime,
   comment: summary.FunctionConfig.Comment ?? "",
   stage: summary.FunctionMetadata.Stage ?? "DEVELOPMENT",
-  status: summary.Status ?? "UNKNOWN",
   lastModifiedTime: summary.FunctionMetadata.LastModifiedTime,
   etag,
   keyValueStoreArns:

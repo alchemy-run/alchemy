@@ -1,11 +1,11 @@
 import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as firebaseappcheck from "@distilled.cloud/gcp/firebaseappcheck_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { dockerAvailable, expectProbe } from "../bindingHost.ts";
+import { expectProbe } from "../bindingHost.ts";
 import { currentProject, runLifecycle } from "./common.ts";
 import AppCheckBindingsHost, { Local } from "./fixtures/bindings-host.ts";
 
@@ -26,7 +26,7 @@ const jwtClaims = (token: string) =>
 
 // App Check needs a Firebase project with the App Check API enabled (see
 // ./common.ts); set GCP_TEST_FIREBASE_APP_ID to run.
-describe.skipIf(!dockerAvailable || !runLifecycle)(
+describe.skipIf(!runLifecycle)(
   "FirebaseAppCheck Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "provider:gcp:run", "live"],

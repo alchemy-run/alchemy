@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Channel, ChannelGroup, OriginEndpoint } from "@alchemy.run/aws/MediaPackageV2";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as mediapackagev2 from "@distilled.cloud/aws/mediapackagev2";
-import { expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

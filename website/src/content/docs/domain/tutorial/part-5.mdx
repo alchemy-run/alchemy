@@ -47,7 +47,7 @@ import BankWorker from "./src/BankWorker.ts";
 
 export default Alchemy.Stack(
   "Bank",
-  { providers: Cloudflare.providers(), state: Alchemy.localState() },
+  { providers: Cloudflare.providers(), state: Cloudflare.state() },
   Effect.gen(function* () {
     const bank = yield* BankWorker;
     return { url: bank.url.as<string>() };
@@ -84,19 +84,20 @@ const accountId = AccountId.make(`${customerId}-main`);
 
 const program = Effect.gen(function* () {
   const bank = yield* BankApi.client;
-  yield* bank.RegisterCustomer({ target: CustomerId.make(customerId), name: customerId }).pipe(
+  yield* bank.RegisterCustomer(CustomerId.make(customerId), { name: customerId }).pipe(
     Effect.catchTag("AlreadyRegistered", () => Effect.void),
   );
   // Print the balance now and after every change, in the background.
   yield* bank.AccountSummary.watch(accountId).pipe(
+    Stream.map(({ state }) => state),
     Stream.filter((summary) => summary !== null && summary.owner !== null),
     Stream.runForEach((summary) => Effect.log(`balance: ${summary?.balance}`)),
     Effect.forkChild,
   );
   yield* Effect.sleep("1 second");
-  yield* bank.DepositMoney({ target: accountId, amount: 100 });
+  yield* bank.DepositMoney(accountId, { amount: 100 });
   yield* Effect.sleep("1 second");
-  yield* bank.WithdrawMoney({ target: accountId, amount: 30 });
+  yield* bank.WithdrawMoney(accountId, { amount: 30 });
   yield* Effect.sleep("1 second");
 });
 

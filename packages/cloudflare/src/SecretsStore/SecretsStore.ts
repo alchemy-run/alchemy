@@ -103,7 +103,7 @@ export const StoreProviderLive = () =>
           // account's default Secrets Store.
           name: "default_secrets_store",
         })
-        .pipe(Effect.catchTag("MaximumStoresExceeded", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("MaximumStoresExceeded", () => Effect.undefined));
 
       if (response) {
         return {

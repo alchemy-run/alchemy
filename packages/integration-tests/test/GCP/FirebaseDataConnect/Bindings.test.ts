@@ -1,12 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as firebasedataconnect from "@distilled.cloud/gcp/firebasedataconnect_v1";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
-import { callProbe, dockerAvailable, type ProbeOutcome } from "../bindingHost.ts";
+import { callProbe, type ProbeOutcome } from "../bindingHost.ts";
 import DataConnectBindingsHost, { App, Queries } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -63,7 +63,7 @@ const expectAuthorized = (outcome: ProbeOutcome<unknown>) => {
   return outcome.error._tag;
 };
 
-describe.skipIf(!dockerAvailable)(
+describe(
   "FirebaseDataConnect Bindings",
   {
     tags: ["provider:gcp", "provider:gcp:firebasedataconnect", "provider:gcp:run", "live"],

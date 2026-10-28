@@ -12,6 +12,7 @@ import {
   buildConditionPayload,
   collectPolicies,
   conditionFingerprint,
+  findTopLevelWorkerScriptKey,
   policyFingerprint,
   resolvePolicies,
   type ApiTokenBinding,
@@ -74,6 +75,33 @@ export type AccountApiToken = Resource<
  *   repository: "my-repo",
  *   name: "CLOUDFLARE_API_TOKEN",
  *   value: token.value,
+ * });
+ * ```
+ *
+ * ### Scoping a Token to One Worker
+ * **Example:** A deploy token that can only edit one Worker
+ * The `Individual Workers` roles (`Admin`, `Editor`, `Content Read-Only`,
+ * `Metadata Read-Only`) apply to a single Worker. Key the Worker by its
+ * `workerId`, nested under the account. Only account-owned tokens accept
+ * these roles.
+ * ```typescript
+ * const { accountId } = yield* yield* Cloudflare.CloudflareEnvironment;
+ * const api = yield* Cloudflare.Worker("Api", { main: "./src/api.ts" });
+ *
+ * const token = yield* Cloudflare.ApiToken.AccountApiToken("api-deploy-token", {
+ *   policies: [
+ *     {
+ *       effect: "allow",
+ *       permissionGroups: ["Individual Workers Editor"],
+ *       resources: api.workerId.pipe(
+ *         Output.map((workerId) => ({
+ *           [`com.cloudflare.api.account.${accountId}`]: {
+ *             [`com.cloudflare.edge.worker.script.${workerId}`]: "*",
+ *           },
+ *         })),
+ *       ),
+ *     },
+ *   ],
  * });
  * ```
  *
@@ -187,6 +215,14 @@ export const AccountApiTokenProvider = () =>
         );
       }
       const policies = resolvePolicies(collected);
+      const workerScriptKey = findTopLevelWorkerScriptKey(policies);
+      if (workerScriptKey) {
+        return yield* Effect.die(
+          `Token "${name}" lists "${workerScriptKey}" as a top-level resource. ` +
+            "Cloudflare only accepts Worker resources nested under the account: " +
+            `{ "com.cloudflare.api.account.${accountId}": { "${workerScriptKey}": "*" } }.`,
+        );
+      }
 
       // Observe — fetch current state if we already know the token id.
       // Cloudflare reports a deleted token as `InvalidRoute` or
@@ -200,8 +236,8 @@ export const AccountApiTokenProvider = () =>
             .pipe(
               Effect.map((token) => token),
               Effect.catchTags({
-                InvalidRoute: () => Effect.succeed(undefined),
-                TokenNotFound: () => Effect.succeed(undefined),
+                InvalidRoute: () => Effect.undefined,
+                TokenNotFound: () => Effect.undefined,
               }),
             )
         : undefined;
@@ -293,8 +329,8 @@ export const AccountApiTokenProvider = () =>
         .pipe(
           Effect.map((token) => buildAttributes(token, output.value, output.accountId)),
           Effect.catchTags({
-            InvalidRoute: () => Effect.succeed(undefined),
-            TokenNotFound: () => Effect.succeed(undefined),
+            InvalidRoute: () => Effect.undefined,
+            TokenNotFound: () => Effect.undefined,
           }),
         );
     }),

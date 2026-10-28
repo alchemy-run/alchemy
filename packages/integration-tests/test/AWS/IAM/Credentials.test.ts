@@ -5,9 +5,9 @@ import {
   SSHPublicKey,
   User,
 } from "@alchemy.run/aws/IAM";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as IAM from "@distilled.cloud/aws/iam";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { testCertificateBody, testSshPublicKey } from "./fixtures.ts";
 import { withSigningCertificateFixture } from "./SigningCertificateTestLease.ts";

@@ -39,12 +39,48 @@ export const observeOps = (
   );
 
 /**
+ * Sees every call to an implemented external system. A story provides one, so
+ * it can assert what each real call was sent and what it returned.
+ *
+ * @internal
+ */
+export interface CallRecorder {
+  readonly record: (
+    system: string,
+    op: string,
+    args: unknown,
+    call: Effect.Effect<unknown, unknown, unknown>,
+  ) => Effect.Effect<unknown, unknown, unknown>;
+}
+
+/** @internal */
+export const CallRecorder = Context.Reference<CallRecorder | undefined>(
+  "alchemy/Domain/ExternalSystem/CallRecorder",
+  { defaultValue: () => undefined },
+);
+
+const recordOps = (
+  system: string,
+  impl: Readonly<Record<string, OpImpl>>,
+): Record<string, OpImpl> =>
+  Object.fromEntries(
+    Object.entries(impl).map(([op, call]) => [
+      op,
+      Effect.fn(function* (args: unknown) {
+        const recorder = yield* CallRecorder;
+        return yield* recorder ? recorder.record(system, op, args, call(args)) : call(args);
+      }),
+    ]),
+  );
+
+/**
  * One operation of an external system: its arguments, success value and business errors.
+ * `error` is one schema, or a list of them when the vendor can refuse in several ways.
  */
 export interface OpSpec {
   readonly args?: Fields;
   readonly success?: Fields | Schema.Top;
-  readonly error?: Schema.Top;
+  readonly error?: Schema.Top | ReadonlyArray<Schema.Top>;
 }
 
 type ArgsOf<S extends OpSpec> = S["args"] extends Fields ? Schema.Struct<S["args"]>["Type"] : void;
@@ -53,7 +89,12 @@ type SuccessOf<S extends OpSpec> = S["success"] extends Schema.Top
   : S["success"] extends Fields
     ? Schema.Struct<S["success"]>["Type"]
     : void;
-type ErrorOf<S extends OpSpec> = S["error"] extends Schema.Top ? S["error"]["Type"] : never;
+type ErrorOf<S extends OpSpec> =
+  S["error"] extends ReadonlyArray<Schema.Top>
+    ? S["error"][number]["Type"]
+    : S["error"] extends Schema.Top
+      ? S["error"]["Type"]
+      : never;
 
 /**
  * The service shape of an external system: one Effect-returning function per operation.
@@ -65,14 +106,15 @@ export type Shape<Ops extends Record<string, OpSpec>> = {
 };
 
 /**
- * A reference to one external system operation, used by stories (`expectCall`, `resolve`).
+ * A reference to one external system operation, used by stories (`call`, `succeed`, `fail`).
  */
-export interface Op<Args = unknown, Success = unknown> {
+export interface Op<Args = unknown, Success = unknown, Error = unknown> {
   readonly kind: "ExternalSystemOp";
   readonly system: string;
   readonly op: string;
   readonly "~args"?: Args;
   readonly "~success"?: Success;
+  readonly "~error"?: Error;
 }
 
 /**
@@ -149,7 +191,10 @@ export const make = <const Name extends string, const Ops extends Record<string,
     ): Layer.Layer<ExternalSystemKey<Name>, E, R> {
       return Layer.effect(
         Tag,
-        Effect.map(build, (impl) => observeOps(name, impl as Record<string, OpImpl>) as never),
+        Effect.map(
+          build,
+          (impl) => observeOps(name, recordOps(name, impl as Record<string, OpImpl>)) as never,
+        ),
       );
     }
   };
@@ -157,6 +202,7 @@ export const make = <const Name extends string, const Ops extends Record<string,
     if (RESERVED.has(op)) {
       throw new Error(`ExternalSystem '${name}' cannot declare an operation named '${op}'`);
     }
+    // oxlint-disable-next-line effecttsgo/floating-effect -- returns `cls`, which is Effect-able; nothing to run
     Object.defineProperty(cls, op, {
       value: { kind: "ExternalSystemOp", system: name, op } satisfies Op,
       enumerable: true,
@@ -178,7 +224,7 @@ export type ExternalSystemClass<
   /** Implement the external system with an Effect that builds its service. */
   toLayer<E, R>(build: Effect.Effect<Shape<Ops>, E, R>): Layer.Layer<ExternalSystemKey<Name>, E, R>;
 } & {
-  readonly [K in keyof Ops]: Op<ArgsOf<Ops[K]>, SuccessOf<Ops[K]>>;
+  readonly [K in keyof Ops]: Op<ArgsOf<Ops[K]>, SuccessOf<Ops[K]>, ErrorOf<Ops[K]>>;
 };
 
 /** @internal */
@@ -188,3 +234,16 @@ export const successSchema = (spec: OpSpec): Schema.Top =>
     : "ast" in (spec.success as object)
       ? (spec.success as Schema.Top)
       : Schema.Struct(spec.success as Fields);
+
+/**
+ * The schema of an operation's declared `error`: the schema itself, a
+ * `Schema.Union` of a list, or `Schema.Never` when it declares none.
+ *
+ * @internal
+ */
+export const errorSchema = (spec: OpSpec): Schema.Top =>
+  spec.error === undefined
+    ? Schema.Never
+    : Array.isArray(spec.error)
+      ? Schema.Union(spec.error as ReadonlyArray<Schema.Top>)
+      : (spec.error as Schema.Top);

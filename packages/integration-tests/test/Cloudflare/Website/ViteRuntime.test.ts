@@ -1,8 +1,8 @@
 import * as NodeHttp from "node:http";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import { describe, expect } from "alchemy-test";
-import * as Test from "alchemy/Test/Alchemy";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -11,6 +11,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import { WebSocketServer } from "ws";
 import { cloneFixture } from "../Utils/Fixture.ts";
 import { expectResponse } from "../Utils/Http.ts";
 import { expectWorkerExists, waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
@@ -74,6 +75,11 @@ const customBuildAppFixtureDir = pathe.resolve(
 const configChangesFixtureDir = pathe.resolve(import.meta.dirname, "vite-config-changes-fixture");
 const hotChannelFixtureDir = pathe.resolve(import.meta.dirname, "vite-hot-channel-fixture");
 const bundledDevFixtureDir = pathe.resolve(import.meta.dirname, "vite-bundled-dev-fixture");
+const proxyFixtureDir = pathe.resolve(import.meta.dirname, "vite-proxy-fixture");
+const pluginWebSocketFixtureDir = pathe.resolve(
+  import.meta.dirname,
+  "vite-plugin-websocket-fixture",
+);
 
 type Mode = "live" | "dev";
 
@@ -281,6 +287,38 @@ const expectWebSocket = (url: string) =>
       ),
     ),
     Effect.retry({ times: 5, schedule: Schedule.spaced("3 seconds") }),
+  );
+
+// Sends "hi" over a WebSocket and records what happens: `open`, the reply,
+// and a `close` if the socket closes within half a second of the reply.
+const echoOnce = (url: string) =>
+  Effect.tryPromise(
+    () =>
+      new Promise<Array<string>>((resolve, reject) => {
+        const socket = new WebSocket(url.replace(/^http/, "ws"));
+        const events: Array<string> = [];
+        const timer = setTimeout(() => reject(new Error(`echo: ${events}`)), 30_000);
+        const done = () => {
+          clearTimeout(timer);
+          resolve([...events]);
+        };
+        socket.addEventListener("open", () => {
+          events.push("open");
+          socket.send("hi");
+        });
+        socket.addEventListener("message", (event) => {
+          events.push(String(event.data));
+          setTimeout(() => {
+            // Bun's `close()` dispatches `close` synchronously.
+            done();
+            socket.close();
+          }, 500);
+        });
+        socket.addEventListener("close", (event) => {
+          events.push(`close ${event.code}`);
+          done();
+        });
+      }),
   );
 
 describe.concurrent(
@@ -508,6 +546,103 @@ describe.concurrent(
             "__worker-module-event-data-received__",
             "__worker-request-event-data-received__",
           ]);
+        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
+    );
+
+    // Vite's `server.proxy` (dev only): paths it matches go to its target,
+    // HTTP and WebSocket alike, and everything else to the Worker. HTTP paths
+    // in `runWorkerFirst` reach the Worker before the proxy, as with
+    // `@cloudflare/vite-plugin`.
+    devTest.provider(
+      "Vite runtime: server.proxy serves the paths it matches (dev)",
+      (stack) =>
+        Effect.gen(function* () {
+          const backend = NodeHttp.createServer((req, res) =>
+            res.end(`backend ${new URL(req.url ?? "/", "http://backend").pathname}`),
+          );
+          const wss = new WebSocketServer({ noServer: true });
+          backend.on("upgrade", (request, socket, head) =>
+            wss.handleUpgrade(request, socket, head, (ws) =>
+              ws.on("message", (data) => ws.send(`backend ${data}`)),
+            ),
+          );
+          yield* Effect.acquireRelease(
+            Effect.promise(
+              () => new Promise<void>((resolve) => backend.listen(0, "127.0.0.1", resolve)),
+            ),
+            () =>
+              Effect.promise(
+                () =>
+                  new Promise<void>((resolve) => {
+                    for (const client of wss.clients) client.terminate();
+                    backend.closeAllConnections();
+                    backend.close(() => resolve());
+                  }),
+              ),
+          );
+          const target = `http://127.0.0.1:${(backend.address() as { port: number }).port}`;
+
+          yield* stack.destroy();
+          const rootDir = yield* cloneFixture(proxyFixtureDir, {
+            prefix: "alchemy-vite-proxy-",
+            tempRoot,
+            entries: ["package.json", "vite.config.ts", "src"],
+          });
+          const fs = yield* FileSystem.FileSystem;
+          yield* fs.writeFileString(
+            pathe.join(rootDir, "backend.json"),
+            JSON.stringify({ target }),
+          );
+          const site = yield* stack.deploy(
+            Cloudflare.Website.Vite("ViteProxy", {
+              rootDir,
+              main: "./src/index.ts",
+              workersDev: true,
+              compatibility: { date: "2026-03-17" },
+              memo: { include: ["**/*"] },
+              assets: { runWorkerFirst: ["/api/worker-first/*"] },
+              dev: { port: 0 },
+            }),
+          );
+          const url = site.url!.replace(/\/$/, "");
+
+          yield* expectText(`${url}/api/hello`, "backend /api/hello");
+          yield* expectText(`${url}/other`, "worker /other");
+          yield* expectText(`${url}/api/worker-first/x`, "worker /api/worker-first/x");
+          expect(yield* echoOnce(`${url}/backend-ws`)).toEqual(["open", "backend hi"]);
+          expect(yield* echoOnce(`${url}/bypass-ws`)).toEqual(["open", "backend hi"]);
+          expect(yield* echoOnce(`${url}/worker-ws`)).toEqual(["open", "worker hi"]);
+        }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+      { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
+    );
+
+    // A Vite plugin's own dev WebSocket (dev only): the Worker doesn't route
+    // the path, so its 404 must not reach a socket the plugin accepts, at once
+    // or only after an `await` (#2191).
+    devTest.provider(
+      "Vite runtime: a plugin's own WebSocket stays open (dev)",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const rootDir = yield* cloneFixture(pluginWebSocketFixtureDir, {
+            prefix: "alchemy-vite-plugin-websocket-",
+            tempRoot,
+            entries: ["package.json", "vite.config.ts", "src"],
+          });
+          const site = yield* stack.deploy(
+            Cloudflare.Website.Vite("VitePluginWebSocket", {
+              rootDir,
+              main: "./src/index.ts",
+              workersDev: true,
+              compatibility: { date: "2026-03-17" },
+              memo: { include: ["**/*"] },
+              dev: { port: 0 },
+            }),
+          );
+          const url = site.url!.replace(/\/$/, "");
+          expect(yield* echoOnce(`${url}/__echo`)).toEqual(["open", "echo hi"]);
+          expect(yield* echoOnce(`${url}/__echo-async`)).toEqual(["open", "echo hi"]);
         }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       { tags: ["provider:cloudflare:worker", "local"], timeout: 180_000 },
     );

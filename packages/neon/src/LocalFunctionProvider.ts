@@ -55,7 +55,7 @@ export const LocalFunctionProvider = () =>
               message: "Local Function WebSockets require Neon CLI >=2.45.0",
             });
           const nodeVersion = yield* spawner.string(ChildProcess.make("node", ["--version"]));
-          if (!/^v24\./.test(nodeVersion.trim()))
+          if (!nodeVersion.trim().startsWith("v24."))
             return yield* new FunctionConfigurationError({
               message: "Local Functions require Node 24",
             });

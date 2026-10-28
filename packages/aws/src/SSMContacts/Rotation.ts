@@ -129,8 +129,9 @@ export const RotationProvider = () =>
           // ResourceNotFoundException or the "Invalid resource Arn"
           // ValidationException (typed as InvalidRotationArn) — both mean
           // "missing" to the reconciler.
-          Effect.catchTag(["ResourceNotFoundException", "InvalidRotationArn"], () =>
-            Effect.succeed(undefined),
+          Effect.catchTag(
+            ["ResourceNotFoundException", "InvalidRotationArn"],
+            () => Effect.undefined,
           ),
         );
 

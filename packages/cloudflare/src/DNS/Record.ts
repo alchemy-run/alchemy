@@ -11,6 +11,11 @@ import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
 import { listAllZones } from "../Zone/lookup.ts";
 
+export class RecordUnexpectedResponse extends Data.TaggedError("RecordUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * DNS record type literal — every value Cloudflare recognises. Stable
  * across reconciles; changing it triggers a replacement because record
@@ -322,13 +327,24 @@ export const RecordProvider = () =>
       //    Ownership has already been verified upstream — `read` reports
       //    existing records as `Unowned` and the engine gates takeover
       //    behind the adopt policy before reconcile ever runs.
+      //    Adoption already arrives with `output` set, so a scan hit here
+      //    is a leftover or a sibling: only an exact match is this record.
+      //    A lone non-matching NS/TXT/A/... is a sibling of a multi-value
+      //    set (e.g. four NS records created together) and must not be
+      //    overwritten. A CNAME is exclusive at its name, so any hit is it.
       let foundByScan = false;
       if (!observed) {
-        const existing = yield* findByNameType(zoneId, news.name, news.type, {
-          content: body.content,
-          data: body.data,
-          priority: news.priority,
-        });
+        const existing = yield* findByNameType(
+          zoneId,
+          news.name,
+          news.type,
+          {
+            content: body.content,
+            data: body.data,
+            priority: news.priority,
+          },
+          { exact: news.type !== "CNAME" },
+        );
         if (existing) {
           foundByScan = true;
           observed = existing;
@@ -362,10 +378,11 @@ export const RecordProvider = () =>
                 existing
                   ? Effect.succeed({ record: existing, raced: true } as const)
                   : Effect.fail(
-                      new Error(
-                        `Cloudflare reported an identical DNS record for ` +
+                      new RecordUnexpectedResponse({
+                        message:
+                          `Cloudflare reported an identical DNS record for ` +
                           `(${news.name}, ${news.type}) but it could not be found`,
-                      ),
+                      }),
                     ),
               ),
             ),
@@ -382,9 +399,9 @@ export const RecordProvider = () =>
       // 4. Sync — Cloudflare's update endpoint is PUT-style; resend
       //    the full desired body when any mutable field differs.
       if (!observed.id) {
-        return yield* Effect.fail(
-          new Error("Cloudflare did not return a record id for DNS record"),
-        );
+        return yield* new RecordUnexpectedResponse({
+          message: "Cloudflare did not return a record id for DNS record",
+        });
       }
       if (!bodyEqualsObserved(body, observed)) {
         // Suppress noise when we just created the record above — the
@@ -408,9 +425,9 @@ export const RecordProvider = () =>
         observed.content === undefined ||
         observed.ttl === undefined
       ) {
-        return yield* Effect.fail(
-          new Error("Cloudflare returned a DNS record without id/type/value/ttl"),
-        );
+        return yield* new RecordUnexpectedResponse({
+          message: "Cloudflare returned a DNS record without id/type/value/ttl",
+        });
       }
       return {
         recordId: observed.id,
@@ -475,7 +492,7 @@ const observeById = (zoneId: string, dnsRecordId: string) =>
   Effect.gen(function* () {
     const r = yield* dns.getRecord({ zoneId, dnsRecordId }).pipe(
       // Only a missing record should fall through to the find-by-name path.
-      Effect.catchTag("RecordNotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("RecordNotFound", () => Effect.undefined),
     );
     if (r === undefined) return undefined;
     return narrowRecord(r as Parameters<typeof narrowRecord>[0]);
@@ -499,7 +516,7 @@ interface RecordMatch {
  */
 export class AmbiguousDnsRecordError extends Data.TaggedError("AmbiguousDnsRecordError")<{
   readonly zoneId: string;
-  readonly name: string;
+  readonly recordName: string;
   readonly type: RecordType;
   readonly candidates: ReadonlyArray<{
     readonly id?: string;
@@ -522,7 +539,13 @@ export class AmbiguousDnsRecordError extends Data.TaggedError("AmbiguousDnsRecor
 //   - exactly one exact match -> that record
 //   - no exact match          -> `undefined` (a new sibling record is created)
 //   - several exact matches   -> fail with an actionable error
-const findByNameType = (zoneId: string, name: string, type: RecordType, match: RecordMatch) =>
+const findByNameType = (
+  zoneId: string,
+  name: string,
+  type: RecordType,
+  match: RecordMatch,
+  options?: { readonly exact?: boolean },
+) =>
   listExactByNameType(zoneId, name, type).pipe(
     Effect.flatMap((found) => {
       if (found.length > 0) return Effect.succeed(found);
@@ -539,7 +562,7 @@ const findByNameType = (zoneId: string, name: string, type: RecordType, match: R
     Effect.flatMap(
       Effect.fn(function* (candidates) {
         if (candidates.length === 0) return undefined;
-        if (candidates.length === 1) return candidates[0];
+        if (candidates.length === 1 && !options?.exact) return candidates[0];
         const narrowed = candidates.filter(
           (r) =>
             (match.content === undefined || r.content === match.content) &&
@@ -550,7 +573,7 @@ const findByNameType = (zoneId: string, name: string, type: RecordType, match: R
         if (narrowed.length === 0) return undefined;
         return yield* new AmbiguousDnsRecordError({
           zoneId,
-          name,
+          recordName: name,
           type,
           candidates: candidates.map((r) => ({
             id: r.id,

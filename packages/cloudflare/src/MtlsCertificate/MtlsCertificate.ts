@@ -29,7 +29,9 @@ export type Props = {
   /**
    * Optional human-readable name for the certificate. If omitted, a unique
    * name will be generated. There is no update API, so changing the name
-   * triggers a replacement.
+   * triggers a replacement. Names are unique per account, so replacing a
+   * certificate that keeps an explicit name deletes the old certificate
+   * before uploading the new one. Omit `name` to rotate create-first.
    * @default ${app}-${stage}-${id}
    */
   name?: string;
@@ -219,8 +221,13 @@ export const MtlsCertificateProvider = () =>
         unwrap(news.privateKey) !== unwrap(olds.privateKey)
       ) {
         // There is no update API for mTLS certificates — every change is a
-        // replacement.
-        return { action: "replace" } as const;
+        // replacement. Cloudflare rejects a duplicate name, so a replacement
+        // that keeps an explicit name must delete the old certificate first.
+        // Generated names include the instance id and replace create-first.
+        return {
+          action: "replace",
+          deleteFirst: news.name !== undefined && news.name === oldName,
+        } as const;
       }
       return undefined;
     }),
@@ -235,7 +242,7 @@ export const MtlsCertificateProvider = () =>
           })
           .pipe(
             Effect.map((cert) => toAttributes(cert, acct)),
-            Effect.catchTag("CertificateNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("CertificateNotFound", () => Effect.undefined),
           );
       }
       // Cold read — recover by listing and matching on the deterministic
@@ -269,15 +276,18 @@ export const MtlsCertificateProvider = () =>
 
       // Observe — the certificate id is the stable identifier; fall through
       // a CertificateNotFound to the list+name match so we recover from
-      // out-of-band deletes and partial state persistence.
+      // out-of-band deletes and partial state persistence. Without an id,
+      // only adopt a certificate that has the same name AND the desired PEM:
+      // a replacement under an explicit name must upload the new PEM, not
+      // adopt the old certificate it is replacing (names are not unique).
       let observed = output?.mtlsCertificateId
         ? yield* mtls
             .getMtlsCertificate({
               accountId,
               mtlsCertificateId: output.mtlsCertificateId,
             })
-            .pipe(Effect.catchTag("CertificateNotFound", () => Effect.succeed(undefined)))
-        : yield* findByName(accountId, name);
+            .pipe(Effect.catchTag("CertificateNotFound", () => Effect.undefined))
+        : yield* findByName(accountId, name, news.certificates);
 
       // Ensure — upload if missing. Cloudflare rejects uploading a
       // certificate with identical content twice (code 1471); tolerate the
@@ -334,17 +344,23 @@ const createCertificateName = (id: string, name: string | undefined) =>
     return name ?? (yield* createPhysicalName({ id, lowercase: true }));
   });
 
-const findByName = (accountId: string, name: string) =>
+const findByName = (accountId: string, name: string, certificates?: string) =>
   Effect.gen(function* () {
     const list = yield* mtls.listMtlsCertificates({ accountId });
-    return list.result.find((c) => c.name === name);
+    return list.result.find(
+      (c) =>
+        c.name === name && (certificates === undefined || samePem(c.certificates, certificates)),
+    );
   });
 
 const findByContent = (accountId: string, certificates: string) =>
   Effect.gen(function* () {
     const list = yield* mtls.listMtlsCertificates({ accountId });
-    return list.result.find((c) => c.certificates?.trim() === certificates.trim());
+    return list.result.find((c) => samePem(c.certificates, certificates));
   });
+
+const samePem = (observed: string | null | undefined, desired: string) =>
+  observed?.trim() === desired.trim();
 
 const unwrap = (value: Redacted.Redacted<string> | undefined): string | undefined =>
   value === undefined ? undefined : Redacted.isRedacted(value) ? Redacted.value(value) : value;
