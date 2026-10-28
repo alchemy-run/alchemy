@@ -346,10 +346,10 @@ describe.skipIf(!!process.env.FAST)(
               Effect.repeat({
                 schedule: Schedule.spaced("5 seconds"),
                 until: (outcome) => outcome.ok || outcome.error._tag !== "Conflict",
-                times: 24,
+                times: 60,
               }),
             );
-            expect(undeleted.ok).toBe(true);
+            expect(undeleted).toMatchObject({ ok: true });
             // Restoring: reads answer NotFound, then "still being created".
             yield* bigtable.getProjectsInstancesTables({ name: trashName }).pipe(
               Effect.retry({
