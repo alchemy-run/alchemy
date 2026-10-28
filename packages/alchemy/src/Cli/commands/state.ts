@@ -268,18 +268,43 @@ const nukeCommand = Command.make(
 const bootstrapCommand = Command.make(
   "bootstrap",
   {
+    main: config,
     envFile,
     profile,
-    backend: lifecycleBackend,
+    backend: Flag.String("backend").pipe(
+      Flag.withDescription(
+        "Provider state store to act on (e.g. aws, cloudflare); defaults to the one the config sets",
+      ),
+      Flag.optional,
+      Flag.map(Option.getOrUndefined),
+    ),
     name: storeName,
     force: Flag.Boolean("force").pipe(
-      Flag.withDescription("Redeploy an existing state store instead of adopting it"),
+      Flag.withDescription(
+        "Redeploy an existing state store instead of adopting it (with --backend)",
+      ),
       Flag.withDefault(false),
     ),
   },
   instrumentCommand("state.bootstrap")(
-    Effect.fn(function* ({ force, ...args }) {
-      const result = yield* AlchemistState.bootstrap({ ...lifecycleSource(args), force });
+    Effect.fn(function* ({ force, main, backend, ...args }) {
+      if (backend === undefined) {
+        if (force || args.name !== undefined) {
+          return yield* new UserInputError({ message: "--force and --name need --backend." });
+        }
+        const { version } = yield* AlchemistState.bootstrapConfigured({
+          _tag: "Configured",
+          entrypoint: main,
+          profile: args.profile,
+          envFile: Option.getOrUndefined(args.envFile),
+        });
+        yield* Interaction.success(`State store configured in '${main}' is ready (v${version})`);
+        return;
+      }
+      const result = yield* AlchemistState.bootstrap({
+        ...lifecycleSource({ ...args, backend }),
+        force,
+      });
       yield* Interaction.success(
         `State store '${result.store}' ${result.status} (${Object.values(result.location).join(", ")})`,
       );

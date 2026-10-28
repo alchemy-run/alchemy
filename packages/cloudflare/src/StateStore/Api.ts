@@ -14,6 +14,8 @@ import * as HttpApiError from "effect/http-api/HttpApiError";
 import * as Etag from "effect/http/Etag";
 import * as HttpPlatform from "effect/http/HttpPlatform";
 import * as HttpRouter from "effect/http/HttpRouter";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { ReadSecret } from "../SecretsStore/ReadSecret.ts";
@@ -36,7 +38,38 @@ export const STATE_STORE_SCRIPT_NAME = DEFAULT_STATE_STORE_NAME;
 // v8: failures behind the auth middleware answer as a typed `StateStoreFailure`
 // (v7 encoded them through `Unauthorized`'s schema and answered a bare 500),
 // FQNs longer than 100 URI-encoded chars are routed, and secret reads retry.
-export const STATE_STORE_VERSION = 8 as const;
+// v9: deployed with direct API calls; refuses the legacy bootstrap stack.
+export const STATE_STORE_VERSION = 9 as const;
+
+/**
+ * The stack older Alchemy versions deployed the store itself with. Those
+ * versions redeploy a store they find out of date through this stack, and on a
+ * store whose rows are missing they generate a new auth token and encryption
+ * key and overwrite the existing secrets with them, losing all state. The
+ * Worker refuses every request for this stack, so such a redeploy fails while
+ * reading its state, before it touches a secret.
+ */
+const LEGACY_BOOTSTRAP_STACK = "CloudflareStateStore";
+
+const isLegacyBootstrapRequest = (url: string) =>
+  new RegExp(`^/state/stacks/${LEGACY_BOOTSTRAP_STACK}(?:[/?]|$)`).test(
+    new URL(url, "http://store").pathname,
+  );
+
+const refuseLegacyBootstrap = <E, R>(
+  app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>,
+) =>
+  Effect.flatMap(HttpServerRequest.HttpServerRequest, (request) =>
+    isLegacyBootstrapRequest(request.url)
+      ? Effect.succeed(
+          HttpServerResponse.text(
+            `This Cloudflare State Store was deployed by a newer version of Alchemy. ` +
+              `Upgrade alchemy to use it.`,
+            { status: 409 },
+          ),
+        )
+      : app,
+  );
 
 /**
  * Hard-coded OTLP/HTTP endpoints. Point at the public ingest relay
@@ -158,6 +191,7 @@ export default Worker(
             .getByName(Store.ROOT_DO_NAME)
             .listStacks()
             .pipe(
+              Effect.map((stacks) => stacks.filter((stack) => stack !== LEGACY_BOOTSTRAP_STACK)),
               failed("listStacks"),
               Effect.withSpan("state_store.listStacks", {
                 attributes: { "alchemy.state_store.op": "listStacks" },
@@ -335,6 +369,7 @@ export default Worker(
         // An FQN travels as one URI-encoded path segment, and the router's
         // default 100-char cap on a parameter left a longer one unrouted.
         Effect.provideService(HttpRouter.RouterConfig, { maxParamLength: MAX_PARAM_LENGTH }),
+        Effect.map(refuseLegacyBootstrap),
         // Effect.provide(TelemetryLive),
       ),
     };

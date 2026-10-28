@@ -56,7 +56,16 @@ export const deployStateStoreWorker = Effect.fn("state_store.deploy_worker")(fun
   domain: string | undefined;
 }) {
   yield* Effect.annotateCurrentSpan({ "alchemy.state_store.script_name": scriptName });
-  // Fail on a hostname another Worker owns before changing anything.
+  // Fail on secrets or a hostname another Worker owns before changing anything.
+  const sharing = yield* findSecretSharingWorker({ accountId, scriptName });
+  if (sharing !== undefined) {
+    return yield* new StateStoreError({
+      message:
+        `Cannot deploy the Cloudflare State Store '${scriptName}': its secrets would be shared ` +
+        `with Worker '${sharing}', because secret names replace '-' with '_'. Choose a ` +
+        `name that differs from '${sharing}' by more than '-' and '_'.`,
+    });
+  }
   if (domain !== undefined) yield* observeStateStoreDomain({ accountId, scriptName, domain });
   const storeId = yield* ensureSecretsStore(accountId);
   const authToken = yield* ensureSecret({
@@ -146,6 +155,32 @@ export const deployStateStoreWorker = Effect.fn("state_store.deploy_worker")(fun
   });
   if (domain !== undefined) yield* attachDomain({ accountId, scriptName, domain });
   return { url: yield* stateStoreUrl({ accountId, scriptName, domain }), authToken };
+});
+
+/**
+ * Another Worker whose store's secrets have the same names as this store's.
+ * Secret names replace every character other than a letter, digit or `_` with
+ * `_`, so the stores `team-a` and `team_a` would share one token and key.
+ */
+export const findSecretSharingWorker = Effect.fn(function* ({
+  accountId,
+  scriptName,
+}: {
+  accountId: string;
+  scriptName: string;
+}) {
+  const secretName = stateStoreSecretName(AuthTokenSecretName, scriptName);
+  return yield* workers.listScripts.items({ accountId }).pipe(
+    Stream.map((script) => script.id ?? undefined),
+    Stream.filter(
+      (name): name is string =>
+        name !== undefined &&
+        name !== scriptName &&
+        stateStoreSecretName(AuthTokenSecretName, name) === secretName,
+    ),
+    Stream.runHead,
+    Effect.map(Option.getOrUndefined),
+  );
 });
 
 /** The origin a store serves on: its custom domain, or its workers.dev URL. */

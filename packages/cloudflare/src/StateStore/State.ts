@@ -36,7 +36,12 @@ import {
   writeStoreCredentials,
   isStateStoreCredentialsStale,
 } from "./CredentialsFile.ts";
-import { deployStateStoreWorker, observeStateStoreDomain, stateStoreUrl } from "./Deploy.ts";
+import {
+  deployStateStoreWorker,
+  findSecretSharingWorker,
+  observeStateStoreDomain,
+  stateStoreUrl,
+} from "./Deploy.ts";
 import { AuthTokenSecretName, EncryptionKeySecretName, stateStoreSecretName } from "./Token.ts";
 
 const CI = Config.Boolean("CI").pipe(Config.withDefault(false));
@@ -89,6 +94,10 @@ export const state = (options: CloudflareStateOptions = {}) =>
         backend: "cloudflare",
         name,
         label: `Cloudflare State Store '${scriptName}'`,
+        configured:
+          options.workerName !== undefined ||
+          options.accountId !== undefined ||
+          domain !== undefined,
       };
 
       const init = Effect.gen(function* () {
@@ -330,11 +339,22 @@ export const teardownStateStore = (options: TeardownOptions = {}) =>
       ),
     );
 
-    // 2. Delete the secrets the state store created, plus any now-empty store.
-    const ourSecretNames = new Set<string>([
-      stateStoreSecretName(AuthTokenSecretName, scriptName),
-      stateStoreSecretName(EncryptionKeySecretName, scriptName),
-    ]);
+    // 2. Delete the secrets the state store created, plus any now-empty store,
+    // unless another store's Worker shares them.
+    const sharing = yield* findSecretSharingWorker({ accountId, scriptName });
+    if (sharing !== undefined) {
+      yield* Interaction.info(
+        `Keeping the secrets of '${scriptName}': Worker '${sharing}' uses the same secrets.`,
+      );
+    }
+    const ourSecretNames = new Set<string>(
+      sharing === undefined
+        ? [
+            stateStoreSecretName(AuthTokenSecretName, scriptName),
+            stateStoreSecretName(EncryptionKeySecretName, scriptName),
+          ]
+        : [],
+    );
     const stores = yield* SecretsStore.listStores.items({ accountId }).pipe(
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
