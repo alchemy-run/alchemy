@@ -420,7 +420,7 @@ test.provider(
             // Printed after the 5 seconds the resource waits by default.
             URL_DELAY_MS: "6000",
           },
-          waitForUrl: "20 seconds",
+          waitForUrl: true,
         }),
       );
 
@@ -434,7 +434,7 @@ test.provider(
 );
 
 test.provider(
-  "waitForUrl settles with a non-local URL when no localhost URL appears",
+  "waitForUrl settles with a late non-local URL when no localhost URL follows",
   (stack) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
@@ -448,8 +448,9 @@ test.provider(
             PID_FILE: pidFile,
             MARKER: "wait-for-url-fallback",
             URL_LINE: "https://docs.astro.build/en/guides/content-collections/",
+            URL_DELAY_MS: "6000",
           },
-          waitForUrl: "1 second",
+          waitForUrl: true,
         }),
       );
 
@@ -463,59 +464,44 @@ test.provider(
 );
 
 inProcessTest.provider(
-  "waitForUrl fails with UrlNotFound when no URL is printed in time",
+  "waitForUrl keeps waiting for a command that prints no URL",
   (stack) =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
       const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
       const pidFile = pathe.join(tmp, "pid.json");
 
-      const error = yield* stack
+      const result = yield* stack
         .deploy(
           Command.Dev("Dev", {
             command: `node ${urlServerScript}`,
             // URL_LINE intentionally unset — the process stays silent.
             env: { PID_FILE: pidFile, MARKER: "wait-for-url-none" },
-            waitForUrl: "1 second",
+            waitForUrl: true,
           }),
         )
-        .pipe(Effect.flip);
-      assert(Command.isCommandError(error));
-      assert(error.reason._tag === "UrlNotFound");
-      expect(error.reason.timeout).toBe("1s");
-      expect(error.message).toContain("printed no URL within 1s");
+        // Well past the 5 seconds the resource waits by default.
+        .pipe(Effect.timeoutOption("8 seconds"));
+      expect(result._tag).toBe("None");
 
-      // A resource that failed to start leaves no process behind.
+      // Interrupting the deploy (Ctrl+C) leaves no process behind.
       const { pid } = yield* waitForPidFile(pidFile, "wait-for-url-none");
       yield* waitForDeath(pid);
+      yield* stack.destroy();
     }),
   { tags: ["local"], timeout: 30_000 },
 );
 
 inProcessTest.provider(
-  "waitForUrl still fails with UnexpectedExit when the command exits first",
+  "waitForUrl fails with UnexpectedExit when the command exits first",
   (stack) =>
     Effect.gen(function* () {
       const error = yield* stack
-        .deploy(Command.Dev("Dev", { command: `node ${dieScript}`, waitForUrl: "20 seconds" }))
+        .deploy(Command.Dev("Dev", { command: `node ${dieScript}`, waitForUrl: true }))
         .pipe(Effect.flip);
       assert(Command.isCommandError(error));
       assert(error.reason._tag === "UnexpectedExit");
       expect(error.reason.exitCode).toBe(1);
-    }),
-  { tags: ["local"], timeout: 30_000 },
-);
-
-inProcessTest.provider(
-  "waitForUrl rejects a duration that is not positive",
-  (stack) =>
-    Effect.gen(function* () {
-      const error = yield* stack
-        .deploy(Command.Dev("Dev", { command: `node ${urlServerScript}`, waitForUrl: 0 }))
-        .pipe(Effect.flip);
-      assert(Command.isCommandError(error));
-      assert(error.reason._tag === "BadArgument");
-      expect(error.message).toContain("waitForUrl must be a positive finite duration");
     }),
   { tags: ["local"], timeout: 30_000 },
 );

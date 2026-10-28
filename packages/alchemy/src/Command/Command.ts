@@ -97,13 +97,7 @@ export class CommandExecutor extends Context.Service<
  */
 export class CommandError extends Data.TaggedError("CommandError")<{
   command: string;
-  reason:
-    | SystemError
-    | BadArgument
-    | UnexpectedExit
-    | OutputNotFound
-    | CommandTimedOut
-    | UrlNotFound;
+  reason: SystemError | BadArgument | UnexpectedExit | OutputNotFound | CommandTimedOut;
   cause?: unknown;
 }> {
   constructor({ command, reason }: { command: string; reason: CommandError["reason"] }) {
@@ -144,16 +138,6 @@ export class CommandTimedOut extends Data.TaggedError("CommandTimedOut")<{ timeo
 }
 
 /**
- * Represents when a long-lived command prints no URL within the time its
- * resource waits for one.
- */
-export class UrlNotFound extends Data.TaggedError("UrlNotFound")<{ timeout: string }> {
-  override get message() {
-    return `The command printed no URL within ${this.timeout}.`;
-  }
-}
-
-/**
  * Represents when the output directory does not exist.
  */
 export class OutputNotFound extends Data.TaggedError("OutputNotFound")<{ outdir: string }> {
@@ -175,9 +159,7 @@ export const makeCommandError = (
         ? new UnexpectedExit({ exitCode: reason.exitCode, stderr: redactor.redact(reason.stderr) })
         : reason._tag === "OutputNotFound"
           ? new OutputNotFound({ outdir: redactor.redact(reason.outdir) })
-          : reason._tag === "UrlNotFound"
-            ? new UrlNotFound({ timeout: redactor.redact(reason.timeout) })
-            : new CommandTimedOut({ timeout: redactor.redact(reason.timeout) });
+          : new CommandTimedOut({ timeout: redactor.redact(reason.timeout) });
 
   return new CommandError({ command: redactor.redact(props.command), reason: safeReason });
 };
@@ -185,18 +167,11 @@ export const makeCommandError = (
 const TERMINATION_GRACE_PERIOD = Duration.seconds(1);
 const TERMINATION_SIGNAL_DISPATCH_TIMEOUT = Duration.millis(25);
 
-/**
- * Decodes a duration prop that must be positive and finite. `method` and
- * `name` say which call and which prop an invalid input is reported against.
- * @internal
- */
-export const parsePositiveDuration = (
-  props: Pick<CommandProps, "command" | "env">,
-  input: Duration.Input | undefined,
-  { method, name }: { method: string; name: string },
+const parseExecutionTimeout = (
+  props: CommandRunProps,
 ): Effect.Effect<Duration.Duration | undefined, CommandError> => {
-  if (input === undefined) return Effect.undefined;
-  const decoded = Duration.fromInput(input);
+  if (props.timeout === undefined) return Effect.undefined;
+  const decoded = Duration.fromInput(props.timeout);
   if (
     Option.isNone(decoded) ||
     !Duration.isFinite(decoded.value) ||
@@ -208,19 +183,14 @@ export const parsePositiveDuration = (
         props,
         new BadArgument({
           module: "Command",
-          method,
-          description: `${name} must be a positive finite duration`,
+          method: "run",
+          description: "timeout must be a positive finite duration",
         }),
       ),
     );
   }
   return Effect.succeed(decoded.value);
 };
-
-const parseExecutionTimeout = (
-  props: CommandRunProps,
-): Effect.Effect<Duration.Duration | undefined, CommandError> =>
-  parsePositiveDuration(props, props.timeout, { method: "run", name: "timeout" });
 
 const terminateProcessGroup = (child: ChildProcessSpawner.ChildProcessHandle) =>
   Effect.gen(function* () {

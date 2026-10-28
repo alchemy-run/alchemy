@@ -1,7 +1,6 @@
 import { stripVTControlCharacters } from "node:util";
 import * as ConsoleService from "effect/Console";
 import * as Deferred from "effect/Deferred";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { FQN_SEPARATOR } from "../FQN.ts";
@@ -13,30 +12,23 @@ import { Resource } from "../Resource.ts";
 import { Stage } from "../Stage.ts";
 import { moduleExtension } from "../Util/Node.ts";
 import { makeResourceOutput } from "../Util/ResourceOutput.ts";
-import {
-  CommandExecutor,
-  UnexpectedExit,
-  UrlNotFound,
-  makeCommandError,
-  parsePositiveDuration,
-  type CommandProps,
-} from "./Command.ts";
+import { CommandExecutor, UnexpectedExit, makeCommandError, type CommandProps } from "./Command.ts";
 import { makeCommandRedactor } from "./Redaction.ts";
 
 export interface DevProps extends CommandProps {
   /**
-   * Make the URL required: wait up to this long for the command to print it,
-   * and fail if it prints none in time or exits first. Without it, the
-   * resource waits 5 seconds and settles with `url: undefined` when no URL
-   * appears.
+   * Make the URL required: the resource is ready only once the command
+   * prints a URL, however long that takes, and fails if the command exits
+   * first. Without it, the resource waits 5 seconds and settles with
+   * `url: undefined` when no URL appears.
    *
-   * A non-local URL printed before the wait ends still counts, as it does
-   * without this prop. Numbers are interpreted as milliseconds. Effect
-   * duration strings and `Duration` values are also accepted.
+   * A localhost/IP URL is still preferred: when the first URL printed is
+   * another one, the resource waits up to 5 seconds more for a local one
+   * before settling with it.
    *
-   * @example "60 seconds"
+   * @default false
    */
-  waitForUrl?: Duration.Input;
+  waitForUrl?: boolean;
 }
 
 export interface Dev extends Resource<
@@ -48,7 +40,7 @@ export interface Dev extends Resource<
      * server's own address) is preferred over any other URL the command
      * prints; a non-local URL is only used as a fallback if no local one
      * appears. Best-effort: `undefined` if no URL appears within 5 seconds,
-     * unless `waitForUrl` is set, which fails the resource instead.
+     * unless `waitForUrl` is set, which waits until one does.
      */
     url: string | undefined;
   }
@@ -83,16 +75,16 @@ export interface Dev extends Resource<
  *
  * ### Requiring a URL
  * By default the resource waits 5 seconds for a URL and settles with
- * `url: undefined` if none appears. Set `waitForUrl` for servers that
- * take longer to start, or whose URL downstream resources depend on: the
- * resource waits up to that long and fails with `UrlNotFound` if no URL
- * is printed in time.
+ * `url: undefined` if none appears. Set `waitForUrl` when downstream
+ * resources depend on the URL: the resource is ready only once the
+ * command prints one, however long the server takes to start, and fails
+ * if the command exits first.
  *
- * **Example:** Wait up to 60 seconds for a slow server
+ * **Example:** Wait for a slow server's URL
  * ```typescript
  * const engine = yield* Dev("Engine", {
  *   command: "rivet-engine start",
- *   waitForUrl: "60 seconds",
+ *   waitForUrl: true,
  * });
  * ```
  *
@@ -157,10 +149,6 @@ export const DevProviderLocal = () =>
         // provides: it keeps running after `start` returns (readiness) and
         // is killed when the helper closes the scope on restart/delete.
         start: Effect.fn(function* ({ fqn, news: props, invalidate }) {
-          const urlWait = yield* parsePositiveDuration(props, props.waitForUrl, {
-            method: "start",
-            name: "waitForUrl",
-          });
           const child = yield* spawn(props);
           const redactor = makeCommandRedactor(props.env);
           // One log file per process generation, closed with the instance
@@ -187,6 +175,8 @@ export const DevProviderLocal = () =>
           // always wins if one shows up. See issue #695.
           let fallbackUrl: string | undefined;
           const deferred = yield* Deferred.make<string>();
+          // Done when the first URL of any kind appears.
+          const anyUrl = yield* Deferred.make<void>();
 
           const mirror = (sink: "stdout" | "stderr") =>
             child[sink].pipe(
@@ -204,6 +194,7 @@ export const DevProviderLocal = () =>
                   buffer += text;
                   const url = extractUrl(buffer);
                   if (!url) return;
+                  Deferred.doneUnsafe(anyUrl, Effect.void);
                   if (isLocalUrl(url)) {
                     // The dev server's own address — resolve immediately.
                     Deferred.doneUnsafe(deferred, Effect.succeed(url));
@@ -220,25 +211,21 @@ export const DevProviderLocal = () =>
           yield* mirror("stdout");
           yield* mirror("stderr");
 
-          // Readiness: a URL appears (or the budget elapses: 5s, or
-          // `waitForUrl`), unless the process exits first — an exit before
-          // readiness is a failure.
+          // Readiness: a localhost/IP URL appears, or 5 seconds pass and we
+          // settle with any other URL we saw (`undefined` with none). With
+          // `waitForUrl`, those 5 seconds start only once some URL appears,
+          // so the URL is required and there is no deadline: the only other
+          // way out is the process exiting, which is a failure.
+          const awaitLocalUrl = Deferred.await(deferred).pipe(
+            Effect.timeoutOrElse({
+              duration: "5 seconds",
+              orElse: () => Effect.succeed(fallbackUrl),
+            }),
+          );
           const url = yield* Effect.raceAllFirst([
-            Deferred.await(deferred).pipe(
-              Effect.timeoutOrElse({
-                duration: urlWait ?? "5 seconds",
-                // No localhost/IP URL appeared in time — fall back to any
-                // other URL we saw. With none, the URL is best-effort
-                // (`undefined`) unless `waitForUrl` made it required.
-                orElse: () =>
-                  fallbackUrl !== undefined || urlWait === undefined
-                    ? Effect.succeed(fallbackUrl)
-                    : makeCommandError(
-                        props,
-                        new UrlNotFound({ timeout: Duration.format(urlWait) }),
-                      ),
-              }),
-            ),
+            props.waitForUrl
+              ? Deferred.await(anyUrl).pipe(Effect.andThen(awaitLocalUrl))
+              : awaitLocalUrl,
             child.exitCode.pipe(
               Effect.mapError((error) => makeCommandError(props, error.reason)),
               Effect.flatMap((exitCode) =>
