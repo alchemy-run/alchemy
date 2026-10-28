@@ -369,6 +369,14 @@ describe.skipIf(!!process.env.FAST)(
                 }),
               );
             expect(hostRoles(policy)).toEqual(["roles/bigtable.editor"]);
+
+            // A restored table comes back deletion-protected, which would block
+            // deleting the instance on destroy.
+            yield* bigtable.patchProjectsInstancesTables({
+              name: trashName,
+              updateMask: "deletionProtection",
+              body: { deletionProtection: false },
+            });
           }),
         live,
       );
