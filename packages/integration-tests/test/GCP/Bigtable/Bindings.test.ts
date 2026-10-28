@@ -3,6 +3,7 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as bigtable from "@distilled.cloud/gcp/bigtableadmin_v2";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { expectAuditEntry } from "../auditLogs.ts";
@@ -15,6 +16,8 @@ import BigtableBindingsHost, {
   Nodes,
   Rows,
 } from "./fixtures/bindings-host.ts";
+
+class StillExists extends Data.TaggedError("StillExists") {}
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -182,6 +185,16 @@ describe.skipIf(!!process.env.FAST)(
                 schedule: Schedule.spaced("5 seconds"),
                 times: 24,
               }),
+            );
+            // Deletion is asynchronous: wait until the table reads as gone.
+            yield* bigtable.getProjectsInstancesTables({ name: genTableName }).pipe(
+              Effect.flatMap(() => Effect.fail(new StillExists())),
+              Effect.retry({
+                while: (error) => error._tag === "StillExists",
+                schedule: Schedule.spaced("3 seconds"),
+                times: 40,
+              }),
+              Effect.catchTag("NotFound", () => Effect.void),
             );
             const undeleted = yield* expectProbe<{ name?: string }>(baseUrl, "undelete");
             expect(undeleted.name).toBeDefined();
