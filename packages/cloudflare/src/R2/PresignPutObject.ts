@@ -20,6 +20,14 @@ export interface PresignPutObjectRequest {
    * mismatch. Omit to leave the Content-Type unconstrained.
    */
   contentType?: string;
+  /**
+   * `Content-Length` in bytes signed into the URL. The uploader must send a
+   * body of exactly this size or R2 rejects the upload with a signature
+   * mismatch. R2 has no presigned POST policies, so this is how a server
+   * caps upload size: check the size the client declares before presigning.
+   * Omit to leave the size unconstrained.
+   */
+  contentLength?: number;
 }
 
 /**
@@ -55,6 +63,15 @@ export interface PresignPutObjectRequest {
  *   key: "uploads/avatar.png",
  *   expiresIn: 300, // valid for 5 minutes
  *   contentType: "image/png", // uploader must send Content-Type: image/png
+ * });
+ * ```
+ *
+ * **Example:** Cap the upload size
+ * ```typescript
+ * // `size` is the byte size the client declared; reject it above your limit first
+ * const url = yield* presignPut({
+ *   key: "uploads/avatar.png",
+ *   contentLength: size, // uploader must send exactly `size` bytes
  * });
  * ```
  *
