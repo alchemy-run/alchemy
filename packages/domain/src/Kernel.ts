@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
+import * as CatchUp from "./CatchUp.ts";
 import * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
 import { DefinitionError, judge, settle } from "./internal.ts";
@@ -145,6 +146,8 @@ export interface Kernel {
     event: { readonly _tag: string },
     seq: number,
   ) => ReadonlyArray<string>;
+  /** Every view and projection in the model, by `CatchUp.targetId`: what catches up. */
+  readonly targets: ReadonlyArray<string>;
   /** The projection that writes a stream, if any. */
   readonly writerOf: (stream: DomainStream.Any) => Projection.Any | undefined;
   readonly decodeStreamEntry: (entry: StreamEntry) => DomainStream.Entry<unknown, string>;
@@ -560,13 +563,15 @@ const build = (
     }
   }
 
-  /** Every delivery an event produces. */
+  /** Every delivery an event produces; only to the consumers in `only`, if given. */
   const fanOut = (
     input: RouteInput,
     delivery: Omit<Delivery, "target" | "key" | "routes">,
+    only?: ReadonlySet<string>,
   ): Array<Delivery> => {
     const out: Array<Delivery> = [];
     for (const subscriber of subscribers.get(delivery.origin)?.get(delivery.tag) ?? []) {
+      if (only && !only.has(CatchUp.targetId(subscriber))) continue;
       for (const { key, routes } of subscriber.route(input)) {
         out.push({
           ...delivery,
@@ -577,6 +582,41 @@ const build = (
       }
     }
     return out;
+  };
+
+  /** The views and projections that consume a source: the consumers it catches up. */
+  const targetsOf = (source: string): ReadonlyArray<string> => {
+    const out = new Set<string>();
+    for (const list of subscribers.get(source)?.values() ?? []) {
+      for (const subscriber of list) {
+        if (subscriber.kind !== "policy") out.add(CatchUp.targetId(subscriber));
+      }
+    }
+    return [...out].sort();
+  };
+
+  /**
+   * Replay stored rows to the consumers lagging behind them, in order, up to
+   * the first row committed at or after `until`.
+   */
+  const replay = <Row>(
+    targets: ReadonlyArray<string>,
+    input: CatchUp.ReplayInput<Row>,
+    seqOf: (row: Row) => number,
+    atOf: (row: Row) => number,
+    route: (row: Row, only: ReadonlySet<string>) => ReadonlyArray<Delivery>,
+  ): CatchUp.ReplayResult => {
+    const routed: Record<string, number> = { ...input.routed };
+    const deliveries: Array<Delivery> = [];
+    for (const row of input.rows) {
+      const seq = seqOf(row);
+      const lagging = new Set(targets.filter((target) => (routed[target] ?? 0) < seq));
+      if (lagging.size === 0) continue;
+      if (atOf(row) >= input.until) return { deliveries, routed, next: atOf(row) };
+      deliveries.push(...route(row, lagging));
+      for (const target of lagging) routed[target] = seq;
+    }
+    return { deliveries, routed, next: undefined };
   };
 
   const viewCodecs = new Map<string, JsonCodec>();
@@ -656,9 +696,42 @@ const build = (
       });
       return { next, events, deliveries };
     };
+    const targets = targetsOf(aggregate.aggregateName);
     return {
       name: aggregate.aggregateName,
       deliver,
+      targets,
+      replay: (input) => {
+        const id = decodeId(input.id) as string;
+        const stream = `${aggregate.aggregateName}/${id}`;
+        const sourceRef = Aggregate.makeRef(aggregate, id);
+        return replay(
+          targets,
+          input,
+          (row) => row.envelope.seq,
+          (row) => row.envelope.at,
+          (row, only) =>
+            fanOut(
+              {
+                event: decodeEvent(row.event),
+                source: sourceRef,
+                envelope: decodeEnvelope(row.envelope),
+                state: undefined,
+                stream,
+              },
+              {
+                source: stream,
+                seq: row.envelope.seq,
+                origin: aggregate.aggregateName,
+                tag: (row.event as { readonly _tag: string })._tag,
+                event: row.event,
+                envelope: row.envelope,
+                history: true,
+              },
+              only,
+            ),
+        );
+      },
       seed: (input) => {
         const id = decodeId(input.id) as string;
         const state = codecs.state.decode(input.state ?? codecs.initial);
@@ -833,9 +906,42 @@ const build = (
     const emit = handlers(def.emit);
     const encodeState = (state: unknown) =>
       codec && state !== null && state !== undefined ? codec.encode(state) : null;
+    const targets = targetsOf(view.viewName);
     return {
       name: view.viewName,
       deliver,
+      targets,
+      replay: (input) => {
+        const keyRef = Key.refOf(def.key, input.id);
+        const stream = `${view.viewName}/${input.id}`;
+        return replay(
+          targets,
+          input,
+          (row) => row.seq,
+          (row) => row.envelope.at,
+          (row, only) =>
+            fanOut(
+              {
+                event: decodeEvent(row.event),
+                source: keyRef,
+                envelope: decodeEnvelope(row.envelope),
+                state: codec && row.state !== null ? codec.decode(row.state) : null,
+                stream,
+              },
+              {
+                source: stream,
+                seq: row.seq,
+                origin: view.viewName,
+                tag: (row.event as { readonly _tag: string })._tag,
+                event: row.event,
+                envelope: row.envelope,
+                state: row.state,
+                history: true,
+              },
+              only,
+            ),
+        );
+      },
       observe: (key, batch) => (effect) => {
         if (!telemetry.views || batch.length === 0 || batch.every((d) => d.history)) return effect;
         const traces = batch.flatMap((d) => (d.envelope.trace ? [d.envelope.trace] : []));
@@ -1085,6 +1191,10 @@ const build = (
     policyKit,
     projectionInputs,
     projectionKeys,
+    targets: [
+      ...definitions.views.map((view) => `view:${view.viewName}`),
+      ...definitions.projections.map((projection) => `projection:${projection.projectionName}`),
+    ].sort(),
     writerOf: (stream) => writers.get(stream.streamName),
     decodeStreamEntry: (entry) => ({
       event: decodeEvent(entry.event),

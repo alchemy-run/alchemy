@@ -1,3 +1,4 @@
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
@@ -6,6 +7,7 @@ import * as SubscriptionRef from "effect/SubscriptionRef";
 import { WorkflowEngine } from "effect/workflow";
 import type * as Aggregate from "./Aggregate.ts";
 import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "./Aggregate.ts";
+import { earliest, laggingFrom, routeLive, type Routed } from "./CatchUp.ts";
 import * as InMemoryWorkflows from "./InMemoryWorkflows.ts";
 import {
   type Accepted,
@@ -34,6 +36,13 @@ export interface Options {
   readonly manual?: boolean;
   /** Clock used to time-stamp commands. Defaults to `Date.now`. */
   readonly now?: () => number;
+  /**
+   * How much history each catch-up round replays (see `CatchUp`): a view or
+   * projection added after its sources recorded events receives them a window
+   * at a time, so events from many instances arrive roughly in the order they
+   * happened. Defaults to one hour.
+   */
+  readonly catchUpWindow?: Duration.Input;
 }
 
 /**
@@ -95,6 +104,37 @@ export const make = (
   const commits: Array<{ aggregate: string; id: string; index: number }> = [];
   // Scheduled commands by `aggregate/id/commandId`, so rescheduling replaces.
   const timers = new Map<string, Timer>();
+  // Storage by entity, kept when a model is built again on this platform (a redeploy).
+  const storage = new Map<string, unknown>();
+  const stored = <T>(key: string, make: () => T): T => {
+    if (!storage.has(key)) storage.set(key, make());
+    return storage.get(key) as T;
+  };
+  // Every source's instances and how to catch one up, as of the latest build.
+  const sources = new Map<
+    string,
+    {
+      readonly ids: () => ReadonlyArray<string>;
+      readonly catchUp: (id: string, until: number) => Effect.Effect<number | undefined>;
+    }
+  >();
+  const window = Duration.toMillis(Duration.fromInputUnsafe(options.catchUpWindow ?? "1 hour"));
+  /**
+   * Replay history to lagging consumers in rounds: each round replays every
+   * instance's events before `until`, and the next starts a window past the
+   * earliest event left. Its deliveries queue behind it, round by round.
+   */
+  const sweep: Effect.Effect<void> = Effect.gen(function* () {
+    let until = Number.NEGATIVE_INFINITY;
+    while (true) {
+      let next: number | undefined;
+      for (const source of sources.values()) {
+        for (const id of source.ids()) next = earliest(next, yield* source.catchUp(id, until));
+      }
+      if (next === undefined) return;
+      until = next + window;
+    }
+  });
 
   /** Fire every timer that is due on the platform's clock; each removes itself. */
   const fireDue: Effect.Effect<void> = Effect.suspend(() => {
@@ -191,20 +231,24 @@ export const make = (
   const platform = Platform.of({
     aggregate: (_aggregate, kit) =>
       Effect.sync(() => {
-        const instances = new Map<
-          string,
-          {
-            state: Json | null;
-            version: number;
-            readonly receipts: Map<string, SendResult>;
-            /** Ids cancelled and not scheduled again since. */
-            readonly cancelled: Set<string>;
-            readonly events: Array<StoredEvent>;
-          }
-        >();
-        const lock = Semaphore.makeUnsafe(1);
-        // The latest version of each instance that anyone watches.
-        const versions = new Map<string, SubscriptionRef.SubscriptionRef<number>>();
+        const { instances, lock, versions } = stored(`aggregate:${kit.name}`, () => ({
+          instances: new Map<
+            string,
+            {
+              state: Json | null;
+              version: number;
+              readonly receipts: Map<string, SendResult>;
+              /** Ids cancelled and not scheduled again since. */
+              readonly cancelled: Set<string>;
+              readonly events: Array<StoredEvent>;
+              /** How far its events were routed to each view and projection. */
+              routed: Routed | undefined;
+            }
+          >(),
+          lock: Semaphore.makeUnsafe(1),
+          // The latest version of each instance that anyone watches.
+          versions: new Map<string, SubscriptionRef.SubscriptionRef<number>>(),
+        }));
         const versionOf = (id: string) =>
           Effect.suspend(() => {
             const found = versions.get(id);
@@ -229,6 +273,7 @@ export const make = (
                 receipts: new Map(),
                 cancelled: new Set(),
                 events: [],
+                routed: undefined,
               }),
             );
           return found;
@@ -252,6 +297,14 @@ export const make = (
               link: meta.link,
             });
             if (result._tag === "Rejected") return result satisfies SendResult;
+            const live = routeLive(
+              kit.targets,
+              current.routed,
+              current.version,
+              result.version,
+              result.deliveries,
+            );
+            current.routed = live.routed;
             current.state = result.state;
             current.version = result.version;
             for (let i = 0; i < result.events.length; i++)
@@ -268,9 +321,28 @@ export const make = (
             };
             current.receipts.set(meta.commandId, sent);
             yield* announce(id);
-            yield* enqueue(result.deliveries, kit.deliver);
+            yield* enqueue(live.deliveries, kit.deliver);
             return sent;
           });
+        sources.set(kit.name, {
+          ids: () => [...instances.keys()],
+          catchUp: (id, until) =>
+            lock.withPermits(1)(
+              Effect.suspend(() => {
+                const current = instance(id);
+                const from = laggingFrom(kit.targets, current.routed, current.version);
+                if (from === undefined) return Effect.succeed(undefined);
+                const result = kit.replay({
+                  id,
+                  routed: current.routed!,
+                  rows: current.events.filter((event) => event.envelope.seq > from),
+                  until,
+                });
+                current.routed = result.routed;
+                return enqueue(result.deliveries, kit.deliver).pipe(Effect.as(result.next));
+              }),
+            ),
+        });
         const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
           lock.withPermits(1)(commit(id, command, meta));
         const executed = (id: string, commandId: string) => instance(id).receipts.has(commandId);
@@ -349,10 +421,18 @@ export const make = (
                   commandId: `seed:${id}:${current.version}`,
                   now: now(),
                 });
+                const live = routeLive(
+                  kit.targets,
+                  current.routed,
+                  current.version,
+                  result.version,
+                  result.deliveries,
+                );
+                current.routed = live.routed;
                 current.state = result.state;
                 current.version = result.version;
                 current.events.push(...result.events);
-                return announce(id).pipe(Effect.andThen(enqueue(result.deliveries, kit.deliver)));
+                return announce(id).pipe(Effect.andThen(enqueue(live.deliveries, kit.deliver)));
               }),
             ),
         };
@@ -360,16 +440,20 @@ export const make = (
 
     view: (_view, kit) =>
       Effect.sync(() => {
-        const keys = new Map<
-          string,
-          {
-            readonly snapshot: SubscriptionRef.SubscriptionRef<ViewSnapshot>;
-            readonly entries: SubscriptionRef.SubscriptionRef<ReadonlyArray<ViewEntry>>;
-            /** The key's immutable input log: every delivery it applied, in order. */
-            readonly inputs: Array<Delivery>;
-          }
-        >();
-        const lock = Semaphore.makeUnsafe(1);
+        const { keys, lock } = stored(`view:${kit.name}`, () => ({
+          keys: new Map<
+            string,
+            {
+              readonly snapshot: SubscriptionRef.SubscriptionRef<ViewSnapshot>;
+              readonly entries: SubscriptionRef.SubscriptionRef<ReadonlyArray<ViewEntry>>;
+              /** The key's immutable input log: every delivery it applied, in order. */
+              readonly inputs: Array<Delivery>;
+              /** How far its entries were routed to each view and projection. */
+              routed: Routed | undefined;
+            }
+          >(),
+          lock: Semaphore.makeUnsafe(1),
+        }));
         const get = (key: string) =>
           Effect.suspend(() => {
             const found = keys.get(key);
@@ -378,10 +462,36 @@ export const make = (
               snapshot: SubscriptionRef.make(emptySnapshot),
               entries: SubscriptionRef.make<ReadonlyArray<ViewEntry>>([]),
             }).pipe(
-              Effect.map((created) => ({ ...created, inputs: [] as Array<Delivery> })),
+              Effect.map((created) => ({
+                ...created,
+                inputs: [] as Array<Delivery>,
+                routed: undefined as Routed | undefined,
+              })),
               Effect.tap((created) => Effect.sync(() => keys.set(key, created))),
             );
           });
+        sources.set(kit.name, {
+          ids: () => [...keys.keys()],
+          catchUp: (key, until) =>
+            lock.withPermits(1)(
+              Effect.gen(function* () {
+                const current = yield* get(key);
+                const snapshot = yield* SubscriptionRef.get(current.snapshot);
+                const from = laggingFrom(kit.targets, current.routed, snapshot.seq);
+                if (from === undefined) return undefined;
+                const entries = yield* SubscriptionRef.get(current.entries);
+                const result = kit.replay({
+                  id: key,
+                  routed: current.routed!,
+                  rows: entries.filter((entry) => entry.seq > from),
+                  until,
+                });
+                current.routed = result.routed;
+                yield* enqueue(result.deliveries, kit.deliver);
+                return result.next;
+              }),
+            ),
+        });
         return {
           receive: (key, deliveries) =>
             lock.withPermits(1)(
@@ -403,8 +513,16 @@ export const make = (
                     ...result.entries,
                   ]);
                 }
+                const live = routeLive(
+                  kit.targets,
+                  current.routed,
+                  before.seq,
+                  result.snapshot.seq,
+                  result.downstream,
+                );
+                current.routed = live.routed;
                 yield* SubscriptionRef.set(current.snapshot, result.snapshot);
-                yield* enqueue(result.downstream, kit.deliver);
+                yield* enqueue(live.deliveries, kit.deliver);
               }).pipe(kit.observe(key, deliveries)),
             ),
           read: (key) =>
@@ -443,7 +561,7 @@ export const make = (
           timer: boolean;
           readonly lock: Semaphore.Semaphore;
         }
-        const partitions = new Map<string, Partition>();
+        const partitions = stored(`projection:${kit.name}`, () => new Map<string, Partition>());
         const partition = (key: string) => {
           let found = partitions.get(key);
           if (!found) {
@@ -534,14 +652,16 @@ export const make = (
 
     stream: (_stream, _kit) =>
       Effect.sync(() => {
-        const keys = new Map<
-          string,
-          {
-            readonly meta: SubscriptionRef.SubscriptionRef<StreamMeta>;
-            readonly entries: SubscriptionRef.SubscriptionRef<ReadonlyArray<StreamEntry>>;
-          }
-        >();
-        const lock = Semaphore.makeUnsafe(1);
+        const { keys, lock } = stored(`stream:${_kit.name}`, () => ({
+          keys: new Map<
+            string,
+            {
+              readonly meta: SubscriptionRef.SubscriptionRef<StreamMeta>;
+              readonly entries: SubscriptionRef.SubscriptionRef<ReadonlyArray<StreamEntry>>;
+            }
+          >(),
+          lock: Semaphore.makeUnsafe(1),
+        }));
         const get = (key: string) =>
           Effect.suspend(() => {
             const found = keys.get(key);
@@ -621,7 +741,7 @@ export const make = (
 
     policy: (_policy, kit) =>
       Effect.sync(() => {
-        const locks = new Map<string, Semaphore.Semaphore>();
+        const locks = stored(`policy:${kit.name}`, () => new Map<string, Semaphore.Semaphore>());
         const lockFor = (key: string) => {
           let found = locks.get(key);
           if (!found) locks.set(key, (found = Semaphore.makeUnsafe(1)));
@@ -646,6 +766,8 @@ export const make = (
             }),
         };
       }),
+
+    start: () => enqueueWork([sweep]),
   });
 
   return {

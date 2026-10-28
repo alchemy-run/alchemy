@@ -4,6 +4,7 @@ import type * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
+import type { ReplayInput, ReplayResult } from "./CatchUp.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -60,7 +61,10 @@ export interface Delivery {
   readonly envelope: EnvelopeJson;
   /** For an event from a view: the view's encoded state after it. */
   readonly state?: Json | null;
-  /** Seeded history (story `given`): views and projections apply it, policies ignore it. */
+  /**
+   * History: seeded (story `given`) or replayed to a consumer added after the
+   * event (see `CatchUp`). Views and projections apply it, policies ignore it.
+   */
   readonly history?: boolean;
 }
 
@@ -169,6 +173,10 @@ export interface AggregateKit {
   readonly seed: (input: SeedInput) => SeedResult;
   /** Route a delivery produced by `handle` to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
+  /** The views and projections that consume this aggregate, by `CatchUp.targetId`. */
+  readonly targets: ReadonlyArray<string>;
+  /** Route stored events to the consumers lagging behind them (see `CatchUp`). */
+  readonly replay: (input: ReplayInput<StoredEvent>) => ReplayResult;
   /**
    * What a subscriber of instance `id` receives, given its current state and
    * the events committed since (at least those after the subscription's cursor).
@@ -317,6 +325,10 @@ export interface ViewKit {
   };
   /** Route a downstream delivery to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
+  /** The views and projections that consume this view, by `CatchUp.targetId`. */
+  readonly targets: ReadonlyArray<string>;
+  /** Route emitted entries to the consumers lagging behind them (see `CatchUp`). */
+  readonly replay: (input: ReplayInput<ViewEntry>) => ReplayResult;
   /** Trace an `apply` of these deliveries to `key` (wrap the work that applies and persists them). */
   readonly observe: (
     key: string,
@@ -521,5 +533,11 @@ export class Platform extends Context.Service<
       kit: ProjectionKit,
     ) => Effect.Effect<ProjectionStore>;
     readonly stream: (stream: DomainStream.Any, kit: StreamKit) => Effect.Effect<StreamStore>;
+    /**
+     * Called once every store is built. A platform that keeps events across
+     * deploys starts catching up the views and projections in `targets` (every
+     * consumer in the model, by `CatchUp.targetId`) that are new to it.
+     */
+    readonly start?: (targets: ReadonlyArray<string>) => Effect.Effect<void>;
   }
 >()("alchemy/Domain/Platform") {}

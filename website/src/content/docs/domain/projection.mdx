@@ -13,7 +13,7 @@ It shares the view's routing and ordering, and differs from a [policy](/domain/p
 
 A view answers one question about one key, and the model serves it. That covers most screens. Some questions don't fit that shape. An accountant wants every money movement across every account this quarter, filtered by amount and sorted by date. A search box wants to find a customer by any part of their name. A data team wants the whole history in their warehouse. Each needs a store built for its kind of query, a SQL table, a search index, a warehouse, and each is a store you run.
 
-A projection is how events reach a store like that. It's still a read model in the CQRS sense: built from events, and never the source of truth. If the table is lost or its schema changes, you empty it and replay the projection over the history to build it again.
+A projection is how events reach a store like that. It's still a read model in the CQRS sense: built from events, and never the source of truth. Add one to a model that already has history, and it receives that history first, so its store starts complete (see [Consumers added later receive the history](/domain/model#consumers-added-later-receive-the-history)).
 
 <DAG
   nodes={[

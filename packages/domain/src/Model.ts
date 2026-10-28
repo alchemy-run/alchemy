@@ -415,6 +415,8 @@ const build = <A, E, R>(
         yield* platform.policy(policy, kernel.policyKit(policy, handler)),
       );
     }
+    // Every store is built: catch up the consumers that are new to the platform.
+    if (platform.start) yield* platform.start(kernel.targets);
 
     return Context.add(hosts, Internals, {
       kernel,

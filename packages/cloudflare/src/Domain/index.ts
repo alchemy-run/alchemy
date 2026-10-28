@@ -1,5 +1,6 @@
 import type * as Aggregate from "@alchemy.run/domain/Aggregate";
 import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "@alchemy.run/domain/Aggregate";
+import { earliest, laggingFrom, routeLive, type Routed } from "@alchemy.run/domain/CatchUp";
 import { isAfter, mergeCheckpoints } from "@alchemy.run/domain/InMemory";
 import { captureContext } from "@alchemy.run/domain/internal";
 import {
@@ -27,6 +28,7 @@ import {
 import { makeCallback } from "alchemy/Callback";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Headers from "effect/http/Headers";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -193,6 +195,8 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
         }),
       /** Process staged rows now, in the background, keeping the instance alive until done. */
       kick: state.waitUntil(drain.pipe(Effect.ignoreCause)),
+      /** Process staged rows now, and wait (unless another drain holds the lease). */
+      flush: drain,
     };
   });
 
@@ -332,11 +336,433 @@ const connectTo = (namespace: Namespace) => (key: string, subscription: Subscrip
     return response;
   });
 
-const aggregateObject = (kit: AggregateKit) =>
+// ---------------------------------------------------------------- catch-up
+
+/** Events (or view entries) an instance replays per transaction while catching up. */
+const CATCH_UP_PAGE = 100;
+
+/** Rows an instance replays per `catchUp` call; the directory calls it again for the rest. */
+const CATCH_UP_BUDGET = 500;
+
+/**
+ * How much history each catch-up round replays: a consumer added later sees
+ * many instances' events roughly in the order they happened, a window at a time.
+ */
+const CATCH_UP_WINDOW_MS = 60 * 60 * 1000;
+
+/** What a `catchUp` call left: the earliest event past the round, and whether it ran out of budget. */
+interface CatchUpResult {
+  readonly next: number | undefined;
+  readonly pending: boolean;
+}
+
+/**
+ * Replay an instance's history to its lagging consumers up to a round's
+ * `until`, a page per transaction, delivering each page before the next.
+ * `page` reads the rows after the lowest lagging cursor and replays them, or
+ * answers `undefined` when nothing lags.
+ */
+const catchUp = <E1, R1, E2, R2, E3, R3>(
+  outbox: {
+    readonly stage: (rows: ReadonlyArray<Delivery>) => Effect.Effect<void, E1, R1>;
+    readonly flush: Effect.Effect<void, E2, R2>;
+  },
+  model: ReadonlySet<string>,
+  targets: ReadonlyArray<string>,
+  page: (routed: Routed | undefined) => Effect.Effect<
+    | {
+        readonly version: number;
+        readonly rows: number;
+        readonly result: {
+          readonly deliveries: ReadonlyArray<Delivery>;
+          readonly routed: Routed;
+          readonly next: number | undefined;
+        };
+      }
+    | undefined,
+    E3,
+    R3
+  >,
+) =>
+  Effect.gen(function* () {
+    // Still on the code before the deploy that started the sweep: ask to be called again.
+    if (!targets.every((target) => model.has(target)))
+      return { next: undefined, pending: true } satisfies CatchUpResult;
+    const state = yield* DurableObjectState;
+    let replayed = 0;
+    while (true) {
+      const step = yield* exclusively(
+        Effect.gen(function* () {
+          const replay = yield* page(yield* state.storage.get<Routed>("routed"));
+          if (replay === undefined) return { done: true, next: undefined, rows: 0 };
+          yield* state.storage.transaction(
+            Effect.gen(function* () {
+              yield* state.storage.put("routed", replay.result.routed);
+              yield* outbox.stage(replay.result.deliveries);
+            }),
+          );
+          return {
+            // Stopped at the round's end, or replayed every row it had.
+            done: replay.result.next !== undefined || replay.rows < CATCH_UP_PAGE,
+            next: replay.result.next,
+            rows: replay.rows,
+          };
+        }),
+      );
+      // Deliver before answering, so a round's events land before the next round's.
+      yield* outbox.flush;
+      replayed += step.rows;
+      if (step.done) return { next: step.next, pending: false } satisfies CatchUpResult;
+      if (replayed >= CATCH_UP_BUDGET)
+        return { next: undefined, pending: true } satisfies CatchUpResult;
+    }
+  });
+
+// ---------------------------------------------------------------- directory
+
+/**
+ * Durable Objects cannot be listed, so every source instance (an aggregate
+ * instance, or a view key) lists itself in a directory when it first commits.
+ * The directory is a tree of objects with a fan-out of 16: an instance's leaf
+ * is the first {@link DIRECTORY_DEPTH} hex digits of a hash of its source and
+ * id, so it is found without a lookup, and a node is created by the first
+ * write to it, then links itself into its parent.
+ *
+ * Catching up a consumer added later runs over the tree in rounds. Each
+ * isolate tells one random node of the model's consumers (`news`); a node
+ * passes news up only the first time it hears it, so each node gets at most
+ * one message per child, and the root starts a sweep. A round goes down the
+ * tree (each node tells its children and catches up its own instances up to
+ * the round's `until`), and reports come back up with the earliest event left.
+ * The root then starts the next round a window past it, until none is left.
+ *
+ * Every step runs in its own alarm (a durable callback), so no call chain is
+ * deeper than one hop and a crash resumes from stored progress. Every message
+ * is idempotent: rounds and reports carry their sweep generation and round.
+ */
+const DIRECTORY_DEPTH = 4;
+
+/** Instances a directory node catches up per alarm, and calls it makes at once. */
+const DIRECTORY_PAGE = 25;
+const DIRECTORY_CONCURRENCY = 5;
+
+/** An instance listed in the directory. */
+interface Registration {
+  readonly source: string;
+  readonly id: string;
+}
+
+/** What an instance needs of the directory. */
+interface Directory {
+  readonly register: (row: Registration) => Effect.Effect<void>;
+}
+
+/** The leaf an instance is listed in: a prefix of the FNV-1a hash of its source and id. */
+const leafOf = ({ source, id }: Registration) => {
+  let hash = 0x811c9dc5;
+  for (const char of `${source}/${id}`) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 0x01000193) >>> 0;
+  }
+  return hash.toString(16).padStart(8, "0").slice(0, DIRECTORY_DEPTH);
+};
+
+const parentOf = (path: string) => path.slice(0, -1);
+
+/** A directory node's progress through the current round of a sweep. */
+interface Sweep {
+  /** Bumped by the root whenever news brings a new consumer: older messages are ignored. */
+  readonly gen: number;
+  readonly round: number;
+  /** Replay events committed before this time, in epoch milliseconds. */
+  readonly until: number;
+  /** The model's consumers when the sweep started: an instance on older code asks to be called again. */
+  readonly targets: ReadonlyArray<string>;
+  /** The children told of this round, and their reports: the earliest event each has left. */
+  readonly children: ReadonlyArray<string>;
+  readonly told: boolean;
+  readonly reports: Readonly<Record<string, number | null>>;
+  /** This node's own instances: the last one listed, those to call again, the earliest event left. */
+  readonly cursor: string | null;
+  readonly listed: boolean;
+  readonly pending: ReadonlyArray<Registration>;
+  readonly earliest: number | null;
+  /** Every own instance has caught up to `until`. */
+  readonly own: boolean;
+  /** The round is reported to the parent (or, at the root, finished). */
+  readonly reported: boolean;
+}
+
+interface DirectoryJob {
+  readonly kind: "link" | "news" | "round" | "report";
+  readonly path: string;
+  /** For `report`: the round reported, as it was when it finished here. */
+  readonly report?: {
+    readonly gen: number;
+    readonly round: number;
+    readonly earliest: number | null;
+  };
+}
+
+/** A directory node, called by its path. */
+interface DirectoryNode {
+  readonly register: (row: Registration) => Effect.Effect<void>;
+  readonly child: (child: string) => Effect.Effect<void>;
+  readonly news: (targets: ReadonlyArray<string>) => Effect.Effect<void>;
+  readonly round: (
+    gen: number,
+    round: number,
+    until: number,
+    targets: ReadonlyArray<string>,
+  ) => Effect.Effect<void>;
+  readonly report: (
+    gen: number,
+    round: number,
+    child: string,
+    earliest: number | null,
+  ) => Effect.Effect<void>;
+}
+
+const earliestOf = (values: ReadonlyArray<number | null | undefined>): number | null =>
+  values.reduce<number | null>(
+    (a, b) => (b === null || b === undefined ? a : (earliest(a ?? undefined, b) ?? null)),
+    null,
+  );
+
+const directoryObject = (deps: {
+  readonly node: (path: string) => DirectoryNode;
+  readonly catchUp: (
+    row: Registration,
+    until: number,
+    targets: ReadonlyArray<string>,
+  ) => Effect.Effect<CatchUpResult>;
+}) =>
+  Effect.gen(function* () {
+    const state = yield* DurableObjectState;
+    return Effect.gen(function* () {
+      const sweepOf = state.storage.get<Sweep>("sweep");
+      const jobs = yield* makeCallback("domain:directory", (job: DirectoryJob) => run(job));
+      // Each step is progress, so a long sweep never exhausts the callback's retry budget.
+      const schedule = (job: DirectoryJob, after: Duration.Input = 0) =>
+        Effect.gen(function* () {
+          const step = ((yield* state.storage.get<number>("step")) ?? 0) + 1;
+          yield* state.storage.put("step", step);
+          yield* jobs.schedule(job.kind, { after, payload: job, progress: step });
+        });
+      /** Link a node into its parent the first time something is written to it. */
+      const link = (path: string) =>
+        Effect.gen(function* () {
+          if (path === "" || (yield* state.storage.get<boolean>("linked"))) return;
+          yield* state.storage.put("linked", true);
+          yield* schedule({ kind: "link", path });
+        });
+      /** Start a round: tell the children, then catch up this node's own instances. */
+      const begin = (
+        path: string,
+        gen: number,
+        round: number,
+        until: number,
+        targets: ReadonlyArray<string>,
+      ) =>
+        Effect.gen(function* () {
+          const children = [...(yield* state.storage.list({ prefix: "c:" })).keys()].map((key) =>
+            key.slice(2),
+          );
+          yield* state.storage.put("sweep", {
+            gen,
+            round,
+            until,
+            targets,
+            children,
+            told: false,
+            reports: {},
+            cursor: null,
+            listed: false,
+            pending: [],
+            earliest: null,
+            own: false,
+            reported: false,
+          } satisfies Sweep);
+          yield* schedule({ kind: "round", path });
+        });
+      /**
+       * A round is done here once the own instances and every child are: report
+       * it to the parent, or at the root start the next round, a window past
+       * the earliest event left, until none is.
+       */
+      const settle = (path: string, sweep: Sweep) =>
+        Effect.gen(function* () {
+          if (sweep.reported || !sweep.own) return;
+          if (sweep.children.some((child) => !(child in sweep.reports))) return;
+          yield* state.storage.put("sweep", { ...sweep, reported: true } satisfies Sweep);
+          const next = earliestOf([sweep.earliest, ...Object.values(sweep.reports)]);
+          if (path !== "") {
+            const report = { gen: sweep.gen, round: sweep.round, earliest: next };
+            return yield* schedule({ kind: "report", path, report });
+          }
+          if (next !== null)
+            yield* begin(
+              path,
+              sweep.gen,
+              sweep.round + 1,
+              next + CATCH_UP_WINDOW_MS,
+              sweep.targets,
+            );
+        });
+      /** Apply `update` to the sweep if it is still the round `sweep` was read in. */
+      const update = (path: string, sweep: Sweep, update: (sweep: Sweep) => Sweep) =>
+        exclusively(
+          Effect.gen(function* () {
+            const latest = yield* sweepOf;
+            if (!latest || latest.gen !== sweep.gen || latest.round !== sweep.round) return;
+            const next = update(latest);
+            yield* state.storage.put("sweep", next);
+            yield* settle(path, next);
+            return next;
+          }),
+        );
+      /** One step of a round: tell the children, then catch up a page of own instances. */
+      const step = (path: string) =>
+        Effect.gen(function* () {
+          let sweep = yield* sweepOf;
+          if (!sweep || sweep.reported) return;
+          if (!sweep.told) {
+            const { gen, round, until, targets } = sweep;
+            yield* Effect.forEach(
+              sweep.children,
+              (child) => deps.node(child).round(gen, round, until, targets),
+              { concurrency: DIRECTORY_CONCURRENCY, discard: true },
+            );
+            const told = yield* update(path, sweep, (s) => ({ ...s, told: true }));
+            if (!told) return;
+            sweep = told;
+          }
+          if (sweep.own) return;
+          const listed =
+            sweep.pending.length > 0
+              ? []
+              : [
+                  ...(yield* state.storage.list<Registration>({
+                    prefix: "i:",
+                    ...(sweep.cursor === null ? {} : { startAfter: sweep.cursor }),
+                    limit: DIRECTORY_PAGE,
+                  })).entries(),
+                ];
+          const batch = sweep.pending.length > 0 ? sweep.pending : listed.map(([, row]) => row);
+          const { until, targets } = sweep;
+          const results = yield* Effect.forEach(
+            batch,
+            (row) =>
+              deps.catchUp(row, until, targets).pipe(Effect.map((result) => ({ row, result }))),
+            { concurrency: DIRECTORY_CONCURRENCY },
+          );
+          const pending = results.filter(({ result }) => result.pending).map(({ row }) => row);
+          const next = yield* update(path, sweep, (s) => {
+            const exhausted = s.pending.length > 0 ? s.listed : listed.length < DIRECTORY_PAGE;
+            return {
+              ...s,
+              cursor: listed.length > 0 ? listed[listed.length - 1]![0] : s.cursor,
+              listed: exhausted,
+              pending,
+              earliest: earliestOf([s.earliest, ...results.map(({ result }) => result.next)]),
+              own: exhausted && pending.length === 0,
+            };
+          });
+          // Instances asked to be called again: back off past the ~20s a Durable Object must
+          // sit idle before it leaves the code it ran before a deploy, so calls don't keep it there.
+          if (next && !next.own)
+            yield* schedule({ kind: "round", path }, sweep.pending.length > 0 ? "30 seconds" : 0);
+        });
+      const run = (
+        job: DirectoryJob,
+      ): Effect.Effect<void, unknown, DurableObjectState | RuntimeContext> =>
+        Effect.gen(function* () {
+          const parent = deps.node(parentOf(job.path));
+          if (job.kind === "link") return yield* parent.child(job.path);
+          if (job.kind === "news")
+            return yield* parent.news((yield* state.storage.get<Array<string>>("known")) ?? []);
+          if (job.kind === "round") return yield* step(job.path);
+          if (job.report) {
+            const { gen, round, earliest } = job.report;
+            yield* parent.report(gen, round, job.path, earliest);
+          }
+        });
+      return {
+        register: (path: string, row: Registration) =>
+          reportDefects(
+            exclusively(
+              Effect.gen(function* () {
+                yield* state.storage.put(`i:${row.source}:${row.id}`, row);
+                yield* link(path);
+              }),
+            ),
+          ),
+        child: (path: string, child: string) =>
+          reportDefects(
+            exclusively(
+              Effect.gen(function* () {
+                yield* state.storage.put(`c:${child}`, true);
+                yield* link(path);
+              }),
+            ),
+          ),
+        news: (path: string, targets: ReadonlyArray<string>) =>
+          reportDefects(
+            exclusively(
+              Effect.gen(function* () {
+                const known = (yield* state.storage.get<Array<string>>("known")) ?? [];
+                const fresh = targets.filter((target) => !known.includes(target));
+                if (fresh.length === 0) return;
+                yield* state.storage.put("known", [...known, ...fresh]);
+                if (path !== "") return yield* schedule({ kind: "news", path });
+                // A new consumer: a new sweep, from a probe round that only finds the earliest event.
+                yield* begin(path, ((yield* sweepOf)?.gen ?? 0) + 1, 0, 0, targets);
+              }),
+            ),
+          ),
+        round: (
+          path: string,
+          gen: number,
+          round: number,
+          until: number,
+          targets: ReadonlyArray<string>,
+        ) =>
+          reportDefects(
+            exclusively(
+              Effect.gen(function* () {
+                const sweep = yield* sweepOf;
+                if (sweep && (sweep.gen > gen || (sweep.gen === gen && sweep.round >= round)))
+                  return;
+                yield* begin(path, gen, round, until, targets);
+              }),
+            ),
+          ),
+        report: (path: string, gen: number, round: number, child: string, at: number | null) =>
+          reportDefects(
+            exclusively(
+              Effect.gen(function* () {
+                const sweep = yield* sweepOf;
+                if (!sweep || sweep.gen !== gen || sweep.round !== round) return;
+                const next = { ...sweep, reports: { ...sweep.reports, [child]: at } };
+                yield* state.storage.put("sweep", next);
+                yield* settle(path, next);
+              }),
+            ),
+          ),
+      };
+    });
+  });
+
+const aggregateObject = (
+  kit: AggregateKit,
+  directory: Directory,
+  model: () => ReadonlySet<string>,
+) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
       const outbox = yield* queue<Delivery>("outbox", kit.deliver);
+      const registrations = yield* queue<Registration>("register", directory.register);
       const currentMeta = state.storage
         .get<{ state: Json | null; version: number }>("meta")
         .pipe(Effect.map((meta) => meta ?? { state: null, version: 0 }));
@@ -369,6 +795,14 @@ const aggregateObject = (kit: AggregateKit) =>
             link: meta.link,
           });
           if (result._tag === "Rejected") return { sent: result as SendResult, kick: false };
+          const live = routeLive(
+            kit.targets,
+            yield* state.storage.get<Routed>("routed"),
+            current.version,
+            result.version,
+            result.deliveries,
+          );
+          const unregistered = !(yield* state.storage.get<boolean>("registered"));
           const sent: SendResult = {
             _tag: "Accepted",
             receipt: {
@@ -388,9 +822,16 @@ const aggregateObject = (kit: AggregateKit) =>
                 version: result.version,
               });
               yield* state.storage.put(`receipt:${meta.commandId}`, sent);
-              yield* outbox.stage(result.deliveries);
+              yield* state.storage.put("routed", live.routed);
+              yield* outbox.stage(live.deliveries);
+              // Listed in the directory, so a consumer added later can reach it.
+              if (unregistered) {
+                yield* state.storage.put("registered", true);
+                yield* registrations.stage([{ source: kit.name, id }]);
+              }
             }),
           );
+          if (unregistered) yield* registrations.kick;
           const committed = { state: result.state, version: result.version };
           yield* broadcast(({ key, subscription }) =>
             Effect.gen(function* () {
@@ -403,7 +844,7 @@ const aggregateObject = (kit: AggregateKit) =>
               return yield* kit.push(key, subscription, committed, events);
             }),
           );
-          return { sent, kick: result.deliveries.length > 0 };
+          return { sent, kick: live.deliveries.length > 0 };
         });
       const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
         Effect.gen(function* () {
@@ -485,6 +926,26 @@ const aggregateObject = (kit: AggregateKit) =>
           ),
         state: () => reportDefects(currentMeta),
         after: (after: number) => reportDefects(eventsAfter(after)),
+        catchUp: (id: string, until: number, targets: ReadonlyArray<string>) =>
+          reportDefects(
+            catchUp(outbox, model(), targets, (routed) =>
+              Effect.gen(function* () {
+                const { version } = yield* currentMeta;
+                const from = laggingFrom(kit.targets, routed, version);
+                if (from === undefined) return undefined;
+                const rows = yield* state.storage.list<StoredEvent>({
+                  prefix: "event:",
+                  start: `event:${pad(from + 1)}`,
+                  limit: CATCH_UP_PAGE,
+                });
+                return {
+                  version,
+                  rows: rows.size,
+                  result: kit.replay({ id, routed: routed!, rows: [...rows.values()], until }),
+                };
+              }),
+            ),
+          ),
         // A live read of this instance: accept its WebSocket, then push on every commit.
         fetch: accept((id, subscription) =>
           Effect.gen(function* () {
@@ -499,11 +960,12 @@ const aggregateObject = (kit: AggregateKit) =>
     });
   });
 
-const viewObject = (kit: ViewKit) =>
+const viewObject = (kit: ViewKit, directory: Directory, model: () => ReadonlySet<string>) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
       const outbox = yield* queue<Delivery>("outbox", kit.deliver);
+      const registrations = yield* queue<Registration>("register", directory.register);
       const read = state.storage
         .get<ViewSnapshot>("snapshot")
         .pipe(Effect.map((s) => s ?? emptySnapshot));
@@ -520,6 +982,14 @@ const viewObject = (kit: ViewKit) =>
                   const before = yield* read;
                   const result = kit.apply(key, before, deliveries);
                   if (!result.changed) return false;
+                  const live = routeLive(
+                    kit.targets,
+                    yield* state.storage.get<Routed>("routed"),
+                    before.seq,
+                    result.snapshot.seq,
+                    result.downstream,
+                  );
+                  const unregistered = !(yield* state.storage.get<boolean>("registered"));
                   const rows: Record<string, ViewEntry> = {};
                   for (const entry of result.entries) rows[`entry:${pad(entry.seq)}`] = entry;
                   // The key's immutable input log: every delivery it applied, in order.
@@ -537,9 +1007,16 @@ const viewObject = (kit: ViewKit) =>
                       yield* state.storage.put("in-seq", inputs + accepted.length);
                       yield* state.storage.put("snapshot", result.snapshot);
                       if (result.entries.length > 0) yield* state.storage.put(rows);
-                      yield* outbox.stage(result.downstream);
+                      yield* state.storage.put("routed", live.routed);
+                      yield* outbox.stage(live.deliveries);
+                      // Listed in the directory, so a consumer of this view added later can reach it.
+                      if (unregistered) {
+                        yield* state.storage.put("registered", true);
+                        yield* registrations.stage([{ source: kit.name, id: key }]);
+                      }
                     }),
                   );
+                  if (unregistered) yield* registrations.kick;
                   yield* broadcast(({ key, subscription }) =>
                     Effect.gen(function* () {
                       // A subscriber behind this commit's first entry reads the gap from storage.
@@ -551,7 +1028,7 @@ const viewObject = (kit: ViewKit) =>
                       return yield* kit.push(key, subscription, result.snapshot, entries);
                     }),
                   );
-                  return result.downstream.length > 0;
+                  return live.deliveries.length > 0;
                 }).pipe(kit.observe(key, deliveries)),
               );
               if (kick) yield* outbox.kick;
@@ -559,6 +1036,26 @@ const viewObject = (kit: ViewKit) =>
           ),
         read: () => reportDefects(read),
         after: (after: number) => reportDefects(entriesAfter(after)),
+        catchUp: (key: string, until: number, targets: ReadonlyArray<string>) =>
+          reportDefects(
+            catchUp(outbox, model(), targets, (routed) =>
+              Effect.gen(function* () {
+                const { seq } = yield* read;
+                const from = laggingFrom(kit.targets, routed, seq);
+                if (from === undefined) return undefined;
+                const rows = yield* state.storage.list<ViewEntry>({
+                  prefix: "entry:",
+                  start: `entry:${pad(from + 1)}`,
+                  limit: CATCH_UP_PAGE,
+                });
+                return {
+                  version: seq,
+                  rows: rows.size,
+                  result: kit.replay({ id: key, routed: routed!, rows: [...rows.values()], until }),
+                };
+              }),
+            ),
+          ),
         // A live read of this key: accept its WebSocket, then push on every commit.
         fetch: accept((key, subscription) =>
           Effect.gen(function* () {
@@ -864,17 +1361,76 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
     const inInit = <A, E>(effect: Effect.Effect<A, E, Worker>): Effect.Effect<A, E> =>
       Effect.provide(effect, init);
 
+    // The directory of source instances, and how to catch one up, by source name.
+    const catchUps = new Map<
+      string,
+      (id: string, until: number, targets: ReadonlyArray<string>) => Effect.Effect<CatchUpResult>
+    >();
+    // Every consumer in the model this isolate runs, set once the model is built.
+    let model: ReadonlySet<string> = new Set();
+    const current = () => model;
+    let directoryNamespace: Namespace | undefined;
+    const node = (path: string): DirectoryNode => {
+      const stub = () => directoryNamespace!.getByName(`node:${path}`);
+      return {
+        register: (row) => unwrapDefects(stub().register(path, row)),
+        child: (child) => unwrapDefects(stub().child(path, child)),
+        news: (targets) => unwrapDefects(stub().news(path, targets)),
+        round: (gen, round, until, targets) =>
+          unwrapDefects(stub().round(path, gen, round, until, targets)),
+        report: (gen, round, child, earliest) =>
+          unwrapDefects(stub().report(path, gen, round, child, earliest)),
+      };
+    };
+    directoryNamespace = yield* inInit(
+      declare(
+        "DomainDirectory",
+        directoryObject({
+          node,
+          catchUp: (row, until, targets) =>
+            catchUps.get(row.source)?.(row.id, until, targets) ??
+            // A source no longer in the model has nothing to catch up.
+            Effect.succeed({ next: undefined, pending: false }),
+        }),
+      ),
+    );
+    const directory: Directory = { register: (row) => node(leafOf(row)).register(row) };
+
+    // The first Domain call in each isolate tells one random directory node of
+    // the model's consumers: a deploy that adds one starts its catch-up.
+    let news: Effect.Effect<void> | undefined;
+    const announce = Effect.suspend(() => {
+      const pending = news;
+      if (pending === undefined) return Effect.void;
+      news = undefined;
+      return pending.pipe(
+        Effect.timeout("5 seconds"),
+        Effect.catchCause(() =>
+          Effect.sync(() => {
+            news = pending;
+          }),
+        ),
+      );
+    });
+
     return Platform.of({
       aggregate: (aggregate, kit) =>
         inInit(
           Effect.gen(function* () {
             const namespace = yield* declare(
               `${aggregate.aggregateName}Aggregate`,
-              aggregateObject(kit),
+              aggregateObject(kit, directory, current),
+            );
+            catchUps.set(aggregate.aggregateName, (id, until, targets) =>
+              unwrapDefects(namespace.getByName(id).catchUp(id, until, targets)),
             );
             return {
               send: (id, command, meta) =>
-                unwrapDefects(namespace.getByName(id).send(id, command, meta)),
+                announce.pipe(
+                  Effect.andThen(
+                    unwrapDefects<SendResult>(namespace.getByName(id).send(id, command, meta)),
+                  ),
+                ),
               // The object answers with a tag (RPC loses typed failures); fail with it here.
               schedule: (id, command, meta, due) =>
                 unwrapDefects<{ readonly at: number } | "AlreadyExecuted">(
@@ -910,7 +1466,14 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
                     },
                   ),
                 ),
-              state: (id) => unwrapDefects(namespace.getByName(id).state()),
+              state: (id) =>
+                announce.pipe(
+                  Effect.andThen(
+                    unwrapDefects<{ state: Json | null; version: number }>(
+                      namespace.getByName(id).state(),
+                    ),
+                  ),
+                ),
               // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
               changes: (id) =>
                 Stream.fromEffectSchedule(
@@ -935,9 +1498,17 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       view: (view, kit) =>
         inInit(
           Effect.gen(function* () {
-            const namespace = yield* declare(`${view.viewName}View`, viewObject(kit));
+            const namespace = yield* declare(
+              `${view.viewName}View`,
+              viewObject(kit, directory, current),
+            );
+            catchUps.set(view.viewName, (key, until, targets) =>
+              unwrapDefects(namespace.getByName(key).catchUp(key, until, targets)),
+            );
             const read = (key: string) =>
-              unwrapDefects<ViewSnapshot>(namespace.getByName(key).read());
+              announce.pipe(
+                Effect.andThen(unwrapDefects<ViewSnapshot>(namespace.getByName(key).read())),
+              );
             const after = (key: string, cursor: number) =>
               unwrapDefects<ReadonlyArray<ViewEntry>>(namespace.getByName(key).after(cursor));
             return {
@@ -1017,6 +1588,18 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
             };
           }),
         ),
+      start: (targets) =>
+        Effect.sync(() => {
+          model = new Set(targets);
+          if (targets.length === 0) return;
+          news = Effect.suspend(() => {
+            // A random node two levels down: the burst after a deploy spreads over 256 of them.
+            const path = Math.floor(Math.random() * 256)
+              .toString(16)
+              .padStart(2, "0");
+            return node(path).news(targets);
+          });
+        }),
       policy: (policy, kit) =>
         inInit(
           Effect.gen(function* () {
@@ -1042,6 +1625,11 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
  * and in order per source, and survive restarts. Live reads over
  * `Domain.protocolWebSocket` are WebSockets to the object that owns the key,
  * pushed on every commit; the object hibernates in between.
+ *
+ * A view or projection added in a later deploy receives the history recorded
+ * before it. Every instance lists itself in a directory of Durable Objects,
+ * and the first Domain call in each isolate after the deploy starts a catch-up
+ * that runs over the directory in alarms, an hour of history at a time.
  *
  * ### Hosting on Cloudflare
  * **Example:** A Worker serving an Api

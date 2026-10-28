@@ -143,6 +143,14 @@ And a client that has just deposited reads the summary at that receipt, so it se
 return yield* summaries.query(Account.ref(accountId), { atLeast: receipt });
 ```
 
+## Consumers added later receive the history
+
+Add a view or a projection to a model that already has events, and it receives those events first. You deploy, and it builds itself from the history, with no command and no script to run.
+
+Each aggregate instance remembers how far it has sent its events to each consumer. One that is behind gets the instance's stored events, in order, before any new ones. The history is sent in rounds of one hour of events at a time across every instance, so a consumer fed by many instances sees their events roughly in the order they happened.
+
+Policies never receive history. They act on new events only, so adding a policy never acts on the past again.
+
 ## Order and partitions
 
 Every consumer works the same way underneath. At commit, each event is routed to a key of each consumer that wants it: by default its source instance, or whatever the consumer's `key` and `keyOf` say. Each key has an ordered input log, and its inputs are handled one at a time, or a batch at a time for a projection. Keys run in parallel.
