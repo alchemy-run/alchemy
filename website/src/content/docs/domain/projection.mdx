@@ -164,6 +164,12 @@ Batching changes how a projection runs, not what it means, so it lives on the La
 
 The handler's code is the same either way: it always receives an array. Changing the batch size is pure tuning.
 
+`version` is tuning too. Bump it and the projection runs again over the whole history on the next deploy, for example after its table was lost, or once the handler writes a new shape. Empty or migrate the table first if a replayed write wouldn't overwrite the old row.
+
+```typescript title="packages/domain/src/Ledger/Ledger.projection.ts"
+{ batch: { size: 100, wait: "1 second" }, version: 1 },
+```
+
 ## It never sends commands
 
 A projection's effects stay in its own store. That's what makes it safe to replay: run it again over the same inputs, and the only thing that happens is the same rows are written again.

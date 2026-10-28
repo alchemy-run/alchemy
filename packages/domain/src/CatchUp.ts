@@ -24,8 +24,16 @@ import type { Delivery } from "./Platform.ts";
 /** The last `seq` a source instance routed to each consumer, by {@link targetId}. */
 export type Routed = Readonly<Record<string, number>>;
 
-/** A consumer's id in {@link Routed}: `view:Name` or `projection:Name`. */
-export const targetId = (target: Delivery["target"]): string => `${target.kind}:${target.name}`;
+/**
+ * A consumer's id in {@link Routed}: `view:Name` or `projection:Name`, with
+ * `#<generation>` once it has been rebuilt. A rebuilt consumer is a new one
+ * to its sources, so they replay their history to it.
+ */
+export const targetId = (target: {
+  readonly kind: string;
+  readonly name: string;
+  readonly generation?: number;
+}): string => `${target.kind}:${target.name}${target.generation ? `#${target.generation}` : ""}`;
 
 /**
  * Route a commit's deliveries: drop those to lagging consumers (they receive

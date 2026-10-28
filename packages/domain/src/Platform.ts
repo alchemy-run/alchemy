@@ -45,7 +45,12 @@ export interface StoredEvent {
  * `(source, target)`.
  */
 export interface Delivery {
-  readonly target: { readonly kind: "view" | "policy" | "projection"; readonly name: string };
+  readonly target: {
+    readonly kind: "view" | "policy" | "projection";
+    readonly name: string;
+    /** The consumer's generation (see `Kernel.generationOf`), when it has been rebuilt. */
+    readonly generation?: number;
+  };
   /** The target partition: a key's id, or the source stream for an unkeyed policy. */
   readonly key: string;
   /** Named routes (from `keyOf`) the event takes into this key; absent for the default route. */
@@ -275,6 +280,12 @@ export interface AggregateStore {
   readonly connect?: (key: string, subscription: Subscription) => HttpEffect;
 }
 
+/** How much history has reached a consumer: see `View.History`. `through` is epoch milliseconds. */
+export interface HistoryJson {
+  readonly complete: boolean;
+  readonly through: number | undefined;
+}
+
 /**
  * The stored state of one view key.
  */
@@ -287,6 +298,8 @@ export interface ViewSnapshot {
   readonly checkpoints: Readonly<Record<string, number>>;
   /** Number of events the key has emitted. */
   readonly seq: number;
+  /** The view's generation the key was built by: an earlier one is stale and starts over. */
+  readonly generation?: number;
 }
 
 /** The snapshot of a key that has never received a delivery. */
@@ -327,6 +340,11 @@ export interface ViewKit {
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
   /** The views and projections that consume this view, by `CatchUp.targetId`. */
   readonly targets: ReadonlyArray<string>;
+  /**
+   * This view's generation. A stored key built by an earlier one is reset
+   * (state, entries, input log and cursors) before it is read or applied to.
+   */
+  readonly generation: number;
   /** Route emitted entries to the consumers lagging behind them (see `CatchUp`). */
   readonly replay: (input: ReplayInput<ViewEntry>) => ReplayResult;
   /** Trace an `apply` of these deliveries to `key` (wrap the work that applies and persists them). */
@@ -409,6 +427,11 @@ export interface ProjectionOptions {
 export interface ProjectionKit {
   readonly name: string;
   readonly options: ProjectionOptions;
+  /**
+   * This projection's generation. A key's log from an earlier one is reset;
+   * deliveries for an earlier one are dropped.
+   */
+  readonly generation: number;
   /**
    * Run the handler for a run of one key's input log, in order. Succeeds only
    * when every write the handler made succeeded; the platform then records
@@ -539,5 +562,11 @@ export class Platform extends Context.Service<
      * consumer in the model, by `CatchUp.targetId`) that are new to it.
      */
     readonly start?: (targets: ReadonlyArray<string>) => Effect.Effect<void>;
+    /**
+     * How much of the history recorded before a consumer (by
+     * `CatchUp.targetId`) has reached it. A platform without it keeps nothing
+     * across deploys, so there is no history to wait for.
+     */
+    readonly history?: (target: string) => Effect.Effect<HistoryJson>;
   }
 >()("alchemy/Domain/Platform") {}

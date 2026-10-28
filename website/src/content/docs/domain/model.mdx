@@ -151,6 +151,26 @@ Each aggregate instance remembers how far it has sent its events to each consume
 
 Policies never receive history. They act on new events only, so adding a policy never acts on the past again.
 
+## Rebuild a view from the history
+
+A view's state is derived, so it can always be built again. When its `evolve` or routing changes what it should hold, or its state was lost, bump its version on the model's Layer:
+
+```typescript title="src/Bank.live.ts"
+Bank.layer(BankHandlers, { versions: { AccountSummary: 1 } });
+```
+
+On the next deploy the view starts over and receives the whole history again, the same way a new view does. Every view and projection that reads it is rebuilt with it.
+
+## Know when the history has arrived
+
+Until a new or rebuilt view has received the history, its answers cover only part of it. `history` says whether it's complete, and how far it has got:
+
+```typescript title="src/summaryStatus.ts"
+const { complete, through } = yield* summaries.history;
+```
+
+A screen can show "catching up" until `complete` is true, or hold its reads until then. A projection's `Progress` service has the same `history`.
+
 ## Order and partitions
 
 Every consumer works the same way underneath. At commit, each event is routed to a key of each consumer that wants it: by default its source instance, or whatever the consumer's `key` and `keyOf` say. Each key has an ordered input log, and its inputs are handled one at a time, or a batch at a time for a projection. Keys run in parallel.

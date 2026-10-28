@@ -30,3 +30,18 @@ export class Before extends Domain.Model("Ledger", { aggregates: [Account] }) {}
 
 /** The second deploy adds the view; its history must reach it. */
 export class After extends Domain.Model("Ledger", { aggregates: [Account], views: [Deposits] }) {}
+
+/** The view redefined: it now records each deposit doubled. Rebuilt by bumping its version. */
+export class DoubledDeposits extends Domain.View("Deposits", {
+  from: [Account],
+  key: Account,
+  state: Schema.Struct({ amounts: Schema.Array(Schema.Number) }),
+  initial: { amounts: [] },
+  evolve: { Deposited: (s, e) => ({ amounts: [...s.amounts, e.amount * 2] }) },
+}) {}
+
+/** The third deploy: the redefined view, at version 1. */
+export class Rebuilt extends Domain.Model("Ledger", {
+  aggregates: [Account],
+  views: [DoubledDeposits],
+}) {}

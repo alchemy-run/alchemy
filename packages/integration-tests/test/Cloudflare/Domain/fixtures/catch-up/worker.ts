@@ -1,0 +1,51 @@
+import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import { Account, Deposit, type Deposits, type DoubledDeposits } from "./ledger.ts";
+
+/**
+ * The Ledger Worker's routes, on whichever model a deploy hosts:
+ * `POST /deposit/<account>/<amount>`, `GET /deposits/<account>`,
+ * `GET /history` (the view's) and `GET /version`.
+ */
+export const ledgerWorker = (
+  version: string,
+  deposits?: typeof Deposits | typeof DoubledDeposits,
+) =>
+  Effect.gen(function* () {
+    const accounts = yield* Account;
+    const view = deposits ? yield* deposits : undefined;
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const path = new URL(request.url, "http://localhost").pathname.split("/");
+        if (path[1] === "version") return HttpServerResponse.text(version);
+        if (path[1] === "deposits" && view) {
+          const state = yield* view.query(Account.ref(path[2]!));
+          return yield* HttpServerResponse.json(Option.getOrNull(state));
+        }
+        if (path[1] === "history" && view) {
+          const { complete, through } = yield* view.history;
+          return yield* HttpServerResponse.json({
+            complete,
+            through: through ? DateTime.toEpochMillis(through) : null,
+          });
+        }
+        if (path[1] !== "deposit") return HttpServerResponse.text("Not Found", { status: 404 });
+        yield* accounts.send(path[2]!, new Deposit({ amount: Number(path[3]) }));
+        return yield* HttpServerResponse.json(yield* accounts.state(path[2]!));
+      }).pipe(
+        Effect.catchTag("ConsistencyTimeout", () =>
+          Effect.succeed(HttpServerResponse.text("not caught up", { status: 503 })),
+        ),
+      ),
+    };
+  });
+
+/** Host a model on Durable Objects. */
+export const hosted = <L extends Layer.Layer<any, any, any>>(model: L) =>
+  model.pipe(Layer.provide(DomainCloudflare.DurableObjects));

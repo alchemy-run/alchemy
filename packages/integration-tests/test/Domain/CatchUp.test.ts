@@ -71,19 +71,31 @@ class Timeline extends Domain.Projection("Timeline", {
   keyOf: { Deposited: () => "all", Logged: () => "all" },
   on: [Deposited, Logged],
 }) {}
-const TimelineLive = Timeline.toLayer(
-  Effect.gen(function* () {
-    const feed = yield* Feed;
-    return Effect.fn(function* (batch) {
-      yield* Ref.update(feed, (all) => [
-        ...all,
-        ...batch.map(({ event }) =>
-          event._tag === "Deposited" ? `deposit ${event.amount}` : `log ${event.note}`,
-        ),
-      ]);
-    });
-  }),
-);
+const timelineLayer = (options?: Domain.Projection.Options) =>
+  Timeline.toLayer(
+    Effect.gen(function* () {
+      const feed = yield* Feed;
+      return Effect.fn(function* (batch) {
+        yield* Ref.update(feed, (all) => [
+          ...all,
+          ...batch.map(({ event }) =>
+            event._tag === "Deposited" ? `deposit ${event.amount}` : `log ${event.note}`,
+          ),
+        ]);
+      });
+    }),
+    options,
+  );
+const TimelineLive = timelineLayer();
+
+/** The same view, redefined: it now records each deposit doubled. */
+class DoubledDeposits extends Domain.View("Deposits", {
+  from: [Account],
+  key: Account,
+  state: Schema.Struct({ amounts: Schema.Array(Schema.Number) }),
+  initial: { amounts: [] },
+  evolve: { Deposited: (s, e) => ({ amounts: [...s.amounts, e.amount * 2] }) },
+}) {}
 
 // ---------------------------------------------------------------- one model, three deploys
 
@@ -92,6 +104,10 @@ class WithView extends Domain.Model("Bank", {
   aggregates: [Account, Journal],
   views: [Deposits],
   policies: [OnDeposit],
+}) {}
+class Redefined extends Domain.Model("Bank", {
+  aggregates: [Account, Journal],
+  views: [DoubledDeposits],
 }) {}
 class WithTimeline extends Domain.Model("Bank", {
   aggregates: [Account, Journal],
@@ -122,16 +138,18 @@ const platform = () => {
   });
   return {
     clock,
+    hosted,
     settle,
     services,
     deploy: <A, E, R, P, PE, PR>(
-      model: { readonly layer: (policies: any) => Layer.Layer<any, any, any> },
+      model: { readonly layer: (policies: any, options?: any) => Layer.Layer<any, any, any> },
       policies: Layer.Layer<P, PE, PR>,
       effect: Effect.Effect<A, E, R>,
+      options?: Domain.Model.LayerOptions,
     ) =>
       effect.pipe(
         Effect.tap(() => settle),
-        Effect.provide(model.layer(policies).pipe(Layer.provide(hosted.layer))),
+        Effect.provide(model.layer(policies, options).pipe(Layer.provide(hosted.layer))),
       ),
   };
 };
@@ -266,6 +284,118 @@ describe("Domain catch-up", () => {
       // Each instance alone would replay all of its history at once:
       // deposit 1, deposit 3, log one, log four.
       expect(feed).toEqual(["deposit 1", "log one", "deposit 3", "log four", "deposit 6"]);
+    }).pipe(Effect.provide(platform().services)),
+  );
+
+  it.live("a new view's history says when it is complete", () =>
+    Effect.gen(function* () {
+      const bank = platform();
+      yield* bank.deploy(Before, Layer.empty, deposit("a-1", 1));
+      const [before, after] = yield* bank.deploy(
+        WithView,
+        OnDepositLive,
+        Effect.gen(function* () {
+          const view = yield* Deposits;
+          const before = yield* view.history;
+          yield* bank.settle;
+          return [before, yield* view.history] as const;
+        }),
+      );
+      expect(before.complete).toBe(false);
+      expect(after.complete).toBe(true);
+    }).pipe(Effect.provide(platform().services)),
+  );
+
+  it.live("instances created and written while a view catches up are folded once", () =>
+    Effect.gen(function* () {
+      const bank = platform();
+      yield* bank.deploy(Before, Layer.empty, Effect.all([deposit("a-1", 1), deposit("a-2", 2)]));
+      const result = yield* bank.deploy(
+        WithView,
+        OnDepositLive,
+        Effect.gen(function* () {
+          // Before the sweep runs: a new instance, and a write to an inactive one.
+          yield* deposit("a-9", 9);
+          yield* deposit("a-2", 3);
+          yield* bank.settle;
+          return [yield* amounts("a-1"), yield* amounts("a-2"), yield* amounts("a-9")];
+        }),
+      );
+      expect(result).toEqual([[1], [2, 3], [9]]);
+    }).pipe(Effect.provide(platform().services)),
+  );
+
+  it.live("a catch-up started again after an interrupted deploy delivers each event once", () =>
+    Effect.gen(function* () {
+      const bank = platform();
+      yield* bank.deploy(Before, Layer.empty, Effect.all([deposit("a-1", 1), deposit("a-1", 2)]));
+      // The first deploy with the view is replaced before its catch-up runs; both sweeps run.
+      const first = WithView.layer(OnDepositLive).pipe(Layer.provide(bank.hosted.layer));
+      yield* Effect.provide(Effect.void, first);
+      const result = yield* bank.deploy(
+        WithView,
+        OnDepositLive,
+        bank.settle.pipe(Effect.andThen(amounts("a-1"))),
+      );
+      expect(result).toEqual([1, 2]);
+      expect(yield* Ref.get(yield* Reactions)).toBe(0);
+    }).pipe(Effect.provide(platform().services)),
+  );
+
+  it.live("bumping a view's version rebuilds it from the history", () =>
+    Effect.gen(function* () {
+      const bank = platform();
+      yield* bank.deploy(
+        WithView,
+        OnDepositLive,
+        Effect.all([deposit("a-1", 1), deposit("a-1", 2)]),
+      );
+      const doubled = (id: string) =>
+        Effect.gen(function* () {
+          const view = yield* DoubledDeposits;
+          return Option.getOrUndefined(yield* view.query(Account.ref(id)))?.amounts;
+        });
+      // Redefined but not rebuilt: only new deposits are doubled, after the old state.
+      const stale = yield* bank.deploy(
+        Redefined,
+        Layer.empty,
+        deposit("a-1", 3).pipe(Effect.andThen(bank.settle), Effect.andThen(doubled("a-1"))),
+      );
+      expect(stale).toEqual([1, 2, 6]);
+      const rebuilt = yield* bank.deploy(
+        Redefined,
+        Layer.empty,
+        Effect.gen(function* () {
+          const view = yield* DoubledDeposits;
+          expect((yield* view.history).complete).toBe(false);
+          yield* bank.settle;
+          expect((yield* view.history).complete).toBe(true);
+          yield* deposit("a-1", 4);
+          yield* bank.settle;
+          return yield* doubled("a-1");
+        }),
+        { versions: { Deposits: 1 } },
+      );
+      expect(rebuilt).toEqual([2, 4, 6, 8]);
+      // A policy on the old view acted on the first two deposits only, never on the rebuild.
+      expect(yield* Ref.get(yield* Reactions)).toBe(2);
+    }).pipe(Effect.provide(platform().services)),
+  );
+
+  it.live("bumping a projection's version runs it again over the history", () =>
+    Effect.gen(function* () {
+      const bank = platform();
+      yield* bank.deploy(
+        WithTimeline,
+        TimelineLive,
+        Effect.all([deposit("a-1", 1), deposit("a-2", 2)]),
+      );
+      const feed = yield* bank.deploy(
+        WithTimeline,
+        timelineLayer({ version: 1 }),
+        bank.settle.pipe(Effect.andThen(Effect.flatMap(Feed, Ref.get))),
+      );
+      expect(feed).toEqual(["deposit 1", "deposit 2", "deposit 1", "deposit 2"]);
     }).pipe(Effect.provide(platform().services)),
   );
 });

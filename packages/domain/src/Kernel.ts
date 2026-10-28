@@ -148,6 +148,14 @@ export interface Kernel {
   ) => ReadonlyArray<string>;
   /** Every view and projection in the model, by `CatchUp.targetId`: what catches up. */
   readonly targets: ReadonlyArray<string>;
+  /**
+   * Set a view's or projection's version (`view:Name` or `projection:Name`).
+   * Bumping it rebuilds the consumer, and every view or projection that reads
+   * it, from the history. Set every version before the platform starts.
+   */
+  readonly setVersion: (consumer: string, version: number) => void;
+  /** A consumer's generation: its version plus those of the views it reads. */
+  readonly generationOf: (kind: "view" | "projection", name: string) => number;
   /** The projection that writes a stream, if any. */
   readonly writerOf: (stream: DomainStream.Any) => Projection.Any | undefined;
   readonly decodeStreamEntry: (entry: StreamEntry) => DomainStream.Entry<unknown, string>;
@@ -563,6 +571,40 @@ const build = (
     }
   }
 
+  // ------------------------------------------------------------ generations
+  const versions = new Map<string, number>();
+  const generations = new Map<string, number>();
+  const viewSources = (from: ReadonlyArray<View.Source>) =>
+    from.flatMap((source) => (source.kind === "Aggregate" ? [] : [(source as View.Any).viewName]));
+  /**
+   * A consumer's generation: its own version plus the generations of the
+   * views it reads, so rebuilding a view rebuilds everything built on it.
+   */
+  const generationOf = (kind: "view" | "projection" | "policy", name: string): number => {
+    if (kind === "policy") return 0;
+    const id = `${kind}:${name}`;
+    const known = generations.get(id);
+    if (known !== undefined) return known;
+    const from =
+      kind === "view"
+        ? (sources.get(name) as { readonly view?: View.Any } | undefined)?.view?.definition.from
+        : projectionByName.get(name)?.definition.from;
+    const generation =
+      (versions.get(id) ?? 0) +
+      viewSources(from ?? []).reduce((sum, view) => sum + generationOf("view", view), 0);
+    generations.set(id, generation);
+    return generation;
+  };
+  /** Where a subscriber's deliveries go, with its generation when it has one. */
+  const targetOf = (subscriber: Subscriber): Delivery["target"] => {
+    const generation = generationOf(subscriber.kind, subscriber.name);
+    return {
+      kind: subscriber.kind,
+      name: subscriber.name,
+      ...(generation > 0 ? { generation } : {}),
+    };
+  };
+
   /** Every delivery an event produces; only to the consumers in `only`, if given. */
   const fanOut = (
     input: RouteInput,
@@ -571,11 +613,12 @@ const build = (
   ): Array<Delivery> => {
     const out: Array<Delivery> = [];
     for (const subscriber of subscribers.get(delivery.origin)?.get(delivery.tag) ?? []) {
-      if (only && !only.has(CatchUp.targetId(subscriber))) continue;
+      const target = targetOf(subscriber);
+      if (only && !only.has(CatchUp.targetId(target))) continue;
       for (const { key, routes } of subscriber.route(input)) {
         out.push({
           ...delivery,
-          target: { kind: subscriber.kind, name: subscriber.name },
+          target,
           key,
           ...(routes ? { routes } : {}),
         });
@@ -589,7 +632,7 @@ const build = (
     const out = new Set<string>();
     for (const list of subscribers.get(source)?.values() ?? []) {
       for (const subscriber of list) {
-        if (subscriber.kind !== "policy") out.add(CatchUp.targetId(subscriber));
+        if (subscriber.kind !== "policy") out.add(CatchUp.targetId(targetOf(subscriber)));
       }
     }
     return [...out].sort();
@@ -696,12 +739,15 @@ const build = (
       });
       return { next, events, deliveries };
     };
-    const targets = targetsOf(aggregate.aggregateName);
     return {
       name: aggregate.aggregateName,
       deliver,
-      targets,
+      // Read when used: versions are set once the whole model is built.
+      get targets() {
+        return targetsOf(aggregate.aggregateName);
+      },
       replay: (input) => {
+        const targets = targetsOf(aggregate.aggregateName);
         const id = decodeId(input.id) as string;
         const stream = `${aggregate.aggregateName}/${id}`;
         const sourceRef = Aggregate.makeRef(aggregate, id);
@@ -906,12 +952,17 @@ const build = (
     const emit = handlers(def.emit);
     const encodeState = (state: unknown) =>
       codec && state !== null && state !== undefined ? codec.encode(state) : null;
-    const targets = targetsOf(view.viewName);
     return {
       name: view.viewName,
       deliver,
-      targets,
+      get targets() {
+        return targetsOf(view.viewName);
+      },
+      get generation() {
+        return generationOf("view", view.viewName);
+      },
       replay: (input) => {
+        const targets = targetsOf(view.viewName);
         const keyRef = Key.refOf(def.key, input.id);
         const stream = `${view.viewName}/${input.id}`;
         return replay(
@@ -979,7 +1030,16 @@ const build = (
         const downstream: Array<Delivery> = [];
         const keyRef = Key.refOf(def.key, key);
         const stream = `${view.viewName}/${key}`;
+        const generation = generationOf("view", view.viewName);
         for (const delivery of batch) {
+          const sent = delivery.target.generation ?? 0;
+          // For an earlier generation: sent by an instance still on older code.
+          if (sent < generation) continue;
+          if (sent > generation) {
+            throw new DefinitionError(
+              `${view.viewName} received generation ${sent} but runs ${generation}: this instance runs older code`,
+            );
+          }
           if ((checkpoints[delivery.source] ?? 0) >= delivery.seq) continue;
           checkpoints[delivery.source] = delivery.seq;
           changed = true;
@@ -1053,7 +1113,13 @@ const build = (
             }
           }
         }
-        const next: ViewSnapshot = { state: encodeState(current), version, checkpoints, seq };
+        const next: ViewSnapshot = {
+          state: encodeState(current),
+          version,
+          checkpoints,
+          seq,
+          ...(generation > 0 ? { generation } : {}),
+        };
         return { snapshot: next, changed, entries, downstream };
       },
     };
@@ -1191,10 +1257,23 @@ const build = (
     policyKit,
     projectionInputs,
     projectionKeys,
-    targets: [
-      ...definitions.views.map((view) => `view:${view.viewName}`),
-      ...definitions.projections.map((projection) => `projection:${projection.projectionName}`),
-    ].sort(),
+    get targets() {
+      return [
+        ...definitions.views.map((view) =>
+          CatchUp.targetId(targetOf({ kind: "view", name: view.viewName, route: () => [] })),
+        ),
+        ...definitions.projections.map((projection) =>
+          CatchUp.targetId(
+            targetOf({ kind: "projection", name: projection.projectionName, route: () => [] }),
+          ),
+        ),
+      ].sort();
+    },
+    setVersion: (consumer, version) => {
+      versions.set(consumer, version);
+      generations.clear();
+    },
+    generationOf,
     writerOf: (stream) => writers.get(stream.streamName),
     decodeStreamEntry: (entry) => ({
       event: decodeEvent(entry.event),

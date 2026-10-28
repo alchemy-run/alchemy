@@ -338,6 +338,19 @@ const connectTo = (namespace: Namespace) => (key: string, subscription: Subscrip
 
 // ---------------------------------------------------------------- catch-up
 
+/** Delete every stored key under these prefixes, a batch at a time. */
+const clearPrefixes = (prefixes: ReadonlyArray<string>) =>
+  Effect.gen(function* () {
+    const state = yield* DurableObjectState;
+    for (const prefix of prefixes) {
+      while (true) {
+        const keys = [...(yield* state.storage.list({ prefix, limit: 128 })).keys()];
+        if (keys.length === 0) break;
+        yield* state.storage.delete(keys);
+      }
+    }
+  });
+
 /** Events (or view entries) an instance replays per transaction while catching up. */
 const CATCH_UP_PAGE = 100;
 
@@ -385,10 +398,11 @@ const catchUp = <E1, R1, E2, R2, E3, R3>(
   >,
 ) =>
   Effect.gen(function* () {
-    // Still on the code before the deploy that started the sweep: ask to be called again.
+    const state = yield* DurableObjectState;
+    // A consumer this code doesn't know: it still runs the code from before the deploy that
+    // started the sweep, and keeps it until it has been idle. Ask to be called again.
     if (!targets.every((target) => model.has(target)))
       return { next: undefined, pending: true } satisfies CatchUpResult;
-    const state = yield* DurableObjectState;
     let replayed = 0;
     while (true) {
       const step = yield* exclusively(
@@ -409,8 +423,10 @@ const catchUp = <E1, R1, E2, R2, E3, R3>(
           };
         }),
       );
-      // Deliver before answering, so a round's events land before the next round's.
-      yield* outbox.flush;
+      // Deliver before answering, so a round's events land before the next round's. A
+      // consumer still on older code refuses them: they stay staged, and the outbox's
+      // backstop delivers them once it runs the deployed code.
+      yield* Effect.ignoreCause(outbox.flush);
       replayed += step.rows;
       if (step.done) return { next: step.next, pending: false } satisfies CatchUpResult;
       if (replayed >= CATCH_UP_BUDGET)
@@ -506,6 +522,11 @@ interface DirectoryJob {
 
 /** A directory node, called by its path. */
 interface DirectoryNode {
+  /** At the root: the consumers whose history has fully arrived, and how far the running sweep is. */
+  readonly status: () => Effect.Effect<{
+    readonly complete: ReadonlyArray<string>;
+    readonly through: { readonly targets: ReadonlyArray<string>; readonly at: number } | undefined;
+  }>;
   readonly register: (row: Registration) => Effect.Effect<void>;
   readonly child: (child: string) => Effect.Effect<void>;
   readonly news: (targets: ReadonlyArray<string>) => Effect.Effect<void>;
@@ -600,6 +621,17 @@ const directoryObject = (deps: {
             const report = { gen: sweep.gen, round: sweep.round, earliest: next };
             return yield* schedule({ kind: "report", path, report });
           }
+          // What the root reports to `history`: the consumers whose history has fully arrived.
+          const complete = (yield* state.storage.get<Array<string>>("complete")) ?? [];
+          if (next === null) {
+            yield* state.storage.put("complete", [
+              ...complete,
+              ...sweep.targets.filter((target) => !complete.includes(target)),
+            ]);
+            yield* state.storage.delete("through");
+          } else {
+            yield* state.storage.put("through", { targets: sweep.targets, at: next });
+          }
           if (next !== null)
             yield* begin(
               path,
@@ -688,6 +720,18 @@ const directoryObject = (deps: {
           }
         });
       return {
+        status: () =>
+          reportDefects(
+            Effect.gen(function* () {
+              return {
+                complete: (yield* state.storage.get<Array<string>>("complete")) ?? [],
+                through: yield* state.storage.get<{
+                  readonly targets: ReadonlyArray<string>;
+                  readonly at: number;
+                }>("through"),
+              };
+            }),
+          ),
         register: (path: string, row: Registration) =>
           reportDefects(
             exclusively(
@@ -966,19 +1010,34 @@ const viewObject = (kit: ViewKit, directory: Directory, model: () => ReadonlySet
     return Effect.gen(function* () {
       const outbox = yield* queue<Delivery>("outbox", kit.deliver);
       const registrations = yield* queue<Registration>("register", directory.register);
-      const read = state.storage
+      const stored = state.storage
         .get<ViewSnapshot>("snapshot")
         .pipe(Effect.map((s) => s ?? emptySnapshot));
+      // Built by an earlier generation of the view: it reads as empty, and starts over on write.
+      const stale = (snapshot: ViewSnapshot) => (snapshot.generation ?? 0) < kit.generation;
+      const read = stored.pipe(Effect.map((s) => (stale(s) ? emptySnapshot : s)));
+      const reset = Effect.gen(function* () {
+        if (!stale(yield* stored)) return;
+        yield* clearPrefixes(["entry:", "in:"]);
+        yield* state.storage.delete(["snapshot", "routed", "in-seq"]);
+      });
       const entriesAfter = (after: number) =>
-        state.storage
-          .list<ViewEntry>({ prefix: "entry:", start: `entry:${pad(after + 1)}` })
-          .pipe(Effect.map((rows) => [...rows.values()]));
+        stored.pipe(
+          Effect.flatMap((snapshot) =>
+            stale(snapshot)
+              ? Effect.succeed([])
+              : state.storage
+                  .list<ViewEntry>({ prefix: "entry:", start: `entry:${pad(after + 1)}` })
+                  .pipe(Effect.map((rows) => [...rows.values()])),
+          ),
+        );
       return {
         receive: (key: string, deliveries: ReadonlyArray<Delivery>) =>
           reportDefects(
             Effect.gen(function* () {
               const kick = yield* exclusively(
                 Effect.gen(function* () {
+                  yield* reset;
                   const before = yield* read;
                   const result = kit.apply(key, before, deliveries);
                   if (!result.changed) return false;
@@ -1040,6 +1099,7 @@ const viewObject = (kit: ViewKit, directory: Directory, model: () => ReadonlySet
           reportDefects(
             catchUp(outbox, model(), targets, (routed) =>
               Effect.gen(function* () {
+                yield* reset;
                 const { seq } = yield* read;
                 const from = laggingFrom(kit.targets, routed, seq);
                 if (from === undefined) return undefined;
@@ -1108,6 +1168,8 @@ interface ProjectionMeta {
   readonly intake: Readonly<Record<string, number>>;
   /** The last handled `seq` per source. */
   readonly checkpoints: Readonly<Record<string, number>>;
+  /** The projection's generation the log was built by: an earlier one starts over. */
+  readonly generation?: number;
 }
 
 const emptyProjectionMeta: ProjectionMeta = {
@@ -1125,9 +1187,23 @@ const projectionObject = (kit: ProjectionKit) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
+      // A log built by an earlier generation of the projection reads as empty.
       const readMeta = state.storage
         .get<ProjectionMeta>("meta")
-        .pipe(Effect.map((meta) => meta ?? emptyProjectionMeta));
+        .pipe(
+          Effect.map((meta) =>
+            meta === undefined || (meta.generation ?? 0) < kit.generation
+              ? { ...emptyProjectionMeta, generation: kit.generation }
+              : meta,
+          ),
+        );
+      /** Start a log built by an earlier generation over. */
+      const reset = Effect.gen(function* () {
+        const meta = yield* state.storage.get<ProjectionMeta>("meta");
+        if (meta === undefined || (meta.generation ?? 0) >= kit.generation) return;
+        yield* clearPrefixes(["in:"]);
+        yield* state.storage.delete("meta");
+      });
       const size = kit.options.batch?.size ?? 1;
       const waitMillis = kit.options.batch?.waitMillis ?? 0;
       const lease = "drain-lease";
@@ -1192,6 +1268,16 @@ const projectionObject = (kit: ProjectionKit) =>
         receive: (key: string, delivery: Delivery) =>
           reportDefects(
             Effect.gen(function* () {
+              const sent = delivery.target.generation ?? 0;
+              // For an earlier generation: sent by an instance still on older code.
+              if (sent < kit.generation) return;
+              // Sent by newer code: fail, so the sender retries once this instance runs it.
+              if (sent > kit.generation) {
+                return yield* Effect.die(
+                  new Error(`${kit.name} received generation ${sent} but runs ${kit.generation}`),
+                );
+              }
+              yield* exclusively(reset);
               const accepted = yield* exclusively(
                 state.storage.transaction(
                   Effect.gen(function* () {
@@ -1373,6 +1459,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
     const node = (path: string): DirectoryNode => {
       const stub = () => directoryNamespace!.getByName(`node:${path}`);
       return {
+        status: () => unwrapDefects(stub().status()),
         register: (row) => unwrapDefects(stub().register(path, row)),
         child: (child) => unwrapDefects(stub().child(path, child)),
         news: (targets) => unwrapDefects(stub().news(path, targets)),
@@ -1588,6 +1675,15 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
             };
           }),
         ),
+      history: (target) =>
+        node("")
+          .status()
+          .pipe(
+            Effect.map(({ complete, through }) => ({
+              complete: complete.includes(target),
+              through: through?.targets.includes(target) ? through.at : undefined,
+            })),
+          ),
       start: (targets) =>
         Effect.sync(() => {
           model = new Set(targets);

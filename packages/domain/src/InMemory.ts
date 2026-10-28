@@ -124,17 +124,39 @@ export const make = (
    * instance's events before `until`, and the next starts a window past the
    * earliest event left. Its deliveries queue behind it, round by round.
    */
-  const sweep: Effect.Effect<void> = Effect.gen(function* () {
-    let until = Number.NEGATIVE_INFINITY;
-    while (true) {
-      let next: number | undefined;
-      for (const source of sources.values()) {
-        for (const id of source.ids()) next = earliest(next, yield* source.catchUp(id, until));
+  const sweep = (targets: ReadonlyArray<string>): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      let until = Number.NEGATIVE_INFINITY;
+      while (true) {
+        let next: number | undefined;
+        for (const source of sources.values()) {
+          for (const id of source.ids()) next = earliest(next, yield* source.catchUp(id, until));
+        }
+        if (next === undefined) return;
+        until = next + window;
+        for (const target of targets) {
+          if (!histories.get(target)?.complete)
+            histories.set(target, { complete: false, through: next });
+        }
       }
-      if (next === undefined) return;
-      until = next + window;
-    }
-  });
+    });
+  // How much history has reached each consumer, by `CatchUp.targetId`.
+  const histories = new Map<string, { complete: boolean; through: number | undefined }>();
+  /** Mark `targets` complete once everything the sweep queued has been delivered. */
+  const finishers = new WeakSet<Effect.Effect<void>>();
+  const finish = (targets: ReadonlyArray<string>): Effect.Effect<void> => {
+    const finisher: Effect.Effect<void> = Effect.suspend(() =>
+      // Wait behind real work only: two finishers must not wait on each other.
+      pending.some((work) => !finishers.has(work))
+        ? enqueueWork([finish(targets)])
+        : Effect.sync(() => {
+            for (const target of targets)
+              histories.set(target, { complete: true, through: undefined });
+          }),
+    );
+    finishers.add(finisher);
+    return finisher;
+  };
 
   /** Fire every timer that is due on the platform's clock; each removes itself. */
   const fireDue: Effect.Effect<void> = Effect.suspend(() => {
@@ -440,7 +462,9 @@ export const make = (
 
     view: (_view, kit) =>
       Effect.sync(() => {
-        const { keys, lock } = stored(`view:${kit.name}`, () => ({
+        const stash = stored(`view:${kit.name}`, () => ({
+          /** The generation the stored keys were built by. */
+          generation: 0,
           keys: new Map<
             string,
             {
@@ -454,6 +478,12 @@ export const make = (
           >(),
           lock: Semaphore.makeUnsafe(1),
         }));
+        const { keys, lock } = stash;
+        // Rebuilt (a new generation): start every key over; the history is replayed to it.
+        if (stash.generation < kit.generation) {
+          keys.clear();
+          stash.generation = kit.generation;
+        }
         const get = (key: string) =>
           Effect.suspend(() => {
             const found = keys.get(key);
@@ -561,7 +591,17 @@ export const make = (
           timer: boolean;
           readonly lock: Semaphore.Semaphore;
         }
-        const partitions = stored(`projection:${kit.name}`, () => new Map<string, Partition>());
+        const stash = stored(`projection:${kit.name}`, () => ({
+          /** The generation the stored logs were built by. */
+          generation: 0,
+          partitions: new Map<string, Partition>(),
+        }));
+        const { partitions } = stash;
+        // Rebuilt (a new generation): start every key's log over; the history is replayed to it.
+        if (stash.generation < kit.generation) {
+          partitions.clear();
+          stash.generation = kit.generation;
+        }
         const partition = (key: string) => {
           let found = partitions.get(key);
           if (!found) {
@@ -630,6 +670,8 @@ export const make = (
         return {
           receive: (delivery) =>
             Effect.suspend(() => {
+              // For an earlier generation of the projection: nothing to run.
+              if ((delivery.target.generation ?? 0) < kit.generation) return Effect.void;
               const p = partition(delivery.key);
               if ((p.intake[delivery.source] ?? 0) >= delivery.seq) return Effect.void;
               p.intake[delivery.source] = delivery.seq;
@@ -767,7 +809,16 @@ export const make = (
         };
       }),
 
-    start: () => enqueueWork([sweep]),
+    start: (targets) =>
+      Effect.suspend(() => {
+        for (const target of targets) {
+          if (!histories.get(target)?.complete)
+            histories.set(target, { complete: false, through: undefined });
+        }
+        return enqueueWork([sweep(targets), finish(targets)]);
+      }),
+    history: (target) =>
+      Effect.sync(() => histories.get(target) ?? { complete: true, through: undefined }),
   });
 
   return {
