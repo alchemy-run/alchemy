@@ -40,6 +40,7 @@ import {
   deployStateStoreWorker,
   findSecretSharingWorker,
   observeStateStoreDomain,
+  stateStoreSecretsExist,
   stateStoreUrl,
 } from "./Deploy.ts";
 import { AuthTokenSecretName, EncryptionKeySecretName, stateStoreSecretName } from "./Token.ts";
@@ -250,7 +251,8 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       yield* annotateAccountHash(accountId);
 
       const serving = yield* isStateStoreServing(accountId, scriptName, domain);
-      if (serving && !force) {
+      // A store missing a secret is redeployed, which creates only the missing one.
+      if (serving && !force && (yield* stateStoreSecretsExist({ accountId, scriptName }))) {
         yield* Interaction.info(
           `Worker '${scriptName}' already exists; adopting and refreshing credentials. ` +
             `Use --force to redeploy.`,

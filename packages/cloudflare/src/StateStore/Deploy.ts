@@ -287,6 +287,29 @@ const waitForAuthoritativeDns = Effect.fn(function* (zoneId: string, domain: str
   );
 });
 
+/** Whether the store's auth token and encryption key both exist. */
+export const stateStoreSecretsExist = Effect.fn(function* ({
+  accountId,
+  scriptName,
+}: {
+  accountId: string;
+  scriptName: string;
+}) {
+  const names = new Set([
+    stateStoreSecretName(AuthTokenSecretName, scriptName),
+    stateStoreSecretName(EncryptionKeySecretName, scriptName),
+  ]);
+  const store = yield* secretsStore.listStores.items({ accountId }).pipe(Stream.runHead);
+  if (Option.isNone(store)) return false;
+  const found = yield* secretsStore.listStoreSecrets
+    .items({ accountId, storeId: store.value.id })
+    .pipe(
+      Stream.filter((secret) => names.has(secret.name)),
+      Stream.runCollect,
+    );
+  return new Set(Array.from(found, (secret) => secret.name)).size === names.size;
+});
+
 /** The account's Secrets Store (Cloudflare allows one), created when missing. */
 const ensureSecretsStore = Effect.fn(function* (accountId: string) {
   const first = secretsStore.listStores

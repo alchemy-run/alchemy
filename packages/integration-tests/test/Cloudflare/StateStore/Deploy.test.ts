@@ -1,0 +1,573 @@
+import crypto from "node:crypto";
+import { fileURLToPath } from "node:url";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { STATE_STORE_VERSION } from "@alchemy.run/cloudflare/StateStore/Api";
+import {
+  bootstrap,
+  loginWithCloudflare,
+  teardownStateStore,
+} from "@alchemy.run/cloudflare/StateStore/State";
+import {
+  AuthTokenSecretName,
+  EncryptionKeySecretName,
+  stateStoreSecretName,
+} from "@alchemy.run/cloudflare/StateStore/Token";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
+import * as workers from "@distilled.cloud/cloudflare/workers";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Alchemist from "alchemy/Alchemist";
+import { currentProfileName } from "alchemy/Auth/Profile";
+import { checkHttpStateStoreAuth, makeHttpStateStore } from "alchemy/State/HttpStateStore";
+import { State } from "alchemy/State/State";
+import { exec } from "alchemy/Util/exec";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Path from "effect/Path";
+import { ChildProcess } from "effect/process";
+import * as Redacted from "effect/Redacted";
+import * as Stream from "effect/Stream";
+import { workerName as configuredWorkerName } from "./fixtures/configured-store.ts";
+
+/**
+ * Every way a Cloudflare State Store deploy can start, and what it must keep.
+ * Whatever the starting point, a deploy never changes a secret that exists:
+ * replacing the auth token or the encryption key loses every stack's state.
+ * Each case checks the secrets' ids and modification times out of band.
+ */
+
+const { test } = Test.make({ providers: Cloudflare.providers() });
+
+const tags = ["provider:cloudflare", "provider:cloudflare:statestore", "live"];
+const stage = Test.defaultStage().replaceAll("_", "-");
+const storeWorker = (name: string) => `alchemy-state-store-${name}-${stage}`;
+/** A store `--name`, which allows 20 characters: unique per stage. */
+const storeName = (prefix: string) =>
+  `${prefix}-${crypto.createHash("sha256").update(stage).digest("hex").slice(0, 8)}`;
+
+const ZONE = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+
+const record = (fqn: string) => ({
+  kind: "resource" as const,
+  resourceType: "Test.Resource",
+  namespace: undefined,
+  fqn,
+  logicalId: fqn,
+  instanceId: "kept",
+  providerVersion: 1,
+  status: "created" as const,
+  downstream: [],
+  bindings: [],
+  props: { hello: "world" },
+  attr: { id: "kept" },
+});
+
+/** Open a store the way a stack does, building its layer anew. */
+const open = (options: Cloudflare.CloudflareStateOptions) =>
+  State.pipe(Effect.flatten, Effect.provide(Layer.fresh(Cloudflare.state(options))));
+
+/** A store's secrets by name: every match, so a duplicate shows up too. */
+const observeSecrets = (accountId: string, workerName: string) =>
+  Effect.gen(function* () {
+    const store = yield* secretsStore.listStores.items({ accountId }).pipe(Stream.runHead);
+    if (Option.isNone(store)) return { token: [], key: [] };
+    const secrets = Array.from(
+      yield* secretsStore.listStoreSecrets
+        .items({ accountId, storeId: store.value.id })
+        .pipe(Stream.runCollect),
+    );
+    const named = (base: string) =>
+      secrets
+        .filter((secret) => secret.name === stateStoreSecretName(base, workerName))
+        .map((secret) => ({ id: secret.id, modified: secret.modified }));
+    return { token: named(AuthTokenSecretName), key: named(EncryptionKeySecretName) };
+  });
+
+const deleteSecret = (accountId: string, workerName: string, base: string) =>
+  Effect.gen(function* () {
+    const store = yield* secretsStore.listStores.items({ accountId }).pipe(Stream.runHead);
+    if (Option.isNone(store)) return;
+    const secret = yield* secretsStore.listStoreSecrets
+      .items({ accountId, storeId: store.value.id })
+      .pipe(
+        Stream.filter((secret) => secret.name === stateStoreSecretName(base, workerName)),
+        Stream.runHead,
+      );
+    if (Option.isSome(secret)) {
+      yield* secretsStore.deleteStoreSecret({
+        accountId,
+        storeId: store.value.id,
+        secretId: secret.value.id,
+      });
+    }
+  });
+
+/** When the Worker's script was last uploaded, or `undefined` without one. */
+const scriptModifiedOn = (accountId: string, workerName: string) =>
+  workers.listScripts.items({ accountId }).pipe(
+    Stream.filter((script) => script.id === workerName),
+    Stream.runHead,
+    Effect.map((script) => (Option.isSome(script) ? script.value.modifiedOn : undefined)),
+  );
+
+const scriptExists = (accountId: string, workerName: string) =>
+  Effect.map(scriptModifiedOn(accountId, workerName), (modified) => modified !== undefined);
+
+/** The version a store's Worker reports. */
+const servedVersion = (url: string) =>
+  Effect.gen(function* () {
+    const response = yield* HttpClient.get(`${url}/version`);
+    return ((yield* response.json) as { version: number }).version;
+  });
+
+const attachedDomains = (accountId: string, hostname: string) =>
+  workers
+    .listDomains({ accountId, hostname })
+    .pipe(
+      Effect.map(({ result }) =>
+        (result ?? []).filter((d) => d.hostname === hostname).map((d) => d.service),
+      ),
+    );
+
+const expectFailure = <A, E>(exit: Exit.Exit<A, E>, message: string) => {
+  expect(Exit.isFailure(exit)).toBe(true);
+  if (Exit.isFailure(exit)) expect(Cause.pretty(exit.cause)).toContain(message);
+};
+
+test.provider(
+  "a store named by workerName deploys once, then adopts and redeploys without touching its secrets",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workerName = storeWorker("deploy");
+      yield* teardownStateStore({ workerName });
+
+      // First use deploys the Worker under exactly `workerName`, with one
+      // token and one key named after it.
+      const state = yield* open({ workerName });
+      yield* state.set({ stack: "deploy", stage: "test", fqn: "a", value: record("a") });
+      const secrets = yield* observeSecrets(accountId, workerName);
+      expect(secrets.token).toHaveLength(1);
+      expect(secrets.key).toHaveLength(1);
+      const uploaded = yield* scriptModifiedOn(accountId, workerName);
+      expect(uploaded).toBeDefined();
+
+      // Opening it again adopts it as it is.
+      const reopened = yield* open({ workerName });
+      expect(yield* reopened.get({ stack: "deploy", stage: "test", fqn: "a" })).toEqual(
+        record("a"),
+      );
+      expect(yield* scriptModifiedOn(accountId, workerName)).toEqual(uploaded);
+
+      // So does a bootstrap, which refreshes the credentials.
+      const adopted = yield* bootstrap({ workerName });
+      expect(yield* adopted.get({ stack: "deploy", stage: "test", fqn: "a" })).toEqual(record("a"));
+      expect(yield* scriptModifiedOn(accountId, workerName)).toEqual(uploaded);
+
+      // A forced redeploy uploads the Worker again over the same secrets.
+      const redeployed = yield* bootstrap({ workerName, force: true });
+      expect(yield* scriptModifiedOn(accountId, workerName)).not.toEqual(uploaded);
+      expect(yield* redeployed.get({ stack: "deploy", stage: "test", fqn: "a" })).toEqual(
+        record("a"),
+      );
+      expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
+
+      yield* teardownStateStore({ workerName });
+      expect(yield* scriptExists(accountId, workerName)).toBe(false);
+      expect(yield* observeSecrets(accountId, workerName)).toEqual({ token: [], key: [] });
+    }),
+  { tags, timeout: 300_000 },
+);
+
+test.provider(
+  "a store whose Worker is gone is redeployed onto its existing secrets",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workerName = storeWorker("orphaned");
+      yield* teardownStateStore({ workerName });
+
+      yield* open({ workerName });
+      const secrets = yield* observeSecrets(accountId, workerName);
+      const profile = yield* currentProfileName;
+      const credentials = yield* loginWithCloudflare(profile, true, workerName, accountId);
+
+      // The Worker is deleted, as after an interrupted teardown.
+      yield* workers.deleteScript({ accountId, scriptName: workerName, force: true });
+
+      const redeployed = yield* bootstrap({ workerName });
+      yield* redeployed.set({ stack: "orphaned", stage: "test", fqn: "a", value: record("a") });
+      expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
+      // The token from before still authenticates.
+      expect(yield* checkHttpStateStoreAuth(credentials)).toBe(true);
+
+      yield* teardownStateStore({ workerName });
+    }),
+  { tags, timeout: 300_000 },
+);
+
+test.provider(
+  "a store missing its auth token gets a new one and keeps its encryption key and state",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workerName = storeWorker("no-token");
+      yield* teardownStateStore({ workerName });
+
+      const state = yield* open({ workerName });
+      yield* state.set({ stack: "no-token", stage: "test", fqn: "a", value: record("a") });
+      const { key } = yield* observeSecrets(accountId, workerName);
+
+      yield* deleteSecret(accountId, workerName, AuthTokenSecretName);
+
+      const healed = yield* bootstrap({ workerName });
+      const secrets = yield* observeSecrets(accountId, workerName);
+      expect(secrets.token).toHaveLength(1);
+      expect(secrets.key).toEqual(key);
+      expect(yield* healed.get({ stack: "no-token", stage: "test", fqn: "a" })).toEqual(
+        record("a"),
+      );
+
+      yield* teardownStateStore({ workerName });
+    }),
+  { tags, timeout: 300_000 },
+);
+
+test.provider(
+  "a store missing its encryption key gets a new one and keeps its auth token",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workerName = storeWorker("no-key");
+      yield* teardownStateStore({ workerName });
+
+      yield* open({ workerName });
+      const { token } = yield* observeSecrets(accountId, workerName);
+
+      yield* deleteSecret(accountId, workerName, EncryptionKeySecretName);
+
+      const healed = yield* bootstrap({ workerName });
+      const secrets = yield* observeSecrets(accountId, workerName);
+      expect(secrets.key).toHaveLength(1);
+      expect(secrets.token).toEqual(token);
+      yield* healed.set({ stack: "no-key", stage: "test", fqn: "a", value: record("a") });
+      expect(yield* healed.get({ stack: "no-key", stage: "test", fqn: "a" })).toEqual(record("a"));
+
+      yield* teardownStateStore({ workerName });
+    }),
+  { tags, timeout: 300_000 },
+);
+
+test.provider(
+  "concurrent first deploys of one store create a single pair of secrets",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workerName = storeWorker("concurrent");
+      yield* teardownStateStore({ workerName });
+
+      const [first, second] = yield* Effect.all(
+        [bootstrap({ workerName }), bootstrap({ workerName })],
+        { concurrency: 2 },
+      );
+      const secrets = yield* observeSecrets(accountId, workerName);
+      expect(secrets.token).toHaveLength(1);
+      expect(secrets.key).toHaveLength(1);
+
+      // Both hold working credentials for the same store.
+      yield* first.set({ stack: "concurrent", stage: "test", fqn: "a", value: record("a") });
+      expect(yield* second.get({ stack: "concurrent", stage: "test", fqn: "a" })).toEqual(
+        record("a"),
+      );
+
+      yield* teardownStateStore({ workerName });
+    }),
+  { tags, timeout: 300_000 },
+);
+
+test.provider(
+  "a store whose name differs from another's only by '-' and '_' is refused, and tearing it down keeps the other's secrets",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workerName = storeWorker("shared");
+      const lookalike = workerName.replaceAll("-", "_");
+      yield* teardownStateStore({ workerName });
+
+      const state = yield* open({ workerName });
+      yield* state.set({ stack: "shared", stage: "test", fqn: "a", value: record("a") });
+      const secrets = yield* observeSecrets(accountId, workerName);
+
+      const refused = yield* Effect.exit(bootstrap({ workerName: lookalike }));
+      expectFailure(refused, `its secrets would be shared with Worker '${workerName}'`);
+      expect(yield* scriptExists(accountId, lookalike)).toBe(false);
+
+      yield* teardownStateStore({ workerName: lookalike });
+      expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
+      const kept = yield* bootstrap({ workerName });
+      expect(yield* kept.get({ stack: "shared", stage: "test", fqn: "a" })).toEqual(record("a"));
+
+      yield* teardownStateStore({ workerName });
+      expect(yield* observeSecrets(accountId, workerName)).toEqual({ token: [], key: [] });
+    }),
+  { tags, timeout: 300_000 },
+);
+
+test.provider(
+  "a domain another Worker owns fails before changing anything, and a free one attaches to the existing store",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workerName = storeWorker("domain");
+      const domain = `state-taken-${stage}.${ZONE}`;
+      yield* stack.destroy();
+      yield* teardownStateStore({ workerName });
+
+      const state = yield* open({ workerName });
+      yield* state.set({ stack: "domain", stage: "test", fqn: "a", value: record("a") });
+      const secrets = yield* observeSecrets(accountId, workerName);
+      const uploaded = yield* scriptModifiedOn(accountId, workerName);
+
+      const holder = yield* stack.deploy(
+        Cloudflare.Worker("DomainHolder", {
+          script: `export default { fetch() { return new Response("holder"); } };`,
+          domain,
+        }),
+      );
+      const taken = yield* Effect.exit(bootstrap({ workerName, domain }));
+      expectFailure(taken, `already attached to Worker '${holder.workerName}'`);
+      expect(yield* attachedDomains(accountId, domain)).toEqual([holder.workerName]);
+      expect(yield* scriptModifiedOn(accountId, workerName)).toEqual(uploaded);
+      expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
+
+      // Once the hostname is free, the existing store moves onto it.
+      yield* stack.destroy();
+      const moved = yield* bootstrap({ workerName, domain });
+      expect(yield* attachedDomains(accountId, domain)).toEqual([workerName]);
+      expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
+      expect(yield* moved.get({ stack: "domain", stage: "test", fqn: "a" })).toEqual(record("a"));
+
+      yield* teardownStateStore({ workerName });
+      expect(yield* attachedDomains(accountId, domain)).toEqual([]);
+    }),
+  { tags, timeout: 400_000 },
+);
+
+/** Run with `CI` and the given env set, as a CI deploy would. */
+const inCI = <A, E, R>(env: Readonly<Record<string, string>>, effect: Effect.Effect<A, E, R>) =>
+  Effect.acquireUseRelease(
+    Effect.sync(() => {
+      const vars = { CI: "true", ...env };
+      const previous = Object.fromEntries(Object.keys(vars).map((key) => [key, process.env[key]]));
+      Object.assign(process.env, vars);
+      return previous;
+    }),
+    () => effect,
+    (previous) =>
+      Effect.sync(() => {
+        for (const [key, value] of Object.entries(previous)) {
+          if (value === undefined) delete process.env[key];
+          else process.env[key] = value;
+        }
+      }),
+  );
+
+test.provider(
+  "in CI, `alchemy state bootstrap` deploys the store the config names, which --backend can't address",
+  () =>
+    Effect.gen(function* () {
+      const environment = yield* yield* CloudflareEnvironment;
+      const { accountId } = environment;
+      const workerName = configuredWorkerName;
+      const entrypoint = fileURLToPath(new URL("./fixtures/configured-store.ts", import.meta.url));
+      const source = { _tag: "Configured", entrypoint } as const;
+      const alchemist = Alchemist.layer();
+      yield* teardownStateStore({ workerName });
+
+      expect(environment.type).toBe("apiToken");
+      const env: Record<string, string> =
+        environment.type === "apiToken"
+          ? {
+              CLOUDFLARE_API_TOKEN: Redacted.value(environment.apiToken),
+              CLOUDFLARE_ACCOUNT_ID: accountId,
+            }
+          : {};
+
+      // A CI run of the stack can't deploy it, and names the command that can.
+      const missing = yield* inCI(
+        env,
+        Effect.exit(Alchemist.State.store(source).pipe(Effect.provide(alchemist))),
+      );
+      expectFailure(missing, `Run 'alchemy state bootstrap --profile`);
+      expect(yield* scriptExists(accountId, workerName)).toBe(false);
+
+      const { version } = yield* inCI(
+        env,
+        Alchemist.State.bootstrapConfigured(source).pipe(Effect.provide(alchemist)),
+      );
+      expect(version).toBe(STATE_STORE_VERSION);
+      expect(yield* scriptExists(accountId, workerName)).toBe(true);
+      const secrets = yield* observeSecrets(accountId, workerName);
+      expect(secrets.token).toHaveLength(1);
+      expect(secrets.key).toHaveLength(1);
+
+      yield* teardownStateStore({ workerName });
+    }),
+  // Exclusive: sets `CI` on the process.
+  { tags, timeout: 300_000, exclusive: true },
+);
+
+/**
+ * The last release before this store's direct deploy: it deploys the store
+ * through a `CloudflareStateStore` stack, and redeploys any store whose
+ * version differs from its own.
+ */
+const OLD_ALCHEMY = "2.0.0-beta.84";
+
+const oldAlchemyDir = fileURLToPath(
+  new URL(`../../../.alchemy/old-alchemy/${OLD_ALCHEMY}/`, import.meta.url),
+);
+
+/** Install the old release once, into a directory of its own. */
+const installOldAlchemy = Effect.gen(function* () {
+  const fs = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const cli = path.join(oldAlchemyDir, "node_modules", "alchemy", "bin", "cli.js");
+  if (yield* fs.exists(cli)) return cli;
+  yield* fs.makeDirectory(oldAlchemyDir, { recursive: true });
+  yield* fs.writeFileString(
+    path.join(oldAlchemyDir, "package.json"),
+    JSON.stringify({ name: "old-alchemy", private: true, type: "module" }),
+  );
+  const { exitCode, stderr } = yield* exec(
+    ChildProcess.make(
+      "npm",
+      [
+        "install",
+        "--no-audit",
+        "--no-fund",
+        `alchemy@${OLD_ALCHEMY}`,
+        `@alchemy.run/cloudflare@${OLD_ALCHEMY}`,
+        "effect@4.0.7",
+        "@effect/platform-node@4.0.7",
+        "@effect/platform-bun@4.0.7",
+      ],
+      { cwd: oldAlchemyDir, stdout: "pipe", stderr: "pipe" },
+    ),
+  );
+  expect({ exitCode, stderr: exitCode === 0 ? "" : stderr }).toEqual({ exitCode: 0, stderr: "" });
+  return cli;
+}).pipe(Effect.scoped);
+
+const oldAlchemyCli = Effect.runSync(Effect.cached(installOldAlchemy));
+
+/** `alchemy state bootstrap --backend cloudflare --name <name>` from the old release. */
+const oldBootstrap = (name: string) =>
+  Effect.gen(function* () {
+    const environment = yield* yield* CloudflareEnvironment;
+    if (environment.type !== "apiToken") {
+      return yield* Effect.die(new Error("The old CLI needs an API token."));
+    }
+    const cli = yield* oldAlchemyCli;
+    const home = `${oldAlchemyDir}home-${name}`;
+    return yield* exec(
+      ChildProcess.make(
+        "node",
+        [cli, "state", "bootstrap", "--backend", "cloudflare", "--name", name, "--no-input"],
+        {
+          cwd: oldAlchemyDir,
+          env: {
+            HOME: home,
+            ALCHEMY_PROFILE: "old-alchemy",
+            CLOUDFLARE_API_TOKEN: Redacted.value(environment.apiToken),
+            CLOUDFLARE_ACCOUNT_ID: environment.accountId,
+          },
+          extendEnv: true,
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      ),
+    ).pipe(Effect.scoped);
+  }).pipe(Effect.provide(NodeServices.layer));
+
+test.provider(
+  "an older Alchemy can't redeploy a store this version deployed",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const name = storeName("new");
+      const workerName = `alchemy-state-store-${name}`;
+      yield* teardownStateStore({ workerName });
+
+      const state = yield* open({ name });
+      yield* state.set({ stack: "new", stage: "test", fqn: "a", value: record("a") });
+      const secrets = yield* observeSecrets(accountId, workerName);
+      const uploaded = yield* scriptModifiedOn(accountId, workerName);
+
+      // It sees a version it doesn't know and redeploys through its bootstrap
+      // stack, which the store refuses before any secret is touched.
+      const old = yield* oldBootstrap(name);
+      expect(old.exitCode).not.toBe(0);
+      expect(`${old.stdout}${old.stderr}`).toContain("409");
+      expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
+      expect(yield* scriptModifiedOn(accountId, workerName)).toEqual(uploaded);
+      const kept = yield* bootstrap({ workerName });
+      expect(yield* kept.get({ stack: "new", stage: "test", fqn: "a" })).toEqual(record("a"));
+
+      yield* teardownStateStore({ workerName });
+    }),
+  { tags, timeout: 400_000 },
+);
+
+test.provider(
+  "a store an older Alchemy deployed is upgraded in place with its secrets and state, and the old version can't take it back",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const name = storeName("old");
+      const workerName = `alchemy-state-store-${name}`;
+      yield* teardownStateStore({ workerName });
+
+      const deployed = yield* oldBootstrap(name);
+      expect({
+        exitCode: deployed.exitCode,
+        output: deployed.exitCode === 0 ? "" : deployed.stderr,
+      }).toEqual({
+        exitCode: 0,
+        output: "",
+      });
+      const secrets = yield* observeSecrets(accountId, workerName);
+      expect(secrets.token).toHaveLength(1);
+      expect(secrets.key).toHaveLength(1);
+
+      // State written to the old Worker.
+      const profile = yield* currentProfileName;
+      const credentials = yield* loginWithCloudflare(profile, true, workerName, accountId);
+      expect(yield* servedVersion(credentials.url)).toBeLessThan(STATE_STORE_VERSION);
+      const legacy = yield* makeHttpStateStore({ ...credentials, id: "legacy" });
+      yield* legacy.set({ stack: "old", stage: "test", fqn: "a", value: record("a") });
+
+      const upgraded = yield* bootstrap({ workerName });
+      expect(yield* servedVersion(credentials.url)).toBe(STATE_STORE_VERSION);
+      expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
+      expect(yield* upgraded.get({ stack: "old", stage: "test", fqn: "a" })).toEqual(record("a"));
+      // The old bootstrap stack's rows stay, but no stack listing shows them.
+      expect(yield* upgraded.listStacks()).toEqual(["old"]);
+
+      const old = yield* oldBootstrap(name);
+      expect(old.exitCode).not.toBe(0);
+      expect(`${old.stdout}${old.stderr}`).toContain("409");
+      expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
+      expect(yield* servedVersion(credentials.url)).toBe(STATE_STORE_VERSION);
+
+      yield* teardownStateStore({ workerName });
+    }),
+  { tags, timeout: 600_000 },
+);
