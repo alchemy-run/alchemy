@@ -124,6 +124,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
               accountId,
             ).pipe(Effect.mapError(existenceUnknown(scriptName)));
             if (observed === undefined) return yield* deployMissing;
+            yield* refuseNewerStore(scriptName, observed);
 
             const httpState = yield* ensureAccess({ url, authToken });
             if (matches) return httpState;
@@ -186,7 +187,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
             return yield* ensureLatest(credentials);
           }
         }
-        if (yield* isStateStoreServing(accountId, scriptName, domain)) {
+        if ((yield* observeServedVersion(accountId, scriptName, domain)) !== undefined) {
           return yield* ensureLatest(
             yield* loginWithCloudflare(profileName, false, scriptName, accountId, domain),
           );
@@ -259,7 +260,8 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       });
       yield* annotateAccountHash(accountId);
 
-      const serving = yield* isStateStoreServing(accountId, scriptName, domain);
+      const observed = yield* observeServedVersion(accountId, scriptName, domain);
+      const serving = observed !== undefined;
       // A store missing a secret is redeployed, which creates only the missing one.
       if (serving && !force && (yield* stateStoreSecretsExist({ accountId, scriptName }))) {
         yield* Interaction.info(
@@ -273,14 +275,7 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           accountId,
           domain,
         );
-        // The store answered just now, so a failed check here only means
-        // redeploying it over its own remote state.
-        const { matches } = yield* checkStateStoreVersion(
-          credentials.url,
-          scriptName,
-          accountId,
-        ).pipe(Effect.orElseSucceed(() => unknownVersion));
-        if (matches) return yield* makeCloudflareStateStore(credentials);
+        if (observed === STATE_STORE_VERSION) return yield* makeCloudflareStateStore(credentials);
       }
       return yield* interaction.task(
         {
@@ -644,7 +639,7 @@ const servesOn = (url: string, domain: string | undefined) =>
  * check: a missing store is bootstrapped, and bootstrapping over a live
  * store replaces its auth token and encryption key.
  */
-const isStateStoreServing = (accountId: string, scriptName: string, domain?: string) =>
+const observeServedVersion = (accountId: string, scriptName: string, domain?: string) =>
   Effect.gen(function* () {
     // Ask the API whether the domain is attached before resolving it, so a
     // lookup before the first deploy can't leave a cached NXDOMAIN behind.
@@ -656,17 +651,32 @@ const isStateStoreServing = (accountId: string, scriptName: string, domain?: str
           e._tag === "StateStoreError" ? e : existenceUnknown(scriptName)(e),
         ),
       )) !== undefined;
-    if (!attached) return false;
-    return yield* Effect.gen(function* () {
+    if (!attached) return undefined;
+    const observed = yield* Effect.gen(function* () {
       const url = yield* stateStoreUrl({ accountId, scriptName, domain }).pipe(
         // Without a workers.dev subdomain, nothing can serve the store.
         Effect.catchTag("SubdomainNotFound", () => Effect.undefined),
       );
-      if (url === undefined) return false;
-      const { observed } = yield* checkStateStoreVersion(url, scriptName, accountId);
-      return observed !== undefined;
+      if (url === undefined) return undefined;
+      return (yield* checkStateStoreVersion(url, scriptName, accountId)).observed;
     }).pipe(Effect.mapError(existenceUnknown(scriptName)));
+    return yield* refuseNewerStore(scriptName, observed);
   });
+
+/**
+ * Fail on a store a newer Alchemy deployed: redeploying this version's Worker
+ * over it could leave its state in a format this version doesn't know.
+ */
+const refuseNewerStore = (scriptName: string, observed: number | undefined) =>
+  observed !== undefined && observed > STATE_STORE_VERSION
+    ? Effect.fail(
+        new StateStoreError({
+          message:
+            `Cloudflare State Store '${scriptName}' runs v${observed}, newer than this ` +
+            `Alchemy's v${STATE_STORE_VERSION}, so it was left untouched. Upgrade alchemy to use it.`,
+        }),
+      )
+    : Effect.succeed(observed);
 
 const existenceUnknown =
   (scriptName: string) =>

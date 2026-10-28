@@ -223,6 +223,37 @@ test.provider(
 );
 
 test.provider(
+  "a store a newer Alchemy deployed is left untouched",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workerName = storeWorker("newer");
+      yield* stack.destroy();
+      yield* teardownStateStore({ workerName });
+
+      // Stands in for a store from a future release: it serves a later version.
+      yield* stack.deploy(
+        Cloudflare.Worker("NewerStore", {
+          name: workerName,
+          script: `export default { fetch() { return Response.json({ version: ${STATE_STORE_VERSION + 1} }); } };`,
+          workersDev: true,
+        }),
+      );
+      const uploaded = yield* scriptModifiedOn(accountId, workerName);
+
+      const message = `runs v${STATE_STORE_VERSION + 1}, newer than this Alchemy's v${STATE_STORE_VERSION}`;
+      expectFailure(yield* Effect.exit(open({ workerName })), message);
+      expectFailure(yield* Effect.exit(bootstrap({ workerName })), message);
+      expectFailure(yield* Effect.exit(bootstrap({ workerName, force: true })), message);
+      expect(yield* scriptModifiedOn(accountId, workerName)).toEqual(uploaded);
+      expect(yield* observeSecrets(accountId, workerName)).toEqual({ token: [], key: [] });
+
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 300_000 },
+);
+
+test.provider(
   "a store whose Worker is gone is redeployed onto its existing secrets",
   () =>
     Effect.gen(function* () {
