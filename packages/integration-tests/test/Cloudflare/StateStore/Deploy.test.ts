@@ -310,6 +310,7 @@ test.provider(
       const { accountId } = yield* yield* CloudflareEnvironment;
       const workerName = storeWorker("shared");
       const lookalike = workerName.replaceAll("-", "_");
+      yield* teardownStateStore({ workerName: lookalike });
       yield* teardownStateStore({ workerName });
 
       const state = yield* open({ workerName });
