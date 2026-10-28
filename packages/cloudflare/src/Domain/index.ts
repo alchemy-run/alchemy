@@ -1549,8 +1549,9 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
  *
  * A view or projection added in a later deploy receives the history recorded
  * before it. Every instance lists itself in a directory of Durable Objects,
- * and the first Domain call in each isolate after the deploy starts a catch-up
- * that runs over the directory in alarms, an hour of history at a time.
+ * and the first Domain call in each isolate after the deploy starts a backfill
+ * that runs over the directory in alarms. Each key of the new consumer pulls
+ * from the instances that feed it and applies their events in timestamp order.
  *
  * ### Hosting on Cloudflare
  * **Example:** A Worker serving an Api

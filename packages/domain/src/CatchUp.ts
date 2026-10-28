@@ -1,22 +1,11 @@
 import type { Delivery } from "./Platform.ts";
 
 /**
- * How a view or projection added after its sources recorded events receives
- * their history. Pure rules shared by every platform.
- *
- * Each source instance (an aggregate instance, or a view key that other
- * consumers read) records how far it has routed its events to each view and
- * projection: its `Routed` cursors. A consumer whose cursor is behind the
- * instance's version is lagging. Live deliveries skip it, and the instance
- * replays its stored events to it instead, in order, through the same outbox,
- * until it reaches the current version and rejoins live delivery. So every
- * consumer receives one source instance's events in order, as the live path
- * does, and replays never jump ahead of history.
- *
- * Platforms replay in rounds bounded by time: each round replays every
- * instance's events committed before `until`, so a consumer fed by many
- * instances sees their history roughly in the order it happened. Policies are
- * never caught up: they act on new events only.
+ * The cursors that route a source instance's events (an aggregate's events,
+ * or a view key's entries) to each view and projection. A consumer whose
+ * cursor is behind the instance's version is lagging: live routing skips it,
+ * and `Backfill` hands it the history instead. Policies are never caught up:
+ * they act on new events only.
  *
  * @internal
  */
@@ -60,32 +49,12 @@ export const routeLive = (
   };
 };
 
-/**
- * The lowest cursor among consumers behind `version`: replay the instance's
- * rows after it. `undefined` when every consumer is caught up.
- */
-export const laggingFrom = (
-  targets: ReadonlyArray<string>,
-  routed: Routed | undefined,
-  version: number,
-): number | undefined => {
-  if (routed === undefined) return undefined;
-  let from: number | undefined;
-  for (const target of targets) {
-    const cursor = routed[target] ?? 0;
-    if (cursor < version) from = from === undefined ? cursor : Math.min(from, cursor);
-  }
-  return from;
-};
-
-/** What a replay needs: stored rows after {@link laggingFrom}, in order. */
+/** What a replay needs: stored rows, in order. */
 export interface ReplayInput<Row> {
   /** The instance: an aggregate id, or a view key. */
   readonly id: string;
   readonly routed: Routed;
   readonly rows: ReadonlyArray<Row>;
-  /** Replay only rows committed before this time, in epoch milliseconds. */
-  readonly until: number;
 }
 
 /** What a replay produced. */
@@ -93,10 +62,4 @@ export interface ReplayResult {
   /** Deliveries to lagging consumers, marked `history`. */
   readonly deliveries: ReadonlyArray<Delivery>;
   readonly routed: Routed;
-  /** When the first row left unreplayed was committed, if a row was left. */
-  readonly next: number | undefined;
 }
-
-/** The earlier of two optional times. */
-export const earliest = (a: number | undefined, b: number | undefined): number | undefined =>
-  a === undefined ? b : b === undefined ? a : Math.min(a, b);

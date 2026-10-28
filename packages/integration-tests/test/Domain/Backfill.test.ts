@@ -17,10 +17,12 @@ const verify = (sim: Sim) =>
     for (const source of sim.sources.values()) {
       const stream = `${source.ref.source}/${source.ref.id}`;
       for (const event of source.events) {
-        for (const key of event.keys) {
-          const list = expected.get(key) ?? [];
-          list.push(`${stream}#${event.seq}`);
-          expected.set(key, list);
+        for (const target of sim.targets) {
+          for (const key of event.keys.map((k) => sim.keyOf(target, k))) {
+            const list = expected.get(key) ?? [];
+            list.push(`${stream}#${event.seq}`);
+            expected.set(key, list);
+          }
         }
       }
     }
@@ -47,9 +49,11 @@ const verify = (sim: Sim) =>
       expect(backfilled.map(order)).toEqual([...backfilled.map(order)].sort());
     }
     for (const source of sim.sources.values()) {
-      expect(
-        (source.object.data.get("routed") as Record<string, number> | undefined)?.[TARGET],
-      ).toBe(source.events.length);
+      for (const target of sim.targets) {
+        expect(
+          (source.object.data.get("routed") as Record<string, number> | undefined)?.[target],
+        ).toBe(source.events.length);
+      }
       expect(
         [...source.object.data.keys()].filter(
           (key) => key.startsWith("bf:") && !key.startsWith("bf:q-"),
@@ -63,7 +67,7 @@ const verify = (sim: Sim) =>
         ),
       ).toEqual([]);
     }
-    expect((yield* sim.status()).complete).toContain(TARGET);
+    for (const target of sim.targets) expect((yield* sim.status()).complete).toContain(target);
   });
 
 /** Commit `count` events on `sources` instances, each routed to one of `keys` keys. */
@@ -76,14 +80,19 @@ const history = (sim: Sim, sources: number, count: number, keys: number, prefix 
 const scenario = (
   name: string,
   run: (sim: Sim) => Effect.Effect<void>,
-  options: { readonly faults?: Faults; readonly seeds?: number } = {},
+  options: {
+    readonly faults?: Faults;
+    readonly seeds?: number;
+    /** More consumers deployed at the same time. */
+    readonly others?: ReadonlyArray<string>;
+  } = {},
 ) =>
   it.effect(name, () =>
     Effect.forEach(
       Array.from({ length: options.seeds ?? 20 }, (_, seed) => seed + 1),
       (seed) =>
         Effect.gen(function* () {
-          const sim = new Sim(seed, TARGET, options.faults ?? noFaults);
+          const sim = new Sim(seed, TARGET, options.faults ?? noFaults, undefined, options.others);
           yield* run(sim);
           yield* verify(sim);
         }).pipe(Effect.annotateLogs({ seed })),
@@ -247,4 +256,52 @@ describe("Domain backfill (simulated)", () => {
       }),
     { faults: { callBefore: 0.05, callAfter: 0.05, crash: 0.05 }, seeds: 40 },
   );
+
+  scenario("instances busy at the deploy stay on older code while calls keep coming", (sim) =>
+    Effect.gen(function* () {
+      for (const commit of history(sim, 6, 30, 3)) yield* commit();
+      yield* sim.deploy({ running: true });
+      // Clients keep writing to two instances every 10 seconds for a few minutes:
+      // they stay on older code all that time, then catch up.
+      const traffic = Array.from({ length: 24 }, (_, i) => () => {
+        sim.now += 10_000;
+        return sim.commit(`A/s${i % 2}`, [`k${i % 3}`]);
+      });
+      yield* sim.run(traffic);
+    }),
+  );
+
+  scenario(
+    "busy instances, busy stale keys and faults together",
+    (sim) =>
+      Effect.gen(function* () {
+        sim.staleKeys.set("k0", sim.now + 40_000);
+        for (const commit of history(sim, 6, 30, 3)) yield* commit();
+        yield* sim.deploy({ running: true });
+        const traffic = Array.from({ length: 12 }, (_, i) => () => {
+          sim.now += 10_000;
+          return sim.commit(`A/s${i % 3}`, [`k${i % 3}`]);
+        });
+        yield* sim.run(traffic);
+      }),
+    { faults: { callBefore: 0.05, callAfter: 0.05, crash: 0.05 }, seeds: 40 },
+  );
+
+  scenario(
+    "two consumers deployed together share the directory, with nodes linking mid-sweep",
+    (sim) =>
+      Effect.gen(function* () {
+        for (const commit of history(sim, 4, 16, 3)) yield* commit();
+        yield* sim.deploy();
+        // New instances list themselves (and link new directory nodes) while both sweeps run.
+        yield* sim.run([...history(sim, 8, 16, 3, "new"), ...history(sim, 4, 8, 2)]);
+      }),
+    { others: ["view:W#1", "view:X#1"], seeds: 40 },
+  );
+
+  scenario("two consumers with faults", (sim) => backfill(sim, 6, 30, 3), {
+    others: ["view:W#1"],
+    faults: { callBefore: 0.05, callAfter: 0.05, crash: 0.05 },
+    seeds: 60,
+  });
 });

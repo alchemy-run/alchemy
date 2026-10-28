@@ -1,5 +1,4 @@
 import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
@@ -34,11 +33,7 @@ export const ledgerWorker = (
           return yield* HttpServerResponse.json(Option.getOrNull(yield* timeline.query("all")));
         }
         if (path[1] === "history" && view) {
-          const { complete, through } = yield* view.history;
-          return yield* HttpServerResponse.json({
-            complete,
-            through: through ? DateTime.toEpochMillis(through) : null,
-          });
+          return yield* HttpServerResponse.json(yield* view.history);
         }
         if (path[1] !== "deposit") return HttpServerResponse.text("Not Found", { status: 404 });
         yield* accounts.send(path[2]!, new Deposit({ amount: Number(path[3]) }));

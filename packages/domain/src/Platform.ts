@@ -280,10 +280,9 @@ export interface AggregateStore {
   readonly connect?: (key: string, subscription: Subscription) => HttpEffect;
 }
 
-/** How much history has reached a consumer: see `View.History`. `through` is epoch milliseconds. */
+/** How much history has reached a consumer: see `View.History`. */
 export interface HistoryJson {
   readonly complete: boolean;
-  readonly through: number | undefined;
 }
 
 /**

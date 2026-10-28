@@ -147,7 +147,7 @@ return yield* summaries.query(Account.ref(accountId), { atLeast: receipt });
 
 Add a view or a projection to a model that already has events, and it receives those events first. You deploy, and it builds itself from the history, with no command and no script to run.
 
-Each aggregate instance remembers how far it has sent its events to each consumer. One that is behind gets the instance's stored events, in order, before any new ones. The history is sent in rounds of one hour of events at a time across every instance, so a consumer fed by many instances sees their events roughly in the order they happened.
+Each key of the new consumer pulls the history from every instance that feeds it and applies those events in the order they were recorded, by timestamp. A summary per account sees its account's events in order, and a single dashboard fed by every account sees all of them in order, as if it had been there from the start. Events recorded while it catches up wait their turn, then arrive live.
 
 Policies never receive history. They act on new events only, so adding a policy never acts on the past again.
 
@@ -161,12 +161,14 @@ Bank.layer(BankHandlers, { versions: { AccountSummary: 1 } });
 
 On the next deploy the view starts over and receives the whole history again, the same way a new view does. Every view and projection that reads it is rebuilt with it.
 
+Bump the version too when you add back a view you removed earlier. Its stored state stopped following the history while it was gone, so it's rebuilt from the start.
+
 ## Know when the history has arrived
 
-Until a new or rebuilt view has received the history, its answers cover only part of it. `history` says whether it's complete, and how far it has got:
+Until a new or rebuilt view has received the history, its answers cover only part of it. `history` says whether it's complete:
 
 ```typescript title="src/summaryStatus.ts"
-const { complete, through } = yield* summaries.history;
+const { complete } = yield* summaries.history;
 ```
 
 A screen can show "catching up" until `complete` is true, or hold its reads until then. A projection's `Progress` service has the same `history`.

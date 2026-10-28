@@ -638,15 +638,11 @@ const build = (
     return [...out].sort();
   };
 
-  /**
-   * Replay stored rows to the consumers lagging behind them, in order, up to
-   * the first row committed at or after `until`.
-   */
+  /** Replay stored rows to the consumers lagging behind them, in order. */
   const replay = <Row>(
     targets: ReadonlyArray<string>,
     input: CatchUp.ReplayInput<Row>,
     seqOf: (row: Row) => number,
-    atOf: (row: Row) => number,
     route: (row: Row, only: ReadonlySet<string>) => ReadonlyArray<Delivery>,
   ): CatchUp.ReplayResult => {
     const routed: Record<string, number> = { ...input.routed };
@@ -655,11 +651,10 @@ const build = (
       const seq = seqOf(row);
       const lagging = new Set(targets.filter((target) => (routed[target] ?? 0) < seq));
       if (lagging.size === 0) continue;
-      if (atOf(row) >= input.until) return { deliveries, routed, next: atOf(row) };
       deliveries.push(...route(row, lagging));
       for (const target of lagging) routed[target] = seq;
     }
-    return { deliveries, routed, next: undefined };
+    return { deliveries, routed };
   };
 
   const viewCodecs = new Map<string, JsonCodec>();
@@ -755,7 +750,6 @@ const build = (
           targets,
           input,
           (row) => row.envelope.seq,
-          (row) => row.envelope.at,
           (row, only) =>
             fanOut(
               {
@@ -969,7 +963,6 @@ const build = (
           targets,
           input,
           (row) => row.seq,
-          (row) => row.envelope.at,
           (row, only) =>
             fanOut(
               {

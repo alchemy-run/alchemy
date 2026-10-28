@@ -283,8 +283,6 @@ export interface WatchOptions<S> {
 export interface History {
   /** Every event recorded before it has reached it: its answers cover the whole history. */
   readonly complete: boolean;
-  /** While incomplete: events committed before this time have reached it, if any have. */
-  readonly through: DateTime.Utc | undefined;
 }
 
 /**

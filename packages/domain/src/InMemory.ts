@@ -1013,7 +1013,6 @@ export const make = (
     history: (target) =>
       Effect.map(net.node.status(""), (status) => ({
         complete: status.complete.includes(target),
-        through: undefined,
       })),
   });
 

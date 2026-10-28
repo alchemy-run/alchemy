@@ -167,6 +167,10 @@ export const defaultLimits: Limits = {
 const enc = encodeURIComponent;
 const pad = (n: number, width: number) => String(Math.max(0, Math.floor(n))).padStart(width, "0");
 
+/** Log a protocol step at debug level (`backfill <step>` and a JSON body), to follow a backfill. */
+const trace = (step: string, fields: Record<string, unknown>) =>
+  Effect.logDebug(`backfill ${step} ${JSON.stringify(fields)}`);
+
 /** The depth of the directory tree's leaves: 16^4 of them. */
 export const DEPTH = 4;
 
@@ -449,6 +453,7 @@ export const makeSource = (
             return scanned >= version ? ("discovered" as const) : ("more" as const);
           }),
         );
+        yield* trace("scan", { source: host.ref, target, result });
         if (result !== "discovered") return result as ScanResult;
         // Discovered only once every key it feeds has been told: a key's sources are
         // complete when discovery is complete everywhere.
@@ -493,6 +498,7 @@ export const makeSource = (
           }),
         );
         yield* queue.flush;
+        yield* trace("ready", { source: host.ref, target, result });
         return result as ReadyResult;
       }),
 
@@ -530,6 +536,14 @@ export const makeSource = (
             return { deliveries, live: true };
           }),
         );
+        yield* trace("pull", {
+          source: host.ref,
+          target,
+          key,
+          after,
+          rows: result.deliveries.length,
+          live: result.live,
+        });
         if (result.live) yield* queue.flush;
         return result;
       }),
@@ -670,13 +684,17 @@ export const makeConsumer = (
       const streams = starved.map(([row]) =>
         decodeURIComponent(row.slice(starvedPrefix(target).length)),
       );
-      yield* Effect.forEach(
+      const failed = yield* Effect.forEach(
         streams,
         (stream) =>
           Effect.gen(function* () {
             const feed = yield* storage.get<Feed>(feedKey(target, stream));
-            if (!feed || feed.live || feed.ref === null) return;
-            const pulled = yield* net.source.pull(feed.ref, target, host.key, feed.cursor);
+            if (!feed || feed.live || feed.ref === null) return false;
+            const pulled = yield* net.source
+              .pull(feed.ref, target, host.key, feed.cursor)
+              // Refused (still on older code) or lost in transit: pull it again later.
+              .pipe(Effect.catchCause(() => Effect.succeed(undefined)));
+            if (pulled === undefined) return true;
             yield* storage.exclusive(
               Effect.gen(function* () {
                 const current = yield* storage.get<Feed>(feedKey(target, stream));
@@ -690,10 +708,11 @@ export const makeConsumer = (
                 });
               }),
             );
+            return false;
           }),
-        { concurrency: limits.concurrency, discard: true },
+        { concurrency: limits.concurrency },
       );
-      return streams.length;
+      return failed.some((stale) => stale);
     });
 
   /**
@@ -817,7 +836,11 @@ export const makeConsumer = (
         if (!backfill) return;
         if (!backfill.ready) {
           // No source has said discovery is complete: ask the directory.
-          const { phase, ask } = yield* askPhase(target, backfill);
+          const asked = yield* askPhase(target, backfill).pipe(
+            Effect.catchCause(() => Effect.succeed(undefined)),
+          );
+          if (asked === undefined) return yield* jobs.schedule(jobId(target), RETRY_MS);
+          const { phase, ask } = asked;
           const ready = phase === "ready" || phase === "complete";
           yield* storage.exclusive(
             Effect.gen(function* () {
@@ -835,11 +858,13 @@ export const makeConsumer = (
             );
         }
         const outcome = yield* applyBuffered(target);
+        yield* trace("merge", { key: host.key, target, outcome });
         if (host.after) yield* host.after;
-        if (outcome === "done") return;
-        if (outcome === "starved") yield* pullStarved(target);
-        if (outcome === "waiting") return;
-        yield* jobs.schedule(jobId(target), 0);
+        if (outcome === "done" || outcome === "waiting") return;
+        // A remote failure never fails the job (which a durable callback would retry
+        // with a growing delay, then park): it asks again after a fixed wait.
+        const failed = outcome === "starved" ? yield* pullStarved(target) : false;
+        yield* jobs.schedule(jobId(target), failed ? RETRY_MS : 0);
       }),
 
     /** Is a backfill of `target` still running on this key? */
@@ -970,10 +995,14 @@ export const makeNode = (
       });
       let stale = false;
       for (const [row, ref] of rows) {
-        const scanned = yield* net.source.scan(ref, target);
+        const scanned = yield* net.source
+          .scan(ref, target)
+          .pipe(Effect.catchCause(() => Effect.succeed("stale" as const)));
         if (scanned === "stale") stale = true;
         if (scanned !== "discovered") continue;
-        const ready = yield* net.source.ready(ref, target);
+        const ready = yield* net.source
+          .ready(ref, target)
+          .pipe(Effect.catchCause(() => Effect.succeed("stale" as const)));
         if (ready === "stale") {
           stale = true;
           continue;
@@ -993,6 +1022,7 @@ export const makeNode = (
 
   const begin = (path: string, target: string, phase: Sweep["phase"]) =>
     Effect.gen(function* () {
+      yield* trace("phase", { path, target, phase });
       const children = (yield* storage.list({ prefix: "c:" })).map(([key]) => key.slice(2));
       const previous = yield* getSweep(target);
       const adopting = phase !== "discover" && previous === undefined ? null : previous?.adopting;
@@ -1042,6 +1072,7 @@ export const makeNode = (
       )
         return;
       yield* storage.put({ [sweepKey(target)]: { ...sweep, reported: true } });
+      yield* trace("settled-phase", { path, target, phase: sweep.phase });
       if (path !== "") return yield* jobs.schedule(`report:${target}`, 0);
       yield* begin(path, target, sweep.phase === "discover" ? "ready" : "complete");
     });
@@ -1054,14 +1085,17 @@ export const makeNode = (
       // Children are told even after this node reported: a child that linked late
       // takes part in the phase (its report is no longer waited for).
       if (!sweep.told) {
-        yield* Effect.forEach(
+        const told = yield* Effect.forEach(
           sweep.children,
-          (child) => net.node.sweep(child, target, sweep.phase),
-          {
-            concurrency: limits.concurrency,
-            discard: true,
-          },
+          (child) =>
+            net.node.sweep(child, target, sweep.phase).pipe(
+              Effect.as(true),
+              Effect.catchCause(() => Effect.succeed(false)),
+            ),
+          { concurrency: limits.concurrency },
         );
+        // A child that could not be told is told on the next step.
+        if (told.includes(false)) return yield* jobs.schedule(`step:${target}`, RETRY_MS);
         yield* storage.exclusive(
           Effect.gen(function* () {
             const current = yield* getSweep(target);
@@ -1090,10 +1124,21 @@ export const makeNode = (
             );
       const results = yield* Effect.forEach(
         batch,
-        (ref) => Effect.map(call(ref), (result) => ({ ref, result })),
+        (ref) =>
+          call(ref).pipe(
+            // Lost in transit, or refused: like older code, call it again after a wait.
+            Effect.catchCause(() => Effect.succeed("stale" as const)),
+            Effect.map((result) => ({ ref, result })),
+          ),
         { concurrency: limits.concurrency },
       );
       const stale = results.some(({ result }) => result === "stale");
+      yield* trace("step", {
+        path,
+        target,
+        phase: sweep.phase,
+        results: results.map(({ ref, result }) => `${ref.source}/${ref.id}:${result}`),
+      });
       const next = yield* storage.exclusive(
         Effect.gen(function* () {
           const current = yield* getSweep(target);
@@ -1225,7 +1270,10 @@ export const makeNode = (
           if (sweep?.reported && sweep.phase !== "complete")
             yield* net.node.report(parent, target, sweep.phase, path);
         }
-      }),
+      }).pipe(
+        // A remote failure asks again after a fixed wait, rather than failing the job.
+        Effect.catchCause(() => jobs.schedule(id, RETRY_MS)),
+      ),
   };
 };
 
@@ -1277,7 +1325,6 @@ export const routeRows = <Row>(
         targets.map((t) => [t, t === target ? seqOf(row) - 1 : Number.MAX_SAFE_INTEGER]),
       ),
       rows: [row],
-      until: Number.POSITIVE_INFINITY,
     }).deliveries,
   }));
 

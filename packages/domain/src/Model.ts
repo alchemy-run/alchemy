@@ -840,13 +840,8 @@ const history = (
 ): Effect.Effect<View.History> =>
   Effect.suspend(() =>
     platform.history
-      ? platform.history(target()).pipe(
-          Effect.map(({ complete, through }) => ({
-            complete,
-            through: through === undefined ? undefined : DateTime.makeUnsafe(through),
-          })),
-        )
-      : Effect.succeed({ complete: true, through: undefined }),
+      ? Effect.map(platform.history(target()), ({ complete }) => ({ complete }))
+      : Effect.succeed({ complete: true }),
   );
 
 const projectionProgress = (

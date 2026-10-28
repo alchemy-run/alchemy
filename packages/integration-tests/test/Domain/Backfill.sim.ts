@@ -157,6 +157,22 @@ export class Sim {
   readonly keys = new Map<string, KeyData>();
   /** Live deliveries waiting to be sent, in order per source (its outbox): retried until they land. */
   readonly outbox = new Map<string, Array<Delivery>>();
+  /** Every consumer deployed together. */
+  get targets(): ReadonlyArray<string> {
+    return [this.target, ...this.others];
+  }
+
+  /** A key of `target`: the primary target's keys are plain, the others' are prefixed. */
+  keyOf(target: string, key: string) {
+    return target === this.target ? key : `${target}|${key}`;
+  }
+
+  /** The target a key belongs to. */
+  targetOfKey(key: string) {
+    const bar = key.indexOf("|");
+    return bar < 0 ? this.target : key.slice(0, bar);
+  }
+
   /** The target exists (the consumer is deployed). */
   deployed = false;
   calls = 0;
@@ -172,12 +188,24 @@ export class Sim {
       nodePage: 2,
       apply: 4,
     },
+    /** More consumers deployed at the same time: they share the directory and the sources. */
+    readonly others: ReadonlyArray<string> = [],
   ) {
     this.random = rng(seed);
   }
 
   chance(p: number) {
     return p > 0 && this.random() < p;
+  }
+
+  /**
+   * A Durable Object keeps the code it started with while calls keep it busy:
+   * a call to one still on older code holds it there for another 20 seconds.
+   */
+  busy<O extends { staleUntil: number }>(object: O): O {
+    if (this.now < object.staleUntil)
+      object.staleUntil = Math.max(object.staleUntil, this.now + 20_000);
+    return object;
   }
 
   /** Every call crosses the network: it may fail before it runs, or after. */
@@ -213,15 +241,15 @@ export class Sim {
       status: (path) => this.call(() => this.node(path).role.status(path)),
     },
     source: {
-      scan: (ref, target) => this.call(() => this.source(ref).role.scan(target)),
-      ready: (ref, target) => this.call(() => this.source(ref).role.ready(target)),
+      scan: (ref, target) => this.call(() => this.busy(this.source(ref)).role.scan(target)),
+      ready: (ref, target) => this.call(() => this.busy(this.source(ref)).role.ready(target)),
       pull: (ref, target, key, after) =>
-        this.call(() => this.source(ref).role.pull(target, key, after)),
+        this.call(() => this.busy(this.source(ref)).role.pull(target, key, after)),
     },
     consumer: {
       source: (target, key, stream, ref) =>
-        this.call(() => this.key(key).role.source(target, stream, ref)),
-      ready: (target, key) => this.call(() => this.key(key).role.ready(target)),
+        this.call(() => this.busy(this.key(key)).role.source(target, stream, ref)),
+      ready: (target, key) => this.call(() => this.busy(this.key(key)).role.ready(target)),
     },
   };
 
@@ -242,23 +270,35 @@ export class Sim {
     return `${ref.source}/${ref.id}`;
   }
 
+  /** An event's deliveries to one target (or every target). */
   private deliveries(
     source: SourceData,
     event: SourceData["events"][number],
     history = false,
+    only?: string,
   ): Array<Delivery> {
     const stream = this.streamOf(source.ref);
-    return event.keys.map((key) => ({
-      target: { kind: "view", name: "V", generation: 1 },
-      key,
-      source: stream,
-      seq: event.seq,
-      origin: source.ref.source,
-      tag: "E",
-      event: { _tag: "E", seq: event.seq },
-      envelope: { id: source.ref.id, stream, seq: event.seq, at: event.at, commandId: "" },
-      ...(history ? { history } : {}),
-    }));
+    return this.targets
+      .filter((target) => only === undefined || target === only)
+      .flatMap((target) => {
+        const [, rest] = target.split(":") as [string, string];
+        const [name, generation] = rest.split("#") as [string, string | undefined];
+        return event.keys.map((key) => ({
+          target: {
+            kind: "view" as const,
+            name,
+            ...(generation ? { generation: Number(generation) } : {}),
+          },
+          key: this.keyOf(target, key),
+          source: stream,
+          seq: event.seq,
+          origin: source.ref.source,
+          tag: "E",
+          event: { _tag: "E", seq: event.seq },
+          envelope: { id: source.ref.id, stream, seq: event.seq, at: event.at, commandId: "" },
+          ...(history ? { history } : {}),
+        }));
+      });
   }
 
   source(ref: Backfill.SourceRef): SourceData {
@@ -280,8 +320,8 @@ export class Sim {
         this.net,
         {
           ref,
-          targets: () => (knows() ? [this.target] : []),
-          model: () => (knows() ? [this.target] : []),
+          targets: () => (knows() ? this.targets : []),
+          model: () => (knows() ? this.targets : []),
           version: Effect.sync(() => data.events.length),
           // Kept in the object's storage, so a crashed step rolls it back with the rest.
           routed: object.storage.get<Routed>("routed"),
@@ -289,19 +329,19 @@ export class Sim {
             Effect.flatMap(object.storage.get<Routed>("routed"), (routed) =>
               object.storage.put({ routed: { ...routed, [target]: data.events.length } }),
             ),
-          rows: (after, limit) =>
+          rows: (after, limit, target) =>
             Effect.sync(() =>
               data.events
                 .filter((event) => event.seq > after)
                 .slice(0, limit)
                 .map((event) => ({
                   seq: event.seq,
-                  deliveries: this.deliveries(data, event, true),
+                  deliveries: this.deliveries(data, event, true, target),
                 })),
             ),
-          rowsAt: (seqs) =>
+          rowsAt: (seqs, target) =>
             Effect.sync(() =>
-              seqs.flatMap((seq) => this.deliveries(data, data.events[seq - 1]!, true)),
+              seqs.flatMap((seq) => this.deliveries(data, data.events[seq - 1]!, true, target)),
             ),
         },
         this.limits,
@@ -331,7 +371,10 @@ export class Sim {
         {
           key,
           // Older code runs the previous generation of the consumer.
-          target: () => (this.now >= keyData.staleUntil ? this.target : "view:V"),
+          target: () => {
+            const target = this.targetOfKey(key);
+            return this.now >= keyData.staleUntil ? target : target.replace(/#\d+$/, "");
+          },
           apply: (deliveries) => Effect.sync(() => this.apply(keyData, deliveries, true)),
         },
         this.limits,
@@ -358,6 +401,7 @@ export class Sim {
     const [name, id] = sourceId.split("/") as [string, string];
     const source = this.source({ source: name, id });
     if (source.events.length === 0) source.staleUntil = staleUntil;
+    this.busy(source);
     const knows = this.deployed && this.now >= source.staleUntil;
     // The first commit lists the instance in the directory before it persists.
     const register =
@@ -372,21 +416,30 @@ export class Sim {
               const before = source.events.length;
               const event = { seq: before + 1, at: this.now, keys };
               source.events.push(event);
-              const deliveries = this.deliveries(source, event);
               const storage = source.object.storage;
               const routed = yield* storage.get<Routed>("routed");
               if (!knows) {
-                // Code without the target: it routes nothing to it, and its cursor stays.
+                // Code without the targets: it routes nothing to them, and its cursors stay.
                 yield* storage.put({ routed: { ...routed } });
                 return [] as ReadonlyArray<Delivery>;
               }
-              const base: Routed = routed ?? { [this.target]: before };
-              if ((base[this.target] ?? 0) === before) {
-                yield* storage.put({ routed: { ...base, [this.target]: before + 1 } });
-                return deliveries as ReadonlyArray<Delivery>;
+              let next: Record<string, number> = {
+                ...(routed ?? Object.fromEntries(this.targets.map((t) => [t, before]))),
+              };
+              const send: Array<Delivery> = [];
+              for (const target of this.targets) {
+                const deliveries = this.deliveries(source, event, false, target);
+                if ((next[target] ?? 0) === before) {
+                  next = { ...next, [target]: before + 1 };
+                  send.push(...deliveries);
+                } else {
+                  send.push(
+                    ...(yield* source.role.onCommit(target, deliveries, before, before + 1)),
+                  );
+                }
               }
-              yield* storage.put({ routed: base });
-              return yield* source.role.onCommit(this.target, deliveries, before, before + 1);
+              yield* storage.put({ routed: next });
+              return send as ReadonlyArray<Delivery>;
             }),
             // A client's command: it is retried by the client, never lost halfway.
             false,
@@ -423,9 +476,10 @@ export class Sim {
   private sendOne(delivery: Delivery) {
     const key = this.key(delivery.key);
     // Older code refuses a newer generation's delivery (its apply dies); the sender retries.
-    if (this.now < key.staleUntil) return Effect.die(new Crash("key still on older code"));
+    if (this.now < this.busy(key).staleUntil)
+      return Effect.die(new Crash("key still on older code"));
     return key.role
-      .admit(this.target, [delivery])
+      .admit(this.targetOfKey(delivery.key), [delivery])
       .pipe(
         Effect.flatMap((apply) =>
           apply
@@ -489,10 +543,16 @@ export class Sim {
     });
   }
 
-  /** Deploy the consumer: code that knows it, and the news of it. */
-  deploy() {
+  /**
+   * Deploy the consumer: code that knows it, and the news of it. Instances
+   * running at the time keep their older code until they have been idle.
+   */
+  deploy(options: { readonly running?: boolean } = {}) {
     this.deployed = true;
-    return this.retry(this.net.node.news("a7", [this.target]));
+    if (options.running)
+      for (const source of this.sources.values())
+        source.staleUntil = Math.max(source.staleUntil, this.now + 20_000);
+    return this.retry(this.net.node.news("a7", this.targets));
   }
 
   /** Run until nothing is left to do, interleaving `actions` (client commits). */

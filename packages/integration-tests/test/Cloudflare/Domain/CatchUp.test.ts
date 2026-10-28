@@ -24,6 +24,12 @@ const call = (url: string, method: "GET" | "POST", path: string) =>
       HttpClientRequest.setHeaders({ connection: "close", "cache-control": "no-cache" }),
     ),
   ).pipe(
+    // A dropped connection is the network's, not the Worker's answer: ask again.
+    Effect.retry({
+      while: (error) => error._tag === "HttpClientError",
+      schedule: Schedule.spaced("1 second"),
+      times: 5,
+    }),
     Effect.flatMap((res) =>
       res.text.pipe(
         Effect.flatMap((body) =>
@@ -62,7 +68,9 @@ const deposits = (url: string, account: string, expected: ReadonlyArray<number>)
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (amounts) => JSON.stringify(amounts) === JSON.stringify(expected),
-      times: 60,
+      // Instances still on the code from before the deploy hold the backfill back
+      // until they have been idle, in 30 second steps: allow a few minutes.
+      times: 150,
     }),
   );
 
@@ -77,7 +85,9 @@ const timeline = (url: string, count: number) =>
     Effect.repeat({
       schedule: Schedule.spaced("2 seconds"),
       until: (entries) => (entries?.length ?? 0) >= count,
-      times: 60,
+      // Instances still on the code from before the deploy hold the backfill back
+      // until they have been idle, in 30 second steps: allow a few minutes.
+      times: 150,
     }),
   );
 
@@ -97,7 +107,9 @@ const historyComplete = (url: string) =>
     Effect.repeat({
       schedule: Schedule.spaced("5 seconds"),
       until: (complete) => complete,
-      times: 60,
+      // Instances still on the code from before the deploy hold the backfill back
+      // until they have been idle, in 30 second steps: allow a few minutes.
+      times: 150,
     }),
   );
 
@@ -108,7 +120,9 @@ for (const dev of [true, false]) {
     const { test } = Test.make({ providers: Cloudflare.providers(), dev });
 
     test.provider(
-      "a view added in a redeploy catches up, and a version bump rebuilds it",
+      // The mode is in the name: the stack is named after the test, and the local and
+      // live runs must not share one.
+      `${dev ? "local" : "live"}: a view added in a redeploy catches up, and a version bump rebuilds it`,
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
