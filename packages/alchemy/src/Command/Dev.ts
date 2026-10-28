@@ -81,6 +81,21 @@ export interface Dev extends Resource<
  * yield* Console.log(dev.url); // e.g. "http://localhost:5173"
  * ```
  *
+ * ### Requiring a URL
+ * By default the resource waits 5 seconds for a URL and settles with
+ * `url: undefined` if none appears. Set `waitForUrl` for servers that
+ * take longer to start, or whose URL downstream resources depend on: the
+ * resource waits up to that long and fails with `UrlNotFound` if no URL
+ * is printed in time.
+ *
+ * **Example:** Wait up to 60 seconds for a slow server
+ * ```typescript
+ * const engine = yield* Dev("Engine", {
+ *   command: "rivet-engine start",
+ *   waitForUrl: "60 seconds",
+ * });
+ * ```
+ *
  * ### Working Directory
  * Use `cwd` to run the command in a subdirectory — useful in
  * monorepos where each package has its own dev server.
