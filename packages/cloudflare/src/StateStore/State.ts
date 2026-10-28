@@ -12,6 +12,7 @@ import {
   makeHttpStateStore,
   type HttpStateStoreCredentials,
 } from "alchemy/State/HttpStateStore";
+import { makeLocalState } from "alchemy/State/LocalState";
 import * as Provisioning from "alchemy/State/Provisioning";
 import { State, StateStoreError } from "alchemy/State/State";
 import { recordStateStoreInit, recordStateStoreOp } from "alchemy/Telemetry/Metrics";
@@ -275,7 +276,10 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           accountId,
           domain,
         );
-        if (observed === STATE_STORE_VERSION) return yield* makeCloudflareStateStore(credentials);
+        if (observed === STATE_STORE_VERSION) {
+          yield* forgetLegacyBootstrapStack(credentials, scriptName);
+          return yield* makeCloudflareStateStore(credentials);
+        }
       }
       return yield* interaction.task(
         {
@@ -446,14 +450,15 @@ const deployStateStore = ({
     // serving the previous version for several seconds. Wait until `/version`
     // reports the version this CLI was built against before using it.
     yield* waitForStateStoreVersion(url, scriptName, accountId);
-    if (authToken === undefined) {
-      return yield* loginWithCloudflare(profileName, true, scriptName, accountId, domain);
-    }
-    const credentials = { url, authToken, accountId };
-    if (!isCI) {
+    const credentials =
+      authToken === undefined
+        ? yield* loginWithCloudflare(profileName, true, scriptName, accountId, domain)
+        : { url, authToken, accountId };
+    if (authToken !== undefined && !isCI) {
       // CI file systems are ephemeral; credentials are re-read each run.
       yield* writeStoreCredentials(yield* CredentialsStore, profileName, scriptName, credentials);
     }
+    yield* forgetLegacyBootstrapStack(credentials, scriptName);
     return credentials;
   }).pipe(
     Effect.withSpan("state_store.deploy", {
@@ -461,6 +466,40 @@ const deployStateStore = ({
     }),
     recordStateStoreOp("deploy"),
   );
+
+/** The stack Alchemy versions before direct deploys deployed the store through. */
+const LEGACY_BOOTSTRAP_STACK = "CloudflareStateStore";
+
+/**
+ * Delete the records of the stack older versions deployed the store through:
+ * the store's own, and those an interrupted bootstrap left in this project's
+ * local state. Destroying that stack would delete the store's Worker and
+ * secrets. A failure only warns: the store refuses that stack's reads and
+ * writes either way, and the next bootstrap tries again.
+ */
+const forgetLegacyBootstrapStack = Effect.fn("state_store.forget_legacy_stack")(
+  function* (credentials: HttpStateStoreCredentials, scriptName: string) {
+    const remote = yield* makeCloudflareStateStore(credentials);
+    yield* remote.deleteStack({ stack: LEGACY_BOOTSTRAP_STACK });
+    // An interrupted bootstrap left its stage as `<profile>_<worker>`.
+    const local = yield* makeLocalState();
+    const stages = yield* local.listStages(LEGACY_BOOTSTRAP_STACK);
+    yield* Effect.forEach(
+      stages.filter((stage) => stage.endsWith(`_${scriptName}`)),
+      (stage) => local.deleteStack({ stack: LEGACY_BOOTSTRAP_STACK, stage }),
+      { discard: true },
+    );
+  },
+  (effect, _credentials, scriptName) =>
+    effect.pipe(
+      Effect.catch((error) =>
+        Interaction.warning(
+          `Couldn't delete the old '${LEGACY_BOOTSTRAP_STACK}' records of Cloudflare State ` +
+            `Store '${scriptName}': ${error.message}`,
+        ),
+      ),
+    ),
+);
 
 /**
  * The account a store lives in: the pinned one, or the profile's. Fails when
@@ -735,6 +774,19 @@ const waitForStateStoreVersion = (url: string, scriptName: string, accountId: st
       // show redeploys occasionally serving the old version for well
       // over 10s. Poll for ~30s before failing loudly.
       schedule: Schedule.max([Schedule.spaced("500 millis"), Schedule.recurs(60)]),
+    }),
+    // Each poll retries on its own, so bound the whole wait.
+    Effect.timeoutOrElse({
+      duration: "2 minutes",
+      orElse: () =>
+        Effect.fail(
+          new StateStoreError({
+            message:
+              `Cloudflare State Store '${scriptName}' was deployed but ${url} did not serve ` +
+              `v${STATE_STORE_VERSION} within 2 minutes. Its secrets and state are unchanged; ` +
+              `run the command again.`,
+          }),
+        ),
     }),
     Effect.withSpan("state_store.wait_for_version", {
       attributes: {

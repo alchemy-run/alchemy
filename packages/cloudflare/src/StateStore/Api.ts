@@ -47,20 +47,22 @@ export const STATE_STORE_VERSION = 8 as const;
  * store whose rows are missing they generate a new auth token and encryption
  * key and overwrite the existing secrets with them, losing all state. The
  * Worker refuses every request for this stack, so such a redeploy fails while
- * reading its state, before it touches a secret.
+ * reading its state, before it touches a secret. Deleting the whole stack is
+ * the exception: bootstrap removes its records so it can't be destroyed.
  */
 const LEGACY_BOOTSTRAP_STACK = "CloudflareStateStore";
 
-const isLegacyBootstrapRequest = (url: string) =>
-  new RegExp(`^/state/stacks/${LEGACY_BOOTSTRAP_STACK}(?:[/?]|$)`).test(
-    new URL(url, "http://store").pathname,
-  );
+const isLegacyBootstrapRequest = (request: HttpServerRequest.HttpServerRequest) => {
+  const { pathname } = new URL(request.url, "http://store");
+  const match = new RegExp(`^/state/stacks/${LEGACY_BOOTSTRAP_STACK}(/.*)?$`).exec(pathname);
+  return match !== null && !(request.method === "DELETE" && match[1] === undefined);
+};
 
 const refuseLegacyBootstrap = <E, R>(
   app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>,
 ) =>
   Effect.flatMap(HttpServerRequest.HttpServerRequest, (request) =>
-    isLegacyBootstrapRequest(request.url)
+    isLegacyBootstrapRequest(request)
       ? Effect.succeed(
           HttpServerResponse.text(
             `This Cloudflare State Store was deployed by a newer version of Alchemy. ` +
@@ -191,7 +193,6 @@ export default Worker(
             .getByName(Store.ROOT_DO_NAME)
             .listStacks()
             .pipe(
-              Effect.map((stacks) => stacks.filter((stack) => stack !== LEGACY_BOOTSTRAP_STACK)),
               failed("listStacks"),
               Effect.withSpan("state_store.listStacks", {
                 attributes: { "alchemy.state_store.op": "listStacks" },

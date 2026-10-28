@@ -22,6 +22,7 @@ import * as Alchemist from "alchemy/Alchemist";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { currentProfileName } from "alchemy/Auth/Profile";
 import { checkHttpStateStoreAuth, makeHttpStateStore } from "alchemy/State/HttpStateStore";
+import { makeLocalState } from "alchemy/State/LocalState";
 import { State } from "alchemy/State/State";
 import { exec } from "alchemy/Util/exec";
 import * as Cause from "effect/Cause";
@@ -623,6 +624,15 @@ test.provider(
       expect(yield* servedVersion(credentials.url)).toBe(OLD_STATE_STORE_VERSION);
       const legacy = yield* makeHttpStateStore({ ...credentials, id: "legacy" });
       yield* legacy.set({ stack: "old", stage: "test", fqn: "a", value: record("a") });
+      // The old version deployed the store through a stack recorded in it.
+      expect([...(yield* legacy.listStacks())].sort()).toEqual(["CloudflareStateStore", "old"]);
+
+      // An interrupted old bootstrap leaves that stack in local state, under
+      // `<profile>_<worker>`. Another store's leftovers are its own business.
+      const local = yield* makeLocalState();
+      const leftover = { stack: "CloudflareStateStore", fqn: "StateStoreSecrets" };
+      yield* local.set({ ...leftover, stage: `${profile}_${workerName}`, value: record("s") });
+      yield* local.set({ ...leftover, stage: `${profile}_other-store`, value: record("s") });
 
       const upgraded = yield* bootstrap({ workerName });
       // A redeploy reaches every edge location within seconds.
@@ -631,8 +641,11 @@ test.provider(
       );
       expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
       expect(yield* upgraded.get({ stack: "old", stage: "test", fqn: "a" })).toEqual(record("a"));
-      // The old bootstrap stack's rows stay, but no stack listing shows them.
+      // The upgrade deletes that stack's records, so nobody can destroy the
+      // store through them.
       expect(yield* upgraded.listStacks()).toEqual(["old"]);
+      expect(yield* local.listStages("CloudflareStateStore")).toEqual([`${profile}_other-store`]);
+      yield* local.deleteStack({ stack: "CloudflareStateStore" });
       const upgradedOn = yield* scriptModifiedOn(accountId, workerName);
 
       const old = yield* oldBootstrap(name);
@@ -691,6 +704,7 @@ test.provider(
       );
       expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
       expect(yield* upgraded.get({ stack: "v7", stage: "test", fqn: "a" })).toEqual(record("a"));
+      expect(yield* upgraded.listStacks()).toEqual(["v7"]);
 
       yield* teardownStateStore({ workerName });
     }),
