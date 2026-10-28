@@ -112,15 +112,22 @@ const migrateCommand = (stage: string) => `alchemy state migrate --stack ${STACK
 
 /**
  * Raw object access to a stage, as a version of alchemy from before the
- * S3 store took a lease would do it. Bucket policies take a few seconds to
- * apply, so this waits for the deny to take effect.
+ * S3 store took a lease would do it. A bucket policy can take a while to
+ * apply everywhere, so this waits for the deny to take effect.
  */
 const deniedRawAccess = (storage: Storage, stage: string) => {
   const Key = `${PREFIX}/${STACK}/${stage}/${b.fqn}.json`;
   const denied = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-    effect.pipe(Effect.flip, Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }));
+    effect.pipe(Effect.flip, Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 45 }));
   return Effect.all([
-    denied(s3.getObject({ Bucket: storage.legacyBucketName, Key })),
+    denied(s3.getObject({ Bucket: storage.legacyBucketName, Key })).pipe(
+      Effect.tapError(() =>
+        s3.getBucketPolicy({ Bucket: storage.legacyBucketName }).pipe(
+          Effect.tap((r) => Effect.logError(`bucket policy while reads were allowed: ${r.Policy}`)),
+          Effect.ignore,
+        ),
+      ),
+    ),
     denied(s3.putObject({ Bucket: storage.legacyBucketName, Key, Body: "{}" })),
     denied(s3.deleteObject({ Bucket: storage.legacyBucketName, Key })),
   ]);
