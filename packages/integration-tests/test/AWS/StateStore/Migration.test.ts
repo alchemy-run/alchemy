@@ -7,6 +7,7 @@ import { openLegacyBucket } from "@alchemy.run/aws/StateStore/LegacyLayout";
 import { migrateToDynamoDB, rollbackToS3 } from "@alchemy.run/aws/StateStore/Migration";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as dynamodb from "@distilled.cloud/aws/dynamodb";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Alchemy from "alchemy";
@@ -15,6 +16,7 @@ import { StateStoreError, type ResourceState } from "alchemy/State";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 
@@ -231,6 +233,104 @@ test.provider(
           Effect.gen(function* () {
             const state = yield* stores(storage).dynamodb;
             expect(yield* state.get({ stack: STACK, stage, fqn: b.fqn })).toEqual(b);
+          }),
+        );
+      }).pipe(Effect.ensuring(release(storage)));
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 180_000 },
+);
+
+test.provider(
+  "while a stage is copied, writes to its S3 objects are denied and reads are not",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(Storage);
+      const stage = "copy-window";
+      const Key = `${PREFIX}/${STACK}/${stage}/${b.fqn}.json`;
+      const Bucket = storage.legacyBucketName;
+      yield* Effect.gen(function* () {
+        yield* seedS3(storage, stage);
+        const checked = { done: false };
+        // The hook runs inside the migration, which provides no AWS context of its own.
+        const aws = yield* Effect.context<Credentials | HttpClient.HttpClient>();
+        const result = yield* migrate(storage, {
+          afterStep: (step) =>
+            step !== "fenced"
+              ? Effect.void
+              : Effect.gen(function* () {
+                  // As a version from before the lease would write. The
+                  // policy takes a few seconds to apply.
+                  yield* s3
+                    .putObject({ Bucket, Key, Body: "{}" })
+                    .pipe(
+                      Effect.flip,
+                      Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 15 }),
+                    );
+                  yield* s3.deleteObject({ Bucket, Key }).pipe(Effect.flip);
+                  yield* s3.getObject({ Bucket, Key });
+                  checked.done = true;
+                }).pipe(
+                  Effect.provideContext(aws),
+                  Effect.mapError(
+                    (error) => new StateStoreError({ message: `copy window: ${String(error)}` }),
+                  ),
+                ),
+        });
+        expect(checked.done).toBe(true);
+        // The writes were refused, so the copy is the seeded stage.
+        expect(result).toEqual([{ stack: STACK, stage, status: "migrated", records: 2 }]);
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const state = yield* stores(storage).dynamodb;
+            expect(yield* state.get({ stack: STACK, stage, fqn: b.fqn })).toEqual(b);
+          }),
+        );
+      }).pipe(Effect.ensuring(release(storage)));
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 180_000 },
+);
+
+test.provider(
+  "the store's own migrate moves stages between the table and bucket it is configured with",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(Storage);
+      const stage = "configured";
+      yield* Effect.gen(function* () {
+        yield* seedS3(storage, stage);
+        // What `alchemy state migrate` calls on the store alchemy.run.ts configures.
+        const viaStore = (rollback: boolean) =>
+          Effect.scoped(
+            Effect.flatMap(stores(storage).dynamodb, (state) =>
+              state.migrate === undefined
+                ? Effect.die("the DynamoDB store has no migrate")
+                : state.migrate({ stack: STACK, stage, rollback }),
+            ),
+          );
+
+        expect(yield* viaStore(false)).toEqual([
+          { stack: STACK, stage, status: "migrated", records: 2 },
+        ]);
+        // Into the configured table, not the account's default one.
+        expect(
+          (yield* dynamodb.getItem({
+            TableName: storage.tableName,
+            Key: { PK: { S: "CATALOG" }, SK: { S: `STAGE#${STACK}#${stage}` } },
+            ConsistentRead: true,
+          })).Item?.migratedFrom?.S,
+        ).toBe(`s3://${storage.legacyBucketName}/${PREFIX}/`);
+
+        expect(yield* viaStore(true)).toEqual([
+          { stack: STACK, stage, status: "rolled-back", records: 2 },
+        ]);
+        yield* Effect.scoped(
+          Effect.gen(function* () {
+            const state = yield* stores(storage).s3;
+            expect(yield* state.get({ stack: STACK, stage, fqn: a.fqn })).toEqual(a);
           }),
         );
       }).pipe(Effect.ensuring(release(storage)));

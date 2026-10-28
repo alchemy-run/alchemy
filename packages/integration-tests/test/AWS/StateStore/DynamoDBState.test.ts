@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import * as AWS from "@alchemy.run/aws";
 import { makeDynamoDBState } from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
+import { createOverflowBucketName } from "@alchemy.run/aws/StateStore/DynamoDBState";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
@@ -470,27 +471,222 @@ test.provider(
   { tags, timeout: 120_000 },
 );
 
-/** Run with `CI` set, as a CI deploy would. */
-const inCI = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  Effect.acquireUseRelease(
-    Effect.sync(() => {
-      const previous = process.env.CI;
-      process.env.CI = "true";
-      return previous;
-    }),
-    () => effect,
-    (previous) =>
+/** Run with `CI` set to `value`, or unset. */
+const withCI =
+  (value: string | undefined) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.acquireUseRelease(
       Effect.sync(() => {
-        if (previous === undefined) delete process.env.CI;
-        else process.env.CI = previous;
+        const previous = process.env.CI;
+        if (value === undefined) delete process.env.CI;
+        else process.env.CI = value;
+        return previous;
       }),
+      () => effect,
+      (previous) =>
+        Effect.sync(() => {
+          if (previous === undefined) delete process.env.CI;
+          else process.env.CI = previous;
+        }),
+    );
+
+/** Run as a CI deploy would. */
+const inCI = withCI("true");
+
+/** Run as a deploy from a laptop would, where a missing store is created on first use. */
+const outsideCI = withCI(undefined);
+
+const bucketExists = (bucketName: string) =>
+  s3.headBucket({ Bucket: bucketName }).pipe(
+    Effect.as(true),
+    Effect.catchTag(["NotFound", "NoSuchBucket"], () => Effect.succeed(false)),
   );
+
+/** A deterministic name per test stage, so runs never collide or touch the account's default store. */
+const stageName = (prefix: string, stage: string) =>
+  Effect.sync(() => `${prefix}-${createHash("sha256").update(stage).digest("hex").slice(0, 8)}`);
 
 const tableExists = (tableName: string) =>
   dynamodb.describeTable({ TableName: tableName }).pipe(
     Effect.as(true),
     Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(false)),
   );
+
+test(
+  "overflow bucket names fit S3's 63-character limit for every valid store name",
+  Effect.sync(() => {
+    const accountId = "123456789012";
+    for (const region of ["us-east-1", "ap-southeast-2"]) {
+      expect(createOverflowBucketName(accountId, region)).toBe(
+        `alchemy-state-overflow-${accountId}-${region}-an`,
+      );
+      expect(createOverflowBucketName(accountId, region, "team-a")).toBe(
+        `alchemy-state-overflow-team-a-${accountId}-${region}-an`,
+      );
+      const seen = new Set<string>();
+      // Store names are 1-20 characters.
+      for (let length = 1; length <= 20; length++) {
+        for (const name of ["a".repeat(length), `${"b".repeat(length - 1)}c`]) {
+          const bucket = createOverflowBucketName(accountId, region, name);
+          expect(bucket.length).toBeLessThanOrEqual(63);
+          expect(bucket).toMatch(/^[a-z0-9][a-z0-9-]*[a-z0-9]$/);
+          expect(bucket).not.toContain("--");
+          expect(bucket.endsWith(`-${accountId}-${region}-an`)).toBe(true);
+          seen.add(bucket);
+        }
+      }
+      // Shortened names stay unique.
+      expect(seen.size).toBe(40);
+    }
+  }),
+);
+
+// A deploy that stalls past its lease (a paused laptop, a GC pause) and
+// lost it to another deploy may still believe its last lease check. The
+// catalog write that enters its stage checks the lease in the same
+// transaction, so the stall can't register a stage it no longer holds.
+test.provider(
+  "a deploy that lost its lease can't enter its stage in the catalog",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(StateStorage);
+      const stage = "lost-lease";
+      const created = resource("Topic", { topicArn: "a" });
+      const leaseKey = { PK: { S: `STAGE#${STACK}#${stage}` }, SK: { S: "LEASE" } };
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const stalled = yield* makeDynamoDBState(storage);
+          // Takes the lease; its check is now trusted for a few seconds.
+          yield* stalled.list({ stack: STACK, stage });
+          // Another deploy takes the lease over.
+          yield* dynamodb.putItem({
+            TableName: storage.tableName,
+            Item: {
+              ...leaseKey,
+              token: { S: "another-deploy" },
+              expiresAt: { N: String(Date.now() + 60_000) },
+            },
+          });
+          const lost = yield* stalled
+            .set({ stack: STACK, stage, fqn: created.fqn, value: created })
+            .pipe(Effect.flip);
+          expect(lost.message).toContain("was lost mid-run");
+        }),
+      );
+
+      const catalog = yield* dynamodb.getItem({
+        TableName: storage.tableName,
+        Key: { PK: { S: "CATALOG" }, SK: { S: `STAGE#${STACK}#${stage}` } },
+        ConsistentRead: true,
+      });
+      expect(catalog.Item).toBeUndefined();
+      expect((yield* partitionItems(storage.tableName, stage)).map((item) => item.SK?.S)).toEqual([
+        "LEASE",
+      ]);
+      expect(
+        (yield* dynamodb.getItem({ TableName: storage.tableName, Key: leaseKey })).Item?.token?.S,
+      ).toBe("another-deploy");
+      yield* dynamodb.deleteItem({ TableName: storage.tableName, Key: leaseKey });
+      yield* stack.destroy();
+    }),
+  { tags, timeout: 120_000 },
+);
+
+test.provider(
+  "a missing overflow bucket is created on first use, and in CI fails before any state is written",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId, region } = yield* AWSEnvironment.current;
+      yield* stack.destroy();
+      const storage = yield* stack.deploy(StateStorage);
+      const overflowBucketName = `${yield* stageName("alchemy-test-ovf", stack.stage)}-${accountId}-${region}-an`;
+      const options = { ...storage, overflowBucketName };
+      const stage = "overflow-up-front";
+      const small = resource("Small", { value: "small" });
+      const write = Effect.scoped(
+        Effect.flatMap(makeDynamoDBState(options), (state) =>
+          state.set({ stack: STACK, stage, fqn: small.fqn, value: small }),
+        ),
+      );
+      const removeBucket = s3.deleteBucket({ Bucket: overflowBucketName }).pipe(Effect.ignore);
+
+      yield* removeBucket;
+      yield* Effect.gen(function* () {
+        const inCi = yield* inCI(Effect.exit(write));
+        expect(Exit.isFailure(inCi)).toBe(true);
+        if (Exit.isFailure(inCi)) {
+          expect(Cause.pretty(inCi.cause)).toContain(
+            `DynamoDB state overflow bucket '${overflowBucketName}'`,
+          );
+        }
+        expect(yield* partitionItems(storage.tableName, stage)).toEqual([]);
+        expect(yield* bucketExists(overflowBucketName)).toBe(false);
+
+        // Outside CI the first write creates it, though this record doesn't overflow.
+        yield* outsideCI(write);
+        expect(yield* bucketExists(overflowBucketName)).toBe(true);
+        yield* Effect.scoped(
+          Effect.flatMap(makeDynamoDBState(options), (state) =>
+            state.deleteStack({ stack: STACK, stage }),
+          ),
+        );
+      }).pipe(Effect.ensuring(removeBucket));
+      yield* stack.destroy();
+    }),
+  // Exclusive: sets `CI` on the process.
+  { tags: [...tags, "provider:aws:s3"], timeout: 120_000, exclusive: true },
+);
+
+test.provider(
+  "a store created on first use has deletion protection and the given KMS key",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId, region } = yield* AWSEnvironment.current;
+      yield* stack.destroy();
+      const { keyArn } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const key = yield* AWS.KMS.Key("StateKey", { description: "DynamoDB state store test" });
+          return { keyArn: key.keyArn };
+        }),
+      );
+      const name = yield* stageName("kms", stack.stage);
+      const table = `alchemy-state-${name}`;
+      const bucket = createOverflowBucketName(accountId, region, name);
+      const target = { _tag: "Provider", backend: "aws", name } as const;
+      const alchemist = Alchemist.layer();
+      const teardown = Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
+
+      yield* teardown;
+      yield* Effect.gen(function* () {
+        yield* outsideCI(
+          Effect.scoped(
+            Effect.flatMap(
+              makeDynamoDBState({ name, kmsKeyId: keyArn, migrateFrom: false }),
+              (state) => state.listStacks(),
+            ),
+          ),
+        );
+        const described = (yield* dynamodb.describeTable({ TableName: table })).Table;
+        expect(described?.DeletionProtectionEnabled).toBe(true);
+        expect(described?.SSEDescription?.SSEType).toBe("KMS");
+        expect(described?.SSEDescription?.KMSMasterKeyArn).toBe(keyArn);
+        const encryption = yield* s3.getBucketEncryption({ Bucket: bucket });
+        const rule = encryption.ServerSideEncryptionConfiguration?.Rules?.[0];
+        expect(rule?.ApplyServerSideEncryptionByDefault?.SSEAlgorithm).toBe("aws:kms");
+        expect(rule?.ApplyServerSideEncryptionByDefault?.KMSMasterKeyID).toBe(keyArn);
+
+        // Teardown lifts the protection to delete it.
+        const torn = yield* teardown;
+        expect([...torn.deleted].sort()).toEqual([table, bucket].sort());
+        expect(yield* tableExists(table)).toBe(false);
+      }).pipe(Effect.ensuring(teardown.pipe(Effect.ignore)));
+      yield* stack.destroy();
+    }),
+  // Exclusive: sets `CI` on the process.
+  { tags: [...tags, "provider:aws:s3", "provider:aws:kms"], timeout: 240_000, exclusive: true },
+);
 
 test.provider(
   "a named DynamoDB state store bootstraps, serves state and tears down",
