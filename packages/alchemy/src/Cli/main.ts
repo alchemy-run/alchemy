@@ -126,6 +126,21 @@ const NoInput = GlobalFlag.Setting("no-input")({
   ),
 });
 
+/**
+ * `--fast-distilled` loads distilled SDKs through their lazy service stubs
+ * under Node. The launcher (`bin/cli.js`) reads it from argv before any
+ * module loads and passes it on as `ALCHEMY_FAST_DISTILLED=1`; this
+ * registration exists so the parser accepts the flag.
+ */
+const FastDistilled = GlobalFlag.Setting("fast-distilled")({
+  flag: Flag.Boolean("fast-distilled").pipe(
+    Flag.withDescription(
+      "Load distilled SDK operations on first use (Node only; lowers startup memory)",
+    ),
+    Flag.withDefault(false),
+  ),
+});
+
 const root = Command.make("alchemy", {}, () =>
   Effect.fail(CliError.ShowHelp.make({ commandPath: ["alchemy"], errors: [] })),
 ).pipe(
@@ -144,7 +159,7 @@ const root = Command.make("alchemy", {}, () =>
       compatibilityCommand(name as CompatibilityCommand),
     ),
   ]),
-  Command.withGlobalFlags([NoInput]),
+  Command.withGlobalFlags([NoInput, FastDistilled]),
 );
 
 /**
