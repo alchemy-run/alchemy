@@ -24,19 +24,23 @@ export const PresignPutObjectToken = Layer.effect(
     makePresignBinding<PresignPutObjectRequest>({
       name: "Cloudflare.R2.PresignPutObject",
       access: "write",
-      presign: (credentials, request) => {
-        const headers: Record<string, string> = {};
-        if (request.contentType !== undefined) headers["content-type"] = request.contentType;
-        if (request.contentLength !== undefined) {
-          headers["content-length"] = String(request.contentLength);
-        }
-        return presignR2Url(credentials, {
+      presign: (credentials, request) =>
+        presignR2Url(credentials, {
           method: "PUT",
           key: request.key,
           expiresIn: request.expiresIn,
-          headers: Object.keys(headers).length > 0 ? headers : undefined,
-        });
-      },
+          headers:
+            request.contentType === undefined && request.contentLength === undefined
+              ? undefined
+              : {
+                  ...(request.contentType !== undefined
+                    ? { "content-type": request.contentType }
+                    : {}),
+                  ...(request.contentLength !== undefined
+                    ? { "content-length": String(request.contentLength) }
+                    : {}),
+                },
+        }),
     }),
   ),
 );
