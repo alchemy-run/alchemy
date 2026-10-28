@@ -33,6 +33,7 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
 import * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { workerName as configuredWorkerName } from "./fixtures/configured-store.ts";
 
@@ -126,6 +127,16 @@ const servedVersion = (url: string) =>
     const response = yield* HttpClient.get(`${url}/version`);
     return ((yield* response.json) as { version: number }).version;
   });
+
+/** The version a store's Worker reports once the edge serves `version`. */
+const eventuallyServes = (url: string, version: number) =>
+  servedVersion(url).pipe(
+    Effect.repeat({
+      until: (served) => served === version,
+      schedule: Schedule.spaced("1 second"),
+      times: 30,
+    }),
+  );
 
 const attachedDomains = (accountId: string, hostname: string) =>
   workers
@@ -555,17 +566,21 @@ test.provider(
       yield* legacy.set({ stack: "old", stage: "test", fqn: "a", value: record("a") });
 
       const upgraded = yield* bootstrap({ workerName });
-      expect(yield* servedVersion(credentials.url)).toBe(STATE_STORE_VERSION);
+      // A redeploy reaches every edge location within seconds.
+      expect(yield* eventuallyServes(credentials.url, STATE_STORE_VERSION)).toBe(
+        STATE_STORE_VERSION,
+      );
       expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
       expect(yield* upgraded.get({ stack: "old", stage: "test", fqn: "a" })).toEqual(record("a"));
       // The old bootstrap stack's rows stay, but no stack listing shows them.
       expect(yield* upgraded.listStacks()).toEqual(["old"]);
+      const upgradedOn = yield* scriptModifiedOn(accountId, workerName);
 
       const old = yield* oldBootstrap(name);
       expect(old.exitCode).not.toBe(0);
       expect(`${old.stdout}${old.stderr}`).toContain("409");
       expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
-      expect(yield* servedVersion(credentials.url)).toBe(STATE_STORE_VERSION);
+      expect(yield* scriptModifiedOn(accountId, workerName)).toEqual(upgradedOn);
 
       yield* teardownStateStore({ workerName });
     }),
