@@ -5,6 +5,7 @@ import * as Arr from "effect/Array";
 import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 
@@ -52,6 +53,8 @@ const DELETE_BATCH_SIZE = 1000;
 export class LegacyStateError extends Data.TaggedError("LegacyStateError")<{
   readonly message: string;
 }> {}
+
+class EmptyBody extends Data.TaggedError("EmptyBody") {}
 
 export const normalizePrefix = (prefix: string | undefined) =>
   prefix ? `${prefix.replace(/\/+$/, "")}/` : "";
@@ -162,16 +165,33 @@ export const readLegacyStage = Effect.fn(function* (
   const records = yield* Effect.forEach(
     recordKeys,
     (key) =>
-      readText(location.bucket, key).pipe(
+      s3.getObject({ Bucket: location.bucket, Key: key }).pipe(
+        Effect.flatMap((result) =>
+          result.Body === undefined
+            ? Effect.fail(new EmptyBody())
+            : Stream.mkString(Stream.decodeText(result.Body)).pipe(
+                Effect.map((text) => ({ text })),
+              ),
+        ),
+        // A response without its body is a transport hiccup: read again.
+        Effect.retry({
+          while: (error) => error._tag === "EmptyBody",
+          schedule: Schedule.spaced("500 millis"),
+          times: 3,
+        }),
+        Effect.catchTag("EmptyBody", () => Effect.succeed(undefined)),
+        Effect.catchTag("NoSuchKey", (error) =>
+          Effect.fail(
+            // Listed but gone: something is writing the stage. Copying the
+            // rest would leave a resource untracked.
+            new LegacyStateError({
+              message: `S3 state object '${key}' was deleted while '${stack}/${stage}' was being read; another deploy is writing it (${error.message ?? "NoSuchKey"})`,
+            }),
+          ),
+        ),
         Effect.flatMap((object) =>
-          // Listed but gone: something is writing the stage. Copying the
-          // rest would leave a resource untracked.
           object === undefined
-            ? Effect.fail(
-                new LegacyStateError({
-                  message: `S3 state object '${key}' was deleted while '${stack}/${stage}' was being read; another deploy is writing it`,
-                }),
-              )
+            ? Effect.fail(new LegacyStateError({ message: `S3 state object '${key}' has no body` }))
             : canonical(object.text, key).pipe(
                 Effect.map((text) => [
                   [decodeFqn(key.slice(prefix.length).replace(/\.json$/, "")), text] as const,

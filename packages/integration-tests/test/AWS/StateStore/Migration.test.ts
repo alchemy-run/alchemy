@@ -216,10 +216,12 @@ test.provider(
             ),
           ).pipe(Effect.flip);
           expect(refused.requires?.command).toBe(migrateCommand(stage));
+          // The S3 store fails at the lock, or at the bucket policy's
+          // write deny once it applies.
           const fenced = yield* Effect.scoped(
             Effect.flatMap(stores(storage).s3, (state) => state.list({ stack: STACK, stage })),
           ).pipe(Effect.flip);
-          expect(fenced.message).toContain("moved to a DynamoDB state store");
+          expect(fenced.message).toMatch(/moved to a DynamoDB state store|explicit deny/);
         }
 
         expect(yield* migrate(storage)).toEqual([
