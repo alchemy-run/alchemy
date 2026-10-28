@@ -844,13 +844,13 @@ const durableObjectPlatform = (
   jurisdiction: DurableObjectJurisdiction | undefined,
 ): Layer.Layer<Platform, never, Worker> =>
   Layer.effect(
-  Platform,
-  Effect.gen(function* () {
-    // Factories run while the Domain's Layer is built, inside the Worker's
-    // init phase; declaring a Durable Object needs that context.
-    const init = yield* captureContext<Worker>();
-    const inInit = <A, E>(effect: Effect.Effect<A, E, Worker>): Effect.Effect<A, E> =>
-      Effect.provide(effect, init);
+    Platform,
+    Effect.gen(function* () {
+      // Factories run while the Domain's Layer is built, inside the Worker's
+      // init phase; declaring a Durable Object needs that context.
+      const init = yield* captureContext<Worker>();
+      const inInit = <A, E>(effect: Effect.Effect<A, E, Worker>): Effect.Effect<A, E> =>
+        Effect.provide(effect, init);
       // Every kind of object is declared through here, so none is left
       // outside the jurisdiction.
       const declareIn = (name: string, impl: ObjectImpl) =>
@@ -858,172 +858,172 @@ const durableObjectPlatform = (
           jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction),
         );
 
-    return Platform.of({
-      aggregate: (aggregate, kit) =>
-        inInit(
-          Effect.gen(function* () {
+      return Platform.of({
+        aggregate: (aggregate, kit) =>
+          inInit(
+            Effect.gen(function* () {
               const namespace = yield* declareIn(
                 `${aggregate.aggregateName}Aggregate`,
                 aggregateObject(kit),
-            );
-            return {
-              send: (id, command, meta) =>
-                unwrapDefects(namespace.getByName(id).send(id, command, meta)),
-              // The object answers with a tag (RPC loses typed failures); fail with it here.
-              schedule: (id, command, meta, due) =>
-                unwrapDefects<{ readonly at: number } | "AlreadyExecuted">(
-                  namespace.getByName(id).schedule(id, command, meta, due),
-                ).pipe(
-                  Effect.flatMap((outcome) =>
-                    outcome === "AlreadyExecuted"
-                      ? Effect.fail(
-                          new AlreadyExecuted({
-                            aggregate: aggregate.aggregateName,
-                            id,
-                            commandId: meta.commandId,
-                          }),
-                        )
-                      : Effect.succeed(outcome.at),
+              );
+              return {
+                send: (id, command, meta) =>
+                  unwrapDefects(namespace.getByName(id).send(id, command, meta)),
+                // The object answers with a tag (RPC loses typed failures); fail with it here.
+                schedule: (id, command, meta, due) =>
+                  unwrapDefects<{ readonly at: number } | "AlreadyExecuted">(
+                    namespace.getByName(id).schedule(id, command, meta, due),
+                  ).pipe(
+                    Effect.flatMap((outcome) =>
+                      outcome === "AlreadyExecuted"
+                        ? Effect.fail(
+                            new AlreadyExecuted({
+                              aggregate: aggregate.aggregateName,
+                              id,
+                              commandId: meta.commandId,
+                            }),
+                          )
+                        : Effect.succeed(outcome.at),
+                    ),
                   ),
-                ),
-              unschedule: (id, commandId) =>
-                unwrapDefects<
-                  "Cancelled" | "AlreadyCancelled" | "AlreadyExecuted" | "NotScheduled"
-                >(namespace.getByName(id).unschedule(commandId)).pipe(
-                  Effect.flatMap(
-                    (
-                      outcome,
-                    ): Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled> => {
-                      const fields = { aggregate: aggregate.aggregateName, id, commandId };
-                      if (outcome === "AlreadyExecuted")
-                        return Effect.fail(new AlreadyExecuted(fields));
-                      if (outcome === "AlreadyCancelled")
-                        return Effect.fail(new AlreadyCancelled(fields));
+                unschedule: (id, commandId) =>
+                  unwrapDefects<
+                    "Cancelled" | "AlreadyCancelled" | "AlreadyExecuted" | "NotScheduled"
+                  >(namespace.getByName(id).unschedule(commandId)).pipe(
+                    Effect.flatMap(
+                      (
+                        outcome,
+                      ): Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled> => {
+                        const fields = { aggregate: aggregate.aggregateName, id, commandId };
+                        if (outcome === "AlreadyExecuted")
+                          return Effect.fail(new AlreadyExecuted(fields));
+                        if (outcome === "AlreadyCancelled")
+                          return Effect.fail(new AlreadyCancelled(fields));
                         if (outcome === "NotScheduled")
                           return Effect.fail(new NotScheduled(fields));
-                      return Effect.void;
-                    },
+                        return Effect.void;
+                      },
+                    ),
                   ),
-                ),
-              state: (id) => unwrapDefects(namespace.getByName(id).state()),
-              // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
-              changes: (id) =>
-                Stream.fromEffectSchedule(
+                state: (id) => unwrapDefects(namespace.getByName(id).state()),
+                // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
+                changes: (id) =>
+                  Stream.fromEffectSchedule(
                     unwrapDefects<{ state: Json; version: number }>(
                       namespace.getByName(id).state(),
                     ),
-                  POLL,
-                ).pipe(Stream.changesWith((a, b) => a.version === b.version)),
-              tail: (id, from) =>
-                pollAfter(
-                  from,
-                  (cursor) =>
-                    unwrapDefects<ReadonlyArray<StoredEvent>>(
-                      namespace.getByName(id).after(cursor),
-                    ),
-                  (event) => event.envelope.seq,
-                ),
-              connect: connectTo(namespace),
-            };
-          }),
-        ),
-      view: (view, kit) =>
-        inInit(
-          Effect.gen(function* () {
+                    POLL,
+                  ).pipe(Stream.changesWith((a, b) => a.version === b.version)),
+                tail: (id, from) =>
+                  pollAfter(
+                    from,
+                    (cursor) =>
+                      unwrapDefects<ReadonlyArray<StoredEvent>>(
+                        namespace.getByName(id).after(cursor),
+                      ),
+                    (event) => event.envelope.seq,
+                  ),
+                connect: connectTo(namespace),
+              };
+            }),
+          ),
+        view: (view, kit) =>
+          inInit(
+            Effect.gen(function* () {
               const namespace = yield* declareIn(`${view.viewName}View`, viewObject(kit));
-            const read = (key: string) =>
-              unwrapDefects<ViewSnapshot>(namespace.getByName(key).read());
-            const after = (key: string, cursor: number) =>
-              unwrapDefects<ReadonlyArray<ViewEntry>>(namespace.getByName(key).after(cursor));
-            return {
-              receive: (key, deliveries) =>
-                unwrapDefects(namespace.getByName(key).receive(key, deliveries)),
-              read,
-              // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
-              changes: (key) =>
-                Stream.fromEffectSchedule(read(key), POLL).pipe(
-                  Stream.changesWith((a, b) => a.version === b.version),
-                ),
-              list: (key) => after(key, 0),
-              connect: connectTo(namespace),
-              tail: (key, from) =>
-                Stream.suspend(() => {
-                  let first = true;
-                  return Stream.paginate(from, (cursor: number) => {
-                    const poll = after(key, cursor);
-                    const next = first ? poll : Effect.delay(poll, "300 millis");
-                    first = false;
-                    return Effect.map(
-                      next,
-                      (fresh) =>
-                        [
-                          fresh,
-                          Option.some(fresh.length > 0 ? fresh[fresh.length - 1]!.seq : cursor),
-                        ] as const,
-                    );
-                  });
-                }),
-            };
-          }),
-        ),
-      projection: (projection, kit) =>
-        inInit(
-          Effect.gen(function* () {
+              const read = (key: string) =>
+                unwrapDefects<ViewSnapshot>(namespace.getByName(key).read());
+              const after = (key: string, cursor: number) =>
+                unwrapDefects<ReadonlyArray<ViewEntry>>(namespace.getByName(key).after(cursor));
+              return {
+                receive: (key, deliveries) =>
+                  unwrapDefects(namespace.getByName(key).receive(key, deliveries)),
+                read,
+                // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
+                changes: (key) =>
+                  Stream.fromEffectSchedule(read(key), POLL).pipe(
+                    Stream.changesWith((a, b) => a.version === b.version),
+                  ),
+                list: (key) => after(key, 0),
+                connect: connectTo(namespace),
+                tail: (key, from) =>
+                  Stream.suspend(() => {
+                    let first = true;
+                    return Stream.paginate(from, (cursor: number) => {
+                      const poll = after(key, cursor);
+                      const next = first ? poll : Effect.delay(poll, "300 millis");
+                      first = false;
+                      return Effect.map(
+                        next,
+                        (fresh) =>
+                          [
+                            fresh,
+                            Option.some(fresh.length > 0 ? fresh[fresh.length - 1]!.seq : cursor),
+                          ] as const,
+                      );
+                    });
+                  }),
+              };
+            }),
+          ),
+        projection: (projection, kit) =>
+          inInit(
+            Effect.gen(function* () {
               const namespace = yield* declareIn(
                 `${projection.projectionName}Projection`,
                 projectionObject(kit),
-            );
-            return {
-              receive: (delivery) =>
-                unwrapDefects(namespace.getByName(delivery.key).receive(delivery.key, delivery)),
-              checkpoints: (key) =>
-                unwrapDefects<Readonly<Record<string, number>>>(
-                  namespace.getByName(key).checkpoints(),
-                ),
-            };
-          }),
-        ),
-      stream: (stream, kit) =>
-        inInit(
-          Effect.gen(function* () {
+              );
+              return {
+                receive: (delivery) =>
+                  unwrapDefects(namespace.getByName(delivery.key).receive(delivery.key, delivery)),
+                checkpoints: (key) =>
+                  unwrapDefects<Readonly<Record<string, number>>>(
+                    namespace.getByName(key).checkpoints(),
+                  ),
+              };
+            }),
+          ),
+        stream: (stream, kit) =>
+          inInit(
+            Effect.gen(function* () {
               const namespace = yield* declareIn(`${stream.streamName}Stream`, streamObject(kit));
-            const read = (key: string) =>
-              unwrapDefects<StreamMeta>(namespace.getByName(key).read());
-            const after = (key: string, cursor: number) =>
-              unwrapDefects<ReadonlyArray<StreamEntry>>(namespace.getByName(key).after(cursor));
-            return {
-              append: (key, write) => unwrapDefects(namespace.getByName(key).append(key, write)),
-              advance: (key, checkpoints) =>
-                unwrapDefects(namespace.getByName(key).advance(checkpoints)),
-              read,
-              // Streamed responses poll; WebSocket reads (`connect`) are pushed on append.
-              changes: (key) =>
-                Stream.fromEffectSchedule(read(key), POLL).pipe(
-                  Stream.changesWith((a, b) => a.seq === b.seq),
-                ),
-              list: (key) => after(key, 0),
-              tail: (key, from) =>
-                pollAfter(
-                  from,
-                  (cursor) => after(key, cursor),
-                  (e) => e.seq,
-                ),
-              connect: connectTo(namespace),
-            };
-          }),
-        ),
-      policy: (policy, kit) =>
-        inInit(
-          Effect.gen(function* () {
+              const read = (key: string) =>
+                unwrapDefects<StreamMeta>(namespace.getByName(key).read());
+              const after = (key: string, cursor: number) =>
+                unwrapDefects<ReadonlyArray<StreamEntry>>(namespace.getByName(key).after(cursor));
+              return {
+                append: (key, write) => unwrapDefects(namespace.getByName(key).append(key, write)),
+                advance: (key, checkpoints) =>
+                  unwrapDefects(namespace.getByName(key).advance(checkpoints)),
+                read,
+                // Streamed responses poll; WebSocket reads (`connect`) are pushed on append.
+                changes: (key) =>
+                  Stream.fromEffectSchedule(read(key), POLL).pipe(
+                    Stream.changesWith((a, b) => a.seq === b.seq),
+                  ),
+                list: (key) => after(key, 0),
+                tail: (key, from) =>
+                  pollAfter(
+                    from,
+                    (cursor) => after(key, cursor),
+                    (e) => e.seq,
+                  ),
+                connect: connectTo(namespace),
+              };
+            }),
+          ),
+        policy: (policy, kit) =>
+          inInit(
+            Effect.gen(function* () {
               const namespace = yield* declareIn(`${policy.policyName}Policy`, policyObject(kit));
-            return {
-              receive: (delivery) =>
-                unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
-            };
-          }),
-        ),
-    });
-  }),
+              return {
+                receive: (delivery) =>
+                  unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
+              };
+            }),
+          ),
+      });
+    }),
   );
 
 /**
