@@ -168,6 +168,13 @@ test.provider(
       const secrets = yield* observeSecrets(accountId, workerName);
       expect(secrets.token).toHaveLength(1);
       expect(secrets.key).toHaveLength(1);
+      const suffix = workerName.replaceAll("-", "_");
+      expect(stateStoreSecretName(AuthTokenSecretName, workerName)).toBe(
+        `AlchemyStateStoreToken_${suffix}`,
+      );
+      expect(stateStoreSecretName(EncryptionKeySecretName, workerName)).toBe(
+        `AlchemyStateStoreEncryptionKey_${suffix}`,
+      );
       const uploaded = yield* scriptModifiedOn(accountId, workerName);
       expect(uploaded).toBeDefined();
 
@@ -196,6 +203,23 @@ test.provider(
       expect(yield* observeSecrets(accountId, workerName)).toEqual({ token: [], key: [] });
     }),
   { tags, timeout: 300_000 },
+);
+
+test.provider(
+  "a Worker name workers.dev can't serve fails before anything is created",
+  () =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      // Cloudflare uploads a 64-character Worker name, but a workers.dev label
+      // holds 63.
+      const workerName = `${storeWorker("too-long")}-`.padEnd(64, "x");
+      const message = `Invalid Cloudflare State Store Worker name '${workerName}'`;
+      expectFailure(yield* Effect.exit(open({ workerName })), message);
+      expectFailure(yield* Effect.exit(bootstrap({ workerName })), message);
+      expect(yield* scriptExists(accountId, workerName)).toBe(false);
+      expect(yield* observeSecrets(accountId, workerName)).toEqual({ token: [], key: [] });
+    }),
+  { tags, timeout: 60_000 },
 );
 
 test.provider(

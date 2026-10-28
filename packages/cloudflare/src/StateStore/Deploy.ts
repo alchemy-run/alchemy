@@ -56,6 +56,7 @@ export const deployStateStoreWorker = Effect.fn("state_store.deploy_worker")(fun
   domain: string | undefined;
 }) {
   yield* Effect.annotateCurrentSpan({ "alchemy.state_store.script_name": scriptName });
+  yield* validateStateStoreWorkerName(scriptName);
   // Fail on secrets or a hostname another Worker owns before changing anything.
   const sharing = yield* findSecretSharingWorker({ accountId, scriptName });
   if (sharing !== undefined) {
@@ -156,6 +157,23 @@ export const deployStateStoreWorker = Effect.fn("state_store.deploy_worker")(fun
   if (domain !== undefined) yield* attachDomain({ accountId, scriptName, domain });
   return { url: yield* stateStoreUrl({ accountId, scriptName, domain }), authToken };
 });
+
+/**
+ * A store's Worker name: lowercase letters, digits, `-` and `_`, starting with
+ * a letter or digit, at most 63 characters. Cloudflare takes longer names, but
+ * the store serves on `<name>.<subdomain>.workers.dev`, whose labels are capped
+ * at 63, and the cap keeps its secret names well under the Secrets Store's 255.
+ */
+export const validateStateStoreWorkerName = (scriptName: string) =>
+  /^[a-z0-9][a-z0-9_-]{0,62}$/.test(scriptName)
+    ? Effect.succeed(scriptName)
+    : Effect.fail(
+        new StateStoreError({
+          message:
+            `Invalid Cloudflare State Store Worker name '${scriptName}': use 1-63 lowercase ` +
+            `letters, digits, '-' and '_', starting with a letter or digit.`,
+        }),
+      );
 
 /**
  * Another Worker whose store's secrets have the same names as this store's.

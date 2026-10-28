@@ -42,6 +42,7 @@ import {
   observeStateStoreDomain,
   stateStoreSecretsExist,
   stateStoreUrl,
+  validateStateStoreWorkerName,
 } from "./Deploy.ts";
 import { AuthTokenSecretName, EncryptionKeySecretName, stateStoreSecretName } from "./Token.ts";
 
@@ -71,7 +72,12 @@ export type CloudflareStateOptions = {
       readonly workerName?: never;
     }
   | {
-      /** The store's full Worker name, instead of deriving it from `name`. */
+      /**
+       * The store's full Worker name, instead of deriving it from `name`:
+       * 1-63 lowercase letters, digits, `-` and `_`, starting with a letter or
+       * digit. Its secrets are named after it, e.g. `acme-state` keeps its
+       * token in `AlchemyStateStoreToken_acme_state`.
+       */
       readonly workerName: string;
       readonly name?: never;
     }
@@ -103,6 +109,7 @@ export const state = (options: CloudflareStateOptions = {}) =>
 
       const init = Effect.gen(function* () {
         if (name !== undefined) yield* Provisioning.storeName(name);
+        yield* validateStateStoreWorkerName(scriptName);
         const accountId = yield* resolveAccountId(options.accountId);
         const deployMissing = Provisioning.deployMissing(
           store,
@@ -238,7 +245,9 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
       const interaction = yield* Interaction.Interaction;
       const isCI = yield* CI;
       const profileName = options.profile ?? (yield* currentProfileName);
-      const scriptName = options.workerName ?? STATE_STORE_SCRIPT_NAME;
+      const scriptName = yield* validateStateStoreWorkerName(
+        options.workerName ?? STATE_STORE_SCRIPT_NAME,
+      );
       const force = options.force ?? false;
       const accountId = yield* resolveAccountId(options.accountId);
       const { domain } = options;
