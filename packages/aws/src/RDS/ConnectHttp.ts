@@ -134,7 +134,7 @@ export const ConnectHttp = Layer.effect(
               }
             : undefined;
         if (options.auth === "iam") {
-          yield* bind`AWS.RDS.Connect(${resource})`({
+          yield* bind`AWS.RDS.Connect(${resource}, ${options.username})`({
             policyStatements: [
               {
                 Effect: "Allow",
