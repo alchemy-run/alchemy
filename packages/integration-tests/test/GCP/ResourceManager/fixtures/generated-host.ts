@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { hostProject, probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeTagKey, ProbeTagValue } from "./generated-resources.ts";
 
 /**
@@ -22,11 +22,9 @@ export default class ResourceManagerGeneratedHost extends GCP.Function<ResourceM
     const p3 = yield* GCP.ResourceManager.GetTagKeyNamespaced();
     const p4 = yield* GCP.ResourceManager.GetTagValue(ProbeTagValue);
     const p5 = yield* GCP.ResourceManager.GetTagValueNamespaced();
-    const p6 = yield* GCP.ResourceManager.ListProjects();
-    const p7 = yield* GCP.ResourceManager.ListTagKeys();
-    const p8 = yield* GCP.ResourceManager.ListTagValues();
-    const p9 = yield* GCP.ResourceManager.ListTagValueTagHolds(ProbeTagValue);
-    const p10 = yield* GCP.ResourceManager.SearchProject();
+    const p6 = yield* GCP.ResourceManager.ListTagKeys();
+    const p7 = yield* GCP.ResourceManager.ListTagValueTagHolds(ProbeTagValue);
+    const p8 = yield* GCP.ResourceManager.SearchProject();
     return {
       fetch: serveProbes({
         CreateTagValueTagHold: probeOutcome(
@@ -39,11 +37,11 @@ export default class ResourceManagerGeneratedHost extends GCP.Function<ResourceM
         GetTagKeyNamespaced: probeOutcome(Retry.none(p3({} as never))),
         GetTagValue: probeOutcome(Retry.none(p4({} as never))),
         GetTagValueNamespaced: probeOutcome(Retry.none(p5({} as never))),
-        ListProjects: probeOutcome(Retry.none(p6({} as never))),
-        ListTagKeys: probeOutcome(Retry.none(p7({} as never))),
-        ListTagValues: probeOutcome(Retry.none(p8({} as never))),
-        ListTagValueTagHolds: probeOutcome(Retry.none(p9({} as never))),
-        SearchProject: probeOutcome(Retry.none(p10({} as never))),
+        ListTagKeys: probeOutcome(
+          Retry.none(p6({ parent: `projects/${yield* hostProject}` } as never)),
+        ),
+        ListTagValueTagHolds: probeOutcome(Retry.none(p7({} as never))),
+        SearchProject: probeOutcome(Retry.none(p8({} as never))),
       }),
     };
   }).pipe(
@@ -56,9 +54,7 @@ export default class ResourceManagerGeneratedHost extends GCP.Function<ResourceM
           GCP.ResourceManager.GetTagKeyNamespacedHttp,
           GCP.ResourceManager.GetTagValueHttp,
           GCP.ResourceManager.GetTagValueNamespacedHttp,
-          GCP.ResourceManager.ListProjectsHttp,
           GCP.ResourceManager.ListTagKeysHttp,
-          GCP.ResourceManager.ListTagValuesHttp,
           GCP.ResourceManager.ListTagValueTagHoldsHttp,
           GCP.ResourceManager.SearchProjectHttp,
         ),
