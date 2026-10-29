@@ -434,7 +434,9 @@ const retentionMillis = (
   value: Duration.Input | "forever" | undefined,
   fallback: Duration.Input,
 ): number | undefined =>
-  value === "forever" ? undefined : Duration.toMillis(Duration.fromInputUnsafe(value ?? fallback));
+  value === "forever" || !Duration.isFinite(Duration.fromInputUnsafe(value ?? fallback))
+    ? undefined
+    : Duration.toMillis(Duration.fromInputUnsafe(value ?? fallback));
 
 /** A conflict the database resolved by aborting the transaction. */
 const isConflict = (error: SqlErrors.SqlError): boolean =>
@@ -572,16 +574,22 @@ const make = (options: Options) =>
 
     // ------------------------------------------------------------ clients
 
+    /** The entity types this platform registered: the only ones retention prunes. */
+    const owned = new Set<string>();
     const register = (
       entity: Entity.Entity<string, any>,
       handlers: Effect.Effect<any, never, any>,
     ): Effect.Effect<void> =>
-      sharding
-        .registerEntity(entity, handlers as never, {
-          concurrency: 1,
-          maxIdleTime: options.entityMaxIdleTime,
-        })
-        .pipe(Effect.provideService(Scope.Scope, scope)) as Effect.Effect<void>;
+      Effect.sync(() => owned.add(entity.type)).pipe(
+        Effect.andThen(
+          sharding
+            .registerEntity(entity, handlers as never, {
+              concurrency: 1,
+              maxIdleTime: options.entityMaxIdleTime,
+            })
+            .pipe(Effect.provideService(Scope.Scope, scope)) as Effect.Effect<void>,
+        ),
+      );
 
     const clients = new Map<string, (id: string) => any>();
     const clientOf = (type: string, entity: () => Entity.Entity<string, any>) =>
@@ -710,7 +718,7 @@ const make = (options: Options) =>
         yield* sql`DELETE FROM ${table.receipts} WHERE at < ${at - retention.receipts}`;
       if (retention.cancelled !== undefined)
         yield* sql`DELETE FROM ${table.schedules} WHERE token = ${CANCELLED} AND at < ${at - retention.cancelled}`;
-      if (retention.messages !== undefined) {
+      if (retention.messages !== undefined && owned.size > 0) {
         // Message ids are snowflakes: the time they were made is in their high bits.
         const before = String(
           Snowflake.make({
@@ -719,10 +727,11 @@ const make = (options: Options) =>
             sequence: 0,
           }),
         );
-        // Domain entities only (`Domain.Aggregate/…`, `Domain.View/…`, …).
-        const ours = "Domain.%";
-        yield* sql`DELETE FROM ${clusterTables.replies} WHERE request_id IN (SELECT id FROM ${clusterTables.messages} WHERE id < ${before} AND processed = ${sqlTrue} AND entity_type LIKE ${ours})`;
-        yield* sql`DELETE FROM ${clusterTables.messages} WHERE id < ${before} AND processed = ${sqlTrue} AND entity_type LIKE ${ours}`;
+        // This platform's entity types only: another model on the same
+        // cluster keeps its own retention.
+        const ours = sql.in("entity_type", [...owned]);
+        yield* sql`DELETE FROM ${clusterTables.replies} WHERE request_id IN (SELECT id FROM ${clusterTables.messages} WHERE id < ${before} AND processed = ${sqlTrue} AND ${ours})`;
+        yield* sql`DELETE FROM ${clusterTables.messages} WHERE id < ${before} AND processed = ${sqlTrue} AND ${ours}`;
       }
     });
 
@@ -1485,20 +1494,24 @@ export const layer = (
  * nanoseconds (a `Duration.Input` may be a bigint, which JSON cannot hold).
  */
 const cacheKey = (options: Options): string => {
-  const nanos = (input: Duration.Input | undefined) =>
-    input === undefined
-      ? null
+  const nanos = (input: Duration.Input | "forever" | undefined) =>
+    input === undefined || input === "forever"
+      ? (input ?? null)
       : Duration.isFinite(Duration.fromInputUnsafe(input))
         ? String(Duration.toNanosUnsafe(input))
         : "infinity";
   return JSON.stringify([
     options.tablePrefix ?? "domain",
+    options.clusterTablePrefix ?? "cluster",
     options.migrations !== false,
     options.watchMillis ?? 250,
     options.sweep?.intervalMillis ?? 10_000,
     options.sweep?.afterMillis ?? 30_000,
     options.viewEntries ?? 50,
     nanos(options.entityMaxIdleTime),
+    nanos(options.retention?.receipts),
+    nanos(options.retention?.cancelled),
+    nanos(options.retention?.messages),
   ]);
 };
 
