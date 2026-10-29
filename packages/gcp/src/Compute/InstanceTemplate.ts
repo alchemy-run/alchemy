@@ -410,7 +410,7 @@ const toAttrs = (template: compute.InstanceTemplate, project: string) => ({
 const getByName = (project: string, instanceTemplate: string) =>
   compute
     .getInstanceTemplates({ project, instanceTemplate })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilPresent = (project: string, templateName: string) =>
   getByName(project, templateName).pipe(
@@ -424,7 +424,7 @@ const waitUntilPresent = (project: string, templateName: string) =>
       times: 8,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag("GCP.Compute.InstanceTemplateNotResolved", () => Effect.succeed(undefined)),
+    Effect.catchTag("GCP.Compute.InstanceTemplateNotResolved", () => Effect.undefined),
   );
 
 const waitUntilGone = (project: string, templateName: string) =>
@@ -551,7 +551,7 @@ export const InstanceTemplateProvider = () =>
           instanceTemplate: output.templateName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

@@ -7,7 +7,28 @@ import DAG from "../../../components/DAG.astro";
 
 An aggregate is the part of a model that makes decisions. Each instance, one bank account for example, holds the state its rules need, takes one command at a time, and answers with events or a refusal.
 
-This page builds the account from the [tutorial](/domain/tutorial/part-1) piece by piece: its state, how it decides, how it applies what it decided, and what makes it safe under concurrent use.
+This chapter starts with what an aggregate is for and how to find one, then builds the account from the [tutorial](/domain/tutorial/part-1) piece by piece: its state, how it decides, how it applies what it decided, and what makes it safe under concurrent use. It ends with how to draw an aggregate's boundary.
+
+## What an aggregate protects
+
+Every business has rules that must never be broken, not even for a moment. An account's balance never goes below zero. A username belongs to at most one customer. A transfer is either approved or expired, never both. DDD calls these **invariants**, and an aggregate is the thing that keeps one true.
+
+To find the invariants, ask the business what must never happen. Then ask which commands could make it happen. A withdrawal could overdraw an account, so `WithdrawMoney` has to be decided by something that knows the balance. That something is the `Account` aggregate: it holds the balance, and every command that could break the rule about it goes through it.
+
+<DAG
+  nodes={[
+    { id: "deposit", label: "DepositMoney", type: "changes the balance", kind: "command", layer: 0 },
+    { id: "withdraw", label: "WithdrawMoney", type: "could overdraw", kind: "command", layer: 0 },
+    { id: "account", label: "Account", type: "balance ≥ 0", kind: "aggregate", layer: 1 },
+  ]}
+  edges={[
+    { from: "deposit", to: "account" },
+    { from: "withdraw", to: "account" },
+  ]}
+  caption="Every command that touches the balance goes through the one thing that guards it."
+/>
+
+So an aggregate isn't a table or an entity with getters and setters. It's a rule, together with exactly the state the rule needs, and the commands that have to respect it. Find the rule first; the state and the commands follow.
 
 ## Give it an identity
 
@@ -222,6 +243,52 @@ Nothing spans two instances. A transfer between accounts can't debit one and cre
 
 That shapes how big an aggregate should be. Draw it around the rules that must hold together, and no wider. A customer and their accounts are separate aggregates: no rule needs a customer's name and an account's balance to change in the same step, and keeping them apart means one busy account never slows down the others.
 
+## Give a rule across instances its own aggregate
+
+Some rules span many instances. Usernames must be unique across every customer, but each customer is its own aggregate, and no customer can see the others. Making `Customer` check every other customer would need a transaction across all of them, which doesn't exist.
+
+The answer is to ask what the rule is about. Uniqueness is about one username, so make the username the aggregate. `UsernameClaim` is keyed by the username itself, and holds who has it:
+
+```typescript title="packages/domain/src/Customer/UsernameClaim.aggregate.ts"
+export class UsernameClaim extends Domain.Aggregate("UsernameClaim", {
+  id: Username,
+  state: Schema.Union([
+    Schema.TaggedStruct("Free", {}),
+    Schema.TaggedStruct("Claimed", { customerId: CustomerId }),
+  ]),
+  initial: { _tag: "Free" },
+  commands: [ClaimUsername],
+  decide: {
+    ClaimUsername: (s, cmd) =>
+      s._tag === "Free"
+        ? [new UsernameClaimed({ customerId: cmd.customerId })]
+        : s.customerId === cmd.customerId
+          ? []
+          : new UsernameTaken(),
+  },
+  evolve: {
+    UsernameClaimed: (_, e) => ({ _tag: "Claimed" as const, customerId: e.customerId }),
+  },
+}) {}
+```
+
+Two customers who ask for `sam` at the same moment both send `ClaimUsername` to the same instance, `UsernameClaim/sam`. It decides one at a time, so one wins and the other is told `UsernameTaken`. The rule holds without anything spanning two aggregates. See [Unique values](/domain/unique-values).
+
+## Keep a process's state in an aggregate
+
+A process that takes time, like a transfer that may wait a day for approval, has state of its own: requested, awaiting approval, completed, failed. Rules apply to that state too. An approval that arrives after the deadline must be refused, and an expiry that arrives after an approval must do nothing.
+
+Those rules make the process an aggregate. In the example bank, `Transfer` holds where each transfer stands, and both `ApproveTransfer` and `ExpireTransfer` go through it, so whichever arrives first wins:
+
+```typescript title="packages/domain/src/Transfer/Transfer.aggregate.ts"
+ExpireTransfer: (s, _, { id }) =>
+  s._tag === "AwaitingApproval"
+    ? [new TransferFailed({ transferId: id, reason: "not approved in time" })]
+    : [],
+```
+
+The money itself still moves through the two accounts, each guarding its own balance. A [saga](/domain/saga) carries out the steps, and reports each outcome back to the `Transfer`, so there's one place that knows how every transfer ended.
+
 ## Send it commands
 
 Inside a hosted model, the aggregate is a service. `yield* Account` gives you its client, and `send` takes an instance id and a command.
@@ -232,8 +299,8 @@ yield* accounts
   .pipe(Effect.catchTag("AlreadyOpen", () => Effect.void));
 ```
 
-The same client reads an instance's current state with `accounts.state(id)`, and schedules a command for later with `accounts.schedule(id, command, { after })`. See [Deadlines](/domain/deadlines).
+The same client reads an instance's current state with `accounts.state(id)`, schedules a command for later with `accounts.schedule(id, command, { after })`, which returns the command id and when it's due, and cancels a pending one with `accounts.unschedule(id, commandId)`. Both fail with `AlreadyExecuted` when that command already ran, and `unschedule` fails with `AlreadyCancelled` or `NotScheduled` when there's nothing pending to cancel. See [Deadlines](/domain/deadlines).
 
 Clients outside the model send commands through an [Api](/domain/api). An aggregate with a `read` contract can also be read through one, so a client can fetch an account, watch it change, and follow its events.
 
-Next, [View](/domain/view) builds read models from the events aggregates record.
+Next, [View](/domain/view): the query side, built from the events aggregates record.

@@ -1,4 +1,5 @@
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 /**
@@ -19,7 +20,6 @@ import * as Plan from "@/Plan";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
 import { InMemoryService, State, type ResourceState } from "@/State";
-import * as Test from "@/Test/Alchemy";
 import { BindingTarget, TestLayers, TestResource } from "./test.resources.ts";
 
 const { test } = Test.make({

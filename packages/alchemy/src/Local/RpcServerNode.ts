@@ -20,7 +20,14 @@ export const RpcServerNode = RpcServer.layerServer(
           undefined;
         const session = createRpcSession(ws, sessionEnv);
         ws.on("message", (data) => {
-          session.dispatch.message(data.toString());
+          session.dispatch.message(
+            (Array.isArray(data)
+              ? Buffer.concat(data)
+              : Buffer.isBuffer(data)
+                ? data
+                : Buffer.from(data)
+            ).toString(),
+          );
         });
         ws.on("close", (code, reason) => {
           session.dispatch.close(code, reason.toString());

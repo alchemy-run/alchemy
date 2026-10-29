@@ -237,7 +237,7 @@ const getByName = (project: string, interconnectAttachmentGroup: string) =>
       project,
       interconnectAttachmentGroup,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, interconnectAttachmentGroupName: string) =>
   getByName(project, interconnectAttachmentGroupName).pipe(

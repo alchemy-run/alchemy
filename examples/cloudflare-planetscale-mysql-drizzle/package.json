@@ -29,6 +29,7 @@
     "effect": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/test": "workspace:*",
     "drizzle-kit": "catalog:"
   }
 }

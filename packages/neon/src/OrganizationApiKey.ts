@@ -210,7 +210,7 @@ export const OrganizationApiKeyProvider = () =>
     }),
     delete: Effect.fn(function* ({ output }) {
       const observed = yield* observeKey(output, output.name, output).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (!observed) return;
       if (observed.project_id !== output.projectId) return yield* recoveryError();

@@ -1,4 +1,3 @@
-import type * as cf from "@cloudflare/workers-types";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { type MemoOptions } from "alchemy/Command/Memo";
 import type { Dependencies } from "alchemy/Dependencies";
@@ -45,7 +44,7 @@ import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
 import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
-import type { WorkerBinding, WorkerBindingResource, WorkerBindings } from "./WorkerBinding.ts";
+import type { WorkerBinding, WorkerBindingResource } from "./WorkerBinding.ts";
 import { transformWorkerDomainProps } from "./WorkerDomainDns.ts";
 import { WorkerEnvironment, WorkerTypeId } from "./WorkerRuntime.ts";
 import {
@@ -1330,6 +1329,14 @@ export type Worker<Bindings = any> = Resource<
      * rules are deployed.
      */
     affinityZoneIds?: string[] | undefined;
+    /**
+     * The sorted names of the `secret_text` and `secret_key` bindings this
+     * Worker's deploys uploaded and have not yet deleted. Cloudflare keeps a
+     * secret binding that a later upload omits, so a full deploy deletes the
+     * names listed here that it no longer uploads. Secrets set outside
+     * Alchemy are never listed, and never deleted.
+     */
+    secretNames?: string[] | undefined;
     hash?: {
       assets: string | undefined;
       bundle: string | undefined;

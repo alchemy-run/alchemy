@@ -1,8 +1,11 @@
+import * as Issues from "@distilled.cloud/github/issues";
+import * as Repos from "@distilled.cloud/github/repos";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { gitHubBaseUrlChanged, Octokit, octokitFor } from "./Octokit.ts";
+import * as Stream from "effect/Stream";
+import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface MilestoneProps {
@@ -124,7 +127,7 @@ export interface Milestone extends Resource<
  * requests. Milestones are created on first deploy and updated in place on
  * subsequent deploys when properties change.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied by
+ * Authentication is resolved via the GitHub `Credentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
  * `repo` scope for private repositories or `public_repo` for public ones.
  * ### Creating Milestones
@@ -248,65 +251,53 @@ export const MilestoneProvider = () =>
       }
     }),
 
-    reconcile: Effect.fn(function* ({ news }) {
-      const octokit = yield* octokitFor(news.baseUrl);
-      const state = news.state ?? "open";
-      const description = news.description ?? "";
-      const requestedDueOn = news.dueOn;
-      const dueOn =
-        requestedDueOn === undefined
-          ? null
-          : yield* Effect.try(() => new Date(requestedDueOn).toISOString().replace(".000Z", "Z"));
+    reconcile: Effect.fn(
+      function* ({ news }) {
+        const state = news.state ?? "open";
+        const description = news.description ?? "";
+        const requestedDueOn = news.dueOn;
+        const dueOn =
+          requestedDueOn === undefined
+            ? null
+            : yield* Effect.try(() => new Date(requestedDueOn).toISOString().replace(".000Z", "Z"));
 
-      // Observe — probe for an existing milestone by title. GitHub's list
-      // endpoint supports filtering by state, but we need to check both open
-      // and closed to find any existing milestone with this title.
-      const existingMilestones = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.issues.listMilestones, {
+        // Observe — probe for an existing milestone by title. GitHub's list
+        // endpoint supports filtering by state, but we need to check both open
+        // and closed to find any existing milestone with this title.
+        const existingMilestones = yield* Stream.runCollect(
+          Issues.listMilestones.items({
             owner: news.owner,
             repo: news.repository,
             state: "all",
             per_page: 100,
           }),
-        catch: (e) => e as Error,
-      });
+        );
 
-      let observed = existingMilestones.find((m) => m.title === news.title);
+        let observed = existingMilestones.find((m) => m.title === news.title);
 
-      // Ensure — when no milestone exists, create one
-      if (observed === undefined) {
-        const { data } = yield* Effect.tryPromise({
-          try: () =>
-            octokit.rest.issues.createMilestone({
-              owner: news.owner,
-              repo: news.repository,
-              title: news.title,
-              state,
-              description,
-              due_on: dueOn ?? undefined,
-            }),
-          catch: (e) => e as Error,
-        });
+        // Ensure — when no milestone exists, create one
+        if (observed === undefined) {
+          observed = yield* Issues.createMilestone({
+            owner: news.owner,
+            repo: news.repository,
+            title: news.title,
+            state,
+            description,
+            due_on: dueOn ?? undefined,
+          });
+        }
 
-        observed = data;
-      }
+        // Creation can shift the due date; converge the returned state too.
+        if (
+          observed.state === state &&
+          (observed.description ?? "") === description &&
+          observed.due_on === dueOn
+        ) {
+          return attrsOf(observed);
+        }
 
-      // Creation can shift the due date; converge the returned state too.
-      if (
-        observed.state === state &&
-        (observed.description ?? "") === description &&
-        observed.due_on === dueOn
-      ) {
-        return attrsOf(observed);
-      }
-
-      // Octokit's endpoint type omits the API's nullable due_on field.
-      const { data } = yield* Effect.tryPromise({
-        try: () =>
-          octokit.request<Awaited<ReturnType<typeof octokit.rest.issues.updateMilestone>>["data"]>({
-            method: "PATCH",
-            url: "/repos/{owner}/{repo}/milestones/{milestone_number}",
+        return attrsOf(
+          yield* Issues.updateMilestone({
             owner: news.owner,
             repo: news.repository,
             milestone_number: observed.number,
@@ -315,76 +306,49 @@ export const MilestoneProvider = () =>
             description,
             due_on: dueOn,
           }),
-        catch: (e) => e as Error,
-      });
-
-      return attrsOf(data);
-    }),
+        );
+      },
+      (effect, { news }) => effect.pipe(withBaseUrl(news.baseUrl)),
+    ),
 
     // Enumerate every milestone across the repositories the token can see —
     // milestones are keyed by {owner, repository, title} with no account-wide
     // list endpoint, so walk the repos like the Variable provider does.
     list: Effect.fn(function* () {
-      const octokit = yield* Octokit;
-
-      const repos = yield* Effect.tryPromise({
-        try: () =>
-          octokit.paginate(octokit.rest.repos.listForAuthenticatedUser, {
-            per_page: 100,
-          }),
-        catch: (e) => e as Error,
-      });
-
+      const repos = yield* Stream.runCollect(
+        Repos.listForAuthenticatedUser.items({ per_page: 100 }),
+      );
       const perRepo = yield* Effect.forEach(
         repos,
         (repo) =>
-          Effect.tryPromise({
-            try: async () => {
-              try {
-                const milestones = await octokit.paginate(octokit.rest.issues.listMilestones, {
-                  owner: repo.owner.login,
-                  repo: repo.name,
-                  state: "all",
-                  per_page: 100,
-                });
-                return milestones.map(attrsOf);
-              } catch (error: any) {
-                // Repos where the token lacks milestone access reject with
-                // 403/404 — skip them rather than failing the whole enumeration.
-                if (error.status === 403 || error.status === 404) {
-                  return [];
-                }
-                throw error;
-              }
-            },
-            catch: (e) => e as Error,
-          }),
+          Stream.runCollect(
+            Issues.listMilestones.items({
+              owner: repo.owner.login,
+              repo: repo.name,
+              state: "all",
+              per_page: 100,
+            }),
+          ).pipe(
+            Effect.map((milestones) => milestones.map(attrsOf)),
+            // Repos where the token lacks milestone access reject with 403/404 —
+            // skip them rather than failing the whole enumeration.
+            Effect.catchTag(["Forbidden", "NotFound"], () => Effect.succeed([])),
+          ),
         { concurrency: 10 },
       );
-
       return perRepo.flat();
     }),
 
-    delete: Effect.fn(function* ({ olds, output }) {
-      const octokit = yield* octokitFor(olds.baseUrl);
-
-      yield* Effect.tryPromise({
-        try: async () => {
-          try {
-            await octokit.rest.issues.deleteMilestone({
-              owner: olds.owner,
-              repo: olds.repository,
-              milestone_number: output.milestoneNumber,
-            });
-          } catch (error: any) {
-            if (error.status !== 404) {
-              throw error;
-            }
-          }
-        },
-        catch: (e) => e as Error,
-      });
-    }),
+    delete: Effect.fn(
+      function* ({ olds, output }) {
+        yield* Issues.deleteMilestone({
+          owner: olds.owner,
+          repo: olds.repository,
+          milestone_number: output.milestoneNumber,
+        }).pipe(Effect.catchTag("NotFound", () => Effect.void));
+      },
+      (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),
+    ),
   });
 
 const attrsOf = (data: {

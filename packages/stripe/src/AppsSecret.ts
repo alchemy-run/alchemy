@@ -143,7 +143,7 @@ export type AppsSecret = Resource<
 export const AppsSecret = Resource<AppsSecret>("Stripe.AppsSecret");
 
 export class AppsSecretNotResolved extends Data.TaggedError("Stripe.AppsSecretNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type AppsSecretAttributes = AppsSecret["Attributes"];
@@ -199,7 +199,7 @@ const findByName = (name: string, scope: AppsSecretScope) =>
     expand: ["payload"],
   }).pipe(
     Effect.map((secret) => (isPresent(secret) ? secret : undefined)),
-    Effect.catchIf(isMissingSecret, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingSecret, () => Effect.undefined),
   );
 
 const listByScope = Effect.fn(function* (scope: AppsSecretScope) {
@@ -335,7 +335,7 @@ export const AppsSecretProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsSecretNotResolved({ name });
+        return yield* new AppsSecretNotResolved({ resourceName: name });
       }
 
       const observedPayload = current.payload ?? undefined;

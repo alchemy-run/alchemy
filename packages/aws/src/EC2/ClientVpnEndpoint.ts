@@ -223,7 +223,7 @@ const usable = (endpoint: EC2.ClientVpnEndpoint) =>
 const describe = (endpointId: string) =>
   EC2.describeClientVpnEndpoints({ ClientVpnEndpointIds: [endpointId] }).pipe(
     Effect.map((result) => result.ClientVpnEndpoints?.find((endpoint) => !gone(endpoint))),
-    Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("InvalidClientVpnEndpointId.NotFound", () => Effect.undefined),
   );
 
 const authentication = (
@@ -353,13 +353,11 @@ const changesFor = Effect.fn(function* (
 ) {
   const desired = settings(news);
   const observed = observedSettings(endpoint, news);
-  const changes: EC2.ModifyClientVpnEndpointRequest = {
-    ...Object.fromEntries(
-      Object.entries(desired).filter(
-        ([key, value]) => !deepEqual(value, observed[key as keyof typeof observed]),
-      ),
+  const changes: EC2.ModifyClientVpnEndpointRequest = Object.fromEntries(
+    Object.entries(desired).filter(
+      ([key, value]) => !deepEqual(value, observed[key as keyof typeof observed]),
     ),
-  };
+  );
   if (!deepEqual(news.dnsServers ?? [], endpoint.DnsServers ?? [])) {
     changes.DnsServers = {
       Enabled: !!news.dnsServers?.length,

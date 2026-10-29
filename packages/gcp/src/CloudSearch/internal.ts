@@ -28,7 +28,7 @@ const RESERVED_SHORT_NAMES = new Set([
 ]);
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.CloudSearch.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -194,7 +194,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.catchIf(
       (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 
@@ -291,7 +291,7 @@ export const waitUntilExists = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceNotResolved,
@@ -302,7 +302,7 @@ export const waitUntilExists = <A, E, R>(
 
 export const getDatasource = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(cloudsearch.getSettingsDatasources({ name: toDatasourceName(name) }));
 
 export const listDatasources = () =>
@@ -331,7 +331,7 @@ export const findOwnedDatasource = (id: string) =>
 
 export const getSearchApplication = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         cloudsearch.getSettingsSearchapplications({
           name: toSearchApplicationName(name),

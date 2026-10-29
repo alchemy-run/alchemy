@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -16,6 +17,13 @@ import {
   syncFleetWiseTags,
   toFleetWiseTagList,
 } from "./internal.ts";
+
+export class ModelManifestUnexpectedResponse extends Data.TaggedError(
+  "ModelManifestUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ModelManifestProps {
   /**
@@ -120,7 +128,7 @@ export const ModelManifestProvider = () =>
       const readManifest = Effect.fn(function* (name: string) {
         return yield* iotfleetwise.getModelManifest({ name }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -189,7 +197,11 @@ export const ModelManifestProvider = () =>
             observed = yield* readManifest(name).pipe(
               Effect.flatMap((manifest) =>
                 manifest === undefined
-                  ? Effect.fail(new Error(`Model manifest '${name}' not found`))
+                  ? Effect.fail(
+                      new ModelManifestUnexpectedResponse({
+                        message: `Model manifest '${name}' not found`,
+                      }),
+                    )
                   : Effect.succeed(manifest),
               ),
               retryObservation,
@@ -218,7 +230,11 @@ export const ModelManifestProvider = () =>
             observed = yield* readManifest(name).pipe(
               Effect.flatMap((manifest) =>
                 manifest === undefined
-                  ? Effect.fail(new Error(`Model manifest '${name}' not found`))
+                  ? Effect.fail(
+                      new ModelManifestUnexpectedResponse({
+                        message: `Model manifest '${name}' not found`,
+                      }),
+                    )
                   : Effect.succeed(manifest),
               ),
               retryObservation,
@@ -233,7 +249,11 @@ export const ModelManifestProvider = () =>
             observed = yield* readManifest(name).pipe(
               Effect.flatMap((manifest) =>
                 manifest === undefined
-                  ? Effect.fail(new Error(`Model manifest '${name}' not found`))
+                  ? Effect.fail(
+                      new ModelManifestUnexpectedResponse({
+                        message: `Model manifest '${name}' not found`,
+                      }),
+                    )
                   : Effect.succeed(manifest),
               ),
               retryObservation,

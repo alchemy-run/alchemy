@@ -53,7 +53,7 @@ export const runVinextBuild = (options: {
     });
     const vite = yield* loadProjectModule<typeof import("vite")>(root, "vite");
     const { default: vinext } = yield* loadVinextModule<{
-      default(
+      default: (
         options?: VinextRouteRootConfig & {
           nextConfig?: unknown;
           cache?: unknown;
@@ -62,11 +62,11 @@ export const runVinextBuild = (options: {
           __skipBuildLifecycle?: boolean;
           __pagesClientAssetsModule?: string | null;
         },
-      ): PluginOption;
+      ) => PluginOption;
     }>(root, "index.js");
     const cache = yield* makeVinextCachePlugin(root, options.cache);
     const { loadDotenv } = yield* loadVinextModule<{
-      loadDotenv(options: { root: string; mode: string }): void;
+      loadDotenv: (options: { root: string; mode: string }) => void;
     }>(root, "config/dotenv.js");
     yield* Effect.sync(() => loadDotenv({ root, mode: "production" }));
     const loaded = yield* Effect.tryPromise(() =>
@@ -75,7 +75,7 @@ export const runVinextBuild = (options: {
     const plugins = loaded?.config.plugins ?? [vinext()];
     const config = yield* loadVinextBuildConfig(root, plugins);
     const { runWithPreviewBuildCredentials } = yield* loadVinextModule<{
-      runWithPreviewBuildCredentials<T>(callback: () => T): T;
+      runWithPreviewBuildCredentials: <T>(callback: () => T) => T;
     }>(root, "build/preview-credentials.js");
     const { PAGES_CLIENT_ASSETS_MODULE } = yield* loadVinextModule<{
       PAGES_CLIENT_ASSETS_MODULE: string;

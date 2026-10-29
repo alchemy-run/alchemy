@@ -153,7 +153,7 @@ export const PlatformApplicationProvider = () =>
         .getPlatformApplicationAttributes({ PlatformApplicationArn: arn })
         .pipe(
           Effect.map((response) => toAttributeMap(response.Attributes)),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       const credentialAttributes: Record<string, string> = {
@@ -274,7 +274,7 @@ const readApplication = Effect.fn(function* (arn: string) {
     .getPlatformApplicationAttributes({ PlatformApplicationArn: arn })
     .pipe(
       Effect.map((response) => toAttributeMap(response.Attributes)),
-      Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFoundException", () => Effect.undefined),
     );
   if (observed === undefined) {
     return undefined;

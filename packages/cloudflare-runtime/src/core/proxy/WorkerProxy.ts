@@ -11,7 +11,6 @@ import * as Scope from "effect/Scope";
 import * as Port from "../internal/Port.ts";
 import type { RuntimeError } from "../RuntimeError.shared.ts";
 import { ConfigError, SystemError } from "../RuntimeError.shared.ts";
-import { CONTINUE_RESPONSE, makeExpectContinueObserver } from "./ExpectContinue.ts";
 
 /**
  * A stable local address for a Worker whose runtime comes and goes.
@@ -21,8 +20,8 @@ import { CONTINUE_RESPONSE, makeExpectContinueObserver } from "./ExpectContinue.
  * accepted connection to whatever upstream is currently {@link
  * WorkerProxyInstance.set}: a plain byte pipe over `node:net`. Forwarded
  * bytes are never rewritten; the only HTTP the proxy speaks is a 502 when
- * no upstream comes, and `100 Continue` for requests that expect it (see
- * `ExpectContinue.ts`), which workerd never sends. HTTP/1.1, streaming bodies and WebSocket upgrades all
+ * no upstream comes. HTTP/1.1 (including `Expect: 100-continue`, which workerd
+ * answers itself), streaming bodies and WebSocket upgrades all
  * pass through untouched, and the Worker receives the client's real `Host`
  * header, so `request.url` inside it is the public URL.
  *
@@ -131,7 +130,7 @@ const connect = (to: Upstream) =>
         Effect.fail(
           SystemError.make({
             subtag: "WorkerProxyConnect",
-            message: `Failed to reach the worker (upstream address: ${to.url})`,
+            message: `Failed to reach the worker (upstream address: ${to.url.href})`,
             cause,
           }),
         ),
@@ -262,14 +261,6 @@ const makeRelay = (pendingTimeout: Duration.Duration): Relay => {
       // the rest. Detaching the collector and attaching the pipe happen
       // in one synchronous step, so no chunk can slip between them.
       socket.off("data", collect);
-      // workerd never sends `100 Continue`; answer `Expect: 100-continue`
-      // here. The observer runs before each chunk is forwarded, so the
-      // interim response reaches the client ahead of the final one.
-      const expectContinue = makeExpectContinueObserver(() => {
-        socket.write(CONTINUE_RESPONSE);
-      });
-      for (const chunk of held) expectContinue.observe(chunk);
-      socket.on("data", expectContinue.observe);
       for (const chunk of held) upstream.write(chunk);
       held.length = 0;
       socket.pipe(upstream);

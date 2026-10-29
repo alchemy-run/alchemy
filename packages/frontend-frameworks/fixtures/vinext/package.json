@@ -11,7 +11,7 @@
   "devDependencies": {
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "@vitejs/plugin-rsc": "^0.5.34",
+    "@vitejs/plugin-rsc": "catalog:",
     "vite": "catalog:"
   },
   "engines": {

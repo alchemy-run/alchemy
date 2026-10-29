@@ -159,7 +159,7 @@ export const ManageDatabasesHttp = Layer.effect(
               return database && database.group === (yield* groupName)
                 ? toManaged(database)
                 : undefined;
-            }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+            }).pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
           ),
         list: () =>
           authorize(

@@ -117,7 +117,7 @@ export const NotificationConfig = Resource<NotificationConfig>(
 export class NotificationConfigNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.NotificationConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, configId: string) =>
@@ -143,10 +143,10 @@ const toAttrs = (config: scc.NotificationConfig, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getProjectsNotificationConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const NotificationConfigProvider = () =>
   Provider.succeed(NotificationConfig, {
@@ -209,7 +209,7 @@ export const NotificationConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NotificationConfigNotResolved({ name });
+        return yield* new NotificationConfigNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

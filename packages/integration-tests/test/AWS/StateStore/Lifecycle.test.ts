@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as Alchemist from "alchemy/Alchemist";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -40,7 +40,7 @@ test.provider(
       // Never the default store, which every other run on the account uses.
       const name = "lifecycle";
       const bucket = `alchemy-state-lifecycle-${accountId}-${region}-an`;
-      const target = { _tag: "Provider", backend: "aws", name } as const;
+      const target = { _tag: "Provider", backend: "aws-s3", name } as const;
       const alchemist = Alchemist.layer();
 
       yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
@@ -75,7 +75,7 @@ test.provider(
       expect(Exit.isFailure(inCi)).toBe(true);
       if (Exit.isFailure(inCi)) {
         expect(Cause.pretty(inCi.cause)).toContain(
-          `Run 'alchemy state bootstrap --backend aws --name ${name}`,
+          `Run 'alchemy state bootstrap --backend aws-s3 --name ${name}`,
         );
       }
       expect(yield* bucketExists(bucket)).toBe(false);

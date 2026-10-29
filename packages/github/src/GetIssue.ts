@@ -1,20 +1,18 @@
-import type { RestEndpointMethodTypes } from "@octokit/rest";
+import type { NotFound } from "@distilled.cloud/github/Errors";
+import type * as Issues from "@distilled.cloud/github/issues";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { GitHubApiError, IssueNotFound } from "./ApiError.ts";
-import type { EndpointParameters } from "./EndpointParameters.ts";
+import type { IssueNotFound } from "./Errors.ts";
 import type { Repository } from "./Repository.ts";
 
-export interface GetIssueRequest extends EndpointParameters<
-  RestEndpointMethodTypes["issues"]["get"]["parameters"]
-> {}
+export interface GetIssueRequest extends Omit<Issues.GetRequest, "owner" | "repo"> {}
 
-export type GetIssueResponse = RestEndpointMethodTypes["issues"]["get"]["response"]["data"];
+export type GetIssueResponse = Issues.Issue;
 
 /**
  * Get one issue by number (`issues.get`). A missing issue fails with the typed
- * `IssueNotFound`.
+ * {@link IssueNotFound}.
  *
  * Provide `GitHub.GetIssueHttp` on a Worker or Function, or
  * `GitHub.GetIssueLocal` on an Action.
@@ -39,7 +37,11 @@ export interface GetIssue extends Binding.Service<
   ) => Effect.Effect<
     (
       request: GetIssueRequest,
-    ) => Effect.Effect<GetIssueResponse, IssueNotFound | GitHubApiError, RuntimeContext>
+    ) => Effect.Effect<
+      GetIssueResponse,
+      Exclude<Issues.GetError, NotFound> | IssueNotFound,
+      RuntimeContext
+    >
   >
 > {}
 

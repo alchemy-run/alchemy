@@ -3,8 +3,8 @@ import { Capability, Transformer } from "@alchemy.run/aws/B2BI";
 import type { PolicyStatement } from "@alchemy.run/aws/IAM";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as b2bi from "@distilled.cloud/aws/b2bi";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

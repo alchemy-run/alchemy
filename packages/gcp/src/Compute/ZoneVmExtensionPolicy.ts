@@ -258,7 +258,7 @@ const toAttrs = (
 const getByName = (project: string, zone: string, vmExtensionPolicy: string) =>
   compute
     .getZoneVmExtensionPolicies({ project, zone, vmExtensionPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitPolicyReady = (project: string, zone: string, vmExtensionPolicyName: string) =>
   getByName(project, zone, vmExtensionPolicyName).pipe(
@@ -403,7 +403,7 @@ export const ZoneVmExtensionPolicyProvider = () =>
             zone,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitZoneOperation(env.project, zone, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -465,7 +465,7 @@ export const ZoneVmExtensionPolicyProvider = () =>
           vmExtensionPolicy: output.vmExtensionPolicyName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

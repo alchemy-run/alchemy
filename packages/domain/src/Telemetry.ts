@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Metric from "effect/Metric";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as Tracer from "effect/Tracer";
 
 /**
@@ -37,11 +38,12 @@ export const resolve = (options: Options | undefined): Resolved => ({
 });
 
 /** A span's identity, stored with what it caused so later work can continue or link to it. @internal */
-export interface TraceJson {
-  readonly traceId: string;
-  readonly spanId: string;
-  readonly sampled: boolean;
-}
+export const TraceJson = Schema.Struct({
+  traceId: Schema.String,
+  spanId: Schema.String,
+  sampled: Schema.Boolean,
+});
+export type TraceJson = typeof TraceJson.Type;
 
 /** The current span, as JSON, if any. @internal */
 export const currentTrace: Effect.Effect<TraceJson | undefined> = Effect.currentParentSpan.pipe(

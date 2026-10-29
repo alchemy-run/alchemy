@@ -131,7 +131,7 @@ export const OrganizationLogScope = Resource<OrganizationLogScope>(
 export class OrganizationLogScopeNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationLogScopeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, location: string, logScopeId: string) =>
@@ -175,7 +175,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   logging
     .getOrganizationsLocationsLogScopes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const OrganizationLogScopeProvider = () =>
   Provider.succeed(OrganizationLogScope, {
@@ -272,7 +272,7 @@ export const OrganizationLogScopeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OrganizationLogScopeNotResolved({ name });
+        return yield* new OrganizationLogScopeNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

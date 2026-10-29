@@ -210,7 +210,7 @@ const toAttrs = (
 const getByName = (project: string, zone: string, instantSnapshotGroup: string) =>
   compute
     .getInstantSnapshotGroups({ project, zone, instantSnapshotGroup })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitReady = (project: string, zone: string, instantSnapshotGroupName: string) =>
   getByName(project, zone, instantSnapshotGroupName).pipe(
@@ -376,7 +376,7 @@ export const InstantSnapshotGroupProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* waitReady(env.project, zone, instantSnapshotGroupName);
       }
@@ -410,7 +410,7 @@ export const InstantSnapshotGroupProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
             times: 8,
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitZoneOperation(env.project, zone, operation).pipe(

@@ -20,7 +20,7 @@ export const fromStream = <E, R>(
   options?: { readonly atomic?: boolean; readonly declaredBytes?: number },
 ) =>
   Effect.gen(function* () {
-    const commands = yield* Schema.decodeUnknownEffect(Commands)(updates);
+    const commands = yield* Schema.decodeEffect(Commands)(updates);
     const input: PushInput = Object.freeze({
       updates: Object.freeze(commands.map((command) => Object.freeze({ ...command }))),
       atomic: options?.atomic ?? true,

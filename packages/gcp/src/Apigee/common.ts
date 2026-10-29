@@ -2,7 +2,7 @@ import * as apigee from "@distilled.cloud/gcp/apigee_v1";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
-import { alchemyLabelKeys, createInternalLabels, hasAlchemyLabels } from "../Labels.ts";
+import { alchemyLabelKeys, hasAlchemyLabels } from "../Labels.ts";
 
 export const lastSegment = (value: string) => {
   const trimmed = value.replace(/\/+$/, "");

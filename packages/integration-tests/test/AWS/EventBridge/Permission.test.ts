@@ -2,9 +2,9 @@ import * as AWS from "@alchemy.run/aws";
 import { EventBus } from "@alchemy.run/aws/EventBridge/EventBus";
 import { Permission } from "@alchemy.run/aws/EventBridge/Permission";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as eventbridge from "@distilled.cloud/aws/eventbridge";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

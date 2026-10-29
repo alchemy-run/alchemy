@@ -1,9 +1,15 @@
 import { sha256 } from "alchemy/Util/sha256";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import type { WebsiteArtifactProps } from "./Artifact.ts";
+
+export class PackageOperationFailed extends Data.TaggedError("PackageOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /** Release staging, compression and validation buffers between deployments. */
 export const packageWebsiteInChild = Effect.fn(
@@ -36,7 +42,8 @@ export const packageWebsiteInChild = Effect.fn(
       { stdin: "ignore", stdout: "ignore", stderr: "inherit" },
     );
     const code = yield* child.exitCode;
-    if (code !== 0) return yield* Effect.fail(new Error(`Website packaging exited ${code}`));
+    if (code !== 0)
+      return yield* new PackageOperationFailed({ message: `Website packaging exited ${code}` });
     const archive = yield* fs.readFile(outputPath);
     return { archive, hash: yield* sha256(archive) };
   },

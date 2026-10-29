@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { StorageLensConfiguration } from "@alchemy.run/aws/S3Control";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as s3control from "@distilled.cloud/aws/s3-control";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

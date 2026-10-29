@@ -4,9 +4,11 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 
 export type { FunctionUrlAuthType } from "@distilled.cloud/aws/lambda";
@@ -75,6 +77,12 @@ export interface Permission extends Resource<
     statementId: string;
     /** The function name or ARN the permission is attached to. */
     functionName: string;
+    /**
+     * The permission's resource-policy statement (principal, action and
+     * conditions), as observed. Lets `alchemy drift` detect out-of-band
+     * changes and removal.
+     */
+    statement?: unknown;
   },
   never,
   Providers
@@ -118,6 +126,12 @@ export interface Permission extends Resource<
  */
 export const Permission = Resource<Permission>("AWS.Lambda.Permission");
 
+/** A Lambda function's resource policy is not valid JSON. */
+export class InvalidLambdaResourcePolicy extends Data.TaggedError("InvalidLambdaResourcePolicy")<{
+  message: string;
+  cause?: unknown;
+}> {}
+
 export const PermissionProvider = () =>
   Provider.effect(
     Permission,
@@ -149,14 +163,15 @@ export const PermissionProvider = () =>
       const removePermission = (request: Lambda.RemovePermissionRequest) =>
         Lambda.removePermission(request).pipe(Effect.retry(retryPolicyMutation));
 
-      const hasStatement = Effect.fn(function* (functionName: string, statementId: string) {
+      const findStatement = Effect.fn(function* (functionName: string, statementId: string) {
         const { Policy } = yield* Lambda.getPolicy({
           FunctionName: functionName,
         }).pipe(
-          // A function without a resource policy is reported as not found.
+          // A function without a resource policy (or no function at all) is
+          // reported as not found.
           Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({ Policy: undefined })),
         );
-        if (!Policy) return false;
+        if (!Policy) return undefined;
         return yield* Effect.try({
           try: () => {
             const policy = JSON.parse(Policy) as {
@@ -167,9 +182,10 @@ export const PermissionProvider = () =>
               : policy.Statement
                 ? [policy.Statement]
                 : [];
-            return statements.some((statement) => statement.Sid === statementId);
+            return statements.find((statement) => statement.Sid === statementId);
           },
-          catch: (cause) => new Error("invalid Lambda resource policy", { cause }),
+          catch: (cause) =>
+            new InvalidLambdaResourcePolicy({ message: "invalid Lambda resource policy", cause }),
         });
       });
 
@@ -206,7 +222,8 @@ export const PermissionProvider = () =>
                       JSON.parse(Policy) as {
                         Statement?: { Sid?: string } | { Sid?: string }[];
                       },
-                    catch: (cause) => new Error("invalid policy", { cause }),
+                    catch: (cause) =>
+                      new InvalidLambdaResourcePolicy({ message: "invalid policy", cause }),
                   }).pipe(
                     // A malformed/non-JSON policy yields no permissions
                     // rather than failing the whole enumeration.
@@ -236,6 +253,14 @@ export const PermissionProvider = () =>
             );
             return perFunction.flat();
           }),
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const functionName = output?.functionName ?? olds?.functionName;
+          if (functionName === undefined) return undefined;
+          const statementId = output?.statementId ?? (yield* createStatementId(id));
+          const statement = yield* findStatement(functionName, statementId);
+          if (statement === undefined) return undefined;
+          return { statementId, functionName, statement: plainJson(statement) };
+        }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
           if (news.functionName !== olds.functionName) {
@@ -252,7 +277,7 @@ export const PermissionProvider = () =>
           // a true create/update collision and must be replaced; a
           // ResourceConflictException from an absent Sid is instead Lambda's
           // transient per-function policy mutation lock and is retried.
-          if (yield* hasStatement(news.functionName, statementId)) {
+          if ((yield* findStatement(news.functionName, statementId)) !== undefined) {
             yield* removePermission({
               FunctionName: news.functionName,
               StatementId: statementId,
@@ -274,9 +299,11 @@ export const PermissionProvider = () =>
 
           yield* session.note(`Permission ${statementId} on ${news.functionName}`);
 
+          const statement = yield* findStatement(news.functionName, statementId);
           return {
             statementId,
             functionName: news.functionName,
+            statement: statement && plainJson(statement),
           };
         }),
         delete: Effect.fn(function* ({ output }) {

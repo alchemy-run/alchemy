@@ -334,7 +334,7 @@ const normalize = (
 const observe = (zoneId: string) =>
   managedTransforms.listManagedTransforms({ zoneId }).pipe(
     Effect.map(normalize),
-    Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+    Effect.catchTag("InvalidRoute", () => Effect.undefined),
   );
 
 /**

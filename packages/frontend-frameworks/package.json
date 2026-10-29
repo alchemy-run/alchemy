@@ -510,6 +510,7 @@
     "@opennextjs/cloudflare": "catalog:",
     "@sveltejs/kit": "catalog:",
     "@tailwindcss/vite": "catalog:",
+    "@tsrx/oxc": "catalog:",
     "@types/node": "catalog:",
     "@vitejs/plugin-react": "catalog:",
     "astro": "catalog:",

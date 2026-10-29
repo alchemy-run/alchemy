@@ -66,7 +66,12 @@ export const RpcServerBun = RpcServer.layerServer(
         },
       }),
     );
-    yield* Effect.addFinalizer(() => Effect.sync(() => server.stop(true)));
+    // Fire and forget: awaiting `stop(true)` can outlive the process's own shutdown.
+    yield* Effect.addFinalizer(() =>
+      Effect.sync(() => {
+        void server.stop(true);
+      }),
+    );
     return {
       url: `ws://${server.hostname}:${server.port}`,
     };

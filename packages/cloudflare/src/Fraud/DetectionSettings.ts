@@ -293,7 +293,7 @@ type ObservedFraudSettings = fraud.GetFraudResponse | fraud.PutFraudResponse;
  * (`InvalidRoute`, Cloudflare code 7003) to `undefined`.
  */
 const observe = (zoneId: string) =>
-  fraud.getFraud({ zoneId }).pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)));
+  fraud.getFraud({ zoneId }).pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));
 
 const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefined : v);
 

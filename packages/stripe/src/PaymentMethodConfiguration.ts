@@ -362,7 +362,7 @@ export const PaymentMethodConfiguration = Resource<PaymentMethodConfiguration>(
 export class PaymentMethodConfigurationNotResolved extends Data.TaggedError(
   "Stripe.PaymentMethodConfigurationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type ConfigurationAttributes = PaymentMethodConfiguration["Attributes"];
@@ -445,7 +445,7 @@ const isMissingConfiguration = isMissingStripeResource;
 
 const getById = (configuration: string) =>
   GetPaymentMethodConfiguration({ configuration }).pipe(
-    Effect.catchIf(isMissingConfiguration, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingConfiguration, () => Effect.undefined),
   );
 
 const listByActive = Effect.fn(function* (active: boolean) {
@@ -574,7 +574,7 @@ export const PaymentMethodConfigurationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new PaymentMethodConfigurationNotResolved({ name });
+        return yield* new PaymentMethodConfigurationNotResolved({ resourceName: name });
       }
 
       const nameChanged = current.name !== name;

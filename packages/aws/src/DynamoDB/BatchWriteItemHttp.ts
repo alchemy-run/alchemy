@@ -49,9 +49,9 @@ export const BatchWriteItemHttp = Layer.effect(
         tablesRegion(sortedTables),
       );
 
-      return Effect.fn(`AWS.DynamoDB.BatchWriteItem(${sortedTables})`)(function* (
-        request: BatchWriteItemRequest,
-      ) {
+      return Effect.fn(
+        `AWS.DynamoDB.BatchWriteItem(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
+      )(function* (request: BatchWriteItemRequest) {
         const requestItems = yield* Effect.forEach(
           Object.entries(request.RequestItems),
           ([tableId, writes]) =>

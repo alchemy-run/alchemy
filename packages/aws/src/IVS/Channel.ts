@@ -188,7 +188,7 @@ export const ChannelProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* ivs.getChannel({ arn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         return response?.channel;
       });
@@ -331,10 +331,10 @@ export const ChannelProvider = () =>
               Effect.forEach(
                 (summary) =>
                   summary.arn === undefined
-                    ? Effect.succeed(undefined)
+                    ? Effect.undefined
                     : getByArn(summary.arn).pipe(
                         Effect.flatMap((channel) =>
-                          channel === undefined ? Effect.succeed(undefined) : toAttrs(channel),
+                          channel === undefined ? Effect.undefined : toAttrs(channel),
                         ),
                       ),
                 { concurrency: 5 },

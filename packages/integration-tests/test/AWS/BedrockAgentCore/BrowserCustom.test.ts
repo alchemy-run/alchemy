@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { BrowserCustom } from "@alchemy.run/aws/BedrockAgentCore";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as control from "@distilled.cloud/aws/bedrock-agentcore-control";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

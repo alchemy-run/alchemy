@@ -308,7 +308,7 @@ type ObservedOrganization = organizations.GetOrganizationResponse;
 const getOrganization = (organizationId: string) =>
   organizations.getOrganization({ organizationId }).pipe(
     Effect.map((org): ObservedOrganization | undefined => org),
-    Effect.catchTag("OrganizationNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("OrganizationNotFound", () => Effect.undefined),
   );
 
 /**
