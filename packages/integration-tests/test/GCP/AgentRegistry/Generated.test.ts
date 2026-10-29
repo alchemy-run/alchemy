@@ -51,6 +51,14 @@ describe.skipIf(!!process.env.FAST)(
     beforeAll(
       Effect.gen(function* () {
         yield* sharedStack.destroy();
+        // The APIs first: the probe resources need them enabled to deploy.
+        yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "agentregistry.googleapis.com",
+            });
+          }),
+        );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
@@ -68,8 +76,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Binding", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetBinding (agentregistry.projects.locations.bindings.get): Binding: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBinding (agentregistry.projects.locations.bindings.get): Binding: binds two agents the registry discovered (sourceIdentifier/targetIdentifier); the testing project runs no registered agents",
         () => Effect.void,
       );
     });

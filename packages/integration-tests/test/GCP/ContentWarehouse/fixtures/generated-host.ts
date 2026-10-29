@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeDocument } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated ContentWarehouse binding as its own
@@ -15,31 +16,56 @@ export default class ContentWarehouseGeneratedHost extends GCP.Function<ContentW
   "ContentWarehouseGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.ContentWarehouse.FetchProjectAcl();
-    const p1 = yield* GCP.ContentWarehouse.ListDocumentSchemas();
-    const p2 = yield* GCP.ContentWarehouse.ListRuleSets();
-    const p3 = yield* GCP.ContentWarehouse.ListSynonymSets();
-    const p4 = yield* GCP.ContentWarehouse.SearchDocument();
-    const p5 = yield* GCP.ContentWarehouse.SetProjectAcl();
+    const p0 = yield* GCP.ContentWarehouse.CreateDocumentLink(ProbeDocument);
+    const p1 = yield* GCP.ContentWarehouse.DeleteDocumentLink(ProbeDocument);
+    const p2 = yield* GCP.ContentWarehouse.FetchDocumentAcl(ProbeDocument);
+    const p3 = yield* GCP.ContentWarehouse.FetchProjectAcl();
+    const p4 = yield* GCP.ContentWarehouse.LinkedDocumentSources(ProbeDocument);
+    const p5 = yield* GCP.ContentWarehouse.LinkedDocumentTargets(ProbeDocument);
+    const p6 = yield* GCP.ContentWarehouse.ListDocumentSchemas();
+    const p7 = yield* GCP.ContentWarehouse.ListRuleSets();
+    const p8 = yield* GCP.ContentWarehouse.ListSynonymSets();
+    const p9 = yield* GCP.ContentWarehouse.LockDocument(ProbeDocument);
+    const p10 = yield* GCP.ContentWarehouse.SearchDocument();
+    const p11 = yield* GCP.ContentWarehouse.SetDocumentAcl(ProbeDocument);
+    const p12 = yield* GCP.ContentWarehouse.SetProjectAcl();
     return {
       fetch: serveProbes({
-        FetchProjectAcl: probeOutcome(Retry.none(p0({} as never))),
-        ListDocumentSchemas: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
-        ListRuleSets: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListSynonymSets: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
-        SearchDocument: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
-        SetProjectAcl: probeOutcome(Retry.none(p5({} as never))),
+        CreateDocumentLink: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DeleteDocumentLink: probeOutcome(
+          Retry.none(p1({ documentLink: "alchemy-missing" } as never)),
+        ),
+        FetchDocumentAcl: probeOutcome(Retry.none(p2({} as never))),
+        FetchProjectAcl: probeOutcome(Retry.none(p3({} as never))),
+        LinkedDocumentSources: probeOutcome(Retry.none(p4({} as never))),
+        LinkedDocumentTargets: probeOutcome(Retry.none(p5({} as never))),
+        ListDocumentSchemas: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListRuleSets: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListSynonymSets: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        LockDocument: probeOutcome(Retry.none(p9({} as never))),
+        SearchDocument: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        SetDocumentAcl: probeOutcome(Retry.none(p11({} as never))),
+        SetProjectAcl: probeOutcome(Retry.none(p12({} as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.ContentWarehouse.CreateDocumentLinkHttp,
+          GCP.ContentWarehouse.DeleteDocumentLinkHttp,
+          GCP.ContentWarehouse.FetchDocumentAclHttp,
           GCP.ContentWarehouse.FetchProjectAclHttp,
+          GCP.ContentWarehouse.LinkedDocumentSourcesHttp,
+          GCP.ContentWarehouse.LinkedDocumentTargetsHttp,
           GCP.ContentWarehouse.ListDocumentSchemasHttp,
           GCP.ContentWarehouse.ListRuleSetsHttp,
           GCP.ContentWarehouse.ListSynonymSetsHttp,
+          GCP.ContentWarehouse.LockDocumentHttp,
           GCP.ContentWarehouse.SearchDocumentHttp,
+          GCP.ContentWarehouse.SetDocumentAclHttp,
           GCP.ContentWarehouse.SetProjectAclHttp,
         ),
       ),

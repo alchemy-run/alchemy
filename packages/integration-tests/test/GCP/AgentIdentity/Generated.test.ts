@@ -51,6 +51,14 @@ describe.skipIf(!!process.env.FAST)(
     beforeAll(
       Effect.gen(function* () {
         yield* sharedStack.destroy();
+        // The APIs first: the probe resources need them enabled to deploy.
+        yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "agentidentity.googleapis.com",
+            });
+          }),
+        );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
@@ -68,41 +76,77 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AuthProvider", { concurrent: true }, () => {
-      test.provider.todo(
-        "DeleteAuthProviderAuthorization (agentidentity.projects.locations.authProviders.authorizations.delete): AuthProvider: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DeleteAuthProviderAuthorization (agentidentity.projects.locations.authProviders.authorizations.delete)",
+        () => probe("DeleteAuthProviderAuthorization", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentidentity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "DisableAuthProvider (agentidentity.projects.locations.authProviders.disable): AuthProvider: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DisableAuthProvider (agentidentity.projects.locations.authProviders.disable)",
+        () => probe("DisableAuthProvider", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentidentity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "EnableAuthProvider (agentidentity.projects.locations.authProviders.enable): AuthProvider: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "EnableAuthProvider (agentidentity.projects.locations.authProviders.enable)",
+        () => probe("EnableAuthProvider", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentidentity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetAuthProvider (agentidentity.projects.locations.authProviders.get): AuthProvider: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetAuthProvider (agentidentity.projects.locations.authProviders.get)",
+        () => probe("GetAuthProvider", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentidentity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetAuthProviderAuthorization (agentidentity.projects.locations.authProviders.authorizations.get): AuthProvider: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetAuthProviderAuthorization (agentidentity.projects.locations.authProviders.authorizations.get)",
+        () => probe("GetAuthProviderAuthorization", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentidentity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListAuthProviderAuthorizations (agentidentity.projects.locations.authProviders.authorizations.list): AuthProvider: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListAuthProviderAuthorizations (agentidentity.projects.locations.authProviders.authorizations.list)",
+        () => probe("ListAuthProviderAuthorizations", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentidentity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "QueryAuthProviderWorkloads (agentidentity.projects.locations.authProviders.queryWorkloads): AuthProvider: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "QueryAuthProviderWorkloads (agentidentity.projects.locations.authProviders.queryWorkloads)",
+        () => probe("QueryAuthProviderWorkloads", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentidentity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RevokeAuthProviderAuthorization (agentidentity.projects.locations.authProviders.revokeAuthorization): AuthProvider: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RevokeAuthProviderAuthorization (agentidentity.projects.locations.authProviders.revokeAuthorization)",
+        () => probe("RevokeAuthProviderAuthorization", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentidentity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "UndeleteAuthProvider (agentidentity.projects.locations.authProviders.undelete): AuthProvider: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "UndeleteAuthProvider (agentidentity.projects.locations.authProviders.undelete)",
+        () => probe("UndeleteAuthProvider", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentidentity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

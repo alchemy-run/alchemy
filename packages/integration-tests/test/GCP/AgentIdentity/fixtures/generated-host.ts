@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeAuthProvider } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated AgentIdentity binding as its own
@@ -15,28 +16,59 @@ export default class AgentIdentityGeneratedHost extends GCP.Function<AgentIdenti
   "AgentIdentityGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.AgentIdentity.GetAccessSummary();
-    const p1 = yield* GCP.AgentIdentity.ListAccessSummaries();
-    const p2 = yield* GCP.AgentIdentity.ListAuthProviders();
-    const p3 = yield* GCP.AgentIdentity.QueryAuthProvider();
+    const p0 = yield* GCP.AgentIdentity.DeleteAuthProviderAuthorization(ProbeAuthProvider);
+    const p1 = yield* GCP.AgentIdentity.DisableAuthProvider(ProbeAuthProvider);
+    const p2 = yield* GCP.AgentIdentity.EnableAuthProvider(ProbeAuthProvider);
+    const p3 = yield* GCP.AgentIdentity.GetAccessSummary();
+    const p4 = yield* GCP.AgentIdentity.GetAuthProvider(ProbeAuthProvider);
+    const p5 = yield* GCP.AgentIdentity.GetAuthProviderAuthorization(ProbeAuthProvider);
+    const p6 = yield* GCP.AgentIdentity.ListAccessSummaries();
+    const p7 = yield* GCP.AgentIdentity.ListAuthProviderAuthorizations(ProbeAuthProvider);
+    const p8 = yield* GCP.AgentIdentity.ListAuthProviders();
+    const p9 = yield* GCP.AgentIdentity.QueryAuthProvider();
+    const p10 = yield* GCP.AgentIdentity.QueryAuthProviderWorkloads(ProbeAuthProvider);
+    const p11 = yield* GCP.AgentIdentity.RevokeAuthProviderAuthorization(ProbeAuthProvider);
+    const p12 = yield* GCP.AgentIdentity.UndeleteAuthProvider(ProbeAuthProvider);
     return {
       fetch: serveProbes({
-        GetAccessSummary: probeOutcome(
-          Retry.none(p0({ accessSummary: "alchemy-missing", location: "us-central1" } as never)),
+        DeleteAuthProviderAuthorization: probeOutcome(
+          Retry.none(p0({ authorization: "alchemy-missing" } as never)),
         ),
-        ListAccessSummaries: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
-        ListAuthProviders: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
-        QueryAuthProvider: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        DisableAuthProvider: probeOutcome(Retry.none(p1({} as never))),
+        EnableAuthProvider: probeOutcome(Retry.none(p2({} as never))),
+        GetAccessSummary: probeOutcome(
+          Retry.none(p3({ accessSummary: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetAuthProvider: probeOutcome(Retry.none(p4({} as never))),
+        GetAuthProviderAuthorization: probeOutcome(
+          Retry.none(p5({ authorization: "alchemy-missing" } as never)),
+        ),
+        ListAccessSummaries: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListAuthProviderAuthorizations: probeOutcome(Retry.none(p7({} as never))),
+        ListAuthProviders: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        QueryAuthProvider: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        QueryAuthProviderWorkloads: probeOutcome(Retry.none(p10({} as never))),
+        RevokeAuthProviderAuthorization: probeOutcome(Retry.none(p11({} as never))),
+        UndeleteAuthProvider: probeOutcome(Retry.none(p12({} as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.AgentIdentity.DeleteAuthProviderAuthorizationHttp,
+          GCP.AgentIdentity.DisableAuthProviderHttp,
+          GCP.AgentIdentity.EnableAuthProviderHttp,
           GCP.AgentIdentity.GetAccessSummaryHttp,
+          GCP.AgentIdentity.GetAuthProviderHttp,
+          GCP.AgentIdentity.GetAuthProviderAuthorizationHttp,
           GCP.AgentIdentity.ListAccessSummariesHttp,
+          GCP.AgentIdentity.ListAuthProviderAuthorizationsHttp,
           GCP.AgentIdentity.ListAuthProvidersHttp,
           GCP.AgentIdentity.QueryAuthProviderHttp,
+          GCP.AgentIdentity.QueryAuthProviderWorkloadsHttp,
+          GCP.AgentIdentity.RevokeAuthProviderAuthorizationHttp,
+          GCP.AgentIdentity.UndeleteAuthProviderHttp,
         ),
       ),
     ),

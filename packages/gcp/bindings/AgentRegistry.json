@@ -8,7 +8,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {},
+    "untestable": {
+      "Binding": "binds two agents the registry discovered (sourceIdentifier/targetIdentifier); the testing project runs no registered agents"
+    },
     "enable": [
       "agentregistry.googleapis.com"
     ]

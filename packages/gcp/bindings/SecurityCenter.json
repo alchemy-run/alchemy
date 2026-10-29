@@ -54,7 +54,9 @@
       "FolderBigQueryExport": "folder-level: needs a folder and folder IAM the testing account lacks",
       "FolderMuteConfig": "folder-level: needs a folder and folder IAM the testing account lacks",
       "OrganizationBigQueryExport": "organization-level: needs org IAM the testing account lacks",
-      "OrganizationMuteConfig": "organization-level: needs org IAM the testing account lacks"
+      "OrganizationMuteConfig": "organization-level: needs org IAM the testing account lacks",
+      "BigQueryExport": "Security Command Center is activated per organization; the testing project has none",
+      "MuteConfig": "Security Command Center is activated per organization; the testing project has none"
     },
     "enable": [
       "securitycenter.googleapis.com"

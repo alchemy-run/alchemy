@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeCustomRange, ProbeRealm, ProbeRegistryBook } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated CloudNumberRegistry binding as its own
@@ -16,25 +17,35 @@ export default class CloudNumberRegistryGeneratedHost extends GCP.Function<Cloud
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.CloudNumberRegistry.CheckIpamAdminScopeAvailability();
-    const p1 = yield* GCP.CloudNumberRegistry.GetDiscoveredRange();
-    const p2 = yield* GCP.CloudNumberRegistry.ListCustomRanges();
-    const p3 = yield* GCP.CloudNumberRegistry.ListDiscoveredRanges();
-    const p4 = yield* GCP.CloudNumberRegistry.ListIpamAdminScopes();
-    const p5 = yield* GCP.CloudNumberRegistry.ListRealms();
-    const p6 = yield* GCP.CloudNumberRegistry.ListRegistryBooks();
+    const p1 = yield* GCP.CloudNumberRegistry.FindCustomRangeFreeIpRanges(ProbeCustomRange);
+    const p2 = yield* GCP.CloudNumberRegistry.GetCustomRange(ProbeCustomRange);
+    const p3 = yield* GCP.CloudNumberRegistry.GetDiscoveredRange();
+    const p4 = yield* GCP.CloudNumberRegistry.GetRealm(ProbeRealm);
+    const p5 = yield* GCP.CloudNumberRegistry.GetRegistryBook(ProbeRegistryBook);
+    const p6 = yield* GCP.CloudNumberRegistry.ListCustomRanges();
+    const p7 = yield* GCP.CloudNumberRegistry.ListDiscoveredRanges();
+    const p8 = yield* GCP.CloudNumberRegistry.ListIpamAdminScopes();
+    const p9 = yield* GCP.CloudNumberRegistry.ListRealms();
+    const p10 = yield* GCP.CloudNumberRegistry.ListRegistryBooks();
+    const p11 = yield* GCP.CloudNumberRegistry.SearchRegistryBookIpResources(ProbeRegistryBook);
     return {
       fetch: serveProbes({
         CheckIpamAdminScopeAvailability: probeOutcome(
           Retry.none(p0({ location: "us-central1" } as never)),
         ),
+        FindCustomRangeFreeIpRanges: probeOutcome(Retry.none(p1({} as never))),
+        GetCustomRange: probeOutcome(Retry.none(p2({} as never))),
         GetDiscoveredRange: probeOutcome(
-          Retry.none(p1({ discoveredRange: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p3({ discoveredRange: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListCustomRanges: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListDiscoveredRanges: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListIpamAdminScopes: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
-        ListRealms: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
-        ListRegistryBooks: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        GetRealm: probeOutcome(Retry.none(p4({} as never))),
+        GetRegistryBook: probeOutcome(Retry.none(p5({} as never))),
+        ListCustomRanges: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListDiscoveredRanges: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListIpamAdminScopes: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListRealms: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListRegistryBooks: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        SearchRegistryBookIpResources: probeOutcome(Retry.none(p11({} as never))),
       }),
     };
   }).pipe(
@@ -42,12 +53,17 @@ export default class CloudNumberRegistryGeneratedHost extends GCP.Function<Cloud
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.CloudNumberRegistry.CheckIpamAdminScopeAvailabilityHttp,
+          GCP.CloudNumberRegistry.FindCustomRangeFreeIpRangesHttp,
+          GCP.CloudNumberRegistry.GetCustomRangeHttp,
           GCP.CloudNumberRegistry.GetDiscoveredRangeHttp,
+          GCP.CloudNumberRegistry.GetRealmHttp,
+          GCP.CloudNumberRegistry.GetRegistryBookHttp,
           GCP.CloudNumberRegistry.ListCustomRangesHttp,
           GCP.CloudNumberRegistry.ListDiscoveredRangesHttp,
           GCP.CloudNumberRegistry.ListIpamAdminScopesHttp,
           GCP.CloudNumberRegistry.ListRealmsHttp,
           GCP.CloudNumberRegistry.ListRegistryBooksHttp,
+          GCP.CloudNumberRegistry.SearchRegistryBookIpResourcesHttp,
         ),
       ),
     ),

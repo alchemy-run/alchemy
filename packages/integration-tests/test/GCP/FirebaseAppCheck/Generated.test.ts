@@ -51,6 +51,14 @@ describe.skipIf(!!process.env.FAST)(
     beforeAll(
       Effect.gen(function* () {
         yield* sharedStack.destroy();
+        // The APIs first: the probe resources need them enabled to deploy.
+        yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "firebaseappcheck.googleapis.com",
+            });
+          }),
+        );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
@@ -68,8 +76,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AppsDebugToken", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDebugToken (firebaseappcheck.projects.apps.debugTokens.get): AppsDebugToken: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetDebugToken (firebaseappcheck.projects.apps.debugTokens.get): AppsDebugToken: needs a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none",
         () => Effect.void,
       );
     });
@@ -262,8 +270,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ServicesResourcePolicy", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetResourcePolicy (firebaseappcheck.projects.services.resourcePolicies.get): ServicesResourcePolicy: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetResourcePolicy (firebaseappcheck.projects.services.resourcePolicies.get): ServicesResourcePolicy: needs a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none",
         () => Effect.void,
       );
     });

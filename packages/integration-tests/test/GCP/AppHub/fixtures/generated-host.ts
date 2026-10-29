@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeApplication } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated AppHub binding as its own
@@ -15,45 +16,53 @@ export default class AppHubGeneratedHost extends GCP.Function<AppHubGeneratedHos
   "AppHubGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.AppHub.GetDiscoveredService();
-    const p1 = yield* GCP.AppHub.GetDiscoveredWorkload();
-    const p2 = yield* GCP.AppHub.GetExtendedMetadataSchema();
-    const p3 = yield* GCP.AppHub.ListApplications();
-    const p4 = yield* GCP.AppHub.ListDiscoveredServices();
-    const p5 = yield* GCP.AppHub.ListDiscoveredWorkloads();
-    const p6 = yield* GCP.AppHub.ListExtendedMetadataSchemas();
-    const p7 = yield* GCP.AppHub.ListServiceProjectAttachments();
-    const p8 = yield* GCP.AppHub.LookupDiscoveredService();
-    const p9 = yield* GCP.AppHub.LookupDiscoveredWorkload();
+    const p0 = yield* GCP.AppHub.GetApplication(ProbeApplication);
+    const p1 = yield* GCP.AppHub.GetDiscoveredService();
+    const p2 = yield* GCP.AppHub.GetDiscoveredWorkload();
+    const p3 = yield* GCP.AppHub.GetExtendedMetadataSchema();
+    const p4 = yield* GCP.AppHub.ListApplications();
+    const p5 = yield* GCP.AppHub.ListApplicationServices(ProbeApplication);
+    const p6 = yield* GCP.AppHub.ListApplicationWorkloads(ProbeApplication);
+    const p7 = yield* GCP.AppHub.ListDiscoveredServices();
+    const p8 = yield* GCP.AppHub.ListDiscoveredWorkloads();
+    const p9 = yield* GCP.AppHub.ListExtendedMetadataSchemas();
+    const p10 = yield* GCP.AppHub.ListServiceProjectAttachments();
+    const p11 = yield* GCP.AppHub.LookupDiscoveredService();
+    const p12 = yield* GCP.AppHub.LookupDiscoveredWorkload();
     return {
       fetch: serveProbes({
+        GetApplication: probeOutcome(Retry.none(p0({} as never))),
         GetDiscoveredService: probeOutcome(
           Retry.none(
-            p0({ discoveredService: "alchemy-missing", location: "us-central1" } as never),
+            p1({ discoveredService: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
         GetDiscoveredWorkload: probeOutcome(
           Retry.none(
-            p1({ discoveredWorkload: "alchemy-missing", location: "us-central1" } as never),
+            p2({ discoveredWorkload: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
         GetExtendedMetadataSchema: probeOutcome(
           Retry.none(
-            p2({ extendedMetadataSchema: "alchemy-missing", location: "us-central1" } as never),
+            p3({ extendedMetadataSchema: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        ListApplications: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListDiscoveredServices: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
-        ListDiscoveredWorkloads: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListApplications: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListApplicationServices: probeOutcome(Retry.none(p5({} as never))),
+        ListApplicationWorkloads: probeOutcome(Retry.none(p6({} as never))),
+        ListDiscoveredServices: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListDiscoveredWorkloads: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
         ListExtendedMetadataSchemas: probeOutcome(
-          Retry.none(p6({ location: "us-central1" } as never)),
+          Retry.none(p9({ location: "us-central1" } as never)),
         ),
         ListServiceProjectAttachments: probeOutcome(
-          Retry.none(p7({ location: "us-central1" } as never)),
+          Retry.none(p10({ location: "us-central1" } as never)),
         ),
-        LookupDiscoveredService: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        LookupDiscoveredService: probeOutcome(
+          Retry.none(p11({ location: "us-central1" } as never)),
+        ),
         LookupDiscoveredWorkload: probeOutcome(
-          Retry.none(p9({ location: "us-central1" } as never)),
+          Retry.none(p12({ location: "us-central1" } as never)),
         ),
       }),
     };
@@ -61,10 +70,13 @@ export default class AppHubGeneratedHost extends GCP.Function<AppHubGeneratedHos
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.AppHub.GetApplicationHttp,
           GCP.AppHub.GetDiscoveredServiceHttp,
           GCP.AppHub.GetDiscoveredWorkloadHttp,
           GCP.AppHub.GetExtendedMetadataSchemaHttp,
           GCP.AppHub.ListApplicationsHttp,
+          GCP.AppHub.ListApplicationServicesHttp,
+          GCP.AppHub.ListApplicationWorkloadsHttp,
           GCP.AppHub.ListDiscoveredServicesHttp,
           GCP.AppHub.ListDiscoveredWorkloadsHttp,
           GCP.AppHub.ListExtendedMetadataSchemasHttp,

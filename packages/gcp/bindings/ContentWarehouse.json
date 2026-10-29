@@ -16,7 +16,9 @@
     }
   },
   "probes": {
-    "resources": {},
+    "resources": {
+      "Document": "ProbeDocument"
+    },
     "untestable": {},
     "enable": [
       "contentwarehouse.googleapis.com"

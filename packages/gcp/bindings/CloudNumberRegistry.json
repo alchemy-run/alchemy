@@ -16,8 +16,14 @@
     }
   },
   "probes": {
-    "resources": {},
-    "untestable": {},
+    "resources": {
+      "RegistryBook": "ProbeRegistryBook",
+      "Realm": "ProbeRealm",
+      "CustomRange": "ProbeCustomRange"
+    },
+    "untestable": {
+      "IpamAdminScope": "scopes IPAM to an organization; the testing account has none"
+    },
     "enable": [
       "cloudnumberregistry.googleapis.com"
     ]

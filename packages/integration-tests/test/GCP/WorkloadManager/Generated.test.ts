@@ -51,6 +51,14 @@ describe.skipIf(!!process.env.FAST)(
     beforeAll(
       Effect.gen(function* () {
         yield* sharedStack.destroy();
+        // The APIs first: the probe resources need them enabled to deploy.
+        yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "workloadmanager.googleapis.com",
+            });
+          }),
+        );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
@@ -68,39 +76,39 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("DeploymentsActuation", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetActuation (workloadmanager.projects.locations.deployments.actuations.get): DeploymentsActuation: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetActuation (workloadmanager.projects.locations.deployments.actuations.get): DeploymentsActuation: actuates a Workload Manager SAP deployment; the testing project has none",
         () => Effect.void,
       );
     });
 
     describe("Evaluation", { concurrent: true }, () => {
-      test.provider.todo(
-        "DeleteEvaluationExecution (workloadmanager.projects.locations.evaluations.executions.delete): Evaluation: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "DeleteEvaluationExecution (workloadmanager.projects.locations.evaluations.executions.delete): Evaluation: evaluates rules from the SAP/SQL Server rule catalog against workloads the project runs; the testing project runs none",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetEvaluation (workloadmanager.projects.locations.evaluations.get): Evaluation: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetEvaluation (workloadmanager.projects.locations.evaluations.get): Evaluation: evaluates rules from the SAP/SQL Server rule catalog against workloads the project runs; the testing project runs none",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetEvaluationExecution (workloadmanager.projects.locations.evaluations.executions.get): Evaluation: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetEvaluationExecution (workloadmanager.projects.locations.evaluations.executions.get): Evaluation: evaluates rules from the SAP/SQL Server rule catalog against workloads the project runs; the testing project runs none",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEvaluationExecutionResults (workloadmanager.projects.locations.evaluations.executions.results.list): Evaluation: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListEvaluationExecutionResults (workloadmanager.projects.locations.evaluations.executions.results.list): Evaluation: evaluates rules from the SAP/SQL Server rule catalog against workloads the project runs; the testing project runs none",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEvaluationExecutions (workloadmanager.projects.locations.evaluations.executions.list): Evaluation: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListEvaluationExecutions (workloadmanager.projects.locations.evaluations.executions.list): Evaluation: evaluates rules from the SAP/SQL Server rule catalog against workloads the project runs; the testing project runs none",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEvaluationExecutionScannedResources (workloadmanager.projects.locations.evaluations.executions.scannedResources.list): Evaluation: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListEvaluationExecutionScannedResources (workloadmanager.projects.locations.evaluations.executions.scannedResources.list): Evaluation: evaluates rules from the SAP/SQL Server rule catalog against workloads the project runs; the testing project runs none",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RunEvaluationExecution (workloadmanager.projects.locations.evaluations.executions.run): Evaluation: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RunEvaluationExecution (workloadmanager.projects.locations.evaluations.executions.run): Evaluation: evaluates rules from the SAP/SQL Server rule catalog against workloads the project runs; the testing project runs none",
         () => Effect.void,
       );
     });

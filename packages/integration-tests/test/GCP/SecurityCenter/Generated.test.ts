@@ -51,6 +51,14 @@ describe.skipIf(!!process.env.FAST)(
     beforeAll(
       Effect.gen(function* () {
         yield* sharedStack.destroy();
+        // The APIs first: the probe resources need them enabled to deploy.
+        yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "securitycenter.googleapis.com",
+            });
+          }),
+        );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
@@ -68,8 +76,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("BigQueryExport", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetBigQueryExport@BigQueryExport (securitycenter.projects.bigQueryExports.get): BigQueryExport: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBigQueryExport@BigQueryExport (securitycenter.projects.bigQueryExports.get): BigQueryExport: Security Command Center is activated per organization; the testing project has none",
         () => Effect.void,
       );
     });
@@ -89,8 +97,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("MuteConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetMuteConfig@MuteConfig (securitycenter.projects.muteConfigs.get): MuteConfig: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetMuteConfig@MuteConfig (securitycenter.projects.muteConfigs.get): MuteConfig: Security Command Center is activated per organization; the testing project has none",
         () => Effect.void,
       );
     });

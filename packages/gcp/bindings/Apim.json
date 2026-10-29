@@ -10,7 +10,10 @@
     }
   },
   "probes": {
-    "resources": {},
+    "resources": {
+      "ObservationJob": "ProbeObservationJob",
+      "ObservationSource": "ProbeObservationSource"
+    },
     "untestable": {},
     "enable": [
       "apim.googleapis.com"

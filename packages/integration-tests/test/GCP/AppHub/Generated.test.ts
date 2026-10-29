@@ -51,6 +51,14 @@ describe.skipIf(!!process.env.FAST)(
     beforeAll(
       Effect.gen(function* () {
         yield* sharedStack.destroy();
+        // The APIs first: the probe resources need them enabled to deploy.
+        yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "apphub.googleapis.com",
+            });
+          }),
+        );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
@@ -68,30 +76,42 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Application", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetApplication (apphub.projects.locations.applications.get): Application: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetApplication (apphub.projects.locations.applications.get)",
+        () => probe("GetApplication", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apphub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListApplicationServices (apphub.projects.locations.applications.services.list): Application: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListApplicationServices (apphub.projects.locations.applications.services.list)",
+        () => probe("ListApplicationServices", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apphub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListApplicationWorkloads (apphub.projects.locations.applications.workloads.list): Application: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListApplicationWorkloads (apphub.projects.locations.applications.workloads.list)",
+        () => probe("ListApplicationWorkloads", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apphub", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ApplicationsService", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetService (apphub.projects.locations.applications.services.get): ApplicationsService: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetService (apphub.projects.locations.applications.services.get): ApplicationsService: registers a service App Hub discovered in the project; the testing project has no discovered services",
         () => Effect.void,
       );
     });
 
     describe("ApplicationsWorkload", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetWorkload (apphub.projects.locations.applications.workloads.get): ApplicationsWorkload: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetWorkload (apphub.projects.locations.applications.workloads.get): ApplicationsWorkload: registers a workload App Hub discovered in the project; the testing project has no discovered workloads",
         () => Effect.void,
       );
     });
@@ -180,8 +200,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ServiceProjectAttachment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetServiceProjectAttachment (apphub.projects.locations.serviceProjectAttachments.get): ServiceProjectAttachment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetServiceProjectAttachment (apphub.projects.locations.serviceProjectAttachments.get): ServiceProjectAttachment: attaches a service project to an App Hub host project; the testing account has a single project",
         () => Effect.void,
       );
     });

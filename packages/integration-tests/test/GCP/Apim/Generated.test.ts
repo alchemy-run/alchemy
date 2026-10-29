@@ -51,6 +51,12 @@ describe.skipIf(!!process.env.FAST)(
     beforeAll(
       Effect.gen(function* () {
         yield* sharedStack.destroy();
+        // The APIs first: the probe resources need them enabled to deploy.
+        yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", { service: "apim.googleapis.com" });
+          }),
+        );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", { service: "apim.googleapis.com" });
@@ -66,44 +72,80 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ObservationJob", { concurrent: true }, () => {
-      test.provider.todo(
-        "BatchApiObservationEditTags (apim.projects.locations.observationJobs.apiObservations.batchEditTags): ObservationJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "BatchApiObservationEditTags (apim.projects.locations.observationJobs.apiObservations.batchEditTags)",
+        () => probe("BatchApiObservationEditTags", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:apim", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "DisableObservationJob (apim.projects.locations.observationJobs.disable): ObservationJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DisableObservationJob (apim.projects.locations.observationJobs.disable)",
+        () => probe("DisableObservationJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:apim", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "EnableObservationJob (apim.projects.locations.observationJobs.enable): ObservationJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "EnableObservationJob (apim.projects.locations.observationJobs.enable)",
+        () => probe("EnableObservationJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:apim", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetObservationJob (apim.projects.locations.observationJobs.get): ObservationJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetObservationJob (apim.projects.locations.observationJobs.get)",
+        () => probe("GetObservationJob", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apim", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetObservationJobApiObservation (apim.projects.locations.observationJobs.apiObservations.get): ObservationJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetObservationJobApiObservation (apim.projects.locations.observationJobs.apiObservations.get)",
+        () => probe("GetObservationJobApiObservation", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:apim", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetObservationJobApiObservationApiOperation (apim.projects.locations.observationJobs.apiObservations.apiOperations.get): ObservationJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetObservationJobApiObservationApiOperation (apim.projects.locations.observationJobs.apiObservations.apiOperations.get)",
+        () => probe("GetObservationJobApiObservationApiOperation", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:apim", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListObservationJobApiObservationApiOperations (apim.projects.locations.observationJobs.apiObservations.apiOperations.list): ObservationJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListObservationJobApiObservationApiOperations (apim.projects.locations.observationJobs.apiObservations.apiOperations.list)",
+        () => probe("ListObservationJobApiObservationApiOperations", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:apim", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListObservationJobApiObservations (apim.projects.locations.observationJobs.apiObservations.list): ObservationJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListObservationJobApiObservations (apim.projects.locations.observationJobs.apiObservations.list)",
+        () => probe("ListObservationJobApiObservations", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apim", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ObservationSource", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetObservationSource (apim.projects.locations.observationSources.get): ObservationSource: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetObservationSource (apim.projects.locations.observationSources.get)",
+        () => probe("GetObservationSource", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apim", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

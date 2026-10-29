@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeObservationJob, ProbeObservationSource } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Apim binding as its own
@@ -15,18 +16,56 @@ export default class ApimGeneratedHost extends GCP.Function<ApimGeneratedHost>()
   "ApimGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.Apim.ListObservationJobs();
-    const p1 = yield* GCP.Apim.ListObservationSources();
+    const p0 = yield* GCP.Apim.BatchApiObservationEditTags(ProbeObservationJob);
+    const p1 = yield* GCP.Apim.DisableObservationJob(ProbeObservationJob);
+    const p2 = yield* GCP.Apim.EnableObservationJob(ProbeObservationJob);
+    const p3 = yield* GCP.Apim.GetObservationJob(ProbeObservationJob);
+    const p4 = yield* GCP.Apim.GetObservationJobApiObservation(ProbeObservationJob);
+    const p5 = yield* GCP.Apim.GetObservationJobApiObservationApiOperation(ProbeObservationJob);
+    const p6 = yield* GCP.Apim.GetObservationSource(ProbeObservationSource);
+    const p7 = yield* GCP.Apim.ListObservationJobApiObservationApiOperations(ProbeObservationJob);
+    const p8 = yield* GCP.Apim.ListObservationJobApiObservations(ProbeObservationJob);
+    const p9 = yield* GCP.Apim.ListObservationJobs();
+    const p10 = yield* GCP.Apim.ListObservationSources();
     return {
       fetch: serveProbes({
-        ListObservationJobs: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListObservationSources: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        BatchApiObservationEditTags: probeOutcome(Retry.none(p0({} as never))),
+        DisableObservationJob: probeOutcome(Retry.none(p1({} as never))),
+        EnableObservationJob: probeOutcome(Retry.none(p2({} as never))),
+        GetObservationJob: probeOutcome(Retry.none(p3({} as never))),
+        GetObservationJobApiObservation: probeOutcome(
+          Retry.none(p4({ apiObservation: "alchemy-missing" } as never)),
+        ),
+        GetObservationJobApiObservationApiOperation: probeOutcome(
+          Retry.none(
+            p5({ apiObservation: "alchemy-missing", apiOperation: "alchemy-missing" } as never),
+          ),
+        ),
+        GetObservationSource: probeOutcome(Retry.none(p6({} as never))),
+        ListObservationJobApiObservationApiOperations: probeOutcome(
+          Retry.none(p7({ apiObservation: "alchemy-missing" } as never)),
+        ),
+        ListObservationJobApiObservations: probeOutcome(Retry.none(p8({} as never))),
+        ListObservationJobs: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListObservationSources: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Layer.mergeAll(GCP.Apim.ListObservationJobsHttp, GCP.Apim.ListObservationSourcesHttp),
+        Layer.mergeAll(
+          GCP.Apim.BatchApiObservationEditTagsHttp,
+          GCP.Apim.DisableObservationJobHttp,
+          GCP.Apim.EnableObservationJobHttp,
+          GCP.Apim.GetObservationJobHttp,
+          GCP.Apim.GetObservationJobApiObservationHttp,
+          GCP.Apim.GetObservationJobApiObservationApiOperationHttp,
+          GCP.Apim.GetObservationSourceHttp,
+          GCP.Apim.ListObservationJobApiObservationApiOperationsHttp,
+          GCP.Apim.ListObservationJobApiObservationsHttp,
+          GCP.Apim.ListObservationJobsHttp,
+          GCP.Apim.ListObservationSourcesHttp,
+        ),
       ),
     ),
   ),

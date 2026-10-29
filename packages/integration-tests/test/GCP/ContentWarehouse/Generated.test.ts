@@ -51,6 +51,14 @@ describe.skipIf(!!process.env.FAST)(
     beforeAll(
       Effect.gen(function* () {
         yield* sharedStack.destroy();
+        // The APIs first: the probe resources need them enabled to deploy.
+        yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "contentwarehouse.googleapis.com",
+            });
+          }),
+        );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
@@ -68,33 +76,61 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Document", { concurrent: true }, () => {
-      test.provider.todo(
-        "CreateDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.create): Document: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CreateDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.create)",
+        () => probe("CreateDocumentLink", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "DeleteDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.delete): Document: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DeleteDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.delete)",
+        () => probe("DeleteDocumentLink", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "FetchDocumentAcl (contentwarehouse.projects.locations.documents.fetchAcl): Document: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "FetchDocumentAcl (contentwarehouse.projects.locations.documents.fetchAcl)",
+        () => probe("FetchDocumentAcl", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "LinkedDocumentSources (contentwarehouse.projects.locations.documents.linkedSources): Document: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "LinkedDocumentSources (contentwarehouse.projects.locations.documents.linkedSources)",
+        () => probe("LinkedDocumentSources", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "LinkedDocumentTargets (contentwarehouse.projects.locations.documents.linkedTargets): Document: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "LinkedDocumentTargets (contentwarehouse.projects.locations.documents.linkedTargets)",
+        () => probe("LinkedDocumentTargets", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "LockDocument (contentwarehouse.projects.locations.documents.lock): Document: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "LockDocument (contentwarehouse.projects.locations.documents.lock)",
+        () => probe("LockDocument", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SetDocumentAcl (contentwarehouse.projects.locations.documents.setAcl): Document: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SetDocumentAcl (contentwarehouse.projects.locations.documents.setAcl)",
+        () => probe("SetDocumentAcl", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

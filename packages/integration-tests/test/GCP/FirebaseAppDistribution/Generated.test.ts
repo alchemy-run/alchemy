@@ -51,6 +51,14 @@ describe.skipIf(!!process.env.FAST)(
     beforeAll(
       Effect.gen(function* () {
         yield* sharedStack.destroy();
+        // The APIs first: the probe resources need them enabled to deploy.
+        yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "firebaseappdistribution.googleapis.com",
+            });
+          }),
+        );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
@@ -68,16 +76,16 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Group", { concurrent: true }, () => {
-      test.provider.todo(
-        "BatchGroupJoin (firebaseappdistribution.projects.groups.batchJoin): Group: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "BatchGroupJoin (firebaseappdistribution.projects.groups.batchJoin): Group: needs a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none",
         () => Effect.void,
       );
-      test.provider.todo(
-        "BatchGroupLeave (firebaseappdistribution.projects.groups.batchLeave): Group: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "BatchGroupLeave (firebaseappdistribution.projects.groups.batchLeave): Group: needs a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetGroup (firebaseappdistribution.projects.groups.get): Group: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetGroup (firebaseappdistribution.projects.groups.get): Group: needs a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none",
         () => Effect.void,
       );
     });

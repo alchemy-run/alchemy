@@ -51,6 +51,14 @@ describe.skipIf(!!process.env.FAST)(
     beforeAll(
       Effect.gen(function* () {
         yield* sharedStack.destroy();
+        // The APIs first: the probe resources need them enabled to deploy.
+        yield* sharedStack.deploy(
+          Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "osconfig.googleapis.com",
+            });
+          }),
+        );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
@@ -82,9 +90,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ProjectsLocationsGlobalPolicyOrchestrator", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPolicyOrchestrator@ProjectsLocationsGlobalPolicyOrchestrator (osconfig.projects.locations.global.policyOrchestrators.get): ProjectsLocationsGlobalPolicyOrchestrator: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetPolicyOrchestrator@ProjectsLocationsGlobalPolicyOrchestrator (osconfig.projects.locations.global.policyOrchestrators.get)",
+        () => probe("GetPolicyOrchestrator@ProjectsLocationsGlobalPolicyOrchestrator", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:osconfig", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
