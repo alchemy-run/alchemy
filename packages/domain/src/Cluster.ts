@@ -626,7 +626,13 @@ const make = (options: Options) =>
         yield* wakeAt(fire.at);
       });
 
-    const sweepOnce = (afterMillis: number) =>
+    /**
+     * Forward outbox rows older than `afterMillis`, and send again the
+     * `Fire` of timers due that long ago. At start (`everyTimer`), every
+     * pending timer: a process may have died between storing a timer and
+     * sending its `Fire`, whenever it is due.
+     */
+    const sweepOnce = (afterMillis: number, everyTimer = false) =>
       Effect.gen(function* () {
         const cutoff = (yield* now) - afterMillis;
         const origins = yield* sql<{
@@ -641,7 +647,7 @@ const make = (options: Options) =>
           command_id: string;
           token: string;
           due: number | string;
-        }>`SELECT name, id, command_id, token, due FROM ${table.schedules} WHERE token <> ${CANCELLED} AND due <= ${cutoff}`;
+        }>`SELECT name, id, command_id, token, due FROM ${table.schedules} WHERE token <> ${CANCELLED} AND due <= ${everyTimer ? Number.MAX_SAFE_INTEGER : cutoff}`;
         yield* Effect.forEach(
           timers,
           (row) =>
@@ -660,7 +666,7 @@ const make = (options: Options) =>
       .registerSingleton(
         `Domain.Cluster/${prefix}/sweep`,
         // At start, everything a dead process left; then only what is late.
-        sweepOnce(0).pipe(
+        sweepOnce(0, true).pipe(
           Effect.andThen(
             sweepOnce(sweep.afterMillis).pipe(Effect.delay(sweep.intervalMillis), Effect.forever),
           ),
