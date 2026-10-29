@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,32 @@ export default class IAPGeneratedHost extends GCP.Function<IAPGeneratedHost>()(
   "IAPGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.IAP.CreateBrand();
+    const p1 = yield* GCP.IAP.GetBrand();
+    const p2 = yield* GCP.IAP.ListBrandIdentityAwareProxyClients();
+    const p3 = yield* GCP.IAP.ListBrands();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        CreateBrand: outcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        GetBrand: outcome(Retry.none(p1({ brand: "alchemy-missing" } as never))),
+        ListBrandIdentityAwareProxyClients: outcome(
+          Retry.none(p2({ brand: "alchemy-missing" } as never)),
+        ),
+        ListBrands: outcome(Retry.none(p3({} as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.IAP.CreateBrandHttp,
+          GCP.IAP.GetBrandHttp,
+          GCP.IAP.ListBrandIdentityAwareProxyClientsHttp,
+          GCP.IAP.ListBrandsHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

@@ -1,6 +1,6 @@
 {
-  "discovery": "cloudresourcemanager-v3",
-  "module": "cloudresourcemanager_v3",
+  "discovery": "servicenetworking-v1",
+  "module": "servicenetworking_v1",
   "resources": {
     "Connection": {
       "pattern": "projects/*"

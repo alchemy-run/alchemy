@@ -19,7 +19,7 @@ export const ListTaskJobsHttp = Layer.effect(
         resource: "GCP.Dataplex.LakesTask",
         operation: dataplex.listProjectsLocationsLakesTasksJobs,
         param: "parent",
-        iam: { role: "roles/dataplex.viewer" },
+        iam: { role: "roles/dataplex.dataScanViewer" },
       },
     ],
   }),

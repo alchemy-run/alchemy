@@ -29,7 +29,7 @@ export type CancelTaskJobShape = (
  * Cancel jobs running for the task resource.
  *
  * Bind it to a {@link LakesTask} and provide {@link CancelTaskJobHttp}. The
- * host gets `roles/dataplex.developer` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/dataplex.dataScanEditor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `jobs.cancel`

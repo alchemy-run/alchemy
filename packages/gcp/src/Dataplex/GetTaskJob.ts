@@ -29,7 +29,7 @@ export type GetTaskJobShape = (
  * Get job resource.
  *
  * Bind it to a {@link LakesTask} and provide {@link GetTaskJobHttp}. The
- * host gets `roles/dataplex.viewer` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/dataplex.dataScanViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `jobs.get`

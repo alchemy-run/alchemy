@@ -2,7 +2,9 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeTagKey, ProbeTagValue } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated ResourceManager binding as its own
@@ -14,8 +16,60 @@ export default class ResourceManagerGeneratedHost extends GCP.Function<ResourceM
   "ResourceManagerGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.ResourceManager.CreateTagValueTagHold(ProbeTagValue);
+    const p1 = yield* GCP.ResourceManager.DeleteTagValueTagHold(ProbeTagValue);
+    const p2 = yield* GCP.ResourceManager.GetTagKey(ProbeTagKey);
+    const p3 = yield* GCP.ResourceManager.GetTagKeyNamespaced();
+    const p4 = yield* GCP.ResourceManager.GetTagValue(ProbeTagValue);
+    const p5 = yield* GCP.ResourceManager.GetTagValueNamespaced();
+    const p6 = yield* GCP.ResourceManager.ListFolders();
+    const p7 = yield* GCP.ResourceManager.ListProjects();
+    const p8 = yield* GCP.ResourceManager.ListTagKeys();
+    const p9 = yield* GCP.ResourceManager.ListTagValues();
+    const p10 = yield* GCP.ResourceManager.ListTagValueTagHolds(ProbeTagValue);
+    const p11 = yield* GCP.ResourceManager.SearchFolder();
+    const p12 = yield* GCP.ResourceManager.SearchOrganization();
+    const p13 = yield* GCP.ResourceManager.SearchProject();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        CreateTagValueTagHold: outcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DeleteTagValueTagHold: outcome(Retry.none(p1({ tagHold: "alchemy-missing" } as never))),
+        GetTagKey: outcome(Retry.none(p2({} as never))),
+        GetTagKeyNamespaced: outcome(Retry.none(p3({} as never))),
+        GetTagValue: outcome(Retry.none(p4({} as never))),
+        GetTagValueNamespaced: outcome(Retry.none(p5({} as never))),
+        ListFolders: outcome(Retry.none(p6({} as never))),
+        ListProjects: outcome(Retry.none(p7({} as never))),
+        ListTagKeys: outcome(Retry.none(p8({} as never))),
+        ListTagValues: outcome(Retry.none(p9({} as never))),
+        ListTagValueTagHolds: outcome(Retry.none(p10({} as never))),
+        SearchFolder: outcome(Retry.none(p11({} as never))),
+        SearchOrganization: outcome(Retry.none(p12({} as never))),
+        SearchProject: outcome(Retry.none(p13({} as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.ResourceManager.CreateTagValueTagHoldHttp,
+          GCP.ResourceManager.DeleteTagValueTagHoldHttp,
+          GCP.ResourceManager.GetTagKeyHttp,
+          GCP.ResourceManager.GetTagKeyNamespacedHttp,
+          GCP.ResourceManager.GetTagValueHttp,
+          GCP.ResourceManager.GetTagValueNamespacedHttp,
+          GCP.ResourceManager.ListFoldersHttp,
+          GCP.ResourceManager.ListProjectsHttp,
+          GCP.ResourceManager.ListTagKeysHttp,
+          GCP.ResourceManager.ListTagValuesHttp,
+          GCP.ResourceManager.ListTagValueTagHoldsHttp,
+          GCP.ResourceManager.SearchFolderHttp,
+          GCP.ResourceManager.SearchOrganizationHttp,
+          GCP.ResourceManager.SearchProjectHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

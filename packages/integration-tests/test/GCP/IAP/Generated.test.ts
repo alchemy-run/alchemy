@@ -47,32 +47,42 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
+    describe("BrandsIdentityAwareProxyClient", { concurrent: true }, () => {
+      test.provider.todo(
+        "GetIdentityAwareProxyClient (iap.projects.brands.identityAwareProxyClients.get): BrandsIdentityAwareProxyClient: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+      test.provider.todo(
+        "ResetIdentityAwareProxyClientSecret (iap.projects.brands.identityAwareProxyClients.resetSecret): BrandsIdentityAwareProxyClient: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+    });
+
+    describe("project", { concurrent: true }, () => {
+      test.provider("CreateBrand (iap.projects.brands.create)", () => probe("CreateBrand", false), {
+        tags: ["provider:gcp", "provider:gcp:iap", "live"],
+        timeout: 600_000,
+      });
+      test.provider("GetBrand (iap.projects.brands.get)", () => probe("GetBrand", false), {
+        tags: ["provider:gcp", "provider:gcp:iap", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "ListBrandIdentityAwareProxyClients (iap.projects.brands.identityAwareProxyClients.list)",
+        () => probe("ListBrandIdentityAwareProxyClients", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:iap", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider("ListBrands (iap.projects.brands.list)", () => probe("ListBrands", true), {
+        tags: ["provider:gcp", "provider:gcp:iap", "live"],
+        timeout: 600_000,
+      });
+    });
+
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
-      test.provider.skip(
-        "iap.projects.brands.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "iap.projects.brands.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "iap.projects.brands.create: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "iap.projects.brands.identityAwareProxyClients.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "iap.projects.brands.identityAwareProxyClients.resetSecret: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "iap.projects.brands.identityAwareProxyClients.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
       test.provider.skip(
         "iap.projects.iap_tunnel.locations.destGroups.list: addressed under `*/`, not a project",
         () => Effect.void,

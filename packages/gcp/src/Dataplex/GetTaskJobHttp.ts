@@ -20,7 +20,7 @@ export const GetTaskJobHttp = Layer.effect(
         operation: dataplex.getProjectsLocationsLakesTasksJobs,
         param: "name",
         children: [["jobs", "job"]],
-        iam: { role: "roles/dataplex.viewer" },
+        iam: { role: "roles/dataplex.dataScanViewer" },
       },
     ],
   }),

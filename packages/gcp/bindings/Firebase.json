@@ -8,5 +8,19 @@
   },
   "probes": {
     "resources": {}
+  },
+  "permissionCollections": {
+    "iosApps": "clients",
+    "androidApps": "clients",
+    "webApps": "clients",
+    "sha": "clients",
+    "availableLocations": "locations",
+    "defaultLocation": "projects",
+    "availableProjects": "projects"
+  },
+  "verbPermissions": {
+    "getConfig": "get",
+    "remove": "delete",
+    "finalize": "update"
   }
 }

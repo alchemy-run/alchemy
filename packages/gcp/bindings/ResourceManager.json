@@ -22,6 +22,18 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "Lien": "ProbeLien",
+      "TagKey": "ProbeTagKey",
+      "TagValue": "ProbeTagValue"
+    },
+    "untestable": {
+      "Folder": "Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+      "Project": "Live create returns Forbidden: \"The caller does not have permission\" (resourcemanager.projects.create on the parent organization/folder). Set GOOGLE_ORGANIZATION_ID when the credentials can create projects there. (GOOGLE_STANDALONE_PROJECTS)"
+    }
+  },
+  "permissionService": "resourcemanager",
+  "skip": {
+    "cloudresourcemanager.projects.undelete": "only a broad admin role grants resourcemanager.projects.undelete"
   }
 }

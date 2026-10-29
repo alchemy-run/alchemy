@@ -85,5 +85,9 @@
       "DataDomainsBinding": "Data domains are allowlisted: the testing project gets Forbidden \"Permission 'dataplex.dataDomains.get' denied\". Set (GCP_TEST_DATAPLEX_DATA_DOMAIN)",
       "EncryptionConfig": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)"
     }
+  },
+  "permissionCollections": {
+    "dataScans": "datascans",
+    "jobs": "datascans"
   }
 }

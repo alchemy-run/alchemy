@@ -17,12 +17,30 @@ export default class FirebaseGeneratedHost extends GCP.Function<FirebaseGenerate
   Effect.gen(function* () {
     const p0 = yield* GCP.Firebase.AddProjectFirebase();
     const p1 = yield* GCP.Firebase.AddProjectGoogleAnalytics();
-    const p2 = yield* GCP.Firebase.GetProject();
-    const p3 = yield* GCP.Firebase.GetProjectAdminSdkConfig();
-    const p4 = yield* GCP.Firebase.GetProjectAnalyticsDetails();
-    const p5 = yield* GCP.Firebase.ListProjects();
-    const p6 = yield* GCP.Firebase.RemoveProjectAnalytics();
-    const p7 = yield* GCP.Firebase.SearchProjectApps();
+    const p2 = yield* GCP.Firebase.CreateIosApp();
+    const p3 = yield* GCP.Firebase.CreateWebApp();
+    const p4 = yield* GCP.Firebase.FinalizeDefaultLocation();
+    const p5 = yield* GCP.Firebase.GetAndroidAppConfig();
+    const p6 = yield* GCP.Firebase.GetIosApp();
+    const p7 = yield* GCP.Firebase.GetIosAppConfig();
+    const p8 = yield* GCP.Firebase.GetProject();
+    const p9 = yield* GCP.Firebase.GetProjectAdminSdkConfig();
+    const p10 = yield* GCP.Firebase.GetProjectAnalyticsDetails();
+    const p11 = yield* GCP.Firebase.GetWebApp();
+    const p12 = yield* GCP.Firebase.GetWebAppConfig();
+    const p13 = yield* GCP.Firebase.ListAndroidApps();
+    const p14 = yield* GCP.Firebase.ListAvailableProjects();
+    const p15 = yield* GCP.Firebase.ListIosApps();
+    const p16 = yield* GCP.Firebase.ListProjects();
+    const p17 = yield* GCP.Firebase.ListWebApps();
+    const p18 = yield* GCP.Firebase.PatchIosApp();
+    const p19 = yield* GCP.Firebase.PatchWebApp();
+    const p20 = yield* GCP.Firebase.RemoveIosApp();
+    const p21 = yield* GCP.Firebase.RemoveProjectAnalytics();
+    const p22 = yield* GCP.Firebase.RemoveWebApp();
+    const p23 = yield* GCP.Firebase.SearchProjectApps();
+    const p24 = yield* GCP.Firebase.UndeleteIosApp();
+    const p25 = yield* GCP.Firebase.UndeleteWebApp();
     return {
       fetch: serveProbes({
         AddProjectFirebase: outcome(
@@ -31,12 +49,34 @@ export default class FirebaseGeneratedHost extends GCP.Function<FirebaseGenerate
         AddProjectGoogleAnalytics: outcome(
           Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        GetProject: outcome(Retry.none(p2({} as never))),
-        GetProjectAdminSdkConfig: outcome(Retry.none(p3({} as never))),
-        GetProjectAnalyticsDetails: outcome(Retry.none(p4({} as never))),
-        ListProjects: outcome(Retry.none(p5({} as never))),
-        RemoveProjectAnalytics: outcome(Retry.none(p6({} as never))),
-        SearchProjectApps: outcome(Retry.none(p7({} as never))),
+        CreateIosApp: outcome(
+          Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CreateWebApp: outcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        FinalizeDefaultLocation: outcome(Retry.none(p4({} as never))),
+        GetAndroidAppConfig: outcome(Retry.none(p5({ androidApp: "alchemy-missing" } as never))),
+        GetIosApp: outcome(Retry.none(p6({ iosApp: "alchemy-missing" } as never))),
+        GetIosAppConfig: outcome(Retry.none(p7({ iosApp: "alchemy-missing" } as never))),
+        GetProject: outcome(Retry.none(p8({} as never))),
+        GetProjectAdminSdkConfig: outcome(Retry.none(p9({} as never))),
+        GetProjectAnalyticsDetails: outcome(Retry.none(p10({} as never))),
+        GetWebApp: outcome(Retry.none(p11({ webApp: "alchemy-missing" } as never))),
+        GetWebAppConfig: outcome(Retry.none(p12({ webApp: "alchemy-missing" } as never))),
+        ListAndroidApps: outcome(Retry.none(p13({} as never))),
+        ListAvailableProjects: outcome(Retry.none(p14({} as never))),
+        ListIosApps: outcome(Retry.none(p15({} as never))),
+        ListProjects: outcome(Retry.none(p16({} as never))),
+        ListWebApps: outcome(Retry.none(p17({} as never))),
+        PatchIosApp: outcome(Retry.none(p18({ iosApp: "alchemy-missing" } as never))),
+        PatchWebApp: outcome(Retry.none(p19({ webApp: "alchemy-missing" } as never))),
+        RemoveIosApp: outcome(Retry.none(p20({ iosApp: "alchemy-missing" } as never))),
+        RemoveProjectAnalytics: outcome(Retry.none(p21({} as never))),
+        RemoveWebApp: outcome(Retry.none(p22({ webApp: "alchemy-missing" } as never))),
+        SearchProjectApps: outcome(Retry.none(p23({} as never))),
+        UndeleteIosApp: outcome(Retry.none(p24({ iosApp: "alchemy-missing" } as never))),
+        UndeleteWebApp: outcome(Retry.none(p25({ webApp: "alchemy-missing" } as never))),
       }),
     };
   }).pipe(
@@ -45,12 +85,30 @@ export default class FirebaseGeneratedHost extends GCP.Function<FirebaseGenerate
         Layer.mergeAll(
           GCP.Firebase.AddProjectFirebaseHttp,
           GCP.Firebase.AddProjectGoogleAnalyticsHttp,
+          GCP.Firebase.CreateIosAppHttp,
+          GCP.Firebase.CreateWebAppHttp,
+          GCP.Firebase.FinalizeDefaultLocationHttp,
+          GCP.Firebase.GetAndroidAppConfigHttp,
+          GCP.Firebase.GetIosAppHttp,
+          GCP.Firebase.GetIosAppConfigHttp,
           GCP.Firebase.GetProjectHttp,
           GCP.Firebase.GetProjectAdminSdkConfigHttp,
           GCP.Firebase.GetProjectAnalyticsDetailsHttp,
+          GCP.Firebase.GetWebAppHttp,
+          GCP.Firebase.GetWebAppConfigHttp,
+          GCP.Firebase.ListAndroidAppsHttp,
+          GCP.Firebase.ListAvailableProjectsHttp,
+          GCP.Firebase.ListIosAppsHttp,
           GCP.Firebase.ListProjectsHttp,
+          GCP.Firebase.ListWebAppsHttp,
+          GCP.Firebase.PatchIosAppHttp,
+          GCP.Firebase.PatchWebAppHttp,
+          GCP.Firebase.RemoveIosAppHttp,
           GCP.Firebase.RemoveProjectAnalyticsHttp,
+          GCP.Firebase.RemoveWebAppHttp,
           GCP.Firebase.SearchProjectAppsHttp,
+          GCP.Firebase.UndeleteIosAppHttp,
+          GCP.Firebase.UndeleteWebAppHttp,
         ),
       ),
     ),

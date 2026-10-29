@@ -112,8 +112,48 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("DataScan", { concurrent: true }, () => {
       test.provider(
+        "CancelDataScanJob (dataplex.projects.locations.dataScans.jobs.cancel)",
+        () => probe("CancelDataScanJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GenerateDataScanDataQualityRules (dataplex.projects.locations.dataScans.generateDataQualityRules)",
+        () => probe("GenerateDataScanDataQualityRules", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GenerateJobDataQualityRules (dataplex.projects.locations.dataScans.jobs.generateDataQualityRules)",
+        () => probe("GenerateJobDataQualityRules", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "GetDataScan (dataplex.projects.locations.dataScans.get)",
         () => probe("GetDataScan", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetDataScanJob (dataplex.projects.locations.dataScans.jobs.get)",
+        () => probe("GetDataScanJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListDataScanJobs (dataplex.projects.locations.dataScans.jobs.list)",
+        () => probe("ListDataScanJobs", true),
         {
           tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
           timeout: 600_000,
@@ -512,26 +552,6 @@ describe.skipIf(!!process.env.FAST)(
 
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
-      test.provider.skip(
-        "dataplex.projects.locations.dataScans.generateDataQualityRules: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataplex.projects.locations.dataScans.jobs.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataplex.projects.locations.dataScans.jobs.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataplex.projects.locations.dataScans.jobs.generateDataQualityRules: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dataplex.projects.locations.dataScans.jobs.cancel: no predefined role grants its permission",
-        () => Effect.void,
-      );
       test.provider.skip(
         "dataplex.organizations.locations.encryptionConfigs.get: no predefined role grants its permission",
         () => Effect.void,

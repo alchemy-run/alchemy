@@ -8,5 +8,12 @@
   },
   "probes": {
     "resources": {}
+  },
+  "permissionService": "clientauthconfig",
+  "permissionCollections": {
+    "identityAwareProxyClients": "clients"
+  },
+  "verbPermissions": {
+    "resetSecret": "getWithSecret"
   }
 }

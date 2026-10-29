@@ -20,7 +20,7 @@ export const CancelTaskJobHttp = Layer.effect(
         operation: dataplex.cancelProjectsLocationsLakesTasksJobs,
         param: "name",
         children: [["jobs", "job"]],
-        iam: { role: "roles/dataplex.developer" },
+        iam: { role: "roles/dataplex.dataScanEditor" },
       },
     ],
   }),

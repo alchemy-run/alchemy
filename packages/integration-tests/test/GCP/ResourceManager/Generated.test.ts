@@ -47,102 +47,213 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
+    describe("Folder", { concurrent: true }, () => {
+      test.provider.skip(
+        "CreateCapabilityConfig@Folder (cloudresourcemanager.folders.capabilityConfigs.create): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "DeleteCapabilityConfig@Folder (cloudresourcemanager.folders.capabilityConfigs.delete): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "GetCapability (cloudresourcemanager.folders.capabilities.get): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "GetCapabilityConfig@Folder (cloudresourcemanager.folders.capabilityConfigs.get): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "GetFolder (cloudresourcemanager.folders.get): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListCapabilityConfigs@Folder (cloudresourcemanager.folders.capabilityConfigs.list): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "MoveFolder (cloudresourcemanager.folders.move): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "PatchCapability (cloudresourcemanager.folders.capabilities.patch): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "PatchCapabilityConfig@Folder (cloudresourcemanager.folders.capabilityConfigs.patch): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "UndeleteFolder (cloudresourcemanager.folders.undelete): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+    });
+
+    describe("project", { concurrent: true }, () => {
+      test.provider(
+        "GetTagKeyNamespaced (cloudresourcemanager.tagKeys.getNamespaced)",
+        () => probe("GetTagKeyNamespaced", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetTagValueNamespaced (cloudresourcemanager.tagValues.getNamespaced)",
+        () => probe("GetTagValueNamespaced", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListFolders (cloudresourcemanager.folders.list)",
+        () => probe("ListFolders", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListProjects (cloudresourcemanager.projects.list)",
+        () => probe("ListProjects", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListTagKeys (cloudresourcemanager.tagKeys.list)",
+        () => probe("ListTagKeys", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListTagValues (cloudresourcemanager.tagValues.list)",
+        () => probe("ListTagValues", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "SearchFolder (cloudresourcemanager.folders.search)",
+        () => probe("SearchFolder", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "SearchOrganization (cloudresourcemanager.organizations.search)",
+        () => probe("SearchOrganization", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "SearchProject (cloudresourcemanager.projects.search)",
+        () => probe("SearchProject", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("Project", { concurrent: true }, () => {
+      test.provider.skip(
+        'CreateCapabilityConfig@Project (cloudresourcemanager.projects.capabilityConfigs.create): Project: Live create returns Forbidden: "The caller does not have permission" (resourcemanager.projects.create on the parent organization/folder). Set GOOGLE_ORGANIZATION_ID when the credentials can create projects there. (GOOGLE_STANDALONE_PROJECTS)',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'DeleteCapabilityConfig@Project (cloudresourcemanager.projects.capabilityConfigs.delete): Project: Live create returns Forbidden: "The caller does not have permission" (resourcemanager.projects.create on the parent organization/folder). Set GOOGLE_ORGANIZATION_ID when the credentials can create projects there. (GOOGLE_STANDALONE_PROJECTS)',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'GetCapabilityConfig@Project (cloudresourcemanager.projects.capabilityConfigs.get): Project: Live create returns Forbidden: "The caller does not have permission" (resourcemanager.projects.create on the parent organization/folder). Set GOOGLE_ORGANIZATION_ID when the credentials can create projects there. (GOOGLE_STANDALONE_PROJECTS)',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'GetProject (cloudresourcemanager.projects.get): Project: Live create returns Forbidden: "The caller does not have permission" (resourcemanager.projects.create on the parent organization/folder). Set GOOGLE_ORGANIZATION_ID when the credentials can create projects there. (GOOGLE_STANDALONE_PROJECTS)',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'ListCapabilityConfigs@Project (cloudresourcemanager.projects.capabilityConfigs.list): Project: Live create returns Forbidden: "The caller does not have permission" (resourcemanager.projects.create on the parent organization/folder). Set GOOGLE_ORGANIZATION_ID when the credentials can create projects there. (GOOGLE_STANDALONE_PROJECTS)',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'MoveProject (cloudresourcemanager.projects.move): Project: Live create returns Forbidden: "The caller does not have permission" (resourcemanager.projects.create on the parent organization/folder). Set GOOGLE_ORGANIZATION_ID when the credentials can create projects there. (GOOGLE_STANDALONE_PROJECTS)',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'PatchCapabilityConfig@Project (cloudresourcemanager.projects.capabilityConfigs.patch): Project: Live create returns Forbidden: "The caller does not have permission" (resourcemanager.projects.create on the parent organization/folder). Set GOOGLE_ORGANIZATION_ID when the credentials can create projects there. (GOOGLE_STANDALONE_PROJECTS)',
+        () => Effect.void,
+      );
+    });
+
+    describe("TagKey", { concurrent: true }, () => {
+      test.provider(
+        "GetTagKey (cloudresourcemanager.tagKeys.get)",
+        () => probe("GetTagKey", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("TagValue", { concurrent: true }, () => {
+      test.provider(
+        "CreateTagValueTagHold (cloudresourcemanager.tagValues.tagHolds.create)",
+        () => probe("CreateTagValueTagHold", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "DeleteTagValueTagHold (cloudresourcemanager.tagValues.tagHolds.delete)",
+        () => probe("DeleteTagValueTagHold", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetTagValue (cloudresourcemanager.tagValues.get)",
+        () => probe("GetTagValue", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListTagValueTagHolds (cloudresourcemanager.tagValues.tagHolds.list)",
+        () => probe("ListTagValueTagHolds", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
-      test.provider.skip(
-        "cloudresourcemanager.tagValues.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.tagValues.tagHolds.create: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.tagValues.tagHolds.delete: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.tagValues.tagHolds.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
       test.provider.skip(
         "cloudresourcemanager.tagBindings.delete: addressed under `tagBindings/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudresourcemanager.projects.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.projects.move: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.projects.undelete: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.projects.capabilityConfigs.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.projects.capabilityConfigs.patch: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.projects.capabilityConfigs.delete: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.projects.capabilityConfigs.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.projects.capabilityConfigs.create: no predefined role grants its permission",
+        "cloudresourcemanager.projects.undelete: only a broad admin role grants resourcemanager.projects.undelete",
         () => Effect.void,
       );
       test.provider.skip(
         "cloudresourcemanager.liens.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.folders.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.folders.move: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.folders.undelete: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.folders.capabilityConfigs.delete: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.folders.capabilityConfigs.patch: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.folders.capabilityConfigs.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.folders.capabilityConfigs.create: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.folders.capabilityConfigs.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.folders.capabilities.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.folders.capabilities.patch: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -155,10 +266,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "cloudresourcemanager.locations.effectiveTagBindingCollections.get: addressed under `locations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.tagKeys.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -186,14 +293,6 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudresourcemanager.tagValues.getNamespaced: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.tagValues.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "cloudresourcemanager.tagBindings.list: no predefined role grants its permission",
         () => Effect.void,
       );
@@ -202,35 +301,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "cloudresourcemanager.projects.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.projects.search: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "cloudresourcemanager.liens.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.folders.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.folders.search: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.tagKeys.getNamespaced: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.tagKeys.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudresourcemanager.organizations.search: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

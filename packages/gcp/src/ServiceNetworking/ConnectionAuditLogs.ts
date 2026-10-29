@@ -20,7 +20,7 @@ export interface ConnectionAuditLogsProps extends Omit<AuditLogEventSourceProps,
 /**
  * Subscribe an Effect handler to the Cloud Audit Logs entries for a
  * {@link Connection} (`GCP.ServiceNetworking.Connection`) and its children: every call to
- * `cloudresourcemanager.googleapis.com` that names it.
+ * `servicenetworking.googleapis.com` that names it.
  *
  * Admin Activity entries (configuration and metadata changes) are always
  * written; Data Access entries (reads and data calls) only where the
@@ -64,7 +64,7 @@ export function consumeConnectionAuditLogs<Req = never, ResourceReq = never>(
             ...props,
             filter: Output.map(resource.name, (resourceName) =>
               resourceAuditLogFilter({
-                serviceNames: ["cloudresourcemanager.googleapis.com"],
+                serviceNames: ["servicenetworking.googleapis.com"],
                 resourceName,
                 methods,
               }),
