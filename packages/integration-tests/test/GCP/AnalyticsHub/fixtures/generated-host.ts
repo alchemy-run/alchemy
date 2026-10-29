@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { hostProject, probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeDataExchange, ProbeListing, ProbeQueryTemplate } from "./generated-resources.ts";
 
 /**
@@ -54,7 +54,16 @@ export default class AnalyticsHubGeneratedHost extends GCP.Function<AnalyticsHub
         RevokeSubscription: probeOutcome(
           Retry.none(p12({ subscription: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        SubscribeDataExchange: probeOutcome(Retry.none(p13({} as never))),
+        SubscribeDataExchange: probeOutcome(
+          Retry.none(
+            p13({
+              body: {
+                destination: `projects/${yield* hostProject}/locations/us-central1`,
+                subscription: "alchemy probe invalid",
+              },
+            } as never),
+          ),
+        ),
         SubscribeListing: probeOutcome(Retry.none(p14({} as never))),
       }),
     };

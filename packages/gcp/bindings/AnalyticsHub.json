@@ -22,6 +22,9 @@
     "skip": {
       "SubmitQueryTemplate": "moves the template out of DRAFTED, which can't be undone: the template then can't be deleted on its own",
       "ApproveQueryTemplate": "moves the template out of DRAFTED, which can't be undone: the template then can't be deleted on its own"
+    },
+    "args": {
+      "SubscribeDataExchange": "{ body: { destination: `projects/${yield* hostProject}/locations/us-central1`, subscription: \"alchemy probe invalid\" } }"
     }
   },
   "permissions": {
