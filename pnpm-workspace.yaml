@@ -69,6 +69,7 @@ catalog:
   "@effect/sql-libsql": "^4.1.0"
   "@effect/sql-mysql2": "^4.1.0"
   "@effect/sql-pg": "^4.1.0"
+  "@effect/sql-sqlite-bun": "^4.1.0"
   "@effect/sql-sqlite-do": "^4.1.0"
   "@effect/tsgo": "^0.57.0"
   "@effect/vitest": "^4.1.0"
@@ -356,6 +357,7 @@ minimumReleaseAgeExclude:
   - "@effect/sql-libsql@4.1.0"
   - "@effect/sql-mysql2@4.1.0"
   - "@effect/sql-pg@4.1.0"
+  - "@effect/sql-sqlite-bun@4.1.0"
   - "@effect/sql-sqlite-do@4.1.0"
   - "@effect/vitest@4.1.0"
   - effect@4.1.0
