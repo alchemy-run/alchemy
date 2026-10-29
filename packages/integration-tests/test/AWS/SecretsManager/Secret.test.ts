@@ -4,13 +4,14 @@ import type { PolicyDocument } from "@alchemy.run/aws/IAM/Policy";
 import { normalizePolicyDocument } from "@alchemy.run/aws/IAM/Policy";
 import { Secret } from "@alchemy.run/aws/SecretsManager/Secret";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -491,4 +492,40 @@ test.provider(
       yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:secretsmanager", "live"] },
+);
+
+// #2688: `read` must observe the live AWSCURRENT version and the resource
+// policy, or a value written out of band reads as `unchanged`.
+test.provider(
+  "drift detects and repairs an out-of-band secret value",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const secret = yield* stack.deploy(
+        Secret("DriftSecret", {
+          secretString: Redacted.make("declared"),
+          tags: { team: "declared" },
+        }),
+      );
+      expect((yield* driftOf(stack, "DriftSecret"))?.action).toBe("unchanged");
+
+      yield* secretsmanager.putSecretValue({
+        SecretId: secret.secretArn,
+        SecretString: "out-of-band",
+      });
+
+      const drifted = yield* waitForDrift(stack, "DriftSecret", "drifted");
+      expect(drifted?.attr?.versionId).not.toBe(secret.versionId);
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.DriftSecret?.action).toBe("repaired");
+      expect((yield* waitForDrift(stack, "DriftSecret", "unchanged"))?.action).toBe("unchanged");
+      const current = yield* secretsmanager.getSecretValue({ SecretId: secret.secretArn });
+      expect(unwrapString(current.SecretString)).toBe("declared");
+
+      yield* stack.destroy();
+      yield* assertSecretDeleted(secret.secretArn);
+    }),
+  { tags: ["provider:aws", "provider:aws:secretsmanager", "live"], timeout: 180_000 },
 );

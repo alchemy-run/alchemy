@@ -14,6 +14,7 @@ import type { HttpServerError } from "effect/http/HttpServerError";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import type { Scope } from "effect/Scope";
 import type { Container } from "../Containers/Container.ts";
 import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
@@ -90,6 +91,10 @@ export interface DurableObject<Shape = unknown> extends DurableObjectLike<Shape>
    * A view of this namespace whose objects are created and stored only inside
    * the given jurisdiction (e.g. `"eu"`). The same name addresses a different
    * object than it does in the unrestricted namespace.
+   *
+   * Enforced when deployed, not emulated in `alchemy dev`: local workerd does
+   * not implement jurisdictions, so there this returns the unrestricted
+   * namespace, and the same name addresses the same object in both.
    *
    * @example
    * ```typescript
@@ -209,6 +214,30 @@ export const normalizeTransferredFrom = (
         ? (value as readonly DurableObjectTransferSource[])
         : [value as DurableObjectTransferSource]
       ).map((source) => resolveTransferSourceRef(source));
+
+/**
+ * `ns` restricted to `jurisdiction`. Local workerd (`alchemy dev`) does not
+ * implement jurisdictions and throws on `jurisdiction()`, so there the
+ * unrestricted namespace is used, the same way a D1 database, R2 bucket or
+ * Queue declared with a jurisdiction runs unrestricted on the local simulator.
+ */
+const restrictToJurisdiction = (
+  ns: cf.DurableObjectNamespace | undefined,
+  jurisdiction: DurableObjectJurisdiction,
+): cf.DurableObjectNamespace | undefined => {
+  try {
+    return ns?.jurisdiction(jurisdiction);
+  } catch (error) {
+    // workerd's message; a deployed Worker never throws it.
+    if (
+      Predicate.hasProperty(error, "message") &&
+      String(error.message).includes("Jurisdiction restrictions are not implemented")
+    ) {
+      return ns;
+    }
+    throw error;
+  }
+};
 
 export interface DurableObjectProps {
   /**
@@ -1378,7 +1407,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           Effect.flatMap(([env, phase]) => {
             if (env === undefined || phase === "plan") {
               // should be fine to return undefined here (it is only undefined at plantime)
-              return Effect.succeed(undefined);
+              return Effect.undefined;
             }
             const ns = env[namespace];
             if (!ns) {
@@ -1415,7 +1444,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           get: (id: DurableObjectId, options?: DurableObjectGetDurableObjectOptions) =>
             makeRpcStub(ns!.get(id, options), { errors }),
           jurisdiction: (jurisdiction: DurableObjectJurisdiction) =>
-            makeNamespace(ns?.jurisdiction(jurisdiction)),
+            makeNamespace(restrictToJurisdiction(ns, jurisdiction)),
         });
 
         return makeNamespace(binding);

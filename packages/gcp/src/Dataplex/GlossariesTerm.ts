@@ -130,7 +130,7 @@ export const GlossariesTerm = Resource<GlossariesTerm>("GCP.Dataplex.GlossariesT
 export class GlossariesTermNotResolved extends Data.TaggedError(
   "GCP.Dataplex.GlossariesTermNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const glossaryOf = (glossary: string, project: string, location: string) =>
@@ -161,7 +161,7 @@ const toAttrs = (term: dataplex.GoogleCloudDataplexV1GlossaryTerm, project: stri
 const getByName = (name: string) =>
   dataplex
     .getProjectsLocationsGlossariesTerms({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const GlossariesTermProvider = () =>
   Provider.succeed(GlossariesTerm, {
@@ -254,7 +254,7 @@ export const GlossariesTermProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new GlossariesTermNotResolved({ name });
+        return yield* new GlossariesTermNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

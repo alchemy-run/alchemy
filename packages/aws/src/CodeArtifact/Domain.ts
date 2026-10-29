@@ -98,7 +98,7 @@ export const DomainProvider = () =>
       const getDomain = Effect.fn(function* (name: string) {
         const response = yield* codeartifact
           .describeDomain({ domain: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.domain;
       });
 

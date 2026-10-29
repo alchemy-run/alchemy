@@ -180,15 +180,15 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apihub
         .getProjectsLocationsApiHubInstances({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const lookupAt = (parent: string) =>
   apihub.lookupProjectsLocationsApiHubInstances({ parent }).pipe(
     Effect.map((response) => response.apiHubInstance),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const configOf = (news: ApiHubInstanceProps): apihub.GoogleCloudApihubV1Config => ({
@@ -296,7 +296,7 @@ export const ApiHubInstanceProvider = () =>
               config,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -304,7 +304,7 @@ export const ApiHubInstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -333,7 +333,7 @@ export const ApiHubInstanceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name: currentName });
+        return yield* new ApihubNotResolved({ resourceName: currentName });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -342,7 +342,7 @@ export const ApiHubInstanceProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apihub
         .deleteProjectsLocationsApiHubInstances({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);
       }

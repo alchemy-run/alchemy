@@ -297,7 +297,7 @@ type ObservedSubdomain = emailSending.GetSubdomainResponse;
 const getSubdomain = (zoneId: string, subdomainId: string) =>
   emailSending.getSubdomain({ zoneId, subdomainId }).pipe(
     Effect.map((subdomain): ObservedSubdomain | undefined => subdomain),
-    Effect.catchTag("SendingSubdomainNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("SendingSubdomainNotFound", () => Effect.undefined),
   );
 
 /**

@@ -1,14 +1,14 @@
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
-import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
-import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
+import { DefinitionError, judge, settle } from "./internal.ts";
+import * as Key from "./Key.ts";
 import type {
   Accepted,
   AggregateKit,
@@ -65,17 +65,7 @@ export interface InputMetaValue {
   appends: number;
 }
 
-/**
- * A domain definition error (duplicate tag, missing `keyOf`, …), raised while
- * the kernel is built.
- */
-export class DefinitionError extends Data.TaggedError("DefinitionError")<{
-  readonly message: string;
-}> {
-  constructor(message: string) {
-    super({ message });
-  }
-}
+export { DefinitionError };
 
 interface JsonCodec {
   readonly encode: (value: unknown) => Json;
@@ -85,7 +75,9 @@ interface JsonCodec {
 const jsonCodec = (schema: Schema.Top): JsonCodec => {
   const codec = Schema.toCodecJson(schema as any) as any;
   return {
+    // oxlint-disable-next-line effecttsgo/schema-sync -- JsonCodec is sync by contract
     encode: Schema.encodeUnknownSync(codec),
+    // oxlint-disable-next-line effecttsgo/schema-sync -- JsonCodec is sync by contract
     decode: Schema.decodeUnknownSync(codec),
   };
 };
@@ -165,7 +157,7 @@ export interface Kernel {
     commandTag: string,
     json: ReceiptJson,
   ) => Aggregate.Receipt;
-  readonly decodeState: (aggregate: Aggregate.Any, json: Json | null) => unknown;
+  readonly decodeState: (aggregate: Aggregate.Any, json: Json) => unknown;
   readonly decodeViewState: (view: View.Any, json: Json) => unknown;
   readonly decodeViewEntry: (view: View.Any, entry: ViewEntry) => View.Entry<unknown, unknown>;
   readonly decodeEvent: (json: Json) => unknown;
@@ -317,8 +309,8 @@ const build = (
     }
     return entry;
   };
-  /** The aggregate whose refs identify a source's instances. */
-  const keyAggregateOf = (entry: SourceEntry) =>
+  /** The key that identifies a source's instances: its aggregate, or a view's key. */
+  const keyOfSource = (entry: SourceEntry): Key.Any =>
     entry.kind === "aggregate" ? entry.aggregate : entry.view.definition.key;
 
   for (const stream of definitions.streams) {
@@ -374,7 +366,8 @@ const build = (
   /** What routing sees of an event. */
   interface RouteInput {
     readonly event: unknown;
-    readonly source: Aggregate.Ref;
+    /** The source instance: a ref, or a Schema-keyed view's key value. */
+    readonly source: unknown;
     readonly envelope: Aggregate.Envelope;
     readonly state: unknown;
     /** The source stream, e.g. `Account/a-1`. */
@@ -405,7 +398,7 @@ const build = (
   /** How a consumer keyed by `def.key` routes `tag` from `source`. */
   const keyRoute = (
     owner: string,
-    def: { readonly key: Aggregate.Any; readonly keyOf?: unknown },
+    def: { readonly key: Key.Any; readonly keyOf?: unknown },
     upstream: SourceEntry,
     source: string,
     tag: string,
@@ -417,10 +410,11 @@ const build = (
       state: input.state,
       envelope: input.envelope,
     });
+    // A route returns a ref for an aggregate key, or the value of a Schema key.
     if (typeof custom === "function") {
       return (input) => {
-        const ref = custom(routing(input)) as Aggregate.Ref | undefined;
-        return ref ? [{ key: ref.id as string }] : [];
+        const ref = custom(routing(input));
+        return ref === undefined ? [] : [{ key: Aggregate.targetId(ref) }];
       };
     }
     if (custom) {
@@ -428,19 +422,20 @@ const build = (
       return (input) => {
         const byKey = new Map<string, Array<string>>();
         for (const [route, fn] of routes) {
-          const ref = fn?.(routing(input)) as Aggregate.Ref | undefined;
-          if (!ref) continue;
-          const list = byKey.get(ref.id as string) ?? [];
-          byKey.set(ref.id as string, list);
+          const ref = fn?.(routing(input));
+          if (ref === undefined) continue;
+          const key = Aggregate.targetId(ref);
+          const list = byKey.get(key) ?? [];
+          byKey.set(key, list);
           list.push(route);
         }
         return [...byKey].map(([key, names]) => ({ key, routes: names }));
       };
     }
-    if (keyAggregateOf(upstream) === def.key)
-      return (input) => [{ key: input.source.id as string }];
+    if (keyOfSource(upstream) === def.key)
+      return (input) => [{ key: Aggregate.targetId(input.source) }];
     problem(
-      `${owner} consumes '${tag}' from ${source}, which is not keyed by ${def.key.aggregateName}: add keyOf.${tag}`,
+      `${owner} consumes '${tag}' from ${source}, which is not keyed by ${Key.isAggregate(def.key) ? def.key.aggregateName : "its key schema"}: add keyOf.${tag}`,
     );
     return () => [];
   };
@@ -559,7 +554,7 @@ const build = (
       }
       if (stream.definition.key !== def.key) {
         problem(
-          `${owner} is keyed by ${def.key.aggregateName}, so it cannot write ${stream.streamName}, keyed by ${stream.definition.key.aggregateName}`,
+          `${owner} is keyed by ${Key.describe(def.key)}, so it cannot write ${stream.streamName}, keyed by ${Key.describe(stream.definition.key)}`,
         );
         continue;
       }
@@ -593,7 +588,7 @@ const build = (
     return codec;
   };
   /** Decode the state a delivery carries from a view source. */
-  const sourceState = (entry: SourceEntry, json: Json | null | undefined) =>
+  const sourceState = (entry: SourceEntry, json: Json) =>
     json === undefined || json === null || entry.kind !== "view" || !entry.view.definition.state
       ? json
       : viewCodec(entry.view).decode(json);
@@ -605,6 +600,7 @@ const build = (
   ): Omit<AggregateKit, "push"> => {
     const def = aggregate.definition;
     const codecs = codecsOf(aggregate);
+    // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
     const decodeId = Schema.decodeUnknownSync(def.id as any) as (u: unknown) => unknown;
     const commit = (
       id: string,
@@ -712,59 +708,48 @@ const build = (
           let decision = (def.decide as Record<string, (...args: any[]) => unknown>)[decoded._tag](
             state,
             decoded,
-            { id, now },
+            {
+              id,
+              now,
+              commandId: input.commandId,
+              stream: `${aggregate.aggregateName}/${id}`,
+              version: input.version,
+            },
           );
           // An effectful decision runs here, inside the decide span, with the
           // context the command was sent with (its only requirement, enforced
           // by `Aggregate.Decision`).
           if (Effect.isEffect(decision)) {
-            const exit = yield* Effect.exit(
-              Effect.provideContext(
-                decision as Effect.Effect<unknown, unknown, never>,
-                RequestContext.restore(input.context),
+            const settled = settle(
+              yield* Effect.exit(
+                Effect.provideContext(
+                  decision,
+                  RequestContext.restore(input.context) as Context.Context<unknown>,
+                ),
               ),
             );
-            if (Exit.isSuccess(exit)) {
-              decision = exit.value;
-            } else {
-              const rejection = Cause.findErrorOption(exit.cause);
-              if (Option.isNone(rejection))
-                return yield* Effect.failCause(exit.cause as Cause.Cause<never>);
-              decision = rejection.value;
-            }
+            if (settled._tag === "Failed")
+              return yield* Effect.failCause(settled.cause as Cause.Cause<never>);
+            decision = settled.decision;
           }
-          if (!Array.isArray(decision)) {
-            const rejection = decision as { readonly _tag: string };
-            const codec = codecs.rejections.get(rejection._tag);
-            const declared = command.cls.rejects.find((r) => r.tag === rejection._tag);
-            if (!codec || !declared) {
-              return yield* Effect.die(
-                new DefinitionError(
-                  `${aggregate.aggregateName}.decide.${decoded._tag} returned '${rejection?._tag}', which ${decoded._tag} does not declare in rejects`,
-                ),
-              );
-            }
+          const judged = judge(aggregate.aggregateName, command.cls, decision);
+          if (judged._tag === "Undeclared") return yield* Effect.die(judged.error);
+          if (judged._tag === "Rejected") {
+            const rejection = judged.rejection;
+            const codec = codecs.rejections.get(rejection._tag)!;
+            const declared = command.cls.rejects.find((r) => r.tag === rejection._tag)!;
             yield* Effect.annotateCurrentSpan({
               "domain.outcome": rejection._tag,
               ...Telemetry.attributesOf(declared, rejection),
             });
             return { _tag: "Rejected", rejection: codec.encode(rejection) } as HandleResult;
           }
-          for (const event of decision as ReadonlyArray<{ readonly _tag: string }>) {
-            if (!command.cls.events.some((e) => e.tag === event._tag)) {
-              return yield* Effect.die(
-                new DefinitionError(
-                  `${aggregate.aggregateName}.decide.${decoded._tag} returned '${event._tag}', which ${decoded._tag} does not declare in events`,
-                ),
-              );
-            }
-          }
           const trace = yield* Telemetry.currentTrace;
           const { next, events, deliveries } = commit(
             id,
             state,
             input.version,
-            decision,
+            judged.events,
             now,
             input.commandId,
             false,
@@ -775,8 +760,8 @@ const build = (
             decoded._tag
           ];
           const reply =
-            replyFn && command.reply ? command.reply.encode(replyFn(next, decision)) : null;
-          const decided = decision as ReadonlyArray<{ readonly _tag: string }>;
+            replyFn && command.reply ? command.reply.encode(replyFn(next, judged.events)) : null;
+          const decided = judged.events;
           yield* Effect.annotateCurrentSpan({
             "domain.outcome": "accepted",
             "domain.events": decided.length,
@@ -861,7 +846,7 @@ const build = (
       name: view.viewName,
       deliver,
       observe: (key, batch) => (effect) => {
-        if (!telemetry.views || batch.length === 0 || batch.every((d) => d.history)) return effect;
+        if (!telemetry.views || batch.every((d) => d.history)) return effect;
         const traces = batch.flatMap((d) => (d.envelope.trace ? [d.envelope.trace] : []));
         const single = batch.length === 1 && traces.length === 1;
         const attributes = {
@@ -895,7 +880,7 @@ const build = (
         let changed = false;
         const entries: Array<ViewEntry> = [];
         const downstream: Array<Delivery> = [];
-        const keyRef = Aggregate.makeRef(def.key, key);
+        const keyRef = Key.refOf(def.key, key);
         const stream = `${view.viewName}/${key}`;
         for (const delivery of batch) {
           if ((checkpoints[delivery.source] ?? 0) >= delivery.seq) continue;
@@ -906,7 +891,7 @@ const build = (
           const envelope = decodeEnvelope(delivery.envelope);
           const context = {
             key: keyRef,
-            source: Aggregate.makeRef(keyAggregateOf(origin), envelope.id),
+            source: Key.refOf(keyOfSource(origin), envelope.id),
             state: sourceState(origin, delivery.state),
             envelope,
             at: envelope.at,
@@ -978,7 +963,7 @@ const build = (
   };
 
   const policyKit = (policy: Policy.Any, handler: Policy.Handler<unknown>): PolicyKit => {
-    const keyAggregate = policy.definition.key;
+    const policyKey = policy.definition.key;
     return {
       name: policy.policyName,
       run: (delivery) => {
@@ -986,8 +971,8 @@ const build = (
         if (delivery.history) return Effect.void;
         const upstream = sources.get(delivery.origin)!;
         const envelope = decodeEnvelope(delivery.envelope);
-        const source = Aggregate.makeRef(keyAggregateOf(upstream), envelope.id);
-        const key = keyAggregate ? Aggregate.makeRef(keyAggregate, delivery.key) : source;
+        const source = Key.refOf(keyOfSource(upstream), envelope.id);
+        const key = policyKey ? Key.refOf(policyKey, delivery.key) : source;
         const event = decodeEvent(delivery.event);
         const state = sourceState(upstream, delivery.state);
         const attributes = {
@@ -1041,12 +1026,12 @@ const build = (
     key: string,
     batch: ReadonlyArray<Accepted>,
   ): ReadonlyArray<unknown> => {
-    const keyRef = Aggregate.makeRef(projection.definition.key, key);
+    const keyRef = Key.refOf(projection.definition.key, key);
     const inputs: Array<unknown> = [];
     for (const { delivery, position } of batch) {
       const upstream = sources.get(delivery.origin)!;
       const envelope = decodeEnvelope(delivery.envelope);
-      const source = Aggregate.makeRef(keyAggregateOf(upstream), envelope.id);
+      const source = Key.refOf(keyOfSource(upstream), envelope.id);
       const event = decodeEvent(delivery.event);
       const state = sourceState(upstream, delivery.state);
       // Shared by every route the delivery takes, so their appends count up together.

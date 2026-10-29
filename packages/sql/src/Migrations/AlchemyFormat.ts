@@ -16,7 +16,7 @@ import {
   type SqlExecutor,
 } from "./Format.ts";
 import { classifyTable, tableColumns } from "./Introspect.ts";
-import { quoteIdentifier, sqlLiteral } from "./Utils.ts";
+import { bookkeepingColumns, quoteIdentifier, scalarText, sqlLiteral } from "./Utils.ts";
 
 export const ALCHEMY_DEFAULT_TABLE = "__alchemy_migrations";
 
@@ -28,7 +28,11 @@ export const ALCHEMY_DEFAULT_TABLE = "__alchemy_migrations";
  * format Alchemy ever writes. Migrating from drizzle/prisma/wrangler
  * bookkeeping is a one-way conversion performed once (see `Convert.ts`).
  */
-const createTableSql = (table: string, dialect: MigrationDialect, id?: "uuid"): string => {
+const createTableSql = (
+  table: string,
+  dialect: MigrationDialect,
+  id?: SqlExecutor["migrationTableId"],
+): string => {
   const quoted = quoteIdentifier(table, dialect);
   switch (dialect) {
     case "sqlite":
@@ -40,6 +44,16 @@ const createTableSql = (table: string, dialect: MigrationDialect, id?: "uuid"): 
   applied_at TEXT
 );`;
     case "postgres":
+      if (id === "spanner") {
+        return `CREATE TABLE IF NOT EXISTS ${quoted} (
+  id varchar(36) NOT NULL DEFAULT spanner.generate_uuid(),
+  hash text NOT NULL,
+  created_at bigint,
+  name text,
+  applied_at timestamptz DEFAULT now(),
+  PRIMARY KEY (id)
+)`;
+      }
       return `CREATE TABLE IF NOT EXISTS ${quoted} (
   id ${id === "uuid" ? "uuid DEFAULT gen_random_uuid()" : "SERIAL"} PRIMARY KEY,
   hash text NOT NULL,
@@ -47,6 +61,14 @@ const createTableSql = (table: string, dialect: MigrationDialect, id?: "uuid"): 
   name text,
   applied_at timestamp with time zone DEFAULT now()
 );`;
+    case "googlesql":
+      return `CREATE TABLE IF NOT EXISTS ${quoted} (
+  \`id\` STRING(36) NOT NULL DEFAULT (GENERATE_UUID()),
+  \`hash\` STRING(MAX) NOT NULL,
+  \`created_at\` INT64,
+  \`name\` STRING(MAX),
+  \`applied_at\` TIMESTAMP DEFAULT (CURRENT_TIMESTAMP())
+) PRIMARY KEY (\`id\`)`;
     case "mysql":
       return `CREATE TABLE IF NOT EXISTS ${quoted} (
   id SERIAL PRIMARY KEY,
@@ -65,8 +87,11 @@ const insertSql = (
 ): string => {
   const quoted = quoteIdentifier(table, dialect);
   const applied = dialect === "sqlite" ? ", datetime('now')" : "";
-  const appliedColumn = dialect === "sqlite" ? ", applied_at" : "";
-  return `INSERT INTO ${quoted} (hash, created_at, name${appliedColumn}) VALUES (${sqlLiteral(record.hash)}, ${sqlLiteral(record.createdAtMillis ?? null)}, ${sqlLiteral(record.name)}${applied});`;
+  const columns =
+    dialect === "sqlite"
+      ? bookkeepingColumns(dialect, "hash", "created_at", "name", "applied_at")
+      : bookkeepingColumns(dialect, "hash", "created_at", "name");
+  return `INSERT INTO ${quoted} (${columns}) VALUES (${sqlLiteral(record.hash, dialect)}, ${sqlLiteral(record.createdAtMillis ?? null, dialect)}, ${sqlLiteral(record.name, dialect)}${applied});`;
 };
 
 const renameSql = (from: string, to: string, dialect: MigrationDialect): string =>
@@ -207,19 +232,23 @@ const aliasesOf = (name: string): readonly string[] => [
 ];
 
 const appliedHistory = (executor: SqlExecutor, table: string) =>
-  executor.query(`SELECT name, hash FROM ${quoteIdentifier(table, executor.dialect)};`).pipe(
-    Effect.map((rows) => {
-      const byName = new Map<string, string | undefined>();
-      for (const row of rows) {
-        if (row.name === null || row.name === undefined) continue;
-        byName.set(
-          String(row.name),
-          row.hash === null || row.hash === undefined ? undefined : String(row.hash),
-        );
-      }
-      return byName;
-    }),
-  );
+  executor
+    .query(
+      `SELECT ${bookkeepingColumns(executor.dialect, "name", "hash")} FROM ${quoteIdentifier(table, executor.dialect)};`,
+    )
+    .pipe(
+      Effect.map((rows) => {
+        const byName = new Map<string, string | undefined>();
+        for (const row of rows) {
+          if (row.name === null || row.name === undefined) continue;
+          byName.set(
+            scalarText(row.name),
+            row.hash === null || row.hash === undefined ? undefined : scalarText(row.hash),
+          );
+        }
+        return byName;
+      }),
+    );
 
 const lookupApplied = (
   byName: Map<string, string | undefined>,

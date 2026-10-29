@@ -5,6 +5,7 @@ import * as Stream from "effect/Stream";
 import * as SubscriptionRef from "effect/SubscriptionRef";
 import { WorkflowEngine } from "effect/workflow";
 import type * as Aggregate from "./Aggregate.ts";
+import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "./Aggregate.ts";
 import * as InMemoryWorkflows from "./InMemoryWorkflows.ts";
 import {
   type Accepted,
@@ -56,6 +57,22 @@ export interface Control {
     readonly executionId: string;
     readonly defect: unknown;
   }>;
+  /**
+   * Every event a command committed (seeded events excluded), in commit
+   * order: its aggregate, instance id, and position in the instance's
+   * events, from 0.
+   */
+  readonly commits: ReadonlyArray<{
+    readonly aggregate: string;
+    readonly id: string;
+    readonly index: number;
+  }>;
+}
+
+/** A scheduled command: when it is due, and how to send it. */
+interface Timer {
+  readonly at: number;
+  readonly fire: Effect.Effect<void>;
 }
 
 /**
@@ -75,14 +92,14 @@ export const make = (
   let suspended = 0;
   const failures: Array<unknown> = [];
   const deaths: Array<{ saga: string; executionId: string; defect: unknown }> = [];
+  const commits: Array<{ aggregate: string; id: string; index: number }> = [];
   // Scheduled commands by `aggregate/id/commandId`, so rescheduling replaces.
-  const timers = new Map<string, { readonly at: number; readonly fire: Effect.Effect<void> }>();
+  const timers = new Map<string, Timer>();
 
-  /** Send every scheduled command that is due on the platform's clock. */
+  /** Fire every timer that is due on the platform's clock; each removes itself. */
   const fireDue: Effect.Effect<void> = Effect.suspend(() => {
-    const due = [...timers].filter(([, timer]) => timer.at <= now());
-    for (const [key] of due) timers.delete(key);
-    return Effect.forEach(due, ([, timer]) => timer.fire, { discard: true });
+    const due = [...timers.values()].filter((timer) => timer.at <= now());
+    return Effect.forEach(due, (timer) => timer.fire, { discard: true });
   });
 
   const deliverAll: Effect.Effect<void> = Effect.suspend(function loop(): Effect.Effect<void> {
@@ -110,10 +127,30 @@ export const make = (
     deliver: (d: Delivery) => Effect.Effect<void>,
   ) => enqueueWork(deliveries.map((delivery) => deliver(delivery)));
 
-  /** Fire `fire` at `at`: from `drain` as a story's clock moves, otherwise in real time. */
-  const timer = (key: string, at: number, fire: Effect.Effect<void>) =>
+  /**
+   * Fire `fire` at `at` while it is still the timer under `key` (not
+   * cancelled, replaced or already fired): from `drain` as a story's clock
+   * moves, otherwise in real time. `exclusive` wraps the check and the fire,
+   * so a caller holding the same lock sees one or the other.
+   */
+  const timer = (
+    key: string,
+    at: number,
+    fire: Effect.Effect<void>,
+    exclusive: (effect: Effect.Effect<void>) => Effect.Effect<void> = (effect) => effect,
+  ) =>
     Effect.suspend(() => {
-      timers.set(key, { at, fire });
+      const armed: Timer = {
+        at,
+        fire: exclusive(
+          Effect.suspend(() => {
+            if (timers.get(key) !== armed) return Effect.void;
+            timers.delete(key);
+            return fire;
+          }),
+        ),
+      };
+      timers.set(key, armed);
       if (options.manual) return Effect.void;
       return Effect.forkDetach(
         Effect.sleep(Math.max(0, at - now())).pipe(Effect.andThen(fireDue)),
@@ -148,6 +185,7 @@ export const make = (
       }),
     failures,
     deaths,
+    commits,
   };
 
   const platform = Platform.of({
@@ -156,9 +194,11 @@ export const make = (
         const instances = new Map<
           string,
           {
-            state: Json | null;
+            state: Json;
             version: number;
             readonly receipts: Map<string, SendResult>;
+            /** Ids cancelled and not scheduled again since. */
+            readonly cancelled: Set<string>;
             readonly events: Array<StoredEvent>;
           }
         >();
@@ -183,58 +223,89 @@ export const make = (
           if (!found)
             instances.set(
               id,
-              (found = { state: null, version: 0, receipts: new Map(), events: [] }),
+              (found = {
+                state: null,
+                version: 0,
+                receipts: new Map(),
+                cancelled: new Set(),
+                events: [],
+              }),
             );
           return found;
         };
+        // Callers hold `lock`.
+        const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
+          Effect.gen(function* () {
+            const current = instance(id);
+            const duplicate = current.receipts.get(meta.commandId);
+            if (duplicate) return duplicate;
+            const result = yield* kit.handle({
+              id,
+              state: current.state,
+              version: current.version,
+              command,
+              commandId: meta.commandId,
+              context: meta.context,
+              now: now(),
+              correlationId: meta.correlationId,
+              trace: meta.trace,
+              link: meta.link,
+            });
+            if (result._tag === "Rejected") return result satisfies SendResult;
+            current.state = result.state;
+            current.version = result.version;
+            for (let i = 0; i < result.events.length; i++)
+              commits.push({ aggregate: kit.name, id, index: current.events.length + i });
+            current.events.push(...result.events);
+            const sent: SendResult = {
+              _tag: "Accepted",
+              receipt: {
+                stream: `${kit.name}/${id}`,
+                version: result.version,
+                events: result.events.map((e) => e.event),
+                reply: result.reply,
+              },
+            };
+            current.receipts.set(meta.commandId, sent);
+            yield* announce(id);
+            yield* enqueue(result.deliveries, kit.deliver);
+            return sent;
+          });
         const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
-          lock.withPermits(1)(
-            Effect.gen(function* () {
-              const current = instance(id);
-              const duplicate = current.receipts.get(meta.commandId);
-              if (duplicate) return duplicate;
-              const result = yield* kit.handle({
-                id,
-                state: current.state,
-                version: current.version,
-                command,
-                commandId: meta.commandId,
-                context: meta.context,
-                now: now(),
-                correlationId: meta.correlationId,
-                trace: meta.trace,
-                link: meta.link,
-              });
-              if (result._tag === "Rejected") return result satisfies SendResult;
-              current.state = result.state;
-              current.version = result.version;
-              current.events.push(...result.events);
-              const sent: SendResult = {
-                _tag: "Accepted",
-                receipt: {
-                  stream: `${kit.name}/${id}`,
-                  version: result.version,
-                  events: result.events.map((e) => e.event),
-                  reply: result.reply,
-                },
-              };
-              current.receipts.set(meta.commandId, sent);
-              yield* announce(id);
-              yield* enqueue(result.deliveries, kit.deliver);
-              return sent;
-            }),
-          );
+          lock.withPermits(1)(commit(id, command, meta));
+        const executed = (id: string, commandId: string) => instance(id).receipts.has(commandId);
         return {
           send,
           schedule: (id, command, meta, due) =>
-            Effect.suspend(() => {
-              const at = "at" in due ? due.at : now() + due.afterMillis;
-              return timer(
-                `${kit.name}/${id}/${meta.commandId}`,
-                at,
-                send(id, command, meta).pipe(Effect.asVoid),
-              );
-            }),
+            lock.withPermits(1)(
+              Effect.suspend(() => {
+                const fields = { aggregate: kit.name, id, commandId: meta.commandId };
+                if (executed(id, meta.commandId)) return Effect.fail(new AlreadyExecuted(fields));
+                instance(id).cancelled.delete(meta.commandId);
+                const at = "at" in due ? due.at : now() + due.afterMillis;
+                return timer(
+                  `${kit.name}/${id}/${meta.commandId}`,
+                  at,
+                  commit(id, command, meta).pipe(Effect.asVoid),
+                  lock.withPermits(1),
+                ).pipe(Effect.as(at));
+              }),
+            ),
+          unschedule: (id, commandId) =>
+            lock.withPermits(1)(
+              Effect.suspend(
+                (): Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled> => {
+                  const fields = { aggregate: kit.name, id, commandId };
+                  if (executed(id, commandId)) return Effect.fail(new AlreadyExecuted(fields));
+                  const { cancelled } = instance(id);
+                  if (cancelled.has(commandId)) return Effect.fail(new AlreadyCancelled(fields));
+                  if (!timers.delete(`${kit.name}/${id}/${commandId}`))
+                    return Effect.fail(new NotScheduled(fields));
+                  cancelled.add(commandId);
+                  return Effect.void;
+                },
+              ),
+            ),
           state: (id) =>
             Effect.sync(() => ({ state: instance(id).state, version: instance(id).version })),
           events: (id) => Effect.sync(() => [...instance(id).events]),
@@ -560,18 +631,18 @@ export const make = (
           receive: (delivery) =>
             Effect.suspend(() => {
               running++;
-              return Effect.forkDetach(
-                lockFor(delivery.key)
-                  .withPermits(1)(kit.run(delivery))
-                  .pipe(
-                    Effect.catchCause((cause) =>
-                      Effect.sync(() => failures.push(cause)).pipe(
-                        Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
-                      ),
+              return lockFor(delivery.key)
+                .withPermits(1)(kit.run(delivery))
+                .pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.sync(() => failures.push(cause)).pipe(
+                      Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
                     ),
-                    Effect.ensuring(Effect.sync(() => running--)),
                   ),
-              ).pipe(Effect.asVoid);
+                  Effect.ensuring(Effect.sync(() => running--)),
+                  Effect.forkDetach,
+                  Effect.asVoid,
+                );
             }),
         };
       }),
@@ -589,7 +660,7 @@ export const make = (
 /**
  * Host a domain model in the current process: aggregates, views and policies,
  * with nothing to deploy. Use it in tests and single-process apps; swap it
- * for `DomainCloudflare.DurableObjects` and nothing else changes.
+ * for `DomainCloudflare.layerDurableObjects()` and nothing else changes.
  *
  * ### Hosting in memory
  * **Example:** A model with its policies

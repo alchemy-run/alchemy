@@ -276,14 +276,14 @@ export const RegionBackendService = Resource<RegionBackendService>(
 export class RegionBackendServiceNotResolved extends Data.TaggedError(
   "GCP.Compute.RegionBackendServiceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
   region: string;
 }> {}
 
 export class RegionBackendServiceStillExists extends Data.TaggedError(
   "GCP.Compute.RegionBackendServiceStillExists",
 )<{
-  name: string;
+  resourceName: string;
   region: string;
 }> {}
 
@@ -448,13 +448,13 @@ const sameLogConfig = (
 const getByName = (project: string, region: string, name: string) =>
   compute
     .getRegionBackendServices({ project, region, backendService: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitPresent = (project: string, region: string, name: string) =>
   getByName(project, region, name).pipe(
     Effect.flatMap((service) =>
       service === undefined
-        ? Effect.fail(new RegionBackendServiceNotResolved({ name, region }))
+        ? Effect.fail(new RegionBackendServiceNotResolved({ resourceName: name, region }))
         : Effect.succeed(service),
     ),
     Effect.retry({
@@ -462,7 +462,7 @@ const waitPresent = (project: string, region: string, name: string) =>
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
-    Effect.catchTag("GCP.Compute.RegionBackendServiceNotResolved", () => Effect.succeed(undefined)),
+    Effect.catchTag("GCP.Compute.RegionBackendServiceNotResolved", () => Effect.undefined),
   );
 
 const waitGone = (project: string, region: string, name: string) =>
@@ -470,7 +470,7 @@ const waitGone = (project: string, region: string, name: string) =>
     Effect.flatMap((service) =>
       service === undefined
         ? Effect.void
-        : Effect.fail(new RegionBackendServiceStillExists({ name, region })),
+        : Effect.fail(new RegionBackendServiceStillExists({ resourceName: name, region })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Compute.RegionBackendServiceStillExists",
@@ -621,7 +621,7 @@ export const RegionBackendServiceProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
@@ -634,7 +634,7 @@ export const RegionBackendServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RegionBackendServiceNotResolved({ name, region });
+        return yield* new RegionBackendServiceNotResolved({ resourceName: name, region });
       }
 
       const timeoutChanged = (current.timeoutSec ?? DEFAULT_TIMEOUT_SEC) !== timeoutSec;
@@ -743,7 +743,7 @@ export const RegionBackendServiceProvider = () =>
           backendService: output.name,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void

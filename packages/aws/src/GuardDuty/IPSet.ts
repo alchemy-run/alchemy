@@ -129,7 +129,7 @@ export const IPSetProvider = () =>
       const getIPSet = (detectorId: string, ipSetId: string) =>
         guardduty
           .getIPSet({ DetectorId: detectorId, IpSetId: ipSetId })
-          .pipe(Effect.catchTag("BadRequestException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("BadRequestException", () => Effect.undefined));
 
       // Recover the set id after state loss by matching the deterministic
       // name across the detector's IP sets.

@@ -92,7 +92,7 @@ export const KeyvaluemapsEntry = Resource<KeyvaluemapsEntry>("GCP.Apigee.Keyvalu
 export class KeyvaluemapsEntryNotResolved extends Data.TaggedError(
   "GCP.Apigee.KeyvaluemapsEntryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const mapIdOf = (map: string) => lastSegment(map);
@@ -122,7 +122,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsKeyvaluemapsEntries({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const KeyvaluemapsEntryProvider = () =>
   Provider.succeed(KeyvaluemapsEntry, {
@@ -181,7 +181,7 @@ export const KeyvaluemapsEntryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new KeyvaluemapsEntryNotResolved({ name });
+        return yield* new KeyvaluemapsEntryNotResolved({ resourceName: name });
       }
 
       if ((current.value ?? "") !== desiredValue) {

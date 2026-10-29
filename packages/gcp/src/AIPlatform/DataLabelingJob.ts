@@ -154,7 +154,7 @@ export const DataLabelingJob = Resource<DataLabelingJob>("GCP.AIPlatform.DataLab
 export class DataLabelingJobNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.DataLabelingJobNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, existing?: string) =>
@@ -195,7 +195,7 @@ const toAttrs = (job: aiplatform.GoogleCloudAiplatformV1DataLabelingJob, project
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsDataLabelingJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listJobs = (project: string, region: string) => {
   const collect = (parent: string) =>
@@ -236,7 +236,7 @@ const cancelAndDelete = (name: string) =>
       yield* getByName(name).pipe(
         Effect.filterOrFail(
           (job) => job === undefined || isJobTerminal(job.state),
-          () => new DataLabelingJobNotResolved({ name }),
+          () => new DataLabelingJobNotResolved({ resourceName: name }),
         ),
         Effect.retry({
           while: (error) => error._tag === "GCP.AIPlatform.DataLabelingJobNotResolved",
@@ -253,8 +253,8 @@ const cancelAndDelete = (name: string) =>
         schedule: Schedule.spaced("3 seconds"),
       }),
       Effect.catchTags({
-        NotFound: () => Effect.succeed(undefined),
-        Conflict: () => Effect.succeed(undefined),
+        NotFound: () => Effect.undefined,
+        Conflict: () => Effect.undefined,
       }),
     );
     if (operation !== undefined) {
@@ -280,7 +280,7 @@ export const DataLabelingJobProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, olds, output }) {
+    read: Effect.fn(function* ({ id, output }) {
       const env = yield* GcpEnvironment.current;
       const existing = yield* findOwned(id, env.project, env.region, output?.name);
       if (existing === undefined) return undefined;
@@ -330,7 +330,7 @@ export const DataLabelingJobProvider = () =>
 
       if (current === undefined) {
         return yield* new DataLabelingJobNotResolved({
-          name: output?.name ?? parentOf(env.project, location),
+          resourceName: output?.name ?? parentOf(env.project, location),
         });
       }
 

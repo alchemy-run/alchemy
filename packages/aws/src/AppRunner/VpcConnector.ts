@@ -12,6 +12,13 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { isActiveStatus, readAppRunnerTags, syncAppRunnerTags, toWireTags } from "./internal.ts";
 
+export class VpcConnectorUnexpectedResponse extends Data.TaggedError(
+  "VpcConnectorUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface VpcConnectorProps {
   /**
    * Name of the VPC connector. Must be 4-40 characters. If omitted, a
@@ -153,9 +160,9 @@ export const VpcConnectorProvider = () =>
           !connector.VpcConnectorArn ||
           connector.VpcConnectorRevision === undefined
         ) {
-          return yield* Effect.fail(
-            new Error("App Runner VPC connector is missing its name, ARN, or revision"),
-          );
+          return yield* new VpcConnectorUnexpectedResponse({
+            message: "App Runner VPC connector is missing its name, ARN, or revision",
+          });
         }
         return {
           vpcConnectorName: connector.VpcConnectorName,

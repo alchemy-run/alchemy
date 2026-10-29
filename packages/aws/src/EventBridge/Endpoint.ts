@@ -252,7 +252,7 @@ export const EndpointProvider = () =>
       const describe = (name: string) =>
         eventbridge
           .describeEndpoint({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       /**
        * Poll until the endpoint leaves CREATING/UPDATING. Endpoints settle in

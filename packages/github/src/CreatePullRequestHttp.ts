@@ -1,15 +1,12 @@
+import * as Pulls from "@distilled.cloud/github/pulls";
 import * as Layer from "effect/Layer";
 import * as BindingHttp from "./BindingHttp.ts";
 import { CreatePullRequest, type CreatePullRequestRequest } from "./CreatePullRequest.ts";
 
 export const createPullRequestOperation = BindingHttp.operation(
   "pulls.create",
-  (octokit, repo) => (request: CreatePullRequestRequest) =>
-    octokit.rest.pulls.create({
-      owner: repo.owner,
-      repo: repo.repository,
-      ...request,
-    }),
+  (repo) => (request: CreatePullRequestRequest) =>
+    Pulls.create({ owner: repo.owner, repo: repo.repository, ...request }),
 );
 
 /**

@@ -11,7 +11,7 @@ import * as Effect from "effect/Effect";
 import { Table } from "../DynamoDB/Table.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { EventSourceMapping } from "../Lambda/EventSourceMapping.ts";
-import { Function as LambdaFunction, type FunctionProps } from "../Lambda/Function.ts";
+import { Function as LambdaFunction } from "../Lambda/Function.ts";
 import { WebFunction } from "../Lambda/WebFunction.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import { Queue } from "../SQS/Queue.ts";

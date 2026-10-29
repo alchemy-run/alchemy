@@ -300,7 +300,7 @@ export const UserPoolClientProvider = () =>
           })
           .pipe(
             Effect.map((r) => r.UserPoolClient),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
       });
 

@@ -223,7 +223,7 @@ export const AppsDebugTokenProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: output?.name ?? `${app}/debugTokens`,
+          resourceName: output?.name ?? `${app}/debugTokens`,
         });
       }
 

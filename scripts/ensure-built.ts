@@ -30,17 +30,13 @@ import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
-import { stampFile } from "./package-build.ts";
+import { command as platformCommand, stampFile } from "./package-build.ts";
 
 /** Packages consumed from their build output, by directory name under packages/. */
 const packages = {
   "cloudflare-runtime": { outDir: "dist" },
   "frontend-frameworks": { outDir: "dist" },
 } as const;
-
-// pnpm may be a `.cmd` shim on Windows, which only a shell can run.
-const shell = process.platform === "win32";
-const pathDelimiter = process.platform === "win32" ? ";" : ":";
 
 type PackageName = keyof typeof packages;
 const packageNames = Object.keys(packages) as Array<PackageName>;
@@ -58,7 +54,7 @@ const workspaceRoot = Effect.gen(function* () {
 const dependencyDirectories = Effect.fn(function* (root: string, name: PackageName) {
   const spawner = yield* ChildProcessSpawner;
   const output = yield* spawner.string(
-    ChildProcess.make(
+    yield* platformCommand(
       "pnpm",
       [
         "ls",
@@ -71,7 +67,7 @@ const dependencyDirectories = Effect.fn(function* (root: string, name: PackageNa
         "--loglevel",
         "error",
       ],
-      { cwd: root, shell },
+      { cwd: root },
     ),
   );
   return (JSON.parse(output) as Array<{ path: string }>).map((project) => project.path);
@@ -85,10 +81,10 @@ const newestSourceTime = Effect.fn(function* (directory: string) {
 
   // `git -C` also works inside submodules, which the parent repo can't list.
   const files = yield* spawner.lines(
-    ChildProcess.make(
+    yield* platformCommand(
       "git",
       ["-C", directory, "ls-files", "--cached", "--others", "--exclude-standard", "."],
-      { cwd: directory, shell },
+      { cwd: directory },
     ),
   );
   const times = yield* Effect.forEach(
@@ -210,7 +206,7 @@ const command = Command.make(
 
     yield* Effect.logInfo(`Rebuilding stale packages: ${stale.join(", ")}`);
     const exitCode = yield* spawner.exitCode(
-      ChildProcess.make(
+      yield* platformCommand(
         "pnpm",
         [
           "-r",
@@ -218,7 +214,7 @@ const command = Command.make(
           "run",
           "build:package",
         ],
-        { cwd: root, shell, stdin: "inherit", stdout: "inherit", stderr: "inherit" },
+        { cwd: root, stdin: "inherit", stdout: "inherit", stderr: "inherit" },
       ),
     );
     if (exitCode !== 0) {

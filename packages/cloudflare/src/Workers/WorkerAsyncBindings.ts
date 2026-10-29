@@ -251,6 +251,7 @@ export const bindWorkerAsyncBindings = Effect.fn(function* (
                 scriptName: binding.workflowName === undefined ? resource.workerName : undefined,
                 limits: binding.limits,
                 schedules: binding.schedules,
+                jurisdiction: binding.jurisdiction,
               });
           if (workflow) {
             // Host linkage must not block the named identity's adoption probe.

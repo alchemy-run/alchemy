@@ -10,11 +10,11 @@ import {
 } from "@alchemy.run/aws/EC2";
 import type { DefaultSecurityGroupProps, SecurityGroupRuleData, VpcId } from "@alchemy.run/aws/EC2";
 import { expect } from "@alchemy.run/test";
+import * as Core from "@alchemy.run/test/Core";
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as Drift from "alchemy/Drift";
 import * as Output from "alchemy/Output";
 import { isActionState, State } from "alchemy/State/State";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";

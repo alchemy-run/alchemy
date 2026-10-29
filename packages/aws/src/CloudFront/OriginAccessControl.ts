@@ -3,10 +3,23 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class OriginAccessControlConflict extends Data.TaggedError("OriginAccessControlConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class OriginAccessControlUnexpectedResponse extends Data.TaggedError(
+  "OriginAccessControlUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface OriginAccessControlProps {
   /**
@@ -127,7 +140,7 @@ export const OriginAccessControlProvider = () =>
           .getOriginAccessControlConfig({
             Id: output.originAccessControlId,
           })
-          .pipe(Effect.catchTag("NoSuchOriginAccessControl", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchOriginAccessControl", () => Effect.undefined));
 
         if (!config?.OriginAccessControlConfig) {
           return undefined;
@@ -155,9 +168,7 @@ export const OriginAccessControlProvider = () =>
                 // omits it). Tolerate a concurrent delete between list and get.
                 const config = yield* cloudfront
                   .getOriginAccessControlConfig({ Id: summary.Id! })
-                  .pipe(
-                    Effect.catchTag("NoSuchOriginAccessControl", () => Effect.succeed(undefined)),
-                  );
+                  .pipe(Effect.catchTag("NoSuchOriginAccessControl", () => Effect.undefined));
                 return toAttrs(
                   {
                     Id: summary.Id!,
@@ -226,9 +237,9 @@ export const OriginAccessControlProvider = () =>
                       existing
                         ? Effect.succeed(existing)
                         : Effect.fail(
-                            new Error(
-                              `Origin access control '${name}' already exists but could not be recovered`,
-                            ),
+                            new OriginAccessControlConflict({
+                              message: `Origin access control '${name}' already exists but could not be recovered`,
+                            }),
                           ),
                     ),
                   ),
@@ -236,9 +247,9 @@ export const OriginAccessControlProvider = () =>
               );
 
             if (!created.OriginAccessControl?.Id) {
-              return yield* Effect.fail(
-                new Error("createOriginAccessControl returned no identifier"),
-              );
+              return yield* new OriginAccessControlUnexpectedResponse({
+                message: "createOriginAccessControl returned no identifier",
+              });
             }
 
             yield* session.note(created.OriginAccessControl.Id);
@@ -262,9 +273,9 @@ export const OriginAccessControlProvider = () =>
           });
 
           if (!updated.OriginAccessControl?.Id) {
-            return yield* Effect.fail(
-              new Error("updateOriginAccessControl returned no identifier"),
-            );
+            return yield* new OriginAccessControlUnexpectedResponse({
+              message: "updateOriginAccessControl returned no identifier",
+            });
           }
 
           yield* session.note(observed.OriginAccessControl.Id);

@@ -94,7 +94,7 @@ export type Team = Resource<
 export const Team = Resource<Team>("GCP.Dataform.Team");
 
 export class TeamNotResolved extends Data.TaggedError("GCP.Dataform.TeamNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (folder: dataform.TeamFolder, project: string, region: string) => {
@@ -114,10 +114,10 @@ const toAttrs = (folder: dataform.TeamFolder, project: string, region: string) =
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataform
         .getProjectsLocationsTeamFolders({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (
   project: string,
@@ -198,7 +198,7 @@ export const TeamProvider = () =>
 
       if (current === undefined) {
         return yield* new TeamNotResolved({
-          name: output?.name ?? locationParent(env.project, location),
+          resourceName: output?.name ?? locationParent(env.project, location),
         });
       }
 

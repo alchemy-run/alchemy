@@ -14,6 +14,16 @@ import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VolumeId } from "./Volume.ts";
 
+export class SnapshotUnexpectedResponse extends Data.TaggedError("SnapshotUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class SnapshotOperationFailed extends Data.TaggedError("SnapshotOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type SnapshotId<ID extends string = string> = `snap-${ID}`;
 export const SnapshotId = <ID extends string>(id: ID): ID & SnapshotId<ID> =>
   `snap-${id}` as ID & SnapshotId<ID>;
@@ -278,15 +288,15 @@ const waitForSnapshotCompleted = (snapshotId: string, session?: ScopedPlanStatus
     });
     const snapshot = result.Snapshots?.[0];
     if (!snapshot) {
-      return yield* Effect.fail(new Error(`Snapshot ${snapshotId} not found`));
+      return yield* new SnapshotUnexpectedResponse({ message: `Snapshot ${snapshotId} not found` });
     }
     if (snapshot.State === "completed") {
       return snapshot;
     }
     if (snapshot.State === "error") {
-      return yield* Effect.fail(
-        new Error(`Snapshot ${snapshotId} entered error state: ${snapshot.StateMessage}`),
-      );
+      return yield* new SnapshotOperationFailed({
+        message: `Snapshot ${snapshotId} entered error state: ${snapshot.StateMessage}`,
+      });
     }
     return yield* new SnapshotPending({
       snapshotId,

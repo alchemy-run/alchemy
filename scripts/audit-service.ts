@@ -15,10 +15,16 @@ import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Argument, Command, Flag } from "effect/cli";
 import * as Console from "effect/Console";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+
+class DistilledImportError extends Data.TaggedError("DistilledImportError")<{
+  message: string;
+  cause: unknown;
+}> {}
 
 /** Reads a file, or `undefined` if it is missing or unreadable. */
 const readOptional = Effect.fn(function* (file: string) {
@@ -690,7 +696,11 @@ const extractDistilledOperations = Effect.fn(function* (
 
   const mod: Record<string, unknown> = yield* Effect.tryPromise({
     try: () => import(moduleSpecifier),
-    catch: (error) => error,
+    catch: (cause) =>
+      new DistilledImportError({
+        message: `Could not import distilled spec: ${moduleSpecifier}`,
+        cause,
+      }),
   });
   return Object.keys(mod)
     .filter((key) => /^[a-z]/.test(key))

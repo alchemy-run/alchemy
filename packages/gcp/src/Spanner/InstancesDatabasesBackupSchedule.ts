@@ -168,7 +168,7 @@ export const InstancesDatabasesBackupSchedule = Resource<InstancesDatabasesBacku
 export class BackupScheduleNotResolved extends Data.TaggedError(
   "GCP.Spanner.BackupScheduleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toId = (id: string, backupScheduleId: string | undefined, existing?: string) =>
@@ -224,7 +224,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   spanner
     .getProjectsInstancesDatabasesBackupSchedules({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toBody = (news: InstancesDatabasesBackupScheduleProps): spanner.BackupSchedule => {
   const incremental = news.incremental === true;
@@ -344,7 +344,7 @@ export const InstancesDatabasesBackupScheduleProvider = () =>
             Effect.flatMap((schedule) =>
               schedule
                 ? Effect.succeed(schedule)
-                : Effect.fail(new BackupScheduleNotResolved({ name })),
+                : Effect.fail(new BackupScheduleNotResolved({ resourceName: name })),
             ),
           );
       }

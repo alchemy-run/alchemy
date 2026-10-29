@@ -1,9 +1,9 @@
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { noopSession } from "@/Report";
-import * as Test from "@/Test/Alchemy";
 import { Server, ServerProviderLive } from "@/Website/Server";
 
 const { test } = Test.make({ providers: ServerProviderLive() });

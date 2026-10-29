@@ -101,7 +101,7 @@ export const ChannelGroupProvider = () =>
       const getGroup = Effect.fn(function* (channelGroupName: string) {
         return yield* mediapackagev2
           .getChannelGroup({ ChannelGroupName: channelGroupName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return {
@@ -194,7 +194,7 @@ export const ChannelGroupProvider = () =>
               (item) =>
                 mediapackagev2.getChannelGroup({ ChannelGroupName: item.ChannelGroupName }).pipe(
                   Effect.map(toAttrs),
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                 ),
               { concurrency: 5 },
             );

@@ -6,10 +6,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class InternetMonitorMonitorNotReady extends Data.TaggedError(
+  "InternetMonitorMonitorNotReady",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface MonitorProps {
   /**
@@ -169,7 +177,7 @@ export const MonitorProvider = () =>
       const readMonitor = Effect.fn(function* (name: string) {
         return yield* im
           .getMonitor({ MonitorName: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // Bounded wait for the monitor to leave PENDING (create and updates
@@ -179,10 +187,18 @@ export const MonitorProvider = () =>
         return yield* readMonitor(name).pipe(
           Effect.flatMap((monitor) => {
             if (monitor === undefined) {
-              return Effect.fail(new Error(`Internet Monitor monitor '${name}' not found`));
+              return Effect.fail(
+                new InternetMonitorMonitorNotReady({
+                  message: `Internet Monitor monitor '${name}' not found`,
+                }),
+              );
             }
             if (monitor.Status === "PENDING") {
-              return Effect.fail(new Error(`Internet Monitor monitor '${name}' is still PENDING`));
+              return Effect.fail(
+                new InternetMonitorMonitorNotReady({
+                  message: `Internet Monitor monitor '${name}' is still PENDING`,
+                }),
+              );
             }
             return Effect.succeed(monitor);
           }),
@@ -214,7 +230,7 @@ export const MonitorProvider = () =>
                   im.getMonitor({ MonitorName: monitor.MonitorName }).pipe(
                     Effect.map(toAttrs),
                     // Tolerate delete races between list and get.
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                   ),
                 { concurrency: 4 },
               ),
@@ -367,9 +383,9 @@ export const MonitorProvider = () =>
               Effect.flatMap((monitor) =>
                 monitor !== undefined && monitor.Status !== "INACTIVE"
                   ? Effect.fail(
-                      new Error(
-                        `Internet Monitor monitor '${name}' is not yet INACTIVE (status: ${monitor.Status})`,
-                      ),
+                      new InternetMonitorMonitorNotReady({
+                        message: `Internet Monitor monitor '${name}' is not yet INACTIVE (status: ${monitor.Status})`,
+                      }),
                     )
                   : Effect.succeed(monitor),
               ),

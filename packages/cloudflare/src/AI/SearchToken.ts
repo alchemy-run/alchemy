@@ -285,7 +285,7 @@ const getToken = (accountId: string, id: string) =>
       legacy: t.legacy,
       modifiedBy: t.modifiedBy,
     })),
-    Effect.catchTag("TokenNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("TokenNotFound", () => Effect.undefined),
   );
 
 /**

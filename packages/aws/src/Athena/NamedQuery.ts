@@ -114,7 +114,7 @@ export const NamedQueryProvider = () =>
       const getOne = (namedQueryId: string) =>
         athena.getNamedQuery({ NamedQueryId: namedQueryId }).pipe(
           Effect.map((res) => res.NamedQuery),
-          Effect.catchTag("NamedQueryNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NamedQueryNotFound", () => Effect.undefined),
         );
 
       return {

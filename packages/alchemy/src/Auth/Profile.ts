@@ -667,6 +667,29 @@ export const ProfileStoreLive = Layer.effect(
   }),
 );
 
+/**
+ * Re-read a provider's stored configuration, failing only with
+ * {@link AuthError}. Silent refreshes rotate single-use refresh tokens, so
+ * {@link AuthProvider.read}/{@link AuthProvider.details} take this effect and
+ * run it under the profile's credentials lock instead of a config read before
+ * it.
+ */
+export const reloadProviderConfig = <Config extends { method: string }>(
+  store: ProfileStoreService,
+  auth: AuthProvider<Config>,
+  profileName: string,
+): Effect.Effect<Config, AuthError> =>
+  store.loadProviderConfig(auth, profileName).pipe(
+    Effect.mapError((cause) =>
+      cause._tag === "AuthError"
+        ? cause
+        : AuthError.make({
+            message: `Could not reload ${auth.name} configuration for profile '${profileName}'.`,
+            cause,
+          }),
+    ),
+  );
+
 /** The name of the currently selected profile. */
 export const currentProfileName: Effect.Effect<string, ProfileError | PlatformError, ProfileStore> =
   ProfileStore.use((store) => store.current).pipe(Effect.map((selection) => selection.name));

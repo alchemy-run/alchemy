@@ -35,7 +35,7 @@ test("opt-in tags require exact positive selection of every required tag", () =>
 });
 
 test("Alchemy tests and provider tests forward tags", async () => {
-  const { make } = await import("../../alchemy/src/Test/Alchemy.ts");
+  const { make } = await import("../src/Alchemy.ts");
   const suite = await collect("adapter.test.ts", async () => {
     const api = make({ providers: Layer.empty, dev: false, sidecar: false });
     describe(

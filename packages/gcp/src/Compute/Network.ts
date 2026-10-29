@@ -257,7 +257,7 @@ const toAttrs = (network: compute.Network, project: string): Network["Attributes
 const getByName = (project: string, networkName: string) =>
   compute
     .getNetworks({ project, network: networkName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitInsertedNetwork = (
   project: string,
@@ -402,7 +402,7 @@ export const NetworkProvider = () =>
             body,
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((inserted) => waitInsertedNetwork(env.project, networkName, inserted)),
             Effect.retry({
               while: (error) => error._tag === "NotFound" || error._tag === "GCP.OperationFailed",

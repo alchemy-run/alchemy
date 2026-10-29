@@ -215,7 +215,7 @@ export const runExecCredential = Effect.fn(function* (options: {
     extendEnv: true,
     env: options.env,
   }).pipe(
-    spawner.spawn,
+    (command) => spawner.spawn(command),
     Effect.flatMap((child) =>
       Effect.all(
         {

@@ -1,4 +1,5 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import { Unowned } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { Resource } from "alchemy/Resource";
@@ -7,12 +8,14 @@ import {
   createInternalTags,
   createTagsList,
   diffTags,
+  hasAlchemyTags,
 } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { tagListRecord } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { getDefaultVpcScope } from "./defaultVpcScope.ts";
@@ -65,6 +68,11 @@ export interface InternetGateway extends Resource<
       state: "attaching" | "available" | "detaching" | "detached";
       vpcId: string;
     }>;
+    /**
+     * Tags on the internet gateway, as observed. Lets `alchemy drift`
+     * detect out-of-band changes.
+     */
+    tags?: Record<string, string>;
   },
   never,
   Providers
@@ -157,8 +165,48 @@ export const InternetGatewayProvider = () =>
           .find((candidate) => candidate.InternetGatewayId !== undefined);
       });
 
+      /**
+       * The attributes `read` and `reconcile` both report, so a converged
+       * gateway reads unchanged. The VPC is the one the gateway is attached
+       * (or attaching) to.
+       */
+      const toAttributes = (
+        igw: ec2.InternetGateway,
+        region: RegionID,
+        accountId: AccountID,
+      ): InternetGateway["Attributes"] => {
+        const internetGatewayId = igw.InternetGatewayId as InternetGatewayId;
+        return {
+          internetGatewayId,
+          internetGatewayArn: `arn:aws:ec2:${region}:${accountId}:internet-gateway/${internetGatewayId}`,
+          vpcId: igw.Attachments?.find((a) => a.State === "available" || a.State === "attaching")
+            ?.VpcId as VpcId | undefined,
+          ownerId: igw.OwnerId,
+          attachments: igw.Attachments?.map((a) => ({
+            state: a.State! as "attaching" | "available" | "detaching" | "detached",
+            vpcId: a.VpcId!,
+          })),
+          tags: tagListRecord(igw.Tags),
+        };
+      };
+
       return {
         stables: ["internetGatewayId", "internetGatewayArn", "ownerId"],
+        read: Effect.fn(function* ({ id, output }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const igw = output?.internetGatewayId
+            ? (yield* ec2
+                .describeInternetGateways({ InternetGatewayIds: [output.internetGatewayId] })
+                .pipe(
+                  Effect.catchTag("InvalidInternetGatewayID.NotFound", () =>
+                    Effect.succeed({ InternetGateways: [] }),
+                  ),
+                )).InternetGateways?.[0]
+            : yield* findInternetGatewayByTags(id);
+          if (!igw?.InternetGatewayId) return undefined;
+          const attrs = toAttributes(igw, region, accountId);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
+        }),
 
         list: () =>
           Effect.gen(function* () {
@@ -317,16 +365,7 @@ export const InternetGatewayProvider = () =>
 
           // Re-read final state.
           const final = yield* describeInternetGateway(internetGatewayId);
-          return {
-            internetGatewayId,
-            internetGatewayArn: `arn:aws:ec2:${region}:${accountId}:internet-gateway/${internetGatewayId}`,
-            vpcId: news.vpcId,
-            ownerId: final.OwnerId,
-            attachments: final.Attachments?.map((a) => ({
-              state: a.State! as "attaching" | "available" | "detaching" | "detached",
-              vpcId: a.VpcId!,
-            })),
-          };
+          return { ...toAttributes(final, region, accountId), tags: desiredTags };
         }),
 
         delete: Effect.fn(function* ({ output, session }) {

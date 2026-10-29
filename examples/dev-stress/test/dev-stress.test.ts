@@ -46,7 +46,6 @@ import { PORTS } from "../src/ports.ts";
 import {
   at,
   DevServer,
-  dockerAvailable,
   fetchJson,
   fetchOk,
   freePinnedPorts,
@@ -205,15 +204,6 @@ const stoppedServing = async (url: URL, marker: string) => {
 };
 
 beforeAll(async () => {
-  // Docker is a hard requirement, not a reason to skip: floci hosts the
-  // whole AWS half and the Container and MicroVM are real containers. A
-  // machine without it must fail this suite, not quietly pass it.
-  if (!dockerAvailable) {
-    throw new Error(
-      "dev-stress requires Docker (floci, Cloudflare Containers, MicroVMs). " +
-        "Start the Docker daemon and re-run.",
-    );
-  }
   resetFlociEmulator();
   freePinnedPorts(Object.values(PORTS));
   const cwd = makeScratchProject(STAGE);

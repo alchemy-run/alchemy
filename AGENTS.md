@@ -20,7 +20,7 @@ A Resource Provider implements the following Lifecycle Operations:
 - **Diff** - compares new props with old props and determines if the Resource needs to be updated or replaced. For updates, it can also specify a list of Stable Properties that will not be changed by the update.
 - **Read** - reads the current state of a Resource and returns the current Output Attributes. May return `Unowned(attrs)` to signal an existing-but-foreign resource that the engine should refuse to take over unless `--adopt` is set.
 - **Pre-Create** - an optional operation that creates a stub of a Resource before reconcile runs. Used to resolve circular dependencies — e.g. Function A and B depend on each other, so we create a stub of Function A first and then `reconcile` later wires up the real dependency.
-- **Observe** - an optional, read-only companion to Pre-Create. A cycle pre-creates on unresolved props, before Read can check ownership, so the engine first asks Observe what exists at the identity Pre-Create would claim. It returns the same shape as Read (`undefined`, attributes, or `Unowned(attrs)`), and the engine refuses an `Unowned` result unless `--adopt` is set. Implement it whenever Pre-Create can write to a resource that already exists.
+- **Observe** - an optional, read-only companion to Pre-Create. A cycle pre-creates on unresolved props, before Read can check ownership, so the engine first asks Observe what exists at the identity Pre-Create would claim. It returns the same shape as Read (`undefined`, attributes, or `Unowned(attrs)`), or `Unresolved` when that identity depends on props that haven't resolved yet; the engine refuses an `Unowned` result unless `--adopt` is set, and checks an `Unresolved` identity once it resolves, before Reconcile. Implement it whenever Pre-Create can write to a resource that already exists.
 - **Reconcile** - converges a Resource's actual cloud state to the desired state described by the new Input Properties. Called for both first-time provisioning and subsequent updates. The provider receives `output` (current Attributes) and `olds` (previous Props) which may both be `undefined` on a greenfield create, both defined on an update, or `output !== undefined && olds === undefined` on an adoption. See the **Reconciler doctrine** section below for the required shape.
 - **Delete** - deletes an existing Resource. It must be designed as idempotent because it is always possible for state persistence to fail after the delete operation is called. If the resource doesn't exist during deletion, it should not be considered an error.
 - **Capability** - a runtime requirement of a Function (e.g. require read access to an `R2Bucket`, or `SQS.SendMessage` on a `SQS.Queue`). A Capability is modeled as one or more `Binding.Service`s. Where the underlying API distinguishes access levels, split it into `Read` / `Write` / `ReadWrite` services (see the **Read/Write/ReadWrite binding convention** below); otherwise a single service suffices. Each service typically ships two interchangeable implementations: a native **binding** (`*Binding`) and a token-scoped **HTTP** client (`*Http`).
@@ -440,6 +440,62 @@ The canonical reference reconcilers cover the common shapes:
 
 Existence-only resources (Lambda Permission, EC2 Route, EC2 RouteTableAssociation, IAM AccessKey, etc.) have nothing mutable beyond their identity. Their reconciler is just observe → if missing, create. There is no sync step.
 
+# SQL database migrations
+
+Every SQL database resource applies schema migrations at deploy time through a `migrations` prop. A database resource without it is a gap to fill. Users get the same DX on every cloud:
+
+```ts
+const db = yield* GCP.SQL.Database("App", {
+  instance: instance.instanceName,
+  migrations: "./migrations", // a directory, { dir, table }, or a Drizzle.Schema
+  migrationsUser: user.userName,
+  migrationsPassword: password.text,
+});
+```
+
+The shared engine lives in `@alchemy.run/sql/Migrations`. It reads the directory (flat `.sql` files, drizzle-kit, or Prisma layouts) and keeps history in Alchemy's `__alchemy_migrations` table. It converts a foreign drizzle-kit/Prisma/wrangler table once, and fails with `RewrittenMigrationHistoryError` when an applied file is edited or removed. The provider never reimplements any of this. It supplies one thing, a `SqlExecutor` for its database:
+
+```ts
+// Props
+migrations?: MigrationsInput;
+// Attributes
+migrationsDir: string | undefined;
+migrationsTable: string | undefined;
+migrationsHashes: Record<string, string>;
+
+// diff: pending files or a table move update in place, never replace
+if (yield* diffMigrations({ news, output })) return { action: "update" } as const;
+
+// reconcile: last, once the database is ready and every other aspect is synced
+const migrationsInput = migrationsInputOf(news);
+const run = migrationsInput
+  ? yield* runMigrations({
+      input: migrationsInput,
+      stamped: stampedOf(output),
+      withExecutor: (apply) => withExecutor(apply), // acquire a SqlExecutor, apply, release
+    })
+  : undefined;
+return { ...attrs, ...migrationsAttrs({ input: migrationsInput, run, output }) };
+```
+
+Rules:
+
+- **Where the prop goes.** Put it on the resource that owns one database's schema: the database (`GCP.SQL.Database`, Cloudflare D1, Turso), the branch (Neon, PlanetScale), or the instance or cluster when it serves exactly one database (`AWS.RDS.DBInstance`, `AWS.DSQL.Cluster`, the primary `GCP.AlloyDB.Instance`). Migrations need a running endpoint, so they go on the resource that is reconciled after the endpoint is ready, not on a parent that is created before it.
+- **Transport, in order of preference.** First, an HTTPS data API, which needs no network route from the deploying machine (D1 HTTP, the RDS Data API, Cloud SQL and AlloyDB `executeSql`). Second, a direct driver connection over a public endpoint or the cloud's connector. Third, a runner inside the private network (`AWS.RDS.MigrationRunner`). When there is more than one, expose `migrationsTransport`, and default to the data API whenever the target has it enabled.
+- **Credentials.** Use the platform's own credentials when it has them: RDS managed secrets, Neon and PlanetScale minted roles, D1 API tokens. Otherwise take `migrationsUser` and `migrationsPassword` (`string | Redacted<string>`). Never ask the user to stage a secret just for the transport; when an API only reads passwords from a secret store, the provider stages and removes one itself.
+- **Executors — reuse, don't rewrite.** `@alchemy.run/sql/Migrations` has the transport pieces; a provider writes only the call that is specific to its cloud:
+  - `withPgExecutor(config, use)` / `withMySqlExecutor(config, use)` — open a `pg`/`mysql2` connection (connection string, TLS, or a pre-connected `stream`), run, always close.
+  - `makeStatementExecutor({ dialect, execute, batch })` — any API that runs a SQL string and returns rows (Cloud SQL and AlloyDB `executeSql`). The provider supplies `execute`, failing on SQL errors inside a 200; `batch: "transaction"` wraps each migration in `BEGIN`/`COMMIT`, `"atomic"` relies on the API committing a call as a unit. `rowsFromCells` maps GCP-style `columns` + `rows[].values[]`.
+  - `splitSqlScript` / `scanSqlScript` — split a script into statements for APIs that take one at a time (PostgreSQL, MySQL, GoogleSQL quoting and comment rules; `scanSqlScript` adds an offset-aligned literal mask for capability checks).
+  - `migrationError(context)`, `retryLogin` / `probeExecutor` (a just-created user's login delay, retried before any batch), `migrationAttributesOf` / `MigrationAttributes`.
+
+  Targets that can't commit DDL atomically set `transactionalDdl: false` and override `applyMigration`: DSQL checkpoints each statement, and Spanner runs each DDL statement as an operation named after the migration and statement, so a crashed or fixed deploy resumes instead of rerunning applied statements.
+- **Errors.** Every transport failure surfaces as `MigrationError` with the database's own message. A SQL error inside a 200 response, as the data APIs return it, is a failure, not a success.
+- **Tests.** Write one live test per transport. Deploy one migration and verify the table and `__alchemy_migrations` out-of-band. Add a file and redeploy; only the new file runs. Redeploy unchanged and assert that `stack.plan` reports no update. Destroy and verify the database is gone. Write migration files into a scoped temp directory (`fs.makeTempDirectoryScoped`) and pass it as `migrations`.
+- **Docs.** Add a `### Migrations` section to the resource JSDoc, with one example per transport and credential source.
+
+References: [AWS.RDS.DBInstance](./packages/aws/src/RDS/DBInstance.ts) + [Migrations.ts](./packages/aws/src/RDS/Migrations.ts) (three transports), [Turso Database](./packages/turso/src/Database.ts) (one HTTP executor), [GCP.SQL.Database](./packages/gcp/src/SQL/Database.ts) (data API with a staged secret, plus the Cloud SQL connector), [GCP.Spanner.Database](./packages/gcp/src/Spanner/Database.ts) (non-transactional DDL, a GoogleSQL dialect in the shared engine).
+
 5. Research and design the test cases for each resource. Test cases can be single or multi-step. Single-step test cases are just testing a single create success or failure mode. Multi-step cases are testing a sequence of operations, starting with create and then updating or replacing the resource multiple times. Test cases should be designed to be exhaustive and cover all possible success and failure modes, starting from simple happy paths to long, complicated aggregate (including other resources) smoke tests.
 6. Implement the Resource contract and Provider in `packages/{cloud}/src/{Service}/{Resource}.ts`.
 
@@ -766,6 +822,7 @@ Choose the deployment-based pattern that fits the behavior under test:
 
 Keep regression cases in the relevant existing resource or binding suite. A Worker lifecycle feature belongs in `test/Cloudflare/Workers/Worker.test.ts`; binding fixtures belong beside their owning suite in `fixtures/`.
 
+- Assume Docker is installed. Never `skipIf`-gate a test on Docker availability; a missing daemon fails the test.
 - Start and end `test.provider` cases with `stack.destroy()`. Fixture suites deploy in `beforeAll` and destroy in `afterAll`. Use deterministic resource identities and verify deletion through the cloud API.
 - Exercise create, update, redeploy, and removal through the stack. **Do not mock HTTP or SDK responses, invoke provider lifecycle methods directly, or call extracted reconciliation helpers as a substitute for a deployment.**
 - Verify the resulting cloud state through distilled and exercise the deployed runtime when relevant. Use real SDK calls on test-owned resources to establish out-of-band state or verify API update semantics. Keep provider behavior assertions driven by `stack.deploy`.
@@ -975,7 +1032,7 @@ Compose a `Stack` that deploys the fixture, share one deploy across the file wit
 // Service.test.ts
 import * as Alchemy from "@/index.ts";
 import * as Cloudflare from "@/Cloudflare";
-import * as Test from "@/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { expect } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -1269,6 +1326,21 @@ Rules of thumb:
 - Bullet/numbered lists are fine when they describe a recap, prerequisites, or genuinely list-shaped content (e.g. "the Worker now handles two routes: PUT and GET" at the end). They are **not** fine as a substitute for splitting a compound snippet.
 - A single API call that internally does several things (e.g. `Cloudflare.upgrade()`) doesn't need splitting — describe its behavior in prose.
 - Use `diff lang="typescript"` blocks so each step shows what's added on top of the previous step.
+
+# Package Skills
+
+A package can ship an agent skill under `packages/{package}/skills/{name}/` (e.g. [alchemy-domain](./packages/domain/skills/alchemy-domain/SKILL.md)): a `SKILL.md` plus `references/*.md`. The skill is an **entrypoint**, not a second copy of the docs. It gives an agent the workflow, the rules, and a short template per topic. The website holds the depth.
+
+- **`SKILL.md` links the docs hub and `https://alchemy.run/llms.txt`**, which lists every page, so an agent can find what the skill leaves out.
+- **Every `##`/`###` section ends with a `More:` line** linking the docs page, or the exact `#section`, that covers it in depth:
+
+  ```md
+  More: [Saga: Undo a step when a later one fails](https://alchemy.run/domain/saga#undo-a-step-when-a-later-one-fails).
+  ```
+
+- **Links must resolve.** Use absolute `https://alchemy.run/...` URLs (the skill is read outside the website), not `website/...` paths. After `pnpm --filter website build`, check that each linked page exists under `website/dist/` and that each `#anchor` is an `id` on it.
+- **Keep the skill in step with the docs.** Renaming a docs page or heading means updating the skill links to it. Adding a docs page a skill covers means adding a `More:` link from its section.
+- **Keep sections short.** If a section grows into an explanation, move the explanation to the docs page and link it.
 
 # Pull Request Conventions
 

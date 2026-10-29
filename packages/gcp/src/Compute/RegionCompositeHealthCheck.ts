@@ -157,7 +157,7 @@ const getByName = (project: string, region: string, name: string) =>
       region,
       compositeHealthCheck: name,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, healthCheckName: string) =>
   getByName(project, region, healthCheckName).pipe(
@@ -276,7 +276,7 @@ export const RegionCompositeHealthCheckProvider = () =>
             },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, region, healthCheckName);
       }
 
@@ -332,6 +332,6 @@ export const RegionCompositeHealthCheckProvider = () =>
           compositeHealthCheck: output.healthCheckName,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }),
   });
