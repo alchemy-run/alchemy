@@ -10,6 +10,7 @@ import {
 } from "../SecretsManager/RotationEventSource.ts";
 import { RotationSchedule } from "../SecretsManager/RotationSchedule.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -82,55 +83,57 @@ export const SecretRotationEventSource = Layer.effect(
       // is registering the runtime handler below. Namespaced under the host
       // so the sub-resources' logical identity is stable per host function.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            yield* host.bind`Allow(${host}, AWS.SecretsManager.RotationEventSource(${secret}))`({
-              policyStatements: [
-                {
-                  Effect: "Allow",
-                  Action: [
-                    "secretsmanager:DescribeSecret",
-                    "secretsmanager:GetSecretValue",
-                    "secretsmanager:PutSecretValue",
-                    "secretsmanager:UpdateSecretVersionStage",
-                  ],
-                  Resource: [secret.secretArn],
-                },
-                {
-                  Effect: "Allow",
-                  Action: ["secretsmanager:GetRandomPassword"],
-                  Resource: ["*"],
-                },
-              ],
-            });
+        yield* wireEventSource(host, secret, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              yield* host.bind`Allow(${host}, AWS.SecretsManager.RotationEventSource(${secret}))`({
+                policyStatements: [
+                  {
+                    Effect: "Allow",
+                    Action: [
+                      "secretsmanager:DescribeSecret",
+                      "secretsmanager:GetSecretValue",
+                      "secretsmanager:PutSecretValue",
+                      "secretsmanager:UpdateSecretVersionStage",
+                    ],
+                    Resource: [secret.secretArn],
+                  },
+                  {
+                    Effect: "Allow",
+                    Action: ["secretsmanager:GetRandomPassword"],
+                    Resource: ["*"],
+                  },
+                ],
+              });
 
-            // Secrets Manager VALIDATES it can invoke the rotation function
-            // when `RotateSecret` configures the schedule, so the Permission
-            // must exist BEFORE the RotationSchedule. Rotation invocations
-            // carry no SourceArn — scope by account per the Secrets Manager
-            // confused-deputy guidance.
-            const { accountId } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
-              accountId: string;
-            }>;
-            const permission = yield* Permission(`${secret.LogicalId}-Rotation-Permission`, {
-              action: "lambda:InvokeFunction",
-              functionName: Lambda.qualifiedArnOf(host),
-              principal: "secretsmanager.amazonaws.com",
-              sourceAccount: accountId,
-            });
+              // Secrets Manager VALIDATES it can invoke the rotation function
+              // when `RotateSecret` configures the schedule, so the Permission
+              // must exist BEFORE the RotationSchedule. Rotation invocations
+              // carry no SourceArn — scope by account per the Secrets Manager
+              // confused-deputy guidance.
+              const { accountId } = yield* AWSEnvironment.current as unknown as Effect.Effect<{
+                accountId: string;
+              }>;
+              const permission = yield* Permission(`${secret.LogicalId}-Rotation-Permission`, {
+                action: "lambda:InvokeFunction",
+                functionName: Lambda.qualifiedArnOf(host),
+                principal: "secretsmanager.amazonaws.com",
+                sourceAccount: accountId,
+              });
 
-            // The Permission echoes the `functionName` prop (the function
-            // ARN) as an attribute — threading it as the rotation Lambda ARN
-            // makes the schedule reconcile only AFTER the invoke permission
-            // exists.
-            yield* Rotation(`${secret.LogicalId}-RotationSchedule`, {
-              secretId: secret.secretArn,
-              rotationLambdaArn: permission.functionName,
-              rotationRules: props.rotationRules,
-              rotateImmediately: props.rotateImmediately,
-            });
-          }),
+              // The Permission echoes the `functionName` prop (the function
+              // ARN) as an attribute — threading it as the rotation Lambda ARN
+              // makes the schedule reconcile only AFTER the invoke permission
+              // exists.
+              yield* Rotation(`${secret.LogicalId}-RotationSchedule`, {
+                secretId: secret.secretArn,
+                rotationLambdaArn: permission.functionName,
+                rotationRules: props.rotationRules,
+                rotateImmediately: props.rotateImmediately,
+              });
+            }),
+          ),
         );
       }
 

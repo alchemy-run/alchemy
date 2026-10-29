@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
+import { wireEventSource } from "../Lambda/DevBridge.ts";
 import type { Function as LambdaFunction } from "../Lambda/Function.ts";
 import { Permission as LambdaPermission } from "../Lambda/Permission.ts";
 import { qualifiedArnOf, qualifiedNameOf } from "../Lambda/QualifiedArn.ts";
@@ -45,6 +46,28 @@ export const toLambda = (
   descriptor: EventDescriptor,
   fn: LambdaFunction,
   props: LambdaRouteTargetProps = {},
+) => wireEventSource(fn, originOf(descriptor), (fn) => routeToLambda(descriptor, fn, props));
+
+/**
+ * Where a rule's events come from: its bus, or, on the default bus, the
+ * AWS platform when every source the pattern matches is an AWS service
+ * (`aws.*`), which only the real cloud emits. The app's own events on the
+ * default bus follow the run mode.
+ */
+const originOf = (descriptor: EventDescriptor) => {
+  if (descriptor.bus !== undefined) return descriptor.bus;
+  const sources: unknown = descriptor.pattern.source;
+  return Array.isArray(sources) &&
+    sources.length > 0 &&
+    sources.every((source) => typeof source === "string" && source.startsWith("aws."))
+    ? ("aws" as const)
+    : undefined;
+};
+
+const routeToLambda = (
+  descriptor: EventDescriptor,
+  fn: LambdaFunction,
+  props: LambdaRouteTargetProps,
 ) =>
   Effect.gen(function* () {
     const routeId = descriptor.id ?? createRouteId(descriptor, `${fn.LogicalId}Lambda`);

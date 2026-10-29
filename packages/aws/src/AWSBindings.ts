@@ -11,7 +11,8 @@ import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Binding from "alchemy/Binding";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
-import { describeDataPlane } from "alchemy/Provider";
+import { isEmulated } from "alchemy/Provider";
+import { UnbridgedDevEdge } from "alchemy/ProviderMode";
 import { isResourceOfType, type ResourceLike } from "alchemy/Resource";
 import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
@@ -270,8 +271,44 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
       const host = yield* Binding.Host;
       if (host === undefined) return;
 
+      const realCloudTarget = yield* realCloudTargetFromEmulator(host);
+      if (realCloudTarget !== undefined) {
+        // Tags arrive literal or interpolated (`${options.tag}(${cluster})`).
+        const text = label.reduce(
+          (acc, part, i) => acc + part + (typeof args[i] === "string" ? args[i] : ""),
+          "",
+        );
+        const service = /^AWS\.(\w+)\.Connect/.exec(text)?.[1];
+        if (service !== undefined && PRIVATE_ENDPOINT_SERVICES.has(service)) {
+          return yield* Effect.die(
+            new UnbridgedDevEdge({
+              message:
+                `${host.FQN} runs on this machine under \`alchemy dev\`, but ${realCloudTarget.FQN} ` +
+                `only has a private endpoint in its VPC, which this machine cannot reach. ` +
+                "Pipe the host through Alchemy.remote() too, or emulate the resource.",
+              from: host.FQN,
+              to: realCloudTarget.FQN,
+              edge: "connect",
+            }),
+          );
+        }
+        if (!runsAsRole(host)) {
+          return yield* Effect.die(
+            new UnbridgedDevEdge({
+              message:
+                `${host.FQN} runs on this machine under \`alchemy dev\`, and calls from a local ` +
+                `${host.Type} cannot reach ${realCloudTarget.FQN} in the real cloud yet. ` +
+                "Pipe the host through Alchemy.remote() too, or emulate the resource.",
+              from: host.FQN,
+              to: realCloudTarget.FQN,
+              edge: "call",
+            }),
+          );
+        }
+      }
+
       if (runsAsRole(host)) {
-        if (yield* bindsRealCloudFromEmulator(host)) {
+        if (realCloudTarget !== undefined) {
           return yield* bindDevCredentials(data);
         }
         return yield* (host as unknown as BindTarget).bind(
@@ -386,20 +423,25 @@ export const Bind: Effect.Effect<BindHost> = Effect.gen(function* () {
 });
 
 /**
- * Whether a host emulated by `alchemy dev` binds resources that live in the
- * real cloud (`Alchemy.remote()`, or a provider with no emulator). The host
- * runs as an emulator role that cannot reach them.
+ * The first resource a host emulated by `alchemy dev` binds in the real
+ * cloud (`Alchemy.remote()`, or a provider with no emulator), if every
+ * resource it binds there lives there. The host runs as an emulator
+ * identity that cannot reach them.
  */
-const bindsRealCloudFromEmulator = Effect.fn(function* (host: ResourceLike) {
-  if ((yield* describeDataPlane(host)).kind !== "local") return false;
+const realCloudTargetFromEmulator = Effect.fn(function* (host: ResourceLike) {
+  if (!(yield* isEmulated(host))) return undefined;
   const targets = yield* Binding.Targets;
-  if (targets.length === 0) return false;
   for (const target of targets) {
-    const plane = yield* describeDataPlane(target);
-    if (plane.kind !== "live" && plane.kind !== "agnostic") return false;
+    if (yield* isEmulated(target)) return undefined;
   }
-  return true;
+  return targets[0];
 });
+
+/**
+ * Services whose endpoints only exist inside a VPC: a connection from the
+ * developer's machine cannot reach them.
+ */
+const PRIVATE_ENDPOINT_SERVICES = new Set(["DAX", "DocDB", "ElastiCache", "MemoryDB"]);
 
 /**
  * Bind real-cloud resources onto an emulated host: the host reads the

@@ -342,6 +342,43 @@ describe("provider modes", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  test.provider(
+    "a dev run rejects a real-cloud resource that depends on an emulated one",
+    (stack) =>
+      Effect.gen(function* () {
+        // The real cloud would be configured with an identity that only
+        // exists on this machine.
+        const exit = yield* inDev(
+          Effect.gen(function* () {
+            const local = yield* ModalResource("Local", { value: "v1" });
+            yield* ModalResource("Live", { value: local.instance }).pipe(remote());
+            return {};
+          }).pipe(stack.deploy, Effect.exit),
+        );
+        expect(Exit.isFailure(exit)).toBe(true);
+        if (Exit.isFailure(exit)) {
+          const defects = exit.cause.reasons.flatMap((reason) =>
+            reason._tag === "Die" ? [reason.defect as any] : [],
+          );
+          const edge = defects.find((d) => d?._tag === "UnbridgedDevEdge");
+          expect(edge).toMatchObject({ from: "Live", to: "Local", edge: "reference" });
+        }
+
+        // The other direction is the ordinary dev shape: an emulated
+        // resource configured from a real-cloud one.
+        const output = yield* inDev(
+          Effect.gen(function* () {
+            const live = yield* ModalResource("Live", { value: "v1" }).pipe(remote());
+            const local = yield* ModalResource("Local", { value: live.instance });
+            return { runtime: local.runtime };
+          }).pipe(stack.deploy),
+        );
+        expect(output.runtime).toEqual("local");
+
+        yield* stack.destroy();
+      }),
+  );
+
   test.provider("conflicting mode decorations on the same resource die", (stack) =>
     Effect.gen(function* () {
       const exit = yield* Effect.gen(function* () {

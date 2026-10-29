@@ -11,6 +11,7 @@ import {
   type MSKRecord,
 } from "../Kafka/ClusterEventSource.ts";
 import type { ServerlessCluster } from "../Kafka/ServerlessCluster.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import { EventSourceMapping } from "./EventSourceMapping.ts";
 import * as Lambda from "./Function.ts";
 
@@ -50,116 +51,118 @@ export const KafkaEventSource = Layer.effect(
       // deployed Function (the global guard). Namespaced under the host so the
       // mapping's logical identity is stable.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            yield* host.bind`Allow(${host}, AWS.Lambda.KafkaEventSource(${cluster}))`({
-              policyStatements: [
-                {
-                  // Cluster-level: connect + describe (Lambda poller + IAM auth).
-                  Effect: "Allow",
-                  Action: [
-                    "kafka-cluster:Connect",
-                    "kafka-cluster:DescribeCluster",
-                    "kafka-cluster:DescribeClusterDynamicConfiguration",
-                    "kafka:DescribeClusterV2",
-                    "kafka:GetBootstrapBrokers",
-                  ],
-                  Resource: [cluster.clusterArn],
-                },
-                {
-                  // Topic-level: read records + describe topics.
-                  Effect: "Allow",
-                  Action: ["kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"],
-                  Resource: [cluster.clusterArn.pipe(Output.map(topicArnGlob))],
-                },
-                {
-                  // Consumer-group-level: join/commit as a consumer group.
-                  Effect: "Allow",
-                  Action: ["kafka-cluster:DescribeGroup", "kafka-cluster:AlterGroup"],
-                  Resource: [cluster.clusterArn.pipe(Output.map(groupArnGlob))],
-                },
-                {
-                  // The poller reaches the cluster through ENIs in its VPC;
-                  // Lambda validates these on the execution role when the
-                  // mapping is created. EC2 Describe* actions do not support
-                  // resource-level permissions, so scope them to the
-                  // cluster's region instead.
-                  Effect: "Allow",
-                  Action: [
-                    "ec2:DescribeNetworkInterfaces",
-                    "ec2:DescribeSecurityGroups",
-                    "ec2:DescribeSubnets",
-                    "ec2:DescribeVpcs",
-                  ],
-                  Resource: ["*"],
-                  Condition: {
-                    StringEquals: {
-                      "aws:RequestedRegion": cluster.clusterArn.pipe(
-                        Output.map((arn) => arn.split(":")[3]!),
-                      ),
-                    },
+        yield* wireEventSource(host, cluster, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              yield* host.bind`Allow(${host}, AWS.Lambda.KafkaEventSource(${cluster}))`({
+                policyStatements: [
+                  {
+                    // Cluster-level: connect + describe (Lambda poller + IAM auth).
+                    Effect: "Allow",
+                    Action: [
+                      "kafka-cluster:Connect",
+                      "kafka-cluster:DescribeCluster",
+                      "kafka-cluster:DescribeClusterDynamicConfiguration",
+                      "kafka:DescribeClusterV2",
+                      "kafka:GetBootstrapBrokers",
+                    ],
+                    Resource: [cluster.clusterArn],
                   },
-                },
-                {
-                  // ENIs may only be created in the cluster's subnets with
-                  // the cluster's security groups.
-                  Effect: "Allow",
-                  Action: ["ec2:CreateNetworkInterface"],
-                  Resource: Output.all(
-                    cluster.clusterArn,
-                    cluster.subnetIds,
-                    cluster.securityGroupIds,
-                  ).pipe(
-                    Output.map(([clusterArn, subnetIds, securityGroupIds]) => [
-                      `${ec2ArnPrefix(clusterArn)}network-interface/*`,
-                      ...subnetIds.map((id) => `${ec2ArnPrefix(clusterArn)}subnet/${id}`),
-                      ...securityGroupIds.map(
-                        (id) => `${ec2ArnPrefix(clusterArn)}security-group/${id}`,
-                      ),
-                    ]),
-                  ),
-                },
-                {
-                  // ...and only ENIs in those subnets may be deleted.
-                  Effect: "Allow",
-                  Action: ["ec2:DeleteNetworkInterface"],
-                  Resource: [
-                    cluster.clusterArn.pipe(
-                      Output.map((arn) => `${ec2ArnPrefix(arn)}network-interface/*`),
-                    ),
-                  ],
-                  Condition: {
-                    ArnEquals: {
-                      "ec2:Subnet": Output.all(cluster.clusterArn, cluster.subnetIds).pipe(
-                        Output.map(([clusterArn, subnetIds]) =>
-                          subnetIds.map((id) => `${ec2ArnPrefix(clusterArn)}subnet/${id}`),
+                  {
+                    // Topic-level: read records + describe topics.
+                    Effect: "Allow",
+                    Action: ["kafka-cluster:DescribeTopic", "kafka-cluster:ReadData"],
+                    Resource: [cluster.clusterArn.pipe(Output.map(topicArnGlob))],
+                  },
+                  {
+                    // Consumer-group-level: join/commit as a consumer group.
+                    Effect: "Allow",
+                    Action: ["kafka-cluster:DescribeGroup", "kafka-cluster:AlterGroup"],
+                    Resource: [cluster.clusterArn.pipe(Output.map(groupArnGlob))],
+                  },
+                  {
+                    // The poller reaches the cluster through ENIs in its VPC;
+                    // Lambda validates these on the execution role when the
+                    // mapping is created. EC2 Describe* actions do not support
+                    // resource-level permissions, so scope them to the
+                    // cluster's region instead.
+                    Effect: "Allow",
+                    Action: [
+                      "ec2:DescribeNetworkInterfaces",
+                      "ec2:DescribeSecurityGroups",
+                      "ec2:DescribeSubnets",
+                      "ec2:DescribeVpcs",
+                    ],
+                    Resource: ["*"],
+                    Condition: {
+                      StringEquals: {
+                        "aws:RequestedRegion": cluster.clusterArn.pipe(
+                          Output.map((arn) => arn.split(":")[3]!),
                         ),
-                      ),
+                      },
                     },
                   },
-                },
-              ],
-            });
+                  {
+                    // ENIs may only be created in the cluster's subnets with
+                    // the cluster's security groups.
+                    Effect: "Allow",
+                    Action: ["ec2:CreateNetworkInterface"],
+                    Resource: Output.all(
+                      cluster.clusterArn,
+                      cluster.subnetIds,
+                      cluster.securityGroupIds,
+                    ).pipe(
+                      Output.map(([clusterArn, subnetIds, securityGroupIds]) => [
+                        `${ec2ArnPrefix(clusterArn)}network-interface/*`,
+                        ...subnetIds.map((id) => `${ec2ArnPrefix(clusterArn)}subnet/${id}`),
+                        ...securityGroupIds.map(
+                          (id) => `${ec2ArnPrefix(clusterArn)}security-group/${id}`,
+                        ),
+                      ]),
+                    ),
+                  },
+                  {
+                    // ...and only ENIs in those subnets may be deleted.
+                    Effect: "Allow",
+                    Action: ["ec2:DeleteNetworkInterface"],
+                    Resource: [
+                      cluster.clusterArn.pipe(
+                        Output.map((arn) => `${ec2ArnPrefix(arn)}network-interface/*`),
+                      ),
+                    ],
+                    Condition: {
+                      ArnEquals: {
+                        "ec2:Subnet": Output.all(cluster.clusterArn, cluster.subnetIds).pipe(
+                          Output.map(([clusterArn, subnetIds]) =>
+                            subnetIds.map((id) => `${ec2ArnPrefix(clusterArn)}subnet/${id}`),
+                          ),
+                        ),
+                      },
+                    },
+                  },
+                ],
+              });
 
-            yield* Mapping(
-              `AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${cluster.LogicalId})`,
-              {
-                functionName: Lambda.qualifiedNameOf(host),
-                eventSourceArn: cluster.clusterArn,
-                topics: props.topics,
-                amazonManagedKafkaEventSourceConfig: props.consumerGroupId
-                  ? { ConsumerGroupId: props.consumerGroupId }
-                  : undefined,
-                batchSize: props.batchSize,
-                maximumBatchingWindow: props.maximumBatchingWindow,
-                startingPosition: props.startingPosition ?? "LATEST",
-                enabled: props.enabled ?? true,
-                filterCriteria: props.filterCriteria,
-                provisionedPollerConfig: props.provisionedPollerConfig,
-              },
-            );
-          }),
+              yield* Mapping(
+                `AWS.Lambda.EventSourceMapping(${host.LogicalId}, ${cluster.LogicalId})`,
+                {
+                  functionName: Lambda.qualifiedNameOf(host),
+                  eventSourceArn: cluster.clusterArn,
+                  topics: props.topics,
+                  amazonManagedKafkaEventSourceConfig: props.consumerGroupId
+                    ? { ConsumerGroupId: props.consumerGroupId }
+                    : undefined,
+                  batchSize: props.batchSize,
+                  maximumBatchingWindow: props.maximumBatchingWindow,
+                  startingPosition: props.startingPosition ?? "LATEST",
+                  enabled: props.enabled ?? true,
+                  filterCriteria: props.filterCriteria,
+                  provisionedPollerConfig: props.provisionedPollerConfig,
+                },
+              );
+            }),
+          ),
         );
       }
 

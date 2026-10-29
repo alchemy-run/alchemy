@@ -47,6 +47,8 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
+import { DEV_BRIDGE_ENV } from "./DevBridgeEnv.ts";
+import { relayDevBridge } from "./DevBridgeRelay.ts";
 import { DEV_CREDENTIALS_ENV } from "./DevCredentials.ts";
 import { writeDevCredentials } from "./DevCredentialsRelay.ts";
 import { flociServices } from "./FlociServices.ts";
@@ -300,6 +302,49 @@ export const makeDevWatchProvider = <
         relays.set(parameterName, refresh);
       });
 
+      // A Function emulated here whose event sources live in the real cloud
+      // receives their invocations through a stub Lambda there (see
+      // `Lambda/DevBridge.ts`). Consume its bridge queue for the rest of the
+      // session. One loop per queue; the Function's name is re-read per
+      // invocation.
+      const bridges = new Map<
+        string,
+        { functionName: string; fiber: Fiber.Fiber<unknown, unknown> }
+      >();
+      const bridgeEvents = Effect.fn(function* (news: unknown, attrs: unknown) {
+        const env = (news as { env?: Record<string, unknown> } | undefined)?.env;
+        const queueUrl = env?.[DEV_BRIDGE_ENV.queueUrl];
+        const bucket = env?.[DEV_BRIDGE_ENV.bucket];
+        const functionName = (attrs as { functionName?: unknown } | undefined)?.functionName;
+        if (
+          typeof queueUrl !== "string" ||
+          typeof bucket !== "string" ||
+          typeof functionName !== "string"
+        ) {
+          return;
+        }
+        const running = bridges.get(queueUrl);
+        if (running !== undefined && running.fiber.pollUnsafe() === undefined) {
+          running.functionName = functionName;
+          return;
+        }
+        const entry = {
+          functionName,
+          fiber: undefined as unknown as Fiber.Fiber<unknown, unknown>,
+        };
+        entry.fiber = yield* relayDevBridge({
+          queueUrl,
+          bucket,
+          functionName: () => entry.functionName,
+          emulator: services,
+        }).pipe(
+          Effect.provide(Layer.succeedContext(ambient)),
+          Effect.forkDetach,
+          Scope.provide(scope),
+        );
+        bridges.set(queueUrl, entry);
+      });
+
       // Per-id serialization: engine reconciles, watcher re-reconciles, and
       // deletes never interleave for the same logical resource.
       const locks = new Map<string, Semaphore.Semaphore>();
@@ -550,6 +595,7 @@ export const makeDevWatchProvider = <
                 wrapped.reconcile(withSafeSession({ ...input, news: reconcileNews }) as any),
               );
               yield* ensureWatch(input, attrs);
+              yield* bridgeEvents(stripEffects(input.news), attrs);
               if (spec.onReconciled !== undefined) {
                 yield* spec
                   .onReconciled({

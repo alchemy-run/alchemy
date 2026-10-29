@@ -54,6 +54,9 @@ import { FLOCI_ENDPOINT, rawS3GetObject } from "../Local/fixtures/raw.ts";
 import RemoteBindingFunctionLive, {
   RemoteBindingFunction,
 } from "./fixtures/floci-remote-binding/handler.ts";
+import RemoteEventsFunctionLive, {
+  RemoteEventsFunction,
+} from "./fixtures/floci-remote-events/handler.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -514,6 +517,96 @@ test.provider(
         Effect.provide(liveContext),
       );
       expect(gone).toBe(true);
+      const queueGone = yield* SQS.getQueueAttributes({ QueueUrl: queueUrl }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
+        Effect.provide(liveContext),
+      );
+      expect(queueGone).toBe(true);
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:s3", "provider:aws:sqs", "local"],
+    timeout: 540_000,
+  },
+);
+
+test.provider(
+  "a dev Function consumes event sources in the real cloud",
+  (stack) =>
+    Effect.gen(function* () {
+      const client = yield* HttpClient.HttpClient;
+      yield* stack.destroy();
+      // The stub Lambda the bridge deploys, found by name in the real account.
+      const devStubs = Lambda.listFunctions.items({}).pipe(
+        Stream.map((fn) => fn.FunctionName ?? ""),
+        Stream.filter((name) => name.toLowerCase().includes("devstub")),
+        Stream.runCollect,
+        Effect.map((names) => new Set(names)),
+        Effect.provide(liveContext),
+      );
+      const stubsBefore = yield* devStubs;
+
+      const fn = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* RemoteEventsFunction;
+        }).pipe(Effect.provide(RemoteEventsFunctionLive)),
+      );
+      expect(fn.functionUrl).toContain("localhost:4566");
+
+      const info = yield* client.get(fn.functionUrl!).pipe(
+        Effect.flatMap((response) =>
+          Effect.map(response.text, (body) => ({ status: response.status, body })),
+        ),
+        Effect.retry({
+          while: (): boolean => true,
+          schedule: Schedule.spaced("2 seconds"),
+          times: 60,
+        }),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (res): boolean => res.status === 200,
+          times: 60,
+        }),
+      );
+      const { bucketName, queueUrl } = JSON.parse(info.body) as {
+        bucketName: string;
+        queueUrl: string;
+      };
+
+      // Real events, produced out of band in the real cloud.
+      yield* SQS.sendMessage({ QueueUrl: queueUrl, MessageBody: "from-the-cloud" }).pipe(
+        Effect.provide(liveContext),
+      );
+      yield* S3.putObject({ Bucket: bucketName, Key: "uploads/hello.txt", Body: "hi" }).pipe(
+        Effect.provide(liveContext),
+      );
+
+      // The local Lambda handled both and wrote the results to the real bucket.
+      const read = (key: string) =>
+        S3.getObject({ Bucket: bucketName, Key: key }).pipe(
+          Effect.retry({
+            while: (error) => error._tag === "NoSuchKey",
+            schedule: Schedule.spaced("3 seconds"),
+            times: 30,
+          }),
+          Effect.flatMap((result) => Stream.mkString(Stream.decodeText(result.Body!))),
+          Effect.provide(liveContext),
+        );
+      expect(yield* read("received/from-the-cloud")).toBe("from-the-cloud");
+      expect(yield* read("seen/hello.txt")).toBe("uploads/hello.txt");
+      const stubs = [...(yield* devStubs)].filter((name) => !stubsBefore.has(name));
+      expect(stubs).toHaveLength(1);
+
+      yield* stack.destroy();
+
+      expect([...(yield* devStubs)].filter((name) => stubs.includes(name))).toEqual([]);
+
+      const bucketGone = yield* S3.headBucket({ Bucket: bucketName }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        Effect.provide(liveContext),
+      );
+      expect(bucketGone).toBe(true);
       const queueGone = yield* SQS.getQueueAttributes({ QueueUrl: queueUrl }).pipe(
         Effect.map(() => false),
         Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),

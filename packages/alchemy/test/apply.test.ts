@@ -6372,8 +6372,11 @@ describe("interrupted replacement destruction", { tags: ["unit", "local"] }, () 
               Effect.gen(function* () {
                 const dependency = yield* Generation("Dependency", { revision: "dependency" });
                 yield* Generation("Sibling", { revision: "sibling" });
-                const resource = Generation("R", { revision, dependency: dependency.physicalId });
-                return yield* revision === "two" ? resource.pipe(remote()) : resource;
+                // The live generation can't depend on an emulated resource
+                // (see UnbridgedDevEdge); the local ones carry the edge.
+                return yield* revision === "two"
+                  ? Generation("R", { revision }).pipe(remote())
+                  : Generation("R", { revision, dependency: dependency.physicalId });
               });
             const first = yield* inDev(stack.deploy(program("one")));
             for (const revision of ["two", "three"]) {

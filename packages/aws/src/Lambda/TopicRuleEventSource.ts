@@ -10,6 +10,7 @@ import {
   type TopicRuleEventSourceProps,
   type TopicRuleEventSourceService,
 } from "../IoT/TopicRuleEventSource.ts";
+import { wireEventSource } from "./DevBridge.ts";
 import * as Lambda from "./Function.ts";
 import { Permission as LambdaPermission } from "./Permission.ts";
 
@@ -46,24 +47,27 @@ export const TopicRuleEventSource = Layer.effect(
       // (scoped to the rule ARN). Skipped once running inside the deployed
       // function, where the only work is registering the runtime handler.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* Namespace.push(
-          host.LogicalId,
-          Effect.gen(function* () {
-            const ruleName = props.ruleName ?? sanitizeRuleName(`${host.LogicalId}_${topicFilter}`);
-            const rule = yield* Rule(`${host.LogicalId}-TopicRule`, {
-              ruleName,
-              sql: props.sql ?? `SELECT * FROM '${topicFilter}'`,
-              awsIotSqlVersion: props.awsIotSqlVersion,
-              actions: [{ lambda: { functionArn: Lambda.qualifiedArnOf(host) } }],
-            });
+        yield* wireEventSource(host, undefined, (host) =>
+          Namespace.push(
+            host.LogicalId,
+            Effect.gen(function* () {
+              const ruleName =
+                props.ruleName ?? sanitizeRuleName(`${host.LogicalId}_${topicFilter}`);
+              const rule = yield* Rule(`${host.LogicalId}-TopicRule`, {
+                ruleName,
+                sql: props.sql ?? `SELECT * FROM '${topicFilter}'`,
+                awsIotSqlVersion: props.awsIotSqlVersion,
+                actions: [{ lambda: { functionArn: Lambda.qualifiedArnOf(host) } }],
+              });
 
-            yield* Permission(`AWS.IoT.TopicRuleInvoke(${ruleName})`, {
-              action: "lambda:InvokeFunction",
-              functionName: Lambda.qualifiedNameOf(host),
-              principal: "iot.amazonaws.com",
-              sourceArn: rule.ruleArn,
-            });
-          }),
+              yield* Permission(`AWS.IoT.TopicRuleInvoke(${ruleName})`, {
+                action: "lambda:InvokeFunction",
+                functionName: Lambda.qualifiedNameOf(host),
+                principal: "iot.amazonaws.com",
+                sourceArn: rule.ruleArn,
+              });
+            }),
+          ),
         );
       }
 
