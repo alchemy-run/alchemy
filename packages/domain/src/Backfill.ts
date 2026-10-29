@@ -184,7 +184,7 @@ const pad = (n: number, width: number) => String(Math.max(0, Math.floor(n))).pad
 const trace = (step: string, fields: Record<string, unknown>) =>
   Effect.logDebug(`backfill ${step} ${JSON.stringify(fields)}`);
 
-/** The leaf an instance is listed in: a prefix of the FNV-1a hash of its source and id. */
+/** The leaf an instance is listed in: a prefix of the hash of its source and id. */
 export const leafOf = (ref: SourceRef, depth: number = DEPTH): string =>
   hashOf(ref).slice(0, depth);
 
@@ -195,7 +195,14 @@ const hashOf = ({ source, id }: SourceRef): string => {
     hash ^= char.charCodeAt(0);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
-  return hash.toString(16).padStart(8, "0");
+  // FNV-1a barely moves the high bits for ids that differ in their last characters
+  // (`b0`, `b1`, …): mix them in (murmur3's finalizer), so the tree fills evenly.
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x85ebca6b);
+  hash ^= hash >>> 13;
+  hash = Math.imul(hash, 0xc2b2ae35);
+  hash ^= hash >>> 16;
+  return (hash >>> 0).toString(16).padStart(8, "0");
 };
 
 /** The child of a split node that lists an instance: one more hex digit of its hash. */
