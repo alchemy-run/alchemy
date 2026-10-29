@@ -11,6 +11,7 @@ import { createHostRuntimeContext, type HostRuntimeContext } from "alchemy/Runti
 import { createInternalTags, createTagsList, hasTags } from "alchemy/Tags";
 import { sha256 } from "alchemy/Util/sha256";
 import { zipCode } from "alchemy/Util/zip";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type * as rolldown from "rolldown";
@@ -18,6 +19,16 @@ import { Assets } from "../Assets.ts";
 import { roleHostBundle } from "../AWSBindings.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
+
+export class EC2HostedInvalidProps extends Data.TaggedError("EC2HostedInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class EC2HostedConflict extends Data.TaggedError("EC2HostedConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Binding contract accepted by EC2-hosted runtimes: environment variables and
@@ -187,9 +198,9 @@ export const createEc2HostedSupport = ({
 
   const bundleProgram = Effect.fn(function* (id: string, props: Ec2HostedProps) {
     if (!props.main) {
-      return yield* Effect.fail(
-        new Error(`${resourceType} '${id}' requires 'main' when bundling a hosted process`),
-      );
+      return yield* new EC2HostedInvalidProps({
+        message: `${resourceType} '${id}' requires 'main' when bundling a hosted process`,
+      });
     }
 
     const handler = props.handler ?? "default";
@@ -430,7 +441,10 @@ systemctl enable --now ${unitName}.service
           iam.getRole({ RoleName: roleName }).pipe(
             Effect.filterOrFail(
               (existing) => hasTags(tags, existing.Role?.Tags),
-              () => new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
+              () =>
+                new EC2HostedConflict({
+                  message: `Role '${roleName}' already exists and is not managed by alchemy`,
+                }),
             ),
           ),
         ),
@@ -592,11 +606,9 @@ systemctl enable --now ${unitName}.service
     }
 
     if (news.instanceProfileName && (news.roleManagedPolicyArns?.length ?? 0) > 0) {
-      return yield* Effect.fail(
-        new Error(
-          `${resourceType} does not support roleManagedPolicyArns with a custom instanceProfileName in host mode`,
-        ),
-      );
+      return yield* new EC2HostedInvalidProps({
+        message: `${resourceType} does not support roleManagedPolicyArns with a custom instanceProfileName in host mode`,
+      });
     }
 
     const { region } = yield* AWSEnvironment.current;
@@ -635,11 +647,9 @@ systemctl enable --now ${unitName}.service
       });
       const role = profile.InstanceProfile.Roles?.[0];
       if (!role?.RoleName) {
-        return yield* Effect.fail(
-          new Error(
-            `Instance profile '${news.instanceProfileName}' must have a role attached for host mode`,
-          ),
-        );
+        return yield* new EC2HostedInvalidProps({
+          message: `Instance profile '${news.instanceProfileName}' must have a role attached for host mode`,
+        });
       }
       roleName = role.RoleName;
       roleArn = role.Arn;

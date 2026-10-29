@@ -127,7 +127,7 @@ export const AgentsFlowsTransitionRouteGroup = Resource<AgentsFlowsTransitionRou
 export class AgentsFlowsTransitionRouteGroupNotResolved extends Data.TaggedError(
   "GCP.Dialogflow.AgentsFlowsTransitionRouteGroupNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const routesOf = (
@@ -173,10 +173,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dialogflow
         .getProjectsLocationsAgentsFlowsTransitionRouteGroups({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, flow: string, hinted?: string) =>
   Effect.gen(function* () {
@@ -280,7 +280,7 @@ export const AgentsFlowsTransitionRouteGroupProvider = () =>
 
       if (current === undefined) {
         return yield* new AgentsFlowsTransitionRouteGroupNotResolved({
-          name:
+          resourceName:
             output?.name ??
             `${flow}/transitionRouteGroups/${news.transitionRouteGroupId ?? "unknown"}`,
         });

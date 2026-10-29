@@ -193,7 +193,7 @@ export const CatalogsCatalogItem = Resource<CatalogsCatalogItem>(
 export class CatalogsCatalogItemNotResolved extends Data.TaggedError(
   "GCP.RecommendationEngine.CatalogsCatalogItemNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (item: CatalogItem, project: string, nameHint?: string) => {
@@ -323,7 +323,7 @@ export const CatalogsCatalogItemProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CatalogsCatalogItemNotResolved({ name });
+        return yield* new CatalogsCatalogItemNotResolved({ resourceName: name });
       }
 
       const title = news.title ?? catalogItemId;

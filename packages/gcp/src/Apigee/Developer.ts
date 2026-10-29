@@ -137,7 +137,7 @@ export type Developer = Resource<
 export const Developer = Resource<Developer>("GCP.Apigee.Developer");
 
 export class DeveloperNotResolved extends Data.TaggedError("GCP.Apigee.DeveloperNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, email: string) =>
@@ -179,7 +179,7 @@ const toAttrs = (developer: apigee.GoogleCloudApigeeV1Developer, organization: s
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDevelopers({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const DeveloperProvider = () =>
   Provider.succeed(Developer, {
@@ -277,7 +277,7 @@ export const DeveloperProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DeveloperNotResolved({ name });
+        return yield* new DeveloperNotResolved({ resourceName: name });
       }
 
       const observed = {

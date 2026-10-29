@@ -1,10 +1,10 @@
 import * as Docker from "@alchemy.run/docker";
 import { healthcheckCommand, isHealthcheckDisabled } from "@alchemy.run/docker/HealthcheckCommand";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Action } from "alchemy/Action";
 import * as Provider from "alchemy/Provider";
 import { inMemoryState, isResourceState, State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";

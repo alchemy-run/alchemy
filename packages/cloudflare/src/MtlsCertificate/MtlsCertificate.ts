@@ -242,7 +242,7 @@ export const MtlsCertificateProvider = () =>
           })
           .pipe(
             Effect.map((cert) => toAttributes(cert, acct)),
-            Effect.catchTag("CertificateNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("CertificateNotFound", () => Effect.undefined),
           );
       }
       // Cold read — recover by listing and matching on the deterministic
@@ -286,7 +286,7 @@ export const MtlsCertificateProvider = () =>
               accountId,
               mtlsCertificateId: output.mtlsCertificateId,
             })
-            .pipe(Effect.catchTag("CertificateNotFound", () => Effect.succeed(undefined)))
+            .pipe(Effect.catchTag("CertificateNotFound", () => Effect.undefined))
         : yield* findByName(accountId, name, news.certificates);
 
       // Ensure — upload if missing. Cloudflare rejects uploading a

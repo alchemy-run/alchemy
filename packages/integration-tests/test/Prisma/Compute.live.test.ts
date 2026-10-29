@@ -1,7 +1,7 @@
 import * as Prisma from "@alchemy.run/prisma";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { getProject, getService } from "@distilled.cloud/prisma/management";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";

@@ -116,7 +116,7 @@ export const renderHelmChart = Effect.fn(function* (options: RenderHelmChartOpti
         detached: false,
         extendEnv: true,
       }).pipe(
-        spawner.spawn,
+        (command) => spawner.spawn(command),
         Effect.flatMap((child) =>
           Effect.all(
             {

@@ -186,6 +186,39 @@ covers the three declaration forms, and
 [Schemaless RPC](/apis/schemaless) the calling convention.
 :::
 
+## Call a Worker in another stack
+
+When `Greeter` is deployed by another stack, reference it with
+`Worker.ref`. Pass the `Greeter` class rather than its logical id so the
+reference keeps its RPC shape:
+
+```typescript
+// src/Api.ts
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Greeter } from "./Greeter.ts";
+
+export default Cloudflare.Worker(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const greeter = yield* Cloudflare.Workers.bindWorker(
+      Cloudflare.Worker.ref(Greeter, { stack: "Greeter" }),
+    );
+
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text(yield* greeter.greet("world"));
+      }),
+    };
+  }),
+);
+```
+
+`Worker.ref(Greeter, ...)` only reads `Greeter`'s logical id. This stack
+does not deploy `Greeter`; it binds to the one the `Greeter` stack owns.
+
 ## Call the Worker's own RPC methods
 
 A Worker can bind itself. Declare the class first so its implementation

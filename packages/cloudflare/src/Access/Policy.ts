@@ -4,11 +4,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { stripNullFields } from "alchemy/Util/data";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class PolicyUnexpectedResponse extends Data.TaggedError("PolicyUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * One arm of a Cloudflare Access policy rule discriminated union. A rule is a
@@ -407,7 +413,9 @@ export const PolicyProvider = () =>
       }
 
       if (!ensured.id) {
-        return yield* Effect.fail(new Error("Policy: ensured policy missing id"));
+        return yield* new PolicyUnexpectedResponse({
+          message: "Policy: ensured policy missing id",
+        });
       }
       return {
         policyId: ensured.id,
@@ -559,7 +567,7 @@ type ObservedPolicy = {
 type RawPolicy = {
   id?: string | null;
   name?: string | null;
-  decision?: PolicyDecision | null | string;
+  decision?: string | null;
   createdAt?: string | null;
   updatedAt?: string | null;
 } & { [K in (typeof PRESERVED_FIELDS)[number]]?: unknown };

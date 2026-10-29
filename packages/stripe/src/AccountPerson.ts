@@ -270,9 +270,7 @@ const isSkippedListError = (error: StripeOpError): boolean =>
   isMissing(error) || error._tag === "InvalidRequestError" || error._tag === "Forbidden";
 
 const getById = (account: string, person: string) =>
-  GetAccountPerson({ account, person }).pipe(
-    Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
-  );
+  GetAccountPerson({ account, person }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
 
 const listPersons = Effect.fn(function* (account: string) {
   const people: StripePerson[] = [];
@@ -282,7 +280,7 @@ const listPersons = Effect.fn(function* (account: string) {
       account,
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
-    }).pipe(Effect.catchIf(isSkippedListError, () => Effect.succeed(undefined)));
+    }).pipe(Effect.catchIf(isSkippedListError, () => Effect.undefined));
     if (response === undefined) {
       break;
     }

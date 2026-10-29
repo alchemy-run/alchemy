@@ -1,10 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import { TargetGroup } from "@alchemy.run/aws/ELBv2";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { getDefaultVpc } from "../DefaultVpc.ts";
 
@@ -109,6 +109,8 @@ test.provider(
             protocol: "HTTP",
             targetType: "ip",
             attributes,
+            healthCheckPath: "/health",
+            tags: { team: "declared" },
           });
         }),
       );
@@ -128,11 +130,18 @@ test.provider(
           { Key: "slow_start.duration_seconds", Value: "60" },
         ],
       });
+      // #2688: the declared health check and the tags drift too.
+      yield* elbv2.modifyTargetGroup({ TargetGroupArn: arn, HealthCheckPath: "/oob" });
+      yield* elbv2.addTags({ ResourceArns: [arn], Tags: [{ Key: "team", Value: "out-of-band" }] });
 
       const drifted = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
       expect(drifted.resources.DriftTargetGroup).toMatchObject({
         action: "drifted",
-        attr: { attributes: { ...attributes, "stickiness.enabled": "false" } },
+        attr: {
+          attributes: { ...attributes, "stickiness.enabled": "false" },
+          healthCheck: { HealthCheckPath: "/oob" },
+          tags: { team: "out-of-band" },
+        },
       });
 
       const repaired = yield* Drift.repair(target).pipe(Effect.provide(stack.state));
@@ -144,6 +153,8 @@ test.provider(
       expect(live).toMatchObject(attributes);
       // Undeclared attributes are not alchemy's to reset.
       expect(live["slow_start.duration_seconds"]).toBe("60");
+      const [group] = (yield* elbv2.describeTargetGroups({ TargetGroupArns: [arn] })).TargetGroups!;
+      expect(group?.HealthCheckPath).toBe("/health");
 
       const settled = yield* Drift.detect(target).pipe(Effect.provide(stack.state));
       expect(settled.resources.DriftTargetGroup?.action).toBe("unchanged");

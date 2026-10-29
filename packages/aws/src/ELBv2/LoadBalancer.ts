@@ -18,6 +18,7 @@ import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { attributeDelta, observedAttributes } from "./common.ts";
+import { readElbTags } from "./internal.ts";
 
 export type LoadBalancerName = string;
 export type LoadBalancerArn =
@@ -224,9 +225,7 @@ export const LoadBalancerProvider = () =>
             .describeLoadBalancers({
               LoadBalancerArns: [output.loadBalancerArn],
             })
-            .pipe(
-              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
-            );
+            .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
           const loadBalancer = described?.LoadBalancers?.[0];
           if (!loadBalancer?.LoadBalancerArn) {
             return undefined;
@@ -237,8 +236,15 @@ export const LoadBalancerProvider = () =>
           if (attributes === null) {
             return undefined;
           }
+          const tags = yield* readElbTags(output.loadBalancerArn).pipe(
+            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined),
+          );
+          if (tags === undefined) {
+            return undefined;
+          }
           return {
             ...output,
+            tags,
             dnsName: loadBalancer.DNSName!,
             canonicalHostedZoneId: loadBalancer.CanonicalHostedZoneId!,
             vpcId: loadBalancer.VpcId!,
@@ -327,9 +333,7 @@ export const LoadBalancerProvider = () =>
             .describeLoadBalancers({
               Names: [name],
             })
-            .pipe(
-              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
-            );
+            .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
           let loadBalancer = described?.LoadBalancers?.[0];
 
           const subnetMappings = news.subnetMappings?.map((m) => ({
@@ -456,9 +460,8 @@ export const LoadBalancerProvider = () =>
           const final =
             (yield* elbv2
               .describeLoadBalancers({ LoadBalancerArns: [loadBalancerArn] })
-              .pipe(
-                Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
-              ))?.LoadBalancers?.[0] ?? loadBalancer;
+              .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined)))
+              ?.LoadBalancers?.[0] ?? loadBalancer;
 
           yield* session.note(loadBalancerArn);
           return {

@@ -179,26 +179,26 @@ export type Connector = Resource<
 export const Connector = Resource<Connector>("GCP.VpcAccess.Connector");
 
 export class ConnectorNotResolved extends Data.TaggedError("GCP.VpcAccess.ConnectorNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ConnectorRangeMissing extends Data.TaggedError("GCP.VpcAccess.ConnectorRangeMissing")<{
-  name: string;
+  resourceName: string;
   message: string;
 }> {}
 
 export class ConnectorFailed extends Data.TaggedError("GCP.VpcAccess.ConnectorFailed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class ConnectorNotReady extends Data.TaggedError("GCP.VpcAccess.ConnectorNotReady")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class ConnectorStillExists extends Data.TaggedError("GCP.VpcAccess.ConnectorStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -297,7 +297,7 @@ const toAttrs = (connector: vpcaccess.Connector, project: string, region: string
 const getByName = (name: string) =>
   vpcaccess
     .getProjectsLocationsConnectors({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 // Connector create/delete takes 2-5 minutes.
 const waitForOperation = (operation: vpcaccess.Operation) =>
@@ -316,15 +316,15 @@ const waitUntilReady = (name: string) => {
   > = getByName(name).pipe(
     Effect.filterOrFail(
       (connector): connector is vpcaccess.Connector => connector !== undefined,
-      () => new ConnectorNotResolved({ name }),
+      () => new ConnectorNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (connector) => connector.state !== "ERROR",
-      (connector) => new ConnectorFailed({ name, state: connector.state }),
+      (connector) => new ConnectorFailed({ resourceName: name, state: connector.state }),
     ),
     Effect.filterOrFail(
       (connector) => connector.state === "READY" || connector.state === undefined,
-      (connector) => new ConnectorNotReady({ name, state: connector.state }),
+      (connector) => new ConnectorNotReady({ resourceName: name, state: connector.state }),
     ),
   );
   return ready.pipe(
@@ -341,7 +341,9 @@ const waitUntilReady = (name: string) => {
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((connector) =>
-      connector === undefined ? Effect.void : Effect.fail(new ConnectorStillExists({ name })),
+      connector === undefined
+        ? Effect.void
+        : Effect.fail(new ConnectorStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.VpcAccess.ConnectorStillExists",
@@ -469,7 +471,7 @@ export const ConnectorProvider = () =>
 
       if (news.subnet === undefined && news.ipCidrRange === undefined) {
         return yield* new ConnectorRangeMissing({
-          name,
+          resourceName: name,
           message:
             "VPC Access connectors require `ipCidrRange` (with optional `network`) or `subnet`.",
         });
@@ -484,7 +486,7 @@ export const ConnectorProvider = () =>
 
       if (current !== undefined && current.state === "ERROR") {
         return yield* new ConnectorFailed({
-          name,
+          resourceName: name,
           state: current.state,
         });
       }
@@ -496,13 +498,13 @@ export const ConnectorProvider = () =>
             connectorId,
             body: createBody(news),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         } else {
           const raced = yield* getByName(name);
           if (raced === undefined) {
-            return yield* new ConnectorNotResolved({ name });
+            return yield* new ConnectorNotResolved({ resourceName: name });
           }
         }
         current = yield* waitUntilReady(name);
@@ -511,7 +513,7 @@ export const ConnectorProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectorNotResolved({ name });
+        return yield* new ConnectorNotResolved({ resourceName: name });
       }
 
       const desiredMachine = news.machineType ?? DEFAULT_MACHINE_TYPE;
@@ -560,7 +562,7 @@ export const ConnectorProvider = () =>
       const operation = yield* vpcaccess
         .deleteProjectsLocationsConnectors({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

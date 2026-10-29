@@ -58,13 +58,18 @@ export const TransferApprovalDeadlineLive = TransferApprovalDeadline.toLayer(
     const transfers = yield* Transfer;
     return Effect.fn(function* ({ source, event }) {
       if (!event.needsApproval) return;
-      yield* transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW });
+      yield* transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW }).pipe(
+        // A redelivery after the window closed: the expiry already ran.
+        Effect.catchTag("AlreadyExecuted", () => Effect.void),
+      );
     });
   }),
 );
 ```
 
 The schedule is durable: it fires even if everything restarted in between. Scheduling again with the same command id replaces the earlier one.
+
+A scheduled command takes its command id like any other command, so it runs once. Scheduling an id the transfer already handled fails with `AlreadyExecuted`, because that command would never run again. Here it means the policy ran a second time for the same event, after the expiry fired, so there's nothing to do.
 
 ## Let the aggregate decide the race
 
@@ -107,6 +112,33 @@ ExpireTransfer: (s, _, { id }) =>
 
 So an approved transfer ignores its expiry, and an expired transfer rejects a late approval with `NotAwaitingApproval`.
 
+## Cancel it
+
+When the deadline no longer applies, cancel it. Schedule the command with a command id you can name again, and unschedule it by that id:
+
+```typescript
+// when the waiting starts
+yield* transfers.schedule(source, new ExpireTransfer(), {
+  after: APPROVAL_WINDOW,
+  commandId: `expire:${source.id}`,
+});
+
+// when the transfer is approved
+yield* transfers.unschedule(source, `expire:${source.id}`);
+```
+
+`schedule` returns a `ScheduleReceipt` with the command id and when the command is due (`at`), so code that schedules without its own id can still cancel by `receipt.commandId`.
+
+Unscheduling is durable, like scheduling. Once it succeeds, the command never fires, even when a story's clock passes its time. When there was nothing to cancel, it fails and says why: `AlreadyExecuted` when the command already ran, `AlreadyCancelled` when it was cancelled before, and `NotScheduled` when nothing was scheduled with that id.
+
+A policy cancels after the approval is recorded, so the expiry can still arrive in between. Keep the guard in `decide` for that case. A policy can also run again for the same event, and then finds the expiry already cancelled:
+
+```typescript
+yield* transfers.unschedule(source, `expire:${source.id}`).pipe(
+  Effect.catchTag(["AlreadyExecuted", "AlreadyCancelled"], () => Effect.void),
+);
+```
+
 ## Test it with the clock
 
 A story has its own clock. `Story.clock` moves it, and any scheduled command that's now due fires.
@@ -127,5 +159,5 @@ Story.rejected(new NotAwaitingApproval()),
 `Story.then(transfer)` with no events checks that nothing new was recorded.
 
 :::note
-Scheduling is covered in [Command](/domain/command#schedule-it). A [saga](/domain/saga) waits for the decision.
+Scheduling is covered in [Command](/domain/command#send-it-later). A [saga](/domain/saga) waits for the decision.
 :::

@@ -169,7 +169,7 @@ export const HostProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* codeconnections
           .getHost({ HostArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response === undefined
           ? undefined
           : ({ ...response, HostArn: arn } satisfies codeconnections.Host);

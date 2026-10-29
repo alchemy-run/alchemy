@@ -214,7 +214,7 @@ const toAttrs = (bucketName: string, key: string, object: storage.Storage_Object
 const observe = (bucketName: string, key: string) =>
   storage
     .getObjects({ bucket: bucketName, object: key })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const sameMetadata = (observed: Record<string, string>, desired: Record<string, string>) =>
   globalThis.Object.entries(desired).every(([key, value]) => observed[key] === value);

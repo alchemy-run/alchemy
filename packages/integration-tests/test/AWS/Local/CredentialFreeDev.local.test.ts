@@ -1,4 +1,3 @@
-import { spawnSync } from "node:child_process";
 import * as AWS from "@alchemy.run/aws";
 import * as EC2 from "@alchemy.run/aws/EC2";
 import * as Endpoint from "@alchemy.run/aws/Endpoint";
@@ -7,6 +6,8 @@ import * as Region from "@alchemy.run/aws/Region";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { Queue } from "@alchemy.run/aws/SQS";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import type { RegionName } from "@distilled.cloud/aws/Region";
@@ -43,8 +44,6 @@ import * as Alchemy from "alchemy";
  */
 import { CredentialsRequired } from "alchemy/Auth/Demand";
 import { ProfileStore, type ProfileStoreService } from "alchemy/Auth/Profile";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/http/HttpBody";
@@ -62,17 +61,6 @@ const FLOCI_ENDPOINT = "http://localhost:4566";
  * configured a profile" starting state.
  */
 const NO_CREDS_PROFILE = "credfree-dev-test-does-not-exist";
-
-// skipIf gate: floci runs as a Docker container. `docker info` proves the
-// daemon is reachable. Sync probe at collection time — skipIf needs a
-// plain boolean.
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
 
 /**
  * Config keys that could leak ambient AWS credentials (or redirect the
@@ -150,7 +138,7 @@ const rawAwsJson = Effect.fn(function* (options: {
  * synthesized local environment (dummy account, emulator endpoint) instead
  * of prompting or dying.
  */
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "dev deploy with zero AWS credentials lands in the local emulator",
   (stack) =>
     Effect.gen(function* () {
@@ -249,7 +237,7 @@ const NetworkStack = Alchemy.Stack(
  * credentials, evaluating `EC2.Network` live fails; destroy plans from state
  * alone and deletes every row through the local provider its mode records.
  */
-test.skipIf(!dockerAvailable)(
+test(
   "destroy of a dev stage needs no AWS credentials",
   Effect.gen(function* () {
     yield* destroy(NetworkStack);

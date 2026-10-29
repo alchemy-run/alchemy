@@ -5,10 +5,21 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 import { readDaxTags, sameStringSet } from "./internal.ts";
+
+export class DAXClusterNotReady extends Data.TaggedError("DAXClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DAXClusterUnexpectedResponse extends Data.TaggedError("DAXClusterUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ClusterProps {
   /**
@@ -215,7 +226,7 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (name: string) {
         const response = yield* dax
           .describeClusters({ ClusterNames: [name] })
-          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.undefined));
         return response?.Clusters?.[0];
       });
 
@@ -226,11 +237,15 @@ export const ClusterProvider = () =>
         return yield* readCluster(name).pipe(
           Effect.flatMap((cluster) => {
             if (!cluster?.ClusterArn) {
-              return Effect.fail(new Error(`DAX cluster '${name}' not found`));
+              return Effect.fail(
+                new DAXClusterNotReady({ message: `DAX cluster '${name}' not found` }),
+              );
             }
             if (cluster.Status !== "available") {
               return Effect.fail(
-                new Error(`DAX cluster '${name}' not available (status: ${cluster.Status})`),
+                new DAXClusterNotReady({
+                  message: `DAX cluster '${name}' not available (status: ${cluster.Status})`,
+                }),
               );
             }
             return Effect.succeed(cluster);
@@ -251,7 +266,9 @@ export const ClusterProvider = () =>
               cluster.Status !== "deleting"
             ) {
               return Effect.fail(
-                new Error(`DAX cluster '${name}' still settling (status: ${cluster.Status})`),
+                new DAXClusterNotReady({
+                  message: `DAX cluster '${name}' still settling (status: ${cluster.Status})`,
+                }),
               );
             }
             return Effect.succeed(cluster);
@@ -262,9 +279,9 @@ export const ClusterProvider = () =>
 
       const toAttrs = Effect.fn(function* (cluster: dax.Cluster) {
         if (!cluster.ClusterName || !cluster.ClusterArn) {
-          return yield* Effect.fail(
-            new Error(`DAX cluster '${cluster.ClusterName}' is missing its ARN`),
-          );
+          return yield* new DAXClusterUnexpectedResponse({
+            message: `DAX cluster '${cluster.ClusterName}' is missing its ARN`,
+          });
         }
         return {
           clusterName: cluster.ClusterName,
@@ -490,7 +507,9 @@ export const ClusterProvider = () =>
               cluster === undefined
                 ? Effect.void
                 : Effect.fail(
-                    new Error(`DAX cluster '${name}' still deleting (status: ${cluster.Status})`),
+                    new DAXClusterNotReady({
+                      message: `DAX cluster '${name}' still deleting (status: ${cluster.Status})`,
+                    }),
                   ),
             ),
             Effect.retry({

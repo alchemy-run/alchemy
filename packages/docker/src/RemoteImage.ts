@@ -140,7 +140,7 @@ export const RemoteImageProvider = () =>
       const inspectImage = (ref: string, context: string | undefined) =>
         docker.image
           .inspect(ref, context)
-          .pipe(Effect.catchIf(isMissingImageError, () => Effect.succeed(undefined)));
+          .pipe(Effect.catchIf(isMissingImageError, () => Effect.undefined));
 
       return RemoteImage.Provider.of({
         list: () => Effect.succeed([]),

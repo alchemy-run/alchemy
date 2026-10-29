@@ -90,7 +90,7 @@ const startPlanningSession = Effect.fn(function* (
   // renderer's "(1.8s)" suffix.
   const settled = (message: string | undefined) =>
     message === undefined
-      ? Effect.succeed(undefined)
+      ? Effect.undefined
       : Clock.currentTimeMillis.pipe(
           Effect.map((now) => `${message} (${formatElapsed(now - startedAt)})`),
         );

@@ -489,7 +489,7 @@ const listFiles = (
           const rel = relative === "" ? entry : `${relative}/${entry}`;
           const stat = yield* fs
             .stat(path.join(cwd, rel))
-            .pipe(Effect.catchTag("PlatformError", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("PlatformError", () => Effect.undefined));
           if (stat === undefined) continue;
           if (stat.type === "Directory") {
             if (
@@ -641,7 +641,7 @@ const MAX_ASSET_COUNT = 20_000;
 
 const maybeReadString = (file: string): Effect.Effect<string | undefined, never, SourceServices> =>
   Effect.flatMap(FileSystem.FileSystem, (fs) =>
-    fs.readFileString(file).pipe(Effect.catchTag("PlatformError", () => Effect.succeed(undefined))),
+    fs.readFileString(file).pipe(Effect.catchTag("PlatformError", () => Effect.undefined)),
   );
 
 const readClientAssets = (
@@ -879,7 +879,7 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
                   path.resolve(rootDir, output.clientDirectory),
                   assetConfigFromProps(ctx.assets),
                 )
-              : Effect.succeed(undefined),
+              : Effect.undefined,
             hashAstroInput(rootDir, options.memo, Effect.succeed(output.externalWorkspaces ?? [])),
           ],
           { concurrency: "unbounded" },

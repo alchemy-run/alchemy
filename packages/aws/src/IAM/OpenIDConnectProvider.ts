@@ -91,7 +91,7 @@ export const OpenIDConnectProviderProvider = () =>
           .getOpenIDConnectProvider({
             OpenIDConnectProviderArn: providerArn,
           })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         return response;
       });
 
@@ -115,7 +115,7 @@ export const OpenIDConnectProviderProvider = () =>
           // A peer test may delete a provider between
           // `listOpenIDConnectProviders` and hydrating its tags — skip the
           // vanished entry rather than failing the whole enumeration.
-          Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
         );
 
       return {

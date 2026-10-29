@@ -21,15 +21,15 @@ export const DEFAULT_NETWORK = "default";
 export const DEFAULT_SUBNETWORK = "default";
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.Workstations.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError("GCP.Workstations.ResourceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceNotReady extends Data.TaggedError("GCP.Workstations.ResourceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -212,7 +212,7 @@ export const waitUntilExists = <A, E extends object, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value != null,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceNotResolved,
@@ -228,7 +228,7 @@ export const waitUntilGone = <A, E extends object, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceStillExists,

@@ -8,12 +8,14 @@ import type * as Headers from "effect/http/Headers";
 import * as Option from "effect/Option";
 import type * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
+import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Runtime from "effect/Runtime";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type * as Scope from "effect/Scope";
 import type { Entry } from "./Api.ts";
-import { describe, type Operation } from "./ApiCatalog.ts";
+import { DefinitionError } from "./internal.ts";
+import { nameOf, readRpcs, type ReadRpcs } from "./ReadRpcs.ts";
 
 /**
  * A command line for an Api: one subcommand per entry, run as a client of the
@@ -43,7 +45,7 @@ export type ClientServices<A extends Cliable> =
 export class CallRejected extends Data.TaggedError("CallRejected")<{
   /** The RPC that rejected the call (`Deposit`, `Balance.get`). */
   readonly rpc: string;
-  /** The failure as wire JSON: what the Api's catalog describes as `error`. */
+  /** The failure as wire JSON, as the Api's RPC server encodes it. */
   readonly error: unknown;
 }> {
   override readonly [Runtime.errorReported] = false;
@@ -65,6 +67,38 @@ export interface Options<E = never, R = never> {
 
 /** The errors a command of the CLI fails with. */
 export type Failure<E = never> = CallRejected | CliError.UserError | E;
+
+// ---------------------------------------------------------------- calls of an Api
+
+/** One call an Api serves. */
+interface Operation {
+  readonly entry: Entry;
+  /** A command's tag, or a view's, stream's or aggregate's name. */
+  readonly name: string;
+  /** `send` for a command; the read's client method otherwise (`get`, `peek`, `list`, ...). */
+  readonly operation: string;
+  /** The RPC the server answers, with middleware applied to the whole Api. */
+  readonly rpc: Rpc.AnyWithProps;
+  readonly stream: boolean;
+}
+
+/** Every call an Api serves, in the order it lists its entries. */
+const operationsOf = (api: Cliable): ReadonlyArray<Operation> =>
+  api.entries.flatMap((entry): ReadonlyArray<Operation> => {
+    const served = (rpc: Rpc.Any) => (api.group.requests.get(rpc._tag) ?? rpc) as Rpc.AnyWithProps;
+    if (entry.kind === "Command") {
+      return [{ entry, name: entry.tag, operation: "send", rpc: served(entry.rpc), stream: false }];
+    }
+    const name = nameOf(entry);
+    return Object.entries(readRpcs(entry)).flatMap(([call, read]) => {
+      if (read === undefined) return [];
+      const rpc = served(read);
+      // A stream's `get` RPC is its client's `peek`.
+      const operation =
+        (call as keyof ReadRpcs) === "get" && entry.kind === "Stream" ? "peek" : call;
+      return [{ entry, name, operation, rpc, stream: RpcSchema.isStreamSchema(rpc.successSchema) }];
+    });
+  });
 
 // ---------------------------------------------------------------- naming
 
@@ -93,8 +127,10 @@ type FieldKind =
   | { readonly _tag: "json" };
 
 interface Field {
-  /** The payload field (`commandId`). */
+  /** The payload field (`commandId`), or the field of a command's `input` (`amount`). */
   readonly name: string;
+  /** `input` for a field of a command's input, which the wire nests under `input`. */
+  readonly within?: "input";
   /** Its flag (`command-id`). */
   readonly flag: string;
   readonly kind: FieldKind;
@@ -131,29 +167,58 @@ const descriptionOfField = (ast: SchemaAST.AST): string | undefined =>
     .map((member) => SchemaAST.resolveDescription(member))
     .find((description) => description !== undefined);
 
-/** The fields of a call's payload, as the wire carries them (the encoded side). */
-const fieldsOf = (where: string, payload: Schema.Top): ReadonlyArray<Field> => {
+/**
+ * The fields of a call's payload, as the wire carries them (the encoded
+ * side). A command's `input` is flattened into flags of its own fields
+ * (`--amount`), next to `--target` and `--command-id`. A field whose flag
+ * the CLI reserves, or that another field takes, is a definition problem.
+ */
+const fieldsOf = (
+  where: string,
+  payload: Schema.Top,
+  command: boolean,
+  problems: Array<DefinitionError>,
+): ReadonlyArray<Field> => {
   const ast = SchemaAST.toEncoded(payload.ast);
   if (!SchemaAST.isObjects(ast)) return [];
   const flags = new Map<string, string>();
-  return ast.propertySignatures.map((property) => {
+  const fieldOf = (property: SchemaAST.PropertySignature, within?: "input"): Array<Field> => {
     const name = String(property.name);
     const flag = kebab(name);
     const taken = flags.get(flag);
     if (RESERVED.has(flag) || taken !== undefined) {
-      throw new Error(
-        `${where}: field \`${name}\` would be the flag --${flag}, ` +
-          (taken === undefined ? "which the CLI reserves" : `as is field \`${taken}\``),
+      problems.push(
+        new DefinitionError(
+          `${where}: field \`${name}\` would be the flag --${flag}, ` +
+            (taken === undefined ? "which the CLI reserves" : `as is field \`${taken}\``),
+        ),
       );
+      return [];
     }
     flags.set(flag, name);
-    return {
+    const field = {
       name,
       flag,
       kind: kindOf(property.type),
       required: !SchemaAST.isOptional(property.type),
       description: descriptionOfField(property.type),
     };
+    return [within === undefined ? field : { ...field, within }];
+  };
+  const outer = new Set(ast.propertySignatures.map((property) => kebab(String(property.name))));
+  return ast.propertySignatures.flatMap((property) => {
+    const input = command && property.name === "input" ? property.type : undefined;
+    // An input field named like `target` keeps the whole input as `--input`'s JSON.
+    const flat =
+      input !== undefined &&
+      SchemaAST.isObjects(input) &&
+      input.propertySignatures.every((field) => {
+        const flag = kebab(String(field.name));
+        return flag === "input" || !outer.has(flag);
+      });
+    return flat
+      ? (input as SchemaAST.Objects).propertySignatures.flatMap((field) => fieldOf(field, "input"))
+      : fieldOf(property);
   });
 };
 
@@ -186,7 +251,7 @@ const flagOf = (field: Field): Flag.Flag<Option.Option<unknown>> => {
 
 const JsonFlag = Flag.String("json").pipe(
   Flag.withMetavar("json"),
-  Flag.withDescription("The whole input as a JSON object. Flags override its fields."),
+  Flag.withDescription("The flags as one JSON object. Flags given as well override its fields."),
   Flag.optional,
 );
 
@@ -209,8 +274,10 @@ const messageOf = (error: unknown): string => {
       reason?: { message?: unknown; cause?: unknown };
       cause?: unknown;
     };
-    const own = [reason?.message, message].find((m) => typeof m === "string" && m.trim() !== "");
-    if (own !== undefined && !/^\w+: ?$/.test(String(own))) return String(own);
+    const own = [reason?.message, message].find(
+      (m): m is string => typeof m === "string" && m.trim() !== "",
+    );
+    if (own !== undefined && !/^\w+: ?$/.test(own)) return own;
     at = reason?.cause ?? cause;
   }
   return String(error);
@@ -226,12 +293,15 @@ const invoke = (
   payload: Record<string, unknown>,
   headers: Headers.Input | undefined,
 ): Effect.Effect<unknown, unknown> => {
-  const entry = (client as Record<string, unknown>)[op.entry];
-  if (op.kind === "Command") {
-    return (entry as (payload: unknown, options: unknown) => Effect.Effect<unknown, unknown>)(
-      payload,
-      { headers },
-    );
+  const entry = (client as Record<string, unknown>)[op.name];
+  if (op.operation === "send") {
+    const { target, input, commandId } = payload;
+    const send = entry as (
+      target: unknown,
+      input: unknown,
+      options: unknown,
+    ) => Effect.Effect<unknown, unknown>;
+    return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
   }
   const { key, ...options } = payload;
   const read = (entry as Record<string, (key: unknown, options: unknown) => unknown>)[
@@ -248,24 +318,22 @@ const invoke = (
 const published = (op: Operation): boolean => !op.stream;
 
 /**
- * An entry's help text: the description the Api's catalog gives it, or what
+ * An entry's help text: a command's Schema `description` annotation, or what
  * it is (`Send the Deposit command.`, `Read the Balance view.`). Once
  * entries declare `description`, this reads it with `descriptionOf(entry)`.
  */
-const descriptionOf = (operations: ReadonlyArray<Operation>): string => {
-  const [first] = operations as [Operation];
-  const described = operations.find((op) => op.description !== undefined)?.description;
-  if (described !== undefined) return described;
-  return first.kind === "Command"
-    ? `Send the ${first.entry} command.`
-    : `Read the ${first.entry} ${first.kind.toLowerCase()}.`;
-};
+const descriptionOf = (op: Operation): string =>
+  (op.entry.kind === "Command" ? SchemaAST.resolveDescription(op.entry.ast) : undefined) ??
+  (op.entry.kind === "Command"
+    ? `Send the ${op.name} command.`
+    : `Read the ${op.name} ${op.entry.kind.toLowerCase()}.`);
 
 /** What each read prints, for its help. */
 const READS: Record<string, string> = {
   get: "Print the key's current state.",
   peek: "Print the key's latest entry.",
   list: "Print a page of the key's entries.",
+  snapshot: "Print the key's current state and the cursor it is valid at.",
 };
 
 const commandOf = <E, R>(
@@ -273,10 +341,11 @@ const commandOf = <E, R>(
   op: Operation,
   name: string,
   options: Options<E, R>,
+  problems: Array<DefinitionError>,
 ): Command.Command<string, unknown, {}, Failure<E>, R> => {
-  // The group's RPC also carries middleware applied to the whole Api.
-  const rpc = api.group.requests.get(op.rpc)! as Rpc.AnyWithProps;
-  const fields = fieldsOf(`${api.apiName} ${op.rpc}`, rpc.payloadSchema);
+  const { rpc } = op;
+  const command = op.operation === "send";
+  const fields = fieldsOf(`${api.apiName} ${rpc._tag}`, rpc.payloadSchema, command, problems);
   const decodePayload = Schema.decodeUnknownEffect(Schema.toCodecJson(rpc.payloadSchema));
   const encodeSuccess = Schema.encodeUnknownEffect(Schema.toCodecJson(rpc.successSchema));
   // Errors decode with no services, so they encode with none.
@@ -284,58 +353,72 @@ const commandOf = <E, R>(
     (schema): schema is Schema.Codec<unknown, unknown> =>
       schema !== undefined && !SchemaAST.isNever(schema.ast),
   );
+  const inputFields = new Set(
+    fields.flatMap((field) => (field.within === undefined ? [] : [field.name])),
+  );
   const config: Record<string, Flag.Flag<Option.Option<unknown>>> = { json: JsonFlag };
-  for (const field of fields) config[field.name] = flagOf(field);
+  for (const field of fields) {
+    config[field.within === undefined ? field.name : `input.${field.name}`] = flagOf(field);
+  }
 
   /** A typed failure goes to stderr as its wire JSON; anything else did not reach the Api. */
   const failed = (error: unknown): Effect.Effect<never, CallRejected | CliError.UserError> => {
     const schema = failures.find((schema) => Schema.is(schema)(error));
     if (!schema) {
-      return Effect.fail(userError(`${op.rpc} did not reach the Api: ${messageOf(error)}`, error));
+      return Effect.fail(
+        userError(`${rpc._tag} did not reach the Api: ${messageOf(error)}`, error),
+      );
     }
     return Schema.encodeUnknownEffect(Schema.toCodecJson(schema))(error).pipe(
       Effect.orDie,
       Effect.tap((wire) => Console.error(JSON.stringify(wire, null, 2))),
-      Effect.flatMap((wire) => Effect.fail(new CallRejected({ rpc: op.rpc, error: wire }))),
+      Effect.flatMap((wire) => Effect.fail(new CallRejected({ rpc: rpc._tag, error: wire }))),
     );
   };
 
-  const handler = (parsed: Record<string, Option.Option<unknown>>) =>
-    Effect.gen(function* () {
-      const wire: Record<string, unknown> = {};
-      const json = parsed.json as Option.Option<string>;
-      if (Option.isSome(json)) {
-        const value = yield* Effect.try({
-          try: () => JSON.parse(json.value) as unknown,
-          catch: (cause) => userError(`--json is not valid JSON: ${String(cause)}`, cause),
-        });
-        if (value === null || typeof value !== "object" || Array.isArray(value)) {
-          return yield* userError("--json must be a JSON object");
-        }
-        Object.assign(wire, value);
+  const handler = Effect.fn(function* (parsed: Record<string, Option.Option<unknown>>) {
+    const wire: Record<string, unknown> = {};
+    // A command's input flags fill `input`, over what `--json` gave it.
+    const input: Record<string, unknown> = {};
+    const json = parsed.json as Option.Option<string>;
+    if (Option.isSome(json)) {
+      const value = yield* Effect.try({
+        try: () => JSON.parse(json.value) as unknown,
+        catch: (cause) => userError(`--json is not valid JSON: ${String(cause)}`, cause),
+      });
+      if (value === null || typeof value !== "object" || Array.isArray(value)) {
+        return yield* userError("--json must be a JSON object");
       }
-      for (const field of fields) {
-        const value = parsed[field.name]!;
-        if (Option.isNone(value)) continue;
-        wire[field.name] =
-          field.kind._tag === "json" ? parseValue(value.value as string) : value.value;
+      // Its fields are the flags' fields: a command's input fields go to `input`.
+      for (const [key, field] of Object.entries(value)) {
+        if (inputFields.has(key)) input[key] = field;
+        else wire[key] = field;
       }
-      const payload = yield* decodePayload(wire).pipe(
-        Effect.mapError((error) => userError(`Invalid input for ${name}: ${error.message}`, error)),
-      );
-      const headers =
-        options.headers === undefined
-          ? undefined
-          : Effect.isEffect(options.headers)
-            ? yield* options.headers
-            : options.headers;
-      const client = yield* api.client;
-      const success = yield* invoke(client, op, payload as Record<string, unknown>, headers).pipe(
-        Effect.catch(failed),
-      );
-      const out = yield* encodeSuccess(success).pipe(Effect.orDie);
-      yield* Console.log(JSON.stringify(out, null, 2));
-    }).pipe(Effect.scoped);
+    }
+    for (const field of fields) {
+      const value = parsed[field.within === undefined ? field.name : `input.${field.name}`]!;
+      if (Option.isNone(value)) continue;
+      const decoded = field.kind._tag === "json" ? parseValue(value.value as string) : value.value;
+      if (field.within === undefined) wire[field.name] = decoded;
+      else input[field.name] = decoded;
+    }
+    if (fields.some((field) => field.within !== undefined)) wire.input = input;
+    const payload = yield* decodePayload(wire).pipe(
+      Effect.mapError((error) => userError(`Invalid input for ${name}: ${error.message}`, error)),
+    );
+    const headers =
+      options.headers === undefined
+        ? undefined
+        : Effect.isEffect(options.headers)
+          ? yield* options.headers
+          : options.headers;
+    const client = yield* api.client;
+    const success = yield* invoke(client, op, payload as Record<string, unknown>, headers).pipe(
+      Effect.catch(failed),
+    );
+    const out = yield* encodeSuccess(success).pipe(Effect.orDie);
+    yield* Console.log(JSON.stringify(out, null, 2));
+  }, Effect.scoped);
 
   return Command.make(name, config, handler as never) as never;
 };
@@ -343,17 +426,20 @@ const commandOf = <E, R>(
 /**
  * An Effect CLI command for an Api: a client that calls the deployed Api over
  * its HTTP protocol, so a person or an agent in a terminal can run any
- * request/response call. The tree is read from `Domain.Api.describe`:
+ * request/response call. The tree is read from the Api's entries:
  *
  * - each entry is a subcommand named in kebab-case (`AccountSummary` →
  *   `account-summary`). A command runs as that subcommand; a view, an
  *   aggregate or a stream has one subcommand per call (`get`, `list`,
- *   `peek`). Live reads (`watch`, `events`) are left out.
+ *   `snapshot`, `peek`). Live reads (`watch`, `events`) are left out.
  * - each payload field is a flag in kebab-case (`--target`, `--command-id`,
- *   `--key`). A string, a number, a boolean or a set of string literals
+ *   `--key`), and a command's input fields are flags of their own
+ *   (`--amount`). A string, a number, a boolean or a set of string literals
  *   takes a typed flag; any other field takes its JSON (`--at-least
- *   '{"stream":"Account/a-1","version":3}'`). `--json` takes the whole input
- *   as one object, and flags override its fields.
+ *   '{"stream":"Account/a-1","version":3}'`). `--json` takes the flags as
+ *   one object (`{"target":"a-1","amount":1000}`), and flags override it.
+ * - two entries with one command name, or a field whose flag another field
+ *   or the CLI takes, fail every run with a `DefinitionError`.
  * - the input is decoded against the call's schema before anything is sent;
  *   an invalid input fails as a `CliError.UserError`.
  * - the result is printed to stdout as JSON (its wire form). A typed
@@ -397,12 +483,13 @@ export const toCli = <A extends Cliable, E = never, R = never>(
   api: A,
   options: Options<E, R> = {},
 ): Command.Command<string, unknown, {}, Failure<E>, ClientServices<A> | R> => {
-  const catalog = describe(api);
+  // A name the CLI cannot give fails every run, like the model's own definition problems.
+  const problems: Array<DefinitionError> = [];
   const byEntry = new Map<string, Array<Operation>>();
-  for (const op of catalog.operations) {
-    const ops = byEntry.get(op.entry) ?? [];
+  for (const op of operationsOf(api)) {
+    const ops = byEntry.get(op.name) ?? [];
     ops.push(op);
-    byEntry.set(op.entry, ops);
+    byEntry.set(op.name, ops);
   }
   const names = new Map<string, string>();
   const subcommands: Array<Command.Command<string, unknown, {}, Failure<E>, R>> = [];
@@ -410,33 +497,37 @@ export const toCli = <A extends Cliable, E = never, R = never>(
     const name = kebab(entry);
     const taken = names.get(name);
     if (taken !== undefined) {
-      throw new Error(
-        `${api.apiName}: entries \`${taken}\` and \`${entry}\` are both the command ${name}`,
+      problems.push(
+        new DefinitionError(
+          `${api.apiName}: entries \`${taken}\` and \`${entry}\` are both the command ${name}`,
+        ),
       );
+      continue;
     }
     names.set(name, entry);
     const ops = all.filter(published);
     if (ops.length === 0) continue;
-    const description = descriptionOf(all);
     let command: Command.Command<string, unknown, {}, Failure<E>, R>;
-    if (all[0]!.kind === "Command") {
-      command = commandOf(api, ops[0]!, name, options);
+    if (all[0]!.operation === "send") {
+      command = commandOf(api, ops[0]!, name, options, problems);
     } else {
       command = Command.make(name).pipe(
         Command.withSubcommands(
           ops.map((op) =>
-            commandOf(api, op, op.operation, options).pipe(
+            commandOf(api, op, op.operation, options, problems).pipe(
               Command.withDescription(READS[op.operation] ?? op.operation),
             ),
           ) as never,
         ),
       ) as never;
     }
-    subcommands.push(Command.withDescription(command, description));
+    subcommands.push(Command.withDescription(command, descriptionOf(all[0]!)));
   }
-  const root = Command.make(options.name ?? kebab(api.apiName)).pipe(
-    Command.withSubcommands(subcommands as never),
-  );
+  const rootName = options.name ?? kebab(api.apiName);
+  const root =
+    problems.length > 0
+      ? Command.make(rootName, {}, () => problems[0]!.pipe(Effect.die))
+      : Command.make(rootName).pipe(Command.withSubcommands(subcommands as never));
   return (
     options.description === undefined ? root : Command.withDescription(root, options.description)
   ) as never;

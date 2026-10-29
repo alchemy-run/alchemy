@@ -87,7 +87,7 @@ export const observeDefaultKeyspaceReplicas = Effect.fn(function* (
 ) {
   return yield* observeDefaultKeyspace(organization, database, branch).pipe(
     Effect.map((keyspace) => keyspace?.replicas),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 });
 

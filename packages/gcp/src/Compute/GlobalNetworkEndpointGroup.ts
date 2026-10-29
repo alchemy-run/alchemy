@@ -243,7 +243,7 @@ const endpointKey = (endpoint: {
 const getByName = (project: string, networkEndpointGroup: string) =>
   compute
     .getGlobalNetworkEndpointGroups({ project, networkEndpointGroup })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, networkEndpointGroupName: string) =>
   getByName(project, networkEndpointGroupName).pipe(
@@ -410,7 +410,7 @@ export const GlobalNetworkEndpointGroupProvider = () =>
             body: desired,
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, networkEndpointGroupName);
       }
 
@@ -466,7 +466,7 @@ export const GlobalNetworkEndpointGroupProvider = () =>
           networkEndpointGroup: output.networkEndpointGroupName,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag(["NotFound", "Conflict"], () => Effect.undefined));
       yield* waitUntilGone(project, output.networkEndpointGroupName);
     }),
   });

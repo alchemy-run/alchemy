@@ -346,7 +346,7 @@ export const BudgetActionProvider = () =>
               BudgetName: output.budgetName,
               ActionId: output.actionId,
             })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!found?.Action) return undefined;
           return attrs(accountId, output.budgetName, output.actionId);
         }),
@@ -383,7 +383,7 @@ export const BudgetActionProvider = () =>
                 })
                 .pipe(
                   Effect.map((r) => r.Action),
-                  Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("NotFoundException", () => Effect.undefined),
                 )
             : undefined;
 

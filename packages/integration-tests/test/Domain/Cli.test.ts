@@ -2,6 +2,7 @@ import * as Domain from "@alchemy.run/domain";
 import { CallRejected, toCli } from "@alchemy.run/domain/Cli";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Cause from "effect/Cause";
 import * as Command from "effect/cli/Command";
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
@@ -285,6 +286,14 @@ describe("Domain toCli", () => {
         ]);
         expect(deposit.code).toBe(0);
         expect(json(deposit.stdout)).toMatchObject({ reply: { balance: 9 } });
+        // `--json` alone carries the input fields, as the flags do.
+        const fromJson = yield* run(asSam, [
+          "deposit",
+          "--json",
+          JSON.stringify({ target: "w-4", amount: 4, note: "from json" }),
+        ]);
+        expect(fromJson.code).toBe(0);
+        expect(json(fromJson.stdout)).toMatchObject({ reply: { balance: 4 } });
         const bad = yield* run(asSam, ["deposit", "--json", "{not json"]);
         expect(bad.code).toBe(1);
         expect(bad.stderr).toContain("--json");
@@ -322,6 +331,9 @@ describe("Domain toCli", () => {
         const balance = yield* run(asSam, ["balance", "--help"]);
         expect(balance.stdout).toMatch(/^\s+get\s+Print the key's current state\.$/m);
         expect(balance.stdout).toMatch(/^\s+list\s+Print a page of the key's entries\.$/m);
+        expect(balance.stdout).toMatch(
+          /^\s+snapshot\s+Print the key's current state and the cursor it is valid at\.$/m,
+        );
         // Live reads are streams: not commands of the CLI.
         expect(balance.stdout).not.toMatch(/\bwatch\b/);
         expect(balance.stdout).not.toMatch(/\bevents\b/);
@@ -337,20 +349,57 @@ describe("Domain toCli", () => {
     ),
   );
 
-  it("refuses an Api whose names clash on the command line", () => {
-    class Clash extends Domain.Command("deposit", {
-      target: WalletId,
-      events: [Deposited],
-    }) {}
-    class ClashApi extends Domain.Api("ClashApi", Deposit, Clash) {}
-    expect(() => toCli(ClashApi, { name: "clash" })).toThrow(/deposit/);
-    class Reserved extends Domain.Command("Reserved", {
-      target: WalletId,
-      input: { json: Schema.String },
-    }) {}
-    class ReservedApi extends Domain.Api("ReservedApi", Reserved) {}
-    expect(() => toCli(ReservedApi, { name: "reserved" })).toThrow(/--json/);
-  });
+  it.live("a command whose input names a field target takes its input as --input JSON", () =>
+    hosted(
+      Effect.gen(function* () {
+        class Rename extends Domain.Command("Rename", {
+          target: WalletId,
+          // `target` here is the input's own field, not the wallet.
+          input: { target: Schema.String },
+        }) {}
+        class RenameApi extends Domain.Api("RenameApi", Rename) {}
+        const run = yield* cliOver;
+        const help = yield* run(toCli(RenameApi, { name: "rename" }) as typeof asSam, [
+          "rename",
+          "--help",
+        ]);
+        expect(help.code).toBe(0);
+        expect(help.stdout).toContain("--target");
+        expect(help.stdout).toContain("--input");
+      }),
+    ),
+  );
+
+  it.live("an Api whose names clash on the command line fails with a DefinitionError", () =>
+    hosted(
+      Effect.gen(function* () {
+        const run = yield* cliOver;
+        /** The defect a run of the CLI dies with. */
+        const defectOf = (cli: unknown) =>
+          run(cli as typeof asSam, []).pipe(
+            Effect.map(({ exit }) => (Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined)),
+          );
+        class Clash extends Domain.Command("deposit", {
+          target: WalletId,
+          events: [Deposited],
+        }) {}
+        class ClashApi extends Domain.Api("ClashApi", Deposit, Clash) {}
+        expect(yield* defectOf(toCli(ClashApi, { name: "clash" }))).toMatchObject({
+          _tag: "DefinitionError",
+          message: "ClashApi: entries `Deposit` and `deposit` are both the command deposit",
+        });
+        class Reserved extends Domain.Command("Reserved", {
+          target: WalletId,
+          input: { json: Schema.String },
+        }) {}
+        class ReservedApi extends Domain.Api("ReservedApi", Reserved) {}
+        expect(yield* defectOf(toCli(ReservedApi, { name: "reserved" }))).toMatchObject({
+          _tag: "DefinitionError",
+          message: expect.stringContaining("--json, which the CLI reserves"),
+        });
+      }),
+    ),
+  );
 
   it("is an Effect CLI command named after the binary", () => {
     expect(asSam.name).toBe("wallet");

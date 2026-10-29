@@ -86,8 +86,7 @@ export interface FrameworkSiteProps {
   /** Native framework development server options, including external-server mode. */
   dev?: ServerDevProps;
   /**
-   * Custom hostname attached using `Prisma.CustomDomain`. Only apps on the
-   * default branch support custom domains.
+   * Custom hostname attached using `Prisma.CustomDomain`.
    *
    * A string (or `{ name }`) leaves DNS to you: Prisma verifies the
    * hostname's `CNAME` to `switchboard.{region}.prisma.build` when the

@@ -2,11 +2,17 @@ import * as Hetzner from "@distilled.cloud/hetzner";
 import type { DnsRecord, DnsRecordType } from "alchemy/DNS/Adapter";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { waitForZoneAction } from "./actions.ts";
 import type { Providers } from "./Providers.ts";
+
+export class DnsRecordListInvalidProps extends Data.TaggedError("DnsRecordListInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface RecordListProps {
   /**
@@ -124,7 +130,7 @@ const retryLocked = <A, E extends { readonly _tag: string }, R>(effect: Effect.E
 const getZone = (idOrName: string) =>
   Hetzner.zones.getZone({ id_or_name: idOrName }).pipe(
     Effect.map(({ zone }) => zone),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 /** Resolve the zone owning `hostname`: the pinned zone, else the most specific zone in the project. */
@@ -140,11 +146,9 @@ const resolveZone = (pinned: string | undefined, hostname: string) =>
         if (zone !== undefined) return zone;
       }
     }
-    return yield* Effect.fail(
-      new Error(
-        `No Hetzner DNS zone contains "${hostname}" — create the zone first or pass "zone" explicitly.`,
-      ),
-    );
+    return yield* new DnsRecordListInvalidProps({
+      message: `No Hetzner DNS zone contains "${hostname}" — create the zone first or pass "zone" explicitly.`,
+    });
   });
 
 const relativeName = (hostname: string, zoneName: string) => {
