@@ -38,7 +38,7 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
             p0({
               catalog: "alchemy-missing",
               eventStore: "alchemy-missing",
-              location: "us-central1",
+              location: "global",
             } as never),
           ),
         ),
@@ -47,7 +47,7 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
             p1({
               catalog: "alchemy-missing",
               eventStore: "alchemy-missing",
-              location: "us-central1",
+              location: "global",
               body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
@@ -58,7 +58,7 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
               catalog: "alchemy-missing",
               eventStore: "alchemy-missing",
               predictionApiKeyRegistration: "alchemy-missing",
-              location: "us-central1",
+              location: "global",
             } as never),
           ),
         ),
@@ -67,7 +67,7 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
             p3({
               catalog: "alchemy-missing",
               catalogItem: "alchemy-missing",
-              location: "us-central1",
+              location: "global",
             } as never),
           ),
         ),
@@ -76,7 +76,7 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
             p4({
               catalog: "alchemy-missing",
               eventStore: "alchemy-missing",
-              location: "us-central1",
+              location: "global",
               body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
@@ -85,24 +85,24 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
           Retry.none(
             p5({
               catalog: "alchemy-missing",
-              location: "us-central1",
+              location: "global",
               body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
         ListCatalogItems: probeOutcome(
-          Retry.none(p6({ catalog: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p6({ catalog: "alchemy-missing", location: "global" } as never)),
         ),
-        ListCatalogs: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListCatalogs: probeOutcome(Retry.none(p7({ location: "global" } as never))),
         PatchCatalog: probeOutcome(
-          Retry.none(p8({ catalog: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p8({ catalog: "alchemy-missing", location: "global" } as never)),
         ),
         PatchCatalogItem: probeOutcome(
           Retry.none(
             p9({
               catalog: "alchemy-missing",
               catalogItem: "alchemy-missing",
-              location: "us-central1",
+              location: "global",
             } as never),
           ),
         ),
@@ -112,7 +112,7 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
               catalog: "alchemy-missing",
               eventStore: "alchemy-missing",
               placement: "alchemy-missing",
-              location: "us-central1",
+              location: "global",
             } as never),
           ),
         ),
@@ -121,7 +121,7 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
             p11({
               catalog: "alchemy-missing",
               eventStore: "alchemy-missing",
-              location: "us-central1",
+              location: "global",
             } as never),
           ),
         ),
@@ -130,7 +130,7 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
             p12({
               catalog: "alchemy-missing",
               eventStore: "alchemy-missing",
-              location: "us-central1",
+              location: "global",
             } as never),
           ),
         ),
@@ -139,7 +139,7 @@ export default class RecommendationEngineGeneratedHost extends GCP.Function<Reco
             p13({
               catalog: "alchemy-missing",
               eventStore: "alchemy-missing",
-              location: "us-central1",
+              location: "global",
             } as never),
           ),
         ),
