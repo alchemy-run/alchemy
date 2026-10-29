@@ -9051,6 +9051,9 @@ importers:
       effect:
         specifier: 4.1.0
         version: 4.1.0
+      foldkit:
+        specifier: 'catalog:'
+        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
