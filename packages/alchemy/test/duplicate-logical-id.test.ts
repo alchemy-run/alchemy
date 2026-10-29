@@ -2,9 +2,14 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Namespace from "@/Namespace";
+import * as Plan from "@/Plan";
 import { DuplicateLogicalIdError } from "@/Resource";
+import * as Stack from "@/Stack";
+import { Stage } from "@/Stage";
+import { InMemoryService, inMemoryState, State } from "@/State";
 import { Bucket, Queue, TestLayers } from "./test.resources.ts";
 
 const { test } = Test.make({ providers: TestLayers() });
@@ -56,8 +61,72 @@ describe("logical ids", { tags: ["unit", "local"] }, () => {
             : [],
         );
         expect(invalid[0]?.fqn).toEqual("My__Resource");
-        expect(invalid[0]?.message).toContain("'__'");
+        expect(invalid[0]?.message).toContain("reads back as 'My/Resource'");
       }
+    }),
+  );
+
+  test.provider("an id with '_' at a segment edge deploys on local state", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const program = Effect.gen(function* () {
+        yield* Bucket("_internal", { name: "leading" });
+        yield* Bucket("trailing_", { name: "trailing" });
+        yield* Bucket("_child", { name: "nested" }).pipe(Namespace.push("Ns"));
+        return {};
+      });
+      yield* stack.deploy(program);
+
+      // Each row lists back as its own id: nothing is planned for deletion.
+      const plan = yield* stack.plan(program);
+      expect(Object.keys(plan.deletions)).toEqual([]);
+      expect(Object.values(plan.resources).map((node) => node.action)).toEqual([
+        "noop",
+        "noop",
+        "noop",
+      ]);
+
+      yield* stack.destroy();
+    }),
+  );
+
+  test.provider("a refused id leaves nothing behind", (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const exit = yield* Effect.gen(function* () {
+        yield* Bucket("Fine", { name: "fine" });
+        yield* Bucket("My__Resource", { name: "flat" });
+        return {};
+      }).pipe(stack.deploy, Effect.exit);
+      expect(Exit.isFailure(exit)).toBe(true);
+
+      // Refused while planning: the valid sibling was not created either.
+      const plan = yield* stack.plan(
+        Effect.gen(function* () {
+          yield* Bucket("Fine", { name: "fine" });
+          return {};
+        }),
+      );
+      expect(plan.resources.Fine?.action).toEqual("create");
+    }),
+  );
+
+  test(
+    "a store keyed by the raw id accepts '__'",
+    Effect.gen(function* () {
+      const program = Effect.gen(function* () {
+        yield* Bucket("My__Resource", { name: "flat" });
+        yield* Bucket("Resource", { name: "nested" }).pipe(Namespace.push("My"));
+        return {};
+      });
+      const plan = yield* program.pipe(
+        // @ts-expect-error - Stack.make's typing erases R unsoundly (see plan.test.ts)
+        Stack.make({ name: "raw-keys", providers: Layer.empty, state: inMemoryState() }),
+        Effect.provideService(Stage, "test"),
+        Effect.flatMap((spec: any) => Plan.make(spec)),
+        Effect.provide(Layer.merge(TestLayers(), Layer.succeed(State, InMemoryService({})))),
+      ) as unknown as Effect.Effect<Plan.Plan<unknown>>;
+      expect(Object.keys(plan.resources).sort()).toEqual(["My/Resource", "My__Resource"]);
     }),
   );
 

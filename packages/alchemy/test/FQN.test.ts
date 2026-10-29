@@ -1,9 +1,10 @@
 import { describe, expect, test } from "@alchemy.run/test";
 import {
+  decodeFqn,
+  encodedFqnReason,
   encodeFqn,
   fromPath,
   FQN_SEPARATOR,
-  invalidFqnReason,
   parseFqn,
   toFqn,
   toPath,
@@ -11,29 +12,51 @@ import {
 import type { NamespaceNode } from "../src/Namespace";
 
 describe("FQN", { tags: ["unit", "local"] }, () => {
-  describe("invalidFqnReason", () => {
-    test("accepts ids whose encoding no other id can produce", () => {
-      for (const fqn of ["Bucket", "My/Resource", "snake_case/id_1", "a/b/c", "x-y.z"]) {
-        expect(invalidFqnReason(fqn)).toBeUndefined();
+  describe("encodedFqnReason", () => {
+    test("accepts ids whose file name reads back as the same id", () => {
+      for (const fqn of [
+        "Bucket",
+        "My/Resource",
+        "snake_case/id_1",
+        "a/b/c",
+        "x-y.z",
+        "_leading",
+        "trailing_",
+        "a/_b",
+      ]) {
+        expect(encodedFqnReason(fqn)).toBeUndefined();
       }
     });
 
-    test("refuses ids that could encode to another id's file name", () => {
-      // Colliding pairs: `My/Resource` stays valid, `My__Resource` is refused;
-      // `a/_b` and `a_/b` both encode to `a___b`, so both are refused.
+    test("refuses ids whose file name reads back as another id", () => {
+      // `My__Resource` is stored as `My__Resource`, which lists as `My/Resource`.
       expect(encodeFqn("My/Resource")).toEqual(encodeFqn("My__Resource"));
-      expect(invalidFqnReason("My/Resource")).toBeUndefined();
+      // `a_/b` and `a/_b` are both stored as `a___b`, which lists as `a/_b`.
       expect(encodeFqn("a/_b")).toEqual(encodeFqn("a_/b"));
       for (const fqn of [
         "My__Resource",
-        "a/_b",
         "a_/b",
-        "_leading",
-        "trailing_",
+        "a___b",
         // a store's own bookkeeping file
         "__stack_output__",
       ]) {
-        expect(invalidFqnReason(fqn)).toBeDefined();
+        expect(encodedFqnReason(fqn)).toBeDefined();
+      }
+    });
+
+    test("no two accepted ids share a file name", () => {
+      const ids = [""];
+      for (let length = 0; length < 7; length++) {
+        for (const id of ids.filter((id) => id.length === length)) {
+          for (const char of ["a", "_", "/"]) ids.push(id + char);
+        }
+      }
+      const owners = new Map<string, string>();
+      for (const fqn of ids.filter((id) => encodedFqnReason(id) === undefined)) {
+        const name = encodeFqn(fqn);
+        expect(owners.get(name) ?? fqn).toEqual(fqn);
+        owners.set(name, fqn);
+        expect(decodeFqn(name)).toEqual(fqn);
       }
     });
   });

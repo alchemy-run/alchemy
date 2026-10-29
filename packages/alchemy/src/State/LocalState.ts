@@ -5,7 +5,7 @@ import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import { dotAlchemyDirectory } from "../AlchemyContext.ts";
-import { decodeFqn, encodeFqn } from "../FQN.ts";
+import { decodeFqn, encodedFqnReason, encodeFqn } from "../FQN.ts";
 import { recordStateStoreInit } from "../Telemetry/Metrics.ts";
 import { writeFileAtomic } from "../Util/AtomicFile.ts";
 import { initialCwd } from "../Util/Node.ts";
@@ -129,6 +129,8 @@ export const makeLocalState = () =>
     const state: StateService = {
       id: "local",
       getVersion: () => Effect.succeed(STATE_STORE_VERSION),
+      // Rows are files named `encodeFqn(fqn)`.
+      invalidFqnReason: encodedFqnReason,
       listStacks: () =>
         fs.readDirectory(stateDir).pipe(
           recover,

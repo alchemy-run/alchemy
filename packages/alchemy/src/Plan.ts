@@ -35,7 +35,7 @@ import {
   type ReplaceDiff,
   type UpdateDiff,
 } from "./Diff.ts";
-import { parseFqn } from "./FQN.ts";
+import { parseFqn, refuseFqn } from "./FQN.ts";
 import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
 import {
@@ -407,6 +407,19 @@ const makePlan = <A>(
     // Resolving the state service may bootstrap a remote store.
     yield* reportPlanned({ _tag: "plan.phase", phase: "loading-state" });
     const state = yield* yield* State;
+
+    // A store that names rows after an encoding of the FQN can confuse two
+    // ids (or read one back as another). Refuse those ids before anything
+    // is read or written, so a deploy never acts on a misread row.
+    if (state.invalidFqnReason !== undefined) {
+      for (const node of declared) {
+        yield* refuseFqn(
+          node.FQN,
+          isAction(node) ? "Action" : "Resource",
+          state.invalidFqnReason(node.FQN),
+        );
+      }
+    }
 
     // A bare platform tag yields a forward reference registered with
     // `undefined` props (and `RequiresImplementation`); its `.make(props,
