@@ -19,6 +19,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import { FleetManagementError } from "../Management.ts";
 import { ecsAwsEnvironment } from "./EcsEnvironment.ts";
 import { EcsHostConfigurationError, resolveManagementRouteTables } from "./EcsHostConfig.ts";
 import {
@@ -26,7 +27,6 @@ import {
   type EcsManagementFleet,
   type EcsManagementService,
 } from "./EcsManagement.ts";
-import { FleetManagementError } from "./Management.ts";
 import { ManagementLambda } from "./ManagementLambda.ts";
 import { makeManagementClient, type ManagementTransport } from "./ManagementRunner.ts";
 
@@ -225,11 +225,11 @@ const collectNetworkPages = <A, E>(
  * ### Hosting the Runner
  * **Example:** Run management as a VPC Lambda
  * ```typescript
- * const host = Celld.EcsFleet().pipe(Layer.provide(Celld.EcsLambdaManagement()));
+ * const host = CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsLambdaManagement()));
  * ```
  *
  * @layer
- * @provides Celld.EcsManagement
+ * @provides CelldAWS.EcsManagement
  * @product Celld
  */
 export const EcsLambdaManagement = (): Layer.Layer<EcsManagement, never, StackServices> =>

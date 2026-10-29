@@ -1227,6 +1227,7 @@ export default defineConfig({
                 { label: "WebSockets", link: "/celld/compute/hibernatable-websockets" },
                 { label: "Containers", link: "/celld/compute/containers" },
                 { label: "Workflows", link: "/celld/compute/workflows" },
+                { label: "Effect workflows", link: "/celld/compute/effect-workflows" },
               ],
             },
             {

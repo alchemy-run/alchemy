@@ -10,7 +10,7 @@ import type { Input } from "alchemy/Input";
 import type { Output } from "alchemy/Output";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
-import type { FleetManagementService } from "./Management.ts";
+import type { FleetManagementService } from "../Management.ts";
 
 /** Prefix of every queued management object in the fleet bucket. */
 export const MANAGEMENT_PREFIX = "alchemy/management/v1";
@@ -66,11 +66,11 @@ export interface EcsManagementState {
 
 /**
  * How an {@link EcsFleet} hosts its management runner. Provide one of
- * `Celld.EcsTaskManagement`, `Celld.EcsServiceManagement` or
- * `Celld.EcsLambdaManagement` to the fleet's Layer.
+ * `CelldAWS.EcsTaskManagement`, `CelldAWS.EcsServiceManagement` or
+ * `CelldAWS.EcsLambdaManagement` to the fleet's Layer.
  */
 export class EcsManagement extends Context.Service<EcsManagement, EcsManagementService>()(
-  "Celld.EcsManagement",
+  "CelldAWS.EcsManagement",
 ) {}
 
 export interface EcsManagementService {

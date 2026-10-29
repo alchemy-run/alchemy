@@ -15,10 +15,14 @@ import { Stack, type StackServices } from "alchemy/Stack";
 import { isActionState, State } from "alchemy/State/State";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import { Bootstrap } from "./Bootstrap.ts";
-import { CELLD_HEALTH_PATH, CELLD_INTERNAL_PORT, CELLD_PUBLIC_PORT } from "./CelldCli.ts";
+import { Bootstrap } from "../Bootstrap.ts";
+import { CELLD_HEALTH_PATH, CELLD_INTERNAL_PORT, CELLD_PUBLIC_PORT } from "../CelldCli.ts";
+import { FleetStorageError } from "../FleetStorage.ts";
+import { Host, type HostService } from "../Host.ts";
+import { FleetManagement } from "../Management.ts";
 import {
   composeEc2Capacity,
   ec2NodeTaskConfiguration,
@@ -40,8 +44,7 @@ import {
   type ManagementQueueState,
 } from "./EcsManagement.ts";
 import { composeEcsPrivateIngress } from "./EcsPrivateIngress.ts";
-import { Host, type HostService } from "./Host.ts";
-import { FleetManagement } from "./Management.ts";
+import { makeS3Store } from "./FleetStorageS3.ts";
 
 const FLEET_CIDR = "10.61.0.0/16";
 
@@ -461,9 +464,9 @@ export const composeEcsFleet = (
  *
  * Deploys reach the nodes' private operator listener through a management
  * runner inside the fleet's network. Provide the Layer that hosts it:
- * `Celld.EcsTaskManagement` (an on-demand Fargate task),
- * `Celld.EcsServiceManagement` (an always-on one) or
- * `Celld.EcsLambdaManagement` (a VPC Lambda). Only the chosen runner's code
+ * `CelldAWS.EcsTaskManagement` (an on-demand Fargate task),
+ * `CelldAWS.EcsServiceManagement` (an always-on one) or
+ * `CelldAWS.EcsLambdaManagement` (a VPC Lambda). Only the chosen runner's code
  * is imported.
  *
  * ### Composing the Host
@@ -472,17 +475,17 @@ export const composeEcsFleet = (
  * const providers = Layer.mergeAll(
  *   AWS.providers(),
  *   Celld.providers(),
- *   Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
+ *   CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
  * );
  * ```
  *
  * ### Dedicated EC2 Hosts
  * **Example:** Containers and Sandbox with gVisor
  * ```typescript
- * const host = Celld.EcsFleet({
+ * const host = CelldAWS.EcsFleet({
  *   capacity: { type: "ec2", instanceType: "m7i.large" },
  *   containerRuntime: "runsc",
- * }).pipe(Layer.provide(Celld.EcsTaskManagement()));
+ * }).pipe(Layer.provide(CelldAWS.EcsTaskManagement()));
  * ```
  *
  * @layer
@@ -507,7 +510,8 @@ export const EcsFleet = (
         const credentials = yield* Credentials;
         const region = yield* Region;
         const describeInstanceTypes = yield* ec2.describeInstanceTypes;
-        const storageCredentials: HostService["deployEnv"] = () =>
+        const http = yield* HttpClient.HttpClient;
+        const storageCredentials = () =>
           Effect.gen(function* () {
             const resolved = yield* credentials;
             return {
@@ -529,9 +533,26 @@ export const EcsFleet = (
               ),
             management,
           ),
-          deployEnv: storageCredentials,
-          storageCredentials,
-          restartNodes: () => Effect.void,
+          storage: (connection) =>
+            Effect.gen(function* () {
+              if (!connection.bucket) {
+                return yield* new FleetStorageError({
+                  reason: "configuration",
+                  message: "The Celld fleet has no backing bucket.",
+                });
+              }
+              const env = yield* storageCredentials().pipe(
+                Effect.mapError(
+                  (cause) =>
+                    new FleetStorageError({
+                      reason: "configuration",
+                      message: "Cannot resolve Celld storage credentials.",
+                      cause,
+                    }),
+                ),
+              );
+              return yield* makeS3Store(connection.bucket, env, http);
+            }),
         } satisfies HostService;
       }),
     ),

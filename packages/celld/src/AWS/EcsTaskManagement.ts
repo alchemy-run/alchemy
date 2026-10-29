@@ -10,7 +10,7 @@ import type { StackServices } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import { CELLD_PUBLIC_PORT } from "./CelldCli.ts";
+import { CELLD_PUBLIC_PORT } from "../CelldCli.ts";
 import { ecsAwsEnvironment } from "./EcsEnvironment.ts";
 import {
   EcsManagement,
@@ -134,18 +134,18 @@ const queuedManagement = (make: (transport: ManagementTransport) => EcsManagemen
  * ### Hosting the Runner
  * **Example:** Start the runner on demand
  * ```typescript
- * const host = Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement()));
+ * const host = CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement()));
  * ```
  *
  * **Example:** Keep an on-demand runner up longer between calls
  * ```typescript
- * const host = Celld.EcsFleet().pipe(
- *   Layer.provide(Celld.EcsTaskManagement({ idleSeconds: 900 })),
+ * const host = CelldAWS.EcsFleet().pipe(
+ *   Layer.provide(CelldAWS.EcsTaskManagement({ idleSeconds: 900 })),
  * );
  * ```
  *
  * @layer
- * @provides Celld.EcsManagement
+ * @provides CelldAWS.EcsManagement
  * @product Celld
  */
 export const EcsTaskManagement = (
@@ -162,11 +162,11 @@ export const EcsTaskManagement = (
  * ### Hosting the Runner
  * **Example:** Keep the runner running
  * ```typescript
- * const host = Celld.EcsFleet().pipe(Layer.provide(Celld.EcsServiceManagement()));
+ * const host = CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsServiceManagement()));
  * ```
  *
  * @layer
- * @provides Celld.EcsManagement
+ * @provides CelldAWS.EcsManagement
  * @product Celld
  */
 export const EcsServiceManagement = (): Layer.Layer<EcsManagement, never, StackServices> =>

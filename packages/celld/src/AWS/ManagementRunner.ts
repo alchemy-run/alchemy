@@ -8,9 +8,8 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import { FleetStorageError } from "./FleetStorage.ts";
-import { makeS3Store } from "./FleetStorageS3.ts";
-import type { FleetConnection } from "./Host.ts";
+import { FleetStorageError } from "../FleetStorage.ts";
+import type { FleetConnection } from "../Host.ts";
 import {
   ActivateEvidence,
   FleetManagementError,
@@ -19,9 +18,10 @@ import {
   makeLocalFleetManagement,
   type FleetManagementService,
   type ManagementOptions,
-} from "./Management.ts";
-import { OperatorError } from "./OperatorClient.ts";
-import * as Runtime from "./Protocol/runtime.ts";
+} from "../Management.ts";
+import { OperatorError } from "../OperatorClient.ts";
+import * as Runtime from "../Protocol/runtime.ts";
+import { makeS3Store } from "./FleetStorageS3.ts";
 
 const Operations = Schema.Literals([
   "reload",

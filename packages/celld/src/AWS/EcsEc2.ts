@@ -7,8 +7,8 @@ import * as IAM from "@alchemy.run/aws/IAM";
 import type * as ec2 from "@distilled.cloud/aws/ec2";
 import type { Input } from "alchemy/Input";
 import * as Effect from "effect/Effect";
+import type { FleetProps } from "../Fleet.ts";
 import { EcsHostConfigurationError } from "./EcsHostConfig.ts";
-import type { FleetProps } from "./Fleet.ts";
 
 export const CELLD_SCRATCH_PATH = "/var/lib/celld";
 export const RUNSC_RELEASE = "20250915.0";

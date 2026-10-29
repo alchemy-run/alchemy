@@ -21,9 +21,9 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import type { FleetConnection } from "../Host.ts";
+import { FleetManagementError } from "../Management.ts";
 import { MANAGEMENT_PREFIX, type ManagementQueueState } from "./EcsManagement.ts";
-import type { FleetConnection } from "./Host.ts";
-import { FleetManagementError } from "./Management.ts";
 import { executeManagementRequest, type ManagementTransport } from "./ManagementRunner.ts";
 
 const requestsPrefix = `${MANAGEMENT_PREFIX}/requests/`;

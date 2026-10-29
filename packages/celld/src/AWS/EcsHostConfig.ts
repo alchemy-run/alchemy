@@ -10,7 +10,7 @@ import {
   DEFAULT_CELLD_IMAGE,
   DEFAULT_CELLD_VERSION,
   isSupportedCelldVersion,
-} from "./CelldCli.ts";
+} from "../CelldCli.ts";
 import type { EcsFleetOptions } from "./EcsFleet.ts";
 
 export const makeEcsNodeIngress = (

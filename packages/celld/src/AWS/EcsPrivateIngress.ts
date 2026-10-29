@@ -3,7 +3,7 @@ import * as ELBv2 from "@alchemy.run/aws/ELBv2";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import { CELLD_HEALTH_PATH, CELLD_INTERNAL_PORT, CELLD_PUBLIC_PORT } from "./CelldCli.ts";
+import { CELLD_HEALTH_PATH, CELLD_INTERNAL_PORT, CELLD_PUBLIC_PORT } from "../CelldCli.ts";
 import { makeEcsNodeIngress } from "./EcsHostConfig.ts";
 
 /** Instance targets give host-network tasks ordinary HTTP URLs without SRV clients. */

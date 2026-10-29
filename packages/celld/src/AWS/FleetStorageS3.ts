@@ -7,9 +7,8 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import { requireHost } from "./Fleet.ts";
-import { FleetStorage, FleetStorageError, type Store } from "./FleetStorage.ts";
-import type { FleetBucket } from "./Host.ts";
+import { FleetStorage, FleetStorageError, type Store } from "../FleetStorage.ts";
+import type { FleetBucket } from "../Host.ts";
 
 const failure = (message: string, cause: unknown) =>
   new FleetStorageError({
@@ -171,34 +170,3 @@ export const makeS3Store = (
     });
     return { get, put, delete: remove, list };
   });
-
-export const FleetStorageS3 = Layer.effect(
-  FleetStorage,
-  Effect.gen(function* () {
-    const http = yield* HttpClient.HttpClient;
-    return Effect.fn(function* (connection) {
-      if (!connection.bucket) {
-        return yield* new FleetStorageError({
-          reason: "configuration",
-          message: "The Celld fleet has no backing bucket.",
-        });
-      }
-      const host = yield* requireHost("storage").pipe(
-        Effect.mapError(
-          (cause) =>
-            new FleetStorageError({
-              reason: "configuration",
-              message: cause.message,
-              cause,
-            }),
-        ),
-      );
-      const credentials = yield* host
-        .deployEnv({ news: connection })
-        .pipe(
-          Effect.mapError((cause) => failure("Cannot resolve Celld storage credentials.", cause)),
-        );
-      return yield* makeS3Store(connection.bucket, credentials, http);
-    });
-  }),
-);
