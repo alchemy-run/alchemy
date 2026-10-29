@@ -1,6 +1,7 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
@@ -207,7 +208,11 @@ describe("Domain Api over the wire", () => {
 
   it.live("a live read whose request does not decode gets a 400", () =>
     Effect.gen(function* () {
-      const client = yield* HttpClient.HttpClient;
+      // fetch refuses requests carrying an `upgrade` header; node:http sends
+      // them and hands back a refusal response.
+      const client = yield* HttpServer.makeTestClient.pipe(
+        Effect.provide(NodeHttpClient.layerNodeHttp),
+      );
       const response = yield* client.execute(
         HttpClientRequest.get(`/?read=${encodeURIComponent("{not json")}`).pipe(
           HttpClientRequest.setHeader("upgrade", "websocket"),
