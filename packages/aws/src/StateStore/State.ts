@@ -245,7 +245,12 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       yield* (yield* stateBucketExists(bucketName))
         ? ensure
         : Provisioning.deployMissing(
-            { backend: "aws", name: options.name, label: `S3 state bucket '${bucketName}'` },
+            {
+              backend: "aws",
+              name: options.name,
+              label: `S3 state bucket '${bucketName}'`,
+              configured: options.bucketName !== undefined,
+            },
             ensure,
           );
       return s3Objects(bucketName, run);

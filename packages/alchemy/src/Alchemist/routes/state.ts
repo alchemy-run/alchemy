@@ -160,6 +160,18 @@ export const bootstrap = Effect.fn("Alchemist.state.bootstrap")(function* (
   );
 });
 
+/**
+ * Provision (or upgrade) the store a project's entrypoint configures, with
+ * every option it sets, such as a custom name, a pinned account or a domain.
+ */
+export const bootstrapConfigured = Effect.fn("Alchemist.state.bootstrapConfigured")(function* (
+  source: Extract<StateSource, { readonly _tag: "Configured" }>,
+) {
+  const session = yield* open(source, { updateStateStore: true });
+  const store = yield* Effect.provide(Effect.flatten(State.State), session.context);
+  return { version: yield* store.getVersion() };
+});
+
 /** Delete a state store and its backing resources. */
 export const teardown = Effect.fn("Alchemist.state.teardown")(function* (source: ProviderSource) {
   const { run, context } = yield* lifecycleOperation(source, "teardown");
