@@ -13,6 +13,9 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "Process": "ProbeProcess"
+    },
+    "untestable": {}
   }
 }

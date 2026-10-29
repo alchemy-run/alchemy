@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeContact } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated EssentialContacts binding as its own
@@ -16,13 +17,15 @@ export default class EssentialContactsGeneratedHost extends GCP.Function<Essenti
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.EssentialContacts.ComputeContact();
-    const p1 = yield* GCP.EssentialContacts.ListContacts();
-    const p2 = yield* GCP.EssentialContacts.SendContactTestMessage();
+    const p1 = yield* GCP.EssentialContacts.GetContact(ProbeContact);
+    const p2 = yield* GCP.EssentialContacts.ListContacts();
+    const p3 = yield* GCP.EssentialContacts.SendContactTestMessage();
     return {
       fetch: serveProbes({
         ComputeContact: outcome(Retry.none(p0({} as never))),
-        ListContacts: outcome(Retry.none(p1({} as never))),
-        SendContactTestMessage: outcome(Retry.none(p2({} as never))),
+        "GetContact@Contact": outcome(Retry.none(p1({} as never))),
+        ListContacts: outcome(Retry.none(p2({} as never))),
+        SendContactTestMessage: outcome(Retry.none(p3({} as never))),
       }),
     };
   }).pipe(
@@ -30,6 +33,7 @@ export default class EssentialContactsGeneratedHost extends GCP.Function<Essenti
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.EssentialContacts.ComputeContactHttp,
+          GCP.EssentialContacts.GetContactHttp,
           GCP.EssentialContacts.ListContactsHttp,
           GCP.EssentialContacts.SendContactTestMessageHttp,
         ),

@@ -16,6 +16,9 @@
   "probes": {
     "resources": {
       "Key": "Signup"
+    },
+    "untestable": {
+      "Firewallpolicy": "The firewall policy API is allow-listed per project. Set (GCP_TEST_RECAPTCHA_FIREWALL)"
     }
   }
 }

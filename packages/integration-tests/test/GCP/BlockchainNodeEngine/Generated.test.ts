@@ -48,8 +48,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("BlockchainNode", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetBlockchainNode (blockchainnodeengine.projects.locations.blockchainNodes.get): BlockchainNode: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBlockchainNode (blockchainnodeengine.projects.locations.blockchainNodes.get): BlockchainNode: Blockchain nodes bill hourly and take 15-45 minutes to provision, so the (GCP_TEST_BLOCKCHAIN_NODE)",
         () => Effect.void,
       );
     });

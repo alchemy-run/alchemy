@@ -16,6 +16,12 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "untestable": {
+      "BareMetalCluster": "needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
+      "BareMetalClustersBareMetalNodePool": "needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
+      "VmwareCluster": "needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
+      "VmwareClustersVmwareNodePool": "needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)"
+    }
   }
 }

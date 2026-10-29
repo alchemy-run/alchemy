@@ -4,7 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
-import { Pool, Root } from "./generated-resources.ts";
+import { Pool, ProbeCertificateTemplate, Root } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated PrivateCA binding as its own
@@ -24,15 +24,16 @@ export default class PrivateCAGeneratedHost extends GCP.Function<PrivateCAGenera
     const p5 = yield* GCP.PrivateCA.GetCaPool(Pool);
     const p6 = yield* GCP.PrivateCA.GetCaPoolCertificate(Pool);
     const p7 = yield* GCP.PrivateCA.GetCertificateAuthorityCertificateRevocationList(Root);
-    const p8 = yield* GCP.PrivateCA.ListCaPoolCertificateAuthorities(Pool);
-    const p9 = yield* GCP.PrivateCA.ListCaPoolCertificates(Pool);
-    const p10 = yield* GCP.PrivateCA.ListCaPools();
-    const p11 = yield* GCP.PrivateCA.ListCertificateAuthorityCertificateRevocationLists(Root);
-    const p12 = yield* GCP.PrivateCA.ListCertificateTemplates();
-    const p13 = yield* GCP.PrivateCA.PatchCaPoolCertificate(Pool);
-    const p14 = yield* GCP.PrivateCA.PatchCertificateAuthorityCertificateRevocationList(Root);
-    const p15 = yield* GCP.PrivateCA.RevokeCaPoolCertificate(Pool);
-    const p16 = yield* GCP.PrivateCA.UndeleteCertificateAuthority(Root);
+    const p8 = yield* GCP.PrivateCA.GetCertificateTemplate(ProbeCertificateTemplate);
+    const p9 = yield* GCP.PrivateCA.ListCaPoolCertificateAuthorities(Pool);
+    const p10 = yield* GCP.PrivateCA.ListCaPoolCertificates(Pool);
+    const p11 = yield* GCP.PrivateCA.ListCaPools();
+    const p12 = yield* GCP.PrivateCA.ListCertificateAuthorityCertificateRevocationLists(Root);
+    const p13 = yield* GCP.PrivateCA.ListCertificateTemplates();
+    const p14 = yield* GCP.PrivateCA.PatchCaPoolCertificate(Pool);
+    const p15 = yield* GCP.PrivateCA.PatchCertificateAuthorityCertificateRevocationList(Root);
+    const p16 = yield* GCP.PrivateCA.RevokeCaPoolCertificate(Pool);
+    const p17 = yield* GCP.PrivateCA.UndeleteCertificateAuthority(Root);
     return {
       fetch: serveProbes({
         ActivateCertificateAuthority: outcome(Retry.none(p0({} as never))),
@@ -47,21 +48,22 @@ export default class PrivateCAGeneratedHost extends GCP.Function<PrivateCAGenera
         GetCertificateAuthorityCertificateRevocationList: outcome(
           Retry.none(p7({ certificateRevocationList: "alchemy-missing" } as never)),
         ),
-        ListCaPoolCertificateAuthorities: outcome(Retry.none(p8({} as never))),
-        ListCaPoolCertificates: outcome(Retry.none(p9({} as never))),
-        ListCaPools: outcome(Retry.none(p10({ location: "us-central1" } as never))),
-        ListCertificateAuthorityCertificateRevocationLists: outcome(Retry.none(p11({} as never))),
-        ListCertificateTemplates: outcome(Retry.none(p12({ location: "us-central1" } as never))),
+        GetCertificateTemplate: outcome(Retry.none(p8({} as never))),
+        ListCaPoolCertificateAuthorities: outcome(Retry.none(p9({} as never))),
+        ListCaPoolCertificates: outcome(Retry.none(p10({} as never))),
+        ListCaPools: outcome(Retry.none(p11({ location: "us-central1" } as never))),
+        ListCertificateAuthorityCertificateRevocationLists: outcome(Retry.none(p12({} as never))),
+        ListCertificateTemplates: outcome(Retry.none(p13({ location: "us-central1" } as never))),
         PatchCaPoolCertificate: outcome(
-          Retry.none(p13({ certificate: "alchemy-missing" } as never)),
+          Retry.none(p14({ certificate: "alchemy-missing" } as never)),
         ),
         PatchCertificateAuthorityCertificateRevocationList: outcome(
-          Retry.none(p14({ certificateRevocationList: "alchemy-missing" } as never)),
+          Retry.none(p15({ certificateRevocationList: "alchemy-missing" } as never)),
         ),
         RevokeCaPoolCertificate: outcome(
-          Retry.none(p15({ certificate: "alchemy-missing" } as never)),
+          Retry.none(p16({ certificate: "alchemy-missing" } as never)),
         ),
-        UndeleteCertificateAuthority: outcome(Retry.none(p16({} as never))),
+        UndeleteCertificateAuthority: outcome(Retry.none(p17({} as never))),
       }),
     };
   }).pipe(
@@ -76,6 +78,7 @@ export default class PrivateCAGeneratedHost extends GCP.Function<PrivateCAGenera
           GCP.PrivateCA.GetCaPoolHttp,
           GCP.PrivateCA.GetCaPoolCertificateHttp,
           GCP.PrivateCA.GetCertificateAuthorityCertificateRevocationListHttp,
+          GCP.PrivateCA.GetCertificateTemplateHttp,
           GCP.PrivateCA.ListCaPoolCertificateAuthoritiesHttp,
           GCP.PrivateCA.ListCaPoolCertificatesHttp,
           GCP.PrivateCA.ListCaPoolsHttp,

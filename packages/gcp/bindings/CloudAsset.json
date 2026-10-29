@@ -10,6 +10,7 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "untestable": {}
   }
 }

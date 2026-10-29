@@ -13,6 +13,11 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "untestable": {
+      "Backend": "needs GCP_TEST_FIREBASE_APP_HOSTING_SA (an external prerequisite the testing project lacks)",
+      "BackendsBuild": "A build reaches READY in about a minute, but its delete LRO was still `done: false` after 14 minutes, so the test cannot clean up. Set (GCP_TEST_FIREBASE_APP_HOSTING_BUILD)",
+      "BackendsDomain": "Custom-domain create stays pending (the LRO did not finish within 5 minutes) until the domain's DNS points at App Hosting. Set (GCP_TEST_FIREBASE_APP_HOSTING_DOMAIN)"
+    }
   }
 }

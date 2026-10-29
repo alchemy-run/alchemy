@@ -48,8 +48,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("CustomConstraint", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetCustomConstraint (orgpolicy.organizations.customConstraints.get): CustomConstraint: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetCustomConstraint (orgpolicy.organizations.customConstraints.get): CustomConstraint: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });

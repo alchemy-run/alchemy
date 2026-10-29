@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeProcess } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated DataLineage binding as its own
@@ -15,11 +16,25 @@ export default class DataLineageGeneratedHost extends GCP.Function<DataLineageGe
   "DataLineageGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.DataLineage.ListProcesses();
+    const p0 = yield* GCP.DataLineage.GetProcess(ProbeProcess);
+    const p1 = yield* GCP.DataLineage.ListProcesses();
+    const p2 = yield* GCP.DataLineage.ListProcessRuns(ProbeProcess);
     return {
       fetch: serveProbes({
-        ListProcesses: outcome(Retry.none(p0({ location: "us-central1" } as never))),
+        GetProcess: outcome(Retry.none(p0({} as never))),
+        ListProcesses: outcome(Retry.none(p1({ location: "us-central1" } as never))),
+        ListProcessRuns: outcome(Retry.none(p2({} as never))),
       }),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Layer.mergeAll(GCP.DataLineage.ListProcessesHttp)))),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.DataLineage.GetProcessHttp,
+          GCP.DataLineage.ListProcessesHttp,
+          GCP.DataLineage.ListProcessRunsHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

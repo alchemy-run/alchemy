@@ -48,8 +48,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Firewallpolicy", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetFirewallpolicy (recaptchaenterprise.projects.firewallpolicies.get): Firewallpolicy: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetFirewallpolicy (recaptchaenterprise.projects.firewallpolicies.get): Firewallpolicy: The firewall policy API is allow-listed per project. Set (GCP_TEST_RECAPTCHA_FIREWALL)",
         () => Effect.void,
       );
     });

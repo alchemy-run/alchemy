@@ -16,7 +16,9 @@
   "probes": {
     "resources": {
       "CaPool": "Pool",
-      "CertificateAuthority": "Root"
-    }
+      "CertificateAuthority": "Root",
+      "CertificateTemplate": "ProbeCertificateTemplate"
+    },
+    "untestable": {}
   }
 }

@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeSaa } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated SaasServiceManagement binding as its own
@@ -17,16 +18,17 @@ export default class SaasServiceManagementGeneratedHost extends GCP.Function<Saa
   Effect.gen(function* () {
     const p0 = yield* GCP.SaasServiceManagement.CreateUnitOperation();
     const p1 = yield* GCP.SaasServiceManagement.DeleteUnitOperation();
-    const p2 = yield* GCP.SaasServiceManagement.GetUnitOperation();
-    const p3 = yield* GCP.SaasServiceManagement.ListReleases();
-    const p4 = yield* GCP.SaasServiceManagement.ListRolloutKinds();
-    const p5 = yield* GCP.SaasServiceManagement.ListRollouts();
-    const p6 = yield* GCP.SaasServiceManagement.ListSaas();
-    const p7 = yield* GCP.SaasServiceManagement.ListTenants();
-    const p8 = yield* GCP.SaasServiceManagement.ListUnitKinds();
-    const p9 = yield* GCP.SaasServiceManagement.ListUnitOperations();
-    const p10 = yield* GCP.SaasServiceManagement.ListUnits();
-    const p11 = yield* GCP.SaasServiceManagement.PatchUnitOperation();
+    const p2 = yield* GCP.SaasServiceManagement.GetSaa(ProbeSaa);
+    const p3 = yield* GCP.SaasServiceManagement.GetUnitOperation();
+    const p4 = yield* GCP.SaasServiceManagement.ListReleases();
+    const p5 = yield* GCP.SaasServiceManagement.ListRolloutKinds();
+    const p6 = yield* GCP.SaasServiceManagement.ListRollouts();
+    const p7 = yield* GCP.SaasServiceManagement.ListSaas();
+    const p8 = yield* GCP.SaasServiceManagement.ListTenants();
+    const p9 = yield* GCP.SaasServiceManagement.ListUnitKinds();
+    const p10 = yield* GCP.SaasServiceManagement.ListUnitOperations();
+    const p11 = yield* GCP.SaasServiceManagement.ListUnits();
+    const p12 = yield* GCP.SaasServiceManagement.PatchUnitOperation();
     return {
       fetch: serveProbes({
         CreateUnitOperation: outcome(
@@ -37,19 +39,20 @@ export default class SaasServiceManagementGeneratedHost extends GCP.Function<Saa
         DeleteUnitOperation: outcome(
           Retry.none(p1({ unitOperation: "alchemy-missing", location: "us-central1" } as never)),
         ),
+        GetSaa: outcome(Retry.none(p2({} as never))),
         GetUnitOperation: outcome(
-          Retry.none(p2({ unitOperation: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p3({ unitOperation: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListReleases: outcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListRolloutKinds: outcome(Retry.none(p4({ location: "us-central1" } as never))),
-        ListRollouts: outcome(Retry.none(p5({ location: "us-central1" } as never))),
-        ListSaas: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        ListTenants: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListUnitKinds: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListUnitOperations: outcome(Retry.none(p9({ location: "us-central1" } as never))),
-        ListUnits: outcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListReleases: outcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListRolloutKinds: outcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListRollouts: outcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListSaas: outcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListTenants: outcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListUnitKinds: outcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListUnitOperations: outcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListUnits: outcome(Retry.none(p11({ location: "us-central1" } as never))),
         PatchUnitOperation: outcome(
-          Retry.none(p11({ unitOperation: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p12({ unitOperation: "alchemy-missing", location: "us-central1" } as never)),
         ),
       }),
     };
@@ -59,6 +62,7 @@ export default class SaasServiceManagementGeneratedHost extends GCP.Function<Saa
         Layer.mergeAll(
           GCP.SaasServiceManagement.CreateUnitOperationHttp,
           GCP.SaasServiceManagement.DeleteUnitOperationHttp,
+          GCP.SaasServiceManagement.GetSaaHttp,
           GCP.SaasServiceManagement.GetUnitOperationHttp,
           GCP.SaasServiceManagement.ListReleasesHttp,
           GCP.SaasServiceManagement.ListRolloutKindsHttp,

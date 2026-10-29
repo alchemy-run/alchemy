@@ -7,6 +7,9 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "untestable": {
+      "Customer": "needs GOOGLE_CLOUDCONTROLSPARTNER_ORGANIZATION (an external prerequisite the testing project lacks)"
+    }
   }
 }

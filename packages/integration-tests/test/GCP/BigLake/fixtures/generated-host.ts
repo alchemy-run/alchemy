@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeCatalog } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated BigLake binding as its own
@@ -15,11 +16,25 @@ export default class BigLakeGeneratedHost extends GCP.Function<BigLakeGeneratedH
   "BigLakeGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.BigLake.ListCatalogs();
+    const p0 = yield* GCP.BigLake.GetCatalog(ProbeCatalog);
+    const p1 = yield* GCP.BigLake.ListCatalogDatabases(ProbeCatalog);
+    const p2 = yield* GCP.BigLake.ListCatalogs();
     return {
       fetch: serveProbes({
-        ListCatalogs: outcome(Retry.none(p0({ location: "us-central1" } as never))),
+        GetCatalog: outcome(Retry.none(p0({} as never))),
+        ListCatalogDatabases: outcome(Retry.none(p1({} as never))),
+        ListCatalogs: outcome(Retry.none(p2({ location: "us-central1" } as never))),
       }),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Layer.mergeAll(GCP.BigLake.ListCatalogsHttp)))),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.BigLake.GetCatalogHttp,
+          GCP.BigLake.ListCatalogDatabasesHttp,
+          GCP.BigLake.ListCatalogsHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

@@ -91,24 +91,24 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Workload", { concurrent: true }, () => {
-      test.provider.todo(
-        "AcknowledgeWorkloadViolation (assuredworkloads.organizations.locations.workloads.violations.acknowledge): Workload: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "AcknowledgeWorkloadViolation (assuredworkloads.organizations.locations.workloads.violations.acknowledge): Workload: Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ApplyWorkloadUpdate (assuredworkloads.organizations.locations.workloads.updates.apply): Workload: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ApplyWorkloadUpdate (assuredworkloads.organizations.locations.workloads.updates.apply): Workload: Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetWorkloadViolation (assuredworkloads.organizations.locations.workloads.violations.get): Workload: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetWorkloadViolation (assuredworkloads.organizations.locations.workloads.violations.get): Workload: Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListWorkloadUpdates (assuredworkloads.organizations.locations.workloads.updates.list): Workload: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListWorkloadUpdates (assuredworkloads.organizations.locations.workloads.updates.list): Workload: Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListWorkloadViolations (assuredworkloads.organizations.locations.workloads.violations.list): Workload: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListWorkloadViolations (assuredworkloads.organizations.locations.workloads.violations.list): Workload: Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
     });

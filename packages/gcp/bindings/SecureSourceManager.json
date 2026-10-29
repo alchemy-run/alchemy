@@ -19,6 +19,13 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "untestable": {
+      "RepositoriesBranchRule": "needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
+      "RepositoriesHook": "needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
+      "RepositoriesIssue": "needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
+      "RepositoriesIssuesIssueComment": "needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
+      "RepositoriesPullRequestsPullRequestComment": "needs GCP_TEST_SECURE_SOURCE_MANAGER_PULL_REQUEST (an external prerequisite the testing project lacks)"
+    }
   }
 }

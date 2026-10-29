@@ -48,8 +48,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("BucketsDatasetsLink", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetLink (observability.projects.locations.buckets.datasets.links.get): BucketsDatasetsLink: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetLink (observability.projects.locations.buckets.datasets.links.get): BucketsDatasetsLink: The `_Trace` bucket and its `Spans` dataset only exist once the project stores trace data in Observability; until then create fails with BadRequest ("Unable to create link; parent bucket of … is not found"). (GCP_TEST_OBSERVABILITY_DATASET)',
         () => Effect.void,
       );
     });

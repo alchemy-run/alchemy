@@ -48,18 +48,26 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ProjectService", { concurrent: true }, () => {
-      test.provider.todo(
-        "DisableService (serviceusage.services.disable): ProjectService: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DisableService (serviceusage.services.disable)",
+        () => probe("DisableService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:serviceusage", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "EnableService (serviceusage.services.enable): ProjectService: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "EnableService (serviceusage.services.enable)",
+        () => probe("EnableService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:serviceusage", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetService (serviceusage.services.get): ProjectService: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
-      );
+      test.provider("GetService (serviceusage.services.get)", () => probe("GetService", true), {
+        tags: ["provider:gcp", "provider:gcp:serviceusage", "live"],
+        timeout: 600_000,
+      });
     });
   },
 );

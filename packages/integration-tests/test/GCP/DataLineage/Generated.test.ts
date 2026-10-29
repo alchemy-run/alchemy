@@ -48,13 +48,21 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Process", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetProcess (datalineage.projects.locations.processes.get): Process: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetProcess (datalineage.projects.locations.processes.get)",
+        () => probe("GetProcess", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datalineage", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListProcessRuns (datalineage.projects.locations.processes.runs.list): Process: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListProcessRuns (datalineage.projects.locations.processes.runs.list)",
+        () => probe("ListProcessRuns", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datalineage", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

@@ -19,6 +19,13 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "untestable": {
+      "AppConnection": "Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
+      "AppConnector": "Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
+      "AppGateway": "Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
+      "SecurityGateway": "Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
+      "SecurityGatewaysApplication": "Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)"
+    }
   }
 }

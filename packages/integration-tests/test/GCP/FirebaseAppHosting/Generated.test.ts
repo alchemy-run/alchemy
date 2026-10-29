@@ -48,42 +48,42 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Backend", { concurrent: true }, () => {
-      test.provider.todo(
-        "CreateBackendRollout (firebaseapphosting.projects.locations.backends.rollouts.create): Backend: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "CreateBackendRollout (firebaseapphosting.projects.locations.backends.rollouts.create): Backend: needs GCP_TEST_FIREBASE_APP_HOSTING_SA (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetBackend (firebaseapphosting.projects.locations.backends.get): Backend: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBackend (firebaseapphosting.projects.locations.backends.get): Backend: needs GCP_TEST_FIREBASE_APP_HOSTING_SA (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetBackendRollout (firebaseapphosting.projects.locations.backends.rollouts.get): Backend: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBackendRollout (firebaseapphosting.projects.locations.backends.rollouts.get): Backend: needs GCP_TEST_FIREBASE_APP_HOSTING_SA (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListBackendBuilds (firebaseapphosting.projects.locations.backends.builds.list): Backend: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListBackendBuilds (firebaseapphosting.projects.locations.backends.builds.list): Backend: needs GCP_TEST_FIREBASE_APP_HOSTING_SA (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListBackendDomains (firebaseapphosting.projects.locations.backends.domains.list): Backend: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListBackendDomains (firebaseapphosting.projects.locations.backends.domains.list): Backend: needs GCP_TEST_FIREBASE_APP_HOSTING_SA (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListBackendRollouts (firebaseapphosting.projects.locations.backends.rollouts.list): Backend: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListBackendRollouts (firebaseapphosting.projects.locations.backends.rollouts.list): Backend: needs GCP_TEST_FIREBASE_APP_HOSTING_SA (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("BackendsBuild", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetBuild (firebaseapphosting.projects.locations.backends.builds.get): BackendsBuild: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBuild (firebaseapphosting.projects.locations.backends.builds.get): BackendsBuild: A build reaches READY in about a minute, but its delete LRO was still `done: false` after 14 minutes, so the test cannot clean up. Set (GCP_TEST_FIREBASE_APP_HOSTING_BUILD)",
         () => Effect.void,
       );
     });
 
     describe("BackendsDomain", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDomain (firebaseapphosting.projects.locations.backends.domains.get): BackendsDomain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetDomain (firebaseapphosting.projects.locations.backends.domains.get): BackendsDomain: Custom-domain create stays pending (the LRO did not finish within 5 minutes) until the domain's DNS points at App Hosting. Set (GCP_TEST_FIREBASE_APP_HOSTING_DOMAIN)",
         () => Effect.void,
       );
     });

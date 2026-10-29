@@ -48,28 +48,28 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Customer", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetCustomer (cloudcontrolspartner.organizations.locations.customers.get): Customer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetCustomer (cloudcontrolspartner.organizations.locations.customers.get): Customer: needs GOOGLE_CLOUDCONTROLSPARTNER_ORGANIZATION (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetCustomerWorkload (cloudcontrolspartner.organizations.locations.customers.workloads.get): Customer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetCustomerWorkload (cloudcontrolspartner.organizations.locations.customers.workloads.get): Customer: needs GOOGLE_CLOUDCONTROLSPARTNER_ORGANIZATION (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetCustomerWorkloadViolation (cloudcontrolspartner.organizations.locations.customers.workloads.violations.get): Customer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetCustomerWorkloadViolation (cloudcontrolspartner.organizations.locations.customers.workloads.violations.get): Customer: needs GOOGLE_CLOUDCONTROLSPARTNER_ORGANIZATION (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListCustomerWorkloadAccessApprovalRequests (cloudcontrolspartner.organizations.locations.customers.workloads.accessApprovalRequests.list): Customer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListCustomerWorkloadAccessApprovalRequests (cloudcontrolspartner.organizations.locations.customers.workloads.accessApprovalRequests.list): Customer: needs GOOGLE_CLOUDCONTROLSPARTNER_ORGANIZATION (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListCustomerWorkloads (cloudcontrolspartner.organizations.locations.customers.workloads.list): Customer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListCustomerWorkloads (cloudcontrolspartner.organizations.locations.customers.workloads.list): Customer: needs GOOGLE_CLOUDCONTROLSPARTNER_ORGANIZATION (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListCustomerWorkloadViolations (cloudcontrolspartner.organizations.locations.customers.workloads.violations.list): Customer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListCustomerWorkloadViolations (cloudcontrolspartner.organizations.locations.customers.workloads.violations.list): Customer: needs GOOGLE_CLOUDCONTROLSPARTNER_ORGANIZATION (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });

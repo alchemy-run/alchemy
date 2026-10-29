@@ -48,31 +48,31 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("BareMetalCluster", { concurrent: true }, () => {
-      test.provider.todo(
-        "EnrollBareMetalClusterBareMetalNodePool (gkeonprem.projects.locations.bareMetalClusters.bareMetalNodePools.enroll): BareMetalCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "EnrollBareMetalClusterBareMetalNodePool (gkeonprem.projects.locations.bareMetalClusters.bareMetalNodePools.enroll): BareMetalCluster: needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetBareMetalCluster (gkeonprem.projects.locations.bareMetalClusters.get): BareMetalCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBareMetalCluster (gkeonprem.projects.locations.bareMetalClusters.get): BareMetalCluster: needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListBareMetalClusterBareMetalNodePools (gkeonprem.projects.locations.bareMetalClusters.bareMetalNodePools.list): BareMetalCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListBareMetalClusterBareMetalNodePools (gkeonprem.projects.locations.bareMetalClusters.bareMetalNodePools.list): BareMetalCluster: needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "UnenrollBareMetalCluster (gkeonprem.projects.locations.bareMetalClusters.unenroll): BareMetalCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "UnenrollBareMetalCluster (gkeonprem.projects.locations.bareMetalClusters.unenroll): BareMetalCluster: needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("BareMetalClustersBareMetalNodePool", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetBareMetalNodePool (gkeonprem.projects.locations.bareMetalClusters.bareMetalNodePools.get): BareMetalClustersBareMetalNodePool: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBareMetalNodePool (gkeonprem.projects.locations.bareMetalClusters.bareMetalNodePools.get): BareMetalClustersBareMetalNodePool: needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "UnenrollBareMetalNodePool (gkeonprem.projects.locations.bareMetalClusters.bareMetalNodePools.unenroll): BareMetalClustersBareMetalNodePool: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "UnenrollBareMetalNodePool (gkeonprem.projects.locations.bareMetalClusters.bareMetalNodePools.unenroll): BareMetalClustersBareMetalNodePool: needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
@@ -233,31 +233,31 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("VmwareCluster", { concurrent: true }, () => {
-      test.provider.todo(
-        "EnrollVmwareClusterVmwareNodePool (gkeonprem.projects.locations.vmwareClusters.vmwareNodePools.enroll): VmwareCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "EnrollVmwareClusterVmwareNodePool (gkeonprem.projects.locations.vmwareClusters.vmwareNodePools.enroll): VmwareCluster: needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetVmwareCluster (gkeonprem.projects.locations.vmwareClusters.get): VmwareCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetVmwareCluster (gkeonprem.projects.locations.vmwareClusters.get): VmwareCluster: needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListVmwareClusterVmwareNodePools (gkeonprem.projects.locations.vmwareClusters.vmwareNodePools.list): VmwareCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListVmwareClusterVmwareNodePools (gkeonprem.projects.locations.vmwareClusters.vmwareNodePools.list): VmwareCluster: needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "UnenrollVmwareCluster (gkeonprem.projects.locations.vmwareClusters.unenroll): VmwareCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "UnenrollVmwareCluster (gkeonprem.projects.locations.vmwareClusters.unenroll): VmwareCluster: needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("VmwareClustersVmwareNodePool", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetVmwareNodePool (gkeonprem.projects.locations.vmwareClusters.vmwareNodePools.get): VmwareClustersVmwareNodePool: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetVmwareNodePool (gkeonprem.projects.locations.vmwareClusters.vmwareNodePools.get): VmwareClustersVmwareNodePool: needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "UnenrollVmwareNodePool (gkeonprem.projects.locations.vmwareClusters.vmwareNodePools.unenroll): VmwareClustersVmwareNodePool: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "UnenrollVmwareNodePool (gkeonprem.projects.locations.vmwareClusters.vmwareNodePools.unenroll): VmwareClustersVmwareNodePool: needs GCP_TEST_GKEONPREM_BAREMETAL_ADMIN (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });

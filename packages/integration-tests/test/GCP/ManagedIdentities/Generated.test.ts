@@ -48,86 +48,86 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Domain", { concurrent: true }, () => {
-      test.provider.todo(
-        "AttachDomainTrust (managedidentities.projects.locations.global.domains.attachTrust): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "AttachDomainTrust (managedidentities.projects.locations.global.domains.attachTrust): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "CheckDomainMigrationPermission (managedidentities.projects.locations.global.domains.checkMigrationPermission): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "CheckDomainMigrationPermission (managedidentities.projects.locations.global.domains.checkMigrationPermission): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "DetachDomainTrust (managedidentities.projects.locations.global.domains.detachTrust): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "DetachDomainTrust (managedidentities.projects.locations.global.domains.detachTrust): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "DisableDomainMigration (managedidentities.projects.locations.global.domains.disableMigration): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "DisableDomainMigration (managedidentities.projects.locations.global.domains.disableMigration): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "DomainJoinMachine (managedidentities.projects.locations.global.domains.domainJoinMachine): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "DomainJoinMachine (managedidentities.projects.locations.global.domains.domainJoinMachine): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "EnableDomainMigration (managedidentities.projects.locations.global.domains.enableMigration): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "EnableDomainMigration (managedidentities.projects.locations.global.domains.enableMigration): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ExtendDomainSchema (managedidentities.projects.locations.global.domains.extendSchema): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ExtendDomainSchema (managedidentities.projects.locations.global.domains.extendSchema): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetDomain (managedidentities.projects.locations.global.domains.get): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetDomain (managedidentities.projects.locations.global.domains.get): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetDomainLdapssettings (managedidentities.projects.locations.global.domains.getLdapssettings): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetDomainLdapssettings (managedidentities.projects.locations.global.domains.getLdapssettings): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetDomainSqlIntegration (managedidentities.projects.locations.global.domains.sqlIntegrations.get): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetDomainSqlIntegration (managedidentities.projects.locations.global.domains.sqlIntegrations.get): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListDomainBackups (managedidentities.projects.locations.global.domains.backups.list): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListDomainBackups (managedidentities.projects.locations.global.domains.backups.list): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListDomainSqlIntegrations (managedidentities.projects.locations.global.domains.sqlIntegrations.list): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListDomainSqlIntegrations (managedidentities.projects.locations.global.domains.sqlIntegrations.list): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ReconfigureDomainTrust (managedidentities.projects.locations.global.domains.reconfigureTrust): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ReconfigureDomainTrust (managedidentities.projects.locations.global.domains.reconfigureTrust): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ResetDomainAdminPassword (managedidentities.projects.locations.global.domains.resetAdminPassword): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ResetDomainAdminPassword (managedidentities.projects.locations.global.domains.resetAdminPassword): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RestoreDomain (managedidentities.projects.locations.global.domains.restore): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RestoreDomain (managedidentities.projects.locations.global.domains.restore): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "UpdateDomainLdapssettings (managedidentities.projects.locations.global.domains.updateLdapssettings): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "UpdateDomainLdapssettings (managedidentities.projects.locations.global.domains.updateLdapssettings): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ValidateDomainTrust (managedidentities.projects.locations.global.domains.validateTrust): Domain: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ValidateDomainTrust (managedidentities.projects.locations.global.domains.validateTrust): Domain: Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
     });
 
     describe("DomainsBackup", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetBackup (managedidentities.projects.locations.global.domains.backups.get): DomainsBackup: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBackup (managedidentities.projects.locations.global.domains.backups.get): DomainsBackup: Backups require a provisioned Managed AD domain (20-60 minutes). Create against a missing parent returns `NotFound` (`parent resource not found for .../domains/missing.alch.test/backups/...`). Set (GCP_TEST_MANAGEDIDENTITIES)",
         () => Effect.void,
       );
     });
 
     describe("Peering", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPeering (managedidentities.projects.locations.global.peerings.get): Peering: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetPeering (managedidentities.projects.locations.global.peerings.get): Peering: Domain peering is cross-project only. Same-project create returns `BadRequest` ("DomainPeering should be used when network and domain resource belong to different projects"). Full lifecycle needs a (GCP_TEST_MANAGEDIDENTITIES)',
         () => Effect.void,
       );
     });

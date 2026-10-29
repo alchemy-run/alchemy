@@ -55,8 +55,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ChannelConnection", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetChannelConnection (eventarc.projects.locations.channelConnections.get): ChannelConnection: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetChannelConnection (eventarc.projects.locations.channelConnections.get): ChannelConnection: ChannelConnection is created in a third-party provider project using a subscriber Channel activation token. The testing project is not an Eventarc SaaS partner; live create is gated. (GCP_TEST_EVENTARC_PARTNER)",
         () => Effect.void,
       );
     });

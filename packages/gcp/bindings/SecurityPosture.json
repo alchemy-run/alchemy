@@ -10,6 +10,10 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "untestable": {
+      "Posture": "Postures live on the organization and need org-level Security Posture permissions the testing service account lacks (list/create answer 403); (GOOGLE_ORGANIZATION_ID)",
+      "PostureDeployment": "Postures live on the organization and need org-level Security Posture permissions the testing service account lacks (list/create answer 403); (GOOGLE_ORGANIZATION_ID)"
+    }
   }
 }

@@ -48,763 +48,763 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AnalyticsDatastore", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDatastore (apigee.organizations.analytics.datastores.get): AnalyticsDatastore: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetDatastore (apigee.organizations.analytics.datastores.get): AnalyticsDatastore: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("Api", { concurrent: true }, () => {
-      test.provider.todo(
-        "ListApiDeployments (apigee.organizations.apis.deployments.list): Api: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListApiDeployments (apigee.organizations.apis.deployments.list): Api: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListApiRevisionDeployments (apigee.organizations.apis.revisions.deployments.list): Api: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListApiRevisionDeployments (apigee.organizations.apis.revisions.deployments.list): Api: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("Apiproduct", { concurrent: true }, () => {
-      test.provider.todo(
-        "AttributesApiproduct (apigee.organizations.apiproducts.attributes): Apiproduct: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'AttributesApiproduct (apigee.organizations.apiproducts.attributes): Apiproduct: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "DeleteApiproductAttribute (apigee.organizations.apiproducts.attributes.delete): Apiproduct: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'DeleteApiproductAttribute (apigee.organizations.apiproducts.attributes.delete): Apiproduct: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetApiproduct (apigee.organizations.apiproducts.get): Apiproduct: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetApiproduct (apigee.organizations.apiproducts.get): Apiproduct: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetApiproductAttribute (apigee.organizations.apiproducts.attributes.get): Apiproduct: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetApiproductAttribute (apigee.organizations.apiproducts.attributes.get): Apiproduct: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListApiproductAttributes (apigee.organizations.apiproducts.attributes.list): Apiproduct: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListApiproductAttributes (apigee.organizations.apiproducts.attributes.list): Apiproduct: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListApiproductRateplans (apigee.organizations.apiproducts.rateplans.list): Apiproduct: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListApiproductRateplans (apigee.organizations.apiproducts.rateplans.list): Apiproduct: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "MoveApiproduct (apigee.organizations.apiproducts.move): Apiproduct: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'MoveApiproduct (apigee.organizations.apiproducts.move): Apiproduct: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "UpdateApiProductAttribute (apigee.organizations.apiproducts.attributes.updateApiProductAttribute): Apiproduct: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'UpdateApiProductAttribute (apigee.organizations.apiproducts.attributes.updateApiProductAttribute): Apiproduct: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("ApiproductsRateplan", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetRateplan (apigee.organizations.apiproducts.rateplans.get): ApiproductsRateplan: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetRateplan (apigee.organizations.apiproducts.rateplans.get): ApiproductsRateplan: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("ApisKeyvaluemap", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetKeyvaluemap@ApisKeyvaluemap (apigee.organizations.apis.keyvaluemaps.get): ApisKeyvaluemap: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetKeyvaluemap@ApisKeyvaluemap (apigee.organizations.apis.keyvaluemaps.get): ApisKeyvaluemap: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListKeyvaluemapEntries@ApisKeyvaluemap (apigee.organizations.apis.keyvaluemaps.entries.list): ApisKeyvaluemap: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListKeyvaluemapEntries@ApisKeyvaluemap (apigee.organizations.apis.keyvaluemaps.entries.list): ApisKeyvaluemap: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("ApisKeyvaluemapsEntry", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetEntry@ApisKeyvaluemapsEntry (apigee.organizations.apis.keyvaluemaps.entries.get): ApisKeyvaluemapsEntry: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetEntry@ApisKeyvaluemapsEntry (apigee.organizations.apis.keyvaluemaps.entries.get): ApisKeyvaluemapsEntry: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("Appgroup", { concurrent: true }, () => {
-      test.provider.todo(
-        "CreateAppgroupSubscription (apigee.organizations.appgroups.subscriptions.create): Appgroup: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'CreateAppgroupSubscription (apigee.organizations.appgroups.subscriptions.create): Appgroup: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ExpireAppgroupSubscription (apigee.organizations.appgroups.subscriptions.expire): Appgroup: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ExpireAppgroupSubscription (apigee.organizations.appgroups.subscriptions.expire): Appgroup: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetAppgroup (apigee.organizations.appgroups.get): Appgroup: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetAppgroup (apigee.organizations.appgroups.get): Appgroup: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetAppgroupSubscription (apigee.organizations.appgroups.subscriptions.get): Appgroup: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetAppgroupSubscription (apigee.organizations.appgroups.subscriptions.get): Appgroup: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListAppgroupApps (apigee.organizations.appgroups.apps.list): Appgroup: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListAppgroupApps (apigee.organizations.appgroups.apps.list): Appgroup: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListAppgroupSubscriptions (apigee.organizations.appgroups.subscriptions.list): Appgroup: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListAppgroupSubscriptions (apigee.organizations.appgroups.subscriptions.list): Appgroup: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("AppgroupsApp", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetApp@AppgroupsApp (apigee.organizations.appgroups.apps.get): AppgroupsApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetApp@AppgroupsApp (apigee.organizations.appgroups.apps.get): AppgroupsApp: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("AppgroupsAppsKey", { concurrent: true }, () => {
-      test.provider.todo(
-        "DeleteKeyApiproduct@AppgroupsAppsKey (apigee.organizations.appgroups.apps.keys.apiproducts.delete): AppgroupsAppsKey: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'DeleteKeyApiproduct@AppgroupsAppsKey (apigee.organizations.appgroups.apps.keys.apiproducts.delete): AppgroupsAppsKey: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetKey@AppgroupsAppsKey (apigee.organizations.appgroups.apps.keys.get): AppgroupsAppsKey: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetKey@AppgroupsAppsKey (apigee.organizations.appgroups.apps.keys.get): AppgroupsAppsKey: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "UpdateAppGroupAppKey (apigee.organizations.appgroups.apps.keys.updateAppGroupAppKey): AppgroupsAppsKey: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'UpdateAppGroupAppKey (apigee.organizations.appgroups.apps.keys.updateAppGroupAppKey): AppgroupsAppsKey: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "UpdateAppGroupAppKeyApiProduct (apigee.organizations.appgroups.apps.keys.apiproducts.updateAppGroupAppKeyApiProduct): AppgroupsAppsKey: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'UpdateAppGroupAppKeyApiProduct (apigee.organizations.appgroups.apps.keys.apiproducts.updateAppGroupAppKeyApiProduct): AppgroupsAppsKey: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("Datacollector", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDatacollector (apigee.organizations.datacollectors.get): Datacollector: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetDatacollector (apigee.organizations.datacollectors.get): Datacollector: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("Developer", { concurrent: true }, () => {
-      test.provider.todo(
-        "AttributesDeveloper (apigee.organizations.developers.attributes): Developer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'AttributesDeveloper (apigee.organizations.developers.attributes): Developer: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "CreateDeveloperSubscription (apigee.organizations.developers.subscriptions.create): Developer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'CreateDeveloperSubscription (apigee.organizations.developers.subscriptions.create): Developer: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "DeleteDeveloperAttribute (apigee.organizations.developers.attributes.delete): Developer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'DeleteDeveloperAttribute (apigee.organizations.developers.attributes.delete): Developer: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ExpireDeveloperSubscription (apigee.organizations.developers.subscriptions.expire): Developer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ExpireDeveloperSubscription (apigee.organizations.developers.subscriptions.expire): Developer: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetDeveloper (apigee.organizations.developers.get): Developer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetDeveloper (apigee.organizations.developers.get): Developer: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetDeveloperAttribute (apigee.organizations.developers.attributes.get): Developer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetDeveloperAttribute (apigee.organizations.developers.attributes.get): Developer: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetDeveloperSubscription (apigee.organizations.developers.subscriptions.get): Developer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetDeveloperSubscription (apigee.organizations.developers.subscriptions.get): Developer: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListDeveloperApps (apigee.organizations.developers.apps.list): Developer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListDeveloperApps (apigee.organizations.developers.apps.list): Developer: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListDeveloperAttributes (apigee.organizations.developers.attributes.list): Developer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListDeveloperAttributes (apigee.organizations.developers.attributes.list): Developer: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListDeveloperSubscriptions (apigee.organizations.developers.subscriptions.list): Developer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListDeveloperSubscriptions (apigee.organizations.developers.subscriptions.list): Developer: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "SetDeveloperStatus (apigee.organizations.developers.setDeveloperStatus): Developer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'SetDeveloperStatus (apigee.organizations.developers.setDeveloperStatus): Developer: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "UpdateDeveloperAttribute (apigee.organizations.developers.attributes.updateDeveloperAttribute): Developer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'UpdateDeveloperAttribute (apigee.organizations.developers.attributes.updateDeveloperAttribute): Developer: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("DevelopersApp", { concurrent: true }, () => {
-      test.provider.todo(
-        "AttributesApp (apigee.organizations.developers.apps.attributes): DevelopersApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'AttributesApp (apigee.organizations.developers.apps.attributes): DevelopersApp: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "CreateAppKeyCreate (apigee.organizations.developers.apps.keys.create.create): DevelopersApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'CreateAppKeyCreate (apigee.organizations.developers.apps.keys.create.create): DevelopersApp: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "DeleteAppAttribute (apigee.organizations.developers.apps.attributes.delete): DevelopersApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'DeleteAppAttribute (apigee.organizations.developers.apps.attributes.delete): DevelopersApp: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GenerateKeyPairOrUpdateDeveloperAppStatus (apigee.organizations.developers.apps.generateKeyPairOrUpdateDeveloperAppStatus): DevelopersApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GenerateKeyPairOrUpdateDeveloperAppStatus (apigee.organizations.developers.apps.generateKeyPairOrUpdateDeveloperAppStatus): DevelopersApp: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetApp@DevelopersApp (apigee.organizations.developers.apps.get): DevelopersApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetApp@DevelopersApp (apigee.organizations.developers.apps.get): DevelopersApp: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetAppAttribute (apigee.organizations.developers.apps.attributes.get): DevelopersApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetAppAttribute (apigee.organizations.developers.apps.attributes.get): DevelopersApp: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListAppAttributes (apigee.organizations.developers.apps.attributes.list): DevelopersApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListAppAttributes (apigee.organizations.developers.apps.attributes.list): DevelopersApp: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "UpdateDeveloperAppAttribute (apigee.organizations.developers.apps.attributes.updateDeveloperAppAttribute): DevelopersApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'UpdateDeveloperAppAttribute (apigee.organizations.developers.apps.attributes.updateDeveloperAppAttribute): DevelopersApp: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("DevelopersAppsKey", { concurrent: true }, () => {
-      test.provider.todo(
-        "DeleteKeyApiproduct@DevelopersAppsKey (apigee.organizations.developers.apps.keys.apiproducts.delete): DevelopersAppsKey: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'DeleteKeyApiproduct@DevelopersAppsKey (apigee.organizations.developers.apps.keys.apiproducts.delete): DevelopersAppsKey: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetKey@DevelopersAppsKey (apigee.organizations.developers.apps.keys.get): DevelopersAppsKey: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetKey@DevelopersAppsKey (apigee.organizations.developers.apps.keys.get): DevelopersAppsKey: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ReplaceDeveloperAppKey (apigee.organizations.developers.apps.keys.replaceDeveloperAppKey): DevelopersAppsKey: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ReplaceDeveloperAppKey (apigee.organizations.developers.apps.keys.replaceDeveloperAppKey): DevelopersAppsKey: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "UpdateDeveloperAppKey (apigee.organizations.developers.apps.keys.updateDeveloperAppKey): DevelopersAppsKey: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'UpdateDeveloperAppKey (apigee.organizations.developers.apps.keys.updateDeveloperAppKey): DevelopersAppsKey: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "UpdateDeveloperAppKeyApiProduct (apigee.organizations.developers.apps.keys.apiproducts.updateDeveloperAppKeyApiProduct): DevelopersAppsKey: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'UpdateDeveloperAppKeyApiProduct (apigee.organizations.developers.apps.keys.apiproducts.updateDeveloperAppKeyApiProduct): DevelopersAppsKey: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("DnsZone", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDnsZone (apigee.organizations.dnsZones.get): DnsZone: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetDnsZone (apigee.organizations.dnsZones.get): DnsZone: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("EndpointAttachment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetEndpointAttachment (apigee.organizations.endpointAttachments.get): EndpointAttachment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetEndpointAttachment (apigee.organizations.endpointAttachments.get): EndpointAttachment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("Envgroup", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetEnvgroup (apigee.organizations.envgroups.get): Envgroup: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetEnvgroup (apigee.organizations.envgroups.get): Envgroup: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvgroupAttachments (apigee.organizations.envgroups.attachments.list): Envgroup: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListEnvgroupAttachments (apigee.organizations.envgroups.attachments.list): Envgroup: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("EnvgroupsAttachment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetAttachment@EnvgroupsAttachment (apigee.organizations.envgroups.attachments.get): EnvgroupsAttachment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetAttachment@EnvgroupsAttachment (apigee.organizations.envgroups.attachments.get): EnvgroupsAttachment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("Environment", { concurrent: true }, () => {
-      test.provider.todo(
-        "AttachSharedFlowToFlowHook (apigee.organizations.environments.flowhooks.attachSharedFlowToFlowHook): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'AttachSharedFlowToFlowHook (apigee.organizations.environments.flowhooks.attachSharedFlowToFlowHook): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "BatchSecurityIncidentUpdate (apigee.organizations.environments.securityIncidents.batchUpdate): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'BatchSecurityIncidentUpdate (apigee.organizations.environments.securityIncidents.batchUpdate): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "CreateEnvironmentAnalyticExport (apigee.organizations.environments.analytics.exports.create): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'CreateEnvironmentAnalyticExport (apigee.organizations.environments.analytics.exports.create): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "CreateEnvironmentQuery (apigee.organizations.environments.queries.create): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'CreateEnvironmentQuery (apigee.organizations.environments.queries.create): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "CreateEnvironmentResourcefile (apigee.organizations.environments.resourcefiles.create): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'CreateEnvironmentResourcefile (apigee.organizations.environments.resourcefiles.create): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "CreateEnvironmentSecurityReport (apigee.organizations.environments.securityReports.create): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'CreateEnvironmentSecurityReport (apigee.organizations.environments.securityReports.create): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "DeleteEnvironmentCache (apigee.organizations.environments.caches.delete): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'DeleteEnvironmentCache (apigee.organizations.environments.caches.delete): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "DeleteEnvironmentResourcefile (apigee.organizations.environments.resourcefiles.delete): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'DeleteEnvironmentResourcefile (apigee.organizations.environments.resourcefiles.delete): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "DeployEnvironmentApiRevision (apigee.organizations.environments.apis.revisions.deploy): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'DeployEnvironmentApiRevision (apigee.organizations.environments.apis.revisions.deploy): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "DeployEnvironmentSharedflowRevision (apigee.organizations.environments.sharedflows.revisions.deploy): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'DeployEnvironmentSharedflowRevision (apigee.organizations.environments.sharedflows.revisions.deploy): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "DetachSharedFlowFromFlowHook (apigee.organizations.environments.flowhooks.detachSharedFlowFromFlowHook): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'DetachSharedFlowFromFlowHook (apigee.organizations.environments.flowhooks.detachSharedFlowFromFlowHook): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GenerateArchiveDeploymentUploadUrl (apigee.organizations.environments.archiveDeployments.generateUploadUrl): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GenerateArchiveDeploymentUploadUrl (apigee.organizations.environments.archiveDeployments.generateUploadUrl): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GenerateDeploymentDeployChangeReport (apigee.organizations.environments.apis.revisions.deployments.generateDeployChangeReport): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GenerateDeploymentDeployChangeReport (apigee.organizations.environments.apis.revisions.deployments.generateDeployChangeReport): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GenerateDeploymentUndeployChangeReport (apigee.organizations.environments.apis.revisions.deployments.generateUndeployChangeReport): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GenerateDeploymentUndeployChangeReport (apigee.organizations.environments.apis.revisions.deployments.generateUndeployChangeReport): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetEnvironment (apigee.organizations.environments.get): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetEnvironment (apigee.organizations.environments.get): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetEnvironmentDeployment (apigee.organizations.environments.deployments.get): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetEnvironmentDeployment (apigee.organizations.environments.deployments.get): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetEnvironmentFlowhook (apigee.organizations.environments.flowhooks.get): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetEnvironmentFlowhook (apigee.organizations.environments.flowhooks.get): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetEnvironmentOptimizedStat (apigee.organizations.environments.optimizedStats.get): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetEnvironmentOptimizedStat (apigee.organizations.environments.optimizedStats.get): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetEnvironmentQuery (apigee.organizations.environments.queries.get): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetEnvironmentQuery (apigee.organizations.environments.queries.get): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetEnvironmentResourcefile (apigee.organizations.environments.resourcefiles.get): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetEnvironmentResourcefile (apigee.organizations.environments.resourcefiles.get): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetEnvironmentSecurityIncident (apigee.organizations.environments.securityIncidents.get): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetEnvironmentSecurityIncident (apigee.organizations.environments.securityIncidents.get): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetEnvironmentSecurityReport (apigee.organizations.environments.securityReports.get): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetEnvironmentSecurityReport (apigee.organizations.environments.securityReports.get): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetEnvironmentStat (apigee.organizations.environments.stats.get): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetEnvironmentStat (apigee.organizations.environments.stats.get): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetRevisionDeployments (apigee.organizations.environments.sharedflows.revisions.getDeployments): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetRevisionDeployments (apigee.organizations.environments.sharedflows.revisions.getDeployments): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentAnalyticExports (apigee.organizations.environments.analytics.exports.list): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListEnvironmentAnalyticExports (apigee.organizations.environments.analytics.exports.list): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentApiDeployments (apigee.organizations.environments.apis.deployments.list): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListEnvironmentApiDeployments (apigee.organizations.environments.apis.deployments.list): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentApiRevisionDebugsessions (apigee.organizations.environments.apis.revisions.debugsessions.list): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListEnvironmentApiRevisionDebugsessions (apigee.organizations.environments.apis.revisions.debugsessions.list): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentArchiveDeployments (apigee.organizations.environments.archiveDeployments.list): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListEnvironmentArchiveDeployments (apigee.organizations.environments.archiveDeployments.list): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentDeployments (apigee.organizations.environments.deployments.list): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListEnvironmentDeployments (apigee.organizations.environments.deployments.list): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentQueries (apigee.organizations.environments.queries.list): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListEnvironmentQueries (apigee.organizations.environments.queries.list): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentResourcefiles (apigee.organizations.environments.resourcefiles.list): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListEnvironmentResourcefiles (apigee.organizations.environments.resourcefiles.list): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentSecurityActions (apigee.organizations.environments.securityActions.list): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListEnvironmentSecurityActions (apigee.organizations.environments.securityActions.list): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentSecurityIncidents (apigee.organizations.environments.securityIncidents.list): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListEnvironmentSecurityIncidents (apigee.organizations.environments.securityIncidents.list): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentSecurityReports (apigee.organizations.environments.securityReports.list): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListEnvironmentSecurityReports (apigee.organizations.environments.securityReports.list): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentSharedflowDeployments (apigee.organizations.environments.sharedflows.deployments.list): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListEnvironmentSharedflowDeployments (apigee.organizations.environments.sharedflows.deployments.list): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListResourcefileEnvironmentResources (apigee.organizations.environments.resourcefiles.listEnvironmentResources): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListResourcefileEnvironmentResources (apigee.organizations.environments.resourcefiles.listEnvironmentResources): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ModifyEnvironment (apigee.organizations.environments.modifyEnvironment): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ModifyEnvironment (apigee.organizations.environments.modifyEnvironment): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "PatchEnvironmentSecurityIncident (apigee.organizations.environments.securityIncidents.patch): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'PatchEnvironmentSecurityIncident (apigee.organizations.environments.securityIncidents.patch): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "QuerySecurityStatTabularStats (apigee.organizations.environments.securityStats.queryTabularStats): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'QuerySecurityStatTabularStats (apigee.organizations.environments.securityStats.queryTabularStats): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "QuerySecurityStatTimeSeriesStats (apigee.organizations.environments.securityStats.queryTimeSeriesStats): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'QuerySecurityStatTimeSeriesStats (apigee.organizations.environments.securityStats.queryTimeSeriesStats): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "SubscribeEnvironment (apigee.organizations.environments.subscribe): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'SubscribeEnvironment (apigee.organizations.environments.subscribe): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "UndeployEnvironmentApiRevision (apigee.organizations.environments.apis.revisions.undeploy): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'UndeployEnvironmentApiRevision (apigee.organizations.environments.apis.revisions.undeploy): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "UndeployEnvironmentSharedflowRevision (apigee.organizations.environments.sharedflows.revisions.undeploy): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'UndeployEnvironmentSharedflowRevision (apigee.organizations.environments.sharedflows.revisions.undeploy): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "UnsubscribeEnvironment (apigee.organizations.environments.unsubscribe): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'UnsubscribeEnvironment (apigee.organizations.environments.unsubscribe): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "UpdateEnvironment (apigee.organizations.environments.updateEnvironment): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'UpdateEnvironment (apigee.organizations.environments.updateEnvironment): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "UpdateEnvironmentResourcefile (apigee.organizations.environments.resourcefiles.update): Environment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'UpdateEnvironmentResourcefile (apigee.organizations.environments.resourcefiles.update): Environment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("EnvironmentsApisRevisionsDebugsession", { concurrent: true }, () => {
-      test.provider.todo(
-        "DeleteDebugsessionData (apigee.organizations.environments.apis.revisions.debugsessions.deleteData): EnvironmentsApisRevisionsDebugsession: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'DeleteDebugsessionData (apigee.organizations.environments.apis.revisions.debugsessions.deleteData): EnvironmentsApisRevisionsDebugsession: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetDebugsession (apigee.organizations.environments.apis.revisions.debugsessions.get): EnvironmentsApisRevisionsDebugsession: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetDebugsession (apigee.organizations.environments.apis.revisions.debugsessions.get): EnvironmentsApisRevisionsDebugsession: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetDebugsessionData (apigee.organizations.environments.apis.revisions.debugsessions.data.get): EnvironmentsApisRevisionsDebugsession: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetDebugsessionData (apigee.organizations.environments.apis.revisions.debugsessions.data.get): EnvironmentsApisRevisionsDebugsession: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("EnvironmentsArchiveDeployment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GenerateArchiveDeploymentDownloadUrl (apigee.organizations.environments.archiveDeployments.generateDownloadUrl): EnvironmentsArchiveDeployment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GenerateArchiveDeploymentDownloadUrl (apigee.organizations.environments.archiveDeployments.generateDownloadUrl): EnvironmentsArchiveDeployment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetArchiveDeployment (apigee.organizations.environments.archiveDeployments.get): EnvironmentsArchiveDeployment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetArchiveDeployment (apigee.organizations.environments.archiveDeployments.get): EnvironmentsArchiveDeployment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("EnvironmentsKeystore", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetKeystore (apigee.organizations.environments.keystores.get): EnvironmentsKeystore: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetKeystore (apigee.organizations.environments.keystores.get): EnvironmentsKeystore: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("EnvironmentsKeystoresAlias", { concurrent: true }, () => {
-      test.provider.todo(
-        "CsrAliase (apigee.organizations.environments.keystores.aliases.csr): EnvironmentsKeystoresAlias: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'CsrAliase (apigee.organizations.environments.keystores.aliases.csr): EnvironmentsKeystoresAlias: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetAliase (apigee.organizations.environments.keystores.aliases.get): EnvironmentsKeystoresAlias: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetAliase (apigee.organizations.environments.keystores.aliases.get): EnvironmentsKeystoresAlias: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetAliaseCertificate (apigee.organizations.environments.keystores.aliases.getCertificate): EnvironmentsKeystoresAlias: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetAliaseCertificate (apigee.organizations.environments.keystores.aliases.getCertificate): EnvironmentsKeystoresAlias: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("EnvironmentsKeyvaluemap", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetKeyvaluemap@EnvironmentsKeyvaluemap (apigee.organizations.environments.keyvaluemaps.get): EnvironmentsKeyvaluemap: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetKeyvaluemap@EnvironmentsKeyvaluemap (apigee.organizations.environments.keyvaluemaps.get): EnvironmentsKeyvaluemap: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListKeyvaluemapEntries@EnvironmentsKeyvaluemap (apigee.organizations.environments.keyvaluemaps.entries.list): EnvironmentsKeyvaluemap: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListKeyvaluemapEntries@EnvironmentsKeyvaluemap (apigee.organizations.environments.keyvaluemaps.entries.list): EnvironmentsKeyvaluemap: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("EnvironmentsKeyvaluemapsEntry", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetEntry@EnvironmentsKeyvaluemapsEntry (apigee.organizations.environments.keyvaluemaps.entries.get): EnvironmentsKeyvaluemapsEntry: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetEntry@EnvironmentsKeyvaluemapsEntry (apigee.organizations.environments.keyvaluemaps.entries.get): EnvironmentsKeyvaluemapsEntry: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("EnvironmentsReference", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetReference (apigee.organizations.environments.references.get): EnvironmentsReference: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetReference (apigee.organizations.environments.references.get): EnvironmentsReference: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("EnvironmentsSecurityAction", { concurrent: true }, () => {
-      test.provider.todo(
-        "DisableSecurityAction (apigee.organizations.environments.securityActions.disable): EnvironmentsSecurityAction: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'DisableSecurityAction (apigee.organizations.environments.securityActions.disable): EnvironmentsSecurityAction: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "EnableSecurityAction (apigee.organizations.environments.securityActions.enable): EnvironmentsSecurityAction: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'EnableSecurityAction (apigee.organizations.environments.securityActions.enable): EnvironmentsSecurityAction: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetSecurityAction (apigee.organizations.environments.securityActions.get): EnvironmentsSecurityAction: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetSecurityAction (apigee.organizations.environments.securityActions.get): EnvironmentsSecurityAction: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("EnvironmentsTargetserver", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTargetserver (apigee.organizations.environments.targetservers.get): EnvironmentsTargetserver: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetTargetserver (apigee.organizations.environments.targetservers.get): EnvironmentsTargetserver: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("EnvironmentsTraceConfigOverride", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetOverride (apigee.organizations.environments.traceConfig.overrides.get): EnvironmentsTraceConfigOverride: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetOverride (apigee.organizations.environments.traceConfig.overrides.get): EnvironmentsTraceConfigOverride: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("Instance", { concurrent: true }, () => {
-      test.provider.todo(
-        "CreateInstanceCanaryevaluation (apigee.organizations.instances.canaryevaluations.create): Instance: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'CreateInstanceCanaryevaluation (apigee.organizations.instances.canaryevaluations.create): Instance: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetInstance (apigee.organizations.instances.get): Instance: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetInstance (apigee.organizations.instances.get): Instance: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetInstanceCanaryevaluation (apigee.organizations.instances.canaryevaluations.get): Instance: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetInstanceCanaryevaluation (apigee.organizations.instances.canaryevaluations.get): Instance: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListInstanceAttachments (apigee.organizations.instances.attachments.list): Instance: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListInstanceAttachments (apigee.organizations.instances.attachments.list): Instance: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListInstanceNatAddresses (apigee.organizations.instances.natAddresses.list): Instance: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListInstanceNatAddresses (apigee.organizations.instances.natAddresses.list): Instance: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ReportInstanceStatus (apigee.organizations.instances.reportStatus): Instance: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ReportInstanceStatus (apigee.organizations.instances.reportStatus): Instance: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("InstancesAttachment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetAttachment@InstancesAttachment (apigee.organizations.instances.attachments.get): InstancesAttachment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetAttachment@InstancesAttachment (apigee.organizations.instances.attachments.get): InstancesAttachment: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("InstancesNatAddress", { concurrent: true }, () => {
-      test.provider.todo(
-        "ActivateNatAddress (apigee.organizations.instances.natAddresses.activate): InstancesNatAddress: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ActivateNatAddress (apigee.organizations.instances.natAddresses.activate): InstancesNatAddress: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetNatAddress (apigee.organizations.instances.natAddresses.get): InstancesNatAddress: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetNatAddress (apigee.organizations.instances.natAddresses.get): InstancesNatAddress: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("Keyvaluemap", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetKeyvaluemap@Keyvaluemap (apigee.organizations.keyvaluemaps.get): Keyvaluemap: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetKeyvaluemap@Keyvaluemap (apigee.organizations.keyvaluemaps.get): Keyvaluemap: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListKeyvaluemapEntries@Keyvaluemap (apigee.organizations.keyvaluemaps.entries.list): Keyvaluemap: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListKeyvaluemapEntries@Keyvaluemap (apigee.organizations.keyvaluemaps.entries.list): Keyvaluemap: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("KeyvaluemapsEntry", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetEntry@KeyvaluemapsEntry (apigee.organizations.keyvaluemaps.entries.get): KeyvaluemapsEntry: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetEntry@KeyvaluemapsEntry (apigee.organizations.keyvaluemaps.entries.get): KeyvaluemapsEntry: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("Organization", { concurrent: true }, () => {
-      test.provider.todo(
-        "CreateHostQuery (apigee.organizations.hostQueries.create): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'CreateHostQuery (apigee.organizations.hostQueries.create): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "CreateHostSecurityReport (apigee.organizations.hostSecurityReports.create): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'CreateHostSecurityReport (apigee.organizations.hostSecurityReports.create): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetApp@Organization (apigee.organizations.apps.get): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetApp@Organization (apigee.organizations.apps.get): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetHostQuery (apigee.organizations.hostQueries.get): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetHostQuery (apigee.organizations.hostQueries.get): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetHostSecurityReport (apigee.organizations.hostSecurityReports.get): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetHostSecurityReport (apigee.organizations.hostSecurityReports.get): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetHostStat (apigee.organizations.hostStats.get): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetHostStat (apigee.organizations.hostStats.get): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetOrganization (apigee.organizations.get): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetOrganization (apigee.organizations.get): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetOrganizationProjectMapping (apigee.organizations.getProjectMapping): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetOrganizationProjectMapping (apigee.organizations.getProjectMapping): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetOrganizationSyncAuthorization (apigee.organizations.getSyncAuthorization): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetOrganizationSyncAuthorization (apigee.organizations.getSyncAuthorization): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListAnalyticDatastores (apigee.organizations.analytics.datastores.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListAnalyticDatastores (apigee.organizations.analytics.datastores.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListApiproducts (apigee.organizations.apiproducts.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListApiproducts (apigee.organizations.apiproducts.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListAppgroups (apigee.organizations.appgroups.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListAppgroups (apigee.organizations.appgroups.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListApps (apigee.organizations.apps.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListApps (apigee.organizations.apps.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListDatacollectors (apigee.organizations.datacollectors.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListDatacollectors (apigee.organizations.datacollectors.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListDeployments (apigee.organizations.deployments.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListDeployments (apigee.organizations.deployments.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListDevelopers (apigee.organizations.developers.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListDevelopers (apigee.organizations.developers.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListDnsZones (apigee.organizations.dnsZones.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListDnsZones (apigee.organizations.dnsZones.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEndpointAttachments (apigee.organizations.endpointAttachments.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListEndpointAttachments (apigee.organizations.endpointAttachments.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvgroups (apigee.organizations.envgroups.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListEnvgroups (apigee.organizations.envgroups.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListHostQueries (apigee.organizations.hostQueries.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListHostQueries (apigee.organizations.hostQueries.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListHostSecurityReports (apigee.organizations.hostSecurityReports.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListHostSecurityReports (apigee.organizations.hostSecurityReports.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListInstances (apigee.organizations.instances.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListInstances (apigee.organizations.instances.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListReports (apigee.organizations.reports.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListReports (apigee.organizations.reports.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListSecurityFeedback (apigee.organizations.securityFeedback.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListSecurityFeedback (apigee.organizations.securityFeedback.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListSecurityMonitoringConditions (apigee.organizations.securityMonitoringConditions.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListSecurityMonitoringConditions (apigee.organizations.securityMonitoringConditions.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListSecurityProfiles (apigee.organizations.securityProfiles.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListSecurityProfiles (apigee.organizations.securityProfiles.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListSecurityProfilesV2 (apigee.organizations.securityProfilesV2.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListSecurityProfilesV2 (apigee.organizations.securityProfilesV2.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListSharedflows (apigee.organizations.sharedflows.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListSharedflows (apigee.organizations.sharedflows.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListSpaces (apigee.organizations.spaces.list): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListSpaces (apigee.organizations.spaces.list): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "SetOrganizationAddons (apigee.organizations.setAddons): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'SetOrganizationAddons (apigee.organizations.setAddons): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "SetOrganizationSyncAuthorization (apigee.organizations.setSyncAuthorization): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'SetOrganizationSyncAuthorization (apigee.organizations.setSyncAuthorization): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "TestAnalyticDatastore (apigee.organizations.analytics.datastores.test): Organization: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'TestAnalyticDatastore (apigee.organizations.analytics.datastores.test): Organization: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
@@ -821,74 +821,74 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Report", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetReport (apigee.organizations.reports.get): Report: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetReport (apigee.organizations.reports.get): Report: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("SecurityFeedback", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSecurityFeedback (apigee.organizations.securityFeedback.get): SecurityFeedback: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetSecurityFeedback (apigee.organizations.securityFeedback.get): SecurityFeedback: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("SecurityMonitoringCondition", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSecurityMonitoringCondition (apigee.organizations.securityMonitoringConditions.get): SecurityMonitoringCondition: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetSecurityMonitoringCondition (apigee.organizations.securityMonitoringConditions.get): SecurityMonitoringCondition: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("SecurityProfile", { concurrent: true }, () => {
-      test.provider.todo(
-        "ComputeEnvironmentScores (apigee.organizations.securityProfiles.environments.computeEnvironmentScores): SecurityProfile: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ComputeEnvironmentScores (apigee.organizations.securityProfiles.environments.computeEnvironmentScores): SecurityProfile: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "DeleteSecurityProfileEnvironment (apigee.organizations.securityProfiles.environments.delete): SecurityProfile: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'DeleteSecurityProfileEnvironment (apigee.organizations.securityProfiles.environments.delete): SecurityProfile: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetSecurityProfile (apigee.organizations.securityProfiles.get): SecurityProfile: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetSecurityProfile (apigee.organizations.securityProfiles.get): SecurityProfile: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListSecurityProfileRevisions (apigee.organizations.securityProfiles.listRevisions): SecurityProfile: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListSecurityProfileRevisions (apigee.organizations.securityProfiles.listRevisions): SecurityProfile: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("SecurityProfilesV2", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSecurityProfilesV2 (apigee.organizations.securityProfilesV2.get): SecurityProfilesV2: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetSecurityProfilesV2 (apigee.organizations.securityProfilesV2.get): SecurityProfilesV2: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("Sharedflow", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSharedflow (apigee.organizations.sharedflows.get): Sharedflow: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetSharedflow (apigee.organizations.sharedflows.get): Sharedflow: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetSharedflowRevision (apigee.organizations.sharedflows.revisions.get): Sharedflow: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetSharedflowRevision (apigee.organizations.sharedflows.revisions.get): Sharedflow: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListSharedflowDeployments (apigee.organizations.sharedflows.deployments.list): Sharedflow: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListSharedflowDeployments (apigee.organizations.sharedflows.deployments.list): Sharedflow: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListSharedflowRevisionDeployments (apigee.organizations.sharedflows.revisions.deployments.list): Sharedflow: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListSharedflowRevisionDeployments (apigee.organizations.sharedflows.revisions.deployments.list): Sharedflow: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });
 
     describe("Space", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSpace (apigee.organizations.spaces.get): Space: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetSpace (apigee.organizations.spaces.get): Space: Needs a provisioned Apigee organization on the testing project (paid, or ~1h eval provisioning); without one calls fail with ApigeeResourceNotFound (403 "Permission denied on resource \\"organizations/{project}\\" (or… (GCP_TEST_APIGEE_ORG)',
         () => Effect.void,
       );
     });

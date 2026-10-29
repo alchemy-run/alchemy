@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeGroup } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated VMMigration binding as its own
@@ -15,23 +16,34 @@ export default class VMMigrationGeneratedHost extends GCP.Function<VMMigrationGe
   "VMMigrationGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.VMMigration.ListGroups();
-    const p1 = yield* GCP.VMMigration.ListImageImports();
-    const p2 = yield* GCP.VMMigration.ListSources();
+    const p0 = yield* GCP.VMMigration.AddGroupMigration(ProbeGroup);
+    const p1 = yield* GCP.VMMigration.GetGroup(ProbeGroup);
+    const p2 = yield* GCP.VMMigration.ListGroups();
+    const p3 = yield* GCP.VMMigration.ListImageImports();
+    const p4 = yield* GCP.VMMigration.ListSources();
+    const p5 = yield* GCP.VMMigration.RemoveGroupMigration(ProbeGroup);
     return {
       fetch: serveProbes({
-        ListGroups: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListImageImports: outcome(Retry.none(p1({ location: "us-central1" } as never))),
-        ListSources: outcome(Retry.none(p2({ location: "us-central1" } as never))),
+        AddGroupMigration: outcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        GetGroup: outcome(Retry.none(p1({} as never))),
+        ListGroups: outcome(Retry.none(p2({ location: "us-central1" } as never))),
+        ListImageImports: outcome(Retry.none(p3({ location: "us-central1" } as never))),
+        ListSources: outcome(Retry.none(p4({ location: "us-central1" } as never))),
+        RemoveGroupMigration: outcome(Retry.none(p5({} as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.VMMigration.AddGroupMigrationHttp,
+          GCP.VMMigration.GetGroupHttp,
           GCP.VMMigration.ListGroupsHttp,
           GCP.VMMigration.ListImageImportsHttp,
           GCP.VMMigration.ListSourcesHttp,
+          GCP.VMMigration.RemoveGroupMigrationHttp,
         ),
       ),
     ),

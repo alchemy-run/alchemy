@@ -48,13 +48,21 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Catalog", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetCatalog (biglake.projects.locations.catalogs.get): Catalog: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetCatalog (biglake.projects.locations.catalogs.get)",
+        () => probe("GetCatalog", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:biglake", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListCatalogDatabases (biglake.projects.locations.catalogs.databases.list): Catalog: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListCatalogDatabases (biglake.projects.locations.catalogs.databases.list)",
+        () => probe("ListCatalogDatabases", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:biglake", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

@@ -22,6 +22,9 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "CertificateMap": "ProbeCertificateMap"
+    },
+    "untestable": {}
   }
 }

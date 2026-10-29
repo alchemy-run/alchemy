@@ -7,6 +7,9 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "ProjectService": "ProbeProjectService"
+    },
+    "untestable": {}
   }
 }

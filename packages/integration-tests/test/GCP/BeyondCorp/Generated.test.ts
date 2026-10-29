@@ -48,30 +48,30 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AppConnection", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetAppConnection (beyondcorp.projects.locations.appConnections.get): AppConnection: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetAppConnection (beyondcorp.projects.locations.appConnections.get): AppConnection: Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
         () => Effect.void,
       );
     });
 
     describe("AppConnector", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetAppConnector (beyondcorp.projects.locations.appConnectors.get): AppConnector: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetAppConnector (beyondcorp.projects.locations.appConnectors.get): AppConnector: Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ReportAppConnectorStatus (beyondcorp.projects.locations.appConnectors.reportStatus): AppConnector: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ReportAppConnectorStatus (beyondcorp.projects.locations.appConnectors.reportStatus): AppConnector: Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ResolveAppConnectorInstanceConfig (beyondcorp.projects.locations.appConnectors.resolveInstanceConfig): AppConnector: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ResolveAppConnectorInstanceConfig (beyondcorp.projects.locations.appConnectors.resolveInstanceConfig): AppConnector: Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
         () => Effect.void,
       );
     });
 
     describe("AppGateway", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetAppGateway (beyondcorp.projects.locations.appGateways.get): AppGateway: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetAppGateway (beyondcorp.projects.locations.appGateways.get): AppGateway: Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
         () => Effect.void,
       );
     });
@@ -120,19 +120,19 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("SecurityGateway", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSecurityGateway (beyondcorp.projects.locations.securityGateways.get): SecurityGateway: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetSecurityGateway (beyondcorp.projects.locations.securityGateways.get): SecurityGateway: Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListSecurityGatewayApplications (beyondcorp.projects.locations.securityGateways.applications.list): SecurityGateway: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListSecurityGatewayApplications (beyondcorp.projects.locations.securityGateways.applications.list): SecurityGateway: Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
         () => Effect.void,
       );
     });
 
     describe("SecurityGatewaysApplication", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetApplication (beyondcorp.projects.locations.securityGateways.applications.get): SecurityGatewaysApplication: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetApplication (beyondcorp.projects.locations.securityGateways.applications.get): SecurityGatewaysApplication: Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
         () => Effect.void,
       );
     });

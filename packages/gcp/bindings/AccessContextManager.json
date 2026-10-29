@@ -19,6 +19,13 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "untestable": {
+      "AccessPoliciesAccessLevel": "Access policies live on the organization and need Access Context Manager admin there; the testing credentials get Forbidden \"The caller does not have (GOOGLE_ORGANIZATION_ID)",
+      "AccessPoliciesAuthorizedOrgsDesc": "Access policies live on the organization and need Access Context Manager admin there; the testing credentials get Forbidden \"The caller does not have (GOOGLE_ORGANIZATION_ID)",
+      "AccessPoliciesServicePerimeter": "Access policies live on the organization and need Access Context Manager admin there; the testing credentials get Forbidden \"The caller does not have (GOOGLE_ORGANIZATION_ID)",
+      "AccessPolicy": "Access policies live on the organization and need Access Context Manager admin there; the testing credentials get Forbidden \"The caller does not have (GOOGLE_ORGANIZATION_ID)",
+      "GcpUserAccessBinding": "Access policies live on the organization and need Access Context Manager admin there; the testing credentials get Forbidden \"The caller does not have (GOOGLE_ORGANIZATION_ID)"
+    }
   }
 }

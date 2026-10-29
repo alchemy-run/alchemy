@@ -25,6 +25,9 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "untestable": {
+      "ChannelConnection": "ChannelConnection is created in a third-party provider project using a subscriber Channel activation token. The testing project is not an Eventarc SaaS partner; live create is gated. (GCP_TEST_EVENTARC_PARTNER)"
+    }
   }
 }

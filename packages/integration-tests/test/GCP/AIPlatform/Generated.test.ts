@@ -48,8 +48,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Agent", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetAgent (aiplatform.projects.locations.agents.get): Agent: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetAgent (aiplatform.projects.locations.agents.get): Agent: AgentService is v1beta1-only; the aiplatform_v1 SDK gets BadRequest "This API version is not supported by AgentService. Please use the (GCP_TEST_AIPLATFORM_AGENTS)',
         () => Effect.void,
       );
     });
@@ -73,35 +73,51 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("CustomJob", { concurrent: true }, () => {
-      test.provider.todo(
-        "CancelCustomJob (aiplatform.projects.locations.customJobs.cancel): CustomJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CancelCustomJob (aiplatform.projects.locations.customJobs.cancel)",
+        () => probe("CancelCustomJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetCustomJob (aiplatform.projects.locations.customJobs.get): CustomJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetCustomJob (aiplatform.projects.locations.customJobs.get)",
+        () => probe("GetCustomJob", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DataLabelingJob", { concurrent: true }, () => {
-      test.provider.todo(
-        "CancelDataLabelingJob (aiplatform.projects.locations.dataLabelingJobs.cancel): DataLabelingJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'CancelDataLabelingJob (aiplatform.projects.locations.dataLabelingJobs.cancel): DataLabelingJob: Vertex AI data labeling is shut down for new projects: create fails with BadRequest "Vertex DataLabelingJob is deprecated, so new project ... will not be able to use the service unless they opt-in to use Labelbox human (GCP_TEST_AIPLATFORM_DATA_LABELING)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetDataLabelingJob (aiplatform.projects.locations.dataLabelingJobs.get): DataLabelingJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetDataLabelingJob (aiplatform.projects.locations.dataLabelingJobs.get): DataLabelingJob: Vertex AI data labeling is shut down for new projects: create fails with BadRequest "Vertex DataLabelingJob is deprecated, so new project ... will not be able to use the service unless they opt-in to use Labelbox human (GCP_TEST_AIPLATFORM_DATA_LABELING)',
         () => Effect.void,
       );
     });
 
     describe("DeploymentResourcePool", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDeploymentResourcePool (aiplatform.projects.locations.deploymentResourcePools.get): DeploymentResourcePool: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDeploymentResourcePool (aiplatform.projects.locations.deploymentResourcePools.get)",
+        () => probe("GetDeploymentResourcePool", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "QueryDeploymentResourcePoolDeployedModels (aiplatform.projects.locations.deploymentResourcePools.queryDeployedModels): DeploymentResourcePool: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "QueryDeploymentResourcePoolDeployedModels (aiplatform.projects.locations.deploymentResourcePools.queryDeployedModels)",
+        () => probe("QueryDeploymentResourcePoolDeployedModels", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -285,9 +301,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("EvaluationItem", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetEvaluationItem (aiplatform.projects.locations.evaluationItems.get): EvaluationItem: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetEvaluationItem (aiplatform.projects.locations.evaluationItems.get)",
+        () => probe("GetEvaluationItem", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -336,13 +356,21 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("FeatureOnlineStore", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetFeatureOnlineStore (aiplatform.projects.locations.featureOnlineStores.get): FeatureOnlineStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetFeatureOnlineStore (aiplatform.projects.locations.featureOnlineStores.get)",
+        () => probe("GetFeatureOnlineStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListFeatureOnlineStoreFeatureViews (aiplatform.projects.locations.featureOnlineStores.featureViews.list): FeatureOnlineStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListFeatureOnlineStoreFeatureViews (aiplatform.projects.locations.featureOnlineStores.featureViews.list)",
+        () => probe("ListFeatureOnlineStoreFeatureViews", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -692,20 +720,20 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ModelDeploymentMonitoringJob", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.get): ModelDeploymentMonitoringJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.get): ModelDeploymentMonitoringJob: Monitoring needs an endpoint with a deployed model: against an empty endpoint create fails with BadRequest "Deployed Model ID: `0` does not (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "PauseModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.pause): ModelDeploymentMonitoringJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'PauseModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.pause): ModelDeploymentMonitoringJob: Monitoring needs an endpoint with a deployed model: against an empty endpoint create fails with BadRequest "Deployed Model ID: `0` does not (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ResumeModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.resume): ModelDeploymentMonitoringJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ResumeModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.resume): ModelDeploymentMonitoringJob: Monitoring needs an endpoint with a deployed model: against an empty endpoint create fails with BadRequest "Deployed Model ID: `0` does not (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "SearchModelDeploymentMonitoringJobModelDeploymentMonitoringStatsAnomalies (aiplatform.projects.locations.modelDeploymentMonitoringJobs.searchModelDeploymentMonitoringStatsAnomalies): ModelDeploymentMonitoringJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'SearchModelDeploymentMonitoringJobModelDeploymentMonitoringStatsAnomalies (aiplatform.projects.locations.modelDeploymentMonitoringJobs.searchModelDeploymentMonitoringStatsAnomalies): ModelDeploymentMonitoringJob: Monitoring needs an endpoint with a deployed model: against an empty endpoint create fails with BadRequest "Deployed Model ID: `0` does not (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)',
         () => Effect.void,
       );
     });
@@ -748,16 +776,16 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("OnlineEvaluator", { concurrent: true }, () => {
-      test.provider.todo(
-        "ActivateOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.activate): OnlineEvaluator: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ActivateOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.activate): OnlineEvaluator: Evaluators need an existing evaluation metric; a missing one fails with BadRequest "Request contains an invalid argument." Set (GCP_TEST_AIPLATFORM_EVALUATION_METRIC)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.get): OnlineEvaluator: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.get): OnlineEvaluator: Evaluators need an existing evaluation metric; a missing one fails with BadRequest "Request contains an invalid argument." Set (GCP_TEST_AIPLATFORM_EVALUATION_METRIC)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "SuspendOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.suspend): OnlineEvaluator: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'SuspendOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.suspend): OnlineEvaluator: Evaluators need an existing evaluation metric; a missing one fails with BadRequest "Request contains an invalid argument." Set (GCP_TEST_AIPLATFORM_EVALUATION_METRIC)',
         () => Effect.void,
       );
     });
@@ -1640,24 +1668,24 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("RagCorpora", { concurrent: true }, () => {
-      test.provider.todo(
-        "DeleteRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.delete): RagCorpora: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'DeleteRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.delete): RagCorpora: New projects must switch RAG Engine to Serverless mode first; otherwise create fails with BadRequest "For new projects, using Spanner mode with RAG Engine in us-central1, us-east1, and us-east4 is restricted to only (GCP_TEST_AIPLATFORM_RAG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetRagCorpora (aiplatform.projects.locations.ragCorpora.get): RagCorpora: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetRagCorpora (aiplatform.projects.locations.ragCorpora.get): RagCorpora: New projects must switch RAG Engine to Serverless mode first; otherwise create fails with BadRequest "For new projects, using Spanner mode with RAG Engine in us-central1, us-east1, and us-east4 is restricted to only (GCP_TEST_AIPLATFORM_RAG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.get): RagCorpora: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'GetRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.get): RagCorpora: New projects must switch RAG Engine to Serverless mode first; otherwise create fails with BadRequest "For new projects, using Spanner mode with RAG Engine in us-central1, us-east1, and us-east4 is restricted to only (GCP_TEST_AIPLATFORM_RAG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ImportRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.import): RagCorpora: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ImportRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.import): RagCorpora: New projects must switch RAG Engine to Serverless mode first; otherwise create fails with BadRequest "For new projects, using Spanner mode with RAG Engine in us-central1, us-east1, and us-east4 is restricted to only (GCP_TEST_AIPLATFORM_RAG)',
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListRagCorporaRagFiles (aiplatform.projects.locations.ragCorpora.ragFiles.list): RagCorpora: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        'ListRagCorporaRagFiles (aiplatform.projects.locations.ragCorpora.ragFiles.list): RagCorpora: New projects must switch RAG Engine to Serverless mode first; otherwise create fails with BadRequest "For new projects, using Spanner mode with RAG Engine in us-central1, us-east1, and us-east4 is restricted to only (GCP_TEST_AIPLATFORM_RAG)',
         () => Effect.void,
       );
     });
@@ -1954,15 +1982,15 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("SemanticGovernancePolicy", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSemanticGovernancePolicy (aiplatform.projects.locations.semanticGovernancePolicies.get): SemanticGovernancePolicy: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetSemanticGovernancePolicy (aiplatform.projects.locations.semanticGovernancePolicies.get): SemanticGovernancePolicy: Policies govern an existing Vertex AI Agent (`projects/{p}/locations/{l}/agents/{a}`), which the v1 API cannot create. (GCP_TEST_AGENT)",
         () => Effect.void,
       );
     });
 
     describe("SpecialistPool", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSpecialistPool (aiplatform.projects.locations.specialistPools.get): SpecialistPool: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetSpecialistPool (aiplatform.projects.locations.specialistPools.get): SpecialistPool: Vertex AI data labeling is shut down: create fails with BadRequest (GCP_TEST_AIPLATFORM_DATA_LABELING)",
         () => Effect.void,
       );
     });
@@ -2158,13 +2186,21 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("TuningJob", { concurrent: true }, () => {
-      test.provider.todo(
-        "CancelTuningJob (aiplatform.projects.locations.tuningJobs.cancel): TuningJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CancelTuningJob (aiplatform.projects.locations.tuningJobs.cancel)",
+        () => probe("CancelTuningJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetTuningJob (aiplatform.projects.locations.tuningJobs.get): TuningJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTuningJob (aiplatform.projects.locations.tuningJobs.get)",
+        () => probe("GetTuningJob", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

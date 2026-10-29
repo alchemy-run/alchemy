@@ -41,6 +41,7 @@
       "ClustersTopic": "Events",
       "ConnectCluster": "Connect",
       "SchemaRegistry": "Schemas"
-    }
+    },
+    "untestable": {}
   }
 }

@@ -48,8 +48,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("InstancesBackup", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetBackup (looker.projects.locations.instances.backups.get): InstancesBackup: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBackup (looker.projects.locations.instances.backups.get): InstancesBackup: Backups need an ACTIVE Looker instance, which bills hourly. Set (GCP_TEST_LOOKER_INSTANCE)",
         () => Effect.void,
       );
     });

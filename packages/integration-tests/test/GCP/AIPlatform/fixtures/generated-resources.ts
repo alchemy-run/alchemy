@@ -110,3 +110,46 @@ export const ProbeSession = Effect.gen(function* () {
     userId: "alchemy-probe",
   });
 });
+
+export const ProbeCustomJob = GCP.AIPlatform.CustomJob("ProbeCustomJob", {
+  location: "us-central1",
+  displayName: "alchemy-echo",
+  jobSpec: {
+    workerPoolSpecs: [
+      {
+        machineSpec: { machineType: "n1-standard-4" },
+        replicaCount: "1",
+        containerSpec: {
+          imageUri: "gcr.io/google-samples/hello-app:1.0",
+          command: ["echo"],
+          args: ["ok"],
+        },
+      },
+    ],
+    scheduling: { timeout: "600s" },
+  },
+});
+export const ProbeDeploymentResourcePool = GCP.AIPlatform.DeploymentResourcePool(
+  "ProbeDeploymentResourcePool",
+  {
+    location: "us-central1",
+    dedicatedResources: {
+      minReplicaCount: 1,
+      maxReplicaCount: 1,
+      machineSpec: { machineType: "n1-standard-2" },
+    },
+  },
+);
+export const ProbeFeatureOnlineStore = GCP.AIPlatform.FeatureOnlineStore(
+  "ProbeFeatureOnlineStore",
+  {
+    location: "us-central1",
+  },
+);
+export const ProbeTuningJob = GCP.AIPlatform.TuningJob("ProbeTuningJob", {
+  location: "us-central1",
+  baseModel: "gemini-2.5-flash",
+  supervisedTuningSpec: {
+    trainingDatasetUri: "gs://cloud-samples-data/ai-platform/tuning/sft_train.jsonl",
+  },
+});

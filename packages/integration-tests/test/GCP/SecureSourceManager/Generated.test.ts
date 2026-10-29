@@ -267,48 +267,48 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("RepositoriesBranchRule", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetBranchRule (securesourcemanager.projects.locations.repositories.branchRules.get): RepositoriesBranchRule: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBranchRule (securesourcemanager.projects.locations.repositories.branchRules.get): RepositoriesBranchRule: needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("RepositoriesHook", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetHook (securesourcemanager.projects.locations.repositories.hooks.get): RepositoriesHook: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetHook (securesourcemanager.projects.locations.repositories.hooks.get): RepositoriesHook: needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("RepositoriesIssue", { concurrent: true }, () => {
-      test.provider.todo(
-        "CloseIssue (securesourcemanager.projects.locations.repositories.issues.close): RepositoriesIssue: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "CloseIssue (securesourcemanager.projects.locations.repositories.issues.close): RepositoriesIssue: needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetIssue (securesourcemanager.projects.locations.repositories.issues.get): RepositoriesIssue: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetIssue (securesourcemanager.projects.locations.repositories.issues.get): RepositoriesIssue: needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListIssueComments (securesourcemanager.projects.locations.repositories.issues.issueComments.list): RepositoriesIssue: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListIssueComments (securesourcemanager.projects.locations.repositories.issues.issueComments.list): RepositoriesIssue: needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "OpenIssue (securesourcemanager.projects.locations.repositories.issues.open): RepositoriesIssue: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "OpenIssue (securesourcemanager.projects.locations.repositories.issues.open): RepositoriesIssue: needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("RepositoriesIssuesIssueComment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetIssueComment (securesourcemanager.projects.locations.repositories.issues.issueComments.get): RepositoriesIssuesIssueComment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetIssueComment (securesourcemanager.projects.locations.repositories.issues.issueComments.get): RepositoriesIssuesIssueComment: needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("RepositoriesPullRequestsPullRequestComment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPullRequestComment (securesourcemanager.projects.locations.repositories.pullRequests.pullRequestComments.get): RepositoriesPullRequestsPullRequestComment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPullRequestComment (securesourcemanager.projects.locations.repositories.pullRequests.pullRequestComments.get): RepositoriesPullRequestsPullRequestComment: needs GCP_TEST_SECURE_SOURCE_MANAGER_PULL_REQUEST (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });

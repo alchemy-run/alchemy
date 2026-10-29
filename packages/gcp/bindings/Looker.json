@@ -7,6 +7,9 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "untestable": {
+      "InstancesBackup": "Backups need an ACTIVE Looker instance, which bills hourly. Set (GCP_TEST_LOOKER_INSTANCE)"
+    }
   }
 }

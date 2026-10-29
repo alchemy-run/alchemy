@@ -13,6 +13,12 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "Contact": "ProbeContact"
+    },
+    "untestable": {
+      "FolderContact": "Folder contacts need a folder the test identity can manage contacts on. (GOOGLE_FOLDER_ID)",
+      "OrganizationContact": "Organization contacts need org-level Essential Contacts permissions the testing service account does not have (calls fail with Forbidden). Set (GOOGLE_ORGANIZATION_ID)"
+    }
   }
 }

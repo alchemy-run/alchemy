@@ -147,50 +147,54 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Release", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetRelease (saasservicemgmt.projects.locations.releases.get): Release: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetRelease (saasservicemgmt.projects.locations.releases.get): Release: Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
         () => Effect.void,
       );
     });
 
     describe("Rollout", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetRollout (saasservicemgmt.projects.locations.rollouts.get): Rollout: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetRollout (saasservicemgmt.projects.locations.rollouts.get): Rollout: Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
         () => Effect.void,
       );
     });
 
     describe("RolloutKind", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetRolloutKind (saasservicemgmt.projects.locations.rolloutKinds.get): RolloutKind: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetRolloutKind (saasservicemgmt.projects.locations.rolloutKinds.get): RolloutKind: Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
         () => Effect.void,
       );
     });
 
     describe("Saa", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSaa (saasservicemgmt.projects.locations.saas.get): Saa: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetSaa (saasservicemgmt.projects.locations.saas.get)",
+        () => probe("GetSaa", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:saasservicemanagement", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("Tenant", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTenant (saasservicemgmt.projects.locations.tenants.get): Tenant: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetTenant (saasservicemgmt.projects.locations.tenants.get): Tenant: Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
         () => Effect.void,
       );
     });
 
     describe("Unit", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetUnit (saasservicemgmt.projects.locations.units.get): Unit: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetUnit (saasservicemgmt.projects.locations.units.get): Unit: Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
         () => Effect.void,
       );
     });
 
     describe("UnitKind", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetUnitKind (saasservicemgmt.projects.locations.unitKinds.get): UnitKind: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetUnitKind (saasservicemgmt.projects.locations.unitKinds.get): UnitKind: Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
         () => Effect.void,
       );
     });

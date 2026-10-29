@@ -48,22 +48,26 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Contact", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetContact@Contact (essentialcontacts.projects.contacts.get): Contact: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetContact@Contact (essentialcontacts.projects.contacts.get)",
+        () => probe("GetContact@Contact", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:essentialcontacts", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("FolderContact", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetContact@FolderContact (essentialcontacts.folders.contacts.get): FolderContact: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetContact@FolderContact (essentialcontacts.folders.contacts.get): FolderContact: Folder contacts need a folder the test identity can manage contacts on. (GOOGLE_FOLDER_ID)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationContact", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetContact@OrganizationContact (essentialcontacts.organizations.contacts.get): OrganizationContact: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetContact@OrganizationContact (essentialcontacts.organizations.contacts.get): OrganizationContact: Organization contacts need org-level Essential Contacts permissions the testing service account does not have (calls fail with Forbidden). Set (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
     });

@@ -16,6 +16,7 @@
     "resources": {
       "Service": "App",
       "ServicesConnector": "Queries"
-    }
+    },
+    "untestable": {}
   }
 }

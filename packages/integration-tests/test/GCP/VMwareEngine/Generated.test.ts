@@ -48,179 +48,179 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Datastore", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDatastore (vmwareengine.projects.locations.datastores.get): Datastore: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetDatastore (vmwareengine.projects.locations.datastores.get): Datastore: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
     });
 
     describe("NetworkPeering", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetNetworkPeering (vmwareengine.projects.locations.networkPeerings.get): NetworkPeering: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetNetworkPeering (vmwareengine.projects.locations.networkPeerings.get): NetworkPeering: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListNetworkPeeringPeeringRoutes (vmwareengine.projects.locations.networkPeerings.peeringRoutes.list): NetworkPeering: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListNetworkPeeringPeeringRoutes (vmwareengine.projects.locations.networkPeerings.peeringRoutes.list): NetworkPeering: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
     });
 
     describe("NetworkPoliciesExternalAccessRule", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetExternalAccessRule (vmwareengine.projects.locations.networkPolicies.externalAccessRules.get): NetworkPoliciesExternalAccessRule: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetExternalAccessRule (vmwareengine.projects.locations.networkPolicies.externalAccessRules.get): NetworkPoliciesExternalAccessRule: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
     });
 
     describe("NetworkPolicy", { concurrent: true }, () => {
-      test.provider.todo(
-        "FetchNetworkPolicyExternalAddresses (vmwareengine.projects.locations.networkPolicies.fetchExternalAddresses): NetworkPolicy: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "FetchNetworkPolicyExternalAddresses (vmwareengine.projects.locations.networkPolicies.fetchExternalAddresses): NetworkPolicy: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetNetworkPolicy (vmwareengine.projects.locations.networkPolicies.get): NetworkPolicy: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetNetworkPolicy (vmwareengine.projects.locations.networkPolicies.get): NetworkPolicy: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListNetworkPolicyExternalAccessRules (vmwareengine.projects.locations.networkPolicies.externalAccessRules.list): NetworkPolicy: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListNetworkPolicyExternalAccessRules (vmwareengine.projects.locations.networkPolicies.externalAccessRules.list): NetworkPolicy: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
     });
 
     describe("PrivateCloud", { concurrent: true }, () => {
-      test.provider.todo(
-        "CreatePrivateCloudHcxActivationKey (vmwareengine.projects.locations.privateClouds.hcxActivationKeys.create): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "CreatePrivateCloudHcxActivationKey (vmwareengine.projects.locations.privateClouds.hcxActivationKeys.create): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetPrivateCloud (vmwareengine.projects.locations.privateClouds.get): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPrivateCloud (vmwareengine.projects.locations.privateClouds.get): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetPrivateCloudHcxActivationKey (vmwareengine.projects.locations.privateClouds.hcxActivationKeys.get): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPrivateCloudHcxActivationKey (vmwareengine.projects.locations.privateClouds.hcxActivationKeys.get): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetPrivateCloudSubnet (vmwareengine.projects.locations.privateClouds.subnets.get): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPrivateCloudSubnet (vmwareengine.projects.locations.privateClouds.subnets.get): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetPrivateCloudUpgrade (vmwareengine.projects.locations.privateClouds.upgrades.get): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPrivateCloudUpgrade (vmwareengine.projects.locations.privateClouds.upgrades.get): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListPrivateCloudClusters (vmwareengine.projects.locations.privateClouds.clusters.list): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListPrivateCloudClusters (vmwareengine.projects.locations.privateClouds.clusters.list): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListPrivateCloudExternalAddresses (vmwareengine.projects.locations.privateClouds.externalAddresses.list): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListPrivateCloudExternalAddresses (vmwareengine.projects.locations.privateClouds.externalAddresses.list): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListPrivateCloudHcxActivationKeys (vmwareengine.projects.locations.privateClouds.hcxActivationKeys.list): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListPrivateCloudHcxActivationKeys (vmwareengine.projects.locations.privateClouds.hcxActivationKeys.list): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListPrivateCloudLoggingServers (vmwareengine.projects.locations.privateClouds.loggingServers.list): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListPrivateCloudLoggingServers (vmwareengine.projects.locations.privateClouds.loggingServers.list): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListPrivateCloudManagementDnsZoneBindings (vmwareengine.projects.locations.privateClouds.managementDnsZoneBindings.list): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListPrivateCloudManagementDnsZoneBindings (vmwareengine.projects.locations.privateClouds.managementDnsZoneBindings.list): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListPrivateCloudSubnets (vmwareengine.projects.locations.privateClouds.subnets.list): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListPrivateCloudSubnets (vmwareengine.projects.locations.privateClouds.subnets.list): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListPrivateCloudUpgrades (vmwareengine.projects.locations.privateClouds.upgrades.list): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListPrivateCloudUpgrades (vmwareengine.projects.locations.privateClouds.upgrades.list): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "MigratePrivateCloudManagementVms (vmwareengine.projects.locations.privateClouds.migrateManagementVms): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "MigratePrivateCloudManagementVms (vmwareengine.projects.locations.privateClouds.migrateManagementVms): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "PatchPrivateCloudSubnet (vmwareengine.projects.locations.privateClouds.subnets.patch): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "PatchPrivateCloudSubnet (vmwareengine.projects.locations.privateClouds.subnets.patch): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "PatchPrivateCloudUpgrade (vmwareengine.projects.locations.privateClouds.upgrades.patch): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "PatchPrivateCloudUpgrade (vmwareengine.projects.locations.privateClouds.upgrades.patch): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "PrivateCloudDeletionNow (vmwareengine.projects.locations.privateClouds.privateCloudDeletionNow): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "PrivateCloudDeletionNow (vmwareengine.projects.locations.privateClouds.privateCloudDeletionNow): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ResetPrivateCloudNsxCredentials (vmwareengine.projects.locations.privateClouds.resetNsxCredentials): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ResetPrivateCloudNsxCredentials (vmwareengine.projects.locations.privateClouds.resetNsxCredentials): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ResetPrivateCloudVcenterCredentials (vmwareengine.projects.locations.privateClouds.resetVcenterCredentials): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ResetPrivateCloudVcenterCredentials (vmwareengine.projects.locations.privateClouds.resetVcenterCredentials): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "UndeletePrivateCloud (vmwareengine.projects.locations.privateClouds.undelete): PrivateCloud: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "UndeletePrivateCloud (vmwareengine.projects.locations.privateClouds.undelete): PrivateCloud: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
     });
 
     describe("PrivateCloudsCluster", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetCluster (vmwareengine.projects.locations.privateClouds.clusters.get): PrivateCloudsCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetCluster (vmwareengine.projects.locations.privateClouds.clusters.get): PrivateCloudsCluster: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetClusterNode (vmwareengine.projects.locations.privateClouds.clusters.nodes.get): PrivateCloudsCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetClusterNode (vmwareengine.projects.locations.privateClouds.clusters.nodes.get): PrivateCloudsCluster: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListClusterNodes (vmwareengine.projects.locations.privateClouds.clusters.nodes.list): PrivateCloudsCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListClusterNodes (vmwareengine.projects.locations.privateClouds.clusters.nodes.list): PrivateCloudsCluster: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "MountClusterDatastore (vmwareengine.projects.locations.privateClouds.clusters.mountDatastore): PrivateCloudsCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "MountClusterDatastore (vmwareengine.projects.locations.privateClouds.clusters.mountDatastore): PrivateCloudsCluster: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "UnmountClusterDatastore (vmwareengine.projects.locations.privateClouds.clusters.unmountDatastore): PrivateCloudsCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "UnmountClusterDatastore (vmwareengine.projects.locations.privateClouds.clusters.unmountDatastore): PrivateCloudsCluster: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
     });
 
     describe("PrivateCloudsExternalAddress", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetExternalAddress (vmwareengine.projects.locations.privateClouds.externalAddresses.get): PrivateCloudsExternalAddress: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetExternalAddress (vmwareengine.projects.locations.privateClouds.externalAddresses.get): PrivateCloudsExternalAddress: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
     });
 
     describe("PrivateCloudsLoggingServer", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetLoggingServer (vmwareengine.projects.locations.privateClouds.loggingServers.get): PrivateCloudsLoggingServer: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetLoggingServer (vmwareengine.projects.locations.privateClouds.loggingServers.get): PrivateCloudsLoggingServer: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
     });
 
     describe("PrivateCloudsManagementDnsZoneBinding", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetManagementDnsZoneBinding (vmwareengine.projects.locations.privateClouds.managementDnsZoneBindings.get): PrivateCloudsManagementDnsZoneBinding: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetManagementDnsZoneBinding (vmwareengine.projects.locations.privateClouds.managementDnsZoneBindings.get): PrivateCloudsManagementDnsZoneBinding: needs GCP_TEST_VMWAREENGINE_PRIVATE_CLOUD (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RepairManagementDnsZoneBinding (vmwareengine.projects.locations.privateClouds.managementDnsZoneBindings.repair): PrivateCloudsManagementDnsZoneBinding: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RepairManagementDnsZoneBinding (vmwareengine.projects.locations.privateClouds.managementDnsZoneBindings.repair): PrivateCloudsManagementDnsZoneBinding: needs GCP_TEST_VMWAREENGINE_PRIVATE_CLOUD (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("PrivateConnection", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPrivateConnection (vmwareengine.projects.locations.privateConnections.get): PrivateConnection: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPrivateConnection (vmwareengine.projects.locations.privateConnections.get): PrivateConnection: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListPrivateConnectionPeeringRoutes (vmwareengine.projects.locations.privateConnections.peeringRoutes.list): PrivateConnection: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListPrivateConnectionPeeringRoutes (vmwareengine.projects.locations.privateConnections.peeringRoutes.list): PrivateConnection: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
     });
@@ -325,8 +325,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("VmwareEngineNetwork", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetVmwareEngineNetwork (vmwareengine.projects.locations.vmwareEngineNetworks.get): VmwareEngineNetwork: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetVmwareEngineNetwork (vmwareengine.projects.locations.vmwareEngineNetworks.get): VmwareEngineNetwork: Private clouds need VMware Engine node quota and bill thousands of dollars (GCP_TEST_VMWAREENGINE)",
         () => Effect.void,
       );
     });

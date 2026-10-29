@@ -174,9 +174,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("CertificateTemplate", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetCertificateTemplate (privateca.projects.locations.certificateTemplates.get): CertificateTemplate: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetCertificateTemplate (privateca.projects.locations.certificateTemplates.get)",
+        () => probe("GetCertificateTemplate", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:privateca", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

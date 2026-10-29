@@ -48,19 +48,19 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Posture", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPosture (securityposture.organizations.locations.postures.get): Posture: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPosture (securityposture.organizations.locations.postures.get): Posture: Postures live on the organization and need org-level Security Posture permissions the testing service account lacks (list/create answer 403); (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListPostureRevisions (securityposture.organizations.locations.postures.listRevisions): Posture: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListPostureRevisions (securityposture.organizations.locations.postures.listRevisions): Posture: Postures live on the organization and need org-level Security Posture permissions the testing service account lacks (list/create answer 403); (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
     });
 
     describe("PostureDeployment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPostureDeployment (securityposture.organizations.locations.postureDeployments.get): PostureDeployment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPostureDeployment (securityposture.organizations.locations.postureDeployments.get): PostureDeployment: Postures live on the organization and need org-level Security Posture permissions the testing service account lacks (list/create answer 403); (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
     });

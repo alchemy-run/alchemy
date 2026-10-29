@@ -2,7 +2,9 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeProjectService } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated ServiceUsage binding as its own
@@ -14,8 +16,25 @@ export default class ServiceUsageGeneratedHost extends GCP.Function<ServiceUsage
   "ServiceUsageGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.ServiceUsage.DisableService(ProbeProjectService);
+    const p1 = yield* GCP.ServiceUsage.EnableService(ProbeProjectService);
+    const p2 = yield* GCP.ServiceUsage.GetService(ProbeProjectService);
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        DisableService: outcome(Retry.none(p0({} as never))),
+        EnableService: outcome(Retry.none(p1({} as never))),
+        GetService: outcome(Retry.none(p2({} as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.ServiceUsage.DisableServiceHttp,
+          GCP.ServiceUsage.EnableServiceHttp,
+          GCP.ServiceUsage.GetServiceHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

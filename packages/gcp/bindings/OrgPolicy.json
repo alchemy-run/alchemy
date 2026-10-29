@@ -10,6 +10,10 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "untestable": {
+      "CustomConstraint": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "Policy": "Project org policies need orgpolicy.policies.create, which only an org-level Organization Policy Administrator grant provides; the testing credentials get Forbidden \"Permission 'orgpolicy.policies.create' denied on\u2026 (GOOGLE_ORGANIZATION_ID)"
+    }
   }
 }

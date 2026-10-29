@@ -25,6 +25,16 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "Saa": "ProbeSaa"
+    },
+    "untestable": {
+      "Release": "Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
+      "Rollout": "Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
+      "RolloutKind": "Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
+      "Tenant": "Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
+      "Unit": "Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)",
+      "UnitKind": "Releases need a blueprint image pushed to Artifact Registry. Set (GCP_TEST_SAAS_BLUEPRINT_PACKAGE)"
+    }
   }
 }
