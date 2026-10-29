@@ -65,9 +65,13 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Connector", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetConnector (vpcaccess.projects.locations.connectors.get): Connector: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetConnector (vpcaccess.projects.locations.connectors.get)",
+        () => probe("GetConnector", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:vpcaccess", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

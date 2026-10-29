@@ -8,6 +8,8 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {}
+    "untestable": {
+      "ApisConfig": "a config lives under an API Gateway API, which Alchemy has no resource for yet; ApisConfig.test.ts creates the parent API through the SDK"
+    }
   }
 }

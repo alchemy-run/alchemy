@@ -101,3 +101,18 @@ export const ProbeLocDlpJob = GCP.DLP.LocationsDlpJob("ProbeLocDlpJob", {
     storageConfig: { hybridOptions: { description: "probe" } },
   },
 });
+
+/** A paused discovery config: it never profiles anything. */
+export const ProbeDiscoveryConfig = Effect.gen(function* () {
+  const template = yield* GCP.DLP.LocationsInspectTemplate("ProbeDiscoveryInspect", {
+    location: "us",
+    inspectConfig: { infoTypes: [{ name: "EMAIL_ADDRESS" }] },
+  });
+  return yield* GCP.DLP.DiscoveryConfig("ProbeDiscovery", {
+    location: "us",
+    displayName: "paused storage",
+    status: "PAUSED",
+    inspectTemplates: [template.name],
+    targets: [{ cloudStorageTarget: { filter: { others: {} }, disabled: {} } }],
+  });
+});

@@ -92,8 +92,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("BackupPlanAssociation", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetBackupPlanAssociation (backupdr.projects.locations.backupPlanAssociations.get): BackupPlanAssociation: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBackupPlanAssociation (backupdr.projects.locations.backupPlanAssociations.get): BackupPlanAssociation: an association needs a VM the vault's service agent can back up, and the first scheduled backup sits under the vault's minimum enforced retention (at least a day), which blocks deleting the vault; BackupPlanAssociation.test.ts covers the typed rejections",
         () => Effect.void,
       );
     });

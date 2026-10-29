@@ -76,9 +76,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("CertificateIssuanceConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetCertificateIssuanceConfig (certificatemanager.projects.locations.certificateIssuanceConfigs.get): CertificateIssuanceConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetCertificateIssuanceConfig (certificatemanager.projects.locations.certificateIssuanceConfigs.get)",
+        () => probe("GetCertificateIssuanceConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:certificatemanager", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

@@ -8,6 +8,7 @@ import {
   ProbeCertificate,
   ProbeCertificateMap,
   ProbeDnsAuthorization,
+  ProbeIssuanceConfig,
   ProbeMapEntry,
   ProbeTrustConfig,
 } from "./generated-resources.ts";
@@ -23,31 +24,33 @@ export default class CertificateManagerGeneratedHost extends GCP.Function<Certif
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.CertificateManager.GetCertificate(ProbeCertificate);
-    const p1 = yield* GCP.CertificateManager.GetCertificateMap(ProbeCertificateMap);
-    const p2 = yield* GCP.CertificateManager.GetCertificateMapEntry(ProbeMapEntry);
-    const p3 = yield* GCP.CertificateManager.GetDnsAuthorization(ProbeDnsAuthorization);
-    const p4 = yield* GCP.CertificateManager.GetTrustConfig(ProbeTrustConfig);
-    const p5 = yield* GCP.CertificateManager.ListCertificateIssuanceConfigs();
-    const p6 = yield* GCP.CertificateManager.ListCertificateMapEntries(ProbeCertificateMap);
-    const p7 = yield* GCP.CertificateManager.ListCertificateMaps();
-    const p8 = yield* GCP.CertificateManager.ListCertificates();
-    const p9 = yield* GCP.CertificateManager.ListDnsAuthorizations();
-    const p10 = yield* GCP.CertificateManager.ListTrustConfigs();
+    const p1 = yield* GCP.CertificateManager.GetCertificateIssuanceConfig(ProbeIssuanceConfig);
+    const p2 = yield* GCP.CertificateManager.GetCertificateMap(ProbeCertificateMap);
+    const p3 = yield* GCP.CertificateManager.GetCertificateMapEntry(ProbeMapEntry);
+    const p4 = yield* GCP.CertificateManager.GetDnsAuthorization(ProbeDnsAuthorization);
+    const p5 = yield* GCP.CertificateManager.GetTrustConfig(ProbeTrustConfig);
+    const p6 = yield* GCP.CertificateManager.ListCertificateIssuanceConfigs();
+    const p7 = yield* GCP.CertificateManager.ListCertificateMapEntries(ProbeCertificateMap);
+    const p8 = yield* GCP.CertificateManager.ListCertificateMaps();
+    const p9 = yield* GCP.CertificateManager.ListCertificates();
+    const p10 = yield* GCP.CertificateManager.ListDnsAuthorizations();
+    const p11 = yield* GCP.CertificateManager.ListTrustConfigs();
     return {
       fetch: serveProbes({
         GetCertificate: outcome(Retry.none(p0({} as never))),
-        GetCertificateMap: outcome(Retry.none(p1({} as never))),
-        GetCertificateMapEntry: outcome(Retry.none(p2({} as never))),
-        GetDnsAuthorization: outcome(Retry.none(p3({} as never))),
-        GetTrustConfig: outcome(Retry.none(p4({} as never))),
+        GetCertificateIssuanceConfig: outcome(Retry.none(p1({} as never))),
+        GetCertificateMap: outcome(Retry.none(p2({} as never))),
+        GetCertificateMapEntry: outcome(Retry.none(p3({} as never))),
+        GetDnsAuthorization: outcome(Retry.none(p4({} as never))),
+        GetTrustConfig: outcome(Retry.none(p5({} as never))),
         ListCertificateIssuanceConfigs: outcome(
-          Retry.none(p5({ location: "us-central1" } as never)),
+          Retry.none(p6({ location: "us-central1" } as never)),
         ),
-        ListCertificateMapEntries: outcome(Retry.none(p6({} as never))),
-        ListCertificateMaps: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListCertificates: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListDnsAuthorizations: outcome(Retry.none(p9({ location: "us-central1" } as never))),
-        ListTrustConfigs: outcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListCertificateMapEntries: outcome(Retry.none(p7({} as never))),
+        ListCertificateMaps: outcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListCertificates: outcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListDnsAuthorizations: outcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListTrustConfigs: outcome(Retry.none(p11({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
@@ -55,6 +58,7 @@ export default class CertificateManagerGeneratedHost extends GCP.Function<Certif
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.CertificateManager.GetCertificateHttp,
+          GCP.CertificateManager.GetCertificateIssuanceConfigHttp,
           GCP.CertificateManager.GetCertificateMapHttp,
           GCP.CertificateManager.GetCertificateMapEntryHttp,
           GCP.CertificateManager.GetDnsAuthorizationHttp,

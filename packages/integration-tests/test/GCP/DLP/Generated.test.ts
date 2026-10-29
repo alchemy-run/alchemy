@@ -87,9 +87,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("DiscoveryConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDiscoveryConfig@DiscoveryConfig (dlp.projects.locations.discoveryConfigs.get): DiscoveryConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDiscoveryConfig@DiscoveryConfig (dlp.projects.locations.discoveryConfigs.get)",
+        () => probe("GetDiscoveryConfig@DiscoveryConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

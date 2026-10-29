@@ -27,7 +27,8 @@
       "DnsAuthorization": "ProbeDnsAuthorization",
       "TrustConfig": "ProbeTrustConfig",
       "Certificate": "ProbeCertificate",
-      "CertificateMapEntry": "ProbeMapEntry"
+      "CertificateMapEntry": "ProbeMapEntry",
+      "CertificateIssuanceConfig": "ProbeIssuanceConfig"
     },
     "untestable": {}
   },

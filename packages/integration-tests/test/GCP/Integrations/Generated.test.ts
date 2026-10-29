@@ -193,25 +193,45 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ProductsIntegrationsVersion", { concurrent: true }, () => {
-      test.provider.todo(
-        "DownloadVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.download): ProductsIntegrationsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DownloadVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.download)",
+        () => probe("DownloadVersion@ProductsIntegrationsVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.get): ProductsIntegrationsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.get)",
+        () => probe("GetVersion@ProductsIntegrationsVersion", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "PublishVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.publish): ProductsIntegrationsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "PublishVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.publish)",
+        () => probe("PublishVersion@ProductsIntegrationsVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "TakeoverVersionEditLock (integrations.projects.locations.products.integrations.versions.takeoverEditLock): ProductsIntegrationsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "TakeoverVersionEditLock (integrations.projects.locations.products.integrations.versions.takeoverEditLock)",
+        () => probe("TakeoverVersionEditLock", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "UnpublishVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.unpublish): ProductsIntegrationsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "UnpublishVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.unpublish)",
+        () => probe("UnpublishVersion@ProductsIntegrationsVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeConnector } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated VpcAccess binding as its own
@@ -15,11 +16,19 @@ export default class VpcAccessGeneratedHost extends GCP.Function<VpcAccessGenera
   "VpcAccessGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.VpcAccess.ListConnectors();
+    const p0 = yield* GCP.VpcAccess.GetConnector(ProbeConnector);
+    const p1 = yield* GCP.VpcAccess.ListConnectors();
     return {
       fetch: serveProbes({
-        ListConnectors: outcome(Retry.none(p0({ location: "us-central1" } as never))),
+        GetConnector: outcome(Retry.none(p0({} as never))),
+        ListConnectors: outcome(Retry.none(p1({ location: "us-central1" } as never))),
       }),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Layer.mergeAll(GCP.VpcAccess.ListConnectorsHttp)))),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(GCP.VpcAccess.GetConnectorHttp, GCP.VpcAccess.ListConnectorsHttp),
+      ),
+    ),
+  ),
 ) {}

@@ -47,3 +47,21 @@ export const ProbeTestCase = Effect.gen(function* () {
     triggerId: "api_trigger/alchemy_probe",
   });
 });
+
+export const ProbeProductVersion = GCP.Integrations.ProductsIntegrationsVersion(
+  "ProbeProductVersion",
+  {
+    location: "us-central1",
+    product: "IP",
+    description: "alchemy probe",
+    triggerConfigs: [
+      {
+        label: "API Trigger",
+        triggerType: "API",
+        triggerNumber: "1",
+        triggerId: "api_trigger/alchemy_probe_product",
+        properties: { "Trigger name": "alchemy_probe_product" },
+      },
+    ],
+  },
+);

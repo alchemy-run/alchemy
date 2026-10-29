@@ -65,8 +65,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ApisConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetConfig (apigateway.projects.locations.apis.configs.get): ApisConfig: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetConfig (apigateway.projects.locations.apis.configs.get): ApisConfig: a config lives under an API Gateway API, which Alchemy has no resource for yet; ApisConfig.test.ts creates the parent API through the SDK",
         () => Effect.void,
       );
     });

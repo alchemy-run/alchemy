@@ -41,7 +41,8 @@
       "Template": "ProbeTemplate",
       "AuthConfig": "ProbeAuthConfig",
       "IntegrationsVersion": "ProbeIntegrationVersion",
-      "IntegrationsVersionsTestCases": "ProbeTestCase"
+      "IntegrationsVersionsTestCases": "ProbeTestCase",
+      "ProductsIntegrationsVersion": "ProbeProductVersion"
     },
     "untestable": {
       "ProductsAuthConfig": "Product-scoped (`products/IP`) auth configs are rejected on a standard project with Forbidden (\"User is not authorized to create AuthConfig with name \u2026 as they don't have membership of project {number}\"), and product (GCP_TEST_INTEGRATIONS_PRODUCT_AUTH)",

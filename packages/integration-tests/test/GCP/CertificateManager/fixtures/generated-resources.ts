@@ -57,3 +57,36 @@ export const ProbeMapEntry = Effect.gen(function* () {
     hostname: "thp.alchemy.test",
   });
 });
+
+/** A DevOps-tier pool with an enabled self-signed root, which an issuance config issues from. */
+export const ProbeIssuanceConfig = Effect.gen(function* () {
+  const pool = yield* GCP.PrivateCA.CaPool("ProbeIssuancePool", {
+    location: "us-central1",
+    tier: "DEVOPS",
+  });
+  const ca = yield* GCP.PrivateCA.CertificateAuthority("ProbeIssuanceCa", {
+    caPool: pool.name,
+    location: "us-central1",
+    type: "SELF_SIGNED",
+    desiredState: "ENABLED",
+    lifetime: "315360000s",
+    keySpec: { algorithm: "EC_P256_SHA256" },
+    config: {
+      subjectConfig: {
+        subject: { organization: "Alchemy", commonName: "Alchemy Probe Issuance Root" },
+      },
+      x509Config: {
+        caOptions: { isCa: true },
+        keyUsage: { baseKeyUsage: { certSign: true, crlSign: true } },
+      },
+    },
+  });
+  return yield* GCP.CertificateManager.CertificateIssuanceConfig("ProbeIssuance", {
+    location: "us-central1",
+    labels: { ca: ca.certificateAuthorityId },
+    lifetime: "2592000s",
+    rotationWindowPercentage: 66,
+    keyAlgorithm: "ECDSA_P256",
+    certificateAuthorityConfig: { certificateAuthorityServiceConfig: { caPool: pool.name } },
+  });
+});
