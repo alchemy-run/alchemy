@@ -77,6 +77,13 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
+    describe("BackupPlanAssociation", { concurrent: true }, () => {
+      test.provider.todo(
+        "GetBackupPlanAssociation (backupdr.projects.locations.backupPlanAssociations.get): BackupPlanAssociation: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+    });
+
     describe("BackupVault", { concurrent: true }, () => {
       test.provider(
         "AbandonDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.abandonBackup)",
@@ -225,6 +232,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "FetchBackupPlanAssociationForResourceType (backupdr.projects.locations.backupPlanAssociations.fetchForResourceType)",
+        () => probe("FetchBackupPlanAssociationForResourceType", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "FetchBackupVaultUsable (backupdr.projects.locations.backupVaults.fetchUsable)",
         () => probe("FetchBackupVaultUsable", false),
         {
@@ -233,8 +248,24 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "FetchDataSourceReferenceForResourceType (backupdr.projects.locations.dataSourceReferences.fetchForResourceType)",
+        () => probe("FetchDataSourceReferenceForResourceType", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "FetchResourceBackupConfig (backupdr.projects.locations.resourceBackupConfigs.fetch)",
         () => probe("FetchResourceBackupConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetDataSourceReference (backupdr.projects.locations.dataSourceReferences.get)",
+        () => probe("GetDataSourceReference", false),
         {
           tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
           timeout: 600_000,
@@ -313,23 +344,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "backupdr.projects.locations.dataSourceReferences.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "backupdr.projects.locations.dataSourceReferences.fetchForResourceType: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "backupdr.projects.locations.backupPlanAssociations.fetchForResourceType: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "backupdr.projects.locations.backupPlanAssociations.triggerBackup: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "backupdr.projects.locations.backupPlanAssociations.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

@@ -11,5 +11,23 @@
     "untestable": {
       "*": "firebaseappdistribution.googleapis.com is not enabled on the testing project"
     }
+  },
+  "permissionService": "firebaseappdistro",
+  "permissionCollections": {
+    "feedbackReports": "releases",
+    "apps": "releases"
+  },
+  "verbPermissions": {
+    "batchAdd": "update",
+    "batchRemove": "update",
+    "batchJoin": "update",
+    "batchLeave": "update",
+    "patch": "update",
+    "distribute": "update",
+    "batchDelete": "update",
+    "delete": "update",
+    "upload": "update",
+    "get": "list",
+    "getAabInfo": "list"
   }
 }

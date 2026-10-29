@@ -50,76 +50,82 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
+    describe("Group", { concurrent: true }, () => {
+      test.provider.skip(
+        "BatchGroupJoin (firebaseappdistribution.projects.groups.batchJoin): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "BatchGroupLeave (firebaseappdistribution.projects.groups.batchLeave): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "GetGroup (firebaseappdistribution.projects.groups.get): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+    });
+
+    describe("project", { concurrent: true }, () => {
+      test.provider.skip(
+        "BatchReleaseDelete (firebaseappdistribution.projects.apps.releases.batchDelete): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "BatchTesterAdd (firebaseappdistribution.projects.testers.batchAdd): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "BatchTesterRemove (firebaseappdistribution.projects.testers.batchRemove): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "DeleteAppReleaseFeedbackReport (firebaseappdistribution.projects.apps.releases.feedbackReports.delete): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "DistributeAppRelease (firebaseappdistribution.projects.apps.releases.distribute): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "GetAppAabInfo (firebaseappdistribution.projects.apps.getAabInfo): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "GetAppRelease (firebaseappdistribution.projects.apps.releases.get): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "GetAppReleaseFeedbackReport (firebaseappdistribution.projects.apps.releases.feedbackReports.get): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListAppReleaseFeedbackReports (firebaseappdistribution.projects.apps.releases.feedbackReports.list): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListAppReleases (firebaseappdistribution.projects.apps.releases.list): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListGroups (firebaseappdistribution.projects.groups.list): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListTesters (firebaseappdistribution.projects.testers.list): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "PatchAppRelease (firebaseappdistribution.projects.apps.releases.patch): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "PatchTester (firebaseappdistribution.projects.testers.patch): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
+      );
+    });
+
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
-      test.provider.skip(
-        "firebaseappdistribution.projects.testers.batchAdd: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.testers.batchRemove: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.testers.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.testers.patch: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.apps.getAabInfo: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.apps.releases.batchDelete: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.apps.releases.patch: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.apps.releases.distribute: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.apps.releases.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.apps.releases.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.apps.releases.feedbackReports.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.apps.releases.feedbackReports.delete: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.apps.releases.feedbackReports.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.groups.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.groups.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.groups.batchLeave: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "firebaseappdistribution.projects.groups.batchJoin: no predefined role grants its permission",
-        () => Effect.void,
-      );
       test.provider.skip(
         "firebaseappdistribution.media.upload: no predefined role grants its permission",
         () => Effect.void,

@@ -21,5 +21,11 @@
       "BackupPlan": "ProbeBackupPlan"
     },
     "untestable": {}
+  },
+  "permissions": {
+    "backupdr.projects.locations.dataSourceReferences.get": "backupdr.dataSourceReferences.list",
+    "backupdr.projects.locations.dataSourceReferences.fetchForResourceType": "backupdr.dataSourceReferences.list",
+    "backupdr.projects.locations.backupPlanAssociations.fetchForResourceType": "backupdr.backupPlanAssociations.list",
+    "backupdr.projects.locations.backupPlanAssociations.get": "backupdr.backupPlanAssociations.list"
   }
 }
