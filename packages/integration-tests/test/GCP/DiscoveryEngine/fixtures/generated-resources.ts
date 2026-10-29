@@ -54,8 +54,10 @@ export const ProbeDocument = Effect.gen(function* () {
 });
 export const ProbeSession = Effect.gen(function* () {
   const store = yield* ProbeCollectionsDataStore;
+  const engine = yield* ProbeEngine;
   return yield* GCP.DiscoveryEngine.CollectionsDataStoresSession("ProbeSession", {
-    dataStore: store.name,
+    // through the engine: controls and sessions need the store attached to one
+    dataStore: Output.all(store.name, engine.name).pipe(Output.map(([name]) => name)),
     displayName: "chat",
   });
 });
@@ -151,8 +153,10 @@ export const ProbeLocDocument = Effect.gen(function* () {
 });
 export const ProbeLocSession = Effect.gen(function* () {
   const store = yield* ProbeDataStore;
+  const engine = yield* ProbeLocEngine;
   return yield* GCP.DiscoveryEngine.DataStoresSession("ProbeLocSession", {
-    dataStore: store.name,
+    // through the engine: controls and sessions need the store attached to one
+    dataStore: Output.all(store.name, engine.name).pipe(Output.map(([name]) => name)),
     displayName: "chat",
   });
 });
@@ -174,8 +178,10 @@ export const ProbeLocTargetSite = Effect.gen(function* () {
 });
 export const ProbeLocControl = Effect.gen(function* () {
   const store = yield* ProbeDataStore;
+  const engine = yield* ProbeLocEngine;
   return yield* GCP.DiscoveryEngine.DataStoresControl("ProbeLocControl", {
-    dataStore: store.name,
+    // through the engine: controls and sessions need the store attached to one
+    dataStore: Output.all(store.name, engine.name).pipe(Output.map(([name]) => name)),
     displayName: "greetings",
     solutionType: "SOLUTION_TYPE_SEARCH",
     synonymsAction: { synonyms: ["hello", "hi"] },
