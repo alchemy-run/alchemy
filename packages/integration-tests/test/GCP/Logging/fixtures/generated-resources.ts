@@ -16,6 +16,8 @@ export const ProbeFolderSavedQuery = GCP.Logging.FolderSavedQuery("ProbeFolderSa
   displayName: "application errors",
   loggingQuery: { filter: "severity>=ERROR" },
   description: "error query",
+  // A private query is visible only to its creator, not the probe host.
+  visibility: "SHARED",
 });
 export const ProbeLocationsBucket = GCP.Logging.LocationsBucket("ProbeLocationsBucket", {
   description: "application logs",
@@ -33,6 +35,8 @@ export const ProbeSavedQuery = GCP.Logging.SavedQuery("ProbeSavedQuery", {
   displayName: "application errors",
   loggingQuery: { filter: "severity>=ERROR" },
   description: "error query",
+  // A private query is visible only to its creator, not the probe host.
+  visibility: "SHARED",
 });
 
 export const ProbeView = Effect.gen(function* () {

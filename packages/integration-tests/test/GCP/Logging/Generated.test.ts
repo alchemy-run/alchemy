@@ -499,7 +499,7 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider("ListEntries (logging.entries.list)", () => probe("ListEntries", true), {
+      test.provider("ListEntries (logging.entries.list)", () => probe("ListEntries", false), {
         tags: ["provider:gcp", "provider:gcp:logging", "live"],
         timeout: 600_000,
       });

@@ -252,6 +252,15 @@ export class GcpBindingProjectMissing extends Data.TaggedError("GCP.BindingProje
 const PROJECT_KEY = "ALCHEMY_GCP_BINDING_PROJECT";
 
 /**
+ * The project a host's project bindings were deployed against, at runtime;
+ * `undefined` on a host with no project binding.
+ */
+export const bindingProject: Effect.Effect<string | undefined> = Effect.gen(function* () {
+  const ctx = yield* CurrentRuntimeContext;
+  return ctx === undefined ? undefined : yield* ctx.get<string>(PROJECT_KEY);
+});
+
+/**
  * Runtime of a generated binding for an operation on the project itself
  * (`topics.list`, `jobs.insert`), which has no resource to bind to: the
  * host gets each variant's role on the stack's project, and the project id

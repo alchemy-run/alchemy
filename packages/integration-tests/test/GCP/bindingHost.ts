@@ -1,3 +1,4 @@
+import { bindingProject } from "@alchemy.run/gcp/HttpBinding";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -161,3 +162,9 @@ export const expectProbe = <A = unknown>(baseUrl: string, name: string) =>
           ),
     ),
   );
+
+/**
+ * The deployed host's project, for a probe request that must name it (a
+ * Logging `entries.list` reads `resourceNames`). Read at the host's runtime.
+ */
+export const hostProject = bindingProject.pipe(Effect.map((project) => project ?? "alchemy-missing"));

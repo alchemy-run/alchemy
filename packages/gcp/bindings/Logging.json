@@ -134,6 +134,12 @@
       "OrganizationLogScope": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
       "OrganizationSavedQuery": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
       "OrganizationSink": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)"
+    },
+    "args": {
+      "ListEntries": "{ body: { resourceNames: [`projects/${yield* hostProject}`] } }"
+    },
+    "locations": {
+      "ListLogScopes": "global"
     }
   },
   "permissionCollections": {

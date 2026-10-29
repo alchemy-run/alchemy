@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { hostProject, probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeExclusion,
   ProbeFolderBucket,
@@ -126,10 +126,12 @@ export default class LoggingGeneratedHost extends GCP.Function<LoggingGeneratedH
         "ListBucketViews@LogBucket": probeOutcome(Retry.none(p28({} as never))),
         "ListBucketViews@FolderBucket": probeOutcome(Retry.none(p29({} as never))),
         "ListBucketViews@LocationsBucket": probeOutcome(Retry.none(p30({} as never))),
-        ListEntries: probeOutcome(Retry.none(p31({} as never))),
+        ListEntries: probeOutcome(
+          Retry.none(p31({ body: { resourceNames: [`projects/${yield* hostProject}`] } } as never)),
+        ),
         ListExclusions: probeOutcome(Retry.none(p32({} as never))),
         ListLogs: probeOutcome(Retry.none(p33({} as never))),
-        ListLogScopes: probeOutcome(Retry.none(p34({ location: "us-central1" } as never))),
+        ListLogScopes: probeOutcome(Retry.none(p34({ location: "global" } as never))),
         ListMetrics: probeOutcome(Retry.none(p35({} as never))),
         ListMonitoredResourceDescriptors: probeOutcome(Retry.none(p36({} as never))),
         ListRecentQueries: probeOutcome(Retry.none(p37({ location: "us-central1" } as never))),
