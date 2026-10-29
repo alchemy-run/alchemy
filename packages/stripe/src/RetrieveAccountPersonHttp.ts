@@ -41,7 +41,7 @@ export const RetrieveAccountPersonHttp = Layer.effect(
       }) {
         return yield* auth(
           GetAccountPerson({
-            ...(request ?? {}),
+            ...request,
             person: yield* id,
             account: yield* account,
           }),

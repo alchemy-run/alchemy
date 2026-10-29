@@ -147,9 +147,7 @@ export const CustomNameserversProvider = () =>
             // ACNS is a Business/Enterprise feature — plan-gated zones
             // reject with `Forbidden`; zones deleted out-of-band 404 with
             // `InvalidZoneIdentifier`. Skip both.
-            Effect.catchTag(["InvalidZoneIdentifier", "Forbidden"], () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag(["InvalidZoneIdentifier", "Forbidden"], () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -173,7 +171,7 @@ export const CustomNameserversProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* zones.getCustomNameserver({ zoneId }).pipe(
         // Zone deleted out-of-band — the configuration is gone with it.
-        Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The custom-NS toggle is a singleton that always exists (disabled
@@ -228,7 +226,7 @@ export const CustomNameserversProvider = () =>
       // Observe — if the zone itself is gone, so is the configuration.
       const observed = yield* zones
         .getCustomNameserver({ zoneId })
-        .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined));
       if (observed === undefined) return;
       // Restore the pre-management state; skip the call when it already
       // matches (idempotent re-delete after a crashed run).

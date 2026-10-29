@@ -59,7 +59,7 @@ export interface Delivery {
   readonly event: Json;
   readonly envelope: EnvelopeJson;
   /** For an event from a view: the view's encoded state after it. */
-  readonly state?: Json | null;
+  readonly state?: Json;
   /** Seeded history (story `given`): views and projections apply it, policies ignore it. */
   readonly history?: boolean;
 }
@@ -105,7 +105,7 @@ export interface Push {
 export interface HandleInput {
   readonly id: string;
   /** The stored state, or `null` for an instance that has never committed. */
-  readonly state: Json | null;
+  readonly state: Json;
   readonly version: number;
   readonly command: Json;
   readonly commandId: string;
@@ -131,7 +131,7 @@ export type HandleResult =
       readonly state: Json;
       readonly version: number;
       readonly events: ReadonlyArray<StoredEvent>;
-      readonly reply: Json | null;
+      readonly reply: Json;
       readonly deliveries: ReadonlyArray<Delivery>;
     };
 
@@ -142,7 +142,7 @@ export interface ReceiptJson {
   readonly stream: string;
   readonly version: number;
   readonly events: ReadonlyArray<Json>;
-  readonly reply: Json | null;
+  readonly reply: Json;
 }
 
 /**
@@ -176,7 +176,7 @@ export interface AggregateKit {
   readonly push: (
     id: string,
     subscription: Subscription,
-    current: { readonly state: Json | null; readonly version: number },
+    current: { readonly state: Json; readonly version: number },
     events: ReadonlyArray<StoredEvent>,
   ) => Effect.Effect<Push>;
 }
@@ -186,7 +186,7 @@ export interface AggregateKit {
  */
 export interface SeedInput {
   readonly id: string;
-  readonly state: Json | null;
+  readonly state: Json;
   readonly version: number;
   readonly events: ReadonlyArray<Json>;
   readonly commandId: string;
@@ -243,15 +243,13 @@ export interface AggregateStore {
     Aggregate.AlreadyExecuted | Aggregate.AlreadyCancelled | Aggregate.NotScheduled
   >;
   /** Read the stored state of an instance. */
-  readonly state: (
-    id: string,
-  ) => Effect.Effect<{ readonly state: Json | null; readonly version: number }>;
+  readonly state: (id: string) => Effect.Effect<{ readonly state: Json; readonly version: number }>;
   /** Read the committed events of an instance (tests and diagnostics; optional). */
   readonly events?: (id: string) => Effect.Effect<ReadonlyArray<StoredEvent>>;
   /** The stored state and version of an instance, then every new one. */
   readonly changes: (
     id: string,
-  ) => Stream.Stream<{ readonly state: Json | null; readonly version: number }>;
+  ) => Stream.Stream<{ readonly state: Json; readonly version: number }>;
   /** Committed events with `seq > after`, then live ones. */
   readonly tail: (id: string, after: number) => Stream.Stream<StoredEvent>;
   /**
@@ -272,7 +270,7 @@ export interface AggregateStore {
  */
 export interface ViewSnapshot {
   /** The encoded state, or `null` when the key does not exist. */
-  readonly state: Json | null;
+  readonly state: Json;
   /** Number of applied deliveries. */
   readonly version: number;
   /** Last applied `seq` per source. */
@@ -291,7 +289,7 @@ export interface ViewEntry {
   readonly seq: number;
   readonly event: Json;
   readonly envelope: EnvelopeJson;
-  readonly state: Json | null;
+  readonly state: Json;
 }
 
 /**

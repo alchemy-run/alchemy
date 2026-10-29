@@ -150,7 +150,7 @@ const createAliasName = (id: string, props: { botAliasName?: string | undefined 
 const describeAlias = Effect.fn(function* (botId: string, botAliasId: string) {
   return yield* lexm
     .describeBotAlias({ botId, botAliasId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 });
 
 /** Find an alias of the bot by exact name (used when state was lost). */

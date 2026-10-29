@@ -171,7 +171,7 @@ export const serviceAccountUniqueId = (email: string) =>
       schedule: Schedule.spaced("2 seconds"),
     }),
     Effect.map((account) => account.uniqueId),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 /**
@@ -194,7 +194,7 @@ const grantActAs = (project: string, email: string) =>
         .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed("")));
       if (raw.length > 0) {
         const parsed = yield* parseServiceAccountKey(raw).pipe(
-          Effect.catchTag("AuthError", () => Effect.succeed(undefined)),
+          Effect.catchTag("AuthError", () => Effect.undefined),
         );
         if (parsed?.client_email) {
           members.push(`serviceAccount:${parsed.client_email}`);
@@ -230,7 +230,7 @@ export const ensureHostServiceAccount = (options: {
       .getProjectsServiceAccounts({
         name: serviceAccountName(options.project, email),
       })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     let created = false;
     if (existing?.email === undefined || existing.email.length === 0) {
       created = yield* iam

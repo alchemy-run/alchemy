@@ -6,14 +6,13 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
-import type { TableBucketArn } from "./TableBucket.ts";
 
 export interface NamespaceProps {
   /**
    * ARN of the table bucket that owns the namespace. Changing it replaces
    * the namespace.
    */
-  tableBucket: TableBucketArn | string;
+  tableBucket: string;
   /**
    * Name of the namespace. Must be 1-255 characters of lowercase letters,
    * numbers, and underscores, beginning with a letter or number. Changing
@@ -101,7 +100,7 @@ export const NamespaceProvider = () =>
           createdBy: n.createdBy,
           ownerAccountId: n.ownerAccountId,
         })),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
     }),
     diff: Effect.fn(function* ({ id, news, olds }) {
@@ -123,7 +122,7 @@ export const NamespaceProvider = () =>
       // out-of-band even if `output` cached it.
       let ns = yield* s3tables.getNamespace({ tableBucketARN: tableBucketArn, namespace }).pipe(
         Effect.map((n) => n),
-        Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFoundException", () => Effect.undefined),
       );
 
       // Ensure — create if missing, tolerating a concurrent create.

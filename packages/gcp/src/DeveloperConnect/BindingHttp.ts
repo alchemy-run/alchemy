@@ -41,7 +41,7 @@ export const makeGitRepositoryLinkHttpBinding = <
       ) {
         const gitRepositoryLink = yield* name;
         return yield* run({
-          ...(request ?? {}),
+          ...request,
           gitRepositoryLink,
         } as I);
       });

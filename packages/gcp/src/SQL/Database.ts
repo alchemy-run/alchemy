@@ -324,7 +324,7 @@ const toAttrs = (
 
 const getByName = (project: string, instance: string, databaseName: string) =>
   sqladmin.getDatabases({ project, instance, database: databaseName }).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
     recoverIfInstanceMissing(project, instance, () => undefined),
   );
 

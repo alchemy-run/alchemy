@@ -229,7 +229,7 @@ export const LocalWorkerProvider = () =>
                 ...toRuntimeConsumerSettings(consumer.settings),
               });
             } else {
-              return yield* Effect.die(`Queue ${consumer.queueId} not found`);
+              return yield* Effect.die(`Queue ${String(consumer.queueId)} not found`);
             }
           }
         }
@@ -734,7 +734,9 @@ export const LocalWorkerProvider = () =>
               });
             }
           }
-          const key = JSON.stringify([...watched.entries()].sort());
+          const key = JSON.stringify(
+            [...watched.entries()].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)),
+          );
           const existing = containerWatchers.get(worker.fqn);
           if (existing !== undefined) {
             if (existing.key === key) return; // same watcher keeps running

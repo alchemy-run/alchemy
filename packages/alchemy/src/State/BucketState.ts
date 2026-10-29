@@ -182,7 +182,7 @@ export const makeBucketState = (options: BucketStateOptions) =>
       use((o) => o.read(key)).pipe(
         Effect.flatMap((object) =>
           object === undefined
-            ? Effect.succeed(undefined)
+            ? Effect.undefined
             : Effect.try({
                 try: () => JSON.parse(object.text, reviveState) as T,
                 catch: (cause) =>
@@ -241,11 +241,11 @@ export const makeBucketState = (options: BucketStateOptions) =>
           const existing = yield* readLease(key);
           const stillHeld = existing === undefined || existing.record.expiresAt > now;
           if (stillHeld) {
-            return yield* Effect.fail(heldError(stack, stage));
+            return yield* heldError(stack, stage);
           }
           const replaced = yield* putLease(key, fresh, { ifVersion: existing.version });
           if (replaced === undefined) {
-            return yield* Effect.fail(heldError(stack, stage));
+            return yield* heldError(stack, stage);
           }
           version = replaced;
         }
@@ -286,11 +286,11 @@ export const makeBucketState = (options: BucketStateOptions) =>
           1,
         )(
           Effect.gen(function* () {
-            if (cursor.lost) return yield* Effect.fail(lostError(stack, stage));
+            if (cursor.lost) return yield* lostError(stack, stage);
             const existing = yield* readLease(key);
             if (existing === undefined || existing.record.token !== token) {
               cursor.lost = true;
-              return yield* Effect.fail(lostError(stack, stage));
+              return yield* lostError(stack, stage);
             }
             const observedAt = yield* Clock.currentTimeMillis;
             if (existing.record.expiresAt <= observedAt) {
@@ -305,7 +305,7 @@ export const makeBucketState = (options: BucketStateOptions) =>
               );
               if (reclaimed === undefined) {
                 cursor.lost = true;
-                return yield* Effect.fail(lostError(stack, stage));
+                return yield* lostError(stack, stage);
               }
               cursor.version = reclaimed;
               return;
@@ -406,14 +406,12 @@ export const makeBucketState = (options: BucketStateOptions) =>
         verifyHeldLeases.pipe(Effect.andThen(listChildren(`${prefix}${stack}/`))),
       get: (request) => guarded(request, readJson<PersistedState>(resourceKey(request))),
       getReplacedResources: Effect.fn(function* (request) {
-        return (yield* Effect.all(
-          (yield* state.list(request)).map((fqn) =>
-            state.get({
-              stack: request.stack,
-              stage: request.stage,
-              fqn,
-            }),
-          ),
+        return (yield* Effect.forEach(yield* state.list(request), (fqn) =>
+          state.get({
+            stack: request.stack,
+            stage: request.stage,
+            fqn,
+          }),
         )).filter((r) => r?.status === "replaced");
       }),
       set: (request) =>

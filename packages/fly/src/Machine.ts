@@ -844,7 +844,7 @@ export type Machine = Resource<
 export const Machine = Resource<Machine>("Fly.Machine");
 
 export class MachineNotCreated extends Data.TaggedError("Fly.MachineNotCreated")<{
-  name: string;
+  resourceName: string;
   appName: string;
 }> {}
 
@@ -928,7 +928,7 @@ const desiredEnv = (
 const desiredMetadata = (
   props: MachineProps,
   alchemy: Record<string, string>,
-): Record<string, string> => ({ ...(props.metadata ?? {}), ...alchemy });
+): Record<string, string> => ({ ...props.metadata, ...alchemy });
 
 const buildConfig = (input: {
   image: string | undefined;
@@ -1245,7 +1245,9 @@ export const MachineProvider = () =>
           }),
       }).pipe(
         Effect.catchTag("Fly.ReplicaNotCreated", (error) =>
-          Effect.fail(new MachineNotCreated({ name: error.name, appName: error.appName })),
+          Effect.fail(
+            new MachineNotCreated({ resourceName: error.resourceName, appName: error.appName }),
+          ),
         ),
       );
       return toAttrs(set);

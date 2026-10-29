@@ -167,7 +167,7 @@ export type Group = Resource<
 export const Group = Resource<Group>("GCP.CloudIdentity.Group");
 
 export class GroupNotResolved extends Data.TaggedError("GCP.CloudIdentity.GroupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (group: cloudidentity.Group) => {
@@ -284,11 +284,7 @@ export const GroupProvider = () =>
             initialGroupConfig: news.initialGroupConfig ?? "EMPTY",
             body: desired,
           })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              Effect.succeed<cloudidentity.Operation | undefined>(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created).pipe(
             Effect.catchTag("GCP.CloudIdentity.OperationPending", () => Effect.void),
@@ -323,7 +319,7 @@ export const GroupProvider = () =>
 
       if (current === undefined) {
         return yield* new GroupNotResolved({
-          name: output?.name ?? groupKeyId,
+          resourceName: output?.name ?? groupKeyId,
         });
       }
 
@@ -361,11 +357,7 @@ export const GroupProvider = () =>
       if (output.name.length === 0) return;
       const deleted = yield* cloudidentity
         .deleteGroups({ name: output.name })
-        .pipe(
-          Effect.catchTag("NotFound", () =>
-            Effect.succeed<cloudidentity.Operation | undefined>(undefined),
-          ),
-        );
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, { notFoundOk: true });
       }

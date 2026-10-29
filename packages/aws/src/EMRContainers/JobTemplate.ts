@@ -275,7 +275,7 @@ export const JobTemplateProvider = () =>
           Effect.catchTag(
             ["ResourceNotFoundException", "ValidationException"],
             // a malformed/unknown id is "not present", same as not-found
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         );
       });

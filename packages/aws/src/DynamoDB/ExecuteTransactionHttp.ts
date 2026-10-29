@@ -34,9 +34,9 @@ export const ExecuteTransactionHttp = Layer.effect(
         DynamoDB.executeTransaction,
         tablesRegion(sortedTables),
       );
-      return Effect.fn(`AWS.DynamoDB.ExecuteTransaction(${tables})`)(function* (
-        request: ExecuteTransactionRequest,
-      ) {
+      return Effect.fn(
+        `AWS.DynamoDB.ExecuteTransaction(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
+      )(function* (request: ExecuteTransactionRequest) {
         return yield* executeTransaction(request);
       });
     });

@@ -207,13 +207,13 @@ export const FeatureOnlineStoresFeatureView = Resource<FeatureOnlineStoresFeatur
 export class FeatureOnlineStoresFeatureViewNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeatureOnlineStoresFeatureViewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeatureOnlineStoresFeatureViewStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeatureOnlineStoresFeatureViewStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parentOf = (project: string, location: string, store: string) =>
@@ -250,14 +250,14 @@ const toAttrs = (view: aiplatform.GoogleCloudAiplatformV1FeatureView, project: s
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsFeatureOnlineStoresFeatureViews({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((view) =>
       view
         ? Effect.succeed(view)
-        : Effect.fail(new FeatureOnlineStoresFeatureViewNotResolved({ name })),
+        : Effect.fail(new FeatureOnlineStoresFeatureViewNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoresFeatureViewNotResolved",
@@ -271,7 +271,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((view) =>
       view === undefined
         ? Effect.void
-        : Effect.fail(new FeatureOnlineStoresFeatureViewStillExists({ name })),
+        : Effect.fail(new FeatureOnlineStoresFeatureViewStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureOnlineStoresFeatureViewStillExists",
@@ -404,7 +404,7 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
               serviceAgentType: news.serviceAgentType,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -412,7 +412,7 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FeatureOnlineStoresFeatureViewNotResolved({ name });
+        return yield* new FeatureOnlineStoresFeatureViewNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -485,7 +485,7 @@ export const FeatureOnlineStoresFeatureViewProvider = () =>
           name: output.name,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

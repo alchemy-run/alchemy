@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -118,6 +119,12 @@ export interface Permission extends Resource<
  */
 export const Permission = Resource<Permission>("AWS.Lambda.Permission");
 
+/** A Lambda function's resource policy is not valid JSON. */
+export class InvalidLambdaResourcePolicy extends Data.TaggedError("InvalidLambdaResourcePolicy")<{
+  message: string;
+  cause?: unknown;
+}> {}
+
 export const PermissionProvider = () =>
   Provider.effect(
     Permission,
@@ -169,7 +176,8 @@ export const PermissionProvider = () =>
                 : [];
             return statements.some((statement) => statement.Sid === statementId);
           },
-          catch: (cause) => new Error("invalid Lambda resource policy", { cause }),
+          catch: (cause) =>
+            new InvalidLambdaResourcePolicy({ message: "invalid Lambda resource policy", cause }),
         });
       });
 
@@ -206,7 +214,8 @@ export const PermissionProvider = () =>
                       JSON.parse(Policy) as {
                         Statement?: { Sid?: string } | { Sid?: string }[];
                       },
-                    catch: (cause) => new Error("invalid policy", { cause }),
+                    catch: (cause) =>
+                      new InvalidLambdaResourcePolicy({ message: "invalid policy", cause }),
                   }).pipe(
                     // A malformed/non-JSON policy yields no permissions
                     // rather than failing the whole enumeration.

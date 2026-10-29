@@ -144,11 +144,7 @@ export const DeploymentConfigProvider = () =>
       const getConfig = Effect.fn(function* (name: string) {
         const response = yield* codedeploy
           .getDeploymentConfig({ deploymentConfigName: name })
-          .pipe(
-            Effect.catchTag("DeploymentConfigDoesNotExistException", () =>
-              Effect.succeed(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("DeploymentConfigDoesNotExistException", () => Effect.undefined));
         return response?.deploymentConfigInfo;
       });
 
@@ -209,9 +205,7 @@ export const DeploymentConfigProvider = () =>
                 zonalConfig: toWireZonalConfig(news.zonalConfig),
               })
               .pipe(
-                Effect.catchTag("DeploymentConfigAlreadyExistsException", () =>
-                  Effect.succeed(undefined),
-                ),
+                Effect.catchTag("DeploymentConfigAlreadyExistsException", () => Effect.undefined),
               );
             config = yield* getConfig(name);
           }

@@ -367,7 +367,7 @@ export const FlagProvider = () =>
             ...desired,
             type: news.type,
           })
-          .pipe(Effect.catchTag("FlagshipFlagAlreadyExists", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("FlagshipFlagAlreadyExists", () => Effect.undefined));
         if (created) {
           return toAttributes(created, accountId, appId);
         }
@@ -450,11 +450,7 @@ export const FlagProvider = () =>
 const getFlag = (accountId: string, appId: string, flagKey: string) =>
   flagship
     .getAppFlag({ accountId, appId, flagKey })
-    .pipe(
-      Effect.catchTag(["FlagshipFlagNotFound", "FlagshipAppNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
-    );
+    .pipe(Effect.catchTag(["FlagshipFlagNotFound", "FlagshipAppNotFound"], () => Effect.undefined));
 
 const createFlagKey = (id: string, key: string | undefined) =>
   Effect.gen(function* () {

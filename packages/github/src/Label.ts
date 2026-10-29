@@ -242,7 +242,7 @@ export const LabelProvider = () =>
 
         // Observe — probe for an existing label by name
         const observed = yield* Issues.getLabel(scope).pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
 
         // Ensure — when no label exists, create one

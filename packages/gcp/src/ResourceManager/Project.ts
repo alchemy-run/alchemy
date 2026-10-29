@@ -144,11 +144,11 @@ export type Project = Resource<
 export const Project = Resource<Project>("GCP.ResourceManager.Project");
 
 export class ProjectNotResolved extends Data.TaggedError("GCP.ResourceManager.ProjectNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ProjectStillExists extends Data.TaggedError("GCP.ResourceManager.ProjectStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const userLabels = (
@@ -186,7 +186,7 @@ const toProjectId = (id: string, projectId: string | undefined, existing?: strin
 const sanitizeDisplayName = (value: string | undefined, fallback: string) => {
   const source = (value ?? fallback).trim();
   let next = source
-    .replace(/[^a-zA-Z0-9 '"\-\!]/g, " ")
+    .replace(/[^a-zA-Z0-9 '"\-!]/g, " ")
     .replace(/\s+/g, " ")
     .trim();
   if (next.length === 0) next = fallback;
@@ -214,7 +214,7 @@ const toAttrs = (project: resourcemanager.Project) => ({
 const getByName = (name: string) =>
   resourcemanager
     .getProjects({ name })
-    .pipe(Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.undefined));
 
 const observe = (resourceName: string | undefined, projectId: string) =>
   Effect.gen(function* () {
@@ -231,7 +231,7 @@ const waitUntilExists = (resourceName: string | undefined, projectId: string) =>
       (project): project is resourcemanager.Project => project !== undefined,
       () =>
         new ProjectNotResolved({
-          name: resourceName ?? `projects/${projectId}`,
+          resourceName: resourceName ?? `projects/${projectId}`,
         }),
     ),
     Effect.retry({
@@ -246,7 +246,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((project) =>
       project === undefined || isDeleteRequested(project.state)
         ? Effect.void
-        : Effect.fail(new ProjectStillExists({ name })),
+        : Effect.fail(new ProjectStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.ProjectStillExists",
@@ -344,7 +344,7 @@ export const ProjectProvider = () =>
               labels: desiredLabels,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const settled = yield* waitForCreate(created);
           current = yield* waitUntilExists(
@@ -359,7 +359,7 @@ export const ProjectProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new ProjectNotResolved({
-          name: `projects/${projectId}`,
+          resourceName: `projects/${projectId}`,
         });
       }
 
@@ -398,7 +398,7 @@ export const ProjectProvider = () =>
 
       if (current === undefined) {
         return yield* new ProjectNotResolved({
-          name: `projects/${projectId}`,
+          resourceName: `projects/${projectId}`,
         });
       }
 
@@ -412,7 +412,7 @@ export const ProjectProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.succeed(undefined)),
+        Effect.catchTag(["NotFound", "ProjectNotFound"], () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

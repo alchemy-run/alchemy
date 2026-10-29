@@ -319,7 +319,7 @@ type ObservedWidget = turnstile.GetWidgetResponse & { accountId: string };
 const getWidget = (accountId: string, sitekey: string) =>
   turnstile.getWidget({ accountId, sitekey }).pipe(
     Effect.map((w): ObservedWidget => ({ ...w, accountId })),
-    Effect.catchTag("WidgetNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("WidgetNotFound", () => Effect.undefined),
   );
 
 /**

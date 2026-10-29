@@ -245,7 +245,7 @@ export const ProjectProvider = () =>
           hydrateProjectAttributes(project).pipe(
             // A project can be deleted between the list call and
             // hydration — skip it rather than fail the whole enumeration.
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -300,7 +300,7 @@ export const ProjectProvider = () =>
       if (output?.projectId) {
         return yield* getProject({ project_id: output.projectId }).pipe(
           Effect.flatMap(({ project }) => hydrateProjectAttributes(project, output)),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       }
       const name = yield* createProjectName(id, olds?.name);
@@ -340,7 +340,7 @@ export const ProjectProvider = () =>
       let observed: ObservedProject | undefined = output?.projectId
         ? yield* getProject({ project_id: output.projectId }).pipe(
             Effect.map(({ project }) => project),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           )
         : undefined;
       if (!observed) {
@@ -470,7 +470,7 @@ export const ProjectProvider = () =>
     }),
   });
 
-const rootDir = Effect.sync(process.cwd);
+const rootDir = Effect.sync(() => process.cwd());
 
 const createProjectName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

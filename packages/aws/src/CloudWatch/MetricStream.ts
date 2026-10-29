@@ -5,12 +5,20 @@ import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { createName, readResourceTags, retryConcurrent, updateResourceTags } from "./common.ts";
+
+export class MetricStreamUnexpectedResponse extends Data.TaggedError(
+  "MetricStreamUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type MetricStreamName = string;
 export type MetricStreamArn = `arn:aws:cloudwatch:${RegionID}:${AccountID}:metric-stream/${string}`;
@@ -110,8 +118,8 @@ export const MetricStreamProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              InvalidParameterValueException: () => Effect.succeed(undefined),
-              ResourceNotFoundException: () => Effect.succeed(undefined),
+              InvalidParameterValueException: () => Effect.undefined,
+              ResourceNotFoundException: () => Effect.undefined,
             }),
           );
 
@@ -181,7 +189,7 @@ export const MetricStreamProvider = () =>
 
             const results = yield* Effect.forEach(
               entries,
-              (entry) => (entry.Name ? readMetricStream(entry.Name) : Effect.succeed(undefined)),
+              (entry) => (entry.Name ? readMetricStream(entry.Name) : Effect.undefined),
               { concurrency: 10 },
             );
 
@@ -231,9 +239,9 @@ export const MetricStreamProvider = () =>
 
           const state = yield* readMetricStream(name);
           if (!state) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled metric stream '${name}'`),
-            );
+            return yield* new MetricStreamUnexpectedResponse({
+              message: `failed to read reconciled metric stream '${name}'`,
+            });
           }
 
           return {

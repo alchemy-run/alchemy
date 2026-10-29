@@ -241,7 +241,7 @@ export const ParameterProvider = () =>
       const resolveKeyArn = Effect.fn(function* (keyId: string | undefined) {
         return yield* kms.describeKey({ KeyId: keyId ?? "alias/aws/ssm" }).pipe(
           Effect.map((r) => r.KeyMetadata?.Arn),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
       });
 
@@ -288,7 +288,7 @@ export const ParameterProvider = () =>
           const name = output?.parameterName ?? (yield* createName(id, olds ?? {}));
           const found = yield* ssm.getParameter({ Name: name }).pipe(
             Effect.map((r) => r.Parameter),
-            Effect.catchTag("ParameterNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("ParameterNotFound", () => Effect.undefined),
           );
           if (!found) return undefined;
           const type = (found.Type ?? "String") as ParameterType;
@@ -342,7 +342,7 @@ export const ParameterProvider = () =>
           //    out-of-band we fall through to create.
           const observed = yield* ssm.getParameter({ Name: name, WithDecryption: true }).pipe(
             Effect.map((r) => r.Parameter),
-            Effect.catchTag("ParameterNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("ParameterNotFound", () => Effect.undefined),
           );
 
           let version: number | undefined;

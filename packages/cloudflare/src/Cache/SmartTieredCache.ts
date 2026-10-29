@@ -123,9 +123,7 @@ export const SmartTieredCacheProvider = () =>
             // `Unauthorized` ("Access denied") on the gated route. These are
             // not the transient code-10000 auth blips the global policy
             // retries; the zone simply has no readable setting, so skip it.
-            Effect.catchTag(["InvalidRoute", "Forbidden", "Unauthorized"], () =>
-              Effect.succeed(undefined),
-            ),
+            Effect.catchTag(["InvalidRoute", "Forbidden", "Unauthorized"], () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -148,7 +146,7 @@ export const SmartTieredCacheProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* cache.getSmartTieredCache({ zoneId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
@@ -189,7 +187,7 @@ export const SmartTieredCacheProvider = () =>
       // Observe — if the zone itself is gone, so is the setting.
       const observed = yield* cache
         .getSmartTieredCache({ zoneId })
-        .pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already
       // matches (idempotent re-delete after a crashed run).

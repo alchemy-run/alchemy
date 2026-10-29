@@ -40,7 +40,6 @@ const packages = {
 
 // pnpm may be a `.cmd` shim on Windows, which only a shell can run.
 const shell = process.platform === "win32";
-const pathDelimiter = process.platform === "win32" ? ";" : ":";
 
 type PackageName = keyof typeof packages;
 const packageNames = Object.keys(packages) as Array<PackageName>;

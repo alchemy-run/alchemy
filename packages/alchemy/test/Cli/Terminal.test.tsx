@@ -1888,7 +1888,7 @@ it.effect(
 
       const output = stripVTControlCharacters(stdout.output);
       expect(output).toContain("Code ABCD-EFGH");
-      expect(output).toContain("copy code");
+      expect(output).toContain("copy URL");
 
       yield* Effect.sync(() => stdin.write("\x1b"));
       const failure = yield* Fiber.join(fiber);

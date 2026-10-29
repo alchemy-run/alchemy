@@ -2,6 +2,7 @@ import { encodeRpcError } from "alchemy/Rpc";
 import { buildEventTelemetry } from "alchemy/TelemetryRuntime";
 import * as Cause from "effect/Cause";
 import type * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { Base64, Base64Url } from "effect/encoding";
 import * as Exit from "effect/Exit";
@@ -137,6 +138,11 @@ interface WorkflowIdentity {
   readonly instanceId: string;
 }
 
+/** The raw value a native `step.do` rejected with, decoded back into a Cause below. */
+class NativeStepRejection extends Data.TaggedError("NativeStepRejection")<{
+  readonly error: unknown;
+}> {}
+
 export const wrapWorkflowStep = (
   step: any,
   identity?: WorkflowIdentity,
@@ -188,16 +194,16 @@ export const wrapWorkflowStep = (
           }
           throw error;
         };
-        return yield* Effect.tryPromise<T, unknown>({
+        return yield* Effect.tryPromise<T, NativeStepRejection>({
           try: () => {
             if (config && rollback) return step.do(name, config, callback, rollback);
             if (config) return step.do(name, config, callback);
             if (rollback) return step.do(name, callback, rollback);
             return step.do(name, callback);
           },
-          catch: (error) => error,
+          catch: (error) => new NativeStepRejection({ error }),
         }).pipe(
-          Effect.catch((error) =>
+          Effect.catch(({ error }) =>
             failure &&
             error instanceof Error &&
             error.name === "Error" &&

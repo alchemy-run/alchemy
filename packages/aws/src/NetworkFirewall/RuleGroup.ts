@@ -174,7 +174,7 @@ export const RuleGroupProvider = () =>
               (meta) =>
                 nfw.describeRuleGroup({ RuleGroupArn: meta.Arn }).pipe(
                   Effect.map((r) => toAttrs(r.RuleGroupResponse)),
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                 ),
               { concurrency: 5 },
             );
@@ -186,17 +186,13 @@ export const RuleGroupProvider = () =>
             output?.ruleGroupArn !== undefined
               ? yield* nfw
                   .describeRuleGroup({ RuleGroupArn: output.ruleGroupArn })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  )
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
               : yield* nfw
                   .describeRuleGroup({
                     RuleGroupName: yield* createName(id, olds ?? {}),
                     Type: olds?.type,
                   })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  );
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found === undefined) return undefined;
           const attrs = toAttrs(found.RuleGroupResponse);
           const tags = nfwTagsToRecord(found.RuleGroupResponse.Tags);
@@ -223,7 +219,7 @@ export const RuleGroupProvider = () =>
           // 1. Observe — cloud state is authoritative.
           let observed = yield* nfw
             .describeRuleGroup({ RuleGroupName: name, Type: news.type })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // 2. Ensure — create if missing.
           if (observed === undefined) {

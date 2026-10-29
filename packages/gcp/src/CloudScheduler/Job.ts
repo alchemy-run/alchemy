@@ -322,22 +322,22 @@ export type Job = Resource<
 export const Job = Resource<Job>("GCP.CloudScheduler.Job");
 
 export class JobNotResolved extends Data.TaggedError("GCP.CloudScheduler.JobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class SchedulerJobNotReady extends Data.TaggedError("GCP.CloudScheduler.JobNotReady")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class JobStateFailed extends Data.TaggedError("GCP.CloudScheduler.JobStateFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
 
 export class JobTargetMissing extends Data.TaggedError("GCP.CloudScheduler.JobTargetMissing")<{
-  name: string;
+  resourceName: string;
   message: string;
 }> {}
 
@@ -424,7 +424,7 @@ const toAttrs = (job: scheduler.Job, project: string, region: string) => {
 const getByName = (name: string) =>
   scheduler
     .getProjectsLocationsJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Poll until Cloud Scheduler reports the job in the desired ENABLED/PAUSED state. */
 const waitForJobState = (name: string, paused: boolean) =>
@@ -435,13 +435,13 @@ const waitForJobState = (name: string, paused: boolean) =>
       if (job?.state === "UPDATE_FAILED" || job?.state === "DISABLED") {
         return Effect.fail(
           new JobStateFailed({
-            name,
+            resourceName: name,
             state: job.state,
             message: job.status?.message ?? `job is ${job.state}`,
           }),
         );
       }
-      return Effect.fail(new SchedulerJobNotReady({ name, state: job?.state }));
+      return Effect.fail(new SchedulerJobNotReady({ resourceName: name, state: job?.state }));
     }),
     Effect.retry({
       while: (error) => error._tag === "GCP.CloudScheduler.JobNotReady",
@@ -590,7 +590,7 @@ const syncPaused = Effect.fn(function* (name: string, current: scheduler.Job, pa
           Effect.flatMap((job) =>
             job !== undefined && job.state === "PAUSED"
               ? Effect.succeed(job)
-              : new JobNotResolved({ name }),
+              : new JobNotResolved({ resourceName: name }),
           ),
         ),
       ),
@@ -606,7 +606,7 @@ const syncPaused = Effect.fn(function* (name: string, current: scheduler.Job, pa
           Effect.flatMap((job) =>
             job !== undefined && job.state === "ENABLED"
               ? Effect.succeed(job)
-              : new JobNotResolved({ name }),
+              : new JobNotResolved({ resourceName: name }),
           ),
         ),
       ),
@@ -657,7 +657,7 @@ export const JobProvider = () =>
       const parent = parentOf(env.project, location);
       if (!hasTarget(news)) {
         return yield* new JobTargetMissing({
-          name,
+          resourceName: name,
           message: "Cloud Scheduler jobs require httpTarget, pubsubTarget, or appEngineHttpTarget",
         });
       }
@@ -704,7 +704,7 @@ export const JobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new JobNotResolved({ name });
+        return yield* new JobNotResolved({ resourceName: name });
       }
 
       const mask: string[] = [];

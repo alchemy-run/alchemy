@@ -455,13 +455,10 @@ export const predict = (
   }
   let decision = decide(state, command, { id: options.id, now: options.now });
   if (Effect.isEffect(decision)) {
-    const settled = settle(
-      Effect.runSyncExit(
-        Effect.provideContext(
-          decision as Effect.Effect<unknown, unknown, never>,
-          (options.context ?? Context.empty()) as Context.Context<never>,
-        ),
-      ),
+    const settled = decision.pipe(
+      Effect.provideContext((options.context ?? Context.empty()) as Context.Context<unknown>),
+      Effect.runSyncExit,
+      settle,
     );
     if (settled._tag === "Failed") return { _tag: "Unpredictable", cause: settled.cause };
     decision = settled.decision;
@@ -684,6 +681,7 @@ export const make = <
   const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects>>>()(
     `alchemy/Domain/Aggregate/${name}`,
   );
+  // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
   const decodeId = Schema.decodeUnknownSync(
     definition.id as unknown as Schema.Codec<unknown, unknown>,
   );

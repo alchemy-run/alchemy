@@ -6,10 +6,21 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+
+export class RuleInvalidProps extends Data.TaggedError("RuleInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class RuleOperationFailed extends Data.TaggedError("RuleOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type {
   AppSyncParameters,
@@ -305,7 +316,7 @@ export const RuleProvider = () =>
               Name: ruleName,
               EventBusName: eventBusName !== "default" ? eventBusName : undefined,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!described?.Name) {
             return undefined;
@@ -467,7 +478,7 @@ export const RuleProvider = () =>
                 EventBusName: eventBusParam,
                 Ids: removedTargetIds,
               })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
             if (response) {
               yield* assertRemoveTargetsSucceeded(response);
@@ -601,19 +612,17 @@ const toRuleArn = (
 
 const validateRuleProps = Effect.fn(function* (props: RuleProps) {
   if (!props.eventPattern && !props.scheduleExpression) {
-    return yield* Effect.fail(
-      new Error("EventBridge Rule requires either `eventPattern` or `scheduleExpression`"),
-    );
+    return yield* new RuleInvalidProps({
+      message: "EventBridge Rule requires either `eventPattern` or `scheduleExpression`",
+    });
   }
 });
 
 const assertPutTargetsSucceeded = Effect.fn(function* (response: eventbridge.PutTargetsResponse) {
   if ((response.FailedEntryCount ?? 0) > 0) {
-    return yield* Effect.fail(
-      new Error(
-        `Failed to attach EventBridge targets: ${JSON.stringify(response.FailedEntries ?? [])}`,
-      ),
-    );
+    return yield* new RuleOperationFailed({
+      message: `Failed to attach EventBridge targets: ${JSON.stringify(response.FailedEntries ?? [])}`,
+    });
   }
 });
 
@@ -621,10 +630,8 @@ const assertRemoveTargetsSucceeded = Effect.fn(function* (
   response: eventbridge.RemoveTargetsResponse,
 ) {
   if ((response.FailedEntryCount ?? 0) > 0) {
-    return yield* Effect.fail(
-      new Error(
-        `Failed to remove EventBridge targets: ${JSON.stringify(response.FailedEntries ?? [])}`,
-      ),
-    );
+    return yield* new RuleOperationFailed({
+      message: `Failed to remove EventBridge targets: ${JSON.stringify(response.FailedEntries ?? [])}`,
+    });
   }
 });

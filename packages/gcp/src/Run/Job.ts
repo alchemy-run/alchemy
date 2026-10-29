@@ -359,22 +359,22 @@ export const Job: Platform<Job, JobServices, JobShape, JobRuntimeContext> = Plat
 );
 
 export class JobNotResolved extends Data.TaggedError("GCP.Run.JobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class JobNotReady extends Data.TaggedError("GCP.Run.JobNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
 
 export class JobReconciling extends Data.TaggedError("GCP.Run.JobReconciling")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class JobStillExists extends Data.TaggedError("GCP.Run.JobStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -488,7 +488,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   cloudrun
     .getProjectsLocationsJobs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toApiContainers = (
   containers: JobContainer[] | undefined,
@@ -656,13 +656,13 @@ const waitUntilReady = (name: string) =>
     Effect.filterOrFail(
       (job): job is cloudrun.GoogleCloudRunV2Job =>
         job !== undefined && job.deleteTime === undefined,
-      () => new JobNotResolved({ name }),
+      () => new JobNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (job) => (job.terminalCondition?.state ?? "") !== "CONDITION_FAILED",
       (job) =>
         new JobNotReady({
-          name,
+          resourceName: name,
           state: job.terminalCondition?.state ?? "",
           message: job.terminalCondition?.message ?? "job failed",
         }),
@@ -671,7 +671,7 @@ const waitUntilReady = (name: string) =>
       (job) => !isPendingJob(job),
       (job) =>
         new JobReconciling({
-          name,
+          resourceName: name,
           state: job.terminalCondition?.state || "reconciling",
         }),
     ),
@@ -686,7 +686,7 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((job) =>
-      job === undefined ? Effect.void : Effect.fail(new JobStillExists({ name })),
+      job === undefined ? Effect.void : Effect.fail(new JobStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Run.JobStillExists",
@@ -857,7 +857,7 @@ export const JobProvider = () =>
           })
           .pipe(
             retryActAs,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
@@ -867,7 +867,7 @@ export const JobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new JobNotResolved({ name });
+        return yield* new JobNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -951,7 +951,7 @@ export const JobProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new JobNotResolved({ name });
+        return yield* new JobNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region, {
@@ -964,7 +964,7 @@ export const JobProvider = () =>
     delete: Effect.fn(function* ({ id, output }) {
       const operation = yield* cloudrun
         .deleteProjectsLocationsJobs({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

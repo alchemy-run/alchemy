@@ -234,7 +234,7 @@ export const IntegrationProvider = () =>
       const getIntegrationSafe = (apiId: string, integrationId: string) =>
         agw2
           .getIntegration({ ApiId: apiId, IntegrationId: integrationId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
       return IntegrationResource.Provider.of({
         stables: ["apiId", "integrationId"],

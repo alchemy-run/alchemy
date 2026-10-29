@@ -61,7 +61,7 @@ const observeConfig = (functionName: string, qualifier: string | undefined) =>
   Lambda.getFunctionEventInvokeConfig({
     FunctionName: functionName,
     Qualifier: qualifier,
-  }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+  }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
 /**
  * Converge the async invocation config of a function or alias to the desired

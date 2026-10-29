@@ -182,7 +182,7 @@ export const ConnectCluster = Resource<ConnectCluster>("GCP.ManagedKafka.Connect
 export class ConnectClusterNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.ConnectClusterNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, connectClusterId: string) =>
@@ -322,7 +322,7 @@ export const ConnectClusterProvider = () =>
           })
           .pipe(
             retryCreateQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -331,7 +331,7 @@ export const ConnectClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectClusterNotResolved({ name });
+        return yield* new ConnectClusterNotResolved({ resourceName: name });
       }
 
       current = yield* waitUntilReady(getConnectCluster(name), name, (cluster) => cluster.state);
@@ -369,7 +369,7 @@ export const ConnectClusterProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
       return toAttrs(current, env.project);
     }),
@@ -377,7 +377,7 @@ export const ConnectClusterProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const op = yield* kafka
         .deleteProjectsLocationsConnectClusters({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (op !== undefined) {
         yield* waitForOperation(op, { notFoundOk: true });
       }

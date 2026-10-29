@@ -265,7 +265,7 @@ const toAttrs = (template: compute.NodeTemplate, project: string): NodeTemplate[
 const getByName = (project: string, region: string, nodeTemplate: string) =>
   compute
     .getNodeTemplates({ project, region, nodeTemplate })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, nodeTemplateName: string) =>
   getByName(project, region, nodeTemplateName).pipe(
