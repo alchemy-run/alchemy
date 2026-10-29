@@ -568,7 +568,11 @@ export class Platform extends Context.Service<
      * deploys starts catching up the views and projections in `targets` (every
      * consumer in the model, by `CatchUp.targetId`) that are new to it.
      */
-    readonly start?: (targets: ReadonlyArray<string>) => Effect.Effect<void>;
+    readonly start?: (
+      targets: ReadonlyArray<string>,
+      /** The sources each consumer reads: a backfill walks only theirs. */
+      sourcesOf: (target: string) => ReadonlyArray<string> | undefined,
+    ) => Effect.Effect<void>;
     /**
      * How much of the history recorded before a consumer (by
      * `CatchUp.targetId`) has reached it. A platform without it keeps nothing

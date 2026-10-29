@@ -247,6 +247,14 @@ export class Sim {
    */
   singleSource = false;
 
+  /** The sources each consumer reads; unset, the root sweeps every subtree. */
+  sourcesOf: ((target: string) => ReadonlyArray<string> | undefined) | undefined = undefined;
+
+  /** Whether instances of `source` feed `target`. */
+  feeds(source: string, target: string) {
+    return this.sourcesOf?.(target)?.includes(source) ?? true;
+  }
+
   /** The target exists (the consumer is deployed). */
   deployed = false;
   calls = 0;
@@ -485,7 +493,9 @@ export class Sim {
       const object = new SimObject(`node:${path}`, this, (id) => this.node(path).role.run(id));
       node = {
         object,
-        role: Backfill.makeNode(object.storage, object.jobsApi, this.net, this.limits),
+        role: Backfill.makeNode(object.storage, object.jobsApi, this.net, this.limits, (target) =>
+          this.sourcesOf?.(target),
+        ),
       };
       this.nodes.set(path, node);
     }
@@ -546,7 +556,7 @@ export class Sim {
         this.net,
         {
           ref,
-          targets: () => (knows() ? this.targets : []),
+          targets: () => (knows() ? this.targets.filter((t) => this.feeds(ref.source, t)) : []),
           singleSource: () => this.singleSource,
           model: () => (knows() ? this.targets : []),
           version: Effect.sync(() => data.events.length),
@@ -768,7 +778,11 @@ export class Sim {
       },
       directory: {
         nodes: this.nodes.size,
-        depth: Math.max(0, ...[...this.nodes.keys()].map((path) => path.length)),
+        // Hash digits below a source's subtree root (`A:3f` is 2 deep).
+        depth: Math.max(
+          0,
+          ...[...this.nodes.keys()].map((path) => path.slice(path.indexOf(":") + 1).length),
+        ),
       },
     };
   }

@@ -154,6 +154,11 @@ export interface Kernel {
    */
   readonly singleSource: (target: string) => boolean;
   /**
+   * The sources (aggregates and views, by name) a consumer reads, by
+   * `CatchUp.targetId`; `undefined` for one this model doesn't have.
+   */
+  readonly sourcesOf: (target: string) => ReadonlyArray<string> | undefined;
+  /**
    * Set a view's or projection's version (`view:Name` or `projection:Name`).
    * Bumping it rebuilds the consumer, and every view or projection that reads
    * it, from the history. Set every version before the platform starts.
@@ -668,6 +673,28 @@ const build = (
       }
     }
     return sources.size === 1;
+  };
+
+  /**
+   * The sources (aggregates and views, by name) a consumer reads, by
+   * `CatchUp.targetId`; `undefined` for one this model doesn't have.
+   */
+  const sourcesOf = (target: string): ReadonlyArray<string> | undefined => {
+    const [kind, rest] = target.split(":") as [string, string];
+    const name = (rest ?? "").replace(/#\d+$/, "");
+    const known =
+      kind === "view"
+        ? definitions.views.some((view) => view.viewName === name)
+        : definitions.projections.some((projection) => projection.projectionName === name);
+    if (!known) return undefined;
+    const sources = new Set<string>();
+    for (const [source, byTag] of subscribers) {
+      for (const list of byTag.values()) {
+        if (list.some((subscriber) => subscriber.kind === kind && subscriber.name === name))
+          sources.add(source);
+      }
+    }
+    return [...sources].sort();
   };
 
   /** Replay stored rows to the consumers lagging behind them, in order. */
@@ -1300,6 +1327,7 @@ const build = (
       ].sort();
     },
     singleSource,
+    sourcesOf,
     setVersion: (consumer, version) => {
       versions.set(consumer, version);
       generations.clear();

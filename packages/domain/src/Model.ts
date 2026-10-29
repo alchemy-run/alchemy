@@ -476,7 +476,7 @@ const build = <A, E, R>(
       );
     }
     // Every store is built: catch up the consumers that are new to the platform.
-    if (platform.start) yield* platform.start(kernel.targets);
+    if (platform.start) yield* platform.start(kernel.targets, kernel.sourcesOf);
 
     return Context.add(hosts, Internals, {
       kernel,

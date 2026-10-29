@@ -499,12 +499,21 @@ const backfillRuntime = (
   });
 
 /** A directory node: one Durable Object per path in the tree. */
-const directoryObject = (net: Backfill.Network) =>
+/** The sources (aggregates and views, by name) a consumer reads, in the deployed model. */
+type SourcesOf = (target: string) => ReadonlyArray<string> | undefined;
+
+const directoryObject = (net: Backfill.Network, sourcesOf: SourcesOf) =>
   Effect.gen(function* () {
     return Effect.gen(function* () {
       let node: Backfill.Node | undefined;
       const runtime = yield* backfillRuntime((id) => node!.run(id));
-      node = Backfill.makeNode(runtime.storage, runtime.jobs, net);
+      node = Backfill.makeNode(
+        runtime.storage,
+        runtime.jobs,
+        net,
+        Backfill.defaultLimits,
+        sourcesOf,
+      );
       const role = node;
       return {
         register: (path: string, ref: Backfill.SourceRef) =>
@@ -785,7 +794,12 @@ const aggregateObject = (
     });
   });
 
-const viewObject = (kit: ViewKit, net: Backfill.Network, model: () => ReadonlyArray<string>) =>
+const viewObject = (
+  kit: ViewKit,
+  net: Backfill.Network,
+  model: () => ReadonlyArray<string>,
+  sourcesOf: SourcesOf,
+) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
@@ -890,6 +904,7 @@ const viewObject = (kit: ViewKit, net: Backfill.Network, model: () => ReadonlyAr
           key,
           target: () => target,
           singleSource: () => kit.singleSource,
+          sources: () => sourcesOf(target) ?? [],
           apply: (deliveries) => runtime.provide(Effect.orDie(apply(key, deliveries))),
           after: runtime.provide(flushAfter),
         }));
@@ -1045,7 +1060,7 @@ const emptyProjectionMeta: ProjectionMeta = {
 /** How long a failed or interrupted run waits before it is retried. */
 const PROJECTION_RETRY_MS = 10_000;
 
-const projectionObject = (kit: ProjectionKit, net: Backfill.Network) =>
+const projectionObject = (kit: ProjectionKit, net: Backfill.Network, sourcesOf: SourcesOf) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
@@ -1182,6 +1197,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network) =>
           key,
           target: () => target,
           singleSource: () => kit.singleSource,
+          sources: () => sourcesOf(target) ?? [],
           apply: (deliveries) =>
             runtime.provide(
               Effect.orDie(Effect.forEach(deliveries, (d) => intake(key, d), { discard: true })),
@@ -1348,6 +1364,8 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
 
     // Every consumer in the model this isolate runs, set once the model is built.
     let model: ReadonlyArray<string> = [];
+    let sourcesOf: SourcesOf = () => undefined;
+    const consumerSources: SourcesOf = (target) => sourcesOf(target);
     const current = () => model;
     // The objects the backfill protocol reaches: directory nodes, sources by name,
     // consumers by kind and name.
@@ -1403,7 +1421,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
         },
       },
     };
-    directory = yield* inInit(declare("DomainDirectory", directoryObject(net)));
+    directory = yield* inInit(declare("DomainDirectory", directoryObject(net, consumerSources)));
 
     // A run of the backfill: announce the model's consumers to the directory, then
     // check the root until every one is complete. Reconciliation starts it and waits.
@@ -1524,7 +1542,10 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       view: (view, kit) =>
         inInit(
           Effect.gen(function* () {
-            const namespace = yield* declare(`${view.viewName}View`, viewObject(kit, net, current));
+            const namespace = yield* declare(
+              `${view.viewName}View`,
+              viewObject(kit, net, current, consumerSources),
+            );
             sources.set(view.viewName, namespace);
             consumers.set(`view:${view.viewName}`, namespace);
             const read = (key: string) =>
@@ -1569,7 +1590,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           Effect.gen(function* () {
             const namespace = yield* declare(
               `${projection.projectionName}Projection`,
-              projectionObject(kit, net),
+              projectionObject(kit, net, consumerSources),
             );
             consumers.set(`projection:${projection.projectionName}`, namespace);
             return {
@@ -1618,7 +1639,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
             through: undefined,
           })),
         ),
-      start: (targets) =>
+      start: (targets, sourcesOfTarget) =>
         Effect.gen(function* () {
           // At deploy time: reconciliation runs the backfill of new consumers and waits.
           if (!globalThis.__ALCHEMY_RUNTIME__ && targets.length > 0) {
@@ -1637,6 +1658,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           Effect.andThen(
             Effect.sync(() => {
               model = targets;
+              sourcesOf = sourcesOfTarget;
               if (targets.length === 0) return;
               news = Effect.suspend(() => {
                 // A random node two levels down: the burst after a deploy spreads over 256 of them.

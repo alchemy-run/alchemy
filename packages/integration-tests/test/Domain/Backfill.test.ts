@@ -50,7 +50,7 @@ const verify = (sim: Sim) =>
       expect(backfilled.map(order)).toEqual([...backfilled.map(order)].sort());
     }
     for (const source of sim.sources.values()) {
-      for (const target of sim.targets) {
+      for (const target of sim.targets.filter((t) => sim.feeds(source.ref.source, t))) {
         expect(
           (source.object.data.get("routed") as Record<string, number> | undefined)?.[target],
         ).toBe(source.events.length);
@@ -129,7 +129,9 @@ describe("Domain backfill (simulated)", () => {
       // 60 instances over 16 leaves of 3: leaves split into deeper children.
       const splits = [...sim.nodes.entries()].filter(([, node]) => node.object.data.get("split"));
       expect(splits.length).toBeGreaterThan(0);
-      expect(Math.max(...[...sim.nodes.keys()].map((path) => path.length))).toBeGreaterThan(1);
+      expect(
+        Math.max(...[...sim.nodes.keys()].map((path) => path.slice(path.indexOf(":") + 1).length)),
+      ).toBeGreaterThan(1);
     }),
   );
 
@@ -209,6 +211,23 @@ describe("Domain backfill (simulated)", () => {
         yield* sim.run(own(sim, 8, 16));
       }),
     { faults: { callBefore: 0.08, callAfter: 0.08, crash: 0.08 }, seeds: 60 },
+  );
+
+  scenario("the sweep walks only the subtrees of the sources the consumer reads", (sim) =>
+    Effect.gen(function* () {
+      sim.sourcesOf = () => ["A"];
+      // Instances of a source the consumer doesn't read: listed in their own subtree.
+      for (let i = 0; i < 12; i++) {
+        sim.now += 1;
+        yield* sim.commit(`B/b${i}`, []);
+      }
+      for (const commit of history(sim, 6, 30, 3)) yield* commit();
+      yield* sim.deploy();
+      yield* sim.run();
+      for (const source of sim.sources.values())
+        if (source.ref.source === "B") expect(source.object.stats.requests).toBe(0);
+      expect([...sim.nodes.keys()].some((path) => path.startsWith("B:"))).toBe(true);
+    }),
   );
 
   scenario("an event routed to several keys", (sim) =>

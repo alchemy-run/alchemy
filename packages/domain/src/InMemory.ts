@@ -181,6 +181,7 @@ export const make = (
         memoryJobs(address, (id) => node(path).run(id)),
         net,
         limits,
+        (target) => sourcesOf(target),
       );
       nodes.set(path, found);
     }
@@ -189,6 +190,7 @@ export const make = (
   // Every consumer in the model of the latest build, and the tuning: keys waiting on
   // discovery ask again on the work queue, as soon as other work has run.
   let model: ReadonlyArray<string> = [];
+  let sourcesOf: (target: string) => ReadonlyArray<string> | undefined = () => undefined;
   const limits: Backfill.Limits = { ...Backfill.defaultLimits, pollMillis: 0 };
   // The source and consumer parts of each hosted entity, as of the latest build.
   const sourceRoles = new Map<string, (id: string) => Backfill.Source>();
@@ -662,6 +664,7 @@ export const make = (
               key,
               target: () => target,
               singleSource: () => kit.singleSource,
+              sources: () => sourcesOf(target) ?? [],
               apply: (deliveries) => apply(key, deliveries),
             },
             limits,
@@ -879,6 +882,7 @@ export const make = (
               key,
               target: () => target,
               singleSource: () => kit.singleSource,
+              sources: () => sourcesOf(target) ?? [],
               apply: (deliveries) => Effect.forEach(deliveries, intake, { discard: true }),
             },
             limits,
@@ -1013,9 +1017,10 @@ export const make = (
       }),
 
     // A deploy that adds consumers tells the directory; it starts their backfill.
-    start: (targets) =>
+    start: (targets, sources) =>
       Effect.suspend(() => {
         model = targets;
+        sourcesOf = sources;
         return targets.length === 0 ? Effect.void : net.node.news("00", targets);
       }),
     history: (target) =>

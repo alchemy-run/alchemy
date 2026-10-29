@@ -199,9 +199,22 @@ const pad = (n: number, width: number) => String(Math.max(0, Math.floor(n))).pad
 const trace = (step: string, fields: Record<string, unknown>) =>
   Effect.logDebug(`backfill ${step} ${JSON.stringify(fields)}`);
 
-/** The leaf an instance is listed in: a prefix of the hash of its source and id. */
+/**
+ * The directory has one subtree per source (`Account:`, `Deposits:`), so a sweep
+ * for a consumer walks only the sources it reads. Within a subtree a node's path
+ * is the source, a colon and a prefix of the instance's hash: `Account:a3`.
+ */
 export const leafOf = (ref: SourceRef, depth: number = DEPTH): string =>
-  hashOf(ref).slice(0, depth);
+  `${ref.source}:${hashOf(ref).slice(0, depth)}`;
+
+/** The hash digits of a path: its depth within its source's subtree. */
+const digitsOf = (path: string) => path.slice(path.indexOf(":") + 1);
+
+/** The source a node's subtree lists, or `undefined` for the root (and news relays). */
+export const sourceOfPath = (path: string): string | undefined => {
+  const colon = path.indexOf(":");
+  return colon < 0 ? undefined : path.slice(0, colon);
+};
 
 /** The FNV-1a hash of an instance's source and id, as 8 hex digits: its path in the tree. */
 const hashOf = ({ source, id }: SourceRef): string => {
@@ -221,9 +234,11 @@ const hashOf = ({ source, id }: SourceRef): string => {
 };
 
 /** The child of a split node that lists an instance: one more hex digit of its hash. */
-const childFor = (path: string, ref: SourceRef) => hashOf(ref).slice(0, path.length + 1);
+const childFor = (path: string, ref: SourceRef) =>
+  `${ref.source}:${hashOf(ref).slice(0, digitsOf(path).length + 1)}`;
 
-const parentOf = (path: string) => path.slice(0, -1);
+/** A source's subtree (`Account:`) hangs off the root; a news relay (`a3`) climbs by digit. */
+const parentOf = (path: string) => (path.endsWith(":") ? "" : path.slice(0, -1));
 const refKey = (ref: SourceRef) => `${enc(ref.source)}:${enc(ref.id)}`;
 
 /** A buffered delivery's place in a key's merge: timestamp, then stream, then seq. */
@@ -711,6 +726,8 @@ export interface ConsumerHost {
    * applies what it pulls directly (nothing to merge).
    */
   readonly singleSource?: () => boolean;
+  /** The sources this consumer reads (`Account`, `Deposits`): where it asks about discovery. */
+  readonly sources?: () => ReadonlyArray<string>;
   /**
    * Apply deliveries in order, as the live path would. Called holding the
    * exclusive section.
@@ -762,7 +779,17 @@ export const makeConsumer = (
   }
 
   /** Start asking at a node two levels down, picked by the key: the asks spread out. */
-  const firstAsk = (target: string) => leafOf({ source: target, id: host.key }).slice(0, 2);
+  /**
+   * A node to ask whether discovery is complete: one of its source's leaves, by
+   * the key's hash, so asks spread out. It climbs toward the root past nodes that
+   * don't know (without sources, it asks the root).
+   */
+  const firstAsk = (target: string) => {
+    const source = host.sources?.()[0];
+    return source === undefined
+      ? ""
+      : leafOf({ source, id: `${target}/${host.key}` }, Math.min(2, limits.depth));
+  };
 
   const begin = (target: string) =>
     Effect.gen(function* () {
@@ -1098,6 +1125,12 @@ export const makeNode = (
   jobs: Jobs,
   net: Network,
   limits: Limits = defaultLimits,
+  /**
+   * The sources a consumer reads (`Account`, `Deposits`), in the code this node
+   * runs: the root sweeps only their subtrees. `undefined` for a consumer it
+   * doesn't know (older code): it sweeps them all.
+   */
+  sourcesOf: (target: string) => ReadonlyArray<string> | undefined = () => undefined,
 ) => {
   const sweepKey = (target: string) => `sw:${enc(target)}`;
   const retry = makeRetry(storage, jobs, limits);
@@ -1262,7 +1295,13 @@ export const makeNode = (
   const begin = (path: string, target: string, phase: Sweep["phase"]) =>
     Effect.gen(function* () {
       yield* trace("phase", { path, target, phase });
-      const children = (yield* storage.list({ prefix: "c:" })).map(([key]) => key.slice(2));
+      const linked = (yield* storage.list({ prefix: "c:" })).map(([key]) => key.slice(2));
+      // The root sweeps only the subtrees of the sources the consumer reads.
+      const sources = path === "" ? sourcesOf(target) : undefined;
+      const children =
+        sources === undefined
+          ? linked
+          : linked.filter((child) => sources.includes(sourceOfPath(child) ?? ""));
       const previous = yield* getSweep(target);
       const adopting = phase !== "discover" && previous === undefined ? null : previous?.adopting;
       yield* keepPath(path);
@@ -1456,7 +1495,7 @@ export const makeNode = (
             yield* storage.put({ [key]: ref, count });
             yield* join(path, ref, key);
             // Full: split into 16 children by the next hex digit, a page at a time.
-            if (count > limits.leafSize && path.length < 8) {
+            if (count > limits.leafSize && digitsOf(path).length < 8) {
               yield* storage.put({ split: true });
               yield* jobs.schedule("split", 0);
             }
@@ -1477,6 +1516,9 @@ export const makeNode = (
             yield* trace("child", { path, child });
             // Linked while sweeps run: it takes part in each one's current phase.
             for (const { target, sweep } of yield* sweeps) {
+              // The root sweeps only the subtrees of the sources the consumer reads.
+              const sources = path === "" ? sourcesOf(target) : undefined;
+              if (sources !== undefined && !sources.includes(sourceOfPath(child) ?? "")) continue;
               // After this node reported, the child is still told, but not waited for.
               const children = sweep.children.includes(child)
                 ? sweep.children
