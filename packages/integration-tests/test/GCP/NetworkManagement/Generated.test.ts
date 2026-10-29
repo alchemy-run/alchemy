@@ -48,13 +48,21 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ConnectivityTest", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetConnectivityTest (networkmanagement.projects.locations.global.connectivityTests.get): ConnectivityTest: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetConnectivityTest (networkmanagement.projects.locations.global.connectivityTests.get)",
+        () => probe("GetConnectivityTest", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkmanagement", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RerunConnectivityTest (networkmanagement.projects.locations.global.connectivityTests.rerun): ConnectivityTest: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RerunConnectivityTest (networkmanagement.projects.locations.global.connectivityTests.rerun)",
+        () => probe("RerunConnectivityTest", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkmanagement", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -104,9 +112,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("VpcFlowLogsConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetVpcFlowLogsConfig@VpcFlowLogsConfig (networkmanagement.projects.locations.vpcFlowLogsConfigs.get): VpcFlowLogsConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetVpcFlowLogsConfig@VpcFlowLogsConfig (networkmanagement.projects.locations.vpcFlowLogsConfigs.get)",
+        () => probe("GetVpcFlowLogsConfig@VpcFlowLogsConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkmanagement", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

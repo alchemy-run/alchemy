@@ -13,6 +13,8 @@
     "resources": {
       "DeploymentGroup": "ProbeDeploymentGroup"
     },
-    "untestable": {}
+    "untestable": {
+      "Preview": "a preview runs Terraform through Cloud Build as a service account that needs Infra Manager roles the testing project doesn't grant (GCP_TEST_CONFIG)"
+    }
   }
 }

@@ -154,9 +154,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("TraceScope", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTraceScope (observability.projects.locations.traceScopes.get): TraceScope: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTraceScope (observability.projects.locations.traceScopes.get)",
+        () => probe("GetTraceScope", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:observability", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

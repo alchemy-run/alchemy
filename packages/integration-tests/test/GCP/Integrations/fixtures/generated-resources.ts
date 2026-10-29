@@ -10,3 +10,29 @@ export const ProbeTemplate = GCP.Integrations.Template("ProbeTemplate", {
   categories: ["SALES_AND_MARKETING"],
   visibility: "PRIVATE",
 });
+
+export const ProbeAuthConfig = GCP.Integrations.AuthConfig("ProbeAuthConfig", {
+  location: "us-central1",
+  displayName: "alchemy-probe",
+  credentialType: "USERNAME_AND_PASSWORD",
+  decryptedCredential: {
+    credentialType: "USERNAME_AND_PASSWORD",
+    usernameAndPassword: { username: "alchemy", password: "probe-secret" },
+  },
+  visibility: "PRIVATE",
+});
+export const ProbeIntegrationVersion = GCP.Integrations.IntegrationsVersion(
+  "ProbeIntegrationVersion",
+  {
+    location: "us-central1",
+    triggerConfigs: [
+      {
+        label: "API Trigger",
+        triggerType: "API",
+        triggerNumber: "1",
+        triggerId: "api_trigger/alchemy_probe",
+        properties: { "Trigger name": "alchemy_probe" },
+      },
+    ],
+  },
+);

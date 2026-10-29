@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeConnectivityTest, ProbeFlowLogs } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated NetworkManagement binding as its own
@@ -15,15 +16,28 @@ export default class NetworkManagementGeneratedHost extends GCP.Function<Network
   "NetworkManagementGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.NetworkManagement.ListVpcFlowLogsConfigs();
+    const p0 = yield* GCP.NetworkManagement.GetConnectivityTest(ProbeConnectivityTest);
+    const p1 = yield* GCP.NetworkManagement.GetVpcFlowLogsConfig(ProbeFlowLogs);
+    const p2 = yield* GCP.NetworkManagement.ListVpcFlowLogsConfigs();
+    const p3 = yield* GCP.NetworkManagement.RerunConnectivityTest(ProbeConnectivityTest);
     return {
       fetch: serveProbes({
-        ListVpcFlowLogsConfigs: outcome(Retry.none(p0({ location: "us-central1" } as never))),
+        GetConnectivityTest: outcome(Retry.none(p0({} as never))),
+        "GetVpcFlowLogsConfig@VpcFlowLogsConfig": outcome(Retry.none(p1({} as never))),
+        ListVpcFlowLogsConfigs: outcome(Retry.none(p2({ location: "us-central1" } as never))),
+        RerunConnectivityTest: outcome(Retry.none(p3({} as never))),
       }),
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(Layer.mergeAll(GCP.NetworkManagement.ListVpcFlowLogsConfigsHttp)),
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.NetworkManagement.GetConnectivityTestHttp,
+          GCP.NetworkManagement.GetVpcFlowLogsConfigHttp,
+          GCP.NetworkManagement.ListVpcFlowLogsConfigsHttp,
+          GCP.NetworkManagement.RerunConnectivityTestHttp,
+        ),
+      ),
     ),
   ),
 ) {}

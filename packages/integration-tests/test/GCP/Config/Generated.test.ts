@@ -91,28 +91,28 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Preview", { concurrent: true }, () => {
-      test.provider.todo(
-        "ExportPreview (config.projects.locations.previews.export): Preview: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ExportPreview (config.projects.locations.previews.export): Preview: a preview runs Terraform through Cloud Build as a service account that needs Infra Manager roles the testing project doesn't grant (GCP_TEST_CONFIG)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetPreview (config.projects.locations.previews.get): Preview: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPreview (config.projects.locations.previews.get): Preview: a preview runs Terraform through Cloud Build as a service account that needs Infra Manager roles the testing project doesn't grant (GCP_TEST_CONFIG)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetPreviewResourceChange (config.projects.locations.previews.resourceChanges.get): Preview: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPreviewResourceChange (config.projects.locations.previews.resourceChanges.get): Preview: a preview runs Terraform through Cloud Build as a service account that needs Infra Manager roles the testing project doesn't grant (GCP_TEST_CONFIG)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetPreviewResourceDrift (config.projects.locations.previews.resourceDrifts.get): Preview: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPreviewResourceDrift (config.projects.locations.previews.resourceDrifts.get): Preview: a preview runs Terraform through Cloud Build as a service account that needs Infra Manager roles the testing project doesn't grant (GCP_TEST_CONFIG)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListPreviewResourceChanges (config.projects.locations.previews.resourceChanges.list): Preview: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListPreviewResourceChanges (config.projects.locations.previews.resourceChanges.list): Preview: a preview runs Terraform through Cloud Build as a service account that needs Infra Manager roles the testing project doesn't grant (GCP_TEST_CONFIG)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListPreviewResourceDrifts (config.projects.locations.previews.resourceDrifts.list): Preview: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListPreviewResourceDrifts (config.projects.locations.previews.resourceDrifts.list): Preview: a preview runs Terraform through Cloud Build as a service account that needs Infra Manager roles the testing project doesn't grant (GCP_TEST_CONFIG)",
         () => Effect.void,
       );
     });

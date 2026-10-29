@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeTraceScope } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Observability binding as its own
@@ -20,13 +21,14 @@ export default class ObservabilityGeneratedHost extends GCP.Function<Observabili
     const p2 = yield* GCP.Observability.GetBucketDataset();
     const p3 = yield* GCP.Observability.GetBucketDatasetView();
     const p4 = yield* GCP.Observability.GetScope();
-    const p5 = yield* GCP.Observability.ListBucketDatasetLinks();
-    const p6 = yield* GCP.Observability.ListBucketDatasets();
-    const p7 = yield* GCP.Observability.ListBucketDatasetViews();
-    const p8 = yield* GCP.Observability.ListBuckets();
-    const p9 = yield* GCP.Observability.ListTraceScopes();
-    const p10 = yield* GCP.Observability.PatchBucket();
-    const p11 = yield* GCP.Observability.PatchScope();
+    const p5 = yield* GCP.Observability.GetTraceScope(ProbeTraceScope);
+    const p6 = yield* GCP.Observability.ListBucketDatasetLinks();
+    const p7 = yield* GCP.Observability.ListBucketDatasets();
+    const p8 = yield* GCP.Observability.ListBucketDatasetViews();
+    const p9 = yield* GCP.Observability.ListBuckets();
+    const p10 = yield* GCP.Observability.ListTraceScopes();
+    const p11 = yield* GCP.Observability.PatchBucket();
+    const p12 = yield* GCP.Observability.PatchScope();
     return {
       fetch: serveProbes({
         CreateBucket: outcome(
@@ -59,9 +61,10 @@ export default class ObservabilityGeneratedHost extends GCP.Function<Observabili
         GetScope: outcome(
           Retry.none(p4({ scope: "alchemy-missing", location: "us-central1" } as never)),
         ),
+        GetTraceScope: outcome(Retry.none(p5({} as never))),
         ListBucketDatasetLinks: outcome(
           Retry.none(
-            p5({
+            p6({
               bucket: "alchemy-missing",
               dataset: "alchemy-missing",
               location: "us-central1",
@@ -69,24 +72,24 @@ export default class ObservabilityGeneratedHost extends GCP.Function<Observabili
           ),
         ),
         ListBucketDatasets: outcome(
-          Retry.none(p6({ bucket: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p7({ bucket: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ListBucketDatasetViews: outcome(
           Retry.none(
-            p7({
+            p8({
               bucket: "alchemy-missing",
               dataset: "alchemy-missing",
               location: "us-central1",
             } as never),
           ),
         ),
-        ListBuckets: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListTraceScopes: outcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListBuckets: outcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListTraceScopes: outcome(Retry.none(p10({ location: "us-central1" } as never))),
         PatchBucket: outcome(
-          Retry.none(p10({ bucket: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p11({ bucket: "alchemy-missing", location: "us-central1" } as never)),
         ),
         PatchScope: outcome(
-          Retry.none(p11({ scope: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p12({ scope: "alchemy-missing", location: "us-central1" } as never)),
         ),
       }),
     };
@@ -99,6 +102,7 @@ export default class ObservabilityGeneratedHost extends GCP.Function<Observabili
           GCP.Observability.GetBucketDatasetHttp,
           GCP.Observability.GetBucketDatasetViewHttp,
           GCP.Observability.GetScopeHttp,
+          GCP.Observability.GetTraceScopeHttp,
           GCP.Observability.ListBucketDatasetLinksHttp,
           GCP.Observability.ListBucketDatasetsHttp,
           GCP.Observability.ListBucketDatasetViewsHttp,

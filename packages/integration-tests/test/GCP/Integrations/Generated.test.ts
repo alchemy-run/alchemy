@@ -48,48 +48,88 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AuthConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetAuthConfig@AuthConfig (integrations.projects.locations.authConfigs.get): AuthConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetAuthConfig@AuthConfig (integrations.projects.locations.authConfigs.get)",
+        () => probe("GetAuthConfig@AuthConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("IntegrationsVersion", { concurrent: true }, () => {
-      test.provider.todo(
-        "DownloadVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.download): IntegrationsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DownloadVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.download)",
+        () => probe("DownloadVersion@IntegrationsVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "DownloadVersionJsonPackage (integrations.projects.locations.integrations.versions.downloadJsonPackage): IntegrationsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DownloadVersionJsonPackage (integrations.projects.locations.integrations.versions.downloadJsonPackage)",
+        () => probe("DownloadVersionJsonPackage", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ExecuteVersionTestCase (integrations.projects.locations.integrations.versions.testCases.execute): IntegrationsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ExecuteVersionTestCase (integrations.projects.locations.integrations.versions.testCases.execute)",
+        () => probe("ExecuteVersionTestCase", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.get): IntegrationsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.get)",
+        () => probe("GetVersion@IntegrationsVersion", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListVersionTestCases (integrations.projects.locations.integrations.versions.testCases.list): IntegrationsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListVersionTestCases (integrations.projects.locations.integrations.versions.testCases.list)",
+        () => probe("ListVersionTestCases", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "PublishVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.publish): IntegrationsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "PublishVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.publish)",
+        () => probe("PublishVersion@IntegrationsVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "TestVersion (integrations.projects.locations.integrations.versions.test): IntegrationsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "TestVersion (integrations.projects.locations.integrations.versions.test)",
+        () => probe("TestVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "UnpublishVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.unpublish): IntegrationsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "UnpublishVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.unpublish)",
+        () => probe("UnpublishVersion@IntegrationsVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "UploadVersionTestCase (integrations.projects.locations.integrations.versions.testCases.upload): IntegrationsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "UploadVersionTestCase (integrations.projects.locations.integrations.versions.testCases.upload)",
+        () => probe("UploadVersionTestCase", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
