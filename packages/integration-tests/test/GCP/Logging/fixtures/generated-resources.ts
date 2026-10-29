@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
-import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as Effect from "effect/Effect";
+import { deployProject } from "../../deployProject.ts";
 
 /** Logging resources the generated bindings bind, mirroring each resource suite's smallest shape. */
 
@@ -51,11 +51,11 @@ export const ProbeLocationsView = Effect.gen(function* () {
 });
 
 export const ProbeLogScope = Effect.gen(function* () {
-  const { project } = yield* GcpEnvironment.current;
+  const project = yield* deployProject;
   return yield* GCP.Logging.LogScope("ProbeLogScope", { resourceNames: [`projects/${project}`] });
 });
 export const ProbeFolderLogScope = Effect.gen(function* () {
-  const { project } = yield* GcpEnvironment.current;
+  const project = yield* deployProject;
   return yield* GCP.Logging.FolderLogScope("ProbeFolderLogScope", {
     resourceNames: [`projects/${project}`],
   });

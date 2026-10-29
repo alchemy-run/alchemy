@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
-import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as Effect from "effect/Effect";
+import { deployProject } from "../../deployProject.ts";
 
 /**
  * Developer Connect resources the generated bindings bind. A connection
@@ -16,7 +16,7 @@ export const ProbeAccountConnector = GCP.DeveloperConnect.AccountConnector("Prob
   providerOauthConfig: { systemProviderId: "GITHUB", scopes: ["repo"] },
 });
 export const ProbeInsights = Effect.gen(function* () {
-  const { project } = yield* GcpEnvironment.current;
+  const project = yield* deployProject;
   return yield* GCP.DeveloperConnect.InsightsConfig("ProbeInsights", {
     location: "us-central1",
     projects: { projectIds: [project] },

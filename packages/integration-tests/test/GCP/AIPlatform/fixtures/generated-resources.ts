@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
-import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as Effect from "effect/Effect";
+import { deployProject } from "../../deployProject.ts";
 import { UsersSource } from "./features.ts";
 
 /**
@@ -209,7 +209,7 @@ export const ProbeIndex = GCP.AIPlatform.Index("ProbeIndex", {
   },
 });
 export const ProbeCachedContent = Effect.gen(function* () {
-  const { project } = yield* GcpEnvironment.current;
+  const project = yield* deployProject;
   return yield* GCP.AIPlatform.CachedContent("ProbeCachedContent", {
     location,
     model: `projects/${project}/locations/${location}/publishers/google/models/gemini-2.5-flash`,

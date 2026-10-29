@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
-import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as Effect from "effect/Effect";
+import { deployProject } from "../../deployProject.ts";
 
 /** Cloud Asset resources the generated bindings bind. */
 export const ProbeFeed = Effect.gen(function* () {
@@ -12,7 +12,7 @@ export const ProbeFeed = Effect.gen(function* () {
   });
 });
 export const ProbeSavedQuery = Effect.gen(function* () {
-  const { project } = yield* GcpEnvironment.current;
+  const project = yield* deployProject;
   return yield* GCP.CloudAsset.SavedQuery("ProbeSavedQuery", {
     content: {
       iamPolicyAnalysisQuery: {

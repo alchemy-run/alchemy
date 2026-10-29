@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
-import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as Effect from "effect/Effect";
+import { deployProject } from "../../deployProject.ts";
 
 /** A BigQuery destination profile for the generated Datastream bindings. */
 export const ProbeProfile = GCP.Datastream.ConnectionProfile("ProbeProfile", {
@@ -22,7 +22,7 @@ export const ProbeSource = GCP.Datastream.ConnectionProfile("ProbeSource", {
   force: true,
 });
 export const ProbeStream = Effect.gen(function* () {
-  const { project } = yield* GcpEnvironment.current;
+  const project = yield* deployProject;
   const source = yield* ProbeSource;
   const dest = yield* ProbeProfile;
   return yield* GCP.Datastream.Stream("ProbeStream", {

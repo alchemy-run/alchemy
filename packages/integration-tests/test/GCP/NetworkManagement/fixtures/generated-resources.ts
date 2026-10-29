@@ -1,12 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
-import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as Effect from "effect/Effect";
+import { deployProject } from "../../deployProject.ts";
 import { defaultNetworkSelfLink } from "../../networkQuota.ts";
 
 /** NetworkManagement resources the generated bindings bind. */
 
 export const ProbeConnectivityTest = Effect.gen(function* () {
-  const { project } = yield* GcpEnvironment.current;
+  const project = yield* deployProject;
   return yield* GCP.NetworkManagement.ConnectivityTest("ProbeConnectivityTest", {
     source: {
       ipAddress: "10.8.0.1",
@@ -19,7 +19,7 @@ export const ProbeConnectivityTest = Effect.gen(function* () {
   });
 });
 export const ProbeFlowLogs = Effect.gen(function* () {
-  const { project } = yield* GcpEnvironment.current;
+  const project = yield* deployProject;
   return yield* GCP.NetworkManagement.VpcFlowLogsConfig("ProbeFlowLogs", {
     network: defaultNetworkSelfLink(project),
     aggregationInterval: "INTERVAL_5_SEC",

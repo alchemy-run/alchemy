@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
-import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as Effect from "effect/Effect";
+import { deployProject } from "../../deployProject.ts";
 import { defaultNetworkSelfLink } from "../../networkQuota.ts";
 
 /** NetworkConnectivity resources the generated bindings bind, mirroring each resource suite's smallest shape. */
@@ -16,7 +16,7 @@ export const ProbeMulticloudDataTransferConfig =
   });
 
 export const ProbeInternalRange = Effect.gen(function* () {
-  const { project } = yield* GcpEnvironment.current;
+  const project = yield* deployProject;
   return yield* GCP.NetworkConnectivity.InternalRange("ProbeInternalRange", {
     network: defaultNetworkSelfLink(project),
     usage: "FOR_VPC",

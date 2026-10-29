@@ -1,6 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
-import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as Effect from "effect/Effect";
+import { deployProject } from "../../deployProject.ts";
 import { Brokers, Connect, Schemas } from "./bindings-host.ts";
 
 /** Resources the generated ManagedKafka bindings bind: the suite's own fixtures and their children. */
@@ -31,7 +31,7 @@ export const ProbeSchemaVersion = Effect.gen(function* () {
   });
 });
 export const ProbeConnector = Effect.gen(function* () {
-  const { project } = yield* GcpEnvironment.current;
+  const project = yield* deployProject;
   const connect = yield* Connect;
   const topic = yield* GCP.PubSub.Topic("ProbeConnectorSink", {});
   return yield* GCP.ManagedKafka.ConnectClustersConnector("ProbeConnector", {
