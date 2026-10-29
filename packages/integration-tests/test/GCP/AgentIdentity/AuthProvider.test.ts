@@ -13,9 +13,11 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const location = "us-central1";
 
-// The Agent Identity API is not enabled in the testing project. Set
-// GCP_TEST_AGENT_IDENTITY=1 on a project where it is.
-const entitled = !!process.env.GCP_TEST_AGENT_IDENTITY;
+// The testing project doesn't enable Agent Identity by default: the stack
+// enables it first.
+const AgentIdentityApi = GCP.ServiceUsage.ProjectService("AgentIdentityApi", {
+  service: "agentidentity.googleapis.com",
+});
 
 const waitUntilGone = (name: string) =>
   agentidentity.getProjectsLocationsAuthProviders({ name }).pipe(
@@ -28,12 +30,13 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(!entitled)(
+test.provider(
   "getProjectsLocationsAuthProviders on a missing provider fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
+      yield* stack.deploy(AgentIdentityApi);
 
       const error = yield* Effect.flip(
         agentidentity.getProjectsLocationsAuthProviders({
@@ -50,41 +53,20 @@ test.provider.skipIf(!entitled)(
   },
 );
 
-test.provider.skipIf(entitled)(
-  "getProjectsLocationsAuthProviders fails with ServiceDisabled while the API is disabled",
-  (stack) =>
-    Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      yield* stack.destroy();
-
-      const error = yield* Effect.flip(
-        agentidentity.getProjectsLocationsAuthProviders({
-          name: `projects/${project}/locations/${location}/authProviders/alchemy-missing-auth`,
-        }),
-      );
-      expect(error._tag).toEqual("ServiceDisabled");
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:agentidentity", "live"],
-    timeout: 90_000,
-  },
-);
-
-test.provider.skipIf(!entitled)(
+test.provider(
   "create, update, and delete an Agent Identity auth provider",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      yield* stack.deploy(AgentIdentityApi);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* AgentIdentityApi;
           return yield* GCP.AgentIdentity.AuthProvider("Maps", {
             location,
             description: "alchemy maps key",
             labels: { env: "test" },
-            allowedScopes: ["https://www.googleapis.com/auth/cloud-platform"],
             authProviderTypeParams: {
               apiKey: { apiKey: "alchemy-test-api-key" },
             },
@@ -110,15 +92,12 @@ test.provider.skipIf(!entitled)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* AgentIdentityApi;
           return yield* GCP.AgentIdentity.AuthProvider("Maps", {
             authProviderId: created.authProviderId,
             location,
             description: "alchemy maps key v2",
             labels: { env: "prod", role: "maps" },
-            allowedScopes: [
-              "https://www.googleapis.com/auth/cloud-platform",
-              "https://www.googleapis.com/auth/userinfo.email",
-            ],
             authProviderTypeParams: {
               apiKey: { apiKey: "alchemy-test-api-key" },
             },

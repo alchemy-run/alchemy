@@ -55,7 +55,8 @@ export type AuthProviderProps = {
   description?: string;
   /**
    * Scopes that may be requested. Empty or omitted allows every scope
-   * except those in `blockedScopes`. At most 200 entries.
+   * except those in `blockedScopes`. At most 200 entries. Must be empty
+   * for an API-key provider.
    */
   allowedScopes?: string[];
   /**
