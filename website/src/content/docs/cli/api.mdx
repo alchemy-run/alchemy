@@ -172,7 +172,7 @@ A handler runs for each event in order, and the operation waits for every handle
 
 ## Terminal UI
 
-`alchemy/Cli/SigilRenderer` reuses the CLI's terminal views in your own script: the Sigil UI on an interactive terminal, plain log lines everywhere else. Provide `SigilRenderer.layer()` in place of `Alchemist.layer()` and wrap each step:
+`alchemy/Cli/SigilRenderer` reuses the CLI's terminal views in your own script: the Sigil UI on an interactive terminal, plain log lines everywhere else. Provide `SigilRenderer.layer()` after `Alchemist.layer()` and wrap each step:
 
 ```typescript
 import * as SigilRenderer from "alchemy/Cli/SigilRenderer";
@@ -188,7 +188,7 @@ const program = Effect.gen(function* () {
 
 await Effect.runPromise(
   program.pipe(
-    Effect.provide(SigilRenderer.layer()),
+    Effect.provide([Alchemist.layer(), SigilRenderer.layer()]),
     Effect.scoped,
   ),
 );

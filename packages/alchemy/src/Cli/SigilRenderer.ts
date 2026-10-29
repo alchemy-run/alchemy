@@ -1,10 +1,10 @@
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Alchemist from "../Alchemist/Runtime.ts";
 import * as Interaction from "../Interaction.ts";
 import type { Plan } from "../Plan.ts";
 import { Cli, type PlanDisplayOptions } from "../Report.ts";
 import { renderApply } from "../Report.ts";
+import { PlatformServices } from "../Util/PlatformServices.ts";
 import { renderPlanning } from "./commands/render.ts";
 import { renderNukeDelete, renderNukeScan, reviewNuke } from "./components/view/Nuke.tsx";
 import { stackOutputsView } from "./components/view/StackOutputs.tsx";
@@ -31,13 +31,13 @@ export interface RenderablePlan {
 }
 
 /**
- * `Alchemist.layer()` with the CLI's terminal and renderer services in place
- * of its non-interactive terminal. Provide it instead of `Alchemist.layer()`.
+ * The CLI's terminal and renderer services, in place of `Alchemist.layer()`'s
+ * non-interactive terminal. Provide it after `Alchemist.layer()`:
+ * `Effect.provide([Alchemist.layer(), SigilRenderer.layer()])`.
  */
 export const layer = () =>
-  Layer.provideMerge(
-    Layer.provideMerge(selectCliServices(), Interaction.layer()),
-    Alchemist.layer(),
+  Layer.provideMerge(selectCliServices(), Interaction.layer()).pipe(
+    Layer.provide(PlatformServices),
   );
 
 /** Planning progress (import, services, state, per-resource diffing) around a `plan` call. */
