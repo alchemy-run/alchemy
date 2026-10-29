@@ -604,7 +604,6 @@ const build = (
     const decodeId = Schema.decodeUnknownSync(def.id as any) as (u: unknown) => unknown;
     const commit = (
       id: string,
-      stream: string,
       state: unknown,
       version: number,
       decided: ReadonlyArray<{ readonly _tag: string }>,
@@ -614,6 +613,7 @@ const build = (
       correlationId: string = commandId,
       trace?: Telemetry.TraceJson,
     ) => {
+      const stream = `${aggregate.aggregateName}/${id}`;
       const events: Array<StoredEvent> = [];
       const deliveries: Array<Delivery> = [];
       const sourceRef = Aggregate.makeRef(aggregate, id);
@@ -668,7 +668,6 @@ const build = (
         const decided = input.events.map(decodeEvent);
         const result = commit(
           id,
-          `${aggregate.aggregateName}/${id}`,
           state,
           input.version,
           decided,
@@ -706,13 +705,16 @@ const build = (
           const state = codecs.state.decode(input.state ?? codecs.initial);
           const id = decodeId(input.id) as string;
           const now = DateTime.makeUnsafe(input.now);
-          const commandId = input.commandId;
-          const version = input.version;
-          const stream = `${aggregate.aggregateName}/${id}`;
           let decision = (def.decide as Record<string, (...args: any[]) => unknown>)[decoded._tag](
             state,
             decoded,
-            { id, now, commandId, stream, version },
+            {
+              id,
+              now,
+              commandId: input.commandId,
+              stream: `${aggregate.aggregateName}/${id}`,
+              version: input.version,
+            },
           );
           // An effectful decision runs here, inside the decide span, with the
           // context the command was sent with (its only requirement, enforced
@@ -745,12 +747,11 @@ const build = (
           const trace = yield* Telemetry.currentTrace;
           const { next, events, deliveries } = commit(
             id,
-            stream,
             state,
-            version,
+            input.version,
             judged.events,
             now,
-            commandId,
+            input.commandId,
             false,
             correlationId,
             trace,
@@ -764,13 +765,13 @@ const build = (
           yield* Effect.annotateCurrentSpan({
             "domain.outcome": "accepted",
             "domain.events": decided.length,
-            "domain.version": version + decided.length,
+            "domain.version": input.version + decided.length,
           });
           const span = yield* Effect.orElseSucceed(Effect.currentSpan, () => undefined);
-          const at = BigInt(DateTime.toEpochMillis(now)) * 1_000_000n;
+          const at = BigInt(input.now) * 1_000_000n;
           for (const [index, event] of decided.entries()) {
             span?.event(event._tag, at, {
-              "domain.seq": version + index + 1,
+              "domain.seq": input.version + index + 1,
               ...eventAttributes(event),
             });
             yield* Telemetry.record(Telemetry.events, {
@@ -781,7 +782,7 @@ const build = (
           return {
             _tag: "Accepted",
             state: codecs.state.encode(next),
-            version: version + decided.length,
+            version: input.version + decided.length,
             events,
             reply,
             deliveries,

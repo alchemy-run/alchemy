@@ -28,11 +28,11 @@ export type InstanceOf<C> = C extends abstract new (...args: any[]) => infer I ?
 export interface DecideContext<Id> {
   /** The id of the aggregate instance handling the command. */
   readonly id: Id;
-  /** The exact native command identity for this decision. */
+  /** The id the command was sent with; its events' envelopes carry it too. */
   readonly commandId: string;
-  /** The exact event stream this decision will commit to. */
+  /** The stream the command's events commit to, e.g. `Account/a-1`. */
   readonly stream: string;
-  /** The held native stream version before this decision. */
+  /** The stream's version before this decision: `0` for a new instance. */
   readonly version: number;
   /** The time the command is being handled. Controlled by stories via `clock`. */
   readonly now: DateTime.Utc;
@@ -403,9 +403,9 @@ interface PredictBase<Id> {
   readonly id: Id;
   /** The time the command is decided at (the server stamps commands with its clock). */
   readonly now: DateTime.Utc;
-  /** The state's version: predicted envelopes continue from it. Defaults to `0`. */
+  /** The state's version: `decide` sees it, and predicted envelopes continue from it. Defaults to `0`. */
   readonly version?: number;
-  /** The id the command will be sent with, for the predicted envelopes. Defaults to `""`. */
+  /** The id the command will be sent with, for `decide` and the predicted envelopes. Defaults to `""`. */
   readonly commandId?: string;
   /** Defaults to the command id. */
   readonly correlationId?: string;
