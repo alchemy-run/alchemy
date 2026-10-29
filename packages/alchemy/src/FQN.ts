@@ -1,3 +1,5 @@
+import * as Data from "effect/Data";
+import * as Effect from "effect/Effect";
 import type { NamespaceNode } from "./Namespace.ts";
 
 /**
@@ -8,6 +10,10 @@ export const FQN_SEPARATOR = "/";
 /**
  * Encode an FQN for safe filesystem storage.
  * Replaces `/` (FQN separator) with `__` to avoid subdirectory creation.
+ *
+ * Not one-to-one: `My/Bucket` and `My__Bucket` both encode to `My__Bucket`.
+ * Stores that key rows by this encoding refuse FQNs that
+ * {@link encodedFqnReason} rejects.
  */
 export const encodeFqn = (fqn: string): string => fqn.replaceAll(FQN_SEPARATOR, "__");
 
@@ -15,6 +21,48 @@ export const encodeFqn = (fqn: string): string => fqn.replaceAll(FQN_SEPARATOR, 
  * Decode a filename back to FQN.
  */
 export const decodeFqn = (filename: string): string => filename.replaceAll("__", FQN_SEPARATOR);
+
+/**
+ * Why a store that names rows `encodeFqn(fqn)` can't hold `fqn`, or
+ * `undefined` when it can.
+ *
+ * A row's FQN is read back from its name with {@link decodeFqn}, so an FQN
+ * is safe exactly when decoding its encoded name gives it back. Every safe
+ * FQN then has a name no other safe FQN shares (decoding that name can only
+ * return one of them). `My__Bucket` is refused: its name decodes to
+ * `My/Bucket`, so the store would list a resource that isn't declared and
+ * plan to delete it.
+ */
+export const encodedFqnReason = (fqn: string): string | undefined => {
+  const readBack = decodeFqn(encodeFqn(fqn));
+  return readBack === fqn
+    ? undefined
+    : `its state file name reads back as '${readBack}' (file names write '/' as '__', ` +
+        `so an id may not contain '__' and a namespace may not end in '_'). Rename it ` +
+        `(e.g. 'My__Bucket' -> 'MyBucket'). If it is already deployed, keep the deployed ` +
+        `resource by renaming with \`.pipe(renamedFrom({ fqn: "${readBack}" }))\``;
+};
+
+/**
+ * A logical id (or a namespace above it) can't be stored in the configured
+ * state store without being mistaken for another one.
+ */
+export class InvalidLogicalIdError extends Data.TaggedError("InvalidLogicalIdError")<{
+  message: string;
+  /** Fully qualified logical id that was refused. */
+  fqn: string;
+}> {}
+
+/** Die with {@link InvalidLogicalIdError} when `reason` is defined. */
+export const refuseFqn = (fqn: string, kind: string, reason: string | undefined) =>
+  reason === undefined
+    ? Effect.void
+    : Effect.die(
+        new InvalidLogicalIdError({
+          message: `${kind} '${fqn}' can't be stored in this state store: ${reason}.`,
+          fqn,
+        }),
+      );
 
 /**
  * Convert a NamespaceNode chain to an array of namespace IDs, from root to leaf.

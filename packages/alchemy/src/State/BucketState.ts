@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import { decodeFqn, encodeFqn } from "../FQN.ts";
+import { decodeFqn, encodedFqnReason, encodeFqn } from "../FQN.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import { StateStoreError, type PersistedState, type StateService } from "./State.ts";
 import { encodeState, reviveState } from "./StateEncoding.ts";
@@ -409,6 +409,8 @@ export const makeBucketState = (options: BucketStateOptions) =>
     const state: StateService = {
       id: options.id,
       getVersion: () => Effect.succeed(STATE_STORE_VERSION),
+      // Rows are files named `encodeFqn(fqn)`.
+      invalidFqnReason: encodedFqnReason,
       listStacks: () => verifyHeldLeases.pipe(Effect.andThen(listChildren(prefix))),
       listStages: (stack: string) =>
         verifyHeldLeases.pipe(Effect.andThen(listChildren(`${prefix}${stack}/`))),

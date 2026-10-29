@@ -59,6 +59,13 @@ export interface StateService {
    * probe.
    */
   getVersion(): Effect.Effect<number, StateStoreError, never>;
+  /**
+   * Why this store can't hold a row for `fqn` (one FQN it would confuse
+   * with another), or `undefined` when it can. Plan refuses a declared
+   * resource or action the store rejects before anything is read or
+   * written. Stores keyed by the raw FQN leave this out.
+   */
+  readonly invalidFqnReason?: (fqn: string) => string | undefined;
   listStacks(): Effect.Effect<readonly string[], StateStoreError, never>;
   listStages(stack: string): Effect.Effect<readonly string[], StateStoreError, never>;
   /**
