@@ -4,6 +4,7 @@
  * it is provided.
  */
 import * as Domain from "@alchemy.run/domain";
+import { Internals } from "@alchemy.run/domain/Model";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -77,7 +78,11 @@ const BumpWriterLive = BumpWriter.toLayer(
     return Effect.fn(function* (batch) {
       const stream = batch[0]!.envelope.stream;
       yield* Effect.sync(() => runs.set(stream, (runs.get(stream) ?? 0) + 1));
-      for (const input of batch) yield* bumps.append(input, new Bumped({ by: input.event.by }));
+      for (const input of batch) {
+        // An increment by 0 is handled without an entry: only the checkpoints move.
+        if (input.event.by === 0) continue;
+        yield* bumps.append(input, new Bumped({ by: input.event.by }));
+      }
     });
   }),
   { batch: { size: 3, wait: "200 millis" } },
@@ -192,6 +197,34 @@ const PayLive = Pay.toLayer(
   }),
 );
 
+/** Attempts of the `debit` step of `Retry`, by run key. */
+export const attempts = new Map<string, number>();
+
+/** Debit a wallet in a step that fails after its command on the first attempt, then retries. */
+export class Retry extends Domain.Saga("Retry", {
+  key: Schema.String,
+  input: { wallet: Schema.String },
+  result: {},
+}) {}
+const RetryLive = Retry.toLayer(
+  Effect.gen(function* () {
+    const wallets = yield* Wallet;
+    return Effect.fn(function* ({ key, wallet }) {
+      yield* Activity.make({
+        name: "debit",
+        error: Schema.String,
+        execute: Effect.gen(function* () {
+          yield* wallets.send(wallet, new Debit({ amount: 10 })).pipe(Effect.orDie);
+          const attempt = (attempts.get(key) ?? 0) + 1;
+          attempts.set(key, attempt);
+          if (attempt === 1) return yield* Effect.fail("after the debit");
+        }),
+      }).pipe(Activity.retry({ times: 1 }), Effect.orDie);
+      return {};
+    });
+  }),
+);
+
 // ---------------------------------------------------------------- the model
 
 export class Contract extends Domain.Model("Contract", {
@@ -200,11 +233,11 @@ export class Contract extends Domain.Model("Contract", {
   policies: [Mirror],
   projections: [BumpWriter],
   streams: [Bumps],
-  sagas: [Pay],
+  sagas: [Pay, Retry],
 }) {}
 export class ContractApi extends Domain.Api("ContractApi", Increment, Counter, Totals, Bumps) {}
 
-export const Handlers = Layer.mergeAll(BumpWriterLive, MirrorLive, PayLive);
+export const Handlers = Layer.mergeAll(BumpWriterLive, MirrorLive, PayLive, RetryLive);
 
 /** What a host gives a model. */
 export type HostLayer<A = never> = Layer.Layer<
@@ -509,6 +542,42 @@ export const hostContract = (name: string, host: () => HostLayer) =>
               ),
             ),
           );
+        }),
+      ),
+    );
+    it.live("a step that runs again sends the same commands", () =>
+      provide(
+        Effect.gen(function* () {
+          const retries = yield* Retry;
+          const wallets = yield* Wallet;
+          // `attempts` is shared by every host in the process: one key per host.
+          const key = `retry-${name.replace(/\W+/g, "-")}`;
+          attempts.delete(key);
+          const run = yield* retries.start(key, { wallet: "w-9" });
+          yield* run.result;
+          expect(attempts.get(key)).toBe(2);
+          // Two attempts, one debit: the retry's command had the same id.
+          expect(yield* wallets.state("w-9")).toEqual({ balance: 90 });
+        }),
+      ),
+    );
+
+    it.live("a projection input with nothing to append still moves its stream's checkpoints", () =>
+      provide(
+        Effect.gen(function* () {
+          const counters = yield* Counter;
+          const internals = yield* Internals;
+          const bumps = internals.streams.get("Bumps")!;
+          const changes = yield* bumps
+            .changes("c-0")
+            .pipe(Stream.take(2), Stream.runCollect, Effect.forkChild);
+          yield* Effect.sleep("50 millis");
+          const receipt = yield* counters.send("c-0", new Increment({ by: 0 }));
+          yield* BumpWriter.caughtUp(receipt);
+          const [before, after] = yield* Fiber.join(changes).pipe(Effect.timeout("5 seconds"));
+          expect(before!.checkpoints).toEqual({});
+          expect(after).toEqual({ seq: 0, checkpoints: { "Counter/c-0": 1 }, origin: [0, 0] });
+          expect(yield* bumps.read("c-0")).toEqual(after);
         }),
       ),
     );
