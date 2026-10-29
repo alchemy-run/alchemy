@@ -27,6 +27,7 @@ import { httpServer } from "../Util/PlatformServices.ts";
 import { pipedColorEnv } from "../Util/Terminal.ts";
 import { SPAWNER_URL_ENV_KEY } from "./RpcProviderProxy.ts";
 import { RPC_SERVER_ENVIRONMENT_KEY, type RpcServerEnvironment } from "./RpcServerEnvironment.ts";
+import { isAuthorizedRpcRequest, makeRpcToken, rpcUrlPath, withRpcToken } from "./RpcToken.ts";
 
 export class RpcSpawner extends Context.Service<
   RpcSpawner,
@@ -185,7 +186,7 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
     const url = yield* getRpcAddress(handle.stdout, (line) => publish({ channel: "stdout", line }));
     const ws = yield* Effect.acquireRelease(
       Effect.sync(() => {
-        const ws = new WebSocket(new URL("/parent", url));
+        const ws = new WebSocket(rpcUrlPath(url, "/parent"));
         // Keep the parent link active so no idle timer on either end can
         // close it; the sidecar ignores messages on this link.
         const heartbeat = setInterval(() => {
@@ -234,6 +235,14 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
   });
 
   const server = yield* HttpServer.HttpServer;
+  if (server.address._tag === "UnixPathAddress") {
+    return yield* Effect.die(new Error("The RPC spawner must listen on a TCP address"));
+  }
+  // The spawner runs any entry module it is asked to, with this process's
+  // environment (cloud credentials included). Only holders of the URL below
+  // (this process and the exec child it hands the URL to) may call it.
+  const host = `127.0.0.1:${server.address.port}`;
+  const token = makeRpcToken();
 
   const encoder = new TextEncoder();
   // The first heartbeat flushes the response headers immediately; the
@@ -253,6 +262,17 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
   yield* server.serve(
     Effect.gen(function* () {
       const request = yield* HttpServerRequest;
+      if (
+        !isAuthorizedRpcRequest(
+          {
+            url: request.url,
+            headers: { host: request.headers.host, origin: request.headers.origin },
+          },
+          { token, host },
+        )
+      ) {
+        return HttpServerResponse.text("Unauthorized", { status: 401 });
+      }
       // `request.url` is relative under Node and absolute under Bun —
       // normalize to the pathname before matching.
       const pathname = new URL(request.url, "http://localhost").pathname;
@@ -299,7 +319,7 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
   );
 
   return RpcSpawner.of({
-    url: HttpServer.formatAddress(server.address),
+    url: withRpcToken(`http://${host}`, token),
   });
 });
 
@@ -377,7 +397,7 @@ export const forwardSidecarLogs = (
     Effect.flatMap((spawnerUrl) => {
       const streamOnce = Effect.gen(function* () {
         const client = yield* HttpClient.HttpClient;
-        const response = yield* client.get(new URL(LOGS_PATH, spawnerUrl).toString());
+        const response = yield* client.get(rpcUrlPath(spawnerUrl, LOGS_PATH));
         yield* response.stream.pipe(
           Stream.decodeText,
           Stream.splitLines,
