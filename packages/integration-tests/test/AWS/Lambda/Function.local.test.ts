@@ -29,18 +29,23 @@ import { fileURLToPath } from "node:url";
  */
 import * as AWS from "@alchemy.run/aws";
 import * as Endpoint from "@alchemy.run/aws/Endpoint";
+import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import * as Region from "@alchemy.run/aws/Region";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
+import * as ApiGateway from "@distilled.cloud/aws/api-gateway";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
+import * as Events from "@distilled.cloud/aws/eventbridge";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import * as SSM from "@distilled.cloud/aws/ssm";
 import * as Alchemy from "alchemy";
+import { AlchemyContext } from "alchemy/AlchemyContext";
 import { Stack } from "alchemy/Stack";
+import { createInternalTags, hasTags } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -59,6 +64,9 @@ import RemoteBindingFunctionLive, {
 import RemoteEventsFunctionLive, {
   RemoteEventsFunction,
 } from "./fixtures/floci-remote-events/handler.ts";
+import RemotePushFunctionLive, {
+  RemotePushFunction,
+} from "./fixtures/floci-remote-push/handler.ts";
 import UnbridgedConnectFunctionLive, {
   UnbridgedConnectFunction,
 } from "./fixtures/floci-unbridged/connect.ts";
@@ -71,6 +79,12 @@ const { test } = Test.make({ providers: AWS.providers(), dev: true });
 const devFixtureDir = fileURLToPath(new URL("../Lambda/fixtures/floci-dev", import.meta.url));
 const esmHandlerPath = fileURLToPath(
   new URL("../Lambda/fixtures/floci-esm/handler.mjs", import.meta.url),
+);
+
+/** Deploy for real from a dev test file: the run mode `alchemy deploy` uses. */
+const asDeploy = Layer.effect(
+  AlchemyContext,
+  AlchemyContext.pipe(Effect.map((context) => ({ ...context, dev: false }))),
 );
 
 /** Floci-scoped context for the raw distilled calls the test makes itself. */
@@ -615,6 +629,30 @@ test.provider(
       );
       expect(yield* stubs).toHaveLength(1);
 
+      // Promote: the same stack deployed for real. The Function now runs in
+      // the cloud, so the stub, its queue and its bucket are collected, and
+      // the real Function consumes the queue itself.
+      const promoted = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* RemoteEventsFunction;
+          }).pipe(Effect.provide(RemoteEventsFunctionLive)),
+        )
+        .pipe(Effect.provide(asDeploy));
+      expect(promoted.functionArn).not.toContain(":000000000000:");
+      expect(yield* stubs).toHaveLength(0);
+      const bridgeQueueGone = yield* SQS.getQueueAttributes({ QueueUrl: bridgeQueue! }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
+        Effect.repeat({ schedule: Schedule.spaced("5 seconds"), until: (gone) => gone, times: 14 }),
+        Effect.provide(liveContext),
+      );
+      expect(bridgeQueueGone).toBe(true);
+      yield* SQS.sendMessage({ QueueUrl: queueUrl, MessageBody: "after-promotion" }).pipe(
+        Effect.provide(liveContext),
+      );
+      expect(yield* read("received/after-promotion")).toBe("after-promotion");
+
       yield* stack.destroy();
 
       expect(yield* stubs).toHaveLength(0);
@@ -683,4 +721,125 @@ test.provider(
       yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 120_000 },
+);
+
+test.provider(
+  "real-cloud push sources reach a dev Function and get its responses back",
+  (stack) =>
+    Effect.gen(function* () {
+      const client = yield* HttpClient.HttpClient;
+      yield* stack.destroy();
+      const { region } = yield* AWSEnvironment.current.pipe(Effect.provide(liveContext));
+
+      const fn = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* RemotePushFunction;
+        }).pipe(Effect.provide(RemotePushFunctionLive)),
+      );
+      expect(fn.functionUrl).toContain("localhost:4566");
+      const info = yield* client.get(fn.functionUrl!).pipe(
+        Effect.flatMap((response) =>
+          Effect.map(response.text, (body) => ({ status: response.status, body })),
+        ),
+        Effect.retry({
+          while: (): boolean => true,
+          schedule: Schedule.spaced("2 seconds"),
+          times: 60,
+        }),
+        Effect.repeat({
+          schedule: Schedule.spaced("2 seconds"),
+          until: (res): boolean => res.status === 200,
+          times: 60,
+        }),
+      );
+      const { bucketName, busName } = JSON.parse(info.body) as {
+        bucketName: string;
+        busName: string;
+      };
+
+      // The real API, found by its tags.
+      const tags = yield* createInternalTags("RemotePushApi");
+      const findApis = ApiGateway.getRestApis.items({}).pipe(
+        Stream.filter((api) => api.id !== undefined && hasTags(tags, api.tags)),
+        Stream.map((api) => api.id!),
+        Stream.runCollect,
+        Effect.provide(liveContext),
+      );
+      const [apiId] = yield* findApis;
+      expect(apiId).toBeDefined();
+      const invokeUrl = `https://${apiId}.execute-api.${region}.amazonaws.com/test`;
+      const get = (path: string, until: (status: number) => boolean) =>
+        client.get(`${invokeUrl}${path}`).pipe(
+          Effect.flatMap((response) =>
+            Effect.map(response.text, (body) => ({
+              status: response.status,
+              served: response.headers["x-served-by"],
+              body,
+            })),
+          ),
+          Effect.retry({
+            while: (): boolean => true,
+            schedule: Schedule.spaced("2 seconds"),
+            times: 30,
+          }),
+          // A fresh stage answers 403/404 for a few seconds.
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (res): boolean => until(res.status),
+            times: 30,
+          }),
+        );
+
+      // The local handler's response, status and headers come back through the stub.
+      const hello = yield* get("/hello?name=sam", (status) => status === 201);
+      expect(hello.status).toBe(201);
+      expect(hello.served).toBe("floci");
+      expect(JSON.parse(hello.body)).toEqual({ path: "/hello", name: "sam" });
+
+      // A failing local handler fails the real invocation.
+      const boom = yield* get("/boom", (status) => status === 502);
+      expect(boom.status).toBe(502);
+
+      // A custom bus in the real cloud delivers to the local handler.
+      yield* Events.putEvents({
+        Entries: [
+          {
+            EventBusName: busName,
+            Source: "alchemy.test",
+            DetailType: "Ping",
+            Detail: JSON.stringify({ id: "evt-1" }),
+          },
+        ],
+      }).pipe(Effect.provide(liveContext));
+      const recorded = yield* S3.getObject({ Bucket: bucketName, Key: "bus/evt-1" }).pipe(
+        Effect.retry({
+          while: (error) => error._tag === "NoSuchKey",
+          schedule: Schedule.spaced("3 seconds"),
+          times: 30,
+        }),
+        Effect.flatMap((result) => Stream.mkString(Stream.decodeText(result.Body!))),
+        Effect.provide(liveContext),
+      );
+      expect(recorded).toBe("Ping");
+
+      yield* stack.destroy();
+
+      expect(yield* findApis).toEqual([]);
+      const bucketGone = yield* S3.headBucket({ Bucket: bucketName }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("NotFound", () => Effect.succeed(true)),
+        Effect.provide(liveContext),
+      );
+      expect(bucketGone).toBe(true);
+    }),
+  {
+    tags: [
+      "provider:aws",
+      "provider:aws:lambda",
+      "provider:aws:apigateway",
+      "provider:aws:eventbridge",
+      "local",
+    ],
+    timeout: 540_000,
+  },
 );
