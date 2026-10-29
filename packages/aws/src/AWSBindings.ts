@@ -5,7 +5,7 @@ import {
   type ResolvedCredentials,
 } from "@distilled.cloud/aws/Credentials";
 import * as Endpoint from "@distilled.cloud/aws/Endpoint";
-import { Region, type RegionName } from "@distilled.cloud/aws/Region";
+import { MissingRegion, Region, type RegionName } from "@distilled.cloud/aws/Region";
 import * as ssm from "@distilled.cloud/aws/ssm";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Binding from "alchemy/Binding";
@@ -589,7 +589,28 @@ const withDevCredentials = Effect.fn(function* <Op>(
 
   // The host's own context reaches the emulator; provided explicitly because
   // the read runs inside a call whose context names the real cloud.
-  const emulator = yield* Effect.context<never>();
+  const [hostCredentials, hostHttp, hostRegion, hostEndpoint] = yield* Effect.all([
+    Effect.serviceOption(Credentials),
+    Effect.serviceOption(HttpClient.HttpClient),
+    Effect.serviceOption(Region),
+    Effect.serviceOption(Endpoint.Endpoint),
+  ]);
+  if (Option.isNone(hostCredentials)) return undefined;
+  const emulator = Layer.mergeAll(
+    Layer.succeed(Credentials, hostCredentials.value),
+    Option.match(hostHttp, {
+      onNone: () => FetchHttpClient.layer,
+      onSome: (client) => Layer.succeed(HttpClient.HttpClient, client),
+    }),
+    Option.match(hostRegion, {
+      onNone: () => Layer.empty,
+      onSome: (value) => Layer.succeed(Region, value),
+    }),
+    Layer.succeed(
+      Endpoint.Endpoint,
+      Option.getOrElse(hostEndpoint, () => Endpoint.fromEnvironment),
+    ),
+  );
   let cached: { value: typeof DevCredentialsValue.Type; readAt: number } | undefined;
   const read = Effect.gen(function* () {
     const now = yield* Clock.currentTimeMillis;
@@ -602,10 +623,7 @@ const withDevCredentials = Effect.fn(function* <Op>(
     }
     const { Parameter } = yield* ssm
       .getParameter({ Name: parameterName, WithDecryption: true })
-      .pipe(Effect.provide(emulator)) as Effect.Effect<
-      ssm.GetParameterResult,
-      ssm.GetParameterError
-    >;
+      .pipe(Effect.provide(emulator));
     const raw = Parameter?.Value;
     const value = yield* Schema.decodeUnknownEffect(DevCredentialsValue)(
       Redacted.isRedacted(raw) ? Redacted.value(raw) : raw,
@@ -628,15 +646,21 @@ const withDevCredentials = Effect.fn(function* <Op>(
     region: value.region as RegionName,
     expiration: value.expiration,
   }));
-  const callRegion =
+  const callRegion: Effect.Effect<RegionName, MissingRegion> =
     region !== undefined
-      ? yield* region as Effect.Effect<Effect.Effect<string>>
-      : Effect.map(read, (value) => value.region);
+      ? Effect.map(
+          yield* region as Effect.Effect<Effect.Effect<string>>,
+          (value) => value as RegionName,
+        )
+      : read.pipe(
+          Effect.map((value) => value.region as RegionName),
+          Effect.mapError((error) => new MissingRegion({ message: error.message })),
+        );
   const context = Layer.mergeAll(
     Layer.succeed(Credentials, credentials),
-    Layer.succeed(Region, callRegion as Effect.Effect<RegionName>),
+    Layer.succeed(Region, callRegion),
     // The real endpoint, not the emulator's `AWS_ENDPOINT_URL`.
-    Layer.succeed(Endpoint.Endpoint, Effect.succeed(undefined)),
+    Layer.succeed(Endpoint.Endpoint, Effect.undefined),
     FetchHttpClient.layer,
   );
   const op = yield* (operation as Effect.Effect<Op>).pipe(Effect.provide(context));
