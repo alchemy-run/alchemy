@@ -12,7 +12,7 @@ import type { CelldWorker } from "../Worker.ts";
  * Runs Effect workflows on Celld Durable Objects. Each workflow gets its own
  * Durable Object class on the host Worker, and each execution is one instance
  * of it, named by its execution id, with its journal in that instance's
- * SQLite. It is the same engine as `Cloudflare.Workflows.DurableObjectEngine`,
+ * SQLite. It is the same engine as `Cloudflare.Workflows.layerDurableObjectEngine()`,
  * so workflow code moves between the two unchanged.
  *
  * A run replays the workflow from the top: finished activities return their
@@ -57,7 +57,7 @@ import type { CelldWorker } from "../Worker.ts";
  *     };
  *   }).pipe(
  *     Effect.provide(
- *       SendWelcomeLive.pipe(Layer.provideMerge(Celld.Workflows.DurableObjectEngine)),
+ *       SendWelcomeLive.pipe(Layer.provideMerge(Celld.Workflows.layerDurableObjectEngine())),
  *     ),
  *   ),
  * ) {}
@@ -67,7 +67,13 @@ import type { CelldWorker } from "../Worker.ts";
  * @provides WorkflowEngine
  * @product Celld
  */
-export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, CelldWorker> =
+export const layerDurableObjectEngine = (): Layer.Layer<
+  WorkflowEngine.WorkflowEngine,
+  never,
+  CelldWorker
+> => engine;
+
+const engine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, CelldWorker> =
   makeDurableObjectEngine({
     // The inline form of `Celld.DurableObject` is typed for single-stage
     // implementations; the engine declares the two-stage form it runs.

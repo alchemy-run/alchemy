@@ -22,4 +22,4 @@ export type {
   WorkflowInstance,
   WorkflowHandle,
 } from "./WorkflowTypes.ts";
-export { DurableObjectEngine } from "./DurableObjectEngine.ts";
+export { layerDurableObjectEngine } from "./DurableObjectEngine.ts";

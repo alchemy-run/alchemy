@@ -7,9 +7,9 @@ An Effect workflow is a durable process written with `effect/workflow`: a
 series of steps whose results are stored, so a run that's interrupted
 resumes after its last finished step, and a run can wait hours or days for
 a timer or a signal. On Celld they run on Durable Objects, with
-`Celld.Workflows.DurableObjectEngine`.
+`Celld.Workflows.layerDurableObjectEngine()`.
 
-It's the same engine as Cloudflare's `DurableObjectEngine`, so workflow code
+It's the same engine as Cloudflare's Durable Object engine, so workflow code
 moves between [Cloudflare](/cloudflare/compute/effect-workflows),
 [AWS Lambda](/aws/compute/effect-workflows) and Celld unchanged; only the
 engine Layer differs. To write against Celld's own step API instead, see
@@ -65,7 +65,7 @@ and `error` schemas, because its result is stored as JSON.
 
 ## Run it on Celld
 
-`Celld.Workflows.DurableObjectEngine` is the engine. Provide it under
+`Celld.Workflows.layerDurableObjectEngine()` is the engine. Provide it under
 the workflow Layers, and provide both to the Worker:
 
 ```typescript
@@ -81,7 +81,7 @@ export default class Api extends Celld.Worker<Api>()(
   Effect.gen(function* () {
     return {};
   }).pipe(
-    Effect.provide(GreetLive.pipe(Layer.provideMerge(Celld.Workflows.DurableObjectEngine))),
+    Effect.provide(GreetLive.pipe(Layer.provideMerge(Celld.Workflows.layerDurableObjectEngine()))),
   ),
 ) {}
 ```
@@ -115,7 +115,7 @@ export default class Api extends Celld.Worker<Api>()(
       }),
     };
   }).pipe(
-    Effect.provide(GreetLive.pipe(Layer.provideMerge(Celld.Workflows.DurableObjectEngine))),
+    Effect.provide(GreetLive.pipe(Layer.provideMerge(Celld.Workflows.layerDurableObjectEngine()))),
   ),
 ) {}
 ```
@@ -226,7 +226,7 @@ Provide the binding's implementation with the engine:
 ```typescript
 Effect.provide(
   CheckoutLive.pipe(
-    Layer.provideMerge(Celld.Workflows.DurableObjectEngine),
+    Layer.provideMerge(Celld.Workflows.layerDurableObjectEngine()),
     Layer.provide(Celld.R2.WriteBucketBinding),
   ),
 )

@@ -11,6 +11,8 @@ export default class DurableWorkflowWorker extends Celld.Worker<DurableWorkflowW
   "DurableWorkflowWorker",
   { main: import.meta.url },
   app.pipe(
-    Effect.provide(WorkflowsLive.pipe(Layer.provideMerge(Celld.Workflows.DurableObjectEngine))),
+    Effect.provide(
+      WorkflowsLive.pipe(Layer.provideMerge(Celld.Workflows.layerDurableObjectEngine())),
+    ),
   ),
 ) {}

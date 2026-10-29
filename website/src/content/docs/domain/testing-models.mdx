@@ -119,6 +119,8 @@ it.effect("a risky withdrawal freezes the account", () =>
 );
 ```
 
+A story checks its answers like an adapter's: a value the operation's schema rejects fails the policy, and so do arguments the policy sends that the schema rejects. See [Calls are checked against the schemas](/domain/external-system#calls-are-checked-against-the-schemas).
+
 ## Answer several calls
 
 `succeed` answers the only call waiting on an operation. When several are waiting, name each one as you expect it, and answer it by name:
