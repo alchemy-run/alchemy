@@ -36,11 +36,10 @@ export default class FirebaseGeneratedHost extends GCP.Function<FirebaseGenerate
     const p18 = yield* GCP.Firebase.PatchIosApp();
     const p19 = yield* GCP.Firebase.PatchWebApp();
     const p20 = yield* GCP.Firebase.RemoveIosApp();
-    const p21 = yield* GCP.Firebase.RemoveProjectAnalytics();
-    const p22 = yield* GCP.Firebase.RemoveWebApp();
-    const p23 = yield* GCP.Firebase.SearchProjectApps();
-    const p24 = yield* GCP.Firebase.UndeleteIosApp();
-    const p25 = yield* GCP.Firebase.UndeleteWebApp();
+    const p21 = yield* GCP.Firebase.RemoveWebApp();
+    const p22 = yield* GCP.Firebase.SearchProjectApps();
+    const p23 = yield* GCP.Firebase.UndeleteIosApp();
+    const p24 = yield* GCP.Firebase.UndeleteWebApp();
     return {
       fetch: serveProbes({
         AddProjectFirebase: probeOutcome(
@@ -74,11 +73,10 @@ export default class FirebaseGeneratedHost extends GCP.Function<FirebaseGenerate
         PatchIosApp: probeOutcome(Retry.none(p18({ iosApp: "alchemy-missing" } as never))),
         PatchWebApp: probeOutcome(Retry.none(p19({ webApp: "alchemy-missing" } as never))),
         RemoveIosApp: probeOutcome(Retry.none(p20({ iosApp: "alchemy-missing" } as never))),
-        RemoveProjectAnalytics: probeOutcome(Retry.none(p21({} as never))),
-        RemoveWebApp: probeOutcome(Retry.none(p22({ webApp: "alchemy-missing" } as never))),
-        SearchProjectApps: probeOutcome(Retry.none(p23({} as never))),
-        UndeleteIosApp: probeOutcome(Retry.none(p24({ iosApp: "alchemy-missing" } as never))),
-        UndeleteWebApp: probeOutcome(Retry.none(p25({ webApp: "alchemy-missing" } as never))),
+        RemoveWebApp: probeOutcome(Retry.none(p21({ webApp: "alchemy-missing" } as never))),
+        SearchProjectApps: probeOutcome(Retry.none(p22({} as never))),
+        UndeleteIosApp: probeOutcome(Retry.none(p23({ iosApp: "alchemy-missing" } as never))),
+        UndeleteWebApp: probeOutcome(Retry.none(p24({ webApp: "alchemy-missing" } as never))),
       }),
     };
   }).pipe(
@@ -106,7 +104,6 @@ export default class FirebaseGeneratedHost extends GCP.Function<FirebaseGenerate
           GCP.Firebase.PatchIosAppHttp,
           GCP.Firebase.PatchWebAppHttp,
           GCP.Firebase.RemoveIosAppHttp,
-          GCP.Firebase.RemoveProjectAnalyticsHttp,
           GCP.Firebase.RemoveWebAppHttp,
           GCP.Firebase.SearchProjectAppsHttp,
           GCP.Firebase.UndeleteIosAppHttp,

@@ -10,6 +10,12 @@
     "resources": {},
     "untestable": {
       "AndroidApp": "Android apps need a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none (createAndroidApps: NotFound (GCP_TEST_FIREBASE_PROJECT)"
+    },
+    "allowedOutcomes": {
+      "NotFound": "the testing project has no Firebase (adding Firebase to a GCP project is permanent), so its project reads answer NotFound"
+    },
+    "skip": {
+      "RemoveProjectAnalytics": "removes Google Analytics from a Firebase project; the testing project has no Firebase"
     }
   },
   "permissionCollections": {

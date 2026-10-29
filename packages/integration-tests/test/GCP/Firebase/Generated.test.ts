@@ -14,7 +14,8 @@ const sharedStack = Core.scratchStack(testOptions, "FirebaseGenerated");
 
 let baseUrl: string;
 
-const ALLOWED: string[] = [];
+// A plain read may answer NotFound: the testing project has no Firebase (adding Firebase to a GCP project is permanent), so its project reads answer NotFound.
+const ALLOWED: string[] = ["NotFound"];
 
 const AMBIGUOUS: string[] = [];
 
@@ -244,13 +245,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "RemoveProjectAnalytics (firebase.projects.removeAnalytics)",
-        () => probe("RemoveProjectAnalytics", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:firebase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "RemoveProjectAnalytics (firebase.projects.removeAnalytics): removes Google Analytics from a Firebase project; the testing project has no Firebase",
+        () => Effect.void,
       );
       test.provider(
         "RemoveWebApp (firebase.projects.webApps.remove)",
