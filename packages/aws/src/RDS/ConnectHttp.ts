@@ -2,6 +2,7 @@ import type * as Credentials from "@distilled.cloud/aws/Credentials";
 import type * as Region from "@distilled.cloud/aws/Region";
 import * as secretsmanager from "@distilled.cloud/aws/secrets-manager";
 import * as Output from "alchemy/Output";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -9,6 +10,14 @@ import * as AWSBindings from "../AWSBindings.ts";
 import { generateDbAuthToken } from "../Connection/DbAuthToken.ts";
 import { formatSqlConnectionUrl } from "../Connection/internal.ts";
 import { Connect, type ConnectOptions, type ConnectResource } from "./Connect.ts";
+
+/**
+ * `Connect` was bound without a `secret` to a proxy, or to a database that
+ * has no RDS-managed master user secret (`manageMasterUserPassword` is off).
+ */
+export class ManagedMasterSecretNotFound extends Data.TaggedError("ManagedMasterSecretNotFound")<{
+  message: string;
+}> {}
 
 /**
  * `arn:{partition}:rds-db:{region}:{account}:dbuser:{resourceId}/{username}`
@@ -23,6 +32,7 @@ const rdsDbUserArn = (sourceArn: string, resourceId: string, username: string): 
  * The `rds-db:connect` resource for IAM database authentication.
  *
  * - DBCluster — the cluster's `DbClusterResourceId` (`cluster-XXXX`).
+ * - DBInstance — the instance's `DbiResourceId` (`db-XXXX`).
  * - DBProxy — the proxy id (`prx-XXXX`), the last segment of the proxy ARN.
  * - DBProxyEndpoint — the parent proxy's `prx-` id is not an endpoint
  *   attribute, so the resource id is wildcarded to the account/region
@@ -35,6 +45,11 @@ const dbUserArn = (resource: ConnectResource, username: string) => {
         Output.all(resource.dbClusterArn, resource.dbClusterResourceId),
         ([arn, resourceId]) => rdsDbUserArn(arn, resourceId ?? "*", username),
       );
+    case "AWS.RDS.DBInstance":
+      return Output.map(
+        Output.all(resource.dbInstanceArn, resource.dbiResourceId),
+        ([arn, resourceId]) => rdsDbUserArn(arn, resourceId ?? "*", username),
+      );
     case "AWS.RDS.DBProxy":
       return Output.map(resource.dbProxyArn, (arn) =>
         rdsDbUserArn(arn, arn.split(":")[6] ?? "*", username),
@@ -43,6 +58,22 @@ const dbUserArn = (resource: ConnectResource, username: string) => {
       return Output.map(resource.dbProxyEndpointArn, (arn) => rdsDbUserArn(arn, "*", username));
   }
 };
+
+const managedSecretArn = (resource: ConnectResource): Output.Output<string, never> =>
+  (resource.Type === "AWS.RDS.DBCluster" || resource.Type === "AWS.RDS.DBInstance"
+    ? resource.masterUserSecretArn
+    : Output.literal<string | undefined>(undefined)
+  ).pipe(
+    Output.mapEffect((arn) =>
+      arn
+        ? Effect.succeed(arn)
+        : Effect.die(
+            new ManagedMasterSecretNotFound({
+              message: `AWS.RDS.Connect(${resource.LogicalId}) has no \`secret\` and ${resource.LogicalId} has no RDS-managed master user secret. Pass \`secret\`, set \`manageMasterUserPassword: true\`, or use \`auth: "iam"\`.`,
+            }),
+          ),
+    ),
+  );
 
 export const ConnectHttp = Layer.effect(
   Connect,
@@ -56,13 +87,29 @@ export const ConnectHttp = Layer.effect(
     );
 
     return Effect.fn(function* (resource: ConnectResource, options: ConnectOptions) {
-      const SecretId = options.auth === "iam" ? undefined : yield* options.secret.secretArn;
-      const Host = yield* resource.endpoint;
-      const Port = resource.Type === "AWS.RDS.DBCluster" ? yield* resource.port : undefined;
+      // Without an explicit `secret`, read the database's RDS-managed master
+      // user secret. Its absence fails the deploy, not the first request.
+      const secretArn: Output.Output<string, never> | undefined =
+        options.auth === "iam"
+          ? undefined
+          : options.secret
+            ? options.secret.secretArn
+            : managedSecretArn(resource);
+      const SecretId = secretArn ? yield* secretArn : undefined;
+      const Host =
+        resource.Type === "AWS.RDS.DBInstance"
+          ? yield* resource.endpointAddress
+          : yield* resource.endpoint;
+      const Port =
+        resource.Type === "AWS.RDS.DBCluster"
+          ? yield* resource.port
+          : resource.Type === "AWS.RDS.DBInstance"
+            ? yield* resource.endpointPort
+            : undefined;
       // Engine flavor drives the connection-URL scheme. Proxy endpoints
       // carry no engine attribute — they default to postgres below.
       const Engine =
-        resource.Type === "AWS.RDS.DBCluster"
+        resource.Type === "AWS.RDS.DBCluster" || resource.Type === "AWS.RDS.DBInstance"
           ? yield* resource.engine
           : resource.Type === "AWS.RDS.DBProxy"
             ? yield* resource.engineFamily
@@ -89,12 +136,12 @@ export const ConnectHttp = Layer.effect(
             ],
           });
         } else {
-          yield* bind`AWS.RDS.Connect(${options.secret})`({
+          yield* bind`AWS.RDS.Connect(${options.secret ?? resource})`({
             policyStatements: [
               {
                 Effect: "Allow",
                 Action: ["secretsmanager:GetSecretValue", "secretsmanager:DescribeSecret"],
-                Resource: [options.secret.secretArn],
+                Resource: [secretArn!],
               },
             ],
           });
