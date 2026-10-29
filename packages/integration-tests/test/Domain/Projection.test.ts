@@ -320,6 +320,11 @@ describe("Domain Projection", () => {
         Effect.flip,
       );
       expect(refused._tag).toBe("NotYours");
+      // A read without a session fails with the middleware's error, and the client's type has it.
+      const anonymous = yield* api.WalletCard.peek("sam-1").pipe(
+        Effect.catchTag("Unauthenticated", (e) => Effect.succeed(e._tag)),
+      );
+      expect(anonymous).toBe("Unauthenticated");
       yield* wallets.send(sam, new Deposit({ amount: 2 }));
       const all = yield* api.WalletCard.events("sam-1", asSam).pipe(
         Stream.filter(Domain.Read.isEvent),
