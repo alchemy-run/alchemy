@@ -129,7 +129,7 @@ Scheduled commands are persisted messages with a due time, and fire even after a
 | --- | --- |
 | The timer's message is stored and a live runner owns its shard | On time when the owner armed it and it is due within a minute. Otherwise up to one storage poll (`entityMessagePollInterval`, 1 second with `layerSingleRunner`) |
 | A process stopped after it stored the timer and before it sent the timer's message | Up to `sweep.afterMillis` plus one `sweep.intervalMillis` (40 seconds by default) on a runner that stays up. The sweep runs on one runner; when it starts there (the first runner, or a new owner), it sends every pending timer again, so a stored timer fires on time. |
-| The runner that owns the shard died | Until another runner takes the shard: at once on a clean stop or a closed database session, up to `shardLockExpiration` (35 seconds) for a frozen runner |
+| The runner that owns the shard stopped or died | Until another runner takes the shard: a few seconds after a clean stop; up to `shardLockExpiration` (35 seconds) when the runner is killed or freezes, as its shard locks must expire first |
 
 If a process stops after a commit and before its deliveries leave, the next process sends them when it starts. A sweep also sends late deliveries and timers again every 10 seconds (`sweep`).
 
