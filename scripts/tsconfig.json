@@ -10,7 +10,6 @@
   },
   "references": [
     { "path": "../submodules/distilled/packages/aws/tsconfig.json" },
-    { "path": "../packages/aws/tsconfig.json" },
-    { "path": "../packages/alchemy/tsconfig.json" }
+    { "path": "../packages/aws/tsconfig.json" }
   ]
 }

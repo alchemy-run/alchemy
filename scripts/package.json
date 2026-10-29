@@ -8,7 +8,6 @@
     "@distilled.cloud/aws": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@types/node": "catalog:",
-    "alchemy": "workspace:*",
     "changelogen": "catalog:",
     "effect": "catalog:",
     "tsrs": "catalog:"
