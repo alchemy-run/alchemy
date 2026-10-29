@@ -8,17 +8,63 @@ export const prefersReducedMotion = () =>
 /** Pauses of at least this long are a demo holding a finished frame. */
 const HOLD_MS = 2000;
 
+/** Set by the page's "Pause motion" control (WCAG 2.2.2). */
+const isMotionPaused = () =>
+  typeof document !== "undefined" &&
+  document.documentElement.classList.contains("alc-motion-paused");
+
+/**
+ * Reduced-motion steps resolve at once, so a script loop with no real wait
+ * would never return to the event loop and freeze the tab. Every Nth
+ * instant step yields one macrotask, which keeps the page responsive.
+ */
+const YIELD_EVERY = 32;
+let instantSteps = 0;
+
+/** A wait that stops while motion is paused and resumes where it left off. */
+const pausableWait = (ms: number) =>
+  new Promise<void>((resolve) => {
+    let left = ms;
+    let since = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const start = () => {
+      since = performance.now();
+      timer = setTimeout(finish, Math.max(0, left));
+    };
+    const finish = () => {
+      timer = undefined;
+      removeEventListener("alc-motion-change", onMotion);
+      resolve();
+    };
+    const onMotion = () => {
+      if (isMotionPaused()) {
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          timer = undefined;
+          left -= performance.now() - since;
+        }
+      } else if (timer === undefined) {
+        start();
+      }
+    };
+    addEventListener("alc-motion-change", onMotion);
+    if (!isMotionPaused()) start();
+  });
+
 /**
  * Timeline pause for the scripted terminal demos. With reduced motion the
  * script fast-forwards to its first finished frame and stays there: short
- * steps resolve immediately and the first hold never resolves.
+ * steps resolve immediately and the first hold never resolves. Otherwise the
+ * wait honors the page's pause control.
  */
-export const sleep = (ms: number) =>
-  prefersReducedMotion()
-    ? ms >= HOLD_MS
-      ? new Promise<void>(() => {})
-      : Promise.resolve()
-    : new Promise<void>((r) => setTimeout(r, ms));
+export const sleep = (ms: number): Promise<void> => {
+  if (!prefersReducedMotion()) return pausableWait(ms);
+  if (ms >= HOLD_MS) return new Promise<void>(() => {});
+  if (++instantSteps % YIELD_EVERY === 0) {
+    return new Promise<void>((r) => setTimeout(r, 0));
+  }
+  return Promise.resolve();
+};
 
 export function useSpinner(active: boolean, intervalMs = 80): string {
   const [i, setI] = useState(0);
