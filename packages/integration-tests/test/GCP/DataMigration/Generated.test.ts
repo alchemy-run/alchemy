@@ -84,6 +84,38 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "DescribeConversionWorkspaceDatabaseEntities (datamigration.projects.locations.conversionWorkspaces.describeDatabaseEntities)",
+        () => probe("DescribeConversionWorkspaceDatabaseEntities", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "DescribeConversionWorkspaceRevisions (datamigration.projects.locations.conversionWorkspaces.describeConversionWorkspaceRevisions)",
+        () => probe("DescribeConversionWorkspaceRevisions", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "FetchConversionWorkspaceEntitiesStatusView (datamigration.projects.locations.conversionWorkspaces.fetchEntitiesStatusView)",
+        () => probe("FetchConversionWorkspaceEntitiesStatusView", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "FetchConversionWorkspaceIssues (datamigration.projects.locations.conversionWorkspaces.fetchIssues)",
+        () => probe("FetchConversionWorkspaceIssues", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "GetConversionWorkspace (datamigration.projects.locations.conversionWorkspaces.get)",
         () => probe("GetConversionWorkspace", true),
         {
@@ -100,8 +132,24 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "ListConversionWorkspaceMappingRules (datamigration.projects.locations.conversionWorkspaces.mappingRules.list)",
+        () => probe("ListConversionWorkspaceMappingRules", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "RollbackConversionWorkspace (datamigration.projects.locations.conversionWorkspaces.rollback)",
         () => probe("RollbackConversionWorkspace", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "SearchConversionWorkspaceBackgroundJobs (datamigration.projects.locations.conversionWorkspaces.searchBackgroundJobs)",
+        () => probe("SearchConversionWorkspaceBackgroundJobs", false),
         {
           tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
           timeout: 600_000,
@@ -114,6 +162,21 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
           timeout: 600_000,
         },
+      );
+      test.provider(
+        "SetConversionWorkspaceDraftEntityDdl (datamigration.projects.locations.conversionWorkspaces.setDraftEntityDdl)",
+        () => probe("SetConversionWorkspaceDraftEntityDdl", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("ConversionWorkspacesMappingRule", { concurrent: true }, () => {
+      test.provider.todo(
+        "GetMappingRule (datamigration.projects.locations.conversionWorkspaces.mappingRules.get): ConversionWorkspacesMappingRule: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
       );
     });
 
@@ -215,42 +278,6 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
           timeout: 600_000,
         },
-      );
-    });
-
-    // Discovery methods with no binding, and why.
-    describe("not generated", () => {
-      test.provider.skip(
-        "datamigration.projects.locations.conversionWorkspaces.describeConversionWorkspaceRevisions: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datamigration.projects.locations.conversionWorkspaces.fetchEntitiesStatusView: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datamigration.projects.locations.conversionWorkspaces.searchBackgroundJobs: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datamigration.projects.locations.conversionWorkspaces.fetchIssues: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datamigration.projects.locations.conversionWorkspaces.setDraftEntityDdl: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datamigration.projects.locations.conversionWorkspaces.describeDatabaseEntities: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datamigration.projects.locations.conversionWorkspaces.mappingRules.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datamigration.projects.locations.conversionWorkspaces.mappingRules.get: no predefined role grants its permission",
-        () => Effect.void,
       );
     });
   },

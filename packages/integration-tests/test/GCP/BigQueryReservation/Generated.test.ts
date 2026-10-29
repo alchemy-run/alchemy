@@ -47,62 +47,86 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
-    // Discovery methods with no binding, and why.
-    describe("not generated", () => {
-      test.provider.skip(
-        "bigqueryreservation.projects.locations.reservations.failoverReservation: no predefined role grants its permission",
+    describe("CapacityCommitment", { concurrent: true }, () => {
+      test.provider.todo(
+        "GetCapacityCommitment (bigqueryreservation.projects.locations.capacityCommitments.get): CapacityCommitment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "bigqueryreservation.projects.locations.reservations.get: no predefined role grants its permission",
+      test.provider.todo(
+        "SplitCapacityCommitment (bigqueryreservation.projects.locations.capacityCommitments.split): CapacityCommitment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "bigqueryreservation.projects.locations.reservations.list: no predefined role grants its permission",
+    });
+
+    describe("project", { concurrent: true }, () => {
+      test.provider(
+        "ListCapacityCommitments (bigqueryreservation.projects.locations.capacityCommitments.list)",
+        () => probe("ListCapacityCommitments", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListReservationGroups (bigqueryreservation.projects.locations.reservationGroups.list)",
+        () => probe("ListReservationGroups", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListReservations (bigqueryreservation.projects.locations.reservations.list)",
+        () => probe("ListReservations", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "MergeCapacityCommitment (bigqueryreservation.projects.locations.capacityCommitments.merge)",
+        () => probe("MergeCapacityCommitment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("Reservation", { concurrent: true }, () => {
+      test.provider.todo(
+        "CreateReservationAssignment (bigqueryreservation.projects.locations.reservations.assignments.create): Reservation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "bigqueryreservation.projects.locations.reservations.assignments.patch: no predefined role grants its permission",
+      test.provider.todo(
+        "DeleteReservationAssignment (bigqueryreservation.projects.locations.reservations.assignments.delete): Reservation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "bigqueryreservation.projects.locations.reservations.assignments.delete: no predefined role grants its permission",
+      test.provider.todo(
+        "FailoverReservation (bigqueryreservation.projects.locations.reservations.failoverReservation): Reservation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "bigqueryreservation.projects.locations.reservations.assignments.move: no predefined role grants its permission",
+      test.provider.todo(
+        "GetReservation (bigqueryreservation.projects.locations.reservations.get): Reservation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "bigqueryreservation.projects.locations.reservations.assignments.create: no predefined role grants its permission",
+      test.provider.todo(
+        "ListReservationAssignments (bigqueryreservation.projects.locations.reservations.assignments.list): Reservation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "bigqueryreservation.projects.locations.reservations.assignments.list: no predefined role grants its permission",
+      test.provider.todo(
+        "MoveReservationAssignment (bigqueryreservation.projects.locations.reservations.assignments.move): Reservation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "bigqueryreservation.projects.locations.reservationGroups.list: no predefined role grants its permission",
+      test.provider.todo(
+        "PatchReservationAssignment (bigqueryreservation.projects.locations.reservations.assignments.patch): Reservation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "bigqueryreservation.projects.locations.reservationGroups.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "bigqueryreservation.projects.locations.capacityCommitments.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "bigqueryreservation.projects.locations.capacityCommitments.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "bigqueryreservation.projects.locations.capacityCommitments.split: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "bigqueryreservation.projects.locations.capacityCommitments.merge: no predefined role grants its permission",
+    });
+
+    describe("ReservationGroup", { concurrent: true }, () => {
+      test.provider.todo(
+        "GetReservationGroup (bigqueryreservation.projects.locations.reservationGroups.get): ReservationGroup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

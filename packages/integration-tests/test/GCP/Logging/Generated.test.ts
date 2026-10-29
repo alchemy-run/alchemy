@@ -374,9 +374,21 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("project", { concurrent: true }, () => {
+      test.provider("CopyEntry (logging.entries.copy)", () => probe("CopyEntry", false), {
+        tags: ["provider:gcp", "provider:gcp:logging", "live"],
+        timeout: 600_000,
+      });
       test.provider(
         "CreateBucketAsync (logging.projects.locations.buckets.createAsync)",
         () => probe("CreateBucketAsync", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "CreateMetric (logging.projects.metrics.create)",
+        () => probe("CreateMetric", false),
         {
           tags: ["provider:gcp", "provider:gcp:logging", "live"],
           timeout: 600_000,
@@ -395,8 +407,36 @@ describe.skipIf(!!process.env.FAST)(
         timeout: 600_000,
       });
       test.provider(
+        "DeleteMetric (logging.projects.metrics.delete)",
+        () => probe("DeleteMetric", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "DeleteSink (logging.projects.sinks.delete)",
         () => probe("DeleteSink", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider("GetMetric (logging.projects.metrics.get)", () => probe("GetMetric", false), {
+        tags: ["provider:gcp", "provider:gcp:logging", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "GetProjectCmekSettings (logging.projects.getCmekSettings)",
+        () => probe("GetProjectCmekSettings", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetProjectSettings (logging.projects.getSettings)",
+        () => probe("GetProjectSettings", false),
         {
           tags: ["provider:gcp", "provider:gcp:logging", "live"],
           timeout: 600_000,
@@ -414,6 +454,10 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
+      test.provider("ListEntries (logging.entries.list)", () => probe("ListEntries", true), {
+        tags: ["provider:gcp", "provider:gcp:logging", "live"],
+        timeout: 600_000,
+      });
       test.provider(
         "ListExclusions (logging.projects.exclusions.list)",
         () => probe("ListExclusions", true),
@@ -434,6 +478,38 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
+      test.provider(
+        "ListMetrics (logging.projects.metrics.list)",
+        () => probe("ListMetrics", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListMonitoredResourceDescriptors (logging.monitoredResourceDescriptors.list)",
+        () => probe("ListMonitoredResourceDescriptors", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListRecentQueries (logging.projects.locations.recentQueries.list)",
+        () => probe("ListRecentQueries", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListSavedQueries (logging.projects.locations.savedQueries.list)",
+        () => probe("ListSavedQueries", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
+      );
       test.provider("ListSinks (logging.projects.sinks.list)", () => probe("ListSinks", true), {
         tags: ["provider:gcp", "provider:gcp:logging", "live"],
         timeout: 600_000,
@@ -442,9 +518,36 @@ describe.skipIf(!!process.env.FAST)(
         tags: ["provider:gcp", "provider:gcp:logging", "live"],
         timeout: 600_000,
       });
+      test.provider("TailEntry (logging.entries.tail)", () => probe("TailEntry", false), {
+        tags: ["provider:gcp", "provider:gcp:logging", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "UpdateMetric (logging.projects.metrics.update)",
+        () => probe("UpdateMetric", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
+      );
       test.provider(
         "UpdateSink (logging.projects.sinks.update)",
         () => probe("UpdateSink", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider("WriteEntry (logging.entries.write)", () => probe("WriteEntry", false), {
+        tags: ["provider:gcp", "provider:gcp:logging", "live"],
+        timeout: 600_000,
+      });
+    });
+
+    describe("SavedQuery", { concurrent: true }, () => {
+      test.provider(
+        "GetSavedQuery (logging.projects.locations.savedQueries.get)",
+        () => probe("GetSavedQuery", true),
         {
           tags: ["provider:gcp", "provider:gcp:logging", "live"],
           timeout: 600_000,
@@ -454,46 +557,6 @@ describe.skipIf(!!process.env.FAST)(
 
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
-      test.provider.skip(
-        "logging.projects.getCmekSettings: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.projects.getSettings: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.projects.locations.savedQueries.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.projects.locations.savedQueries.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.projects.locations.recentQueries.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.projects.metrics.update: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.projects.metrics.create: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.projects.metrics.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.projects.metrics.delete: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.projects.metrics.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
       test.provider.skip(
         "logging.billingAccounts.getCmekSettings: addressed under `billingAccounts/`, not a project",
         () => Effect.void,
@@ -772,26 +835,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "logging.logs.list: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.entries.tail: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.entries.write: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.entries.copy: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.entries.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.monitoredResourceDescriptors.list: no predefined role grants its permission",
         () => Effect.void,
       );
     });

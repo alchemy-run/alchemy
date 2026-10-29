@@ -47,6 +47,46 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
+    describe("Certificate", { concurrent: true }, () => {
+      test.provider.todo(
+        "GetCertificate (certificatemanager.projects.locations.certificates.get): Certificate: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+    });
+
+    describe("CertificateIssuanceConfig", { concurrent: true }, () => {
+      test.provider.todo(
+        "GetCertificateIssuanceConfig (certificatemanager.projects.locations.certificateIssuanceConfigs.get): CertificateIssuanceConfig: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+    });
+
+    describe("CertificateMap", { concurrent: true }, () => {
+      test.provider(
+        "GetCertificateMap (certificatemanager.projects.locations.certificateMaps.get)",
+        () => probe("GetCertificateMap", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:certificatemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListCertificateMapEntries (certificatemanager.projects.locations.certificateMaps.certificateMapEntries.list)",
+        () => probe("ListCertificateMapEntries", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:certificatemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("CertificateMapEntry", { concurrent: true }, () => {
+      test.provider.todo(
+        "GetCertificateMapEntry (certificatemanager.projects.locations.certificateMaps.certificateMapEntries.get): CertificateMapEntry: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+    });
+
     describe("DnsAuthorization", { concurrent: true }, () => {
       test.provider(
         "GetDnsAuthorization (certificatemanager.projects.locations.dnsAuthorizations.get)",
@@ -59,6 +99,30 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("project", { concurrent: true }, () => {
+      test.provider(
+        "ListCertificateIssuanceConfigs (certificatemanager.projects.locations.certificateIssuanceConfigs.list)",
+        () => probe("ListCertificateIssuanceConfigs", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:certificatemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListCertificateMaps (certificatemanager.projects.locations.certificateMaps.list)",
+        () => probe("ListCertificateMaps", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:certificatemanager", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListCertificates (certificatemanager.projects.locations.certificates.list)",
+        () => probe("ListCertificates", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:certificatemanager", "live"],
+          timeout: 600_000,
+        },
+      );
       test.provider(
         "ListDnsAuthorizations (certificatemanager.projects.locations.dnsAuthorizations.list)",
         () => probe("ListDnsAuthorizations", true),
@@ -85,42 +149,6 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:certificatemanager", "live"],
           timeout: 600_000,
         },
-      );
-    });
-
-    // Discovery methods with no binding, and why.
-    describe("not generated", () => {
-      test.provider.skip(
-        "certificatemanager.projects.locations.certificates.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "certificatemanager.projects.locations.certificates.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "certificatemanager.projects.locations.certificateIssuanceConfigs.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "certificatemanager.projects.locations.certificateIssuanceConfigs.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "certificatemanager.projects.locations.certificateMaps.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "certificatemanager.projects.locations.certificateMaps.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "certificatemanager.projects.locations.certificateMaps.certificateMapEntries.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "certificatemanager.projects.locations.certificateMaps.certificateMapEntries.get: no predefined role grants its permission",
-        () => Effect.void,
       );
     });
   },

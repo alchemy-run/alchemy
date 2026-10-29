@@ -8,5 +8,16 @@
   },
   "probes": {
     "resources": {}
+  },
+  "permissionService": "cloudsecurityscanner",
+  "permissionCollections": {
+    "scanConfigs": "scans",
+    "scanRuns": "scanruns",
+    "crawledUrls": "crawledurls",
+    "findings": "results",
+    "findingTypeStats": "results"
+  },
+  "verbPermissions": {
+    "start": "run"
   }
 }

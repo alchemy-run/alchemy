@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,28 @@ export default class BigQueryReservationGeneratedHost extends GCP.Function<BigQu
   "BigQueryReservationGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.BigQueryReservation.ListCapacityCommitments();
+    const p1 = yield* GCP.BigQueryReservation.ListReservationGroups();
+    const p2 = yield* GCP.BigQueryReservation.ListReservations();
+    const p3 = yield* GCP.BigQueryReservation.MergeCapacityCommitment();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        ListCapacityCommitments: outcome(Retry.none(p0({ location: "us-central1" } as never))),
+        ListReservationGroups: outcome(Retry.none(p1({ location: "us-central1" } as never))),
+        ListReservations: outcome(Retry.none(p2({ location: "us-central1" } as never))),
+        MergeCapacityCommitment: outcome(Retry.none(p3({ location: "us-central1" } as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.BigQueryReservation.ListCapacityCommitmentsHttp,
+          GCP.BigQueryReservation.ListReservationGroupsHttp,
+          GCP.BigQueryReservation.ListReservationsHttp,
+          GCP.BigQueryReservation.MergeCapacityCommitmentHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

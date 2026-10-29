@@ -69,6 +69,32 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
+    describe("DiscoveryConfig", { concurrent: true }, () => {
+      test.provider.todo(
+        "GetDiscoveryConfig@DiscoveryConfig (dlp.projects.locations.discoveryConfigs.get): DiscoveryConfig: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+    });
+
+    describe("DlpJob", { concurrent: true }, () => {
+      test.provider(
+        "CancelDlpJob@DlpJob (dlp.projects.dlpJobs.cancel)",
+        () => probe("CancelDlpJob@DlpJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetDlpJob@DlpJob (dlp.projects.dlpJobs.get)",
+        () => probe("GetDlpJob@DlpJob", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
     describe("InspectTemplate", { concurrent: true }, () => {
       test.provider(
         "GetInspectTemplate@InspectTemplate (dlp.projects.inspectTemplates.get)",
@@ -107,6 +133,25 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:dlp", "live"],
           timeout: 600_000,
         },
+      );
+    });
+
+    describe("LocationsDlpJob", { concurrent: true }, () => {
+      test.provider.todo(
+        "CancelDlpJob@LocationsDlpJob (dlp.projects.locations.dlpJobs.cancel): LocationsDlpJob: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+      test.provider.todo(
+        "FinishDlpJob (dlp.projects.locations.dlpJobs.finish): LocationsDlpJob: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+      test.provider.todo(
+        "GetDlpJob@LocationsDlpJob (dlp.projects.locations.dlpJobs.get): LocationsDlpJob: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+      test.provider.todo(
+        "HybridDlpJobInspect (dlp.projects.locations.dlpJobs.hybridInspect): LocationsDlpJob: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
       );
     });
 
@@ -180,6 +225,13 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
+    describe("OrganizationsLocationsDiscoveryConfig", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetDiscoveryConfig@OrganizationsLocationsDiscoveryConfig (dlp.organizations.locations.discoveryConfigs.get): OrganizationsLocationsDiscoveryConfig: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+        () => Effect.void,
+      );
+    });
+
     describe("OrganizationsLocationsInspectTemplate", { concurrent: true }, () => {
       test.provider.skip(
         "GetInspectTemplate@OrganizationsLocationsInspectTemplate (dlp.organizations.locations.inspectTemplates.get): OrganizationsLocationsInspectTemplate: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
@@ -210,8 +262,24 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("project", { concurrent: true }, () => {
       test.provider(
+        "DeidentifyContent (dlp.projects.content.deidentify)",
+        () => probe("DeidentifyContent", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "DeleteConnection (dlp.projects.locations.connections.delete)",
         () => probe("DeleteConnection", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "DeleteFileStoreDataProfile (dlp.projects.locations.fileStoreDataProfiles.delete)",
+        () => probe("DeleteFileStoreDataProfile", false),
         {
           tags: ["provider:gcp", "provider:gcp:dlp", "live"],
           timeout: 600_000,
@@ -242,6 +310,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "GetFileStoreDataProfile (dlp.projects.locations.fileStoreDataProfiles.get)",
+        () => probe("GetFileStoreDataProfile", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "GetProjectDataProfile (dlp.projects.locations.projectDataProfiles.get)",
         () => probe("GetProjectDataProfile", false),
         {
@@ -252,6 +328,14 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "GetTableDataProfile (dlp.projects.locations.tableDataProfiles.get)",
         () => probe("GetTableDataProfile", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "InspectContent (dlp.projects.content.inspect)",
+        () => probe("InspectContent", false),
         {
           tags: ["provider:gcp", "provider:gcp:dlp", "live"],
           timeout: 600_000,
@@ -284,6 +368,34 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "ListDeidentifyTemplates (dlp.projects.deidentifyTemplates.list)",
         () => probe("ListDeidentifyTemplates", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListDiscoveryConfigs (dlp.projects.locations.discoveryConfigs.list)",
+        () => probe("ListDiscoveryConfigs", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider("ListDlpJobs (dlp.projects.dlpJobs.list)", () => probe("ListDlpJobs", true), {
+        tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "ListFileStoreDataProfiles (dlp.projects.locations.fileStoreDataProfiles.list)",
+        () => probe("ListFileStoreDataProfiles", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListInfoTypes (dlp.projects.locations.infoTypes.list)",
+        () => probe("ListInfoTypes", true),
         {
           tags: ["provider:gcp", "provider:gcp:dlp", "live"],
           timeout: 600_000,
@@ -337,6 +449,18 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
+      test.provider("RedactImage (dlp.projects.image.redact)", () => probe("RedactImage", false), {
+        tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "ReidentifyContent (dlp.projects.content.reidentify)",
+        () => probe("ReidentifyContent", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
+      );
       test.provider(
         "SearchConnection (dlp.projects.locations.connections.search)",
         () => probe("SearchConnection", false),
@@ -365,94 +489,6 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "dlp.projects.dlpJobs.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.dlpJobs.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.dlpJobs.cancel: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.infoTypes.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.image.redact: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.discoveryConfigs.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.discoveryConfigs.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.content.inspect: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.content.deidentify: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.content.reidentify: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.fileStoreDataProfiles.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.fileStoreDataProfiles.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.fileStoreDataProfiles.delete: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.dlpJobs.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.dlpJobs.cancel: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.dlpJobs.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.dlpJobs.hybridInspect: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.locations.dlpJobs.finish: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.image.redact: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.content.deidentify: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.content.reidentify: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.projects.content.inspect: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "dlp.organizations.deidentifyTemplates.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
@@ -466,10 +502,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "dlp.organizations.locations.fileStoreDataProfiles.delete: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dlp.organizations.locations.discoveryConfigs.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

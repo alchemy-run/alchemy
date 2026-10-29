@@ -24,7 +24,9 @@
     "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.macSign": "cloudkms.cryptoKeyVersions.useToSign",
     "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.asymmetricSign": "cloudkms.cryptoKeyVersions.useToSign",
     "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.macVerify": "cloudkms.cryptoKeyVersions.useToVerify",
-    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.decapsulate": "cloudkms.cryptoKeyVersions.useToDecapsulate"
+    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.decapsulate": "cloudkms.cryptoKeyVersions.useToDecapsulate",
+    "cloudkms.projects.updateAutokeyConfig": "cloudkms.autokeyConfigs.update",
+    "cloudkms.projects.getAutokeyConfig": "cloudkms.autokeyConfigs.get"
   },
   "skip": {
     "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.import": "imports wrapped key material through an ImportJob; a deploy-time concern, not a runtime call",

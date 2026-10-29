@@ -14,5 +14,15 @@
   },
   "probes": {
     "resources": {}
+  },
+  "permissionService": "bigquery",
+  "permissionCollections": {
+    "assignments": "reservationAssignments"
+  },
+  "verbPermissions": {
+    "move": "update",
+    "failoverReservation": "update",
+    "split": "update",
+    "merge": "update"
   }
 }

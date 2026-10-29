@@ -28,5 +28,11 @@
       "TrustConfig": "ProbeTrustConfig"
     },
     "untestable": {}
+  },
+  "permissionCollections": {
+    "certificates": "certs",
+    "certificateIssuanceConfigs": "certissuanceconfigs",
+    "certificateMaps": "certmaps",
+    "certificateMapEntries": "certmapentries"
   }
 }

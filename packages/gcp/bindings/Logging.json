@@ -129,5 +129,27 @@
       "OrganizationSavedQuery": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
       "OrganizationSink": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)"
     }
+  },
+  "permissionCollections": {
+    "savedQueries": "queries",
+    "recentQueries": "queries",
+    "entries": "logEntries",
+    "queries": "queries",
+    "metrics": "logMetrics"
+  },
+  "verbPermissions": {
+    "tail": "list",
+    "write": "create",
+    "copy": "download",
+    "getCmekSettings": "get",
+    "getSettings": "get"
+  },
+  "permissions": {
+    "logging.monitoredResourceDescriptors.list": "logging.logs.list",
+    "logging.projects.getCmekSettings": "logging.settings.get",
+    "logging.projects.getSettings": "logging.settings.get",
+    "logging.projects.locations.savedQueries.get": "logging.queries.getShared",
+    "logging.projects.locations.savedQueries.list": "logging.queries.listShared",
+    "logging.projects.locations.recentQueries.list": "logging.queries.listShared"
   }
 }

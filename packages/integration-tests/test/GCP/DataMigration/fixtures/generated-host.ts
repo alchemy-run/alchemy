@@ -19,32 +19,54 @@ export default class DataMigrationGeneratedHost extends GCP.Function<DataMigrati
     const p0 = yield* GCP.DataMigration.ApplyConversionWorkspace(ProbeConversionWorkspace);
     const p1 = yield* GCP.DataMigration.CommitConversionWorkspace(ProbeConversionWorkspace);
     const p2 = yield* GCP.DataMigration.ConvertConversionWorkspace(ProbeConversionWorkspace);
-    const p3 = yield* GCP.DataMigration.GetConnectionProfile(ProbeConnectionProfile);
-    const p4 = yield* GCP.DataMigration.GetConversionWorkspace(ProbeConversionWorkspace);
+    const p3 =
+      yield* GCP.DataMigration.DescribeConversionWorkspaceDatabaseEntities(
+        ProbeConversionWorkspace,
+      );
+    const p4 =
+      yield* GCP.DataMigration.DescribeConversionWorkspaceRevisions(ProbeConversionWorkspace);
     const p5 =
+      yield* GCP.DataMigration.FetchConversionWorkspaceEntitiesStatusView(ProbeConversionWorkspace);
+    const p6 = yield* GCP.DataMigration.FetchConversionWorkspaceIssues(ProbeConversionWorkspace);
+    const p7 = yield* GCP.DataMigration.GetConnectionProfile(ProbeConnectionProfile);
+    const p8 = yield* GCP.DataMigration.GetConversionWorkspace(ProbeConversionWorkspace);
+    const p9 =
       yield* GCP.DataMigration.ImportConversionWorkspaceMappingRule(ProbeConversionWorkspace);
-    const p6 = yield* GCP.DataMigration.ListConnectionProfiles();
-    const p7 = yield* GCP.DataMigration.ListConversionWorkspaces();
-    const p8 = yield* GCP.DataMigration.ListMigrationJobs();
-    const p9 = yield* GCP.DataMigration.ListPrivateConnections();
-    const p10 = yield* GCP.DataMigration.RollbackConversionWorkspace(ProbeConversionWorkspace);
-    const p11 = yield* GCP.DataMigration.SeedConversionWorkspace(ProbeConversionWorkspace);
+    const p10 = yield* GCP.DataMigration.ListConnectionProfiles();
+    const p11 =
+      yield* GCP.DataMigration.ListConversionWorkspaceMappingRules(ProbeConversionWorkspace);
+    const p12 = yield* GCP.DataMigration.ListConversionWorkspaces();
+    const p13 = yield* GCP.DataMigration.ListMigrationJobs();
+    const p14 = yield* GCP.DataMigration.ListPrivateConnections();
+    const p15 = yield* GCP.DataMigration.RollbackConversionWorkspace(ProbeConversionWorkspace);
+    const p16 =
+      yield* GCP.DataMigration.SearchConversionWorkspaceBackgroundJobs(ProbeConversionWorkspace);
+    const p17 = yield* GCP.DataMigration.SeedConversionWorkspace(ProbeConversionWorkspace);
+    const p18 =
+      yield* GCP.DataMigration.SetConversionWorkspaceDraftEntityDdl(ProbeConversionWorkspace);
     return {
       fetch: serveProbes({
         ApplyConversionWorkspace: outcome(Retry.none(p0({} as never))),
         CommitConversionWorkspace: outcome(Retry.none(p1({} as never))),
         ConvertConversionWorkspace: outcome(Retry.none(p2({} as never))),
-        GetConnectionProfile: outcome(Retry.none(p3({} as never))),
-        GetConversionWorkspace: outcome(Retry.none(p4({} as never))),
+        DescribeConversionWorkspaceDatabaseEntities: outcome(Retry.none(p3({} as never))),
+        DescribeConversionWorkspaceRevisions: outcome(Retry.none(p4({} as never))),
+        FetchConversionWorkspaceEntitiesStatusView: outcome(Retry.none(p5({} as never))),
+        FetchConversionWorkspaceIssues: outcome(Retry.none(p6({} as never))),
+        GetConnectionProfile: outcome(Retry.none(p7({} as never))),
+        GetConversionWorkspace: outcome(Retry.none(p8({} as never))),
         ImportConversionWorkspaceMappingRule: outcome(
-          Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+          Retry.none(p9({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ListConnectionProfiles: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        ListConversionWorkspaces: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListMigrationJobs: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListPrivateConnections: outcome(Retry.none(p9({ location: "us-central1" } as never))),
-        RollbackConversionWorkspace: outcome(Retry.none(p10({} as never))),
-        SeedConversionWorkspace: outcome(Retry.none(p11({} as never))),
+        ListConnectionProfiles: outcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListConversionWorkspaceMappingRules: outcome(Retry.none(p11({} as never))),
+        ListConversionWorkspaces: outcome(Retry.none(p12({ location: "us-central1" } as never))),
+        ListMigrationJobs: outcome(Retry.none(p13({ location: "us-central1" } as never))),
+        ListPrivateConnections: outcome(Retry.none(p14({ location: "us-central1" } as never))),
+        RollbackConversionWorkspace: outcome(Retry.none(p15({} as never))),
+        SearchConversionWorkspaceBackgroundJobs: outcome(Retry.none(p16({} as never))),
+        SeedConversionWorkspace: outcome(Retry.none(p17({} as never))),
+        SetConversionWorkspaceDraftEntityDdl: outcome(Retry.none(p18({} as never))),
       }),
     };
   }).pipe(
@@ -54,15 +76,22 @@ export default class DataMigrationGeneratedHost extends GCP.Function<DataMigrati
           GCP.DataMigration.ApplyConversionWorkspaceHttp,
           GCP.DataMigration.CommitConversionWorkspaceHttp,
           GCP.DataMigration.ConvertConversionWorkspaceHttp,
+          GCP.DataMigration.DescribeConversionWorkspaceDatabaseEntitiesHttp,
+          GCP.DataMigration.DescribeConversionWorkspaceRevisionsHttp,
+          GCP.DataMigration.FetchConversionWorkspaceEntitiesStatusViewHttp,
+          GCP.DataMigration.FetchConversionWorkspaceIssuesHttp,
           GCP.DataMigration.GetConnectionProfileHttp,
           GCP.DataMigration.GetConversionWorkspaceHttp,
           GCP.DataMigration.ImportConversionWorkspaceMappingRuleHttp,
           GCP.DataMigration.ListConnectionProfilesHttp,
+          GCP.DataMigration.ListConversionWorkspaceMappingRulesHttp,
           GCP.DataMigration.ListConversionWorkspacesHttp,
           GCP.DataMigration.ListMigrationJobsHttp,
           GCP.DataMigration.ListPrivateConnectionsHttp,
           GCP.DataMigration.RollbackConversionWorkspaceHttp,
+          GCP.DataMigration.SearchConversionWorkspaceBackgroundJobsHttp,
           GCP.DataMigration.SeedConversionWorkspaceHttp,
+          GCP.DataMigration.SetConversionWorkspaceDraftEntityDdlHttp,
         ),
       ),
     ),

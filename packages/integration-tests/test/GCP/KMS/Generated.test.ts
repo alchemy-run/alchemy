@@ -66,6 +66,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "GetProjectAutokeyConfig (cloudkms.projects.getAutokeyConfig)",
+        () => probe("GetProjectAutokeyConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:kms", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "GetRetiredResource (cloudkms.projects.locations.retiredResources.get)",
         () => probe("GetRetiredResource", false),
         {
@@ -146,6 +154,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "UpdateProjectAutokeyConfig (cloudkms.projects.updateAutokeyConfig)",
+        () => probe("UpdateProjectAutokeyConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:kms", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "VerifyEkmConnectionConnectivity (cloudkms.projects.locations.ekmConnections.verifyConnectivity)",
         () => probe("VerifyEkmConnectionConnectivity", false),
         {
@@ -163,14 +179,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "cloudkms.organizations.updateKajPolicyConfig: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudkms.projects.updateAutokeyConfig: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudkms.projects.getAutokeyConfig: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

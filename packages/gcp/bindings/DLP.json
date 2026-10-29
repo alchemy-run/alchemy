@@ -90,5 +90,13 @@
       "OrganizationsLocationsJobTrigger": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
       "OrganizationsLocationsStoredInfoType": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)"
     }
-  }
+  },
+  "permissionCollections": {
+    "dlpJobs": "jobs",
+    "fileStoreDataProfiles": "fileStoreProfiles"
+  },
+  "verbPermissions": {
+    "finish": "cancel"
+  },
+  "defaultPermission": "serviceusage.services.use"
 }
