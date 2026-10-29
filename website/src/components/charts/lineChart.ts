@@ -15,8 +15,10 @@ export interface LineChartSpec {
   readonly x: Axis;
   readonly y: Axis;
   readonly series: ReadonlyArray<Series>;
-  /** Formats a point for its value label and tooltip. */
+  /** Written after a value in its label and tooltip (`min`), or nothing. */
   readonly unit: string;
+  /** Written before a value (`$`). */
+  readonly prefix?: string;
 }
 
 export interface Axis {
@@ -96,13 +98,17 @@ export const renderLineChart = (spec: LineChartSpec): string => {
     s.points.forEach(([x, y], j) => {
       const [px, py] = pts[j]!;
       out.push(
-        `<g class="lc-pt">${marker(i, px, py)}<title>${esc(`${s.name}: ${fmt(x)} ${spec.x.label.toLowerCase()} → ${y} ${spec.unit}`)}</title></g>`,
+        `<g class="lc-pt">${marker(i, px, py)}<title>${esc(`${s.name}: ${fmt(x)} ${spec.x.label.toLowerCase()} → ${spec.prefix ?? ""}${y}${spec.unit ? ` ${spec.unit}` : ""}`)}</title></g>`,
       );
     });
     out.push(`</g>`);
     const [lastX, lastY] = s.points[s.points.length - 1]!;
     const [ex, ey] = pts[pts.length - 1]!;
-    ends.push({ x: ex, y: ey, text: `${lastY} ${spec.unit}` });
+    ends.push({
+      x: ex,
+      y: ey,
+      text: `${spec.prefix ?? ""}${lastY}${spec.unit ? ` ${spec.unit}` : ""}`,
+    });
     void lastX;
   });
   for (const end of ends) {

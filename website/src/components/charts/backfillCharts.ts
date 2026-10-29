@@ -1,113 +1,69 @@
 import type { LineChartSpec } from "./lineChart.ts";
 
 /**
- * Backfill scaling, from the simulator in
- * `packages/integration-tests/test/Domain/Backfill.bench.test.ts` (the same
- * protocol code, with a 10 ms round trip, 50 ms alarms and 1 ms per event).
- * Rows are the protocol's own, not counting the view writing its state.
+ * Backfill scaling, measured on Cloudflare by
+ * `packages/integration-tests/test/Cloudflare/Domain/CatchUp.bench.test.ts`
+ * (2026-10-29). Cost is at Workers Paid rates, before the monthly allowance:
+ * requests, duration, and rows written and read.
  */
 export const backfillCharts = {
   timeByWidth: {
-    title: "Time as instances grow (10 events each)",
-    x: { label: "Instances", ticks: [100, 1_000, 10_000], log: true },
-    y: { label: "Seconds", ticks: [0, 10, 20, 30, 40, 50] },
-    unit: "s",
+    title: "How long the deploy waits, by number of accounts",
+    x: { label: "Accounts, 10 deposits each", ticks: [1_000, 10_000, 100_000], log: true },
+    y: { label: "Minutes", ticks: [0, 5, 10, 15, 20] },
+    unit: "min",
     series: [
       {
-        name: "Keyed by its aggregate",
+        name: "A view per account",
         points: [
-          [100, 5.6],
-          [1_000, 5.9],
-          [10_000, 7.5],
-        ],
-      },
-      {
-        name: "100 instances per key",
-        points: [
-          [1_000, 5.8],
-          [10_000, 7.1],
-        ],
-      },
-      {
-        name: "One key for all",
-        points: [
-          [100, 5.6],
-          [1_000, 40.3],
+          [1_000, 1.9],
+          [10_000, 5.9],
+          [100_000, 17.5],
         ],
       },
     ],
   },
   timeByDepth: {
-    title: "Time as one key's history grows",
-    x: { label: "Events behind the key", ticks: [10, 100, 1_000, 10_000, 100_000], log: true },
-    y: { label: "Seconds", ticks: [0, 20, 40, 60, 80, 100] },
-    unit: "s",
+    title: "How long the deploy waits, by events behind one key",
+    x: { label: "Events behind the key", ticks: [1_000, 10_000, 100_000], log: true },
+    y: { label: "Minutes", ticks: [0, 2, 4, 6, 8] },
+    unit: "min",
     series: [
       {
-        name: "From one instance",
+        name: "One account's summary",
         points: [
-          [10, 5.4],
-          [100, 5.4],
-          [1_000, 5.4],
-          [10_000, 13.1],
+          [1_000, 0.2],
+          [10_000, 0.6],
+          [100_000, 5.9],
+        ],
+      },
+      { name: "A bank-wide total, fed by 100 accounts", points: [[10_000, 1.9]] },
+    ],
+  },
+  costByEvents: {
+    title: "What a backfill costs per million events",
+    x: { label: "Events in the history", ticks: [1_000, 10_000, 100_000, 1_000_000], log: true },
+    y: { label: "Dollars per million events", ticks: [0, 5, 10, 15, 20] },
+    unit: "",
+    prefix: "$",
+    series: [
+      {
+        name: "A view per account",
+        points: [
+          [10_000, 14.4],
+          [100_000, 13.1],
+          [1_000_000, 16.1],
         ],
       },
       {
-        name: "From 100 instances",
+        name: "One account's summary",
         points: [
           [1_000, 5.6],
-          [10_000, 12.7],
-          [100_000, 91.7],
+          [10_000, 5.1],
+          [100_000, 5.1],
         ],
       },
-    ],
-  },
-  costByWidth: {
-    title: "Cost per event as instances grow (10 events each)",
-    x: { label: "Instances", ticks: [100, 1_000, 10_000], log: true },
-    y: { label: "Rows written per event", ticks: [0, 4, 8, 12] },
-    unit: "rows",
-    series: [
-      {
-        name: "Keyed by its aggregate",
-        points: [
-          [100, 5.3],
-          [1_000, 4.1],
-          [10_000, 3.8],
-        ],
-      },
-      {
-        name: "Through keyOf",
-        points: [
-          [100, 9.7],
-          [1_000, 8.5],
-          [10_000, 8.2],
-        ],
-      },
-    ],
-  },
-  costByDepth: {
-    title: "Cost per event as histories grow (1,000 instances)",
-    x: { label: "Events per instance", ticks: [1, 10, 100], log: true },
-    y: { label: "Rows written per event", ticks: [0.1, 1, 10, 100], log: true },
-    unit: "rows",
-    series: [
-      {
-        name: "Keyed by its aggregate",
-        points: [
-          [1, 41],
-          [10, 4.1],
-          [100, 0.41],
-        ],
-      },
-      {
-        name: "Through keyOf",
-        points: [
-          [1, 49],
-          [10, 8.5],
-          [100, 4.5],
-        ],
-      },
+      { name: "A bank-wide total", points: [[10_000, 11.1]] },
     ],
   },
 } satisfies Record<string, LineChartSpec>;

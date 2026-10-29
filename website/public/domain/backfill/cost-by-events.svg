@@ -1,0 +1,31 @@
+<svg viewBox="0 0 480 320" role="img" aria-label="What a backfill costs per million events" xmlns="http://www.w3.org/2000/svg" class="lc"><style>
+.lc{display:block;width:100%;height:auto;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+.lc-surface{fill:#fbf6ea}
+.lc-text{fill:#2a2620}
+.lc-muted{fill:#52442e}
+.lc-title{font-size:14px;font-weight:600}
+.lc-small{font-size:11px}
+.lc-grid{stroke:rgba(42,38,32,0.14);stroke-width:1}
+.lc-s1,.lc-s2,.lc-s3{stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.lc-s1{stroke:#2a78d6;fill:#2a78d6}
+.lc-s2{stroke:#eb6834;fill:#eb6834}
+.lc-s3{stroke:#1baf7a;fill:#1baf7a}
+.lc-s1 path[fill=none],.lc-s2 path[fill=none],.lc-s3 path[fill=none]{fill:none}
+.lc-pt>*{stroke:#fbf6ea;stroke-width:2}
+.lc-label{stroke:#fbf6ea;stroke-width:3;paint-order:stroke;stroke-linejoin:round}
+@media (prefers-color-scheme: dark){
+.lc{display:block;width:100%;height:auto;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+.lc-surface{fill:#221e18}
+.lc-text{fill:#faf6ec}
+.lc-muted{fill:#c0af89}
+.lc-title{font-size:14px;font-weight:600}
+.lc-small{font-size:11px}
+.lc-grid{stroke:rgba(250,246,236,0.14);stroke-width:1}
+.lc-s1,.lc-s2,.lc-s3{stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.lc-s1{stroke:#3987e5;fill:#3987e5}
+.lc-s2{stroke:#d95926;fill:#d95926}
+.lc-s3{stroke:#199e70;fill:#199e70}
+.lc-s1 path[fill=none],.lc-s2 path[fill=none],.lc-s3 path[fill=none]{fill:none}
+.lc-pt>*{stroke:#221e18;stroke-width:2}
+.lc-label{stroke:#221e18;stroke-width:3;paint-order:stroke;stroke-linejoin:round}
+}</style><rect class="lc-surface" width="480" height="320" rx="8"/><text class="lc-text lc-title" x="16" y="24">What a backfill costs per million events</text><g class="lc-s1"><line x1="16" x2="32" y1="46" y2="46"/><circle cx="24" cy="46" r="4.5"/></g><text class="lc-muted lc-small" x="38" y="50">A view per account</text><g class="lc-s2"><line x1="166" x2="182" y1="46" y2="46"/><rect x="170" y="42" width="8" height="8" rx="1"/></g><text class="lc-muted lc-small" x="188" y="50">One account's summary</text><g class="lc-s3"><line x1="334" x2="350" y1="46" y2="46"/><path d="M342 40.5L347.5 46L342 51.5L336.5 46Z"/></g><text class="lc-muted lc-small" x="356" y="50">A bank-wide total</text><line class="lc-grid" x1="52" x2="452" y1="272" y2="272"/><text class="lc-muted lc-small" x="44" y="276" text-anchor="end">0</text><line class="lc-grid" x1="52" x2="452" y1="225" y2="225"/><text class="lc-muted lc-small" x="44" y="229" text-anchor="end">5</text><line class="lc-grid" x1="52" x2="452" y1="178" y2="178"/><text class="lc-muted lc-small" x="44" y="182" text-anchor="end">10</text><line class="lc-grid" x1="52" x2="452" y1="131" y2="131"/><text class="lc-muted lc-small" x="44" y="135" text-anchor="end">15</text><line class="lc-grid" x1="52" x2="452" y1="84" y2="84"/><text class="lc-muted lc-small" x="44" y="88" text-anchor="end">20</text><text class="lc-muted lc-small" x="52" y="290" text-anchor="middle">1k</text><text class="lc-muted lc-small" x="185.33333333333331" y="290" text-anchor="middle">10k</text><text class="lc-muted lc-small" x="318.66666666666663" y="290" text-anchor="middle">100k</text><text class="lc-muted lc-small" x="452" y="290" text-anchor="middle">1M</text><text class="lc-muted lc-small" x="252" y="310" text-anchor="middle">Events in the history</text><text class="lc-muted lc-small" x="16" y="68">Dollars per million events</text><g class="lc-s1"><path fill="none" d="M185.33333333333331 136.64000000000001L318.66666666666663 148.86L452 120.66"/><g class="lc-pt"><circle cx="185.33333333333331" cy="136.64000000000001" r="4.5"/><title>A view per account: 10k events in the history → $14.4</title></g><g class="lc-pt"><circle cx="318.66666666666663" cy="148.86" r="4.5"/><title>A view per account: 100k events in the history → $13.1</title></g><g class="lc-pt"><circle cx="452" cy="120.66" r="4.5"/><title>A view per account: 1M events in the history → $16.1</title></g></g><g class="lc-s2"><path fill="none" d="M52 219.36L185.33333333333331 224.06L318.66666666666663 224.06"/><g class="lc-pt"><rect x="48" y="215.36" width="8" height="8" rx="1"/><title>One account's summary: 1k events in the history → $5.6</title></g><g class="lc-pt"><rect x="181.33333333333331" y="220.06" width="8" height="8" rx="1"/><title>One account's summary: 10k events in the history → $5.1</title></g><g class="lc-pt"><rect x="314.66666666666663" y="220.06" width="8" height="8" rx="1"/><title>One account's summary: 100k events in the history → $5.1</title></g></g><g class="lc-s3"><path fill="none" d="M185.33333333333331 167.66000000000003"/><g class="lc-pt"><path d="M185.33333333333331 162.16000000000003L190.83333333333331 167.66000000000003L185.33333333333331 173.16000000000003L179.83333333333331 167.66000000000003Z"/><title>A bank-wide total: 10k events in the history → $11.1</title></g></g><text class="lc-text lc-small lc-label" x="444" y="110.66" text-anchor="end">$16.1</text><text class="lc-text lc-small lc-label" x="326.66666666666663" y="214.06" text-anchor="start">$5.1</text><text class="lc-text lc-small lc-label" x="193.33333333333331" y="157.66000000000003" text-anchor="start">$11.1</text></svg>
