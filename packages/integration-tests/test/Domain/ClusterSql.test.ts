@@ -8,27 +8,26 @@
  * Every test uses its own table prefixes, and drops its tables before and
  * after it runs.
  */
-import * as Domain from "@alchemy.run/domain";
 import { describe, expect, it } from "@alchemy.run/test";
-import * as BunClusterSocket from "@effect/platform-bun/BunClusterSocket";
-import { MysqlClient } from "@effect/sql-mysql2";
-import { PgClient } from "@effect/sql-pg";
-import * as RunnerAddress from "effect/cluster/RunnerAddress";
-import * as RunnerHealth from "effect/cluster/RunnerHealth";
-import * as Runners from "effect/cluster/Runners";
-import * as RunnerStorage from "effect/cluster/RunnerStorage";
-import * as Sharding from "effect/cluster/Sharding";
-import * as ShardingConfig from "effect/cluster/ShardingConfig";
-import * as SqlMessageStorage from "effect/cluster/SqlMessageStorage";
-import * as SqlRunnerStorage from "effect/cluster/SqlRunnerStorage";
-import * as Digest from "effect/crypto/Digest";
+import * as BunServices from "@effect/platform-bun/BunServices";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
-import * as Option from "effect/Option";
-import * as Redacted from "effect/Redacted";
+import * as Path from "effect/Path";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Scope from "effect/Scope";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as Stream from "effect/Stream";
+import {
+  clean,
+  migrate,
+  singleRunner,
+  socketRunner,
+  sqlClient,
+  type SqlLayer,
+} from "./fixtures/ClusterRunners.ts";
 import {
   ContractApi,
   Counter,
@@ -41,94 +40,11 @@ import {
 const POSTGRES_URL = process.env.DOMAIN_TEST_POSTGRES_URL;
 const MYSQL_URL = process.env.DOMAIN_TEST_MYSQL_URL;
 
-type SqlLayer = Layer.Layer<SqlClient.SqlClient, unknown>;
-
-/** The tables one test owns: the host's and the cluster's. */
-const tablesOf = (prefix: string) => [
-  ...[
-    "aggregates",
-    "events",
-    "receipts",
-    "schedules",
-    "outbox",
-    "views",
-    "view_entries",
-    "projections",
-    "projection_inputs",
-    "streams",
-    "stream_entries",
-    "migrations",
-  ].map((table) => `${prefix}_${table}`),
-  ...["replies", "messages", "migrations", "locks", "runners", "runner_migrations"].map(
-    (table) => `${prefix}c_${table}`,
-  ),
-];
-
-/** Drop a test's tables when it starts (a run that crashed left them) and when it ends. */
-const clean = (prefix: string): Layer.Layer<never, never, SqlClient.SqlClient> => {
-  const drop = Effect.gen(function* () {
-    const sql = yield* SqlClient.SqlClient;
-    for (const table of tablesOf(prefix)) yield* sql.unsafe(`DROP TABLE IF EXISTS ${table}`);
-  }).pipe(Effect.orDie);
-  return Layer.effectDiscard(Effect.acquireRelease(drop, () => drop));
-};
-
-const config = { entityMessagePollInterval: "1 second" } as const;
-
-/** One runner that owns every shard, with its own table prefixes. */
-const singleRunner = (prefix: string) =>
-  Domain.Cluster.layer({ tablePrefix: prefix, clusterTablePrefix: `${prefix}c` }).pipe(
-    Layer.provide(
-      Sharding.layer.pipe(
-        Layer.provideMerge(Runners.layerNoop),
-        Layer.provideMerge(
-          SqlMessageStorage.layerStorage({ prefix: `${prefix}c` }).pipe(
-            Layer.provide(SqlMessageStorage.layerMigrations({ prefix: `${prefix}c` })),
-          ),
-        ),
-        Layer.provide([RunnerStorage.layerMemory, RunnerHealth.layerNoop]),
-        Layer.provide(ShardingConfig.layer(config)),
-        Layer.provide(Digest.layerWebCrypto),
-      ),
-    ),
-  );
-
-/** A socket runner on `port`, sharing the database with the others; the tables come from a deploy step. */
-const socketRunner = (prefix: string, port: number) => {
-  const shardingConfig = {
-    ...config,
-    runnerAddress: Option.some(RunnerAddress.make("localhost", port)),
-  };
-  return Domain.Cluster.layer({
-    tablePrefix: prefix,
-    clusterTablePrefix: `${prefix}c`,
-    migrations: false,
-  }).pipe(
-    Layer.provide(BunClusterSocket.layer({ storage: "byo", shardingConfig })),
-    Layer.provide(
-      Layer.mergeAll(
-        SqlMessageStorage.layerStorage({ prefix: `${prefix}c` }),
-        SqlRunnerStorage.layerStorage({ prefix: `${prefix}c` }),
-      ),
-    ),
-    Layer.provide(ShardingConfig.layer(shardingConfig)),
-    Layer.provide(Digest.layerWebCrypto),
-  );
-};
-
-/** The deploy step: every table, made once before the runners start. */
-const migrate = (prefix: string) =>
-  Layer.mergeAll(
-    Domain.Cluster.layerMigrations({ tablePrefix: prefix }),
-    SqlMessageStorage.layerMigrations({ prefix: `${prefix}c` }),
-    SqlRunnerStorage.layerMigrations({ prefix: `${prefix}c` }),
-  );
-
 const suite = (
   name: string,
   url: string | undefined,
   client: (url: string) => SqlLayer,
-  ports: readonly [number, number],
+  ports: readonly [number, number, number, number],
 ) =>
   describe.skipIf(url === undefined)(`Domain.Cluster on ${name}`, () => {
     const tag = name.toLowerCase();
@@ -143,7 +59,7 @@ const suite = (
     hostContract(`Cluster on ${name}`, () => onPrefix(`dct_${tag}_${next++}`));
 
     it.live(
-      "concurrent commands and deliveries leave no reply without its writes",
+      "concurrent commands keep one event and one receipt each; every processed view delivery is applied",
       () =>
         Effect.gen(function* () {
           const prefix = stress;
@@ -189,8 +105,11 @@ const suite = (
             );
             expect(Number(receipts[0]!.n)).toBe(40);
           }
-          // Every delivery the cluster marked processed (its reply is stored)
-          // is in the view's state.
+          // Each view delivery the cluster marked processed (its reply is
+          // stored): the key's checkpoint for its source has reached its seq.
+          // A checkpoint alone cannot show that no earlier seq was skipped;
+          // the exact view totals above do. This load does not force the
+          // deadlock of #10162; it checks the result under real contention.
           const processed = yield* sql<{
             entity_id: string;
             payload: string;
@@ -211,7 +130,7 @@ const suite = (
     );
 
     it.live(
-      "two runners share one database; one stops and the other takes over its work",
+      "two runners share one database; a live read on one follows commits on the other; one stops and the other takes over its work",
       () =>
         Effect.gen(function* () {
           const prefix = `dct_${tag}_runners`;
@@ -247,7 +166,23 @@ const suite = (
 
           // Both runners answer for every instance, wherever its shard is.
           yield* sendAll(a, 1);
+          // Live reads on A; about half the instances commit on B.
+          const watches = yield* Effect.forEach(ids, (id) =>
+            Effect.gen(function* () {
+              const api = yield* ContractApi.Client;
+              return yield* api.Counter.watch(id).pipe(
+                Stream.take(2),
+                Stream.runCollect,
+                Effect.forkChild,
+              );
+            }).pipe(Effect.provide(a.context)),
+          );
+          yield* Effect.sleep("300 millis");
           yield* sendAll(b, 2);
+          for (const watch of watches) {
+            const [first, second] = yield* Fiber.join(watch).pipe(Effect.timeout("10 seconds"));
+            expect([first!.cursor, second!.cursor]).toEqual([1, 2]);
+          }
 
           // B stops; A takes its shards and its work.
           const stopping = yield* Effect.sync(() => Date.now());
@@ -277,17 +212,83 @@ const suite = (
         }).pipe(Effect.scoped),
       { timeout: 120_000 },
     );
+
+    it.live(
+      "a runner killed with SIGKILL: the other takes its shards and finishes its work",
+      () =>
+        Effect.gen(function* () {
+          const prefix = `dct_${tag}_kill`;
+          yield* Layer.build(
+            migrate(prefix).pipe(Layer.provide(clean(prefix)), Layer.provide(client(url!))),
+          );
+          const a = yield* Layer.build(
+            hosted(socketRunner(prefix, ports[2]).pipe(Layer.provideMerge(client(url!)))),
+          );
+          const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+          const path = yield* Path.Path;
+          const runner = path.join(import.meta.dirname, "fixtures", "cluster-runner.ts");
+          const b = yield* spawner.spawn(
+            ChildProcess.make("bun", [runner, url!, prefix, String(ports[3])]),
+          );
+          yield* b.stdout.pipe(
+            Stream.decodeText(),
+            Stream.splitLines,
+            Stream.filter((line) => line === "ready"),
+            Stream.runHead,
+          );
+          // Let the shards spread over both runners.
+          yield* Effect.sleep("3 seconds");
+          const ids = Array.from({ length: 20 }, (_, i) => `k-${i}`);
+          const sendAll = (round: number) =>
+            Effect.forEach(
+              ids,
+              (id) =>
+                Effect.gen(function* () {
+                  const counters = yield* Counter;
+                  yield* counters.send(id, new Increment({ by: 1 }), {
+                    commandId: `${id}-${round}`,
+                  });
+                }).pipe(Effect.provide(a)),
+              { concurrency: "unbounded", discard: true },
+            );
+          yield* sendAll(1);
+          yield* b.kill({ killSignal: "SIGKILL" });
+          yield* b.exitCode.pipe(Effect.ignore);
+          const killed = yield* Effect.sync(() => Date.now());
+          yield* sendAll(2);
+          const answered = yield* Effect.sync(() => Date.now());
+          yield* Effect.log(
+            `Domain.Cluster on ${name}: runner SIGKILL, then 20 commands answered in ${answered - killed} ms`,
+          );
+          yield* Effect.gen(function* () {
+            const counters = yield* Counter;
+            const api = yield* ContractApi.Client;
+            for (const id of ids) {
+              expect(yield* counters.state(id)).toEqual({ total: 2 });
+              yield* eventually(
+                api.Totals.get(id).pipe(
+                  Effect.filterOrFail(
+                    (view) => view?.total === 2,
+                    () => "not yet" as const,
+                  ),
+                ),
+                60,
+              );
+              yield* eventually(
+                counters.state(`mirror-${id}`).pipe(
+                  Effect.filterOrFail(
+                    (s) => s.total === 2,
+                    () => "not yet" as const,
+                  ),
+                ),
+                60,
+              );
+            }
+          }).pipe(Effect.provide(a));
+        }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
+      { timeout: 180_000 },
+    );
   });
 
-suite(
-  "Postgres",
-  POSTGRES_URL,
-  (url) => PgClient.layer({ url: Redacted.make(url), maxConnections: 4 }),
-  [34431, 34432],
-);
-suite(
-  "MySQL",
-  MYSQL_URL,
-  (url) => MysqlClient.layer({ url: Redacted.make(url), maxConnections: 4 }),
-  [34433, 34434],
-);
+suite("Postgres", POSTGRES_URL, sqlClient, [34431, 34432, 34435, 34436]);
+suite("MySQL", MYSQL_URL, sqlClient, [34433, 34434, 34437, 34438]);

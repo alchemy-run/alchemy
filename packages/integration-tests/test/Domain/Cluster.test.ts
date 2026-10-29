@@ -246,6 +246,60 @@ describe("Domain.Cluster on SQLite", () => {
       ),
   );
 
+  it.live("retention prunes only the messages of its own model, and takes bigint durations", () =>
+    Effect.gen(function* () {
+      const api = yield* ContractApi.Client;
+      const sql = yield* SqlClient.SqlClient;
+      // Processed messages of two other models on the same cluster: one on
+      // another prefix, one on the default prefix.
+      for (const [id, type] of [
+        [1, "Domain.Policy/rb/Mirror"],
+        [2, "Domain.View/Totals"],
+      ] as const) {
+        yield* sql`INSERT INTO cluster_messages (id, shard_id, entity_type, entity_id, kind, processed, request_id) VALUES (${id}, 'default:1', ${type}, 'k', 0, 1, ${id})`;
+        yield* sql`INSERT INTO cluster_replies (id, kind, request_id, payload) VALUES (${id}, 0, ${id}, '{}')`;
+      }
+      yield* api.Increment("c-1", { by: 1 });
+      yield* api.Totals.get("c-1", { atLeast: { stream: "Counter/c-1", version: 1 } });
+      const count = (where: string) =>
+        sql<{
+          n: number;
+        }>`SELECT COUNT(*) AS n FROM cluster_messages WHERE processed = 1 AND entity_type LIKE ${where}`.pipe(
+          Effect.map(([row]) => Number(row!.n)),
+        );
+      // This model's processed messages go; the others' stay, with their replies.
+      yield* eventually(
+        count("Domain.%/ra/%").pipe(
+          Effect.filterOrFail(
+            (n) => n === 0,
+            () => "not yet" as const,
+          ),
+        ),
+      );
+      expect(yield* count("Domain.Policy/rb/%")).toBe(1);
+      expect(yield* count("Domain.View/Totals")).toBe(1);
+      const [replies] = yield* sql<{
+        n: number;
+      }>`SELECT COUNT(*) AS n FROM cluster_replies WHERE request_id IN (1, 2)`;
+      expect(Number(replies!.n)).toBe(2);
+      // Options that mean the same share one Layer, whatever form the durations take.
+      expect(Domain.Cluster.layer({ retention: { receipts: "1 hour", messages: "forever" } })).toBe(
+        Domain.Cluster.layer({ retention: { receipts: 3_600_000_000_000n, messages: "forever" } }),
+      );
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        hosted(
+          onSqlite({
+            tablePrefix: "ra",
+            sweep: { intervalMillis: 100, afterMillis: 30_000 },
+            retention: { receipts: 3_600_000_000_000n, cancelled: 1_000_000_000n, messages: 0n },
+          }),
+        ),
+      ),
+    ),
+  );
+
   it.live("state, pending deliveries and timers survive a restart on the same file", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;

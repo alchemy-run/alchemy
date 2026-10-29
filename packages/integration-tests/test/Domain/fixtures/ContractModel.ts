@@ -4,6 +4,7 @@
  * No test imports, so a child process can host it too.
  */
 import * as Domain from "@alchemy.run/domain";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
@@ -220,6 +221,34 @@ const RetryLive = Retry.toLayer(
   }),
 );
 
+/** Set by a process a test kills: `Hang`'s step then stops after its command. */
+export const hang = { value: false };
+
+/** Debit a wallet in a step; in a process that hangs, the step never ends after its command. */
+export class Hang extends Domain.Saga("Hang", {
+  key: Schema.String,
+  input: { wallet: Schema.String },
+  result: {},
+}) {}
+const HangLive = Hang.toLayer(
+  Effect.gen(function* () {
+    const wallets = yield* Wallet;
+    return Effect.fn(function* ({ wallet }) {
+      yield* Activity.make({
+        name: "debit",
+        execute: Effect.gen(function* () {
+          yield* wallets.send(wallet, new Debit({ amount: 10 })).pipe(Effect.orDie);
+          if (hang.value) {
+            yield* Console.log("debited");
+            return yield* Effect.never;
+          }
+        }),
+      });
+      return {};
+    });
+  }),
+);
+
 // ---------------------------------------------------------------- the model
 
 export class Contract extends Domain.Model("Contract", {
@@ -228,8 +257,8 @@ export class Contract extends Domain.Model("Contract", {
   policies: [Mirror],
   projections: [BumpWriter],
   streams: [Bumps],
-  sagas: [Pay, Retry],
+  sagas: [Pay, Retry, Hang],
 }) {}
 export class ContractApi extends Domain.Api("ContractApi", Increment, Counter, Totals, Bumps) {}
 
-export const Handlers = Layer.mergeAll(BumpWriterLive, MirrorLive, PayLive, RetryLive);
+export const Handlers = Layer.mergeAll(BumpWriterLive, MirrorLive, PayLive, RetryLive, HangLive);
