@@ -59,29 +59,6 @@ export interface WorkerBuild<Export = any> {
 }
 
 /**
- * workerd cancels a fetch event's pending I/O once the client disconnects,
- * which would drop the cleanup that the handler's interruption starts (see
- * `Http.interruptOnClientAbort`). Registering the whole event, including its
- * request-scope close, with `ctx.waitUntil` from the abort listener keeps the
- * invocation alive until that cleanup finishes. The signal only fires under
- * the `enable_request_signal` compatibility flag.
- */
-const keepAliveOnClientAbort = (
-  request: { readonly signal?: AbortSignal } | undefined,
-  ctx: cf.ExecutionContext,
-  event: Promise<unknown>,
-) => {
-  const signal = request?.signal;
-  if (signal === undefined || signal.aborted) return;
-  const keepAlive = () => ctx.waitUntil(event.catch(() => undefined));
-  signal.addEventListener("abort", keepAlive, { once: true });
-  void event.then(
-    () => signal.removeEventListener("abort", keepAlive),
-    () => signal.removeEventListener("abort", keepAlive),
-  );
-};
-
-/**
  * Makes the WorkerEntrypoint class and bridges to Effect fetch and RPC calls.
  */
 export const makeWorkerBridge = (
@@ -173,7 +150,13 @@ export const makeWorkerBridge = (
                 ? Promise.resolve(exit.value)
                 : Promise.reject(Cause.squash(exit.cause)),
           );
-          keepAliveOnClientAbort(methodName === "fetch" ? input : undefined, this.ctx, event);
+          if (methodName === "fetch") {
+            // workerd cancels a fetch event's pending I/O once the client
+            // disconnects, dropping the cleanup a client abort starts (see
+            // `Http.safeHttpEffect`). `waitUntil` keeps the invocation alive
+            // until the event, including its request-scope close, settles.
+            this.ctx.waitUntil(event.catch(() => undefined));
+          }
           return event;
         };
       }

@@ -1,9 +1,10 @@
+import * as Tls from "node:tls";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
 import * as Cookies from "effect/http/Cookies";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -199,6 +200,32 @@ for (const dev of [false, true]) {
   );
 }
 
+class TlsSocketError extends Data.TaggedError("TlsSocketError")<{ readonly cause: Error }> {}
+
+/**
+ * A raw TLS connection. Releasing it destroys the socket, dropping the
+ * connection the way a client that went away does.
+ */
+const tlsConnection = (host: string) =>
+  Effect.acquireRelease(
+    Effect.callback<Tls.TLSSocket, TlsSocketError>((resume) => {
+      const socket = Tls.connect(
+        { host, port: 443, servername: host, ALPNProtocols: ["http/1.1"] },
+        () => resume(Effect.succeed(socket)),
+      );
+      socket.on("error", (cause) => resume(Effect.fail(new TlsSocketError({ cause }))));
+      return Effect.sync(() => socket.destroy());
+    }),
+    (socket) => Effect.sync(() => socket.destroy()),
+  );
+
+const writeSocket = (socket: Tls.TLSSocket, data: string) =>
+  Effect.callback<void, TlsSocketError>((resume) => {
+    socket.write(data, (cause) =>
+      resume(cause ? Effect.fail(new TlsSocketError({ cause })) : Effect.void),
+    );
+  });
+
 // A client that disconnects interrupts the handler, so its resources are
 // released as an interruption instead of staying open for nobody. Live only:
 // local workerd does not fire `request.signal` when the client disconnects.
@@ -208,7 +235,6 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       const worker = yield* stack.deploy(RequestAbortWorker);
-      const client = yield* HttpClient.HttpClient;
       // `/ready` calls the journal Durable Object, whose first calls after a
       // deploy can fail with an opaque "internal error".
       yield* waitUntilStable(
@@ -228,16 +254,25 @@ test.provider(
         Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
       );
 
-      // Hold the request open until the handler has started, then drop it.
-      const pending = yield* Effect.forkChild(client.get(`${worker.url!}/slow?id=${id}`));
-      yield* events.pipe(
-        Effect.repeat({
-          schedule: Schedule.spaced("500 millis"),
-          times: 30,
-          until: (events) => events.includes("started"),
+      // Send `/slow` over a raw HTTP/1.1 connection, wait until the handler
+      // has started, then destroy the socket.
+      const host = yield* Effect.sync(() => new URL(worker.url!).host);
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const socket = yield* tlsConnection(host);
+          yield* writeSocket(
+            socket,
+            `GET /slow?id=${id} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`,
+          );
+          yield* events.pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("500 millis"),
+              times: 30,
+              until: (events) => events.includes("started"),
+            }),
+          );
         }),
       );
-      yield* Fiber.interrupt(pending);
 
       const released = yield* events.pipe(
         Effect.repeat({

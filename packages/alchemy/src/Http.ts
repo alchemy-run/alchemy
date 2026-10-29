@@ -6,7 +6,6 @@ import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as ErrorReporter from "effect/ErrorReporter";
-import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Etag from "effect/http/Etag";
 import type { HttpBodyError } from "effect/http/HttpBody";
@@ -89,7 +88,7 @@ export const safeHttpEffect = <Req = never>(
   Req | HttpServerRequest | Scope.Scope
 > =>
   Effect.catchCause(
-    interruptOnClientAbort(
+    raceClientAbort(
       handler.pipe(
         // @ts-expect-error
         Effect.flatMap((response) =>
@@ -117,38 +116,31 @@ export const safeHttpEffect = <Req = never>(
   );
 
 /**
- * Runs the handler in a child fiber that the request's abort signal
- * interrupts, annotated as a client abort so `causeResponse` answers 499.
+ * Races the handler against the request's abort signal. The abort wins as an
+ * interrupt annotated with Effect's `ClientAbort`, which `causeResponse` maps
+ * to 499, and the race interrupts the handler so its finalizers run.
  *
- * The calling fiber is left alone on purpose: `HttpEffect.toHandled` runs
- * the handler in an uninterruptible region, and an interrupt against that
- * fiber would only fire once the region ends, ending the event with an
- * interrupt exit instead of a response. Interrupting the child instead makes
- * the abort an ordinary failure of the handler, which the boundary converts.
- *
- * A request that arrives aborted never starts its handler. The subscription
- * ends when the handler settles: an abort after a streamed body started
- * belongs to the body's cancellation, which closes the transferred scope.
+ * A race rather than interrupting the request fiber: `HttpEffect.toHandled`
+ * runs the handler uninterruptibly, so an interrupt against that fiber waits
+ * for the handler to finish. The race's fibers are interruptible.
  */
-export const interruptOnClientAbort = <A, E, R>(
+const raceClientAbort = <A, E, R>(
   handler: Effect.Effect<A, E, R>,
   signal: AbortSignal | undefined,
 ): Effect.Effect<A, E, R> =>
   signal === undefined
     ? handler
-    : Effect.gen(function* () {
-        if (signal.aborted) return yield* clientAborted;
-        const fiber = yield* Effect.forkChild(handler, {
-          startImmediately: true,
-        });
-        const abort = () => fiber.interruptUnsafe(undefined, ClientAbort.annotation);
-        signal.addEventListener("abort", abort, { once: true });
-        return yield* Fiber.join(fiber).pipe(
-          Effect.ensuring(Effect.sync(() => signal.removeEventListener("abort", abort))),
-        );
-      });
-
-const clientAborted = Effect.failCause(Cause.annotate(Cause.interrupt(), ClientAbort.annotation));
+    : // The abort goes first so a request that arrived aborted never starts its handler.
+      Effect.raceFirst(
+        Effect.callback<never>((resume) => {
+          const onAbort = () =>
+            resume(Effect.failCause(Cause.annotate(Cause.interrupt(), ClientAbort.annotation)));
+          if (signal.aborted) return onAbort();
+          signal.addEventListener("abort", onAbort, { once: true });
+          return Effect.sync(() => signal.removeEventListener("abort", onAbort));
+        }),
+        handler,
+      );
 
 /**
  * No `ErrorReporter` is registered by default, so without a fallback a defect
