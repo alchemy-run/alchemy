@@ -17,6 +17,7 @@
       "Processor": "OcrBind",
       "Schema": "Invoice",
       "SchemasSchemaVersion": "InvoiceV1"
-    }
+    },
+    "location": "us"
   }
 }

@@ -57,7 +57,7 @@ export default class DocumentAIGeneratedHost extends GCP.Function<DocumentAIGene
         ),
         GenerateSchemaVersion: probeOutcome(Retry.none(p7({} as never))),
         GetProcessorType: probeOutcome(
-          Retry.none(p8({ processorType: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p8({ processorType: "alchemy-missing", location: "us" } as never)),
         ),
         GetProcessorVersion: probeOutcome(
           Retry.none(p9({ processorVersion: "alchemy-missing" } as never)),
@@ -67,19 +67,19 @@ export default class DocumentAIGeneratedHost extends GCP.Function<DocumentAIGene
             p10({ processorVersion: "alchemy-missing", evaluation: "alchemy-missing" } as never),
           ),
         ),
-        ListProcessors: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
-        ListProcessorTypes: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
+        ListProcessors: probeOutcome(Retry.none(p11({ location: "us" } as never))),
+        ListProcessorTypes: probeOutcome(Retry.none(p12({ location: "us" } as never))),
         ListProcessorVersionEvaluations: probeOutcome(
           Retry.none(p13({ processorVersion: "alchemy-missing" } as never)),
         ),
         ListProcessorVersions: probeOutcome(Retry.none(p14({} as never))),
-        ListSchemas: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListSchemas: probeOutcome(Retry.none(p15({ location: "us" } as never))),
         ListSchemaVersions: probeOutcome(Retry.none(p16({} as never))),
         ProcessProcessorVersion: probeOutcome(
           Retry.none(p17({ processorVersion: "alchemy-missing" } as never)),
         ),
         ReviewHumanReviewConfigDocument: probeOutcome(
-          Retry.none(p18({ processor: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p18({ processor: "alchemy-missing", location: "us" } as never)),
         ),
         SetDefaultProcessorVersion: probeOutcome(Retry.none(p19({} as never))),
         TrainProcessorVersion: probeOutcome(Retry.none(p20({} as never))),
