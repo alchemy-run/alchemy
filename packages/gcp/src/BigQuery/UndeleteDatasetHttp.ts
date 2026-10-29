@@ -19,7 +19,7 @@ export const UndeleteDatasetHttp = Layer.effect(
         resource: "GCP.BigQuery.Dataset",
         operation: bigquery.undeleteDatasets,
         params: { projectId: "project", datasetId: "datasetId" },
-        iam: { role: "roles/bigquery.user", on: "bigquery.dataset" },
+        iam: { role: "roles/bigquery.user" },
       },
     ],
   }),

@@ -5,7 +5,10 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { Job } from "./Job.ts";
 
-export interface CancelJobRequest extends Omit<bigquery.CancelJobsRequest, "projectId" | "jobId"> {}
+export interface CancelJobRequest extends Omit<
+  bigquery.CancelJobsRequest,
+  "projectId" | "jobId" | "location"
+> {}
 
 export type CancelJobShape = (
   resource: Job,

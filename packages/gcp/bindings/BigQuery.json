@@ -14,7 +14,10 @@
     },
     "Job": {
       "pattern": "projects/*/jobs/*",
-      "attributes": ["project", "jobId"]
+      "attributes": ["project", "jobId"],
+      "fields": {
+        "location": "location"
+      }
     },
     "Routine": {
       "pattern": "projects/*/datasets/*/routines/*",
@@ -40,5 +43,8 @@
   "projectCalls": ["bigquery.jobs.insert"],
   "skip": {
     "bigquery.projects.getServiceAccount": "returns BigQuery's service agent for the project: setup information, not a runtime call"
+  },
+  "projectGrant": {
+    "bigquery.datasets.undelete": "a deleted dataset has no IAM policy: undelete is authorized on the project"
   }
 }

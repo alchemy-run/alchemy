@@ -44,8 +44,9 @@ export const recordAuditLogs =
 class NotDeliveredYet extends Data.TaggedError("NotDeliveredYet")<{ key: string }> {}
 
 /**
- * Test side: run `trigger` (an Admin Activity call logged as `method`)
- * until a marker for it appears under `key`, then return the recorded entry.
+ * Test side: run `trigger` (an Admin Activity call logged as `method`, or
+ * any method when empty) until a marker for it appears under `key`, then
+ * return the recorded entry.
  */
 export const expectAuditEntry = <E extends { readonly _tag: string }, R>(options: {
   bucket: string;
@@ -54,7 +55,8 @@ export const expectAuditEntry = <E extends { readonly _tag: string }, R>(options
   trigger: Effect.Effect<unknown, E, R>;
 }) =>
   Effect.gen(function* () {
-    const prefix = `${options.key}/${options.method}/`;
+    // An empty method waits for any entry under `key`.
+    const prefix = options.method ? `${options.key}/${options.method}/` : `${options.key}/`;
     const marker = yield* Effect.gen(function* () {
       yield* options.trigger;
       yield* Effect.sleep("20 seconds");

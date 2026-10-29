@@ -22,7 +22,7 @@ export type UndeleteDatasetShape = (
  * Undeletes a dataset which is within time travel window based on datasetId.
  *
  * Bind it to a {@link Dataset} and provide {@link UndeleteDatasetHttp}. The
- * host gets `roles/bigquery.user` on the bound resource.
+ * host gets `roles/bigquery.user` on the project: a deleted dataset has no IAM policy: undelete is authorized on the project.
  *
  * ### Usage
  * **Example:** Call `datasets.undelete`

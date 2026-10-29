@@ -18,7 +18,7 @@ export const GetJobHttp = Layer.effect(
       {
         resource: "GCP.BigQuery.Job",
         operation: bigquery.getJobs,
-        params: { projectId: "project", jobId: "jobId" },
+        params: { projectId: "project", jobId: "jobId", location: "location" },
         iam: { role: "roles/bigquery.resourceViewer" },
       },
     ],

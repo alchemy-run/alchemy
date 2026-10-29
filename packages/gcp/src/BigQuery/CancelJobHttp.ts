@@ -18,7 +18,7 @@ export const CancelJobHttp = Layer.effect(
       {
         resource: "GCP.BigQuery.Job",
         operation: bigquery.cancelJobs,
-        params: { projectId: "project", jobId: "jobId" },
+        params: { projectId: "project", jobId: "jobId", location: "location" },
         iam: { role: "roles/bigquery.admin" },
       },
     ],
