@@ -208,7 +208,7 @@ const isDnsNotConfigured = (error: unknown): boolean =>
   error.body !== undefined &&
   Redacted.value(error.body).includes("DNS is not configured");
 
-/** The `domain-ownership-required` rejection, with the record its hint names. */
+/** The `domain-ownership-required` rejection, with the record Prisma returns. */
 const ownershipRequiredOf = (
   error: {
     readonly _tag: string;
@@ -220,24 +220,28 @@ const ownershipRequiredOf = (
   if (error._tag !== "PrismaApiError" || error.status !== 422 || error.body === undefined) {
     return undefined;
   }
-  const body = Redacted.value(error.body);
-  if (!body.includes("domain-ownership-required")) return undefined;
-  const hint = parseErrorHint(body) ?? "";
-  const match = /TXT record named\s+(\S+)\s+with value\s+(\S+?)\.?(?:\s|$)/.exec(hint);
-  const recordName = match?.[1] ?? `_prisma-verification.${hostname}`;
-  const recordValue = match?.[2] ?? "";
+  const rejection = parseErrorBody(Redacted.value(error.body));
+  if (rejection?.code !== "domain-ownership-required") return undefined;
+  const recordName = rejection.verification?.name ?? `_prisma-verification.${hostname}`;
+  const recordValue = rejection.verification?.value ?? "";
   return new PrismaDomainOwnershipRequired({
     hostname,
     recordName,
     recordValue,
-    message: `Prisma requires proof that this workspace owns '${hostname}'. Publish a TXT record named '${recordName}'${recordValue ? ` with value '${recordValue}'` : ""}, keep it, and redeploy.${recordValue ? "" : ` ${hint}`}`,
+    message: `Prisma requires proof that this workspace owns '${hostname}'. Publish a TXT record named '${recordName}'${recordValue ? ` with value '${recordValue}'` : ""}, keep it, and redeploy.${recordValue ? "" : ` ${rejection.hint ?? ""}`}`,
   });
 };
 
-const parseErrorHint = (body: string): string | undefined => {
+/** Prisma's error envelope; `verification` is set on `domain-ownership-required`. */
+interface PrismaErrorBody {
+  readonly code?: string;
+  readonly hint?: string;
+  readonly verification?: { readonly name?: string; readonly value?: string };
+}
+
+const parseErrorBody = (body: string): PrismaErrorBody | undefined => {
   try {
-    const hint = JSON.parse(body)?.error?.hint;
-    return typeof hint === "string" ? hint : undefined;
+    return JSON.parse(body)?.error;
   } catch {
     return undefined;
   }
