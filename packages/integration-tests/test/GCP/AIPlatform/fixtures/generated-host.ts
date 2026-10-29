@@ -30,6 +30,7 @@ import {
   ProbeMetadataStore,
   ProbeNotebookTemplate,
   ProbeRun,
+  ProbeSchedule,
   ProbeSession,
   ProbeStudy,
   ProbeTensorboard,
@@ -154,160 +155,163 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
     const p104 = yield* GCP.AIPlatform.GetReasoningEngineSandboxEnvironment(Agent);
     const p105 = yield* GCP.AIPlatform.GetReasoningEngineSandboxEnvironmentSnapshot(Agent);
     const p106 = yield* GCP.AIPlatform.GetRun(ProbeRun);
-    const p107 = yield* GCP.AIPlatform.GetSession(ProbeSession);
-    const p108 = yield* GCP.AIPlatform.GetStudy(ProbeStudy);
-    const p109 = yield* GCP.AIPlatform.GetTensorboard(ProbeTensorboard);
-    const p110 = yield* GCP.AIPlatform.GetTimeSery(ProbeTimeSeries);
-    const p111 = yield* GCP.AIPlatform.GetTrial(ProbeTrial);
-    const p112 = yield* GCP.AIPlatform.ImportDataset();
-    const p113 = yield* GCP.AIPlatform.ImportEntityTypeFeatureValues(ProbeEntityType);
-    const p114 = yield* GCP.AIPlatform.ImportEvaluationSet();
-    const p115 = yield* GCP.AIPlatform.ImportModelEvaluation();
-    const p116 = yield* GCP.AIPlatform.IngestMemoryBankEvents();
-    const p117 = yield* GCP.AIPlatform.IngestMemoryEvents(Agent);
-    const p118 = yield* GCP.AIPlatform.InvokeEndpointDeployedModelInvoke(ProbeEndpoint);
-    const p119 = yield* GCP.AIPlatform.InvokeEndpointInvoke(ProbeEndpoint);
-    const p120 = yield* GCP.AIPlatform.InvokePublisherModelInvoke();
-    const p121 = yield* GCP.AIPlatform.ListAgents();
-    const p122 = yield* GCP.AIPlatform.ListBatchPredictionJobs();
-    const p123 = yield* GCP.AIPlatform.ListCachedContents();
-    const p124 = yield* GCP.AIPlatform.ListCustomJobs();
-    const p125 = yield* GCP.AIPlatform.ListDataLabelingJobs();
-    const p126 = yield* GCP.AIPlatform.ListDatasetDataItemAnnotations();
-    const p127 = yield* GCP.AIPlatform.ListDatasetDataItems();
-    const p128 = yield* GCP.AIPlatform.ListDatasets();
-    const p129 = yield* GCP.AIPlatform.ListDatasetSavedQueries();
-    const p130 = yield* GCP.AIPlatform.ListDatasetVersions();
-    const p131 = yield* GCP.AIPlatform.ListDeploymentResourcePools();
-    const p132 = yield* GCP.AIPlatform.ListEndpoints();
-    const p133 = yield* GCP.AIPlatform.ListEntityTypeFeatures(ProbeEntityType);
-    const p134 = yield* GCP.AIPlatform.ListEvaluationItems();
-    const p135 = yield* GCP.AIPlatform.ListEvaluationMetrics();
-    const p136 = yield* GCP.AIPlatform.ListEvaluationRuns();
-    const p137 = yield* GCP.AIPlatform.ListEvaluationSets();
-    const p138 = yield* GCP.AIPlatform.ListExperimentRuns(ProbeExperiment);
-    const p139 = yield* GCP.AIPlatform.ListFeatureGroupFeatures(ProbeFeatureGroup);
-    const p140 = yield* GCP.AIPlatform.ListFeatureGroups();
-    const p141 = yield* GCP.AIPlatform.ListFeatureOnlineStoreFeatureViews(ProbeFeatureOnlineStore);
-    const p142 = yield* GCP.AIPlatform.ListFeatureOnlineStores();
-    const p143 = yield* GCP.AIPlatform.ListFeaturestoreEntityTypes(ProbeFeaturestore);
-    const p144 = yield* GCP.AIPlatform.ListFeaturestores();
-    const p145 = yield* GCP.AIPlatform.ListFeatureViewSyncs(ProbeFeatureView);
-    const p146 = yield* GCP.AIPlatform.ListHyperparameterTuningJobs();
-    const p147 = yield* GCP.AIPlatform.ListIndexEndpoints();
-    const p148 = yield* GCP.AIPlatform.ListIndexes();
-    const p149 = yield* GCP.AIPlatform.ListMemoryBankMemories();
-    const p150 = yield* GCP.AIPlatform.ListMemoryBankMemoryRevisions();
-    const p151 = yield* GCP.AIPlatform.ListMemoryRevisions(ProbeMemory);
-    const p152 = yield* GCP.AIPlatform.ListMetadataStoreArtifacts(ProbeMetadataStore);
-    const p153 = yield* GCP.AIPlatform.ListMetadataStoreContexts(ProbeMetadataStore);
-    const p154 = yield* GCP.AIPlatform.ListMetadataStoreExecutions(ProbeMetadataStore);
-    const p155 = yield* GCP.AIPlatform.ListMetadataStoreMetadataSchemas(ProbeMetadataStore);
-    const p156 = yield* GCP.AIPlatform.ListMetadataStores();
-    const p157 = yield* GCP.AIPlatform.ListModelCheckpoints();
-    const p158 = yield* GCP.AIPlatform.ListModelDeploymentMonitoringJobs();
-    const p159 = yield* GCP.AIPlatform.ListModelEvaluations();
-    const p160 = yield* GCP.AIPlatform.ListModelEvaluationSlices();
-    const p161 = yield* GCP.AIPlatform.ListModels();
-    const p162 = yield* GCP.AIPlatform.ListModelVersions();
-    const p163 = yield* GCP.AIPlatform.ListNasJobs();
-    const p164 = yield* GCP.AIPlatform.ListNotebookExecutionJobs();
-    const p165 = yield* GCP.AIPlatform.ListNotebookRuntimes();
-    const p166 = yield* GCP.AIPlatform.ListNotebookRuntimeTemplates();
-    const p167 = yield* GCP.AIPlatform.ListOnlineEvaluators();
-    const p168 = yield* GCP.AIPlatform.ListOptimalTrials(ProbeStudy);
-    const p169 = yield* GCP.AIPlatform.ListPersistentResources();
-    const p170 = yield* GCP.AIPlatform.ListPipelineJobs();
-    const p171 = yield* GCP.AIPlatform.ListRagCorpora();
-    const p172 = yield* GCP.AIPlatform.ListReasoningEngineMemories(Agent);
-    const p173 = yield* GCP.AIPlatform.ListReasoningEngines();
-    const p174 = yield* GCP.AIPlatform.ListReasoningEngineSandboxEnvironments(Agent);
-    const p175 = yield* GCP.AIPlatform.ListReasoningEngineSandboxEnvironmentSnapshots(Agent);
-    const p176 = yield* GCP.AIPlatform.ListReasoningEngineSandboxEnvironmentTemplates(Agent);
-    const p177 = yield* GCP.AIPlatform.ListReasoningEngineSessions(Agent);
-    const p178 = yield* GCP.AIPlatform.ListRunTimeSeries(ProbeRun);
-    const p179 = yield* GCP.AIPlatform.ListSchedules();
-    const p180 = yield* GCP.AIPlatform.ListSemanticGovernancePolicies();
-    const p181 = yield* GCP.AIPlatform.ListSessionEvents(ProbeSession);
-    const p182 = yield* GCP.AIPlatform.ListSpecialistPools();
-    const p183 = yield* GCP.AIPlatform.ListStudies();
-    const p184 = yield* GCP.AIPlatform.ListStudyTrials(ProbeStudy);
-    const p185 = yield* GCP.AIPlatform.ListTensorboardExperiments(ProbeTensorboard);
-    const p186 = yield* GCP.AIPlatform.ListTensorboards();
-    const p187 = yield* GCP.AIPlatform.ListTrainingPipelines();
-    const p188 = yield* GCP.AIPlatform.ListTuningJobs();
-    const p189 = yield* GCP.AIPlatform.LookupStudy();
-    const p190 = yield* GCP.AIPlatform.MergeModelVersionAliases();
-    const p191 = yield* GCP.AIPlatform.MutateEndpointDeployedModel(ProbeEndpoint);
-    const p192 = yield* GCP.AIPlatform.MutateIndexEndpointDeployedIndex(ProbeIndexEndpoint);
-    const p193 = yield* GCP.AIPlatform.PatchDataset();
-    const p194 = yield* GCP.AIPlatform.PatchDatasetVersion();
-    const p195 = yield* GCP.AIPlatform.PatchMemoryBankMemory();
-    const p196 = yield* GCP.AIPlatform.PatchModel();
-    const p197 = yield* GCP.AIPlatform.PauseReasoningEngineSandboxEnvironment(Agent);
-    const p198 = yield* GCP.AIPlatform.PredictEndpoint(ProbeEndpoint);
-    const p199 = yield* GCP.AIPlatform.PredictEndpointLongRunning(ProbeEndpoint);
-    const p200 = yield* GCP.AIPlatform.PredictModelLongRunning();
-    const p201 = yield* GCP.AIPlatform.PredictPublisherModel();
-    const p202 = yield* GCP.AIPlatform.PurgeMemoryBankMemory();
-    const p203 = yield* GCP.AIPlatform.PurgeMetadataStoreArtifact(ProbeMetadataStore);
-    const p204 = yield* GCP.AIPlatform.PurgeMetadataStoreContext(ProbeMetadataStore);
-    const p205 = yield* GCP.AIPlatform.PurgeMetadataStoreExecution(ProbeMetadataStore);
-    const p206 = yield* GCP.AIPlatform.PurgeReasoningEngineMemory(Agent);
-    const p207 = yield* GCP.AIPlatform.QueryArtifactLineageSubgraph(ProbeArtifact);
-    const p208 = yield* GCP.AIPlatform.QueryContextLineageSubgraph(ProbeContext);
-    const p209 = yield* GCP.AIPlatform.QueryDeploymentResourcePoolDeployedModels(
+    const p107 = yield* GCP.AIPlatform.GetSchedule(ProbeSchedule);
+    const p108 = yield* GCP.AIPlatform.GetSession(ProbeSession);
+    const p109 = yield* GCP.AIPlatform.GetStudy(ProbeStudy);
+    const p110 = yield* GCP.AIPlatform.GetTensorboard(ProbeTensorboard);
+    const p111 = yield* GCP.AIPlatform.GetTimeSery(ProbeTimeSeries);
+    const p112 = yield* GCP.AIPlatform.GetTrial(ProbeTrial);
+    const p113 = yield* GCP.AIPlatform.ImportDataset();
+    const p114 = yield* GCP.AIPlatform.ImportEntityTypeFeatureValues(ProbeEntityType);
+    const p115 = yield* GCP.AIPlatform.ImportEvaluationSet();
+    const p116 = yield* GCP.AIPlatform.ImportModelEvaluation();
+    const p117 = yield* GCP.AIPlatform.IngestMemoryBankEvents();
+    const p118 = yield* GCP.AIPlatform.IngestMemoryEvents(Agent);
+    const p119 = yield* GCP.AIPlatform.InvokeEndpointDeployedModelInvoke(ProbeEndpoint);
+    const p120 = yield* GCP.AIPlatform.InvokeEndpointInvoke(ProbeEndpoint);
+    const p121 = yield* GCP.AIPlatform.InvokePublisherModelInvoke();
+    const p122 = yield* GCP.AIPlatform.ListAgents();
+    const p123 = yield* GCP.AIPlatform.ListBatchPredictionJobs();
+    const p124 = yield* GCP.AIPlatform.ListCachedContents();
+    const p125 = yield* GCP.AIPlatform.ListCustomJobs();
+    const p126 = yield* GCP.AIPlatform.ListDataLabelingJobs();
+    const p127 = yield* GCP.AIPlatform.ListDatasetDataItemAnnotations();
+    const p128 = yield* GCP.AIPlatform.ListDatasetDataItems();
+    const p129 = yield* GCP.AIPlatform.ListDatasets();
+    const p130 = yield* GCP.AIPlatform.ListDatasetSavedQueries();
+    const p131 = yield* GCP.AIPlatform.ListDatasetVersions();
+    const p132 = yield* GCP.AIPlatform.ListDeploymentResourcePools();
+    const p133 = yield* GCP.AIPlatform.ListEndpoints();
+    const p134 = yield* GCP.AIPlatform.ListEntityTypeFeatures(ProbeEntityType);
+    const p135 = yield* GCP.AIPlatform.ListEvaluationItems();
+    const p136 = yield* GCP.AIPlatform.ListEvaluationMetrics();
+    const p137 = yield* GCP.AIPlatform.ListEvaluationRuns();
+    const p138 = yield* GCP.AIPlatform.ListEvaluationSets();
+    const p139 = yield* GCP.AIPlatform.ListExperimentRuns(ProbeExperiment);
+    const p140 = yield* GCP.AIPlatform.ListFeatureGroupFeatures(ProbeFeatureGroup);
+    const p141 = yield* GCP.AIPlatform.ListFeatureGroups();
+    const p142 = yield* GCP.AIPlatform.ListFeatureOnlineStoreFeatureViews(ProbeFeatureOnlineStore);
+    const p143 = yield* GCP.AIPlatform.ListFeatureOnlineStores();
+    const p144 = yield* GCP.AIPlatform.ListFeaturestoreEntityTypes(ProbeFeaturestore);
+    const p145 = yield* GCP.AIPlatform.ListFeaturestores();
+    const p146 = yield* GCP.AIPlatform.ListFeatureViewSyncs(ProbeFeatureView);
+    const p147 = yield* GCP.AIPlatform.ListHyperparameterTuningJobs();
+    const p148 = yield* GCP.AIPlatform.ListIndexEndpoints();
+    const p149 = yield* GCP.AIPlatform.ListIndexes();
+    const p150 = yield* GCP.AIPlatform.ListMemoryBankMemories();
+    const p151 = yield* GCP.AIPlatform.ListMemoryBankMemoryRevisions();
+    const p152 = yield* GCP.AIPlatform.ListMemoryRevisions(ProbeMemory);
+    const p153 = yield* GCP.AIPlatform.ListMetadataStoreArtifacts(ProbeMetadataStore);
+    const p154 = yield* GCP.AIPlatform.ListMetadataStoreContexts(ProbeMetadataStore);
+    const p155 = yield* GCP.AIPlatform.ListMetadataStoreExecutions(ProbeMetadataStore);
+    const p156 = yield* GCP.AIPlatform.ListMetadataStoreMetadataSchemas(ProbeMetadataStore);
+    const p157 = yield* GCP.AIPlatform.ListMetadataStores();
+    const p158 = yield* GCP.AIPlatform.ListModelCheckpoints();
+    const p159 = yield* GCP.AIPlatform.ListModelDeploymentMonitoringJobs();
+    const p160 = yield* GCP.AIPlatform.ListModelEvaluations();
+    const p161 = yield* GCP.AIPlatform.ListModelEvaluationSlices();
+    const p162 = yield* GCP.AIPlatform.ListModels();
+    const p163 = yield* GCP.AIPlatform.ListModelVersions();
+    const p164 = yield* GCP.AIPlatform.ListNasJobs();
+    const p165 = yield* GCP.AIPlatform.ListNotebookExecutionJobs();
+    const p166 = yield* GCP.AIPlatform.ListNotebookRuntimes();
+    const p167 = yield* GCP.AIPlatform.ListNotebookRuntimeTemplates();
+    const p168 = yield* GCP.AIPlatform.ListOnlineEvaluators();
+    const p169 = yield* GCP.AIPlatform.ListOptimalTrials(ProbeStudy);
+    const p170 = yield* GCP.AIPlatform.ListPersistentResources();
+    const p171 = yield* GCP.AIPlatform.ListPipelineJobs();
+    const p172 = yield* GCP.AIPlatform.ListRagCorpora();
+    const p173 = yield* GCP.AIPlatform.ListReasoningEngineMemories(Agent);
+    const p174 = yield* GCP.AIPlatform.ListReasoningEngines();
+    const p175 = yield* GCP.AIPlatform.ListReasoningEngineSandboxEnvironments(Agent);
+    const p176 = yield* GCP.AIPlatform.ListReasoningEngineSandboxEnvironmentSnapshots(Agent);
+    const p177 = yield* GCP.AIPlatform.ListReasoningEngineSandboxEnvironmentTemplates(Agent);
+    const p178 = yield* GCP.AIPlatform.ListReasoningEngineSessions(Agent);
+    const p179 = yield* GCP.AIPlatform.ListRunTimeSeries(ProbeRun);
+    const p180 = yield* GCP.AIPlatform.ListSchedules();
+    const p181 = yield* GCP.AIPlatform.ListSemanticGovernancePolicies();
+    const p182 = yield* GCP.AIPlatform.ListSessionEvents(ProbeSession);
+    const p183 = yield* GCP.AIPlatform.ListSpecialistPools();
+    const p184 = yield* GCP.AIPlatform.ListStudies();
+    const p185 = yield* GCP.AIPlatform.ListStudyTrials(ProbeStudy);
+    const p186 = yield* GCP.AIPlatform.ListTensorboardExperiments(ProbeTensorboard);
+    const p187 = yield* GCP.AIPlatform.ListTensorboards();
+    const p188 = yield* GCP.AIPlatform.ListTrainingPipelines();
+    const p189 = yield* GCP.AIPlatform.ListTuningJobs();
+    const p190 = yield* GCP.AIPlatform.LookupStudy();
+    const p191 = yield* GCP.AIPlatform.MergeModelVersionAliases();
+    const p192 = yield* GCP.AIPlatform.MutateEndpointDeployedModel(ProbeEndpoint);
+    const p193 = yield* GCP.AIPlatform.MutateIndexEndpointDeployedIndex(ProbeIndexEndpoint);
+    const p194 = yield* GCP.AIPlatform.PatchDataset();
+    const p195 = yield* GCP.AIPlatform.PatchDatasetVersion();
+    const p196 = yield* GCP.AIPlatform.PatchMemoryBankMemory();
+    const p197 = yield* GCP.AIPlatform.PatchModel();
+    const p198 = yield* GCP.AIPlatform.PauseReasoningEngineSandboxEnvironment(Agent);
+    const p199 = yield* GCP.AIPlatform.PauseSchedule(ProbeSchedule);
+    const p200 = yield* GCP.AIPlatform.PredictEndpoint(ProbeEndpoint);
+    const p201 = yield* GCP.AIPlatform.PredictEndpointLongRunning(ProbeEndpoint);
+    const p202 = yield* GCP.AIPlatform.PredictModelLongRunning();
+    const p203 = yield* GCP.AIPlatform.PredictPublisherModel();
+    const p204 = yield* GCP.AIPlatform.PurgeMemoryBankMemory();
+    const p205 = yield* GCP.AIPlatform.PurgeMetadataStoreArtifact(ProbeMetadataStore);
+    const p206 = yield* GCP.AIPlatform.PurgeMetadataStoreContext(ProbeMetadataStore);
+    const p207 = yield* GCP.AIPlatform.PurgeMetadataStoreExecution(ProbeMetadataStore);
+    const p208 = yield* GCP.AIPlatform.PurgeReasoningEngineMemory(Agent);
+    const p209 = yield* GCP.AIPlatform.QueryArtifactLineageSubgraph(ProbeArtifact);
+    const p210 = yield* GCP.AIPlatform.QueryContextLineageSubgraph(ProbeContext);
+    const p211 = yield* GCP.AIPlatform.QueryDeploymentResourcePoolDeployedModels(
       ProbeDeploymentResourcePool,
     );
-    const p210 = yield* GCP.AIPlatform.QueryExecutionInputsAndOutputs(ProbeExecution);
-    const p211 = yield* GCP.AIPlatform.QueryReasoningEngineRuntimeRevision(Agent);
-    const p212 = yield* GCP.AIPlatform.RawEndpointPredict(ProbeEndpoint);
-    const p213 = yield* GCP.AIPlatform.RawModelPredict();
-    const p214 = yield* GCP.AIPlatform.ReadEntityTypeFeatureValues(ProbeEntityType);
-    const p215 = yield* GCP.AIPlatform.ReadIndexEndpointIndexDatapoints(ProbeIndexEndpoint);
-    const p216 = yield* GCP.AIPlatform.ReadTensorboardSize(ProbeTensorboard);
-    const p217 = yield* GCP.AIPlatform.ReadTensorboardUsage(ProbeTensorboard);
-    const p218 = yield* GCP.AIPlatform.ReadTimeSery(ProbeTimeSeries);
-    const p219 = yield* GCP.AIPlatform.ReadTimeSeryBlobData(ProbeTimeSeries);
-    const p220 = yield* GCP.AIPlatform.RebaseTuningJobTunedModel();
-    const p221 = yield* GCP.AIPlatform.RemoveContextChildren(ProbeContext);
-    const p222 = yield* GCP.AIPlatform.RemoveIndexDatapoints(ProbeIndex);
-    const p223 = yield* GCP.AIPlatform.RestoreDatasetVersion();
-    const p224 = yield* GCP.AIPlatform.ResumeReasoningEngineSandboxEnvironment(Agent);
-    const p225 = yield* GCP.AIPlatform.RetrieveMemoryBankMemory();
-    const p226 = yield* GCP.AIPlatform.RetrieveReasoningEngineMemory(Agent);
-    const p227 = yield* GCP.AIPlatform.RollbackMemory(ProbeMemory);
-    const p228 = yield* GCP.AIPlatform.RollbackMemoryBankMemory();
-    const p229 = yield* GCP.AIPlatform.SearchDatasetDataItems();
-    const p230 = yield* GCP.AIPlatform.SearchFeaturestoreFeatures();
-    const p231 = yield* GCP.AIPlatform.SearchFeatureViewNearestEntities(ProbeFeatureView);
-    const p232 = yield* GCP.AIPlatform.SearchMigratableResource();
-    const p233 = yield* GCP.AIPlatform.ServerEndpointStreamingPredict(ProbeEndpoint);
-    const p234 = yield* GCP.AIPlatform.ServerModelStreamingPredict();
-    const p235 = yield* GCP.AIPlatform.SnapshotReasoningEngineSandboxEnvironment(Agent);
-    const p236 = yield* GCP.AIPlatform.SnapshotSandboxEnvironment(Code);
-    const p237 = yield* GCP.AIPlatform.StartNotebookRuntime();
-    const p238 = yield* GCP.AIPlatform.StopNotebookRuntime();
-    const p239 = yield* GCP.AIPlatform.StopTrial(ProbeTrial);
-    const p240 = yield* GCP.AIPlatform.StreamEndpointGenerateContent(ProbeEndpoint);
-    const p241 = yield* GCP.AIPlatform.StreamEndpointRawPredict(ProbeEndpoint);
-    const p242 = yield* GCP.AIPlatform.StreamingEntityTypeReadFeatureValues(ProbeEntityType);
-    const p243 = yield* GCP.AIPlatform.StreamModelGenerateContent();
-    const p244 = yield* GCP.AIPlatform.StreamModelRawPredict();
-    const p245 = yield* GCP.AIPlatform.StreamReasoningEngineQuery(Agent);
-    const p246 = yield* GCP.AIPlatform.StreamRuntimeRevisionQuery(Agent);
-    const p247 = yield* GCP.AIPlatform.SuggestStudyTrial(ProbeStudy);
-    const p248 = yield* GCP.AIPlatform.SyncFeatureView(ProbeFeatureView);
-    const p249 = yield* GCP.AIPlatform.UndeployEndpointModel(ProbeEndpoint);
-    const p250 = yield* GCP.AIPlatform.UndeployIndexEndpointIndex(ProbeIndexEndpoint);
-    const p251 = yield* GCP.AIPlatform.UpdateModelExplanationDataset();
-    const p252 = yield* GCP.AIPlatform.UpdateProjectCacheConfig();
-    const p253 = yield* GCP.AIPlatform.UpgradeNotebookRuntime();
-    const p254 = yield* GCP.AIPlatform.UploadModel();
-    const p255 = yield* GCP.AIPlatform.UpsertIndexDatapoints(ProbeIndex);
-    const p256 = yield* GCP.AIPlatform.WriteEntityTypeFeatureValues(ProbeEntityType);
-    const p257 = yield* GCP.AIPlatform.WriteExperiment(ProbeExperiment);
-    const p258 = yield* GCP.AIPlatform.WriteRun(ProbeRun);
+    const p212 = yield* GCP.AIPlatform.QueryExecutionInputsAndOutputs(ProbeExecution);
+    const p213 = yield* GCP.AIPlatform.QueryReasoningEngineRuntimeRevision(Agent);
+    const p214 = yield* GCP.AIPlatform.RawEndpointPredict(ProbeEndpoint);
+    const p215 = yield* GCP.AIPlatform.RawModelPredict();
+    const p216 = yield* GCP.AIPlatform.ReadEntityTypeFeatureValues(ProbeEntityType);
+    const p217 = yield* GCP.AIPlatform.ReadIndexEndpointIndexDatapoints(ProbeIndexEndpoint);
+    const p218 = yield* GCP.AIPlatform.ReadTensorboardSize(ProbeTensorboard);
+    const p219 = yield* GCP.AIPlatform.ReadTensorboardUsage(ProbeTensorboard);
+    const p220 = yield* GCP.AIPlatform.ReadTimeSery(ProbeTimeSeries);
+    const p221 = yield* GCP.AIPlatform.ReadTimeSeryBlobData(ProbeTimeSeries);
+    const p222 = yield* GCP.AIPlatform.RebaseTuningJobTunedModel();
+    const p223 = yield* GCP.AIPlatform.RemoveContextChildren(ProbeContext);
+    const p224 = yield* GCP.AIPlatform.RemoveIndexDatapoints(ProbeIndex);
+    const p225 = yield* GCP.AIPlatform.RestoreDatasetVersion();
+    const p226 = yield* GCP.AIPlatform.ResumeReasoningEngineSandboxEnvironment(Agent);
+    const p227 = yield* GCP.AIPlatform.ResumeSchedule(ProbeSchedule);
+    const p228 = yield* GCP.AIPlatform.RetrieveMemoryBankMemory();
+    const p229 = yield* GCP.AIPlatform.RetrieveReasoningEngineMemory(Agent);
+    const p230 = yield* GCP.AIPlatform.RollbackMemory(ProbeMemory);
+    const p231 = yield* GCP.AIPlatform.RollbackMemoryBankMemory();
+    const p232 = yield* GCP.AIPlatform.SearchDatasetDataItems();
+    const p233 = yield* GCP.AIPlatform.SearchFeaturestoreFeatures();
+    const p234 = yield* GCP.AIPlatform.SearchFeatureViewNearestEntities(ProbeFeatureView);
+    const p235 = yield* GCP.AIPlatform.SearchMigratableResource();
+    const p236 = yield* GCP.AIPlatform.ServerEndpointStreamingPredict(ProbeEndpoint);
+    const p237 = yield* GCP.AIPlatform.ServerModelStreamingPredict();
+    const p238 = yield* GCP.AIPlatform.SnapshotReasoningEngineSandboxEnvironment(Agent);
+    const p239 = yield* GCP.AIPlatform.SnapshotSandboxEnvironment(Code);
+    const p240 = yield* GCP.AIPlatform.StartNotebookRuntime();
+    const p241 = yield* GCP.AIPlatform.StopNotebookRuntime();
+    const p242 = yield* GCP.AIPlatform.StopTrial(ProbeTrial);
+    const p243 = yield* GCP.AIPlatform.StreamEndpointGenerateContent(ProbeEndpoint);
+    const p244 = yield* GCP.AIPlatform.StreamEndpointRawPredict(ProbeEndpoint);
+    const p245 = yield* GCP.AIPlatform.StreamingEntityTypeReadFeatureValues(ProbeEntityType);
+    const p246 = yield* GCP.AIPlatform.StreamModelGenerateContent();
+    const p247 = yield* GCP.AIPlatform.StreamModelRawPredict();
+    const p248 = yield* GCP.AIPlatform.StreamReasoningEngineQuery(Agent);
+    const p249 = yield* GCP.AIPlatform.StreamRuntimeRevisionQuery(Agent);
+    const p250 = yield* GCP.AIPlatform.SuggestStudyTrial(ProbeStudy);
+    const p251 = yield* GCP.AIPlatform.SyncFeatureView(ProbeFeatureView);
+    const p252 = yield* GCP.AIPlatform.UndeployEndpointModel(ProbeEndpoint);
+    const p253 = yield* GCP.AIPlatform.UndeployIndexEndpointIndex(ProbeIndexEndpoint);
+    const p254 = yield* GCP.AIPlatform.UpdateModelExplanationDataset();
+    const p255 = yield* GCP.AIPlatform.UpdateProjectCacheConfig();
+    const p256 = yield* GCP.AIPlatform.UpgradeNotebookRuntime();
+    const p257 = yield* GCP.AIPlatform.UploadModel();
+    const p258 = yield* GCP.AIPlatform.UpsertIndexDatapoints(ProbeIndex);
+    const p259 = yield* GCP.AIPlatform.WriteEntityTypeFeatureValues(ProbeEntityType);
+    const p260 = yield* GCP.AIPlatform.WriteExperiment(ProbeExperiment);
+    const p261 = yield* GCP.AIPlatform.WriteRun(ProbeRun);
     return {
       fetch: serveProbes({
         AddContextArtifactsAndExecutions: outcome(
@@ -602,14 +606,15 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           Retry.none(p105({ sandboxEnvironmentSnapshot: "alchemy-missing" } as never)),
         ),
         GetRun: outcome(Retry.none(p106({} as never))),
-        GetSession: outcome(Retry.none(p107({} as never))),
-        GetStudy: outcome(Retry.none(p108({} as never))),
-        GetTensorboard: outcome(Retry.none(p109({} as never))),
-        GetTimeSery: outcome(Retry.none(p110({} as never))),
-        GetTrial: outcome(Retry.none(p111({} as never))),
+        GetSchedule: outcome(Retry.none(p107({} as never))),
+        GetSession: outcome(Retry.none(p108({} as never))),
+        GetStudy: outcome(Retry.none(p109({} as never))),
+        GetTensorboard: outcome(Retry.none(p110({} as never))),
+        GetTimeSery: outcome(Retry.none(p111({} as never))),
+        GetTrial: outcome(Retry.none(p112({} as never))),
         ImportDataset: outcome(
           Retry.none(
-            p112({
+            p113({
               dataset: "alchemy-missing",
               location: "us-central1",
               body: { alchemyProbe: "alchemy-missing" },
@@ -617,16 +622,16 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           ),
         ),
         ImportEntityTypeFeatureValues: outcome(
-          Retry.none(p113({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+          Retry.none(p114({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         ImportEvaluationSet: outcome(
           Retry.none(
-            p114({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p115({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
         ImportModelEvaluation: outcome(
           Retry.none(
-            p115({
+            p116({
               model: "alchemy-missing",
               location: "us-central1",
               body: { alchemyProbe: "alchemy-missing" },
@@ -634,18 +639,18 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           ),
         ),
         IngestMemoryBankEvents: outcome(
-          Retry.none(p116({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p117({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        IngestMemoryEvents: outcome(Retry.none(p117({} as never))),
+        IngestMemoryEvents: outcome(Retry.none(p118({} as never))),
         InvokeEndpointDeployedModelInvoke: outcome(
           Retry.none(
-            p118({ deployedModelId: "alchemy-missing", invokeId: "alchemy-missing" } as never),
+            p119({ deployedModelId: "alchemy-missing", invokeId: "alchemy-missing" } as never),
           ),
         ),
-        InvokeEndpointInvoke: outcome(Retry.none(p119({ invokeId: "alchemy-missing" } as never))),
+        InvokeEndpointInvoke: outcome(Retry.none(p120({ invokeId: "alchemy-missing" } as never))),
         InvokePublisherModelInvoke: outcome(
           Retry.none(
-            p120({
+            p121({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               invokeId: "alchemy-missing",
@@ -653,14 +658,14 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        ListAgents: outcome(Retry.none(p121({ location: "us-central1" } as never))),
-        ListBatchPredictionJobs: outcome(Retry.none(p122({ location: "us-central1" } as never))),
-        ListCachedContents: outcome(Retry.none(p123({ location: "us-central1" } as never))),
-        ListCustomJobs: outcome(Retry.none(p124({ location: "us-central1" } as never))),
-        ListDataLabelingJobs: outcome(Retry.none(p125({ location: "us-central1" } as never))),
+        ListAgents: outcome(Retry.none(p122({ location: "us-central1" } as never))),
+        ListBatchPredictionJobs: outcome(Retry.none(p123({ location: "us-central1" } as never))),
+        ListCachedContents: outcome(Retry.none(p124({ location: "us-central1" } as never))),
+        ListCustomJobs: outcome(Retry.none(p125({ location: "us-central1" } as never))),
+        ListDataLabelingJobs: outcome(Retry.none(p126({ location: "us-central1" } as never))),
         ListDatasetDataItemAnnotations: outcome(
           Retry.none(
-            p126({
+            p127({
               dataset: "alchemy-missing",
               dataItem: "alchemy-missing",
               location: "us-central1",
@@ -668,119 +673,119 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           ),
         ),
         ListDatasetDataItems: outcome(
-          Retry.none(p127({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p128({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListDatasets: outcome(Retry.none(p128({ location: "us-central1" } as never))),
+        ListDatasets: outcome(Retry.none(p129({ location: "us-central1" } as never))),
         ListDatasetSavedQueries: outcome(
-          Retry.none(p129({ dataset: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        ListDatasetVersions: outcome(
           Retry.none(p130({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
+        ListDatasetVersions: outcome(
+          Retry.none(p131({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+        ),
         ListDeploymentResourcePools: outcome(
-          Retry.none(p131({ location: "us-central1" } as never)),
+          Retry.none(p132({ location: "us-central1" } as never)),
         ),
-        ListEndpoints: outcome(Retry.none(p132({ location: "us-central1" } as never))),
-        ListEntityTypeFeatures: outcome(Retry.none(p133({} as never))),
-        ListEvaluationItems: outcome(Retry.none(p134({ location: "us-central1" } as never))),
-        ListEvaluationMetrics: outcome(Retry.none(p135({ location: "us-central1" } as never))),
-        ListEvaluationRuns: outcome(Retry.none(p136({ location: "us-central1" } as never))),
-        ListEvaluationSets: outcome(Retry.none(p137({ location: "us-central1" } as never))),
-        ListExperimentRuns: outcome(Retry.none(p138({} as never))),
-        ListFeatureGroupFeatures: outcome(Retry.none(p139({} as never))),
-        ListFeatureGroups: outcome(Retry.none(p140({ location: "us-central1" } as never))),
-        ListFeatureOnlineStoreFeatureViews: outcome(Retry.none(p141({} as never))),
-        ListFeatureOnlineStores: outcome(Retry.none(p142({ location: "us-central1" } as never))),
-        ListFeaturestoreEntityTypes: outcome(Retry.none(p143({} as never))),
-        ListFeaturestores: outcome(Retry.none(p144({ location: "us-central1" } as never))),
-        ListFeatureViewSyncs: outcome(Retry.none(p145({} as never))),
+        ListEndpoints: outcome(Retry.none(p133({ location: "us-central1" } as never))),
+        ListEntityTypeFeatures: outcome(Retry.none(p134({} as never))),
+        ListEvaluationItems: outcome(Retry.none(p135({ location: "us-central1" } as never))),
+        ListEvaluationMetrics: outcome(Retry.none(p136({ location: "us-central1" } as never))),
+        ListEvaluationRuns: outcome(Retry.none(p137({ location: "us-central1" } as never))),
+        ListEvaluationSets: outcome(Retry.none(p138({ location: "us-central1" } as never))),
+        ListExperimentRuns: outcome(Retry.none(p139({} as never))),
+        ListFeatureGroupFeatures: outcome(Retry.none(p140({} as never))),
+        ListFeatureGroups: outcome(Retry.none(p141({ location: "us-central1" } as never))),
+        ListFeatureOnlineStoreFeatureViews: outcome(Retry.none(p142({} as never))),
+        ListFeatureOnlineStores: outcome(Retry.none(p143({ location: "us-central1" } as never))),
+        ListFeaturestoreEntityTypes: outcome(Retry.none(p144({} as never))),
+        ListFeaturestores: outcome(Retry.none(p145({ location: "us-central1" } as never))),
+        ListFeatureViewSyncs: outcome(Retry.none(p146({} as never))),
         ListHyperparameterTuningJobs: outcome(
-          Retry.none(p146({ location: "us-central1" } as never)),
+          Retry.none(p147({ location: "us-central1" } as never)),
         ),
-        ListIndexEndpoints: outcome(Retry.none(p147({ location: "us-central1" } as never))),
-        ListIndexes: outcome(Retry.none(p148({ location: "us-central1" } as never))),
+        ListIndexEndpoints: outcome(Retry.none(p148({ location: "us-central1" } as never))),
+        ListIndexes: outcome(Retry.none(p149({ location: "us-central1" } as never))),
         ListMemoryBankMemories: outcome(
-          Retry.none(p149({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p150({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ListMemoryBankMemoryRevisions: outcome(
           Retry.none(
-            p150({
+            p151({
               memoryBank: "alchemy-missing",
               memory: "alchemy-missing",
               location: "us-central1",
             } as never),
           ),
         ),
-        ListMemoryRevisions: outcome(Retry.none(p151({} as never))),
-        ListMetadataStoreArtifacts: outcome(Retry.none(p152({} as never))),
-        ListMetadataStoreContexts: outcome(Retry.none(p153({} as never))),
-        ListMetadataStoreExecutions: outcome(Retry.none(p154({} as never))),
-        ListMetadataStoreMetadataSchemas: outcome(Retry.none(p155({} as never))),
-        ListMetadataStores: outcome(Retry.none(p156({ location: "us-central1" } as never))),
+        ListMemoryRevisions: outcome(Retry.none(p152({} as never))),
+        ListMetadataStoreArtifacts: outcome(Retry.none(p153({} as never))),
+        ListMetadataStoreContexts: outcome(Retry.none(p154({} as never))),
+        ListMetadataStoreExecutions: outcome(Retry.none(p155({} as never))),
+        ListMetadataStoreMetadataSchemas: outcome(Retry.none(p156({} as never))),
+        ListMetadataStores: outcome(Retry.none(p157({ location: "us-central1" } as never))),
         ListModelCheckpoints: outcome(
-          Retry.none(p157({ model: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p158({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ListModelDeploymentMonitoringJobs: outcome(
-          Retry.none(p158({ location: "us-central1" } as never)),
+          Retry.none(p159({ location: "us-central1" } as never)),
         ),
         ListModelEvaluations: outcome(
-          Retry.none(p159({ model: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p160({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ListModelEvaluationSlices: outcome(
           Retry.none(
-            p160({
+            p161({
               model: "alchemy-missing",
               evaluation: "alchemy-missing",
               location: "us-central1",
             } as never),
           ),
         ),
-        ListModels: outcome(Retry.none(p161({ location: "us-central1" } as never))),
+        ListModels: outcome(Retry.none(p162({ location: "us-central1" } as never))),
         ListModelVersions: outcome(
-          Retry.none(p162({ model: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p163({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListNasJobs: outcome(Retry.none(p163({ location: "us-central1" } as never))),
-        ListNotebookExecutionJobs: outcome(Retry.none(p164({ location: "us-central1" } as never))),
-        ListNotebookRuntimes: outcome(Retry.none(p165({ location: "us-central1" } as never))),
+        ListNasJobs: outcome(Retry.none(p164({ location: "us-central1" } as never))),
+        ListNotebookExecutionJobs: outcome(Retry.none(p165({ location: "us-central1" } as never))),
+        ListNotebookRuntimes: outcome(Retry.none(p166({ location: "us-central1" } as never))),
         ListNotebookRuntimeTemplates: outcome(
-          Retry.none(p166({ location: "us-central1" } as never)),
+          Retry.none(p167({ location: "us-central1" } as never)),
         ),
-        ListOnlineEvaluators: outcome(Retry.none(p167({ location: "us-central1" } as never))),
-        ListOptimalTrials: outcome(Retry.none(p168({} as never))),
-        ListPersistentResources: outcome(Retry.none(p169({ location: "us-central1" } as never))),
-        ListPipelineJobs: outcome(Retry.none(p170({ location: "us-central1" } as never))),
-        ListRagCorpora: outcome(Retry.none(p171({ location: "us-central1" } as never))),
-        ListReasoningEngineMemories: outcome(Retry.none(p172({} as never))),
-        ListReasoningEngines: outcome(Retry.none(p173({ location: "us-central1" } as never))),
-        ListReasoningEngineSandboxEnvironments: outcome(Retry.none(p174({} as never))),
-        ListReasoningEngineSandboxEnvironmentSnapshots: outcome(Retry.none(p175({} as never))),
-        ListReasoningEngineSandboxEnvironmentTemplates: outcome(Retry.none(p176({} as never))),
-        ListReasoningEngineSessions: outcome(Retry.none(p177({} as never))),
-        ListRunTimeSeries: outcome(Retry.none(p178({} as never))),
-        ListSchedules: outcome(Retry.none(p179({ location: "us-central1" } as never))),
+        ListOnlineEvaluators: outcome(Retry.none(p168({ location: "us-central1" } as never))),
+        ListOptimalTrials: outcome(Retry.none(p169({} as never))),
+        ListPersistentResources: outcome(Retry.none(p170({ location: "us-central1" } as never))),
+        ListPipelineJobs: outcome(Retry.none(p171({ location: "us-central1" } as never))),
+        ListRagCorpora: outcome(Retry.none(p172({ location: "us-central1" } as never))),
+        ListReasoningEngineMemories: outcome(Retry.none(p173({} as never))),
+        ListReasoningEngines: outcome(Retry.none(p174({ location: "us-central1" } as never))),
+        ListReasoningEngineSandboxEnvironments: outcome(Retry.none(p175({} as never))),
+        ListReasoningEngineSandboxEnvironmentSnapshots: outcome(Retry.none(p176({} as never))),
+        ListReasoningEngineSandboxEnvironmentTemplates: outcome(Retry.none(p177({} as never))),
+        ListReasoningEngineSessions: outcome(Retry.none(p178({} as never))),
+        ListRunTimeSeries: outcome(Retry.none(p179({} as never))),
+        ListSchedules: outcome(Retry.none(p180({ location: "us-central1" } as never))),
         ListSemanticGovernancePolicies: outcome(
-          Retry.none(p180({ location: "us-central1" } as never)),
+          Retry.none(p181({ location: "us-central1" } as never)),
         ),
-        ListSessionEvents: outcome(Retry.none(p181({} as never))),
-        ListSpecialistPools: outcome(Retry.none(p182({ location: "us-central1" } as never))),
-        ListStudies: outcome(Retry.none(p183({ location: "us-central1" } as never))),
-        ListStudyTrials: outcome(Retry.none(p184({} as never))),
-        ListTensorboardExperiments: outcome(Retry.none(p185({} as never))),
-        ListTensorboards: outcome(Retry.none(p186({ location: "us-central1" } as never))),
-        ListTrainingPipelines: outcome(Retry.none(p187({ location: "us-central1" } as never))),
-        ListTuningJobs: outcome(Retry.none(p188({ location: "us-central1" } as never))),
-        LookupStudy: outcome(Retry.none(p189({ location: "us-central1" } as never))),
+        ListSessionEvents: outcome(Retry.none(p182({} as never))),
+        ListSpecialistPools: outcome(Retry.none(p183({ location: "us-central1" } as never))),
+        ListStudies: outcome(Retry.none(p184({ location: "us-central1" } as never))),
+        ListStudyTrials: outcome(Retry.none(p185({} as never))),
+        ListTensorboardExperiments: outcome(Retry.none(p186({} as never))),
+        ListTensorboards: outcome(Retry.none(p187({ location: "us-central1" } as never))),
+        ListTrainingPipelines: outcome(Retry.none(p188({ location: "us-central1" } as never))),
+        ListTuningJobs: outcome(Retry.none(p189({ location: "us-central1" } as never))),
+        LookupStudy: outcome(Retry.none(p190({ location: "us-central1" } as never))),
         MergeModelVersionAliases: outcome(
-          Retry.none(p190({ model: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p191({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        MutateEndpointDeployedModel: outcome(Retry.none(p191({} as never))),
-        MutateIndexEndpointDeployedIndex: outcome(Retry.none(p192({} as never))),
+        MutateEndpointDeployedModel: outcome(Retry.none(p192({} as never))),
+        MutateIndexEndpointDeployedIndex: outcome(Retry.none(p193({} as never))),
         PatchDataset: outcome(
-          Retry.none(p193({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p194({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
         PatchDatasetVersion: outcome(
           Retry.none(
-            p194({
+            p195({
               dataset: "alchemy-missing",
               datasetVersion: "alchemy-missing",
               location: "us-central1",
@@ -789,7 +794,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
         ),
         PatchMemoryBankMemory: outcome(
           Retry.none(
-            p195({
+            p196({
               memoryBank: "alchemy-missing",
               memory: "alchemy-missing",
               location: "us-central1",
@@ -797,16 +802,17 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           ),
         ),
         PatchModel: outcome(
-          Retry.none(p196({ model: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p197({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
         PauseReasoningEngineSandboxEnvironment: outcome(
-          Retry.none(p197({ sandboxEnvironment: "alchemy-missing" } as never)),
+          Retry.none(p198({ sandboxEnvironment: "alchemy-missing" } as never)),
         ),
-        PredictEndpoint: outcome(Retry.none(p198({} as never))),
-        PredictEndpointLongRunning: outcome(Retry.none(p199({} as never))),
+        PauseSchedule: outcome(Retry.none(p199({} as never))),
+        PredictEndpoint: outcome(Retry.none(p200({} as never))),
+        PredictEndpointLongRunning: outcome(Retry.none(p201({} as never))),
         PredictModelLongRunning: outcome(
           Retry.none(
-            p200({
+            p202({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
@@ -815,7 +821,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
         ),
         PredictPublisherModel: outcome(
           Retry.none(
-            p201({
+            p203({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
@@ -823,41 +829,41 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           ),
         ),
         PurgeMemoryBankMemory: outcome(
-          Retry.none(p202({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p204({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        PurgeMetadataStoreArtifact: outcome(Retry.none(p203({} as never))),
-        PurgeMetadataStoreContext: outcome(Retry.none(p204({} as never))),
-        PurgeMetadataStoreExecution: outcome(Retry.none(p205({} as never))),
-        PurgeReasoningEngineMemory: outcome(Retry.none(p206({} as never))),
-        QueryArtifactLineageSubgraph: outcome(Retry.none(p207({} as never))),
-        QueryContextLineageSubgraph: outcome(Retry.none(p208({} as never))),
-        QueryDeploymentResourcePoolDeployedModels: outcome(Retry.none(p209({} as never))),
-        QueryExecutionInputsAndOutputs: outcome(Retry.none(p210({} as never))),
+        PurgeMetadataStoreArtifact: outcome(Retry.none(p205({} as never))),
+        PurgeMetadataStoreContext: outcome(Retry.none(p206({} as never))),
+        PurgeMetadataStoreExecution: outcome(Retry.none(p207({} as never))),
+        PurgeReasoningEngineMemory: outcome(Retry.none(p208({} as never))),
+        QueryArtifactLineageSubgraph: outcome(Retry.none(p209({} as never))),
+        QueryContextLineageSubgraph: outcome(Retry.none(p210({} as never))),
+        QueryDeploymentResourcePoolDeployedModels: outcome(Retry.none(p211({} as never))),
+        QueryExecutionInputsAndOutputs: outcome(Retry.none(p212({} as never))),
         QueryReasoningEngineRuntimeRevision: outcome(
-          Retry.none(p211({ runtimeRevision: "alchemy-missing" } as never)),
+          Retry.none(p213({ runtimeRevision: "alchemy-missing" } as never)),
         ),
-        RawEndpointPredict: outcome(Retry.none(p212({} as never))),
+        RawEndpointPredict: outcome(Retry.none(p214({} as never))),
         RawModelPredict: outcome(
           Retry.none(
-            p213({
+            p215({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
             } as never),
           ),
         ),
-        ReadEntityTypeFeatureValues: outcome(Retry.none(p214({} as never))),
-        ReadIndexEndpointIndexDatapoints: outcome(Retry.none(p215({} as never))),
-        ReadTensorboardSize: outcome(Retry.none(p216({} as never))),
-        ReadTensorboardUsage: outcome(Retry.none(p217({} as never))),
-        ReadTimeSery: outcome(Retry.none(p218({} as never))),
-        ReadTimeSeryBlobData: outcome(Retry.none(p219({} as never))),
-        RebaseTuningJobTunedModel: outcome(Retry.none(p220({ location: "us-central1" } as never))),
-        RemoveContextChildren: outcome(Retry.none(p221({} as never))),
-        RemoveIndexDatapoints: outcome(Retry.none(p222({} as never))),
+        ReadEntityTypeFeatureValues: outcome(Retry.none(p216({} as never))),
+        ReadIndexEndpointIndexDatapoints: outcome(Retry.none(p217({} as never))),
+        ReadTensorboardSize: outcome(Retry.none(p218({} as never))),
+        ReadTensorboardUsage: outcome(Retry.none(p219({} as never))),
+        ReadTimeSery: outcome(Retry.none(p220({} as never))),
+        ReadTimeSeryBlobData: outcome(Retry.none(p221({} as never))),
+        RebaseTuningJobTunedModel: outcome(Retry.none(p222({ location: "us-central1" } as never))),
+        RemoveContextChildren: outcome(Retry.none(p223({} as never))),
+        RemoveIndexDatapoints: outcome(Retry.none(p224({} as never))),
         RestoreDatasetVersion: outcome(
           Retry.none(
-            p223({
+            p225({
               dataset: "alchemy-missing",
               datasetVersion: "alchemy-missing",
               location: "us-central1",
@@ -865,16 +871,17 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           ),
         ),
         ResumeReasoningEngineSandboxEnvironment: outcome(
-          Retry.none(p224({ sandboxEnvironment: "alchemy-missing" } as never)),
+          Retry.none(p226({ sandboxEnvironment: "alchemy-missing" } as never)),
         ),
+        ResumeSchedule: outcome(Retry.none(p227({} as never))),
         RetrieveMemoryBankMemory: outcome(
-          Retry.none(p225({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p228({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        RetrieveReasoningEngineMemory: outcome(Retry.none(p226({} as never))),
-        RollbackMemory: outcome(Retry.none(p227({} as never))),
+        RetrieveReasoningEngineMemory: outcome(Retry.none(p229({} as never))),
+        RollbackMemory: outcome(Retry.none(p230({} as never))),
         RollbackMemoryBankMemory: outcome(
           Retry.none(
-            p228({
+            p231({
               memoryBank: "alchemy-missing",
               memory: "alchemy-missing",
               location: "us-central1",
@@ -882,15 +889,15 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           ),
         ),
         SearchDatasetDataItems: outcome(
-          Retry.none(p229({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p232({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        SearchFeaturestoreFeatures: outcome(Retry.none(p230({ location: "us-central1" } as never))),
-        SearchFeatureViewNearestEntities: outcome(Retry.none(p231({} as never))),
-        SearchMigratableResource: outcome(Retry.none(p232({ location: "us-central1" } as never))),
-        ServerEndpointStreamingPredict: outcome(Retry.none(p233({} as never))),
+        SearchFeaturestoreFeatures: outcome(Retry.none(p233({ location: "us-central1" } as never))),
+        SearchFeatureViewNearestEntities: outcome(Retry.none(p234({} as never))),
+        SearchMigratableResource: outcome(Retry.none(p235({ location: "us-central1" } as never))),
+        ServerEndpointStreamingPredict: outcome(Retry.none(p236({} as never))),
         ServerModelStreamingPredict: outcome(
           Retry.none(
-            p234({
+            p237({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
@@ -898,26 +905,26 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           ),
         ),
         SnapshotReasoningEngineSandboxEnvironment: outcome(
-          Retry.none(p235({ sandboxEnvironment: "alchemy-missing" } as never)),
+          Retry.none(p238({ sandboxEnvironment: "alchemy-missing" } as never)),
         ),
-        SnapshotSandboxEnvironment: outcome(Retry.none(p236({} as never))),
+        SnapshotSandboxEnvironment: outcome(Retry.none(p239({} as never))),
         StartNotebookRuntime: outcome(
           Retry.none(
-            p237({ notebookRuntime: "alchemy-missing", location: "us-central1" } as never),
+            p240({ notebookRuntime: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
         StopNotebookRuntime: outcome(
           Retry.none(
-            p238({ notebookRuntime: "alchemy-missing", location: "us-central1" } as never),
+            p241({ notebookRuntime: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        StopTrial: outcome(Retry.none(p239({} as never))),
-        StreamEndpointGenerateContent: outcome(Retry.none(p240({} as never))),
-        StreamEndpointRawPredict: outcome(Retry.none(p241({} as never))),
-        StreamingEntityTypeReadFeatureValues: outcome(Retry.none(p242({} as never))),
+        StopTrial: outcome(Retry.none(p242({} as never))),
+        StreamEndpointGenerateContent: outcome(Retry.none(p243({} as never))),
+        StreamEndpointRawPredict: outcome(Retry.none(p244({} as never))),
+        StreamingEntityTypeReadFeatureValues: outcome(Retry.none(p245({} as never))),
         StreamModelGenerateContent: outcome(
           Retry.none(
-            p243({
+            p246({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
@@ -926,35 +933,35 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
         ),
         StreamModelRawPredict: outcome(
           Retry.none(
-            p244({
+            p247({
               publisher: "alchemy-missing",
               model: "alchemy-missing",
               location: "us-central1",
             } as never),
           ),
         ),
-        StreamReasoningEngineQuery: outcome(Retry.none(p245({} as never))),
+        StreamReasoningEngineQuery: outcome(Retry.none(p248({} as never))),
         StreamRuntimeRevisionQuery: outcome(
-          Retry.none(p246({ runtimeRevision: "alchemy-missing" } as never)),
+          Retry.none(p249({ runtimeRevision: "alchemy-missing" } as never)),
         ),
-        SuggestStudyTrial: outcome(Retry.none(p247({} as never))),
-        SyncFeatureView: outcome(Retry.none(p248({} as never))),
-        UndeployEndpointModel: outcome(Retry.none(p249({} as never))),
-        UndeployIndexEndpointIndex: outcome(Retry.none(p250({} as never))),
+        SuggestStudyTrial: outcome(Retry.none(p250({} as never))),
+        SyncFeatureView: outcome(Retry.none(p251({} as never))),
+        UndeployEndpointModel: outcome(Retry.none(p252({} as never))),
+        UndeployIndexEndpointIndex: outcome(Retry.none(p253({} as never))),
         UpdateModelExplanationDataset: outcome(
-          Retry.none(p251({ model: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p254({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        UpdateProjectCacheConfig: outcome(Retry.none(p252({} as never))),
+        UpdateProjectCacheConfig: outcome(Retry.none(p255({} as never))),
         UpgradeNotebookRuntime: outcome(
           Retry.none(
-            p253({ notebookRuntime: "alchemy-missing", location: "us-central1" } as never),
+            p256({ notebookRuntime: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        UploadModel: outcome(Retry.none(p254({ location: "us-central1" } as never))),
-        UpsertIndexDatapoints: outcome(Retry.none(p255({} as never))),
-        WriteEntityTypeFeatureValues: outcome(Retry.none(p256({} as never))),
-        WriteExperiment: outcome(Retry.none(p257({} as never))),
-        WriteRun: outcome(Retry.none(p258({} as never))),
+        UploadModel: outcome(Retry.none(p257({ location: "us-central1" } as never))),
+        UpsertIndexDatapoints: outcome(Retry.none(p258({} as never))),
+        WriteEntityTypeFeatureValues: outcome(Retry.none(p259({} as never))),
+        WriteExperiment: outcome(Retry.none(p260({} as never))),
+        WriteRun: outcome(Retry.none(p261({} as never))),
       }),
     };
   }).pipe(
@@ -1069,6 +1076,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           GCP.AIPlatform.GetReasoningEngineSandboxEnvironmentHttp,
           GCP.AIPlatform.GetReasoningEngineSandboxEnvironmentSnapshotHttp,
           GCP.AIPlatform.GetRunHttp,
+          GCP.AIPlatform.GetScheduleHttp,
           GCP.AIPlatform.GetSessionHttp,
           GCP.AIPlatform.GetStudyHttp,
           GCP.AIPlatform.GetTensorboardHttp,
@@ -1084,9 +1092,9 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           GCP.AIPlatform.InvokeEndpointInvokeHttp,
           GCP.AIPlatform.InvokePublisherModelInvokeHttp,
           GCP.AIPlatform.ListAgentsHttp,
-          GCP.AIPlatform.ListBatchPredictionJobsHttp,
         ),
         Layer.mergeAll(
+          GCP.AIPlatform.ListBatchPredictionJobsHttp,
           GCP.AIPlatform.ListCachedContentsHttp,
           GCP.AIPlatform.ListCustomJobsHttp,
           GCP.AIPlatform.ListDataLabelingJobsHttp,
@@ -1126,9 +1134,9 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           GCP.AIPlatform.ListModelEvaluationsHttp,
           GCP.AIPlatform.ListModelEvaluationSlicesHttp,
           GCP.AIPlatform.ListModelsHttp,
-          GCP.AIPlatform.ListModelVersionsHttp,
         ),
         Layer.mergeAll(
+          GCP.AIPlatform.ListModelVersionsHttp,
           GCP.AIPlatform.ListNasJobsHttp,
           GCP.AIPlatform.ListNotebookExecutionJobsHttp,
           GCP.AIPlatform.ListNotebookRuntimesHttp,
@@ -1164,13 +1172,14 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           GCP.AIPlatform.PatchMemoryBankMemoryHttp,
           GCP.AIPlatform.PatchModelHttp,
           GCP.AIPlatform.PauseReasoningEngineSandboxEnvironmentHttp,
+          GCP.AIPlatform.PauseScheduleHttp,
           GCP.AIPlatform.PredictEndpointHttp,
           GCP.AIPlatform.PredictEndpointLongRunningHttp,
           GCP.AIPlatform.PredictModelLongRunningHttp,
-          GCP.AIPlatform.PredictPublisherModelHttp,
-          GCP.AIPlatform.PurgeMemoryBankMemoryHttp,
         ),
         Layer.mergeAll(
+          GCP.AIPlatform.PredictPublisherModelHttp,
+          GCP.AIPlatform.PurgeMemoryBankMemoryHttp,
           GCP.AIPlatform.PurgeMetadataStoreArtifactHttp,
           GCP.AIPlatform.PurgeMetadataStoreContextHttp,
           GCP.AIPlatform.PurgeMetadataStoreExecutionHttp,
@@ -1193,6 +1202,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           GCP.AIPlatform.RemoveIndexDatapointsHttp,
           GCP.AIPlatform.RestoreDatasetVersionHttp,
           GCP.AIPlatform.ResumeReasoningEngineSandboxEnvironmentHttp,
+          GCP.AIPlatform.ResumeScheduleHttp,
           GCP.AIPlatform.RetrieveMemoryBankMemoryHttp,
           GCP.AIPlatform.RetrieveReasoningEngineMemoryHttp,
           GCP.AIPlatform.RollbackMemoryHttp,
@@ -1208,11 +1218,11 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           GCP.AIPlatform.StartNotebookRuntimeHttp,
           GCP.AIPlatform.StopNotebookRuntimeHttp,
           GCP.AIPlatform.StopTrialHttp,
+        ),
+        Layer.mergeAll(
           GCP.AIPlatform.StreamEndpointGenerateContentHttp,
           GCP.AIPlatform.StreamEndpointRawPredictHttp,
           GCP.AIPlatform.StreamingEntityTypeReadFeatureValuesHttp,
-        ),
-        Layer.mergeAll(
           GCP.AIPlatform.StreamModelGenerateContentHttp,
           GCP.AIPlatform.StreamModelRawPredictHttp,
           GCP.AIPlatform.StreamReasoningEngineQueryHttp,

@@ -257,9 +257,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("PrivateConnection", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPrivateConnection (datamigration.projects.locations.privateConnections.get): PrivateConnection: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetPrivateConnection (datamigration.projects.locations.privateConnections.get)",
+        () => probe("GetPrivateConnection", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

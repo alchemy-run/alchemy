@@ -2156,17 +2156,29 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Schedule", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSchedule (aiplatform.projects.locations.schedules.get): Schedule: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetSchedule (aiplatform.projects.locations.schedules.get)",
+        () => probe("GetSchedule", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "PauseSchedule (aiplatform.projects.locations.schedules.pause): Schedule: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "PauseSchedule (aiplatform.projects.locations.schedules.pause)",
+        () => probe("PauseSchedule", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ResumeSchedule (aiplatform.projects.locations.schedules.resume): Schedule: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ResumeSchedule (aiplatform.projects.locations.schedules.resume)",
+        () => probe("ResumeSchedule", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

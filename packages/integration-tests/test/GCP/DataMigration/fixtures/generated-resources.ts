@@ -1,4 +1,5 @@
 import * as GCP from "@alchemy.run/gcp";
+import * as Effect from "effect/Effect";
 
 /** DataMigration resources the generated bindings bind, mirroring each resource suite's smallest shape. */
 
@@ -25,3 +26,14 @@ export const ProbeConversionWorkspace = GCP.DataMigration.ConversionWorkspace(
     globalSettings: { skip_triggers: "false" },
   },
 );
+
+const PeeringVpc = GCP.Compute.Network("ProbeDmsVpc", { autoCreateSubnetworks: false });
+export const ProbePrivateConnection = Effect.gen(function* () {
+  const network = yield* PeeringVpc;
+  return yield* GCP.DataMigration.PrivateConnection("ProbePrivateConnection", {
+    location: "us-central1",
+    displayName: "probe-dms-peer",
+    skipValidation: true,
+    vpcPeeringConfig: { vpcName: network.networkName, subnet: "10.8.9.0/29" },
+  });
+});

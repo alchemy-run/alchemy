@@ -21,7 +21,8 @@
   "probes": {
     "resources": {
       "ConnectionProfile": "ProbeConnectionProfile",
-      "ConversionWorkspace": "ProbeConversionWorkspace"
+      "ConversionWorkspace": "ProbeConversionWorkspace",
+      "PrivateConnection": "ProbePrivateConnection"
     },
     "untestable": {}
   },

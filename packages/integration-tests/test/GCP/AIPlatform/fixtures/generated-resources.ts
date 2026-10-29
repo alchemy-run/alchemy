@@ -1,4 +1,5 @@
 import * as GCP from "@alchemy.run/gcp";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { deployProject } from "../../deployProject.ts";
 import { UsersSource } from "./features.ts";
@@ -255,5 +256,28 @@ export const ProbeFeatureView = Effect.gen(function* () {
       featureGroups: [{ featureGroupId: group.featureGroupId, featureIds: [feature.featureId] }],
     },
     syncConfig: { cron: "0 * * * *" },
+  });
+});
+
+const PipelineRoot = GCP.Storage.Bucket("ProbePipelineRoot", {
+  location: "US-CENTRAL1",
+  forceDestroy: true,
+});
+/** A paused schedule: it never starts a run. */
+export const ProbeSchedule = Effect.gen(function* () {
+  const bucket = yield* PipelineRoot;
+  return yield* GCP.AIPlatform.Schedule("ProbeSchedule", {
+    location,
+    displayName: "probe-nightly",
+    cron: "0 8 * * *",
+    paused: true,
+    maxRunCount: "1",
+    createPipelineJobRequest: {
+      pipelineJob: {
+        displayName: "probe-hello",
+        templateUri: "https://us-kfp.pkg.dev/ml-pipeline/google-cloud-registry/hello-world/latest",
+        runtimeConfig: { gcsOutputDirectory: Output.interpolate`gs://${bucket.bucketName}/runs` },
+      },
+    },
   });
 });

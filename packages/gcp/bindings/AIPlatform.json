@@ -188,7 +188,8 @@
       "CachedContent": "ProbeCachedContent",
       "FeatureGroup": "ProbeFeatureGroup",
       "FeatureGroupsFeature": "ProbeGroupFeature",
-      "FeatureOnlineStoresFeatureView": "ProbeFeatureView"
+      "FeatureOnlineStoresFeatureView": "ProbeFeatureView",
+      "Schedule": "ProbeSchedule"
     },
     "untestable": {
       "Agent": "AgentService is v1beta1-only; the v1 SDK gets \"This API version is not supported by AgentService\"",
