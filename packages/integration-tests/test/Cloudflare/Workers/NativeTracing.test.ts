@@ -18,6 +18,7 @@ import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
+import BoundLogsWorker from "./fixtures/native-tracing/bound-logs-worker.ts";
 import type { TraceSink } from "./fixtures/native-tracing/collector.ts";
 import NativeTracingWorker, { makeTracedWorker } from "./fixtures/native-tracing/worker.ts";
 
@@ -277,6 +278,39 @@ test.provider(
       "provider:cloudflare:worker",
       "live",
     ],
+    timeout: 180_000,
+  },
+);
+
+test.provider(
+  "bound observability.logs merge over the default logs config",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+
+      const worker = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* BoundLogsWorker;
+        }),
+      );
+
+      const settings = yield* workers.getScriptScriptAndVersionSetting({
+        accountId,
+        scriptName: worker.workerName,
+      });
+      expect(settings.observability?.traces?.enabled).toBe(true);
+      expect(settings.observability?.logs?.enabled).toBe(true);
+      expect(settings.observability?.logs?.persist).toBe(false);
+      expect(settings.observability?.logs?.headSamplingRate).toBe(0.5);
+      // The default config's invocation logs survive the bound logs.
+      expect(settings.observability?.logs?.invocationLogs).toBe(true);
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+    }).pipe(logLevel),
+  {
+    tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"],
     timeout: 180_000,
   },
 );
