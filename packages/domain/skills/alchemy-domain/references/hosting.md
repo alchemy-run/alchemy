@@ -1,6 +1,6 @@
 # Hosting on Cloudflare with alchemy
 
-The server package hosts the model in a Cloudflare Worker. `DomainCloudflare.DurableObjects` declares one Durable Object class per aggregate, view, policy, projection and stream while the Worker builds. It also runs sagas on `Cloudflare.Workflows.DurableObjectEngine`. Each aggregate instance is one Durable Object: one writer, which commits its events, state, idempotency receipt and outbox in a single transaction.
+The server package hosts the model in a Cloudflare Worker. `DomainCloudflare.layerDurableObjects()` declares one Durable Object class per aggregate, view, policy, projection and stream while the Worker builds. It also runs sagas on `Cloudflare.Workflows.layerDurableObjectEngine()`. Each aggregate instance is one Durable Object: one writer, which commits its events, state, idempotency receipt and outbox in a single transaction.
 
 ```ts
 // packages/server/src/BankWorker.ts
@@ -22,7 +22,7 @@ const BankLive = Layer.mergeAll(SessionLive, MfaChallengeLive).pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),
   Layer.provideMerge(D1LedgerStore),
   Layer.provide(
-    Layer.mergeAll(DomainCloudflare.DurableObjects, SiftFraudCheck, Cloudflare.D1.QueryDatabaseBinding),
+    Layer.mergeAll(DomainCloudflare.layerDurableObjects(), SiftFraudCheck, Cloudflare.D1.QueryDatabaseBinding),
   ),
 );
 
@@ -44,7 +44,7 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 ) {}
 ```
 
-- Swap `DomainCloudflare.DurableObjects` for `Domain.InMemory` and nothing else changes. That's how the Api tests host the model.
+- Swap `DomainCloudflare.layerDurableObjects()` for `Domain.InMemory` and nothing else changes. That's how the Api tests host the model.
 - Resources the adapters need, like a D1 database, are declared in the server package and bound through alchemy bindings (`Cloudflare.D1.QueryDatabase(db)` inside the adapter's Layer).
 - Webhooks and event sources, like a Stripe webhook, are yielded in the Worker's init and send commands into the model.
 - `alchemy dev` runs everything locally in workerd: Durable Objects, sagas and the foldkit app.
