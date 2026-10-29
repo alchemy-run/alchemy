@@ -14,6 +14,7 @@ import type { HttpServerError } from "effect/http/HttpServerError";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import type { Scope } from "effect/Scope";
 import type { Container } from "../Containers/Container.ts";
 import { DurableObjectState, fromDurableObjectState } from "./DurableObjectState.ts";
@@ -229,8 +230,8 @@ const restrictToJurisdiction = (
   } catch (error) {
     // workerd's message; a deployed Worker never throws it.
     if (
-      error instanceof Error &&
-      error.message.includes("Jurisdiction restrictions are not implemented")
+      Predicate.hasProperty(error, "message") &&
+      String(error.message).includes("Jurisdiction restrictions are not implemented")
     ) {
       return ns;
     }

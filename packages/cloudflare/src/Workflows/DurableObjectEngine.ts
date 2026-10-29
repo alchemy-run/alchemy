@@ -93,7 +93,7 @@ import type { Worker } from "../Workers/Worker.ts";
  * import { SendWelcomeLive } from "./SendWelcome.ts";
  *
  * const WorkflowsLive = SendWelcomeLive.pipe(
- *   Layer.provideMerge(Cloudflare.Workflows.durableObjectEngine({ jurisdiction: "eu" })),
+ *   Layer.provideMerge(Cloudflare.Workflows.layerDurableObjectEngine({ jurisdiction: "eu" })),
  * );
  * ```
  *
@@ -104,7 +104,7 @@ import type { Worker } from "../Workers/Worker.ts";
 export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =
   makeEngine(undefined);
 
-/** Options for {@link durableObjectEngine}. */
+/** Options for {@link layerDurableObjectEngine}. */
 export interface DurableObjectEngineOptions {
   /**
    * Create and store every workflow execution object only inside this
@@ -135,11 +135,9 @@ const engines = new Map<
  * @provides WorkflowEngine
  * @product Durable Objects
  */
-export function durableObjectEngine({ jurisdiction }: DurableObjectEngineOptions = {}): Layer.Layer<
-  WorkflowEngine.WorkflowEngine,
-  never,
-  Worker
-> {
+export function layerDurableObjectEngine({
+  jurisdiction,
+}: DurableObjectEngineOptions = {}): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> {
   if (jurisdiction === undefined) return DurableObjectEngine;
   let engine = engines.get(jurisdiction);
   if (engine === undefined) engines.set(jurisdiction, (engine = makeEngine(jurisdiction)));

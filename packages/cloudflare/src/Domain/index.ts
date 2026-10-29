@@ -45,7 +45,7 @@ import {
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
 import type { Worker } from "../Workers/Worker.ts";
-import { durableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
+import { layerDurableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
 
 const pad = (n: number) => n.toString().padStart(12, "0");
 
@@ -1071,7 +1071,7 @@ const durableObjectPlatform = (
 export const DurableObjects: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker> =
   makeDurableObjects(undefined);
 
-/** Options for {@link durableObjects}. */
+/** Options for {@link layerDurableObjects}. */
 export interface DurableObjectsOptions {
   /**
    * Create and store every Durable Object of the model (aggregates, views,
@@ -1113,7 +1113,7 @@ const platforms = new Map<
  * import { Bank, BankPolicies } from "./Bank.ts";
  *
  * const BankLive = Bank.layer(BankPolicies).pipe(
- *   Layer.provide(DomainCloudflare.durableObjects({ jurisdiction: "eu" })),
+ *   Layer.provide(DomainCloudflare.layerDurableObjects({ jurisdiction: "eu" })),
  * );
  * ```
  *
@@ -1121,7 +1121,7 @@ const platforms = new Map<
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export function durableObjects({ jurisdiction }: DurableObjectsOptions = {}): Layer.Layer<
+export function layerDurableObjects({ jurisdiction }: DurableObjectsOptions = {}): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine,
   never,
   Worker
@@ -1138,5 +1138,8 @@ export function durableObjects({ jurisdiction }: DurableObjectsOptions = {}): La
 function makeDurableObjects(
   jurisdiction: DurableObjectJurisdiction | undefined,
 ): Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker> {
-  return Layer.merge(durableObjectPlatform(jurisdiction), durableObjectEngine({ jurisdiction }));
+  return Layer.merge(
+    durableObjectPlatform(jurisdiction),
+    layerDurableObjectEngine({ jurisdiction }),
+  );
 }

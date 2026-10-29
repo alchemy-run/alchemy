@@ -168,12 +168,12 @@ Sagas run on `Cloudflare.Workflows.DurableObjectEngine`, the same engine you can
 
 ## Keep the model in a jurisdiction
 
-Swap `DomainCloudflare.DurableObjects` in `BankLive` for `DomainCloudflare.durableObjects({ jurisdiction })` to create and store every Durable Object of the model, saga runs included, only inside a jurisdiction, for example the EU for personal data:
+Swap `DomainCloudflare.DurableObjects` in `BankLive` for `DomainCloudflare.layerDurableObjects({ jurisdiction })` to create and store every Durable Object of the model, saga runs included, only inside a jurisdiction, for example the EU for personal data:
 
 ```typescript
   Layer.provide(
     Layer.mergeAll(
-      DomainCloudflare.durableObjects({ jurisdiction: "eu" }),
+      DomainCloudflare.layerDurableObjects({ jurisdiction: "eu" }),
       SiftFraudCheck,
       StripePayments,
       Cloudflare.D1.QueryDatabaseBinding,

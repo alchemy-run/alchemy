@@ -11,7 +11,7 @@ export default class EuDurableWorkflowWorker extends Cloudflare.Worker<EuDurable
   app.pipe(
     Effect.provide(
       WorkflowsLive.pipe(
-        Layer.provideMerge(Cloudflare.Workflows.durableObjectEngine({ jurisdiction: "eu" })),
+        Layer.provideMerge(Cloudflare.Workflows.layerDurableObjectEngine({ jurisdiction: "eu" })),
       ),
     ),
   ),

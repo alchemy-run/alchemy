@@ -15,7 +15,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 /**
  * Local workerd does not implement Durable Object jurisdictions, so under
- * `alchemy dev` `durableObjects({ jurisdiction: "eu" })` runs the model
+ * `alchemy dev` `layerDurableObjects({ jurisdiction: "eu" })` runs the model
  * unrestricted, as a D1 database, R2 bucket or Queue with a jurisdiction does.
  * Every kind of object, and the workflow engine, must still work.
  */

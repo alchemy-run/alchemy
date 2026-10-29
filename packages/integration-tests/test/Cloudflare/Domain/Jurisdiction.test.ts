@@ -14,7 +14,7 @@ const { test } = Test.make({
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 /**
- * `durableObjects({ jurisdiction: "eu" })` keeps the model's objects in the
+ * `layerDurableObjects({ jurisdiction: "eu" })` keeps the model's objects in the
  * EU namespace: switching the same Worker to the unrestricted platform finds
  * none of them, and switching back finds them where they were left.
  */
