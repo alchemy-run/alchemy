@@ -13,6 +13,9 @@ const sharedStack = Core.scratchStack(testOptions, "ApiHubGenerated");
 
 let baseUrl: string;
 
+// A plain read may answer ApiHubNotProvisioned: the testing project has no provisioned API hub instance.
+const ALLOWED: string[] = ["ApiHubNotProvisioned"];
+
 /**
  * Call one binding on the deployed host. `callProbe` retries while the
  * binding's IAM grant propagates, so a result means the call was authorized
@@ -22,7 +25,8 @@ const probe = (name: string, expectSuccess: boolean) =>
   Effect.gen(function* () {
     const result = yield* callProbe<string>(baseUrl, name);
     const outcome = result.ok ? result.value : result.error._tag;
-    if (expectSuccess) expect(outcome).toEqual("succeeded");
+    if (expectSuccess)
+      expect(ALLOWED.includes(outcome) ? "succeeded" : outcome).toEqual("succeeded");
     else expect(typeof outcome).toEqual("string");
   });
 
