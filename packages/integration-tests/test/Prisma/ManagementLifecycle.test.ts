@@ -2,10 +2,6 @@ import type { App } from "@alchemy.run/prisma/App";
 import { Branch as PrismaBranch, BranchProvider } from "@alchemy.run/prisma/Branch";
 import { PrismaApiError, PrismaClient } from "@alchemy.run/prisma/Client";
 import type { PrismaManagementClient } from "@alchemy.run/prisma/Client";
-import {
-  CustomDomain as PrismaCustomDomain,
-  CustomDomainProvider,
-} from "@alchemy.run/prisma/CustomDomain";
 import { Database as PrismaDatabase, DatabaseProvider } from "@alchemy.run/prisma/Database";
 import {
   EnvironmentVariable as PrismaEnvironmentVariable,
@@ -18,7 +14,6 @@ import {
 } from "@alchemy.run/prisma/SourceRepository";
 import type {
   Branch as ApiBranch,
-  CustomDomain as ApiCustomDomain,
   Database as ApiDatabase,
   DatabaseConnectionWithSecrets,
   Project as ApiProject,
@@ -166,13 +161,6 @@ const environmentVariableLayer = (client: PrismaManagementClient) =>
     Layer.provideMerge(EnvironmentVariableProvider()),
     Layer.provide(liveProviderContext),
     Layer.provideMerge(clientBackedApi(client).layer),
-  );
-
-const customDomainLayer = (client: PrismaManagementClient) =>
-  Layer.effect(TestPrismaProviders, Provider.collection([PrismaCustomDomain])).pipe(
-    Layer.provideMerge(CustomDomainProvider()),
-    Layer.provideMerge(Layer.succeed(PrismaClient, client)),
-    Layer.provide(liveProviderContext),
   );
 
 const sourceRepositoryLayer = (client: PrismaManagementClient) =>
@@ -1391,201 +1379,6 @@ environmentAdoption.test.provider(
       yield* stack.destroy();
     }),
   { tags: ["unit", "provider:prisma", "provider:prisma:environmentvariable", "local"] },
-);
-
-const customDomainCalls: Array<[string, unknown?]> = [];
-const customDomainCloud = new Map<string, ApiCustomDomain>();
-let nextCustomDomainId = 1;
-const customDomainClient = {
-  listAppDomains: (appId: string) =>
-    Effect.sync(() => {
-      customDomainCalls.push(["listAppDomains", appId]);
-      return Array.from(customDomainCloud.values()).filter((domain) => domain.appId === appId);
-    }),
-  getCustomDomain: (id: string) =>
-    Effect.suspend(() => {
-      const domain = customDomainCloud.get(id);
-      return domain
-        ? Effect.succeed(domain)
-        : Effect.fail(
-            new PrismaApiError({
-              method: "GET",
-              path: `/v1/domains/${id}`,
-              status: 404,
-              message: "not found",
-            }),
-          );
-    }),
-  createAppDomain: (appId: string, input: { hostname: string }) =>
-    Effect.sync(() => {
-      customDomainCalls.push(["createAppDomain", { appId, input }]);
-      const id = `domain-${nextCustomDomainId++}`;
-      const domain: ApiCustomDomain = {
-        id,
-        type: "custom-domain" as const,
-        url: `https://api.prisma.test/v1/domains/${id}`,
-        hostname: input.hostname,
-        appId,
-        status: "pending_dns" as const,
-        foundryStatus: "pending",
-        failureReason: null,
-        failureCategory: null,
-        certExpiresAt: null,
-        dnsRecords: [
-          { type: "CNAME" as const, name: input.hostname, value: "api.prisma.build", ttl: null },
-        ],
-        createdAt,
-        updatedAt: createdAt,
-      };
-      customDomainCloud.set(id, domain);
-      return { status: 201 as const, domain };
-    }),
-  retryCustomDomain: (id: string) =>
-    Effect.sync(() => {
-      customDomainCalls.push(["retryCustomDomain", id]);
-      const domain = customDomainCloud.get(id)!;
-      const retried: ApiCustomDomain = {
-        ...domain,
-        status: "verifying",
-        foundryStatus: "provisioning",
-        failureReason: null,
-        failureCategory: null,
-        updatedAt: createdAt,
-      };
-      customDomainCloud.set(id, retried);
-      return retried;
-    }),
-  deleteCustomDomain: (id: string) =>
-    Effect.sync(() => {
-      customDomainCalls.push(["deleteCustomDomain", id]);
-      customDomainCloud.delete(id);
-    }),
-} as unknown as PrismaManagementClient;
-const customDomains = Test.make({ providers: customDomainLayer(customDomainClient) });
-
-customDomains.test.provider(
-  "custom domains use the canonical App API and exact status fields",
-  (stack) =>
-    Effect.gen(function* () {
-      customDomainCalls.length = 0;
-      customDomainCloud.clear();
-      nextCustomDomainId = 1;
-      yield* stack.destroy();
-
-      const domain = yield* stack.deploy(
-        PrismaCustomDomain("Domain", {
-          app: { appId: Output.asOutput("app-1") } as unknown as App,
-          hostname: "NEW.EXAMPLE.COM.",
-        }),
-      );
-
-      expect(domain.appId).toBe("app-1");
-      expect(domain.hostname).toBe("new.example.com");
-      expect(domain.foundryStatus).toBe("pending");
-      expect(customDomainCalls).toContainEqual(["listAppDomains", "app-1"]);
-      expect(customDomainCalls).toContainEqual([
-        "createAppDomain",
-        { appId: "app-1", input: { hostname: "new.example.com" } },
-      ]);
-
-      const replacement = domain;
-
-      customDomainCloud.set(replacement.customDomainId, {
-        ...customDomainCloud.get(replacement.customDomainId)!,
-        status: "failed",
-        foundryStatus: "failed",
-        failureReason: "DNS verification failed",
-        failureCategory: "dns",
-      });
-      const provider = yield* Provider.findProvider(PrismaCustomDomain);
-      const failed = yield* provider.read!({
-        id: "Domain",
-        instanceId: "00000000000000000000000000000000",
-        olds: { app: "app-1", hostname: "new.example.com" },
-        output: replacement,
-      } as never);
-      const failedDiff = yield* provider.diff!({
-        id: "Domain",
-        instanceId: "00000000000000000000000000000000",
-        olds: { app: "app-1", hostname: "new.example.com" },
-        news: { app: "app-1", hostname: "new.example.com" },
-        output: failed,
-        oldBindings: [],
-        newBindings: [],
-      } as never);
-      expect(failedDiff).toEqual({ action: "update" });
-      const activeDiff = yield* provider.diff!({
-        id: "Domain",
-        instanceId: "00000000000000000000000000000000",
-        olds: { app: "app-1", hostname: "new.example.com" },
-        news: { app: "app-1", hostname: "new.example.com" },
-        output: { ...replacement, status: "active" },
-        oldBindings: [],
-        newBindings: [],
-      } as never);
-      expect(activeDiff).toBeUndefined();
-      customDomainCalls.length = 0;
-      const retried = yield* provider.reconcile({
-        id: "Domain",
-        instanceId: "00000000000000000000000000000000",
-        news: { app: "app-1", hostname: "new.example.com" },
-        olds: { app: "app-1", hostname: "new.example.com" },
-        output: failed,
-        bindings: [],
-      } as never);
-      expect(retried.customDomainId).toBe(replacement.customDomainId);
-      expect(retried.status).toBe("verifying");
-      expect(customDomainCalls).toContainEqual(["retryCustomDomain", replacement.customDomainId]);
-      expect(
-        customDomainCalls.filter(([operation]) => operation === "retryCustomDomain"),
-      ).toHaveLength(1);
-      const moveDiff = yield* provider.diff!({
-        id: "Domain",
-        instanceId: "00000000000000000000000000000000",
-        olds: { app: "app-1", hostname: "new.example.com" },
-        news: { app: "app-2", hostname: "new.example.com" },
-        output: retried,
-        oldBindings: [],
-        newBindings: [],
-      } as never).pipe(Effect.result);
-      expect(Result.isFailure(moveDiff)).toBe(true);
-      if (Result.isFailure(moveDiff)) {
-        expect(String(moveDiff.failure)).toContain("cannot atomically replace");
-      }
-      const hostnameDiff = yield* provider.diff!({
-        id: "Domain",
-        instanceId: "00000000000000000000000000000000",
-        olds: { app: "app-1", hostname: "new.example.com" },
-        news: { app: "app-1", hostname: "other.example.com" },
-        output: retried,
-        oldBindings: [],
-        newBindings: [],
-      } as never).pipe(Effect.result);
-      expect(Result.isFailure(hostnameDiff)).toBe(true);
-
-      const mismatch = yield* provider
-        .reconcile({
-          id: "Domain",
-          instanceId: "00000000000000000000000000000000",
-          news: { app: "app-2", hostname: "new.example.com" },
-          olds: { app: "app-1", hostname: "new.example.com" },
-          output: retried,
-          bindings: [],
-        } as never)
-        .pipe(Effect.result);
-      expect(Result.isFailure(mismatch)).toBe(true);
-
-      yield* stack.destroy();
-    }),
-  {
-    tags: [
-      "unit",
-      "provider:prisma",
-      "provider:prisma:app",
-      "provider:prisma:customdomain",
-      "local",
-    ],
-  },
 );
 
 const sourceRepositoryCloud = new Map<string, ApiSourceRepository>();

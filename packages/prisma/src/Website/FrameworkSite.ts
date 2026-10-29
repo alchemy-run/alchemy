@@ -1,6 +1,7 @@
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import type { MemoOptions } from "alchemy/Command/Memo";
 import * as DNS from "alchemy/DNS/Adapter";
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import { ProviderModePolicy } from "alchemy/ProviderMode";
 import type { ResourceLike } from "alchemy/Resource";
@@ -10,6 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { Compute, type ComputeProps } from "../Compute.ts";
 import { CustomDomain } from "../CustomDomain.ts";
+import { DomainOwnership } from "../DomainOwnership.ts";
 import { Project } from "../Project.ts";
 import type { Providers } from "../Providers.ts";
 import type { PrismaRegionId } from "../Types.ts";
@@ -48,10 +50,11 @@ export type WebsiteDomain =
       name: string;
       /**
        * DNS host that publishes the hostname's `CNAME` to the app's regional
-       * switchboard (`switchboard.{region}.prisma.build`) before the domain
-       * is registered — Prisma verifies it on registration (see
+       * switchboard (`switchboard.{region}.prisma.build`) and the workspace's
+       * `_prisma-verification` ownership `TXT` record before the domain is
+       * registered — Prisma checks both on registration (see
        * [DNS Adapters](/infrastructure-as-code/dns-adapters)), e.g.
-       * `Cloudflare.DNS.Adapter()`. Omitted: publish it yourself first.
+       * `Cloudflare.DNS.Adapter()`. Omitted: publish them yourself first.
        */
       dns?: DNS.DnsConfig;
     };
@@ -178,25 +181,37 @@ export const deployWebsite = Effect.fn(function* (
     },
   });
   const domainName = websiteDomainName(props.domain);
-  // Prisma verifies the CNAME when the domain is registered, so the record
-  // must exist first: the CustomDomain's hostname depends on it.
-  const routing =
-    domainName && typeof props.domain === "object" && props.domain.dns
-      ? yield* (yield* DNS.resolve(props.domain.dns)).alias("DomainAlias", {
-          name: domainName,
-          target: {
-            hostname: Output.map(compute.appEndpointDomain, switchboardTarget) as unknown as string,
-          },
-        })
+  // Prisma checks the workspace's ownership of the hostname, then its CNAME,
+  // when the domain is registered: both must exist first, so the
+  // CustomDomain's hostname depends on them.
+  const dnsConfig = domainName && typeof props.domain === "object" ? props.domain.dns : undefined;
+  const ready =
+    dnsConfig && domainName
+      ? [
+          yield* (yield* DNS.resolve(dnsConfig)).alias("DomainAlias", {
+            name: domainName,
+            target: {
+              hostname: Output.map(
+                compute.appEndpointDomain,
+                switchboardTarget,
+              ) as unknown as string,
+            },
+          }),
+          yield* DomainOwnership("DomainOwnership", {
+            project,
+            domain: domainName,
+            dns: dnsConfig,
+          }),
+        ]
       : undefined;
   const domain = domainName
     ? yield* CustomDomain("Domain", {
         app: compute,
         hostname:
-          routing === undefined
+          ready === undefined
             ? domainName
             : (Output.map(
-                Output.of(routing as ResourceLike),
+                Output.all(...ready.map((resource) => Output.of(resource as ResourceLike))),
                 () => domainName,
               ) as unknown as string),
       })
