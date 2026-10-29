@@ -26,7 +26,7 @@ export type IngestHl7V2StoreMessageShape = (
  * Parses and stores an HL7v2 message.
  *
  * Bind it to a {@link DatasetsHl7V2Store} and provide {@link IngestHl7V2StoreMessageHttp}. The
- * host gets `roles/healthcare.hl7V2StoreAdmin` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/healthcare.hl7V2Ingest` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `messages.ingest`

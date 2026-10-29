@@ -19,7 +19,7 @@ export const ExecuteFhirBundleHttp = Layer.effect(
         resource: "GCP.Healthcare.DatasetsFhirStore",
         operation: healthcare.executeBundleProjectsLocationsDatasetsFhirStoresFhir,
         param: "parent",
-        iam: { role: "roles/healthcare.fhirStoreAdmin" },
+        iam: { role: "roles/healthcare.fhirResourceReader" },
       },
     ],
   }),

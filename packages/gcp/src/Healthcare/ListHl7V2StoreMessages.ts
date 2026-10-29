@@ -26,7 +26,7 @@ export type ListHl7V2StoreMessagesShape = (
  * Lists all the messages in the given HL7v2 store with support for filtering.
  *
  * Bind it to a {@link DatasetsHl7V2Store} and provide {@link ListHl7V2StoreMessagesHttp}. The
- * host gets `roles/healthcare.hl7V2StoreViewer` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/healthcare.hl7V2Consumer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `messages.list`

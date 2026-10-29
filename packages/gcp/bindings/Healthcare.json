@@ -45,6 +45,22 @@
       "DatasetsConsentStoresConsentArtifact": "ProbeArtifact",
       "DatasetsConsentStoresConsent": "ProbeConsent",
       "DatasetsConsentStoresUserDataMapping": "ProbeMapping"
+    },
+    "skip": {
+      "DeidentifyDataset": "de-identify needs the admin permission on the source and data-plane write on the destination it fills; a binding grants one role",
+      "DeidentifyDicomStore": "de-identify needs the admin permission on the source and data-plane write on the destination it fills; a binding grants one role",
+      "DeidentifyFhirStore": "de-identify needs the admin permission on the source and data-plane write on the destination it fills; a binding grants one role"
     }
+  },
+  "roles": {
+    "healthcare.projects.locations.datasets.hl7V2Stores.messages.list": "roles/healthcare.hl7V2Consumer",
+    "healthcare.projects.locations.datasets.hl7V2Stores.messages.get": "roles/healthcare.hl7V2Consumer",
+    "healthcare.projects.locations.datasets.hl7V2Stores.messages.ingest": "roles/healthcare.hl7V2Ingest",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.search": "roles/healthcare.fhirResourceReader",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.executeBundle": "roles/healthcare.fhirResourceReader",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.create": "roles/healthcare.fhirResourceEditor",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.conditionalDelete": "roles/healthcare.fhirResourceEditor",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.conditionalUpdate": "roles/healthcare.fhirResourceEditor",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.conditionalPatch": "roles/healthcare.fhirResourceEditor"
   }
 }

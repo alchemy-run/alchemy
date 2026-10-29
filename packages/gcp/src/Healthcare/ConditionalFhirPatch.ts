@@ -26,7 +26,7 @@ export type ConditionalFhirPatchShape = (
  * If a resource is found with the identifier specified in the query parameters, updates part of that resource by applying the operations specified in a [JSON Patch](http://jsonpatch.com/) document.
  *
  * Bind it to a {@link DatasetsFhirStore} and provide {@link ConditionalFhirPatchHttp}. The
- * host gets `roles/healthcare.fhirStoreAdmin` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/healthcare.fhirResourceEditor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `fhir.conditionalPatch`

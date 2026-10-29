@@ -26,7 +26,7 @@ export type SearchFhirStoreFhirShape = (
  * Searches for resources in the given FHIR store according to criteria specified as query parameters.
  *
  * Bind it to a {@link DatasetsFhirStore} and provide {@link SearchFhirStoreFhirHttp}. The
- * host gets `roles/healthcare.fhirStoreViewer` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/healthcare.fhirResourceReader` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `fhir.search`

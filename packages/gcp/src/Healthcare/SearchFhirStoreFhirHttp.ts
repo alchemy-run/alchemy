@@ -19,7 +19,7 @@ export const SearchFhirStoreFhirHttp = Layer.effect(
         resource: "GCP.Healthcare.DatasetsFhirStore",
         operation: healthcare.searchProjectsLocationsDatasetsFhirStoresFhir,
         param: "parent",
-        iam: { role: "roles/healthcare.fhirStoreViewer" },
+        iam: { role: "roles/healthcare.fhirResourceReader" },
       },
     ],
   }),

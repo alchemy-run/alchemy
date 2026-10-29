@@ -26,7 +26,7 @@ export type ConditionalFhirUpdateShape = (
  * If a resource is found with the identifier specified in the query parameters, updates the entire contents of that resource.
  *
  * Bind it to a {@link DatasetsFhirStore} and provide {@link ConditionalFhirUpdateHttp}. The
- * host gets `roles/healthcare.fhirStoreAdmin` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/healthcare.fhirResourceEditor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `fhir.conditionalUpdate`

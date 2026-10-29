@@ -26,7 +26,7 @@ export type ExecuteFhirBundleShape = (
  * Executes all the requests in the given Bundle.
  *
  * Bind it to a {@link DatasetsFhirStore} and provide {@link ExecuteFhirBundleHttp}. The
- * host gets `roles/healthcare.fhirStoreAdmin` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/healthcare.fhirResourceReader` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `fhir.executeBundle`

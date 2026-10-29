@@ -22,7 +22,7 @@ export const ListHl7V2StoreMessagesHttp = Layer.effect(
         resource: "GCP.Healthcare.DatasetsHl7V2Store",
         operation: healthcare.listProjectsLocationsDatasetsHl7V2StoresMessages,
         param: "parent",
-        iam: { role: "roles/healthcare.hl7V2StoreViewer" },
+        iam: { role: "roles/healthcare.hl7V2Consumer" },
       },
     ],
   }),

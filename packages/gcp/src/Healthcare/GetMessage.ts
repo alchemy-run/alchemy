@@ -26,7 +26,7 @@ export type GetMessageShape = (
  * Gets an HL7v2 message.
  *
  * Bind it to a {@link DatasetsHl7V2StoresMessage} and provide {@link GetMessageHttp}. The
- * host gets `roles/healthcare.hl7V2StoreViewer` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/healthcare.hl7V2Consumer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `messages.get`

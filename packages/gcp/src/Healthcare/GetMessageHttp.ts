@@ -19,7 +19,7 @@ export const GetMessageHttp = Layer.effect(
         resource: "GCP.Healthcare.DatasetsHl7V2StoresMessage",
         operation: healthcare.getProjectsLocationsDatasetsHl7V2StoresMessages,
         param: "name",
-        iam: { role: "roles/healthcare.hl7V2StoreViewer" },
+        iam: { role: "roles/healthcare.hl7V2Consumer" },
       },
     ],
   }),

@@ -19,7 +19,7 @@ export const ConditionalFhirDeleteHttp = Layer.effect(
         resource: "GCP.Healthcare.DatasetsFhirStore",
         operation: healthcare.conditionalDeleteProjectsLocationsDatasetsFhirStoresFhir,
         param: "parent",
-        iam: { role: "roles/healthcare.fhirStoreAdmin" },
+        iam: { role: "roles/healthcare.fhirResourceEditor" },
       },
     ],
   }),

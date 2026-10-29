@@ -19,7 +19,7 @@ export const ConditionalFhirUpdateHttp = Layer.effect(
         resource: "GCP.Healthcare.DatasetsFhirStore",
         operation: healthcare.conditionalUpdateProjectsLocationsDatasetsFhirStoresFhir,
         param: "parent",
-        iam: { role: "roles/healthcare.fhirStoreAdmin" },
+        iam: { role: "roles/healthcare.fhirResourceEditor" },
       },
     ],
   }),
