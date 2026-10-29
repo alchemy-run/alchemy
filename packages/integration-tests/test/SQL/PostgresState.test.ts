@@ -247,6 +247,7 @@ const makeFakePostgres = (options: { singleConnection?: boolean } = {}) => {
   const client = SqlClient.make({
     acquirer,
     compiler: PgClient.makeCompiler(),
+    driver: "pg",
     spanAttributes: [],
   }).pipe(Effect.provide(Reactivity.layer));
 

@@ -59,7 +59,7 @@ const describeTarget = Effect.fn(function* (instance: rds.DBInstance) {
       .describeDBClusters({ DBClusterIdentifier: instance.DBClusterIdentifier })
       .pipe(
         Effect.map((response) => response.DBClusters?.[0]),
-        Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(undefined)),
+        Effect.catchTag("DBClusterNotFoundFault", () => Effect.undefined),
       );
     if (!cluster) {
       return yield* new MigrationError({

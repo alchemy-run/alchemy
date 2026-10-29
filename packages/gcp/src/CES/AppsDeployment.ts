@@ -127,7 +127,7 @@ export const AppsDeployment = Resource<AppsDeployment>("GCP.CES.AppsDeployment")
 export class AppsDeploymentNotResolved extends Data.TaggedError(
   "GCP.CES.AppsDeploymentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (app: string, deploymentId: string) => `${app}/deployments/${deploymentId}`;
@@ -153,10 +153,10 @@ const toAttrs = (deployment: ces.Deployment, project: string, region: string, ap
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ces
         .getProjectsLocationsAppsDeployments({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   collectPages(
@@ -239,7 +239,7 @@ export const AppsDeploymentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsDeploymentNotResolved({ name });
+        return yield* new AppsDeploymentNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

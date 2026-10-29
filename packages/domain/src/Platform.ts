@@ -1,7 +1,8 @@
 import type { HttpEffect } from "alchemy/Http";
 import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
 import type { ReplayInput, ReplayResult } from "./CatchUp.ts";
@@ -10,6 +11,23 @@ import type * as Projection from "./Projection.ts";
 import type * as DomainStream from "./Stream.ts";
 import { TraceJson } from "./Telemetry.ts";
 import type * as View from "./View.ts";
+
+/**
+ * Capture the services `R` for later use, minus the `Scope`: a captured
+ * construction-time scope must never replace the scope of a later request or
+ * event (finalizers would attach to the wrong lifetime, and on workerd the
+ * work would be pinned to another request's I/O context). Platforms that host
+ * a model call this when they are built.
+ */
+export const captureContext = <R = never>(): Effect.Effect<
+  Context.Context<Exclude<R, Scope>>,
+  never,
+  R
+> =>
+  Effect.map(
+    Effect.context<R>(),
+    (context) => Context.omit(Scope)(context) as Context.Context<Exclude<R, Scope>>,
+  );
 
 /**
  * Everything a platform persists or sends is plain JSON. The kernel owns the
@@ -65,7 +83,7 @@ export interface Delivery {
   readonly event: Json;
   readonly envelope: EnvelopeJson;
   /** For an event from a view: the view's encoded state after it. */
-  readonly state?: Json | null;
+  readonly state?: Json;
   /**
    * History: seeded (story `given`) or replayed to a consumer added after the
    * event (see `CatchUp`). Views and projections apply it, policies ignore it.
@@ -114,7 +132,7 @@ export interface Push {
 export interface HandleInput {
   readonly id: string;
   /** The stored state, or `null` for an instance that has never committed. */
-  readonly state: Json | null;
+  readonly state: Json;
   readonly version: number;
   readonly command: Json;
   readonly commandId: string;
@@ -140,7 +158,7 @@ export type HandleResult =
       readonly state: Json;
       readonly version: number;
       readonly events: ReadonlyArray<StoredEvent>;
-      readonly reply: Json | null;
+      readonly reply: Json;
       readonly deliveries: ReadonlyArray<Delivery>;
     };
 
@@ -151,7 +169,7 @@ export interface ReceiptJson {
   readonly stream: string;
   readonly version: number;
   readonly events: ReadonlyArray<Json>;
-  readonly reply: Json | null;
+  readonly reply: Json;
 }
 
 /**
@@ -191,7 +209,7 @@ export interface AggregateKit {
   readonly push: (
     id: string,
     subscription: Subscription,
-    current: { readonly state: Json | null; readonly version: number },
+    current: { readonly state: Json; readonly version: number },
     events: ReadonlyArray<StoredEvent>,
   ) => Effect.Effect<Push>;
 }
@@ -201,7 +219,7 @@ export interface AggregateKit {
  */
 export interface SeedInput {
   readonly id: string;
-  readonly state: Json | null;
+  readonly state: Json;
   readonly version: number;
   readonly events: ReadonlyArray<Json>;
   readonly commandId: string;
@@ -258,15 +276,13 @@ export interface AggregateStore {
     Aggregate.AlreadyExecuted | Aggregate.AlreadyCancelled | Aggregate.NotScheduled
   >;
   /** Read the stored state of an instance. */
-  readonly state: (
-    id: string,
-  ) => Effect.Effect<{ readonly state: Json | null; readonly version: number }>;
+  readonly state: (id: string) => Effect.Effect<{ readonly state: Json; readonly version: number }>;
   /** Read the committed events of an instance (tests and diagnostics; optional). */
   readonly events?: (id: string) => Effect.Effect<ReadonlyArray<StoredEvent>>;
   /** The stored state and version of an instance, then every new one. */
   readonly changes: (
     id: string,
-  ) => Stream.Stream<{ readonly state: Json | null; readonly version: number }>;
+  ) => Stream.Stream<{ readonly state: Json; readonly version: number }>;
   /** Committed events with `seq > after`, then live ones. */
   readonly tail: (id: string, after: number) => Stream.Stream<StoredEvent>;
   /**
@@ -292,7 +308,7 @@ export interface HistoryJson {
  */
 export interface ViewSnapshot {
   /** The encoded state, or `null` when the key does not exist. */
-  readonly state: Json | null;
+  readonly state: Json;
   /** Number of applied deliveries. */
   readonly version: number;
   /** Last applied `seq` per source. */
@@ -313,7 +329,7 @@ export interface ViewEntry {
   readonly seq: number;
   readonly event: Json;
   readonly envelope: EnvelopeJson;
-  readonly state: Json | null;
+  readonly state: Json;
 }
 
 /**

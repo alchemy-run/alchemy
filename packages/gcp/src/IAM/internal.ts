@@ -14,7 +14,7 @@ import { waitForOperation as waitForLongRunning, type LongRunningOperation } fro
 export const MAX_POLICY_ID = 63;
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.IAM.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {

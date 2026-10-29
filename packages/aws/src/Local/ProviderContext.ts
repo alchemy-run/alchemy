@@ -76,7 +76,7 @@ export const captureAwsEnvironment: Effect.Effect<Layer.Layer<any, never, never>
     ctx = Context.add(
       ctx,
       Endpoint.Endpoint,
-      Option.getOrElse(endpoint, () => Effect.succeed(undefined)),
+      Option.getOrElse(endpoint, () => Effect.undefined),
     );
     const region = yield* Effect.serviceOption(Region);
     if (Option.isSome(region)) ctx = Context.add(ctx, Region, region.value);

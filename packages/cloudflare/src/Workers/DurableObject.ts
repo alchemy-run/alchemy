@@ -1378,7 +1378,7 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           Effect.flatMap(([env, phase]) => {
             if (env === undefined || phase === "plan") {
               // should be fine to return undefined here (it is only undefined at plantime)
-              return Effect.succeed(undefined);
+              return Effect.undefined;
             }
             const ns = env[namespace];
             if (!ns) {

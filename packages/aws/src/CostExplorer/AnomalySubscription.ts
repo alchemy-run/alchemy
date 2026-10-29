@@ -145,7 +145,7 @@ export const AnomalySubscriptionProvider = () =>
           }),
         ).pipe(
           Effect.map((r) => r.AnomalySubscriptions[0]),
-          Effect.catchTag("UnknownSubscriptionException", () => Effect.succeed(undefined)),
+          Effect.catchTag("UnknownSubscriptionException", () => Effect.undefined),
         );
 
       const findByName = (subscriptionName: string) =>

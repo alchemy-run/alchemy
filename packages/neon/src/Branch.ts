@@ -344,7 +344,7 @@ export const BranchProvider = () =>
           branch_id: output.branchId,
         }).pipe(
           Effect.flatMap(({ branch }) => hydrateBranch(output.projectId, branch, output)),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       }
       if (!olds?.project) return undefined;
@@ -397,7 +397,7 @@ export const BranchProvider = () =>
               branch_id: output.branchId,
             }).pipe(
               Effect.map(({ branch }) => branch),
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             )
           : undefined;
       if (!observed) {
@@ -652,7 +652,7 @@ const hydrateBranch = (
     return attributes;
   }).pipe(
     // A branch/database/endpoint can disappear mid-enumeration — skip it.
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const rootDir = Effect.sync(() => process.cwd());

@@ -133,7 +133,7 @@ export const AnomalyDetectorProvider = () =>
       const describe = Effect.fn(function* (workspaceId: string, anomalyDetectorId: string) {
         const response = yield* amp
           .describeAnomalyDetector({ workspaceId, anomalyDetectorId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.anomalyDetector;
       });
 
@@ -146,7 +146,7 @@ export const AnomalyDetectorProvider = () =>
           Stream.filter((s) => s.alias === alias),
           Stream.runHead,
           Effect.map(Option.getOrUndefined),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         return summary === undefined
           ? undefined

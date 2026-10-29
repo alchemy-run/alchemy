@@ -362,7 +362,7 @@ const legacyPipelineName = (id: string, name: string | undefined) =>
 const getLegacyPipeline = (accountId: string, pipelineName: string) =>
   pipelines.getPipeline({ accountId, pipelineName }).pipe(
     Effect.map((p): ObservedLegacyPipeline | undefined => p),
-    Effect.catchTag("PipelineNotExists", () => Effect.succeed(undefined)),
+    Effect.catchTag("PipelineNotExists", () => Effect.undefined),
   );
 
 interface LegacyPipelineSummary {

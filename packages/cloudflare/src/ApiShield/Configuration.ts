@@ -143,8 +143,9 @@ export const ConfigurationProvider = () =>
             }),
             // API Shield is entitlement-gated and zones may be partial or
             // deleted out-of-band — skip any zone we can't read.
-            Effect.catchTag(["NotEntitled", "InvalidObjectIdentifier", "Forbidden"], () =>
-              Effect.succeed(undefined),
+            Effect.catchTag(
+              ["NotEntitled", "InvalidObjectIdentifier", "Forbidden"],
+              () => Effect.undefined,
             ),
           ),
         { concurrency: 10 },
@@ -168,7 +169,7 @@ export const ConfigurationProvider = () =>
       if (zoneId === undefined) return undefined;
       const observed = yield* apiGateway.getConfiguration({ zoneId }).pipe(
         // Zone deleted out-of-band — the configuration is gone with it.
-        Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidObjectIdentifier", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The configuration is a singleton that always exists with a default
@@ -219,7 +220,7 @@ export const ConfigurationProvider = () =>
       // Observe — if the zone itself is gone, so is the configuration.
       const observed = yield* apiGateway
         .getConfiguration({ zoneId })
-        .pipe(Effect.catchTag("InvalidObjectIdentifier", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("InvalidObjectIdentifier", () => Effect.undefined));
       if (observed === undefined) return;
       // Restore the pre-management characteristics; skip the call when
       // they already match (idempotent re-delete after a crashed run).

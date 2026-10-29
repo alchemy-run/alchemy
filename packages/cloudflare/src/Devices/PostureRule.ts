@@ -287,7 +287,7 @@ type ObservedRule =
 const observeRule = (accountId: string, ruleId: string) =>
   zeroTrust
     .getDevicePosture({ accountId, ruleId })
-    .pipe(Effect.catchTag("PostureRuleNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("PostureRuleNotFound", () => Effect.undefined));
 
 /**
  * Find a posture rule by exact name (oldest-id-first for determinism when

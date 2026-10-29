@@ -10,7 +10,6 @@ import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
 import * as CatchUp from "./CatchUp.ts";
-import * as Command from "./Command.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import type * as Key from "./Key.ts";
@@ -446,6 +445,7 @@ const build = <A, E, R>(
           run: (key, batch) =>
             Effect.gen(function* () {
               // Platforms run handlers inside their runtime (a Durable Object, or this process).
+              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs handlers inside its runtime, which provides RuntimeContext
               yield* implementation.handle(
                 kernel.projectionInputs(projection, key, batch),
               ) as Effect.Effect<void>;
@@ -663,14 +663,13 @@ const viewHost = (
           Duration.toMillis(Duration.fromInputUnsafe(options?.timeout ?? "10 seconds")) / 25,
         ),
       }),
-      Effect.mapError(
-        () =>
-          new View.ConsistencyTimeout({
-            view: view.viewName,
-            key: id,
-            stream: atLeast.stream,
-            version: atLeast.version,
-          }),
+      Effect.mapError(() =>
+        View.ConsistencyTimeout.make({
+          view: view.viewName,
+          key: id,
+          stream: atLeast.stream,
+          version: atLeast.version,
+        }),
       ),
     );
   };
@@ -751,7 +750,7 @@ const streamHost = (
   const decode = (entry: StreamEntry) => kernel.decodeStreamEntry(entry);
   const latest = (key: string, meta: StreamMeta) =>
     meta.seq === 0
-      ? Effect.succeed(Option.none())
+      ? Effect.succeedNone
       : store
           .tail(key, meta.seq - 1)
           .pipe(Stream.take(1), Stream.runHead, Effect.map(Option.map(decode)));
@@ -771,7 +770,7 @@ const streamHost = (
               ),
             options?.timeout,
             () =>
-              new View.ConsistencyTimeout({
+              View.ConsistencyTimeout.make({
                 view: stream.streamName,
                 key: Aggregate.targetId(key),
                 stream: atLeast.stream,
@@ -884,7 +883,7 @@ const projectionProgress = (
               ),
             options?.timeout,
             () =>
-              new View.ConsistencyTimeout({
+              View.ConsistencyTimeout.make({
                 view: projection.projectionName,
                 key,
                 stream: receipt.stream,

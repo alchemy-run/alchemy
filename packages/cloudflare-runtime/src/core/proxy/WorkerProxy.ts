@@ -130,7 +130,7 @@ const connect = (to: Upstream) =>
         Effect.fail(
           SystemError.make({
             subtag: "WorkerProxyConnect",
-            message: `Failed to reach the worker (upstream address: ${to.url})`,
+            message: `Failed to reach the worker (upstream address: ${to.url.href})`,
             cause,
           }),
         ),

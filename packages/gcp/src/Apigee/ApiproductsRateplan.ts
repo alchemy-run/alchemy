@@ -157,7 +157,7 @@ export const ApiproductsRateplan = Resource<ApiproductsRateplan>("GCP.Apigee.Api
 export class ApiproductsRateplanNotResolved extends Data.TaggedError(
   "GCP.Apigee.ApiproductsRateplanNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const productParent = (organizationId: string, apiproduct: string) => {
@@ -197,7 +197,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApiproductsRateplans({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const ApiproductsRateplanProvider = () =>
   Provider.succeed(ApiproductsRateplan, {
@@ -267,13 +267,13 @@ export const ApiproductsRateplanProvider = () =>
             parent,
             body,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? undefined;
       }
 
       if (current === undefined || current.name === undefined) {
         return yield* new ApiproductsRateplanNotResolved({
-          name: output?.name ?? parent,
+          resourceName: output?.name ?? parent,
         });
       }
 

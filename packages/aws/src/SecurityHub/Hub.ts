@@ -97,8 +97,8 @@ const buildAttrs = (hub: securityhub.DescribeHubResponse) => ({
 // both mean "no Hub", so collapse them to `undefined`.
 const describeHub = securityhub.describeHub({}).pipe(
   Effect.catchTags({
-    InvalidAccessException: () => Effect.succeed(undefined),
-    ResourceNotFoundException: () => Effect.succeed(undefined),
+    InvalidAccessException: () => Effect.undefined,
+    ResourceNotFoundException: () => Effect.undefined,
   }),
 );
 

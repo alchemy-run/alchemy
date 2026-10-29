@@ -248,9 +248,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
           message: `GCP: gcloud configuration '${configuration}' needs a login${detail ? ` (${detail})` : ""}. ${refreshHint(GCP_AUTH_PROVIDER_NAME, profileName)}`,
         });
       }
-      return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ConfigHelperOutput))(
-        stdout,
-      ).pipe(
+      return yield* Schema.decodeEffect(Schema.fromJsonString(ConfigHelperOutput))(stdout).pipe(
         Effect.mapError((cause) =>
           AuthError.make({
             message: `GCP: unexpected output from gcloud config config-helper`,

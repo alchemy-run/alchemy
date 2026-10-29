@@ -3,7 +3,6 @@ import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as iam from "@distilled.cloud/aws/iam";
 import type { Region } from "@distilled.cloud/aws/Region";
-import * as route53 from "@distilled.cloud/aws/route-53";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import type { DnsConfig } from "alchemy/DNS/Adapter";
 import * as Namespace from "alchemy/Namespace";
@@ -23,7 +22,6 @@ import type { HttpClient } from "effect/http/HttpClient";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { Certificate } from "../ACM/Certificate.ts";
 import { ScalableTarget } from "../ApplicationAutoScaling/ScalableTarget.ts";
 import { ScalingPolicy } from "../ApplicationAutoScaling/ScalingPolicy.ts";
 import { Service as CloudMapService } from "../CloudMap/Service.ts";
@@ -50,6 +48,7 @@ import { ListenerRule } from "../ELBv2/ListenerRule.ts";
 import { LoadBalancer } from "../ELBv2/LoadBalancer.ts";
 import { TargetGroup, type TargetGroupArn } from "../ELBv2/TargetGroup.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { plainJson } from "../internal/Observe.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
@@ -910,6 +909,13 @@ export interface Service extends Resource<
      */
     ingressKind?: "owned" | "shared";
 
+    /**
+     * Desired count, networking, load balancers, service registries, the
+     * declared deployment/placement/execute-command settings and the tags,
+     * as observed. Lets `alchemy drift` detect out-of-band changes.
+     */
+    configuration?: Record<string, unknown>;
+
     /** Family of the synthesized task definition (image-owning form only). */
     taskFamily?: string;
     /** Name of the primary container (image-owning form only). */
@@ -1350,6 +1356,63 @@ export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRu
   });
 
 /** The BYO task reference, when the props use the `task:` form. */
+/**
+ * The service settings reconcile converges, as observed on `service`.
+ * `read` and `reconcile` share it so a converged service reads unchanged.
+ * Settings whose prop is unset are left unchanged by `updateService`, so
+ * they are only observed when declared; the desired count is not observed
+ * while autoscaling owns it.
+ */
+const observeServiceConfiguration = (
+  service: ecs.Service,
+  props: ServiceProps | undefined,
+  tags: Record<string, string>,
+) => {
+  const declared = <V>(key: keyof ServiceProps, value: V) =>
+    props?.[key] === undefined ? undefined : value;
+  const vpc = service.networkConfiguration?.awsvpcConfiguration;
+  return plainJson({
+    desiredCount: props?.scaling === undefined ? service.desiredCount : undefined,
+    networkConfiguration: vpc && {
+      subnets: [...(vpc.subnets ?? [])].sort(),
+      securityGroups: [...(vpc.securityGroups ?? [])].sort(),
+      assignPublicIp: vpc.assignPublicIp,
+    },
+    loadBalancers: service.loadBalancers?.length
+      ? [...service.loadBalancers].sort((a, b) =>
+          JSON.stringify(a).localeCompare(JSON.stringify(b)),
+        )
+      : undefined,
+    serviceRegistries: service.serviceRegistries?.length ? service.serviceRegistries : undefined,
+    platformVersion: declared("platformVersion", service.platformVersion),
+    deploymentConfiguration: declared("deploymentConfiguration", service.deploymentConfiguration),
+    healthCheckGracePeriodSeconds: declared(
+      "healthCheckGracePeriod",
+      service.healthCheckGracePeriodSeconds,
+    ),
+    capacityProviderStrategy: declared(
+      "capacityProviderStrategy",
+      service.capacityProviderStrategy,
+    ),
+    placementConstraints: declared("placementConstraints", service.placementConstraints),
+    placementStrategy: declared("placementStrategy", service.placementStrategy),
+    enableExecuteCommand: declared("enableExecuteCommand", service.enableExecuteCommand),
+    propagateTags: declared("propagateTags", service.propagateTags),
+    availabilityZoneRebalancing: declared(
+      "availabilityZoneRebalancing",
+      service.availabilityZoneRebalancing,
+    ),
+    tags,
+  });
+};
+
+const ecsTagRecord = (tags: ecs.Tag[] | undefined): Record<string, string> =>
+  Object.fromEntries(
+    (tags ?? []).flatMap((t) =>
+      typeof t.key === "string" && typeof t.value === "string" ? [[t.key, t.value]] : [],
+    ),
+  );
+
 const taskRefOf = (props: ServiceProps | undefined) =>
   props !== undefined && "task" in props ? props.task : undefined;
 
@@ -1477,7 +1540,7 @@ interface ManagedSgPort {
  */
 const managedSgIngress = (
   staticPorts: ManagedSgPort[],
-  dynamicPort: number | unknown | undefined,
+  dynamicPort: unknown,
 ): SecurityGroupRuleData[] => {
   const rulesOf = (entries: ManagedSgPort[]): SecurityGroupRuleData[] => {
     const seen = new Set<string>();
@@ -2462,7 +2525,7 @@ const observeServiceConvergence = (input: {
         cluster: input.clusterArn,
         services: [input.serviceName],
       })
-      .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
     const service = described?.services?.find(
       (candidate) => candidate.serviceName === input.serviceName && candidate.status !== "INACTIVE",
     );
@@ -2733,7 +2796,7 @@ export const ServiceProvider = () =>
           .describeLoadBalancers({
             LoadBalancerArns: [ingress.loadBalancerArn],
           })
-          .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
         const dnsName = described?.LoadBalancers?.[0]?.DNSName;
         if (!dnsName) {
           return undefined;
@@ -2889,13 +2952,13 @@ export const ServiceProvider = () =>
         // already-attached ARNs; a `LimitExceededException` means the
         // policy was NOT attached, so it propagates and fails the deploy
         // rather than silently shipping a role with missing permissions.
-        yield* Effect.all(
-          (news.taskRoleManagedPolicyArns ?? []).map((policyArn) =>
+        yield* Effect.forEach(
+          news.taskRoleManagedPolicyArns ?? [],
+          (policyArn) =>
             iam.attachRolePolicy({
               RoleName: taskRoleName,
               PolicyArn: policyArn,
             }),
-          ),
           { concurrency: "unbounded" },
         );
 
@@ -3168,7 +3231,7 @@ export const ServiceProvider = () =>
               services: [serviceName],
               include: ["TAGS"],
             })
-            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
           const service = described?.services?.[0];
           if (!service?.serviceArn) {
             return undefined;
@@ -3180,6 +3243,7 @@ export const ServiceProvider = () =>
             clusterArn: service.clusterArn as ClusterArn,
             taskDefinitionArn: service.taskDefinition!,
             status: service.status ?? "ACTIVE",
+            configuration: observeServiceConfiguration(service, olds, ecsTagRecord(service.tags)),
           };
         }),
         list: () =>
@@ -3294,7 +3358,7 @@ export const ServiceProvider = () =>
               services: [serviceName],
               include: ["TAGS"],
             })
-            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
           const observed = described?.services?.find(
             (s) =>
               s.serviceName === serviceName && s.status !== "INACTIVE" && s.status !== "DRAINING",
@@ -3380,6 +3444,7 @@ export const ServiceProvider = () =>
               clusterArn: stableService.clusterArn as ClusterArn,
               taskDefinitionArn: stableService.taskDefinition!,
               status: stableService.status ?? "ACTIVE",
+              configuration: observeServiceConfiguration(stableService, news, desiredTags),
               ...ingressAttrs,
               ...ownedAttributes,
             };
@@ -3481,6 +3546,7 @@ export const ServiceProvider = () =>
             clusterArn: stableService.clusterArn as ClusterArn,
             taskDefinitionArn: stableService.taskDefinition!,
             status: stableService.status ?? "ACTIVE",
+            configuration: observeServiceConfiguration(stableService, news, desiredTags),
             ...ingressAttrs,
             ...ownedAttributes,
           };

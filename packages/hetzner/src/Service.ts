@@ -253,7 +253,7 @@ export const ServiceProvider = () =>
           if (serverId === undefined) return undefined;
           const live = yield* Hetzner.servers.getServer({ id: serverId }).pipe(
             Effect.map(({ server }) => server),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (live === undefined) return undefined;
           return {
@@ -324,7 +324,7 @@ export const ServiceProvider = () =>
         }),
         delete: Effect.fn(function* ({ olds, output }) {
           const ssh = yield* openSession(olds).pipe(
-            Effect.catchTag("Hetzner.SshError", () => Effect.succeed(undefined)),
+            Effect.catchTag("Hetzner.SshError", () => Effect.undefined),
           );
           if (ssh === undefined) return;
           yield* Effect.ensuring(hosted.removeUnit({ ssh, unitName: output.unitName }), ssh.close);

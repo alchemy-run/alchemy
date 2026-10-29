@@ -317,7 +317,7 @@ const toAttrs = (
 const getByName = (project: string, zone: string, networkEndpointGroup: string) =>
   compute
     .getNetworkEndpointGroups({ project, zone, networkEndpointGroup })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toApiEndpoint = (
   project: string,
@@ -536,7 +536,7 @@ export const NetworkEndpointGroupProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
@@ -561,9 +561,7 @@ export const NetworkEndpointGroupProvider = () =>
             times: 8,
             schedule: Schedule.exponential("250 millis"),
           }),
-          Effect.catchTag("GCP.Compute.NetworkEndpointGroupNotResolved", () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag("GCP.Compute.NetworkEndpointGroupNotResolved", () => Effect.undefined),
         );
       }
 
@@ -621,7 +619,7 @@ export const NetworkEndpointGroupProvider = () =>
           networkEndpointGroup: output.networkEndpointGroupName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void

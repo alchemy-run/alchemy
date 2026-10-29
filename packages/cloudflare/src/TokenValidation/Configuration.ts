@@ -339,7 +339,7 @@ type ObservedConfiguration = tokenValidation.GetConfigurationResponse;
 const getConfiguration = (zoneId: string, configId: string) =>
   tokenValidation.getConfiguration({ zoneId, configId }).pipe(
     Effect.map((c): ObservedConfiguration | undefined => c),
-    Effect.catchTag("TokenConfigurationNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("TokenConfigurationNotFound", () => Effect.undefined),
   );
 
 /**

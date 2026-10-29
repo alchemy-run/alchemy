@@ -50,6 +50,7 @@ export const validateTag = (tag: string): string | null => {
   if (typeof tag !== "string" || tag.length === 0 || tag.length > MAX_TAG_LENGTH) {
     return null;
   }
+  // oxlint-disable-next-line no-control-regex -- rejects control characters on purpose
   if (/[\x00-\x1f\\:]/.test(tag)) return null;
   return tag;
 };

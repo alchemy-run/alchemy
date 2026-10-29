@@ -225,7 +225,7 @@ const projectParent = (project: string) =>
         ? normalizeParent(resource.parent)
         : undefined,
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const resolveParent = (news: { parent?: string }, output: { parent?: string } | undefined) =>
@@ -380,7 +380,7 @@ const toAttrs = (
 const getById = (securityPolicy: string) =>
   compute
     .getOrganizationSecurityPolicies({ securityPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findByShortName = (parentId: string, shortName: string) =>
   compute.listOrganizationSecurityPolicies
@@ -393,7 +393,7 @@ const findByShortName = (parentId: string, shortName: string) =>
       Stream.filter((policy) => policy.shortName === shortName),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)[0]),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
 
 const observe = (securityPolicyId: string | undefined, parentId: string, shortName: string) =>
@@ -509,7 +509,7 @@ const syncRules = (
           priority,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }
   });
 
@@ -619,7 +619,7 @@ export const OrganizationSecurityPolicyProvider = () =>
             },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         const createdId = inserted !== undefined ? idFromOperation(inserted) : "";
         current = yield* awaitResource(
           createdId.length > 0 ? createdId : (output?.securityPolicyId ?? ""),
@@ -721,7 +721,7 @@ export const OrganizationSecurityPolicyProvider = () =>
               ignore: ["RESOURCE_NOT_FOUND"],
             }),
           ),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

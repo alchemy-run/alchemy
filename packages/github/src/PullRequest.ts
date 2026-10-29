@@ -7,10 +7,18 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { dedent } from "alchemy/Util/dedent";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
 import type * as GitHub from "./Providers.ts";
+
+export class PullRequestUnexpectedResponse extends Data.TaggedError(
+  "PullRequestUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface PullRequestProps {
   /**
@@ -286,7 +294,7 @@ export const PullRequestProvider = () =>
         const body = news.body === undefined ? undefined : dedent(news.body);
         const getPull = (number: number) =>
           Pulls.get({ ...scope, pull_number: number }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
         const findOpen = () =>
           Pulls.list({
@@ -324,7 +332,9 @@ export const PullRequestProvider = () =>
           observed = yield* getPull(number);
         }
         if (observed === undefined) {
-          return yield* Effect.fail(new Error("Pull request disappeared during reconciliation"));
+          return yield* new PullRequestUnexpectedResponse({
+            message: "Pull request disappeared during reconciliation",
+          });
         }
         const state = news.state ?? "open";
         const draft = news.draft ?? false;
@@ -357,7 +367,9 @@ export const PullRequestProvider = () =>
         }
         const final = yield* getPull(observed.number);
         if (final === undefined) {
-          return yield* Effect.fail(new Error("Pull request disappeared after reconciliation"));
+          return yield* new PullRequestUnexpectedResponse({
+            message: "Pull request disappeared after reconciliation",
+          });
         }
         return attributes(final);
       },
@@ -405,7 +417,7 @@ export const PullRequestProvider = () =>
 
         // GitHub preserves pull request history; destruction closes it.
         const observed = yield* Pulls.get(pull).pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
         if (observed?.state === "open") {
           yield* Pulls.update({ ...pull, state: "closed" }).pipe(

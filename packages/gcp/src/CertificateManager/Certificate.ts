@@ -241,13 +241,13 @@ export const Certificate = Resource<Certificate>("GCP.CertificateManager.Certifi
 export class CertificateNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.CertificateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateStillExists extends Data.TaggedError(
   "GCP.CertificateManager.CertificateStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -417,12 +417,12 @@ const toAttrs = (cert: certificatemanager.Certificate, project: string) => {
 const getByName = (name: string) =>
   certificatemanager
     .getProjectsLocationsCertificates({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cert) =>
-      cert ? Effect.succeed(cert) : Effect.fail(new CertificateNotResolved({ name })),
+      cert ? Effect.succeed(cert) : Effect.fail(new CertificateNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateNotResolved",
@@ -434,7 +434,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((cert) =>
-      cert === undefined ? Effect.void : Effect.fail(new CertificateStillExists({ name })),
+      cert === undefined
+        ? Effect.void
+        : Effect.fail(new CertificateStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateStillExists",
@@ -647,7 +649,7 @@ export const CertificateProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -656,7 +658,7 @@ export const CertificateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateNotResolved({ name });
+        return yield* new CertificateNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -695,7 +697,7 @@ export const CertificateProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

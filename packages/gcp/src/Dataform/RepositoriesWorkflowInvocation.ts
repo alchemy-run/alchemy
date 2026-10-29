@@ -121,7 +121,7 @@ export const RepositoriesWorkflowInvocation = Resource<RepositoriesWorkflowInvoc
 export class RepositoriesWorkflowInvocationNotResolved extends Data.TaggedError(
   "GCP.Dataform.RepositoriesWorkflowInvocationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (invocation: dataform.WorkflowInvocation, project: string, region: string) => {
@@ -144,10 +144,10 @@ const toAttrs = (invocation: dataform.WorkflowInvocation, project: string, regio
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataform
         .getProjectsLocationsRepositoriesWorkflowInvocations({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const invocationBody = (
   news: RepositoriesWorkflowInvocationProps,
@@ -200,14 +200,14 @@ export const RepositoriesWorkflowInvocationProvider = () =>
       });
     }),
 
-    read: Effect.fn(function* ({ olds, output }) {
+    read: Effect.fn(function* ({ output }) {
       const env = yield* GcpEnvironment.current;
       const existing = yield* getByName(output?.name ?? "");
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project, env.region);
       const parent = yield* dataform
         .getProjectsLocationsRepositories({ name: attrs.repository })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (parent === undefined) return Unowned(attrs);
       return hasAlchemyLabelMap(parent.labels) ? attrs : Unowned(attrs);
     }),
@@ -239,7 +239,7 @@ export const RepositoriesWorkflowInvocationProvider = () =>
 
       if (current === undefined) {
         return yield* new RepositoriesWorkflowInvocationNotResolved({
-          name: output?.name ?? `${repository}/workflowInvocations`,
+          resourceName: output?.name ?? `${repository}/workflowInvocations`,
         });
       }
 

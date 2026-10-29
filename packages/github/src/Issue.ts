@@ -230,7 +230,7 @@ export const IssueProvider = () =>
                 owner: news.owner,
                 repo: news.repository,
                 issue_number: output.issueNumber,
-              }).pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.succeed(undefined)))
+              }).pipe(Effect.catchTag(["NotFound", "Gone"], () => Effect.undefined))
             : undefined;
 
         if (data === undefined) {

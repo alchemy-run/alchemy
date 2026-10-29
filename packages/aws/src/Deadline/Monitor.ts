@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -14,6 +15,18 @@ import {
   retryThroughIamPropagation,
   syncDeadlineTags,
 } from "./internal.ts";
+
+export class DeadlineMonitorInvalidProps extends Data.TaggedError("DeadlineMonitorInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class DeadlineMonitorUnexpectedResponse extends Data.TaggedError(
+  "DeadlineMonitorUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface MonitorProps {
   /**
@@ -137,7 +150,7 @@ interface MonitorState {
 const readMonitorById = Effect.fn(function* (monitorId: string, arnOf: (path: string) => string) {
   const described = yield* deadline
     .getMonitor({ monitorId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described) return undefined;
   const monitorArn = arnOf(`monitor/${described.monitorId}`);
   const state: MonitorState = {
@@ -220,7 +233,9 @@ export const MonitorProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (news === undefined) {
-            return yield* Effect.fail(new Error("AWS.Deadline.Monitor requires props"));
+            return yield* new DeadlineMonitorInvalidProps({
+              message: "AWS.Deadline.Monitor requires props",
+            });
           }
           const arnOf = yield* deadlineArnOf;
           const displayName = yield* createMonitorName(id, news);
@@ -247,7 +262,9 @@ export const MonitorProvider = () =>
             yield* session.note(`Created monitor ${displayName} (${created.monitorId})`);
             state = yield* readMonitorById(created.monitorId, arnOf);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created monitor ${displayName}`));
+              return yield* new DeadlineMonitorUnexpectedResponse({
+                message: `failed to read created monitor ${displayName}`,
+              });
             }
           }
 
@@ -273,9 +290,9 @@ export const MonitorProvider = () =>
           yield* session.note(state.attrs.monitorArn);
           const final = yield* readMonitorById(state.attrs.monitorId, arnOf);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled monitor ${displayName}`),
-            );
+            return yield* new DeadlineMonitorUnexpectedResponse({
+              message: `failed to read reconciled monitor ${displayName}`,
+            });
           }
           return final.attrs;
         }),

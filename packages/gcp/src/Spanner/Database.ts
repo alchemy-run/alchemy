@@ -199,16 +199,16 @@ export type Database = Resource<
 export const Database = Resource<Database>("GCP.Spanner.Database");
 
 export class DatabaseNotResolved extends Data.TaggedError("GCP.Spanner.DatabaseNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DatabaseNotReady extends Data.TaggedError("GCP.Spanner.DatabaseNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class DatabaseStillExists extends Data.TaggedError("GCP.Spanner.DatabaseStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -325,12 +325,14 @@ const toAttrs = (
 const getByName = (name: string) =>
   spanner
     .getProjectsInstancesDatabases({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((database) =>
-      database ? Effect.succeed(database) : Effect.fail(new DatabaseNotResolved({ name })),
+      database
+        ? Effect.succeed(database)
+        : Effect.fail(new DatabaseNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.DatabaseNotResolved",
@@ -346,13 +348,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (database): database is spanner.Database => database !== undefined,
-      () => new DatabaseNotResolved({ name }),
+      () => new DatabaseNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (database) => isReadyState(database.state),
       (database) =>
         new DatabaseNotReady({
-          name,
+          resourceName: name,
           state: database.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -368,7 +370,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((database) =>
-      database === undefined ? Effect.void : Effect.fail(new DatabaseStillExists({ name })),
+      database === undefined
+        ? Effect.void
+        : Effect.fail(new DatabaseStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Spanner.DatabaseStillExists",
@@ -509,7 +513,7 @@ export const DatabaseProvider = () =>
               databaseDialect: dialect === DEFAULT_DIALECT ? undefined : dialect,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -517,7 +521,7 @@ export const DatabaseProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatabaseNotResolved({ name });
+        return yield* new DatabaseNotResolved({ resourceName: name });
       }
 
       if (!isReadyState(current.state)) {

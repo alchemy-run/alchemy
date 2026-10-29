@@ -99,7 +99,7 @@ export class TagBindingNotResolved extends Data.TaggedError(
 export class TagBindingStillExists extends Data.TaggedError(
   "GCP.ResourceManager.TagBindingStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -269,7 +269,7 @@ const waitUntilGone = (
         ? Effect.void
         : Effect.fail(
             new TagBindingStillExists({
-              name: binding.name ?? name ?? "",
+              resourceName: binding.name ?? name ?? "",
             }),
           ),
     ),
@@ -342,7 +342,7 @@ export const TagBindingProvider = () =>
           .createTagBindings({
             body: createBody(parent, tagValue),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -380,7 +380,7 @@ export const TagBindingProvider = () =>
 
       const operation = yield* resourcemanager
         .deleteTagBindings({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

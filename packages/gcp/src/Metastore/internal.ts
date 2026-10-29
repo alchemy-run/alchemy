@@ -17,20 +17,20 @@ export const DEFAULT_HIVE_VERSION = "3.1.2";
 export const MAX_NAME_LENGTH = 63;
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.Metastore.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError("GCP.Metastore.ResourceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceNotReady extends Data.TaggedError("GCP.Metastore.ResourceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ResourceFailed extends Data.TaggedError("GCP.Metastore.ResourceFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
   details: string | undefined;
 }> {}
@@ -200,7 +200,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is Exclude<A, undefined> => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Metastore.ResourceNotResolved",
@@ -216,7 +216,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -243,13 +243,13 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is Exclude<A, undefined> => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (value) => !isFailedState(stateOf(value)),
       (value) =>
         new ResourceFailed({
-          name,
+          resourceName: name,
           state: stateOf(value) ?? "",
           details: detailsOf?.(value),
         }),
@@ -259,7 +259,7 @@ export const waitUntilReady = <A, E extends { readonly _tag: string }, R>(
         const state = stateOf(value) ?? "";
         return isReadyState(state) || state.length === 0;
       },
-      (value) => new ResourceNotReady({ name, state: stateOf(value) ?? "" }),
+      (value) => new ResourceNotReady({ resourceName: name, state: stateOf(value) ?? "" }),
     ),
     Effect.retry({
       while: (error) =>

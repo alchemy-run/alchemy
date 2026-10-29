@@ -861,10 +861,10 @@ export class Engine extends DurableObject<Env, EngineProps> {
         }
         try {
           for (const row of this.ctx.storage.sql.exec(query)) {
-            if (row.ts) {
+            if (typeof row.ts === "string" && row.ts) {
               // SQLite DATETIME('now','subsec') returns "YYYY-MM-DD HH:MM:SS.sss"
               // which is not valid ISO 8601 (needs T separator and Z timezone).
-              const raw = String(row.ts).replace(" ", "T") + "Z";
+              const raw = row.ts.replace(" ", "T") + "Z";
               createdOn = raw;
             }
           }

@@ -6,12 +6,20 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
 import { toWireSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent, waitUntilStable } from "./internal.ts";
 import type { ServiceNetworkAuthType } from "./ServiceNetwork.ts";
+
+export class VpcLatticeServiceUnexpectedResponse extends Data.TaggedError(
+  "VpcLatticeServiceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ServiceProps {
   /**
@@ -120,7 +128,7 @@ export const ServiceProvider = () =>
       const observe = (serviceIdentifier: string) =>
         vpclattice
           .getService({ serviceIdentifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findByName = (name: string) =>
         vpclattice.listServices.pages({}).pipe(
@@ -130,9 +138,7 @@ export const ServiceProvider = () =>
               .flatMap((page) => page.items ?? [])
               .find((s) => s.name === name),
           ),
-          Effect.flatMap((summary) =>
-            summary?.id ? observe(summary.id) : Effect.succeed(undefined),
-          ),
+          Effect.flatMap((summary) => (summary?.id ? observe(summary.id) : Effect.undefined)),
         );
 
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
@@ -209,7 +215,9 @@ export const ServiceProvider = () =>
               })
               .pipe(Effect.catchTag("ConflictException", () => findByName(name)));
             if (!created?.arn || !created.id) {
-              return yield* Effect.fail(new Error(`Failed to create service ${name}`));
+              return yield* new VpcLatticeServiceUnexpectedResponse({
+                message: `Failed to create service ${name}`,
+              });
             }
             serviceId = created.id;
             serviceArn = created.arn;

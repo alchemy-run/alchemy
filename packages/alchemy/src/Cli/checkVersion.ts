@@ -1,15 +1,25 @@
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Clock from "effect/Clock";
 import * as Console from "effect/Console";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
+import * as Result from "effect/Result";
+import * as SemVer from "effect/SemVer";
 import packageJson from "../../package.json" with { type: "json" };
 import { ANSI_RESET, ansiFg, colorsEnabled, unicodeEnabled } from "../Util/Terminal.ts";
 import { glyphsFor, theme } from "../Util/Theme.ts";
+
+export class CheckVersionUnexpectedResponse extends Data.TaggedError(
+  "CheckVersionUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const NPM_DIST_TAGS_URL = "https://registry.npmjs.org/-/package/alchemy/dist-tags";
 
@@ -25,43 +35,14 @@ interface VersionCheckCache {
   distTags?: Record<string, string>;
 }
 
-const parseVersion = (v: string) => {
-  const [core = "", pre] = v.split("-", 2);
-  return {
-    core: core.split(".").map(Number),
-    pre: pre === undefined ? [] : pre.split(".").map((id) => (/^\d+$/.test(id) ? Number(id) : id)),
-  };
-};
-
 /**
- * Semver precedence (semver.org §11): negative when a < b, positive when
- * a > b. Enough of the spec for registry versions — numeric core, dotted
- * prerelease identifiers, release > prerelease.
+ * Semver precedence: negative when a < b, positive when a > b. Versions that
+ * don't parse compare equal, so they never trigger an upgrade notice.
  */
 const compareVersions = (a: string, b: string): number => {
-  const pa = parseVersion(a);
-  const pb = parseVersion(b);
-  for (let i = 0; i < 3; i++) {
-    const d = (pa.core[i] ?? 0) - (pb.core[i] ?? 0);
-    if (d !== 0) return d;
-  }
-  // A release outranks any prerelease of the same core.
-  if (pa.pre.length === 0 || pb.pre.length === 0) {
-    return pb.pre.length - pa.pre.length;
-  }
-  for (let i = 0; i < Math.max(pa.pre.length, pb.pre.length); i++) {
-    const x = pa.pre[i];
-    const y = pb.pre[i];
-    if (x === undefined) return -1;
-    if (y === undefined) return 1;
-    if (x === y) continue;
-    if (typeof x === "number" && typeof y === "number") return x - y;
-    // Numeric identifiers rank below alphanumeric ones.
-    if (typeof x === "number") return -1;
-    if (typeof y === "number") return 1;
-    return x < y ? -1 : 1;
-  }
-  return 0;
+  const pa = Result.getOrUndefined(SemVer.parse(a));
+  const pb = Result.getOrUndefined(SemVer.parse(b));
+  return pa === undefined || pb === undefined ? 0 : SemVer.Order(pa, pb);
 };
 
 /**
@@ -107,7 +88,7 @@ const fetchDistTags = Effect.gen(function* () {
   const response = yield* http.get(NPM_DIST_TAGS_URL);
   const distTags = (yield* response.json) as Record<string, string> | null;
   if (typeof distTags !== "object" || distTags === null) {
-    return yield* Effect.fail(new Error("malformed dist-tags response"));
+    return yield* new CheckVersionUnexpectedResponse({ message: "malformed dist-tags response" });
   }
   return distTags;
 });

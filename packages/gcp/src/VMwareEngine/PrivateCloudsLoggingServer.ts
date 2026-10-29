@@ -170,12 +170,12 @@ const toAttrs = (item: vmwareengine.LoggingServer, project: string) => {
 const getByName = (name: string) =>
   vmwareengine
     .getProjectsLocationsPrivateCloudsLoggingServers({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const getParentCloud = (name: string) =>
   vmwareengine
     .getProjectsLocationsPrivateClouds({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const PrivateCloudsLoggingServerProvider = () =>
   Provider.succeed(PrivateCloudsLoggingServer, {
@@ -302,7 +302,7 @@ export const PrivateCloudsLoggingServerProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -311,7 +311,7 @@ export const PrivateCloudsLoggingServerProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VmwareengineNotResolved({ name });
+        return yield* new VmwareengineNotResolved({ resourceName: name });
       }
 
       const hostnameChanged = (current.hostname ?? "") !== news.hostname;
@@ -355,7 +355,7 @@ export const PrivateCloudsLoggingServerProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

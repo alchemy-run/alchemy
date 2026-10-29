@@ -13,17 +13,17 @@ export const MAX_NAME_LENGTH = 63;
 export class NetworksecurityNotResolved extends Data.TaggedError(
   "GCP.NetworkSecurity.NotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class NetworksecurityStillExists extends Data.TaggedError(
   "GCP.NetworkSecurity.StillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class NetworksecurityFailed extends Data.TaggedError("GCP.NetworkSecurity.Failed")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -154,7 +154,9 @@ export const changedFields = (pairs: ReadonlyArray<readonly [string, boolean]>) 
 export const waitUntilPresent = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value ? Effect.succeed(value) : Effect.fail(new NetworksecurityNotResolved({ name })),
+      value
+        ? Effect.succeed(value)
+        : Effect.fail(new NetworksecurityNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworksecurityNotResolved,
@@ -166,7 +168,9 @@ export const waitUntilPresent = <A, E, R>(get: Effect.Effect<A | undefined, E, R
 export const waitUntilGone = <A, E, R>(get: Effect.Effect<A | undefined, E, R>, name: string) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined ? Effect.void : Effect.fail(new NetworksecurityStillExists({ name })),
+      value === undefined
+        ? Effect.void
+        : Effect.fail(new NetworksecurityStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworksecurityStillExists,
@@ -193,15 +197,15 @@ export const waitUntilReady = <A extends { state?: string }, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is A => value !== undefined,
-      () => new NetworksecurityNotResolved({ name }),
+      () => new NetworksecurityNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (value) => !FAILED_STATES.has(value.state ?? ""),
-      (value) => new NetworksecurityFailed({ name, state: value.state }),
+      (value) => new NetworksecurityFailed({ resourceName: name, state: value.state }),
     ),
     Effect.filterOrFail(
       (value) => !PENDING_STATES.has(value.state ?? ""),
-      () => new NetworksecurityNotResolved({ name }),
+      () => new NetworksecurityNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof NetworksecurityNotResolved,

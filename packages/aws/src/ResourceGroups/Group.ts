@@ -273,7 +273,7 @@ export const GroupProvider = () =>
           const groupName = output?.groupName ?? (yield* createName(id, olds ?? {}));
           const found = yield* resourcegroups.getGroup({ Group: groupName }).pipe(
             Effect.map((r) => r.Group),
-            Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFoundException", () => Effect.undefined),
           );
           if (!found) return undefined;
           const attrs = {
@@ -304,7 +304,7 @@ export const GroupProvider = () =>
           // OBSERVE — cloud state is authoritative; output is only a name cache.
           let live = yield* resourcegroups.getGroup({ Group: groupName }).pipe(
             Effect.map((r) => r.Group),
-            Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFoundException", () => Effect.undefined),
           );
 
           // ENSURE — create if missing; tolerate the already-exists race.
@@ -342,7 +342,7 @@ export const GroupProvider = () =>
             const desiredQuery = toResourceQuery(news.resourceQuery);
             const observedQuery = yield* resourcegroups.getGroupQuery({ Group: groupName }).pipe(
               Effect.map((r) => r.GroupQuery?.ResourceQuery),
-              Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFoundException", () => Effect.undefined),
             );
             if (
               observedQuery?.Type !== desiredQuery.Type ||

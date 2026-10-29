@@ -57,7 +57,6 @@ export function useInViewLoop(
       signal.aborted = true;
       obs.disconnect();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 }
 
