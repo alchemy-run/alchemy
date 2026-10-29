@@ -44,6 +44,12 @@ export const makeRpcStub = <Shape>(
      * instances instead of the plain objects RPC serialization produces.
      */
     readonly errors?: ReadonlyArray<RpcErrorClass> | undefined;
+    /**
+     * Append the caller's trace context to every call's arguments. Only for
+     * a callee known to strip it again — a Durable Object class bridged by
+     * the same bundle; anything else would get an extra argument.
+     */
+    readonly traceContext?: boolean | undefined;
   },
 ): Shape => {
   const isLazy = isYieldableEffect(stubSource);
@@ -64,7 +70,7 @@ export const makeRpcStub = <Shape>(
             const stub = isLazy ? yield* stubSource as Effect.Effect<any> : stubSource;
             // The callee parents its spans on the caller's, like `traceparent`
             // does for a `fetch` into the object.
-            const callArgs = yield* withRpcTraceContext(args);
+            const callArgs = options?.traceContext ? yield* withRpcTraceContext(args) : args;
             return yield* Effect.tryPromise({
               try: () => (stub as any)[prop](...callArgs),
               catch: (cause) => new RpcCallError({ method: String(prop), cause }),
