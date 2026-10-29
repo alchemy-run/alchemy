@@ -2,10 +2,6 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 
 /** Apim resources the generated bindings bind, mirroring each resource suite's smallest shape. */
-export const ProbeObservationJob = GCP.Apim.ObservationJob("ProbeObservationJob", {
-  location: "us-central1",
-  enabled: false,
-});
 export const ProbeObservationSource = Effect.gen(function* () {
   const subnet = yield* GCP.Compute.Subnetwork("ProbeApimSubnet", {
     network: "default",
@@ -18,5 +14,14 @@ export const ProbeObservationSource = Effect.gen(function* () {
     gclbObservationSource: {
       pscNetworkConfigs: [{ network: "default", subnetwork: subnet.subnetworkName }],
     },
+  });
+});
+/** A job observes at least one source. */
+export const ProbeObservationJob = Effect.gen(function* () {
+  const source = yield* ProbeObservationSource;
+  return yield* GCP.Apim.ObservationJob("ProbeObservationJob", {
+    location: "us-central1",
+    sources: [source.name],
+    enabled: false,
   });
 });
