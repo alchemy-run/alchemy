@@ -1,3 +1,4 @@
+import * as Backfill from "@alchemy.run/domain/Backfill";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import { type Faults, noFaults, Sim } from "./Backfill.sim.ts";
@@ -130,6 +131,31 @@ describe("Domain backfill (simulated)", () => {
       expect(splits.length).toBeGreaterThan(0);
       expect(Math.max(...[...sim.nodes.keys()].map((path) => path.length))).toBeGreaterThan(1);
     }),
+  );
+
+  scenario(
+    "a child that links while its parent tells its children takes part in the sweep",
+    (sim) =>
+      Effect.gen(function* () {
+        for (const commit of history(sim, 3, 9, 2)) yield* commit();
+        const linked = new Set(sim.nodes.keys());
+        let interjected = false;
+        // While the root tells its children, an instance lists itself in a leaf that isn't linked yet.
+        sim.interject = (path) => {
+          if (interjected || path === "") return Effect.void;
+          interjected = true;
+          for (let i = 0; ; i++) {
+            const leaf = Backfill.leafOf({ source: "A", id: `n${i}` }, sim.limits.depth);
+            if (!linked.has(leaf)) {
+              sim.now += 1;
+              return sim.commit(`A/n${i}`, ["k0"]);
+            }
+          }
+        };
+        yield* sim.deploy();
+        yield* sim.run();
+        expect(interjected).toBe(true);
+      }),
   );
 
   scenario("an event routed to several keys", (sim) =>

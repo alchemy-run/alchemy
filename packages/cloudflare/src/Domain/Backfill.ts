@@ -65,14 +65,18 @@ export class BackfillFailed extends Data.TaggedError("BackfillFailed")<{
   readonly status: string;
 }> {}
 
-/** A run id from the targets: the same model finds the same run (FNV-1a over the sorted ids). */
-const instanceIdOf = (targets: ReadonlyArray<string>) => {
+/**
+ * A run id from the targets and this resource's own instance: a deploy of the
+ * same model finds the same run, and a stack destroyed and deployed again starts
+ * a new one (Cloudflare keeps finished instance ids). FNV-1a over the sorted ids.
+ */
+const runIdOf = (targets: ReadonlyArray<string>, resource: string) => {
   let hash = 0x811c9dc5;
   for (const char of [...targets].sort().join("|")) {
     hash ^= char.charCodeAt(0);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
-  return `backfill-${hash.toString(16).padStart(8, "0")}-${targets.length}`;
+  return `backfill-${resource.slice(0, 12)}-${hash.toString(16).padStart(8, "0")}-${targets.length}`;
 };
 
 const POLL = "3 seconds";
@@ -103,9 +107,9 @@ const BackfillLive = () =>
         );
       return instance === undefined ? undefined : { ...output, status: instance.status };
     }),
-    reconcile: Effect.fn(function* ({ news, session }) {
+    reconcile: Effect.fn(function* ({ instanceId: resource, news, session }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
-      const instanceId = instanceIdOf(news.targets);
+      const instanceId = runIdOf(news.targets, resource);
       const attrs = {
         accountId,
         workflowName: news.workflowName,
@@ -193,11 +197,11 @@ const BackfillLocal = () =>
     read: Effect.fn(function* ({ output }) {
       return output;
     }),
-    reconcile: Effect.fn(function* ({ news }) {
+    reconcile: Effect.fn(function* ({ instanceId, news }) {
       return {
         accountId: "dev",
         workflowName: news.workflowName,
-        instanceId: `dev:${instanceIdOf(news.targets)}`,
+        instanceId: `dev:${runIdOf(news.targets, instanceId)}`,
         targets: news.targets,
         status: "complete",
       };

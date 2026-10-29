@@ -235,6 +235,12 @@ export class Sim {
     return bar < 0 ? this.target : key.slice(0, bar);
   }
 
+  /**
+   * Run something while a node tells `path` of a sweep: work that lands on the
+   * node between reading its children and recording that it told them.
+   */
+  interject: ((path: string) => Effect.Effect<void>) | undefined = undefined;
+
   /** The target exists (the consumer is deployed). */
   deployed = false;
   calls = 0;
@@ -432,7 +438,9 @@ export class Sim {
       news: (path, targets) =>
         this.call(this.node(path).object, () => this.node(path).role.news(path, targets)),
       sweep: (path, target, phase) =>
-        this.call(this.node(path).object, () => this.node(path).role.sweep(path, target, phase)),
+        Effect.andThen(this.interject?.(path) ?? Effect.void, () =>
+          this.call(this.node(path).object, () => this.node(path).role.sweep(path, target, phase)),
+        ),
       report: (path, target, phase, child) =>
         this.call(this.node(path).object, () =>
           this.node(path).role.report(path, target, phase, child),

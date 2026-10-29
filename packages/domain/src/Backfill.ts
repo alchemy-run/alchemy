@@ -909,10 +909,12 @@ export const makeConsumer = (
                 });
             }),
           );
+          // Its sources tell a key with history when it's ready: it asks again only
+          // rarely, so a wide backfill never polls the directory hard.
           if (!ready)
             return yield* jobs.schedule(
               jobId(target),
-              ask === backfill.ask ? limits.pollMillis : 0,
+              ask !== backfill.ask ? 0 : pulling ? SAFETY_POLL_MS : limits.pollMillis,
             );
         }
         const outcome = yield* applyBuffered(target);
@@ -988,8 +990,11 @@ export const makeNode = (
   const ensureLinked = (path: string) =>
     Effect.gen(function* () {
       if (path === "" || (yield* storage.get("linked"))) return;
-      yield* net.node.child(parentOf(path), path);
+      yield* net.node
+        .child(parentOf(path), path)
+        .pipe(Effect.tapCause((cause) => trace("link-failed", { path, cause: String(cause) })));
       yield* storage.exclusive(storage.put({ linked: true, path }));
+      yield* trace("linked", { path });
     });
 
   /** Every sweep this node takes part in. */
@@ -1201,26 +1206,53 @@ export const makeNode = (
             ),
           { concurrency: limits.concurrency },
         );
+        yield* trace("told", {
+          path,
+          target,
+          phase: sweep.phase,
+          children: sweep.children,
+          failed: sweep.children.filter((_, i) => !told[i]),
+        });
         // A child that could not be told is told on the next step.
         if (told.includes(false)) return yield* jobs.schedule(`step:${target}`, RETRY_MS);
-        yield* storage.exclusive(
+        // A child that linked while these were told was not among them: tell it on another step.
+        const toldAll = yield* storage.exclusive(
           Effect.gen(function* () {
             const current = yield* getSweep(target);
-            if (current?.phase === sweep.phase)
-              yield* storage.put({ [sweepKey(target)]: { ...current, told: true } });
+            if (current?.phase !== sweep.phase) return true;
+            if (current.children.some((child) => !sweep.children.includes(child))) return false;
+            yield* storage.put({ [sweepKey(target)]: { ...current, told: true } });
+            return true;
           }),
         );
+        if (!toldAll) yield* jobs.schedule(`step:${target}`, 0);
       }
       if (sweep.reported || sweep.own) return;
-      const listed =
-        sweep.pending.length > 0
-          ? []
-          : yield* storage.list<SourceRef>({
-              prefix: "i:",
-              ...(sweep.cursor === null ? {} : { startAfter: sweep.cursor }),
-              limit: limits.nodePage,
-            });
-      const batch = sweep.pending.length > 0 ? sweep.pending : listed.map(([, ref]) => ref);
+      // Own instances to call: those waiting, else the next page of the listing. The page
+      // moves into `pending` and the cursor past it at once, so an instance that lists
+      // itself meanwhile is either ahead of the cursor or joins `pending`, never skipped.
+      const batch = yield* storage.exclusive(
+        Effect.gen(function* () {
+          const current = yield* getSweep(target);
+          if (!current || current.phase !== sweep.phase || current.reported) return [];
+          if (current.pending.length > 0 || current.listed)
+            return current.pending.slice(0, limits.nodePage);
+          const page = yield* storage.list<SourceRef>({
+            prefix: "i:",
+            ...(current.cursor === null ? {} : { startAfter: current.cursor }),
+            limit: limits.nodePage,
+          });
+          yield* storage.put({
+            [sweepKey(target)]: {
+              ...current,
+              cursor: page.length > 0 ? page[page.length - 1]![0] : current.cursor,
+              listed: page.length < limits.nodePage,
+              pending: page.map(([, ref]) => ref),
+            },
+          });
+          return page.map(([, ref]) => ref);
+        }),
+      );
       const call = (ref: SourceRef): Effect.Effect<"done" | "more" | "stale" | "pending"> =>
         sweep.phase === "discover"
           ? Effect.map(net.source.scan(ref, target), (result) =>
@@ -1255,17 +1287,17 @@ export const makeNode = (
             if (result === "pending" && !(yield* storage.get(settledKey(target, ref))))
               yield* storage.put({ [`${unsettledPrefix(target)}${refKey(ref)}`]: ref });
           }
-          const exhausted =
-            current.pending.length > 0 ? current.listed : listed.length < limits.nodePage;
-          const pending = results
-            .filter(({ result }) => result === "more" || result === "stale")
-            .map(({ ref }) => ref);
+          // Done with those that answered; those still to call (and any that joined) stay.
+          const finished = new Set(
+            results
+              .filter(({ result }) => result === "done" || result === "pending")
+              .map(({ ref }) => refKey(ref)),
+          );
+          const pending = current.pending.filter((ref) => !finished.has(refKey(ref)));
           const updated: Sweep = {
             ...current,
-            cursor: listed.length > 0 ? listed[listed.length - 1]![0] : current.cursor,
-            listed: exhausted,
             pending,
-            own: exhausted && pending.length === 0,
+            own: current.listed && pending.length === 0,
           };
           yield* storage.put({ [sweepKey(target)]: updated });
           yield* settle(path, target);
@@ -1309,6 +1341,7 @@ export const makeNode = (
             yield* keepPath(path);
             yield* storage.put({ [`c:${child}`]: true });
             if (!fresh) return;
+            yield* trace("child", { path, child });
             // Linked while sweeps run: it takes part in each one's current phase.
             for (const { target, sweep } of yield* sweeps) {
               // After this node reported, the child is still told, but not waited for.
