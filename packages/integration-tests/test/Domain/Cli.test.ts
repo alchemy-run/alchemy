@@ -101,6 +101,7 @@ const CliEnvironment = Layer.mergeAll(
     Terminal.make({
       columns: Effect.succeed(120),
       rows: Effect.succeed(24),
+      size: Effect.die("unused"),
       readInput: Effect.die("unused"),
       readLine: Effect.die("unused"),
       display: () => Effect.void,
