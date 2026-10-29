@@ -28,8 +28,8 @@ const domainSuffix = `alchemy-worker-domain-${process.env.PULL_REQUEST ?? proces
 
 const DECLARED_HOSTNAME = `wd1-${domainSuffix}.${zoneName}`;
 const OUT_OF_BAND_HOSTNAME = `wd2-${domainSuffix}.${zoneName}`;
-const ZONED_HOSTNAME = `wd3-${domainSuffix}.${zoneName}`;
-const ZONED_DRIFT_HOSTNAME = `wd4-${domainSuffix}.${zoneName}`;
+const ZONED_HOSTNAME = `wd6-${domainSuffix}.${zoneName}`;
+const ZONED_DRIFT_HOSTNAME = `wd7-${domainSuffix}.${zoneName}`;
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
