@@ -19,28 +19,21 @@ const pausableWait = (ms: number) =>
     let left = ms;
     let since = 0;
     let timer: ReturnType<typeof setTimeout> | undefined;
-    const start = () => {
-      since = performance.now();
-      timer = setTimeout(finish, Math.max(0, left));
-    };
-    const finish = () => {
-      timer = undefined;
-      removeEventListener("alc-motion-change", onMotion);
-      resolve();
-    };
-    const onMotion = () => {
-      if (isMotionPaused()) {
-        if (timer !== undefined) {
-          clearTimeout(timer);
-          timer = undefined;
-          left -= performance.now() - since;
-        }
-      } else if (timer === undefined) {
-        start();
+    const sync = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+        left -= performance.now() - since;
       }
+      if (isMotionPaused()) return;
+      since = performance.now();
+      timer = setTimeout(() => {
+        removeEventListener("alc-motion-change", sync);
+        resolve();
+      }, left);
     };
-    addEventListener("alc-motion-change", onMotion);
-    if (!isMotionPaused()) start();
+    addEventListener("alc-motion-change", sync);
+    sync();
   });
 
 /**
