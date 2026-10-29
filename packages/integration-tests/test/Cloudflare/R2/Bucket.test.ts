@@ -1495,7 +1495,7 @@ const recordDelete = (props: { forceDestroy?: boolean }, options?: { force?: boo
         olds: props,
         output: stubbedOutput,
         bindings: [] as never,
-        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+        session: { note: () => Effect.void },
         force: options?.force,
       });
     }).pipe(
@@ -1604,7 +1604,7 @@ const recordReconcile = (input: {
         olds: input.olds,
         output: stubbedOutput,
         bindings: [],
-        session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+        session: { note: () => Effect.void },
       });
     }).pipe(
       Effect.provide(Cloudflare.R2.BucketProvider()),

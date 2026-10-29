@@ -6,6 +6,7 @@ import { type BucketObjects, makeBucketState } from "alchemy/State/BucketState";
 import * as Provisioning from "alchemy/State/Provisioning";
 import { State, StateStoreError } from "alchemy/State/State";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
+import { globalLogs } from "alchemy/Util/LogRecord";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
@@ -197,6 +198,8 @@ export const s3State = (options: S3StateOptions = {}) =>
       // the first state operation, which may sit in a shorter scope.
       const make = Scope.provide(makeS3State(options), scope).pipe(
         recordStateStoreInit,
+        // Account-level: filed in the global run log, not the project's.
+        globalLogs,
         Effect.orDie,
         Effect.provideContext(context),
       );

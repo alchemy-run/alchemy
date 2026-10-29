@@ -5,7 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
-import { AuthProviderLayer, AuthProviders, NeedsReauth } from "@/Auth/AuthProvider.ts";
+import { AuthProviderLayer, AuthProvidersLive, NeedsReauth } from "@/Auth/AuthProvider.ts";
 import {
   type CredentialDemand,
   type CredentialsRequired,
@@ -66,7 +66,7 @@ const makeTestLayer = (config: Record<string, unknown> = {}) =>
   Layer.mergeAll(ProfileStoreLive, ProbeAuth, EnvProbeAuth).pipe(
     Layer.provideMerge(
       Layer.mergeAll(
-        Layer.succeed(AuthProviders, {}),
+        AuthProvidersLive,
         // Fully replaces the ambient provider: an exported CI=1 (or
         // ALCHEMY_PROFILE) in the developer's shell must not leak into the
         // demand seam under test.
