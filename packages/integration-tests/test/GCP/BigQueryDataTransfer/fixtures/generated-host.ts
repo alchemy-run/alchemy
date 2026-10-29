@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { Nightly } from "./generated-resources.ts";
 
 /**
@@ -31,25 +31,25 @@ export default class BigQueryDataTransferGeneratedHost extends GCP.Function<BigQ
     const p12 = yield* GCP.BigQueryDataTransfer.ScheduleTransferConfigRuns(Nightly);
     return {
       fetch: serveProbes({
-        CheckDataSourceValidCreds: outcome(
+        CheckDataSourceValidCreds: probeOutcome(
           Retry.none(p0({ dataSource: "alchemy-missing" } as never)),
         ),
-        DeleteTransferConfigRun: outcome(Retry.none(p1({ run: "alchemy-missing" } as never))),
-        EnrollProjectDataSources: outcome(Retry.none(p2({} as never))),
-        GetDataSource: outcome(Retry.none(p3({ dataSource: "alchemy-missing" } as never))),
-        GetTransferConfig: outcome(Retry.none(p4({} as never))),
-        GetTransferConfigRun: outcome(Retry.none(p5({ run: "alchemy-missing" } as never))),
-        GetTransferConfigTransferResource: outcome(
+        DeleteTransferConfigRun: probeOutcome(Retry.none(p1({ run: "alchemy-missing" } as never))),
+        EnrollProjectDataSources: probeOutcome(Retry.none(p2({} as never))),
+        GetDataSource: probeOutcome(Retry.none(p3({ dataSource: "alchemy-missing" } as never))),
+        GetTransferConfig: probeOutcome(Retry.none(p4({} as never))),
+        GetTransferConfigRun: probeOutcome(Retry.none(p5({ run: "alchemy-missing" } as never))),
+        GetTransferConfigTransferResource: probeOutcome(
           Retry.none(p6({ transferResource: "alchemy-missing" } as never)),
         ),
-        ListDataSources: outcome(Retry.none(p7({} as never))),
-        ListTransferConfigRuns: outcome(Retry.none(p8({} as never))),
-        ListTransferConfigRunTransferLogs: outcome(
+        ListDataSources: probeOutcome(Retry.none(p7({} as never))),
+        ListTransferConfigRuns: probeOutcome(Retry.none(p8({} as never))),
+        ListTransferConfigRunTransferLogs: probeOutcome(
           Retry.none(p9({ run: "alchemy-missing" } as never)),
         ),
-        ListTransferConfigs: outcome(Retry.none(p10({} as never))),
-        ListTransferConfigTransferResources: outcome(Retry.none(p11({} as never))),
-        ScheduleTransferConfigRuns: outcome(Retry.none(p12({} as never))),
+        ListTransferConfigs: probeOutcome(Retry.none(p10({} as never))),
+        ListTransferConfigTransferResources: probeOutcome(Retry.none(p11({} as never))),
+        ScheduleTransferConfigRuns: probeOutcome(Retry.none(p12({} as never))),
       }),
     };
   }).pipe(

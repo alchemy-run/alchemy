@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeReservation, ProbeReservationGroup } from "./generated-resources.ts";
 
 /**
@@ -30,24 +30,24 @@ export default class BigQueryReservationGeneratedHost extends GCP.Function<BigQu
     const p11 = yield* GCP.BigQueryReservation.PatchReservationAssignment(ProbeReservation);
     return {
       fetch: serveProbes({
-        CreateReservationAssignment: outcome(
+        CreateReservationAssignment: probeOutcome(
           Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        DeleteReservationAssignment: outcome(
+        DeleteReservationAssignment: probeOutcome(
           Retry.none(p1({ assignment: "alchemy-missing" } as never)),
         ),
-        FailoverReservation: outcome(Retry.none(p2({} as never))),
-        GetReservation: outcome(Retry.none(p3({} as never))),
-        GetReservationGroup: outcome(Retry.none(p4({} as never))),
-        ListCapacityCommitments: outcome(Retry.none(p5({ location: "us-central1" } as never))),
-        ListReservationAssignments: outcome(Retry.none(p6({} as never))),
-        ListReservationGroups: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListReservations: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        MergeCapacityCommitment: outcome(Retry.none(p9({ location: "us-central1" } as never))),
-        MoveReservationAssignment: outcome(
+        FailoverReservation: probeOutcome(Retry.none(p2({} as never))),
+        GetReservation: probeOutcome(Retry.none(p3({} as never))),
+        GetReservationGroup: probeOutcome(Retry.none(p4({} as never))),
+        ListCapacityCommitments: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListReservationAssignments: probeOutcome(Retry.none(p6({} as never))),
+        ListReservationGroups: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListReservations: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        MergeCapacityCommitment: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        MoveReservationAssignment: probeOutcome(
           Retry.none(p10({ assignment: "alchemy-missing" } as never)),
         ),
-        PatchReservationAssignment: outcome(
+        PatchReservationAssignment: probeOutcome(
           Retry.none(p11({ assignment: "alchemy-missing" } as never)),
         ),
       }),

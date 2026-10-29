@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeAssetsExportJob,
   ProbeDiscoveryClient,
@@ -64,52 +64,54 @@ export default class MigrationCenterGeneratedHost extends GCP.Function<Migration
     const p35 = yield* GCP.MigrationCenter.ValidateImportJob(ProbeImportJob);
     return {
       fetch: serveProbes({
-        AddGroupAssets: outcome(
+        AddGroupAssets: probeOutcome(
           Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        AggregateAssetValues: outcome(Retry.none(p1({ location: "us-central1" } as never))),
-        BatchAssetDelete: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        BatchAssetUpdate: outcome(Retry.none(p3({ location: "us-central1" } as never))),
-        DeleteAsset: outcome(
+        AggregateAssetValues: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        BatchAssetDelete: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
+        BatchAssetUpdate: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        DeleteAsset: probeOutcome(
           Retry.none(p4({ asset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetAsset: outcome(
+        GetAsset: probeOutcome(
           Retry.none(p5({ asset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetAssetsExportJob: outcome(Retry.none(p6({} as never))),
-        GetDiscoveryClient: outcome(Retry.none(p7({} as never))),
-        GetGroup: outcome(Retry.none(p8({} as never))),
-        GetImportDataFile: outcome(Retry.none(p9({} as never))),
-        GetImportJob: outcome(Retry.none(p10({} as never))),
-        GetPreferenceSet: outcome(Retry.none(p11({} as never))),
-        GetRelation: outcome(
+        GetAssetsExportJob: probeOutcome(Retry.none(p6({} as never))),
+        GetDiscoveryClient: probeOutcome(Retry.none(p7({} as never))),
+        GetGroup: probeOutcome(Retry.none(p8({} as never))),
+        GetImportDataFile: probeOutcome(Retry.none(p9({} as never))),
+        GetImportJob: probeOutcome(Retry.none(p10({} as never))),
+        GetPreferenceSet: probeOutcome(Retry.none(p11({} as never))),
+        GetRelation: probeOutcome(
           Retry.none(p12({ relation: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetReport: outcome(Retry.none(p13({} as never))),
-        GetReportConfig: outcome(Retry.none(p14({} as never))),
-        GetSource: outcome(Retry.none(p15({} as never))),
-        GetSourceErrorFrame: outcome(Retry.none(p16({ errorFrame: "alchemy-missing" } as never))),
-        ListAssets: outcome(Retry.none(p17({ location: "us-central1" } as never))),
-        ListAssetsExportJobs: outcome(Retry.none(p18({ location: "us-central1" } as never))),
-        ListDiscoveryClients: outcome(Retry.none(p19({ location: "us-central1" } as never))),
-        ListGroups: outcome(Retry.none(p20({ location: "us-central1" } as never))),
-        ListImportJobImportDataFiles: outcome(Retry.none(p21({} as never))),
-        ListImportJobs: outcome(Retry.none(p22({ location: "us-central1" } as never))),
-        ListPreferenceSets: outcome(Retry.none(p23({ location: "us-central1" } as never))),
-        ListRelations: outcome(Retry.none(p24({ location: "us-central1" } as never))),
-        ListReportConfigReports: outcome(Retry.none(p25({} as never))),
-        ListReportConfigs: outcome(Retry.none(p26({ location: "us-central1" } as never))),
-        ListSourceErrorFrames: outcome(Retry.none(p27({} as never))),
-        ListSources: outcome(Retry.none(p28({ location: "us-central1" } as never))),
-        PatchAsset: outcome(
+        GetReport: probeOutcome(Retry.none(p13({} as never))),
+        GetReportConfig: probeOutcome(Retry.none(p14({} as never))),
+        GetSource: probeOutcome(Retry.none(p15({} as never))),
+        GetSourceErrorFrame: probeOutcome(
+          Retry.none(p16({ errorFrame: "alchemy-missing" } as never)),
+        ),
+        ListAssets: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
+        ListAssetsExportJobs: probeOutcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListDiscoveryClients: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
+        ListGroups: probeOutcome(Retry.none(p20({ location: "us-central1" } as never))),
+        ListImportJobImportDataFiles: probeOutcome(Retry.none(p21({} as never))),
+        ListImportJobs: probeOutcome(Retry.none(p22({ location: "us-central1" } as never))),
+        ListPreferenceSets: probeOutcome(Retry.none(p23({ location: "us-central1" } as never))),
+        ListRelations: probeOutcome(Retry.none(p24({ location: "us-central1" } as never))),
+        ListReportConfigReports: probeOutcome(Retry.none(p25({} as never))),
+        ListReportConfigs: probeOutcome(Retry.none(p26({ location: "us-central1" } as never))),
+        ListSourceErrorFrames: probeOutcome(Retry.none(p27({} as never))),
+        ListSources: probeOutcome(Retry.none(p28({ location: "us-central1" } as never))),
+        PatchAsset: probeOutcome(
           Retry.none(p29({ asset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        RemoveGroupAssets: outcome(Retry.none(p30({} as never))),
-        ReportAssetFrames: outcome(Retry.none(p31({ location: "us-central1" } as never))),
-        RunAssetsExportJob: outcome(Retry.none(p32({} as never))),
-        RunImportJob: outcome(Retry.none(p33({} as never))),
-        SendDiscoveryClientHeartbeat: outcome(Retry.none(p34({} as never))),
-        ValidateImportJob: outcome(Retry.none(p35({} as never))),
+        RemoveGroupAssets: probeOutcome(Retry.none(p30({} as never))),
+        ReportAssetFrames: probeOutcome(Retry.none(p31({ location: "us-central1" } as never))),
+        RunAssetsExportJob: probeOutcome(Retry.none(p32({} as never))),
+        RunImportJob: probeOutcome(Retry.none(p33({} as never))),
+        SendDiscoveryClientHeartbeat: probeOutcome(Retry.none(p34({} as never))),
+        ValidateImportJob: probeOutcome(Retry.none(p35({} as never))),
       }),
     };
   }).pipe(

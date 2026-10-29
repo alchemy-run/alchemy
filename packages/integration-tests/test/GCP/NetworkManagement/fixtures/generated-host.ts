@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeConnectivityTest, ProbeFlowLogs } from "./generated-resources.ts";
 
 /**
@@ -22,10 +22,10 @@ export default class NetworkManagementGeneratedHost extends GCP.Function<Network
     const p3 = yield* GCP.NetworkManagement.RerunConnectivityTest(ProbeConnectivityTest);
     return {
       fetch: serveProbes({
-        GetConnectivityTest: outcome(Retry.none(p0({} as never))),
-        "GetVpcFlowLogsConfig@VpcFlowLogsConfig": outcome(Retry.none(p1({} as never))),
-        ListVpcFlowLogsConfigs: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        RerunConnectivityTest: outcome(Retry.none(p3({} as never))),
+        GetConnectivityTest: probeOutcome(Retry.none(p0({} as never))),
+        "GetVpcFlowLogsConfig@VpcFlowLogsConfig": probeOutcome(Retry.none(p1({} as never))),
+        ListVpcFlowLogsConfigs: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
+        RerunConnectivityTest: probeOutcome(Retry.none(p3({} as never))),
       }),
     };
   }).pipe(

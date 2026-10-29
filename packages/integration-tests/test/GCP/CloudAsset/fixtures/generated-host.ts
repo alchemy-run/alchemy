@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeFeed, ProbeSavedQuery } from "./generated-resources.ts";
 
 /**
@@ -20,8 +20,8 @@ export default class CloudAssetGeneratedHost extends GCP.Function<CloudAssetGene
     const p1 = yield* GCP.CloudAsset.GetSavedQuery(ProbeSavedQuery);
     return {
       fetch: serveProbes({
-        GetFeed: outcome(Retry.none(p0({} as never))),
-        GetSavedQuery: outcome(Retry.none(p1({} as never))),
+        GetFeed: probeOutcome(Retry.none(p0({} as never))),
+        GetSavedQuery: probeOutcome(Retry.none(p1({} as never))),
       }),
     };
   }).pipe(

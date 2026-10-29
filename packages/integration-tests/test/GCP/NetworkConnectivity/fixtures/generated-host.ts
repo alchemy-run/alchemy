@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeConnectionPolicy,
   ProbeHub,
@@ -71,31 +71,31 @@ export default class NetworkConnectivityGeneratedHost extends GCP.Function<Netwo
     const p40 = yield* GCP.NetworkConnectivity.RejectHubSpokeUpdate(ProbeHub);
     return {
       fetch: serveProbes({
-        AcceptHubSpoke: outcome(Retry.none(p0({} as never))),
-        AcceptHubSpokeUpdate: outcome(Retry.none(p1({} as never))),
-        CreatePscAuthorizationPolicy: outcome(
+        AcceptHubSpoke: probeOutcome(Retry.none(p0({} as never))),
+        AcceptHubSpokeUpdate: probeOutcome(Retry.none(p1({} as never))),
+        CreatePscAuthorizationPolicy: probeOutcome(
           Retry.none(
             p2({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        DeletePscAuthorizationPolicy: outcome(
+        DeletePscAuthorizationPolicy: probeOutcome(
           Retry.none(
             p3({ pscAuthorizationPolicy: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        DeleteServiceClass: outcome(
+        DeleteServiceClass: probeOutcome(
           Retry.none(p4({ serviceClass: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetDestination: outcome(Retry.none(p5({} as never))),
-        GetHub: outcome(Retry.none(p6({} as never))),
-        GetHubGroup: outcome(Retry.none(p7({ group: "alchemy-missing" } as never))),
-        GetHubRouteTable: outcome(Retry.none(p8({ routeTable: "alchemy-missing" } as never))),
-        GetHubRouteTableRoute: outcome(
+        GetDestination: probeOutcome(Retry.none(p5({} as never))),
+        GetHub: probeOutcome(Retry.none(p6({} as never))),
+        GetHubGroup: probeOutcome(Retry.none(p7({ group: "alchemy-missing" } as never))),
+        GetHubRouteTable: probeOutcome(Retry.none(p8({ routeTable: "alchemy-missing" } as never))),
+        GetHubRouteTableRoute: probeOutcome(
           Retry.none(p9({ routeTable: "alchemy-missing", route: "alchemy-missing" } as never)),
         ),
-        GetInternalRange: outcome(Retry.none(p10({} as never))),
-        GetMulticloudDataTransferConfig: outcome(Retry.none(p11({} as never))),
-        GetMulticloudDataTransferSupportedService: outcome(
+        GetInternalRange: probeOutcome(Retry.none(p10({} as never))),
+        GetMulticloudDataTransferConfig: probeOutcome(Retry.none(p11({} as never))),
+        GetMulticloudDataTransferSupportedService: probeOutcome(
           Retry.none(
             p12({
               multicloudDataTransferSupportedService: "alchemy-missing",
@@ -103,56 +103,60 @@ export default class NetworkConnectivityGeneratedHost extends GCP.Function<Netwo
             } as never),
           ),
         ),
-        GetPolicyBasedRoute: outcome(Retry.none(p13({} as never))),
-        GetPscAuthorizationPolicy: outcome(
+        GetPolicyBasedRoute: probeOutcome(Retry.none(p13({} as never))),
+        GetPscAuthorizationPolicy: probeOutcome(
           Retry.none(
             p14({ pscAuthorizationPolicy: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        GetRemoteTransportProfile: outcome(
+        GetRemoteTransportProfile: probeOutcome(
           Retry.none(
             p15({ remoteTransportProfile: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        GetServiceClass: outcome(
+        GetServiceClass: probeOutcome(
           Retry.none(p16({ serviceClass: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetServiceConnectionPolicy: outcome(Retry.none(p17({} as never))),
-        GetSpoke: outcome(Retry.none(p18({} as never))),
-        ListHubGroups: outcome(Retry.none(p19({} as never))),
-        ListHubRouteTableRoutes: outcome(
+        GetServiceConnectionPolicy: probeOutcome(Retry.none(p17({} as never))),
+        GetSpoke: probeOutcome(Retry.none(p18({} as never))),
+        ListHubGroups: probeOutcome(Retry.none(p19({} as never))),
+        ListHubRouteTableRoutes: probeOutcome(
           Retry.none(p20({ routeTable: "alchemy-missing" } as never)),
         ),
-        ListHubRouteTables: outcome(Retry.none(p21({} as never))),
-        ListHubSpokes: outcome(Retry.none(p22({} as never))),
-        ListInternalRanges: outcome(Retry.none(p23({ location: "us-central1" } as never))),
-        ListMulticloudDataTransferConfigDestinations: outcome(Retry.none(p24({} as never))),
-        ListMulticloudDataTransferConfigs: outcome(
+        ListHubRouteTables: probeOutcome(Retry.none(p21({} as never))),
+        ListHubSpokes: probeOutcome(Retry.none(p22({} as never))),
+        ListInternalRanges: probeOutcome(Retry.none(p23({ location: "us-central1" } as never))),
+        ListMulticloudDataTransferConfigDestinations: probeOutcome(Retry.none(p24({} as never))),
+        ListMulticloudDataTransferConfigs: probeOutcome(
           Retry.none(p25({ location: "us-central1" } as never)),
         ),
-        ListMulticloudDataTransferSupportedServices: outcome(
+        ListMulticloudDataTransferSupportedServices: probeOutcome(
           Retry.none(p26({ location: "us-central1" } as never)),
         ),
-        ListPscAuthorizationPolicies: outcome(
+        ListPscAuthorizationPolicies: probeOutcome(
           Retry.none(p27({ location: "us-central1" } as never)),
         ),
-        ListRegionalEndpoints: outcome(Retry.none(p28({ location: "us-central1" } as never))),
-        ListRemoteTransportProfiles: outcome(Retry.none(p29({ location: "us-central1" } as never))),
-        ListServiceClasses: outcome(Retry.none(p30({ location: "us-central1" } as never))),
-        ListServiceConnectionMaps: outcome(Retry.none(p31({ location: "us-central1" } as never))),
-        ListServiceConnectionPolicies: outcome(
+        ListRegionalEndpoints: probeOutcome(Retry.none(p28({ location: "us-central1" } as never))),
+        ListRemoteTransportProfiles: probeOutcome(
+          Retry.none(p29({ location: "us-central1" } as never)),
+        ),
+        ListServiceClasses: probeOutcome(Retry.none(p30({ location: "us-central1" } as never))),
+        ListServiceConnectionMaps: probeOutcome(
+          Retry.none(p31({ location: "us-central1" } as never)),
+        ),
+        ListServiceConnectionPolicies: probeOutcome(
           Retry.none(p32({ location: "us-central1" } as never)),
         ),
-        ListSpokeGatewayAdvertisedRoutes: outcome(Retry.none(p33({} as never))),
-        ListSpokes: outcome(Retry.none(p34({ location: "us-central1" } as never))),
-        ListTransports: outcome(Retry.none(p35({ location: "us-central1" } as never))),
-        PatchHubGroup: outcome(Retry.none(p36({ group: "alchemy-missing" } as never))),
-        PatchServiceClass: outcome(
+        ListSpokeGatewayAdvertisedRoutes: probeOutcome(Retry.none(p33({} as never))),
+        ListSpokes: probeOutcome(Retry.none(p34({ location: "us-central1" } as never))),
+        ListTransports: probeOutcome(Retry.none(p35({ location: "us-central1" } as never))),
+        PatchHubGroup: probeOutcome(Retry.none(p36({ group: "alchemy-missing" } as never))),
+        PatchServiceClass: probeOutcome(
           Retry.none(p37({ serviceClass: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        QueryHubStatus: outcome(Retry.none(p38({} as never))),
-        RejectHubSpoke: outcome(Retry.none(p39({} as never))),
-        RejectHubSpokeUpdate: outcome(Retry.none(p40({} as never))),
+        QueryHubStatus: probeOutcome(Retry.none(p38({} as never))),
+        RejectHubSpoke: probeOutcome(Retry.none(p39({} as never))),
+        RejectHubSpokeUpdate: probeOutcome(Retry.none(p40({} as never))),
       }),
     };
   }).pipe(

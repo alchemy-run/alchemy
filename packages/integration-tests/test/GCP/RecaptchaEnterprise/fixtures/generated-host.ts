@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { Signup } from "./generated-resources.ts";
 
 /**
@@ -33,25 +33,27 @@ export default class RecaptchaEnterpriseGeneratedHost extends GCP.Function<Recap
     const p14 = yield* GCP.RecaptchaEnterprise.UpdateKeyPolicy();
     return {
       fetch: serveProbes({
-        AddKeyIpOverride: outcome(
+        AddKeyIpOverride: probeOutcome(
           Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        AnnotateAssessment: outcome(Retry.none(p1({ assessment: "alchemy-missing" } as never))),
-        GetKey: outcome(Retry.none(p2({} as never))),
-        GetKeyMetrics: outcome(Retry.none(p3({ key: "alchemy-missing" } as never))),
-        GetKeyPolicy: outcome(Retry.none(p4({ key: "alchemy-missing" } as never))),
-        ListFirewallpolicies: outcome(Retry.none(p5({} as never))),
-        ListKeyIpOverrides: outcome(Retry.none(p6({} as never))),
-        ListKeys: outcome(Retry.none(p7({} as never))),
-        ListRelatedaccountgroupMemberships: outcome(
+        AnnotateAssessment: probeOutcome(
+          Retry.none(p1({ assessment: "alchemy-missing" } as never)),
+        ),
+        GetKey: probeOutcome(Retry.none(p2({} as never))),
+        GetKeyMetrics: probeOutcome(Retry.none(p3({ key: "alchemy-missing" } as never))),
+        GetKeyPolicy: probeOutcome(Retry.none(p4({ key: "alchemy-missing" } as never))),
+        ListFirewallpolicies: probeOutcome(Retry.none(p5({} as never))),
+        ListKeyIpOverrides: probeOutcome(Retry.none(p6({} as never))),
+        ListKeys: probeOutcome(Retry.none(p7({} as never))),
+        ListRelatedaccountgroupMemberships: probeOutcome(
           Retry.none(p8({ relatedaccountgroup: "alchemy-missing" } as never)),
         ),
-        ListRelatedaccountgroups: outcome(Retry.none(p9({} as never))),
-        MigrateKey: outcome(Retry.none(p10({} as never))),
-        RemoveKeyIpOverride: outcome(Retry.none(p11({} as never))),
-        ReorderFirewallpolicy: outcome(Retry.none(p12({} as never))),
-        SearchRelatedaccountgroupmembership: outcome(Retry.none(p13({} as never))),
-        UpdateKeyPolicy: outcome(Retry.none(p14({ key: "alchemy-missing" } as never))),
+        ListRelatedaccountgroups: probeOutcome(Retry.none(p9({} as never))),
+        MigrateKey: probeOutcome(Retry.none(p10({} as never))),
+        RemoveKeyIpOverride: probeOutcome(Retry.none(p11({} as never))),
+        ReorderFirewallpolicy: probeOutcome(Retry.none(p12({} as never))),
+        SearchRelatedaccountgroupmembership: probeOutcome(Retry.none(p13({} as never))),
+        UpdateKeyPolicy: probeOutcome(Retry.none(p14({ key: "alchemy-missing" } as never))),
       }),
     };
   }).pipe(

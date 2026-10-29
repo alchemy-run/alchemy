@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeBackupChannel, ProbeRestoreChannel } from "./generated-resources.ts";
 
 /**
@@ -28,20 +28,20 @@ export default class GKEBackupGeneratedHost extends GCP.Function<GKEBackupGenera
     const p9 = yield* GCP.GKEBackup.ListRestorePlans();
     return {
       fetch: serveProbes({
-        GetBackupChannel: outcome(Retry.none(p0({} as never))),
-        GetBackupChannelBackupPlanBinding: outcome(
+        GetBackupChannel: probeOutcome(Retry.none(p0({} as never))),
+        GetBackupChannelBackupPlanBinding: probeOutcome(
           Retry.none(p1({ backupPlanBinding: "alchemy-missing" } as never)),
         ),
-        GetRestoreChannel: outcome(Retry.none(p2({} as never))),
-        GetRestoreChannelRestorePlanBinding: outcome(
+        GetRestoreChannel: probeOutcome(Retry.none(p2({} as never))),
+        GetRestoreChannelRestorePlanBinding: probeOutcome(
           Retry.none(p3({ restorePlanBinding: "alchemy-missing" } as never)),
         ),
-        ListBackupChannelBackupPlanBindings: outcome(Retry.none(p4({} as never))),
-        ListBackupChannels: outcome(Retry.none(p5({ location: "us-central1" } as never))),
-        ListBackupPlans: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        ListRestoreChannelRestorePlanBindings: outcome(Retry.none(p7({} as never))),
-        ListRestoreChannels: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListRestorePlans: outcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListBackupChannelBackupPlanBindings: probeOutcome(Retry.none(p4({} as never))),
+        ListBackupChannels: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListBackupPlans: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListRestoreChannelRestorePlanBindings: probeOutcome(Retry.none(p7({} as never))),
+        ListRestoreChannels: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListRestorePlans: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(

@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { AppConfig } from "./generated-resources.ts";
 
 /**
@@ -30,15 +30,15 @@ export default class ParameterManagerGeneratedHost extends GCP.Function<Paramete
     const p11 = yield* GCP.ParameterManager.RenderTemplateVersion();
     return {
       fetch: serveProbes({
-        CreateTemplate: outcome(
+        CreateTemplate: probeOutcome(
           Retry.none(
             p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        DeleteTemplate: outcome(
+        DeleteTemplate: probeOutcome(
           Retry.none(p1({ template: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        DeleteTemplateVersion: outcome(
+        DeleteTemplateVersion: probeOutcome(
           Retry.none(
             p2({
               template: "alchemy-missing",
@@ -47,10 +47,10 @@ export default class ParameterManagerGeneratedHost extends GCP.Function<Paramete
             } as never),
           ),
         ),
-        GetTemplate: outcome(
+        GetTemplate: probeOutcome(
           Retry.none(p3({ template: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetTemplateVersion: outcome(
+        GetTemplateVersion: probeOutcome(
           Retry.none(
             p4({
               template: "alchemy-missing",
@@ -59,16 +59,16 @@ export default class ParameterManagerGeneratedHost extends GCP.Function<Paramete
             } as never),
           ),
         ),
-        ListParameters: outcome(Retry.none(p5({ location: "us-central1" } as never))),
-        ListParameterVersions: outcome(Retry.none(p6({} as never))),
-        ListTemplates: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListTemplateVersions: outcome(
+        ListParameters: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListParameterVersions: probeOutcome(Retry.none(p6({} as never))),
+        ListTemplates: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListTemplateVersions: probeOutcome(
           Retry.none(p8({ template: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        PatchTemplate: outcome(
+        PatchTemplate: probeOutcome(
           Retry.none(p9({ template: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        PatchTemplateVersion: outcome(
+        PatchTemplateVersion: probeOutcome(
           Retry.none(
             p10({
               template: "alchemy-missing",
@@ -77,7 +77,7 @@ export default class ParameterManagerGeneratedHost extends GCP.Function<Paramete
             } as never),
           ),
         ),
-        RenderTemplateVersion: outcome(
+        RenderTemplateVersion: probeOutcome(
           Retry.none(
             p11({
               template: "alchemy-missing",

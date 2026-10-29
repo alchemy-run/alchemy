@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { DenyAll, Live } from "./generated-resources.ts";
 
 /**
@@ -22,10 +22,10 @@ export default class FirebaseRulesGeneratedHost extends GCP.Function<FirebaseRul
     const p3 = yield* GCP.FirebaseRules.ListRulesets();
     return {
       fetch: serveProbes({
-        GetRelease: outcome(Retry.none(p0({} as never))),
-        GetRuleset: outcome(Retry.none(p1({} as never))),
-        ListReleases: outcome(Retry.none(p2({} as never))),
-        ListRulesets: outcome(Retry.none(p3({} as never))),
+        GetRelease: probeOutcome(Retry.none(p0({} as never))),
+        GetRuleset: probeOutcome(Retry.none(p1({} as never))),
+        ListReleases: probeOutcome(Retry.none(p2({} as never))),
+        ListRulesets: probeOutcome(Retry.none(p3({} as never))),
       }),
     };
   }).pipe(

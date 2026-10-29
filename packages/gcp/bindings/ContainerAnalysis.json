@@ -16,6 +16,10 @@
       "pattern": "projects/*/occurrences/*"
     }
   },
+  "permissions": {
+    "containeranalysis.projects.notes.occurrences.list": "containeranalysis.notes.listOccurrences",
+    "containeranalysis.projects.locations.notes.occurrences.list": "containeranalysis.notes.listOccurrences"
+  },
   "probes": {
     "resources": {
       "Note": "Authority",

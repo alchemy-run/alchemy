@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeConnector } from "./generated-resources.ts";
 
 /**
@@ -20,8 +20,8 @@ export default class VpcAccessGeneratedHost extends GCP.Function<VpcAccessGenera
     const p1 = yield* GCP.VpcAccess.ListConnectors();
     return {
       fetch: serveProbes({
-        GetConnector: outcome(Retry.none(p0({} as never))),
-        ListConnectors: outcome(Retry.none(p1({ location: "us-central1" } as never))),
+        GetConnector: probeOutcome(Retry.none(p0({} as never))),
+        ListConnectors: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(

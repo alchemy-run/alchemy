@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated Connectors binding as its own
@@ -39,13 +39,13 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
     const p21 = yield* GCP.Connectors.UpdateEntityEntitiesWithConditions();
     return {
       fetch: serveProbes({
-        CheckConnectionReadiness: outcome(
+        CheckConnectionReadiness: probeOutcome(
           Retry.none(p0({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        CheckConnectionStatus: outcome(
+        CheckConnectionStatus: probeOutcome(
           Retry.none(p1({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        DeleteEntityEntitiesWithConditions: outcome(
+        DeleteEntityEntitiesWithConditions: probeOutcome(
           Retry.none(
             p2({
               connection: "alchemy-missing",
@@ -54,10 +54,10 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
             } as never),
           ),
         ),
-        ExchangeConnectionAuthCode: outcome(
+        ExchangeConnectionAuthCode: probeOutcome(
           Retry.none(p3({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ExecuteConnectionAction: outcome(
+        ExecuteConnectionAction: probeOutcome(
           Retry.none(
             p4({
               connection: "alchemy-missing",
@@ -66,13 +66,13 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
             } as never),
           ),
         ),
-        ExecuteConnectionHttpRequest: outcome(
+        ExecuteConnectionHttpRequest: probeOutcome(
           Retry.none(p5({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ExecuteConnectionSqlQuery: outcome(
+        ExecuteConnectionSqlQuery: probeOutcome(
           Retry.none(p6({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ExecuteConnectionTool: outcome(
+        ExecuteConnectionTool: probeOutcome(
           Retry.none(
             p7({
               connection: "alchemy-missing",
@@ -81,10 +81,10 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
             } as never),
           ),
         ),
-        GenerateConnectionToolspecOverride: outcome(
+        GenerateConnectionToolspecOverride: probeOutcome(
           Retry.none(p8({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetConnectionAction: outcome(
+        GetConnectionAction: probeOutcome(
           Retry.none(
             p9({
               connection: "alchemy-missing",
@@ -93,7 +93,7 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
             } as never),
           ),
         ),
-        GetConnectionEntityType: outcome(
+        GetConnectionEntityType: probeOutcome(
           Retry.none(
             p10({
               connection: "alchemy-missing",
@@ -102,7 +102,7 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
             } as never),
           ),
         ),
-        GetConnectionResource: outcome(
+        GetConnectionResource: probeOutcome(
           Retry.none(
             p11({
               connection: "alchemy-missing",
@@ -111,7 +111,7 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
             } as never),
           ),
         ),
-        GetResourcePost: outcome(
+        GetResourcePost: probeOutcome(
           Retry.none(
             p12({
               connection: "alchemy-missing",
@@ -120,13 +120,13 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
             } as never),
           ),
         ),
-        ListConnectionActions: outcome(
+        ListConnectionActions: probeOutcome(
           Retry.none(p13({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListConnectionCustomToolNames: outcome(
+        ListConnectionCustomToolNames: probeOutcome(
           Retry.none(p14({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListConnectionEntityTypeEntities: outcome(
+        ListConnectionEntityTypeEntities: probeOutcome(
           Retry.none(
             p15({
               connection: "alchemy-missing",
@@ -135,22 +135,22 @@ export default class ConnectorsGeneratedHost extends GCP.Function<ConnectorsGene
             } as never),
           ),
         ),
-        ListConnectionEntityTypes: outcome(
+        ListConnectionEntityTypes: probeOutcome(
           Retry.none(p16({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListConnectionResources: outcome(
+        ListConnectionResources: probeOutcome(
           Retry.none(p17({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListConnectionTools: outcome(
+        ListConnectionTools: probeOutcome(
           Retry.none(p18({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        RefreshConnectionAccessToken: outcome(
+        RefreshConnectionAccessToken: probeOutcome(
           Retry.none(p19({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ToolsConnection: outcome(
+        ToolsConnection: probeOutcome(
           Retry.none(p20({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        UpdateEntityEntitiesWithConditions: outcome(
+        UpdateEntityEntitiesWithConditions: probeOutcome(
           Retry.none(
             p21({
               connection: "alchemy-missing",

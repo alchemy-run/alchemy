@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated ServiceManagement binding as its own
@@ -19,8 +19,8 @@ export default class ServiceManagementGeneratedHost extends GCP.Function<Service
     const p1 = yield* GCP.ServiceManagement.ListServices();
     return {
       fetch: serveProbes({
-        GenerateServiceConfigReport: outcome(Retry.none(p0({} as never))),
-        ListServices: outcome(Retry.none(p1({} as never))),
+        GenerateServiceConfigReport: probeOutcome(Retry.none(p0({} as never))),
+        ListServices: probeOutcome(Retry.none(p1({} as never))),
       }),
     };
   }).pipe(

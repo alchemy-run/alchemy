@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated DNS binding as its own
@@ -42,7 +42,7 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
     const p24 = yield* GCP.DNS.UpdateResponsePolicyRule();
     return {
       fetch: serveProbes({
-        CreateChange: outcome(
+        CreateChange: probeOutcome(
           Retry.none(
             p0({
               managedZone: "alchemy-missing",
@@ -50,7 +50,7 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
             } as never),
           ),
         ),
-        CreateResourceRecordSet: outcome(
+        CreateResourceRecordSet: probeOutcome(
           Retry.none(
             p1({
               managedZone: "alchemy-missing",
@@ -58,7 +58,7 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
             } as never),
           ),
         ),
-        CreateResponsePolicyRule: outcome(
+        CreateResponsePolicyRule: probeOutcome(
           Retry.none(
             p2({
               responsePolicy: "alchemy-missing",
@@ -66,7 +66,7 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
             } as never),
           ),
         ),
-        DeleteResourceRecordSet: outcome(
+        DeleteResourceRecordSet: probeOutcome(
           Retry.none(
             p3({
               name: "alchemy-missing",
@@ -75,7 +75,7 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
             } as never),
           ),
         ),
-        DeleteResponsePolicyRule: outcome(
+        DeleteResponsePolicyRule: probeOutcome(
           Retry.none(
             p4({
               responsePolicyRule: "alchemy-missing",
@@ -83,19 +83,19 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
             } as never),
           ),
         ),
-        GetChange: outcome(
+        GetChange: probeOutcome(
           Retry.none(p5({ changeId: "alchemy-missing", managedZone: "alchemy-missing" } as never)),
         ),
-        GetDnsKey: outcome(
+        GetDnsKey: probeOutcome(
           Retry.none(p6({ managedZone: "alchemy-missing", dnsKeyId: "alchemy-missing" } as never)),
         ),
-        GetManagedZone: outcome(Retry.none(p7({ managedZone: "alchemy-missing" } as never))),
-        GetManagedZoneOperation: outcome(
+        GetManagedZone: probeOutcome(Retry.none(p7({ managedZone: "alchemy-missing" } as never))),
+        GetManagedZoneOperation: probeOutcome(
           Retry.none(p8({ operation: "alchemy-missing", managedZone: "alchemy-missing" } as never)),
         ),
-        GetPolicy: outcome(Retry.none(p9({ policy: "alchemy-missing" } as never))),
-        GetProject: outcome(Retry.none(p10({} as never))),
-        GetResourceRecordSet: outcome(
+        GetPolicy: probeOutcome(Retry.none(p9({ policy: "alchemy-missing" } as never))),
+        GetProject: probeOutcome(Retry.none(p10({} as never))),
+        GetResourceRecordSet: probeOutcome(
           Retry.none(
             p11({
               name: "alchemy-missing",
@@ -104,8 +104,10 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
             } as never),
           ),
         ),
-        GetResponsePolicy: outcome(Retry.none(p12({ responsePolicy: "alchemy-missing" } as never))),
-        GetResponsePolicyRule: outcome(
+        GetResponsePolicy: probeOutcome(
+          Retry.none(p12({ responsePolicy: "alchemy-missing" } as never)),
+        ),
+        GetResponsePolicyRule: probeOutcome(
           Retry.none(
             p13({
               responsePolicyRule: "alchemy-missing",
@@ -113,21 +115,21 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
             } as never),
           ),
         ),
-        ListChanges: outcome(Retry.none(p14({ managedZone: "alchemy-missing" } as never))),
-        ListDnsKeys: outcome(Retry.none(p15({ managedZone: "alchemy-missing" } as never))),
-        ListManagedZoneOperations: outcome(
+        ListChanges: probeOutcome(Retry.none(p14({ managedZone: "alchemy-missing" } as never))),
+        ListDnsKeys: probeOutcome(Retry.none(p15({ managedZone: "alchemy-missing" } as never))),
+        ListManagedZoneOperations: probeOutcome(
           Retry.none(p16({ managedZone: "alchemy-missing" } as never)),
         ),
-        ListManagedZones: outcome(Retry.none(p17({} as never))),
-        ListPolicies: outcome(Retry.none(p18({} as never))),
-        ListResourceRecordSets: outcome(
+        ListManagedZones: probeOutcome(Retry.none(p17({} as never))),
+        ListPolicies: probeOutcome(Retry.none(p18({} as never))),
+        ListResourceRecordSets: probeOutcome(
           Retry.none(p19({ managedZone: "alchemy-missing" } as never)),
         ),
-        ListResponsePolicies: outcome(Retry.none(p20({} as never))),
-        ListResponsePolicyRules: outcome(
+        ListResponsePolicies: probeOutcome(Retry.none(p20({} as never))),
+        ListResponsePolicyRules: probeOutcome(
           Retry.none(p21({ responsePolicy: "alchemy-missing" } as never)),
         ),
-        PatchResourceRecordSet: outcome(
+        PatchResourceRecordSet: probeOutcome(
           Retry.none(
             p22({
               managedZone: "alchemy-missing",
@@ -136,7 +138,7 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
             } as never),
           ),
         ),
-        PatchResponsePolicyRule: outcome(
+        PatchResponsePolicyRule: probeOutcome(
           Retry.none(
             p23({
               responsePolicyRule: "alchemy-missing",
@@ -144,7 +146,7 @@ export default class DNSGeneratedHost extends GCP.Function<DNSGeneratedHost>()(
             } as never),
           ),
         ),
-        UpdateResponsePolicyRule: outcome(
+        UpdateResponsePolicyRule: probeOutcome(
           Retry.none(
             p24({
               responsePolicy: "alchemy-missing",

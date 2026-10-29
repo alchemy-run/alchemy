@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated GKEOnPrem binding as its own
@@ -36,59 +36,67 @@ export default class GKEOnPremGeneratedHost extends GCP.Function<GKEOnPremGenera
     const p18 = yield* GCP.GKEOnPrem.UnenrollVmwareAdminCluster();
     return {
       fetch: serveProbes({
-        CreateBareMetalAdminCluster: outcome(
+        CreateBareMetalAdminCluster: probeOutcome(
           Retry.none(
             p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        CreateVmwareAdminCluster: outcome(
+        CreateVmwareAdminCluster: probeOutcome(
           Retry.none(
             p1({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        EnrollBareMetalAdminCluster: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        EnrollBareMetalCluster: outcome(Retry.none(p3({ location: "us-central1" } as never))),
-        EnrollVmwareAdminCluster: outcome(Retry.none(p4({ location: "us-central1" } as never))),
-        EnrollVmwareCluster: outcome(Retry.none(p5({ location: "us-central1" } as never))),
-        GetBareMetalAdminCluster: outcome(
+        EnrollBareMetalAdminCluster: probeOutcome(
+          Retry.none(p2({ location: "us-central1" } as never)),
+        ),
+        EnrollBareMetalCluster: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        EnrollVmwareAdminCluster: probeOutcome(
+          Retry.none(p4({ location: "us-central1" } as never)),
+        ),
+        EnrollVmwareCluster: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        GetBareMetalAdminCluster: probeOutcome(
           Retry.none(
             p6({ bareMetalAdminCluster: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        GetVmwareAdminCluster: outcome(
+        GetVmwareAdminCluster: probeOutcome(
           Retry.none(
             p7({ vmwareAdminCluster: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        ListBareMetalAdminClusters: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListBareMetalClusters: outcome(Retry.none(p9({ location: "us-central1" } as never))),
-        ListVmwareAdminClusters: outcome(Retry.none(p10({ location: "us-central1" } as never))),
-        ListVmwareClusters: outcome(Retry.none(p11({ location: "us-central1" } as never))),
-        PatchBareMetalAdminCluster: outcome(
+        ListBareMetalAdminClusters: probeOutcome(
+          Retry.none(p8({ location: "us-central1" } as never)),
+        ),
+        ListBareMetalClusters: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListVmwareAdminClusters: probeOutcome(
+          Retry.none(p10({ location: "us-central1" } as never)),
+        ),
+        ListVmwareClusters: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
+        PatchBareMetalAdminCluster: probeOutcome(
           Retry.none(
             p12({ bareMetalAdminCluster: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        PatchVmwareAdminCluster: outcome(
+        PatchVmwareAdminCluster: probeOutcome(
           Retry.none(
             p13({ vmwareAdminCluster: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        QueryBareMetalAdminClusterVersionConfig: outcome(
+        QueryBareMetalAdminClusterVersionConfig: probeOutcome(
           Retry.none(p14({ location: "us-central1" } as never)),
         ),
-        QueryBareMetalClusterVersionConfig: outcome(
+        QueryBareMetalClusterVersionConfig: probeOutcome(
           Retry.none(p15({ location: "us-central1" } as never)),
         ),
-        QueryVmwareClusterVersionConfig: outcome(
+        QueryVmwareClusterVersionConfig: probeOutcome(
           Retry.none(p16({ location: "us-central1" } as never)),
         ),
-        UnenrollBareMetalAdminCluster: outcome(
+        UnenrollBareMetalAdminCluster: probeOutcome(
           Retry.none(
             p17({ bareMetalAdminCluster: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        UnenrollVmwareAdminCluster: outcome(
+        UnenrollVmwareAdminCluster: probeOutcome(
           Retry.none(
             p18({ vmwareAdminCluster: "alchemy-missing", location: "us-central1" } as never),
           ),

@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbePrivateConnection,
   ProbeProfile,
@@ -38,21 +38,27 @@ export default class DatastreamGeneratedHost extends GCP.Function<DatastreamGene
     const p14 = yield* GCP.Datastream.StopObjectBackfillJob(ProbeStream);
     return {
       fetch: serveProbes({
-        DiscoverConnectionProfile: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        GetConnectionProfile: outcome(Retry.none(p1({} as never))),
-        GetPrivateConnection: outcome(Retry.none(p2({} as never))),
-        GetRoute: outcome(Retry.none(p3({} as never))),
-        GetStream: outcome(Retry.none(p4({} as never))),
-        GetStreamObject: outcome(Retry.none(p5({ object: "alchemy-missing" } as never))),
-        ListConnectionProfiles: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        ListPrivateConnectionRoutes: outcome(Retry.none(p7({} as never))),
-        ListPrivateConnections: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListStreamObjects: outcome(Retry.none(p9({} as never))),
-        ListStreams: outcome(Retry.none(p10({ location: "us-central1" } as never))),
-        LookupStreamObject: outcome(Retry.none(p11({} as never))),
-        RunStream: outcome(Retry.none(p12({} as never))),
-        StartObjectBackfillJob: outcome(Retry.none(p13({ object: "alchemy-missing" } as never))),
-        StopObjectBackfillJob: outcome(Retry.none(p14({ object: "alchemy-missing" } as never))),
+        DiscoverConnectionProfile: probeOutcome(
+          Retry.none(p0({ location: "us-central1" } as never)),
+        ),
+        GetConnectionProfile: probeOutcome(Retry.none(p1({} as never))),
+        GetPrivateConnection: probeOutcome(Retry.none(p2({} as never))),
+        GetRoute: probeOutcome(Retry.none(p3({} as never))),
+        GetStream: probeOutcome(Retry.none(p4({} as never))),
+        GetStreamObject: probeOutcome(Retry.none(p5({ object: "alchemy-missing" } as never))),
+        ListConnectionProfiles: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListPrivateConnectionRoutes: probeOutcome(Retry.none(p7({} as never))),
+        ListPrivateConnections: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListStreamObjects: probeOutcome(Retry.none(p9({} as never))),
+        ListStreams: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        LookupStreamObject: probeOutcome(Retry.none(p11({} as never))),
+        RunStream: probeOutcome(Retry.none(p12({} as never))),
+        StartObjectBackfillJob: probeOutcome(
+          Retry.none(p13({ object: "alchemy-missing" } as never)),
+        ),
+        StopObjectBackfillJob: probeOutcome(
+          Retry.none(p14({ object: "alchemy-missing" } as never)),
+        ),
       }),
     };
   }).pipe(

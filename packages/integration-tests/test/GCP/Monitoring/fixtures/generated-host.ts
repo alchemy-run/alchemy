@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeAlertPolicy,
   ProbeGroup,
@@ -57,43 +57,43 @@ export default class MonitoringGeneratedHost extends GCP.Function<MonitoringGene
     const p28 = yield* GCP.Monitoring.VerifyNotificationChannel(ProbeNotificationChannel);
     return {
       fetch: serveProbes({
-        CreateSnooze: outcome(
+        CreateSnooze: probeOutcome(
           Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        CreateTimeSery: outcome(
+        CreateTimeSery: probeOutcome(
           Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        GetAlert: outcome(Retry.none(p2({ alert: "alchemy-missing" } as never))),
-        GetAlertPolicy: outcome(Retry.none(p3({} as never))),
-        GetGroup: outcome(Retry.none(p4({} as never))),
-        GetMetricDescriptor: outcome(Retry.none(p5({} as never))),
-        GetMonitoredResourceDescriptor: outcome(
+        GetAlert: probeOutcome(Retry.none(p2({ alert: "alchemy-missing" } as never))),
+        GetAlertPolicy: probeOutcome(Retry.none(p3({} as never))),
+        GetGroup: probeOutcome(Retry.none(p4({} as never))),
+        GetMetricDescriptor: probeOutcome(Retry.none(p5({} as never))),
+        GetMonitoredResourceDescriptor: probeOutcome(
           Retry.none(p6({ monitoredResourceDescriptor: "alchemy-missing" } as never)),
         ),
-        GetNotificationChannel: outcome(Retry.none(p7({} as never))),
-        GetNotificationChannelDescriptor: outcome(
+        GetNotificationChannel: probeOutcome(Retry.none(p7({} as never))),
+        GetNotificationChannelDescriptor: probeOutcome(
           Retry.none(p8({ notificationChannelDescriptor: "alchemy-missing" } as never)),
         ),
-        GetNotificationChannelVerificationCode: outcome(Retry.none(p9({} as never))),
-        GetService: outcome(Retry.none(p10({} as never))),
-        GetServiceLevelObjective: outcome(Retry.none(p11({} as never))),
-        GetSnooze: outcome(Retry.none(p12({ snooze: "alchemy-missing" } as never))),
-        GetUptimeCheckConfig: outcome(Retry.none(p13({} as never))),
-        ListAlertPolicies: outcome(Retry.none(p14({} as never))),
-        ListAlerts: outcome(Retry.none(p15({} as never))),
-        ListGroupMembers: outcome(Retry.none(p16({} as never))),
-        ListGroups: outcome(Retry.none(p17({} as never))),
-        ListMetricDescriptors: outcome(Retry.none(p18({} as never))),
-        ListMonitoredResourceDescriptors: outcome(Retry.none(p19({} as never))),
-        ListNotificationChannelDescriptors: outcome(Retry.none(p20({} as never))),
-        ListNotificationChannels: outcome(Retry.none(p21({} as never))),
-        ListServiceLevelObjectives: outcome(Retry.none(p22({} as never))),
-        ListSnoozes: outcome(Retry.none(p23({} as never))),
-        ListTimeSeries: outcome(Retry.none(p24({} as never))),
-        ListUptimeCheckConfigs: outcome(Retry.none(p25({} as never))),
-        PatchSnooze: outcome(Retry.none(p26({ snooze: "alchemy-missing" } as never))),
-        SendNotificationChannelVerificationCode: outcome(Retry.none(p27({} as never))),
-        VerifyNotificationChannel: outcome(Retry.none(p28({} as never))),
+        GetNotificationChannelVerificationCode: probeOutcome(Retry.none(p9({} as never))),
+        GetService: probeOutcome(Retry.none(p10({} as never))),
+        GetServiceLevelObjective: probeOutcome(Retry.none(p11({} as never))),
+        GetSnooze: probeOutcome(Retry.none(p12({ snooze: "alchemy-missing" } as never))),
+        GetUptimeCheckConfig: probeOutcome(Retry.none(p13({} as never))),
+        ListAlertPolicies: probeOutcome(Retry.none(p14({} as never))),
+        ListAlerts: probeOutcome(Retry.none(p15({} as never))),
+        ListGroupMembers: probeOutcome(Retry.none(p16({} as never))),
+        ListGroups: probeOutcome(Retry.none(p17({} as never))),
+        ListMetricDescriptors: probeOutcome(Retry.none(p18({} as never))),
+        ListMonitoredResourceDescriptors: probeOutcome(Retry.none(p19({} as never))),
+        ListNotificationChannelDescriptors: probeOutcome(Retry.none(p20({} as never))),
+        ListNotificationChannels: probeOutcome(Retry.none(p21({} as never))),
+        ListServiceLevelObjectives: probeOutcome(Retry.none(p22({} as never))),
+        ListSnoozes: probeOutcome(Retry.none(p23({} as never))),
+        ListTimeSeries: probeOutcome(Retry.none(p24({} as never))),
+        ListUptimeCheckConfigs: probeOutcome(Retry.none(p25({} as never))),
+        PatchSnooze: probeOutcome(Retry.none(p26({ snooze: "alchemy-missing" } as never))),
+        SendNotificationChannelVerificationCode: probeOutcome(Retry.none(p27({} as never))),
+        VerifyNotificationChannel: probeOutcome(Retry.none(p28({} as never))),
       }),
     };
   }).pipe(

@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated CloudTasks binding as its own
@@ -18,7 +18,7 @@ export default class CloudTasksGeneratedHost extends GCP.Function<CloudTasksGene
     const p0 = yield* GCP.CloudTasks.ListQueues();
     return {
       fetch: serveProbes({
-        ListQueues: outcome(Retry.none(p0({ location: "us-central1" } as never))),
+        ListQueues: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(Effect.provide(Layer.mergeAll(Layer.mergeAll(GCP.CloudTasks.ListQueuesHttp)))),

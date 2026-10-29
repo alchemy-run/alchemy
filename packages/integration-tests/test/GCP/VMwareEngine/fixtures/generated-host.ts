@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated VMwareEngine binding as its own
@@ -29,22 +29,26 @@ export default class VMwareEngineGeneratedHost extends GCP.Function<VMwareEngine
     const p11 = yield* GCP.VMwareEngine.UpdatePrivateCloudDnsForwarding();
     return {
       fetch: serveProbes({
-        GetNodeType: outcome(
+        GetNodeType: probeOutcome(
           Retry.none(p0({ nodeType: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetPrivateCloudDnsForwarding: outcome(
+        GetPrivateCloudDnsForwarding: probeOutcome(
           Retry.none(p1({ privateCloud: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GrantDnsBindPermission: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListDatastores: outcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListNetworkPeerings: outcome(Retry.none(p4({ location: "us-central1" } as never))),
-        ListNetworkPolicies: outcome(Retry.none(p5({ location: "us-central1" } as never))),
-        ListNodeTypes: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        ListPrivateClouds: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListPrivateConnections: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListVmwareEngineNetworks: outcome(Retry.none(p9({ location: "us-central1" } as never))),
-        RevokeDnsBindPermission: outcome(Retry.none(p10({ location: "us-central1" } as never))),
-        UpdatePrivateCloudDnsForwarding: outcome(
+        GrantDnsBindPermission: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
+        ListDatastores: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        ListNetworkPeerings: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListNetworkPolicies: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListNodeTypes: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListPrivateClouds: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListPrivateConnections: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListVmwareEngineNetworks: probeOutcome(
+          Retry.none(p9({ location: "us-central1" } as never)),
+        ),
+        RevokeDnsBindPermission: probeOutcome(
+          Retry.none(p10({ location: "us-central1" } as never)),
+        ),
+        UpdatePrivateCloudDnsForwarding: probeOutcome(
           Retry.none(p11({ privateCloud: "alchemy-missing", location: "us-central1" } as never)),
         ),
       }),

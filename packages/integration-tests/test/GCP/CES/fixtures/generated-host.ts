@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeAgent,
   ProbeApp,
@@ -68,57 +68,61 @@ export default class CESGeneratedHost extends GCP.Function<CESGeneratedHost>()(
     const p40 = yield* GCP.CES.StreamVersionMessage(ProbeVersion);
     return {
       fetch: serveProbes({
-        BatchConversationDelete: outcome(Retry.none(p0({} as never))),
-        CancelAssistantSessionAssistantTurn: outcome(
+        BatchConversationDelete: probeOutcome(Retry.none(p0({} as never))),
+        CancelAssistantSessionAssistantTurn: probeOutcome(
           Retry.none(p1({ assistantSession: "alchemy-missing" } as never)),
         ),
-        DeleteAppConversation: outcome(
+        DeleteAppConversation: probeOutcome(
           Retry.none(p2({ conversation: "alchemy-missing" } as never)),
         ),
-        ExecuteAppTool: outcome(Retry.none(p3({} as never))),
-        ExportApp: outcome(Retry.none(p4({} as never))),
-        GenerateAppOnboardingSuggestions: outcome(Retry.none(p5({} as never))),
-        GenerateSessionChatToken: outcome(Retry.none(p6({ session: "alchemy-missing" } as never))),
-        GetAgent: outcome(Retry.none(p7({} as never))),
-        GetApp: outcome(Retry.none(p8({} as never))),
-        GetAppChangelog: outcome(Retry.none(p9({ changelog: "alchemy-missing" } as never))),
-        GetAppConversation: outcome(Retry.none(p10({ conversation: "alchemy-missing" } as never))),
-        GetAppExtendedAgentCard: outcome(Retry.none(p11({} as never))),
-        GetDeployment: outcome(Retry.none(p12({} as never))),
-        GetDeploymentExtendedAgentCard: outcome(Retry.none(p13({} as never))),
-        GetExample: outcome(Retry.none(p14({} as never))),
-        GetGuardrail: outcome(Retry.none(p15({} as never))),
-        GetTool: outcome(Retry.none(p16({} as never))),
-        GetToolset: outcome(Retry.none(p17({} as never))),
-        GetVersion: outcome(Retry.none(p18({} as never))),
-        GetVersionExtendedAgentCard: outcome(Retry.none(p19({} as never))),
-        ImportApp: outcome(
+        ExecuteAppTool: probeOutcome(Retry.none(p3({} as never))),
+        ExportApp: probeOutcome(Retry.none(p4({} as never))),
+        GenerateAppOnboardingSuggestions: probeOutcome(Retry.none(p5({} as never))),
+        GenerateSessionChatToken: probeOutcome(
+          Retry.none(p6({ session: "alchemy-missing" } as never)),
+        ),
+        GetAgent: probeOutcome(Retry.none(p7({} as never))),
+        GetApp: probeOutcome(Retry.none(p8({} as never))),
+        GetAppChangelog: probeOutcome(Retry.none(p9({ changelog: "alchemy-missing" } as never))),
+        GetAppConversation: probeOutcome(
+          Retry.none(p10({ conversation: "alchemy-missing" } as never)),
+        ),
+        GetAppExtendedAgentCard: probeOutcome(Retry.none(p11({} as never))),
+        GetDeployment: probeOutcome(Retry.none(p12({} as never))),
+        GetDeploymentExtendedAgentCard: probeOutcome(Retry.none(p13({} as never))),
+        GetExample: probeOutcome(Retry.none(p14({} as never))),
+        GetGuardrail: probeOutcome(Retry.none(p15({} as never))),
+        GetTool: probeOutcome(Retry.none(p16({} as never))),
+        GetToolset: probeOutcome(Retry.none(p17({} as never))),
+        GetVersion: probeOutcome(Retry.none(p18({} as never))),
+        GetVersionExtendedAgentCard: probeOutcome(Retry.none(p19({} as never))),
+        ImportApp: probeOutcome(
           Retry.none(p20({ location: "us", body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ListAppAgents: outcome(Retry.none(p21({} as never))),
-        ListAppChangelogs: outcome(Retry.none(p22({} as never))),
-        ListAppConversations: outcome(Retry.none(p23({} as never))),
-        ListAppDeployments: outcome(Retry.none(p24({} as never))),
-        ListAppExamples: outcome(Retry.none(p25({} as never))),
-        ListAppGuardrails: outcome(Retry.none(p26({} as never))),
-        ListApps: outcome(Retry.none(p27({ location: "us" } as never))),
-        ListAppTools: outcome(Retry.none(p28({} as never))),
-        ListAppToolsets: outcome(Retry.none(p29({} as never))),
-        ListAppVersions: outcome(Retry.none(p30({} as never))),
-        RestoreVersion: outcome(
+        ListAppAgents: probeOutcome(Retry.none(p21({} as never))),
+        ListAppChangelogs: probeOutcome(Retry.none(p22({} as never))),
+        ListAppConversations: probeOutcome(Retry.none(p23({} as never))),
+        ListAppDeployments: probeOutcome(Retry.none(p24({} as never))),
+        ListAppExamples: probeOutcome(Retry.none(p25({} as never))),
+        ListAppGuardrails: probeOutcome(Retry.none(p26({} as never))),
+        ListApps: probeOutcome(Retry.none(p27({ location: "us" } as never))),
+        ListAppTools: probeOutcome(Retry.none(p28({} as never))),
+        ListAppToolsets: probeOutcome(Retry.none(p29({} as never))),
+        ListAppVersions: probeOutcome(Retry.none(p30({} as never))),
+        RestoreVersion: probeOutcome(
           Retry.none(p31({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        RunSession: outcome(Retry.none(p32({ session: "alchemy-missing" } as never))),
-        SendAppMessage: outcome(Retry.none(p33({} as never))),
-        SendDeploymentMessage: outcome(Retry.none(p34({} as never))),
-        SendVersionMessage: outcome(Retry.none(p35({} as never))),
-        StreamAppMessage: outcome(Retry.none(p36({} as never))),
-        StreamAssistantSessionChatAiAssistant: outcome(
+        RunSession: probeOutcome(Retry.none(p32({ session: "alchemy-missing" } as never))),
+        SendAppMessage: probeOutcome(Retry.none(p33({} as never))),
+        SendDeploymentMessage: probeOutcome(Retry.none(p34({} as never))),
+        SendVersionMessage: probeOutcome(Retry.none(p35({} as never))),
+        StreamAppMessage: probeOutcome(Retry.none(p36({} as never))),
+        StreamAssistantSessionChatAiAssistant: probeOutcome(
           Retry.none(p37({ assistantSession: "alchemy-missing" } as never)),
         ),
-        StreamDeploymentMessage: outcome(Retry.none(p38({} as never))),
-        StreamRunSession: outcome(Retry.none(p39({ session: "alchemy-missing" } as never))),
-        StreamVersionMessage: outcome(Retry.none(p40({} as never))),
+        StreamDeploymentMessage: probeOutcome(Retry.none(p38({} as never))),
+        StreamRunSession: probeOutcome(Retry.none(p39({ session: "alchemy-missing" } as never))),
+        StreamVersionMessage: probeOutcome(Retry.none(p40({} as never))),
       }),
     };
   }).pipe(

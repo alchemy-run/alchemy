@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated Vision binding as its own
@@ -25,18 +25,18 @@ export default class VisionGeneratedHost extends GCP.Function<VisionGeneratedHos
     const p7 = yield* GCP.Vision.PurgeProduct();
     return {
       fetch: serveProbes({
-        AnnotateFile: outcome(Retry.none(p0({} as never))),
-        AnnotateImage: outcome(Retry.none(p1({} as never))),
-        AsyncFileBatchAnnotate: outcome(Retry.none(p2({} as never))),
-        AsyncImageBatchAnnotate: outcome(Retry.none(p3({} as never))),
-        ImportProductSet: outcome(
+        AnnotateFile: probeOutcome(Retry.none(p0({} as never))),
+        AnnotateImage: probeOutcome(Retry.none(p1({} as never))),
+        AsyncFileBatchAnnotate: probeOutcome(Retry.none(p2({} as never))),
+        AsyncImageBatchAnnotate: probeOutcome(Retry.none(p3({} as never))),
+        ImportProductSet: probeOutcome(
           Retry.none(
             p4({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        ListProducts: outcome(Retry.none(p5({ location: "us-central1" } as never))),
-        ListProductSets: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        PurgeProduct: outcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListProducts: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListProductSets: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        PurgeProduct: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(

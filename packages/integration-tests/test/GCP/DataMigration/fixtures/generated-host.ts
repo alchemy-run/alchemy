@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeConnectionProfile,
   ProbeConversionWorkspace,
@@ -53,29 +53,31 @@ export default class DataMigrationGeneratedHost extends GCP.Function<DataMigrati
       yield* GCP.DataMigration.SetConversionWorkspaceDraftEntityDdl(ProbeConversionWorkspace);
     return {
       fetch: serveProbes({
-        ApplyConversionWorkspace: outcome(Retry.none(p0({} as never))),
-        CommitConversionWorkspace: outcome(Retry.none(p1({} as never))),
-        ConvertConversionWorkspace: outcome(Retry.none(p2({} as never))),
-        DescribeConversionWorkspaceDatabaseEntities: outcome(Retry.none(p3({} as never))),
-        DescribeConversionWorkspaceRevisions: outcome(Retry.none(p4({} as never))),
-        FetchConversionWorkspaceEntitiesStatusView: outcome(Retry.none(p5({} as never))),
-        FetchConversionWorkspaceIssues: outcome(Retry.none(p6({} as never))),
-        GetConnectionProfile: outcome(Retry.none(p7({} as never))),
-        GetConversionWorkspace: outcome(Retry.none(p8({} as never))),
-        GetMappingRule: outcome(Retry.none(p9({} as never))),
-        GetPrivateConnection: outcome(Retry.none(p10({} as never))),
-        ImportConversionWorkspaceMappingRule: outcome(
+        ApplyConversionWorkspace: probeOutcome(Retry.none(p0({} as never))),
+        CommitConversionWorkspace: probeOutcome(Retry.none(p1({} as never))),
+        ConvertConversionWorkspace: probeOutcome(Retry.none(p2({} as never))),
+        DescribeConversionWorkspaceDatabaseEntities: probeOutcome(Retry.none(p3({} as never))),
+        DescribeConversionWorkspaceRevisions: probeOutcome(Retry.none(p4({} as never))),
+        FetchConversionWorkspaceEntitiesStatusView: probeOutcome(Retry.none(p5({} as never))),
+        FetchConversionWorkspaceIssues: probeOutcome(Retry.none(p6({} as never))),
+        GetConnectionProfile: probeOutcome(Retry.none(p7({} as never))),
+        GetConversionWorkspace: probeOutcome(Retry.none(p8({} as never))),
+        GetMappingRule: probeOutcome(Retry.none(p9({} as never))),
+        GetPrivateConnection: probeOutcome(Retry.none(p10({} as never))),
+        ImportConversionWorkspaceMappingRule: probeOutcome(
           Retry.none(p11({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ListConnectionProfiles: outcome(Retry.none(p12({ location: "us-central1" } as never))),
-        ListConversionWorkspaceMappingRules: outcome(Retry.none(p13({} as never))),
-        ListConversionWorkspaces: outcome(Retry.none(p14({ location: "us-central1" } as never))),
-        ListMigrationJobs: outcome(Retry.none(p15({ location: "us-central1" } as never))),
-        ListPrivateConnections: outcome(Retry.none(p16({ location: "us-central1" } as never))),
-        RollbackConversionWorkspace: outcome(Retry.none(p17({} as never))),
-        SearchConversionWorkspaceBackgroundJobs: outcome(Retry.none(p18({} as never))),
-        SeedConversionWorkspace: outcome(Retry.none(p19({} as never))),
-        SetConversionWorkspaceDraftEntityDdl: outcome(Retry.none(p20({} as never))),
+        ListConnectionProfiles: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
+        ListConversionWorkspaceMappingRules: probeOutcome(Retry.none(p13({} as never))),
+        ListConversionWorkspaces: probeOutcome(
+          Retry.none(p14({ location: "us-central1" } as never)),
+        ),
+        ListMigrationJobs: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListPrivateConnections: probeOutcome(Retry.none(p16({ location: "us-central1" } as never))),
+        RollbackConversionWorkspace: probeOutcome(Retry.none(p17({} as never))),
+        SearchConversionWorkspaceBackgroundJobs: probeOutcome(Retry.none(p18({} as never))),
+        SeedConversionWorkspace: probeOutcome(Retry.none(p19({} as never))),
+        SetConversionWorkspaceDraftEntityDdl: probeOutcome(Retry.none(p20({} as never))),
       }),
     };
   }).pipe(

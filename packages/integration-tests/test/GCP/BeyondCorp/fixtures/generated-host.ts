@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated BeyondCorp binding as its own
@@ -22,11 +22,11 @@ export default class BeyondCorpGeneratedHost extends GCP.Function<BeyondCorpGene
     const p4 = yield* GCP.BeyondCorp.ResolveAppConnection();
     return {
       fetch: serveProbes({
-        ListAppConnections: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListAppConnectors: outcome(Retry.none(p1({ location: "us-central1" } as never))),
-        ListAppGateways: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListSecurityGateways: outcome(Retry.none(p3({ location: "global" } as never))),
-        ResolveAppConnection: outcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListAppConnections: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
+        ListAppConnectors: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        ListAppGateways: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
+        ListSecurityGateways: probeOutcome(Retry.none(p3({ location: "global" } as never))),
+        ResolveAppConnection: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(

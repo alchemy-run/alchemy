@@ -5,7 +5,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { callProbe } from "../bindingHost.ts";
+import { callProbe, outcomeTag } from "../bindingHost.ts";
 import RecommendationEngineGeneratedHost from "./fixtures/generated-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -34,12 +34,12 @@ const probe = (name: string, expectSuccess: boolean) =>
         : yield* call.pipe(
             Effect.repeat({
               schedule: Schedule.spaced("10 seconds"),
-              until: (value) => !AMBIGUOUS.includes(value),
+              until: (value) => !AMBIGUOUS.includes(outcomeTag(value)),
               times: 30,
             }),
           );
     if (expectSuccess)
-      expect(ALLOWED.includes(outcome) ? "succeeded" : outcome).toEqual("succeeded");
+      expect(ALLOWED.includes(outcomeTag(outcome)) ? "succeeded" : outcome).toEqual("succeeded");
     else expect(typeof outcome).toEqual("string");
   });
 

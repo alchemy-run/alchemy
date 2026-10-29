@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated Spanner binding as its own
@@ -23,14 +23,16 @@ export default class SpannerGeneratedHost extends GCP.Function<SpannerGeneratedH
     const p5 = yield* GCP.Spanner.PatchInstanceConfig();
     return {
       fetch: serveProbes({
-        DeleteInstanceConfig: outcome(
+        DeleteInstanceConfig: probeOutcome(
           Retry.none(p0({ instanceConfig: "alchemy-missing" } as never)),
         ),
-        GetInstanceConfig: outcome(Retry.none(p1({ instanceConfig: "alchemy-missing" } as never))),
-        ListInstanceConfigOperations: outcome(Retry.none(p2({} as never))),
-        ListInstanceConfigs: outcome(Retry.none(p3({} as never))),
-        ListInstances: outcome(Retry.none(p4({} as never))),
-        PatchInstanceConfig: outcome(
+        GetInstanceConfig: probeOutcome(
+          Retry.none(p1({ instanceConfig: "alchemy-missing" } as never)),
+        ),
+        ListInstanceConfigOperations: probeOutcome(Retry.none(p2({} as never))),
+        ListInstanceConfigs: probeOutcome(Retry.none(p3({} as never))),
+        ListInstances: probeOutcome(Retry.none(p4({} as never))),
+        PatchInstanceConfig: probeOutcome(
           Retry.none(p5({ instanceConfig: "alchemy-missing" } as never)),
         ),
       }),

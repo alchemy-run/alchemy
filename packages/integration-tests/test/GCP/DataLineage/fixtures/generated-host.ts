@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeLineageEvent, ProbeProcess, ProbeRun } from "./generated-resources.ts";
 
 /**
@@ -24,12 +24,12 @@ export default class DataLineageGeneratedHost extends GCP.Function<DataLineageGe
     const p5 = yield* GCP.DataLineage.ListRunLineageEvents(ProbeRun);
     return {
       fetch: serveProbes({
-        GetLineageEvent: outcome(Retry.none(p0({} as never))),
-        GetProcess: outcome(Retry.none(p1({} as never))),
-        GetRun: outcome(Retry.none(p2({} as never))),
-        ListProcesses: outcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListProcessRuns: outcome(Retry.none(p4({} as never))),
-        ListRunLineageEvents: outcome(Retry.none(p5({} as never))),
+        GetLineageEvent: probeOutcome(Retry.none(p0({} as never))),
+        GetProcess: probeOutcome(Retry.none(p1({} as never))),
+        GetRun: probeOutcome(Retry.none(p2({} as never))),
+        ListProcesses: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        ListProcessRuns: probeOutcome(Retry.none(p4({} as never))),
+        ListRunLineageEvents: probeOutcome(Retry.none(p5({} as never))),
       }),
     };
   }).pipe(

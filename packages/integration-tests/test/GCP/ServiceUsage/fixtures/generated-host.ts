@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeProjectService } from "./generated-resources.ts";
 
 /**
@@ -21,9 +21,9 @@ export default class ServiceUsageGeneratedHost extends GCP.Function<ServiceUsage
     const p2 = yield* GCP.ServiceUsage.GetService(ProbeProjectService);
     return {
       fetch: serveProbes({
-        DisableService: outcome(Retry.none(p0({} as never))),
-        EnableService: outcome(Retry.none(p1({} as never))),
-        GetService: outcome(Retry.none(p2({} as never))),
+        DisableService: probeOutcome(Retry.none(p0({} as never))),
+        EnableService: probeOutcome(Retry.none(p1({} as never))),
+        GetService: probeOutcome(Retry.none(p2({} as never))),
       }),
     };
   }).pipe(

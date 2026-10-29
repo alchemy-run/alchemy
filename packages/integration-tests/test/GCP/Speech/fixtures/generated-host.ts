@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated Speech binding as its own
@@ -20,9 +20,9 @@ export default class SpeechGeneratedHost extends GCP.Function<SpeechGeneratedHos
     const p2 = yield* GCP.Speech.LongrunningrecognizeSpeech();
     return {
       fetch: serveProbes({
-        ListCustomClasses: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListPhraseSets: outcome(Retry.none(p1({ location: "us-central1" } as never))),
-        LongrunningrecognizeSpeech: outcome(Retry.none(p2({} as never))),
+        ListCustomClasses: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
+        ListPhraseSets: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        LongrunningrecognizeSpeech: probeOutcome(Retry.none(p2({} as never))),
       }),
     };
   }).pipe(

@@ -28,7 +28,7 @@ export type ListNoteOccurrencesShape = (
  * Lists occurrences referencing the specified note.
  *
  * Bind it to a {@link Note} or {@link LocationsNote} and provide {@link ListNoteOccurrencesHttp}. The
- * host gets `roles/containeranalysis.occurrences.viewer` on the bound resource.
+ * host gets `roles/containeranalysis.notes.occurrences.viewer` on the bound resource.
  *
  * ### Usage
  * **Example:** Call `occurrences.list`

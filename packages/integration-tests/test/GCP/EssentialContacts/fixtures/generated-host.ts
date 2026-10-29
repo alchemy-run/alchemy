@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeContact } from "./generated-resources.ts";
 
 /**
@@ -22,10 +22,10 @@ export default class EssentialContactsGeneratedHost extends GCP.Function<Essenti
     const p3 = yield* GCP.EssentialContacts.SendContactTestMessage();
     return {
       fetch: serveProbes({
-        ComputeContact: outcome(Retry.none(p0({} as never))),
-        "GetContact@Contact": outcome(Retry.none(p1({} as never))),
-        ListContacts: outcome(Retry.none(p2({} as never))),
-        SendContactTestMessage: outcome(Retry.none(p3({} as never))),
+        ComputeContact: probeOutcome(Retry.none(p0({} as never))),
+        "GetContact@Contact": probeOutcome(Retry.none(p1({} as never))),
+        ListContacts: probeOutcome(Retry.none(p2({} as never))),
+        SendContactTestMessage: probeOutcome(Retry.none(p3({} as never))),
       }),
     };
   }).pipe(

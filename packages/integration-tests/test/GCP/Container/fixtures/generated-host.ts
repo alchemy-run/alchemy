@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { App, Workers } from "./generated-resources.ts";
 
 /**
@@ -44,32 +44,32 @@ export default class ContainerGeneratedHost extends GCP.Function<ContainerGenera
     const p25 = yield* GCP.Container.UpdateClusterMaster(App);
     return {
       fetch: serveProbes({
-        CheckClusterAutopilotCompatibility: outcome(Retry.none(p0({} as never))),
-        CompleteClusterControlPlaneUpgrade: outcome(Retry.none(p1({} as never))),
-        CompleteClusterIpRotation: outcome(Retry.none(p2({} as never))),
-        CompleteNodePoolUpgrade: outcome(Retry.none(p3({} as never))),
-        FetchClusterUpgradeInfo: outcome(Retry.none(p4({} as never))),
-        FetchNodePoolUpgradeInfo: outcome(Retry.none(p5({} as never))),
-        GetClusterJwks: outcome(Retry.none(p6({} as never))),
-        GetWellKnownOpenidConfiguration: outcome(Retry.none(p7({} as never))),
-        ListAggregatedUsableSubnetworks: outcome(Retry.none(p8({} as never))),
-        ListClusterNodePools: outcome(Retry.none(p9({} as never))),
-        ListClusters: outcome(Retry.none(p10({ location: "us-central1" } as never))),
-        RollbackNodePool: outcome(Retry.none(p11({} as never))),
-        SetClusterAddons: outcome(Retry.none(p12({} as never))),
-        SetClusterLegacyAbac: outcome(Retry.none(p13({} as never))),
-        SetClusterLocations: outcome(Retry.none(p14({} as never))),
-        SetClusterLogging: outcome(Retry.none(p15({} as never))),
-        SetClusterMaintenancePolicy: outcome(Retry.none(p16({} as never))),
-        SetClusterMasterAuth: outcome(Retry.none(p17({} as never))),
-        SetClusterMonitoring: outcome(Retry.none(p18({} as never))),
-        SetClusterNetworkPolicy: outcome(Retry.none(p19({} as never))),
-        SetClusterResourceLabels: outcome(Retry.none(p20({} as never))),
-        SetNodePoolAutoscaling: outcome(Retry.none(p21({} as never))),
-        SetNodePoolManagement: outcome(Retry.none(p22({} as never))),
-        SetNodePoolSize: outcome(Retry.none(p23({} as never))),
-        StartClusterIpRotation: outcome(Retry.none(p24({} as never))),
-        UpdateClusterMaster: outcome(Retry.none(p25({} as never))),
+        CheckClusterAutopilotCompatibility: probeOutcome(Retry.none(p0({} as never))),
+        CompleteClusterControlPlaneUpgrade: probeOutcome(Retry.none(p1({} as never))),
+        CompleteClusterIpRotation: probeOutcome(Retry.none(p2({} as never))),
+        CompleteNodePoolUpgrade: probeOutcome(Retry.none(p3({} as never))),
+        FetchClusterUpgradeInfo: probeOutcome(Retry.none(p4({} as never))),
+        FetchNodePoolUpgradeInfo: probeOutcome(Retry.none(p5({} as never))),
+        GetClusterJwks: probeOutcome(Retry.none(p6({} as never))),
+        GetWellKnownOpenidConfiguration: probeOutcome(Retry.none(p7({} as never))),
+        ListAggregatedUsableSubnetworks: probeOutcome(Retry.none(p8({} as never))),
+        ListClusterNodePools: probeOutcome(Retry.none(p9({} as never))),
+        ListClusters: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        RollbackNodePool: probeOutcome(Retry.none(p11({} as never))),
+        SetClusterAddons: probeOutcome(Retry.none(p12({} as never))),
+        SetClusterLegacyAbac: probeOutcome(Retry.none(p13({} as never))),
+        SetClusterLocations: probeOutcome(Retry.none(p14({} as never))),
+        SetClusterLogging: probeOutcome(Retry.none(p15({} as never))),
+        SetClusterMaintenancePolicy: probeOutcome(Retry.none(p16({} as never))),
+        SetClusterMasterAuth: probeOutcome(Retry.none(p17({} as never))),
+        SetClusterMonitoring: probeOutcome(Retry.none(p18({} as never))),
+        SetClusterNetworkPolicy: probeOutcome(Retry.none(p19({} as never))),
+        SetClusterResourceLabels: probeOutcome(Retry.none(p20({} as never))),
+        SetNodePoolAutoscaling: probeOutcome(Retry.none(p21({} as never))),
+        SetNodePoolManagement: probeOutcome(Retry.none(p22({} as never))),
+        SetNodePoolSize: probeOutcome(Retry.none(p23({} as never))),
+        StartClusterIpRotation: probeOutcome(Retry.none(p24({} as never))),
+        UpdateClusterMaster: probeOutcome(Retry.none(p25({} as never))),
       }),
     };
   }).pipe(

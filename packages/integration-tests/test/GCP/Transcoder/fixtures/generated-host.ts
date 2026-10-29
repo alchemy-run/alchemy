@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { Template } from "./generated-resources.ts";
 
 /**
@@ -23,15 +23,15 @@ export default class TranscoderGeneratedHost extends GCP.Function<TranscoderGene
     const p4 = yield* GCP.Transcoder.ListJobTemplates();
     return {
       fetch: serveProbes({
-        DeleteJob: outcome(
+        DeleteJob: probeOutcome(
           Retry.none(p0({ job: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetJob: outcome(
+        GetJob: probeOutcome(
           Retry.none(p1({ job: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetJobTemplate: outcome(Retry.none(p2({} as never))),
-        ListJobs: outcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListJobTemplates: outcome(Retry.none(p4({ location: "us-central1" } as never))),
+        GetJobTemplate: probeOutcome(Retry.none(p2({} as never))),
+        ListJobs: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        ListJobTemplates: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(

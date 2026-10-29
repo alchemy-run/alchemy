@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated IAP binding as its own
@@ -21,14 +21,14 @@ export default class IAPGeneratedHost extends GCP.Function<IAPGeneratedHost>()(
     const p3 = yield* GCP.IAP.ListBrands();
     return {
       fetch: serveProbes({
-        CreateBrand: outcome(
+        CreateBrand: probeOutcome(
           Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        GetBrand: outcome(Retry.none(p1({ brand: "alchemy-missing" } as never))),
-        ListBrandIdentityAwareProxyClients: outcome(
+        GetBrand: probeOutcome(Retry.none(p1({ brand: "alchemy-missing" } as never))),
+        ListBrandIdentityAwareProxyClients: probeOutcome(
           Retry.none(p2({ brand: "alchemy-missing" } as never)),
         ),
-        ListBrands: outcome(Retry.none(p3({} as never))),
+        ListBrands: probeOutcome(Retry.none(p3({} as never))),
       }),
     };
   }).pipe(

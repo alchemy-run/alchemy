@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeActiveDirectory,
   ProbeBackupPolicy,
@@ -50,33 +50,33 @@ export default class NetAppGeneratedHost extends GCP.Function<NetAppGeneratedHos
     const p24 = yield* GCP.NetApp.VerifyKmsConfig(ProbeKmsConfig);
     return {
       fetch: serveProbes({
-        EncryptKmsConfig: outcome(Retry.none(p0({} as never))),
-        ExecuteOntapDelete: outcome(Retry.none(p1({ ontap: "alchemy-missing" } as never))),
-        ExecuteOntapGet: outcome(Retry.none(p2({ ontap: "alchemy-missing" } as never))),
-        ExecuteOntapPatch: outcome(Retry.none(p3({ ontap: "alchemy-missing" } as never))),
-        ExecuteOntapPost: outcome(Retry.none(p4({ ontap: "alchemy-missing" } as never))),
-        GetActiveDirectory: outcome(Retry.none(p5({} as never))),
-        GetBackupPolicy: outcome(Retry.none(p6({} as never))),
-        GetBackupVault: outcome(Retry.none(p7({} as never))),
-        GetHostGroup: outcome(Retry.none(p8({} as never))),
-        GetKmsConfig: outcome(Retry.none(p9({} as never))),
-        GetStoragePool: outcome(Retry.none(p10({} as never))),
-        ListActiveDirectories: outcome(Retry.none(p11({ location: "us-central1" } as never))),
-        ListBackupPolicies: outcome(Retry.none(p12({ location: "us-central1" } as never))),
-        ListBackupVaultBackups: outcome(Retry.none(p13({} as never))),
-        ListBackupVaults: outcome(Retry.none(p14({ location: "us-central1" } as never))),
-        ListHostGroups: outcome(Retry.none(p15({ location: "us-central1" } as never))),
-        ListKmsConfigs: outcome(Retry.none(p16({ location: "us-central1" } as never))),
-        ListStoragePoolBackupConfigs: outcome(Retry.none(p17({} as never))),
-        ListStoragePools: outcome(Retry.none(p18({ location: "us-central1" } as never))),
-        ListVolumes: outcome(Retry.none(p19({ location: "us-central1" } as never))),
-        RestoreStoragePoolVolume: outcome(
+        EncryptKmsConfig: probeOutcome(Retry.none(p0({} as never))),
+        ExecuteOntapDelete: probeOutcome(Retry.none(p1({ ontap: "alchemy-missing" } as never))),
+        ExecuteOntapGet: probeOutcome(Retry.none(p2({ ontap: "alchemy-missing" } as never))),
+        ExecuteOntapPatch: probeOutcome(Retry.none(p3({ ontap: "alchemy-missing" } as never))),
+        ExecuteOntapPost: probeOutcome(Retry.none(p4({ ontap: "alchemy-missing" } as never))),
+        GetActiveDirectory: probeOutcome(Retry.none(p5({} as never))),
+        GetBackupPolicy: probeOutcome(Retry.none(p6({} as never))),
+        GetBackupVault: probeOutcome(Retry.none(p7({} as never))),
+        GetHostGroup: probeOutcome(Retry.none(p8({} as never))),
+        GetKmsConfig: probeOutcome(Retry.none(p9({} as never))),
+        GetStoragePool: probeOutcome(Retry.none(p10({} as never))),
+        ListActiveDirectories: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
+        ListBackupPolicies: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
+        ListBackupVaultBackups: probeOutcome(Retry.none(p13({} as never))),
+        ListBackupVaults: probeOutcome(Retry.none(p14({ location: "us-central1" } as never))),
+        ListHostGroups: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListKmsConfigs: probeOutcome(Retry.none(p16({ location: "us-central1" } as never))),
+        ListStoragePoolBackupConfigs: probeOutcome(Retry.none(p17({} as never))),
+        ListStoragePools: probeOutcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListVolumes: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
+        RestoreStoragePoolVolume: probeOutcome(
           Retry.none(p20({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        SwitchStoragePool: outcome(Retry.none(p21({} as never))),
-        UpdateStoragePoolBackupConfig: outcome(Retry.none(p22({} as never))),
-        ValidateStoragePoolDirectoryService: outcome(Retry.none(p23({} as never))),
-        VerifyKmsConfig: outcome(Retry.none(p24({} as never))),
+        SwitchStoragePool: probeOutcome(Retry.none(p21({} as never))),
+        UpdateStoragePoolBackupConfig: probeOutcome(Retry.none(p22({} as never))),
+        ValidateStoragePoolDirectoryService: probeOutcome(Retry.none(p23({} as never))),
+        VerifyKmsConfig: probeOutcome(Retry.none(p24({} as never))),
       }),
     };
   }).pipe(

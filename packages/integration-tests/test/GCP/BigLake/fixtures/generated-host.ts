@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeCatalog, ProbeDatabase, ProbeTable } from "./generated-resources.ts";
 
 /**
@@ -25,13 +25,13 @@ export default class BigLakeGeneratedHost extends GCP.Function<BigLakeGeneratedH
     const p6 = yield* GCP.BigLake.RenameTable(ProbeTable);
     return {
       fetch: serveProbes({
-        GetCatalog: outcome(Retry.none(p0({} as never))),
-        GetDatabase: outcome(Retry.none(p1({} as never))),
-        GetTable: outcome(Retry.none(p2({} as never))),
-        ListCatalogDatabases: outcome(Retry.none(p3({} as never))),
-        ListCatalogs: outcome(Retry.none(p4({ location: "us-central1" } as never))),
-        ListDatabaseTables: outcome(Retry.none(p5({} as never))),
-        RenameTable: outcome(Retry.none(p6({} as never))),
+        GetCatalog: probeOutcome(Retry.none(p0({} as never))),
+        GetDatabase: probeOutcome(Retry.none(p1({} as never))),
+        GetTable: probeOutcome(Retry.none(p2({} as never))),
+        ListCatalogDatabases: probeOutcome(Retry.none(p3({} as never))),
+        ListCatalogs: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListDatabaseTables: probeOutcome(Retry.none(p5({} as never))),
+        RenameTable: probeOutcome(Retry.none(p6({} as never))),
       }),
     };
   }).pipe(

@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   Brokers,
   Connect,
@@ -81,111 +81,131 @@ export default class ManagedKafkaGeneratedHost extends GCP.Function<ManagedKafka
     const p54 = yield* GCP.ManagedKafka.UpdateSchemaRegistryMode(Schemas);
     return {
       fetch: serveProbes({
-        AddAclEntry: outcome(
+        AddAclEntry: probeOutcome(
           Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        CheckCompatibility: outcome(Retry.none(p1({ compatibility: "alchemy-missing" } as never))),
-        DeleteClusterConsumerGroup: outcome(
+        CheckCompatibility: probeOutcome(
+          Retry.none(p1({ compatibility: "alchemy-missing" } as never)),
+        ),
+        DeleteClusterConsumerGroup: probeOutcome(
           Retry.none(p2({ consumerGroup: "alchemy-missing" } as never)),
         ),
-        DeleteSchemaRegistryConfig: outcome(Retry.none(p3({ config: "alchemy-missing" } as never))),
-        DeleteSchemaRegistryContextConfig: outcome(
+        DeleteSchemaRegistryConfig: probeOutcome(
+          Retry.none(p3({ config: "alchemy-missing" } as never)),
+        ),
+        DeleteSchemaRegistryContextConfig: probeOutcome(
           Retry.none(p4({ context: "alchemy-missing", config: "alchemy-missing" } as never)),
         ),
-        DeleteSchemaRegistryContextMode: outcome(
+        DeleteSchemaRegistryContextMode: probeOutcome(
           Retry.none(p5({ context: "alchemy-missing", mode: "alchemy-missing" } as never)),
         ),
-        DeleteSchemaRegistryContextSubject: outcome(
+        DeleteSchemaRegistryContextSubject: probeOutcome(
           Retry.none(p6({ context: "alchemy-missing", subject: "alchemy-missing" } as never)),
         ),
-        DeleteSchemaRegistryMode: outcome(Retry.none(p7({ mode: "alchemy-missing" } as never))),
-        DeleteSchemaRegistrySubject: outcome(
+        DeleteSchemaRegistryMode: probeOutcome(
+          Retry.none(p7({ mode: "alchemy-missing" } as never)),
+        ),
+        DeleteSchemaRegistrySubject: probeOutcome(
           Retry.none(p8({ subject: "alchemy-missing" } as never)),
         ),
-        GetAcl: outcome(Retry.none(p9({} as never))),
-        GetClusterConsumerGroup: outcome(
+        GetAcl: probeOutcome(Retry.none(p9({} as never))),
+        GetClusterConsumerGroup: probeOutcome(
           Retry.none(p10({ consumerGroup: "alchemy-missing" } as never)),
         ),
-        GetConnector: outcome(Retry.none(p11({} as never))),
-        GetSchema: outcome(Retry.none(p12({ schema: "alchemy-missing" } as never))),
-        GetSchemaRegistryConfig: outcome(Retry.none(p13({ config: "alchemy-missing" } as never))),
-        GetSchemaRegistryContext: outcome(Retry.none(p14({ context: "alchemy-missing" } as never))),
-        GetSchemaRegistryContextConfig: outcome(
+        GetConnector: probeOutcome(Retry.none(p11({} as never))),
+        GetSchema: probeOutcome(Retry.none(p12({ schema: "alchemy-missing" } as never))),
+        GetSchemaRegistryConfig: probeOutcome(
+          Retry.none(p13({ config: "alchemy-missing" } as never)),
+        ),
+        GetSchemaRegistryContext: probeOutcome(
+          Retry.none(p14({ context: "alchemy-missing" } as never)),
+        ),
+        GetSchemaRegistryContextConfig: probeOutcome(
           Retry.none(p15({ context: "alchemy-missing", config: "alchemy-missing" } as never)),
         ),
-        GetSchemaRegistryContextMode: outcome(
+        GetSchemaRegistryContextMode: probeOutcome(
           Retry.none(p16({ context: "alchemy-missing", mode: "alchemy-missing" } as never)),
         ),
-        GetSchemaRegistryContextSchema: outcome(
+        GetSchemaRegistryContextSchema: probeOutcome(
           Retry.none(p17({ context: "alchemy-missing", schema: "alchemy-missing" } as never)),
         ),
-        GetSchemaRegistryMode: outcome(Retry.none(p18({ mode: "alchemy-missing" } as never))),
-        GetSchemaRegistrySchema: outcome(Retry.none(p19({ schema: "alchemy-missing" } as never))),
-        "GetVersion@SchemaRegistriesSubjectsVersion": outcome(Retry.none(p20({} as never))),
-        "GetVersion@SchemaRegistriesContextsSubjectsVersion": outcome(Retry.none(p21({} as never))),
-        "GetVersionSchema@SchemaRegistriesSubjectsVersion": outcome(Retry.none(p22({} as never))),
-        "GetVersionSchema@SchemaRegistriesContextsSubjectsVersion": outcome(
+        GetSchemaRegistryMode: probeOutcome(Retry.none(p18({ mode: "alchemy-missing" } as never))),
+        GetSchemaRegistrySchema: probeOutcome(
+          Retry.none(p19({ schema: "alchemy-missing" } as never)),
+        ),
+        "GetVersion@SchemaRegistriesSubjectsVersion": probeOutcome(Retry.none(p20({} as never))),
+        "GetVersion@SchemaRegistriesContextsSubjectsVersion": probeOutcome(
+          Retry.none(p21({} as never)),
+        ),
+        "GetVersionSchema@SchemaRegistriesSubjectsVersion": probeOutcome(
+          Retry.none(p22({} as never)),
+        ),
+        "GetVersionSchema@SchemaRegistriesContextsSubjectsVersion": probeOutcome(
           Retry.none(p23({} as never)),
         ),
-        ListClusterAcls: outcome(Retry.none(p24({} as never))),
-        ListClusterConsumerGroups: outcome(Retry.none(p25({} as never))),
-        ListClusters: outcome(Retry.none(p26({ location: "us-central1" } as never))),
-        ListClusterTopics: outcome(Retry.none(p27({} as never))),
-        ListConnectClusterConnectors: outcome(Retry.none(p28({} as never))),
-        ListConnectClusters: outcome(Retry.none(p29({ location: "us-central1" } as never))),
-        ListSchemaRegistries: outcome(Retry.none(p30({ location: "us-central1" } as never))),
-        ListSchemaRegistryContexts: outcome(Retry.none(p31({} as never))),
-        ListSchemaRegistryContextSchemaSubjects: outcome(
+        ListClusterAcls: probeOutcome(Retry.none(p24({} as never))),
+        ListClusterConsumerGroups: probeOutcome(Retry.none(p25({} as never))),
+        ListClusters: probeOutcome(Retry.none(p26({ location: "us-central1" } as never))),
+        ListClusterTopics: probeOutcome(Retry.none(p27({} as never))),
+        ListConnectClusterConnectors: probeOutcome(Retry.none(p28({} as never))),
+        ListConnectClusters: probeOutcome(Retry.none(p29({ location: "us-central1" } as never))),
+        ListSchemaRegistries: probeOutcome(Retry.none(p30({ location: "us-central1" } as never))),
+        ListSchemaRegistryContexts: probeOutcome(Retry.none(p31({} as never))),
+        ListSchemaRegistryContextSchemaSubjects: probeOutcome(
           Retry.none(p32({ context: "alchemy-missing", schema: "alchemy-missing" } as never)),
         ),
-        ListSchemaRegistryContextSchemaTypes: outcome(
+        ListSchemaRegistryContextSchemaTypes: probeOutcome(
           Retry.none(p33({ context: "alchemy-missing" } as never)),
         ),
-        ListSchemaRegistryContextSchemaVersions: outcome(
+        ListSchemaRegistryContextSchemaVersions: probeOutcome(
           Retry.none(p34({ context: "alchemy-missing", schema: "alchemy-missing" } as never)),
         ),
-        ListSchemaRegistryContextSubjects: outcome(
+        ListSchemaRegistryContextSubjects: probeOutcome(
           Retry.none(p35({ context: "alchemy-missing" } as never)),
         ),
-        ListSchemaRegistryContextSubjectVersions: outcome(
+        ListSchemaRegistryContextSubjectVersions: probeOutcome(
           Retry.none(p36({ context: "alchemy-missing", subject: "alchemy-missing" } as never)),
         ),
-        ListSchemaRegistrySchemaSubjects: outcome(
+        ListSchemaRegistrySchemaSubjects: probeOutcome(
           Retry.none(p37({ schema: "alchemy-missing" } as never)),
         ),
-        ListSchemaRegistrySchemaTypes: outcome(Retry.none(p38({} as never))),
-        ListSchemaRegistrySchemaVersions: outcome(
+        ListSchemaRegistrySchemaTypes: probeOutcome(Retry.none(p38({} as never))),
+        ListSchemaRegistrySchemaVersions: probeOutcome(
           Retry.none(p39({ schema: "alchemy-missing" } as never)),
         ),
-        ListSchemaRegistrySubjects: outcome(Retry.none(p40({} as never))),
-        ListSchemaRegistrySubjectVersions: outcome(
+        ListSchemaRegistrySubjects: probeOutcome(Retry.none(p40({} as never))),
+        ListSchemaRegistrySubjectVersions: probeOutcome(
           Retry.none(p41({ subject: "alchemy-missing" } as never)),
         ),
-        "ListVersionReferencedby@SchemaRegistriesSubjectsVersion": outcome(
+        "ListVersionReferencedby@SchemaRegistriesSubjectsVersion": probeOutcome(
           Retry.none(p42({} as never)),
         ),
-        "ListVersionReferencedby@SchemaRegistriesContextsSubjectsVersion": outcome(
+        "ListVersionReferencedby@SchemaRegistriesContextsSubjectsVersion": probeOutcome(
           Retry.none(p43({} as never)),
         ),
-        LookupSubjectVersion: outcome(Retry.none(p44({ subject: "alchemy-missing" } as never))),
-        PatchClusterConsumerGroup: outcome(
+        LookupSubjectVersion: probeOutcome(
+          Retry.none(p44({ subject: "alchemy-missing" } as never)),
+        ),
+        PatchClusterConsumerGroup: probeOutcome(
           Retry.none(p45({ consumerGroup: "alchemy-missing" } as never)),
         ),
-        PauseConnector: outcome(Retry.none(p46({} as never))),
-        RemoveAclEntry: outcome(Retry.none(p47({} as never))),
-        RestartConnector: outcome(Retry.none(p48({} as never))),
-        ResumeConnector: outcome(Retry.none(p49({} as never))),
-        StopConnector: outcome(Retry.none(p50({} as never))),
-        UpdateSchemaRegistryConfig: outcome(
+        PauseConnector: probeOutcome(Retry.none(p46({} as never))),
+        RemoveAclEntry: probeOutcome(Retry.none(p47({} as never))),
+        RestartConnector: probeOutcome(Retry.none(p48({} as never))),
+        ResumeConnector: probeOutcome(Retry.none(p49({} as never))),
+        StopConnector: probeOutcome(Retry.none(p50({} as never))),
+        UpdateSchemaRegistryConfig: probeOutcome(
           Retry.none(p51({ config: "alchemy-missing" } as never)),
         ),
-        UpdateSchemaRegistryContextConfig: outcome(
+        UpdateSchemaRegistryContextConfig: probeOutcome(
           Retry.none(p52({ context: "alchemy-missing", config: "alchemy-missing" } as never)),
         ),
-        UpdateSchemaRegistryContextMode: outcome(
+        UpdateSchemaRegistryContextMode: probeOutcome(
           Retry.none(p53({ context: "alchemy-missing", mode: "alchemy-missing" } as never)),
         ),
-        UpdateSchemaRegistryMode: outcome(Retry.none(p54({ mode: "alchemy-missing" } as never))),
+        UpdateSchemaRegistryMode: probeOutcome(
+          Retry.none(p54({ mode: "alchemy-missing" } as never)),
+        ),
       }),
     };
   }).pipe(

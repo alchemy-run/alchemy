@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { Pool, ProbeCertificateTemplate, Root } from "./generated-resources.ts";
 
 /**
@@ -36,34 +36,40 @@ export default class PrivateCAGeneratedHost extends GCP.Function<PrivateCAGenera
     const p17 = yield* GCP.PrivateCA.UndeleteCertificateAuthority(Root);
     return {
       fetch: serveProbes({
-        ActivateCertificateAuthority: outcome(Retry.none(p0({} as never))),
-        CreateCaPoolCertificate: outcome(
+        ActivateCertificateAuthority: probeOutcome(Retry.none(p0({} as never))),
+        CreateCaPoolCertificate: probeOutcome(
           Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        DisableCertificateAuthority: outcome(Retry.none(p2({} as never))),
-        EnableCertificateAuthority: outcome(Retry.none(p3({} as never))),
-        FetchCertificateAuthority: outcome(Retry.none(p4({} as never))),
-        GetCaPool: outcome(Retry.none(p5({} as never))),
-        GetCaPoolCertificate: outcome(Retry.none(p6({ certificate: "alchemy-missing" } as never))),
-        GetCertificateAuthorityCertificateRevocationList: outcome(
+        DisableCertificateAuthority: probeOutcome(Retry.none(p2({} as never))),
+        EnableCertificateAuthority: probeOutcome(Retry.none(p3({} as never))),
+        FetchCertificateAuthority: probeOutcome(Retry.none(p4({} as never))),
+        GetCaPool: probeOutcome(Retry.none(p5({} as never))),
+        GetCaPoolCertificate: probeOutcome(
+          Retry.none(p6({ certificate: "alchemy-missing" } as never)),
+        ),
+        GetCertificateAuthorityCertificateRevocationList: probeOutcome(
           Retry.none(p7({ certificateRevocationList: "alchemy-missing" } as never)),
         ),
-        GetCertificateTemplate: outcome(Retry.none(p8({} as never))),
-        ListCaPoolCertificateAuthorities: outcome(Retry.none(p9({} as never))),
-        ListCaPoolCertificates: outcome(Retry.none(p10({} as never))),
-        ListCaPools: outcome(Retry.none(p11({ location: "us-central1" } as never))),
-        ListCertificateAuthorityCertificateRevocationLists: outcome(Retry.none(p12({} as never))),
-        ListCertificateTemplates: outcome(Retry.none(p13({ location: "us-central1" } as never))),
-        PatchCaPoolCertificate: outcome(
+        GetCertificateTemplate: probeOutcome(Retry.none(p8({} as never))),
+        ListCaPoolCertificateAuthorities: probeOutcome(Retry.none(p9({} as never))),
+        ListCaPoolCertificates: probeOutcome(Retry.none(p10({} as never))),
+        ListCaPools: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
+        ListCertificateAuthorityCertificateRevocationLists: probeOutcome(
+          Retry.none(p12({} as never)),
+        ),
+        ListCertificateTemplates: probeOutcome(
+          Retry.none(p13({ location: "us-central1" } as never)),
+        ),
+        PatchCaPoolCertificate: probeOutcome(
           Retry.none(p14({ certificate: "alchemy-missing" } as never)),
         ),
-        PatchCertificateAuthorityCertificateRevocationList: outcome(
+        PatchCertificateAuthorityCertificateRevocationList: probeOutcome(
           Retry.none(p15({ certificateRevocationList: "alchemy-missing" } as never)),
         ),
-        RevokeCaPoolCertificate: outcome(
+        RevokeCaPoolCertificate: probeOutcome(
           Retry.none(p16({ certificate: "alchemy-missing" } as never)),
         ),
-        UndeleteCertificateAuthority: outcome(Retry.none(p17({} as never))),
+        UndeleteCertificateAuthority: probeOutcome(Retry.none(p17({} as never))),
       }),
     };
   }).pipe(

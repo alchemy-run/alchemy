@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeContentPolicy,
   ProbeDeidentify,
@@ -77,80 +77,86 @@ export default class DLPGeneratedHost extends GCP.Function<DLPGeneratedHost>()(
     const p45 = yield* GCP.DLP.SearchConnection();
     return {
       fetch: serveProbes({
-        "ActivateJobTrigger@JobTrigger": outcome(Retry.none(p0({} as never))),
-        "ActivateJobTrigger@LocationsJobTrigger": outcome(Retry.none(p1({} as never))),
-        "CancelDlpJob@DlpJob": outcome(Retry.none(p2({} as never))),
-        "CancelDlpJob@LocationsDlpJob": outcome(Retry.none(p3({} as never))),
-        DeidentifyContent: outcome(Retry.none(p4({} as never))),
-        DeleteConnection: outcome(
+        "ActivateJobTrigger@JobTrigger": probeOutcome(Retry.none(p0({} as never))),
+        "ActivateJobTrigger@LocationsJobTrigger": probeOutcome(Retry.none(p1({} as never))),
+        "CancelDlpJob@DlpJob": probeOutcome(Retry.none(p2({} as never))),
+        "CancelDlpJob@LocationsDlpJob": probeOutcome(Retry.none(p3({} as never))),
+        DeidentifyContent: probeOutcome(Retry.none(p4({} as never))),
+        DeleteConnection: probeOutcome(
           Retry.none(p5({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        DeleteFileStoreDataProfile: outcome(
+        DeleteFileStoreDataProfile: probeOutcome(
           Retry.none(
             p6({ fileStoreDataProfile: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        DeleteTableDataProfile: outcome(
+        DeleteTableDataProfile: probeOutcome(
           Retry.none(p7({ tableDataProfile: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        FinishDlpJob: outcome(Retry.none(p8({} as never))),
-        GetColumnDataProfile: outcome(
+        FinishDlpJob: probeOutcome(Retry.none(p8({} as never))),
+        GetColumnDataProfile: probeOutcome(
           Retry.none(
             p9({ columnDataProfile: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        GetConnection: outcome(
+        GetConnection: probeOutcome(
           Retry.none(p10({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetContentPolicy: outcome(Retry.none(p11({} as never))),
-        "GetDeidentifyTemplate@DeidentifyTemplate": outcome(Retry.none(p12({} as never))),
-        "GetDeidentifyTemplate@LocationsDeidentifyTemplate": outcome(Retry.none(p13({} as never))),
-        "GetDiscoveryConfig@DiscoveryConfig": outcome(Retry.none(p14({} as never))),
-        "GetDlpJob@DlpJob": outcome(Retry.none(p15({} as never))),
-        "GetDlpJob@LocationsDlpJob": outcome(Retry.none(p16({} as never))),
-        GetFileStoreDataProfile: outcome(
+        GetContentPolicy: probeOutcome(Retry.none(p11({} as never))),
+        "GetDeidentifyTemplate@DeidentifyTemplate": probeOutcome(Retry.none(p12({} as never))),
+        "GetDeidentifyTemplate@LocationsDeidentifyTemplate": probeOutcome(
+          Retry.none(p13({} as never)),
+        ),
+        "GetDiscoveryConfig@DiscoveryConfig": probeOutcome(Retry.none(p14({} as never))),
+        "GetDlpJob@DlpJob": probeOutcome(Retry.none(p15({} as never))),
+        "GetDlpJob@LocationsDlpJob": probeOutcome(Retry.none(p16({} as never))),
+        GetFileStoreDataProfile: probeOutcome(
           Retry.none(
             p17({ fileStoreDataProfile: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        "GetInspectTemplate@InspectTemplate": outcome(Retry.none(p18({} as never))),
-        "GetInspectTemplate@LocationsInspectTemplate": outcome(Retry.none(p19({} as never))),
-        "GetJobTrigger@JobTrigger": outcome(Retry.none(p20({} as never))),
-        "GetJobTrigger@LocationsJobTrigger": outcome(Retry.none(p21({} as never))),
-        GetProjectDataProfile: outcome(
+        "GetInspectTemplate@InspectTemplate": probeOutcome(Retry.none(p18({} as never))),
+        "GetInspectTemplate@LocationsInspectTemplate": probeOutcome(Retry.none(p19({} as never))),
+        "GetJobTrigger@JobTrigger": probeOutcome(Retry.none(p20({} as never))),
+        "GetJobTrigger@LocationsJobTrigger": probeOutcome(Retry.none(p21({} as never))),
+        GetProjectDataProfile: probeOutcome(
           Retry.none(
             p22({ projectDataProfile: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        "GetStoredInfoType@StoredInfoType": outcome(Retry.none(p23({} as never))),
-        "GetStoredInfoType@LocationsStoredInfoType": outcome(Retry.none(p24({} as never))),
-        GetTableDataProfile: outcome(
+        "GetStoredInfoType@StoredInfoType": probeOutcome(Retry.none(p23({} as never))),
+        "GetStoredInfoType@LocationsStoredInfoType": probeOutcome(Retry.none(p24({} as never))),
+        GetTableDataProfile: probeOutcome(
           Retry.none(
             p25({ tableDataProfile: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        HybridDlpJobInspect: outcome(Retry.none(p26({} as never))),
-        HybridJobTriggerInspect: outcome(Retry.none(p27({} as never))),
-        InspectContent: outcome(Retry.none(p28({} as never))),
-        ListColumnDataProfiles: outcome(Retry.none(p29({ location: "us-central1" } as never))),
-        ListConnections: outcome(Retry.none(p30({ location: "us-central1" } as never))),
-        ListContentPolicies: outcome(Retry.none(p31({ location: "us-central1" } as never))),
-        ListDeidentifyTemplates: outcome(Retry.none(p32({} as never))),
-        ListDiscoveryConfigs: outcome(Retry.none(p33({ location: "us-central1" } as never))),
-        ListDlpJobs: outcome(Retry.none(p34({} as never))),
-        ListFileStoreDataProfiles: outcome(Retry.none(p35({ location: "us-central1" } as never))),
-        ListInfoTypes: outcome(Retry.none(p36({ location: "us-central1" } as never))),
-        ListInspectTemplates: outcome(Retry.none(p37({} as never))),
-        ListJobTriggers: outcome(Retry.none(p38({} as never))),
-        ListProjectDataProfiles: outcome(Retry.none(p39({ location: "us-central1" } as never))),
-        ListStoredInfoTypes: outcome(Retry.none(p40({} as never))),
-        ListTableDataProfiles: outcome(Retry.none(p41({ location: "us-central1" } as never))),
-        PatchConnection: outcome(
+        HybridDlpJobInspect: probeOutcome(Retry.none(p26({} as never))),
+        HybridJobTriggerInspect: probeOutcome(Retry.none(p27({} as never))),
+        InspectContent: probeOutcome(Retry.none(p28({} as never))),
+        ListColumnDataProfiles: probeOutcome(Retry.none(p29({ location: "us-central1" } as never))),
+        ListConnections: probeOutcome(Retry.none(p30({ location: "us-central1" } as never))),
+        ListContentPolicies: probeOutcome(Retry.none(p31({ location: "us-central1" } as never))),
+        ListDeidentifyTemplates: probeOutcome(Retry.none(p32({} as never))),
+        ListDiscoveryConfigs: probeOutcome(Retry.none(p33({ location: "us-central1" } as never))),
+        ListDlpJobs: probeOutcome(Retry.none(p34({} as never))),
+        ListFileStoreDataProfiles: probeOutcome(
+          Retry.none(p35({ location: "us-central1" } as never)),
+        ),
+        ListInfoTypes: probeOutcome(Retry.none(p36({ location: "us-central1" } as never))),
+        ListInspectTemplates: probeOutcome(Retry.none(p37({} as never))),
+        ListJobTriggers: probeOutcome(Retry.none(p38({} as never))),
+        ListProjectDataProfiles: probeOutcome(
+          Retry.none(p39({ location: "us-central1" } as never)),
+        ),
+        ListStoredInfoTypes: probeOutcome(Retry.none(p40({} as never))),
+        ListTableDataProfiles: probeOutcome(Retry.none(p41({ location: "us-central1" } as never))),
+        PatchConnection: probeOutcome(
           Retry.none(p42({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        RedactImage: outcome(Retry.none(p43({} as never))),
-        ReidentifyContent: outcome(Retry.none(p44({} as never))),
-        SearchConnection: outcome(Retry.none(p45({ location: "us-central1" } as never))),
+        RedactImage: probeOutcome(Retry.none(p43({} as never))),
+        ReidentifyContent: probeOutcome(Retry.none(p44({} as never))),
+        SearchConnection: probeOutcome(Retry.none(p45({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(

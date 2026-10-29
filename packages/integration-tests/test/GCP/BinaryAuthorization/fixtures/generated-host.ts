@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { GkePolicy } from "./generated-resources.ts";
 
 /**
@@ -22,10 +22,12 @@ export default class BinaryAuthorizationGeneratedHost extends GCP.Function<Binar
     const p3 = yield* GCP.BinaryAuthorization.ReplacePlatformPolicy(GkePolicy);
     return {
       fetch: serveProbes({
-        GetProjectPolicy: outcome(Retry.none(p0({} as never))),
-        ListAttestors: outcome(Retry.none(p1({} as never))),
-        ListPlatformPolicies: outcome(Retry.none(p2({ platform: "alchemy-missing" } as never))),
-        ReplacePlatformPolicy: outcome(Retry.none(p3({} as never))),
+        GetProjectPolicy: probeOutcome(Retry.none(p0({} as never))),
+        ListAttestors: probeOutcome(Retry.none(p1({} as never))),
+        ListPlatformPolicies: probeOutcome(
+          Retry.none(p2({ platform: "alchemy-missing" } as never)),
+        ),
+        ReplacePlatformPolicy: probeOutcome(Retry.none(p3({} as never))),
       }),
     };
   }).pipe(

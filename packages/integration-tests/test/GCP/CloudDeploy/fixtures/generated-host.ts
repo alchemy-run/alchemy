@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeCustomTargetType,
   ProbePipeline,
@@ -51,41 +51,41 @@ export default class CloudDeployGeneratedHost extends GCP.Function<CloudDeployGe
     const p27 = yield* GCP.CloudDeploy.TerminateDeliveryPipelineReleaseRolloutJobRun(ProbePipeline);
     return {
       fetch: serveProbes({
-        AbandonDeliveryPipelineRelease: outcome(
+        AbandonDeliveryPipelineRelease: probeOutcome(
           Retry.none(p0({ release: "alchemy-missing" } as never)),
         ),
-        AdvanceDeliveryPipelineReleaseRollout: outcome(
+        AdvanceDeliveryPipelineReleaseRollout: probeOutcome(
           Retry.none(p1({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
         ),
-        ApproveDeliveryPipelineReleaseRollout: outcome(
+        ApproveDeliveryPipelineReleaseRollout: probeOutcome(
           Retry.none(p2({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
         ),
-        CancelDeliveryPipelineAutomationRun: outcome(
+        CancelDeliveryPipelineAutomationRun: probeOutcome(
           Retry.none(p3({ automationRun: "alchemy-missing" } as never)),
         ),
-        CancelDeliveryPipelineReleaseRollout: outcome(
+        CancelDeliveryPipelineReleaseRollout: probeOutcome(
           Retry.none(p4({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
         ),
-        CreateDeliveryPipelineRelease: outcome(
+        CreateDeliveryPipelineRelease: probeOutcome(
           Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        CreateDeliveryPipelineReleaseRollout: outcome(
+        CreateDeliveryPipelineReleaseRollout: probeOutcome(
           Retry.none(
             p6({ release: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        GetCustomTargetType: outcome(Retry.none(p7({} as never))),
-        GetDeliveryPipeline: outcome(Retry.none(p8({} as never))),
-        GetDeliveryPipelineAutomationRun: outcome(
+        GetCustomTargetType: probeOutcome(Retry.none(p7({} as never))),
+        GetDeliveryPipeline: probeOutcome(Retry.none(p8({} as never))),
+        GetDeliveryPipelineAutomationRun: probeOutcome(
           Retry.none(p9({ automationRun: "alchemy-missing" } as never)),
         ),
-        GetDeliveryPipelineRelease: outcome(
+        GetDeliveryPipelineRelease: probeOutcome(
           Retry.none(p10({ release: "alchemy-missing" } as never)),
         ),
-        GetDeliveryPipelineReleaseRollout: outcome(
+        GetDeliveryPipelineReleaseRollout: probeOutcome(
           Retry.none(p11({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
         ),
-        GetDeliveryPipelineReleaseRolloutJobRun: outcome(
+        GetDeliveryPipelineReleaseRolloutJobRun: probeOutcome(
           Retry.none(
             p12({
               release: "alchemy-missing",
@@ -94,29 +94,29 @@ export default class CloudDeployGeneratedHost extends GCP.Function<CloudDeployGe
             } as never),
           ),
         ),
-        GetDeployPolicy: outcome(Retry.none(p13({} as never))),
-        GetTarget: outcome(Retry.none(p14({} as never))),
-        IgnoreRolloutJob: outcome(
+        GetDeployPolicy: probeOutcome(Retry.none(p13({} as never))),
+        GetTarget: probeOutcome(Retry.none(p14({} as never))),
+        IgnoreRolloutJob: probeOutcome(
           Retry.none(p15({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
         ),
-        ListCustomTargetTypes: outcome(Retry.none(p16({ location: "us-central1" } as never))),
-        ListDeliveryPipelineAutomationRuns: outcome(Retry.none(p17({} as never))),
-        ListDeliveryPipelineAutomations: outcome(Retry.none(p18({} as never))),
-        ListDeliveryPipelineReleaseRolloutJobRuns: outcome(
+        ListCustomTargetTypes: probeOutcome(Retry.none(p16({ location: "us-central1" } as never))),
+        ListDeliveryPipelineAutomationRuns: probeOutcome(Retry.none(p17({} as never))),
+        ListDeliveryPipelineAutomations: probeOutcome(Retry.none(p18({} as never))),
+        ListDeliveryPipelineReleaseRolloutJobRuns: probeOutcome(
           Retry.none(p19({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
         ),
-        ListDeliveryPipelineReleaseRollouts: outcome(
+        ListDeliveryPipelineReleaseRollouts: probeOutcome(
           Retry.none(p20({ release: "alchemy-missing" } as never)),
         ),
-        ListDeliveryPipelineReleases: outcome(Retry.none(p21({} as never))),
-        ListDeliveryPipelines: outcome(Retry.none(p22({ location: "us-central1" } as never))),
-        ListDeployPolicies: outcome(Retry.none(p23({ location: "us-central1" } as never))),
-        ListTargets: outcome(Retry.none(p24({ location: "us-central1" } as never))),
-        RetryRolloutJob: outcome(
+        ListDeliveryPipelineReleases: probeOutcome(Retry.none(p21({} as never))),
+        ListDeliveryPipelines: probeOutcome(Retry.none(p22({ location: "us-central1" } as never))),
+        ListDeployPolicies: probeOutcome(Retry.none(p23({ location: "us-central1" } as never))),
+        ListTargets: probeOutcome(Retry.none(p24({ location: "us-central1" } as never))),
+        RetryRolloutJob: probeOutcome(
           Retry.none(p25({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
         ),
-        RollbackDeliveryPipelineTarget: outcome(Retry.none(p26({} as never))),
-        TerminateDeliveryPipelineReleaseRolloutJobRun: outcome(
+        RollbackDeliveryPipelineTarget: probeOutcome(Retry.none(p26({} as never))),
+        TerminateDeliveryPipelineReleaseRolloutJobRun: probeOutcome(
           Retry.none(
             p27({
               release: "alchemy-missing",

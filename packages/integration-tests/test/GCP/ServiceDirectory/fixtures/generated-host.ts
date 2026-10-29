@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { Api, Registry } from "./generated-resources.ts";
 
 /**
@@ -23,11 +23,11 @@ export default class ServiceDirectoryGeneratedHost extends GCP.Function<ServiceD
     const p4 = yield* GCP.ServiceDirectory.ListServiceEndpoints(Api);
     return {
       fetch: serveProbes({
-        GetNamespace: outcome(Retry.none(p0({} as never))),
-        GetService: outcome(Retry.none(p1({} as never))),
-        ListNamespaces: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListNamespaceServices: outcome(Retry.none(p3({} as never))),
-        ListServiceEndpoints: outcome(Retry.none(p4({} as never))),
+        GetNamespace: probeOutcome(Retry.none(p0({} as never))),
+        GetService: probeOutcome(Retry.none(p1({} as never))),
+        ListNamespaces: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
+        ListNamespaceServices: probeOutcome(Retry.none(p3({} as never))),
+        ListServiceEndpoints: probeOutcome(Retry.none(p4({} as never))),
       }),
     };
   }).pipe(

@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated KMS binding as its own
@@ -32,22 +32,22 @@ export default class KMSGeneratedHost extends GCP.Function<KMSGeneratedHost>()(
     const p14 = yield* GCP.KMS.VerifyEkmConnectionConnectivity();
     return {
       fetch: serveProbes({
-        GetEkmConnection: outcome(
+        GetEkmConnection: probeOutcome(
           Retry.none(p0({ ekmConnection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetKeyHandle: outcome(
+        GetKeyHandle: probeOutcome(
           Retry.none(p1({ keyHandle: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetProjectAutokeyConfig: outcome(Retry.none(p2({} as never))),
-        GetRetiredResource: outcome(
+        GetProjectAutokeyConfig: probeOutcome(Retry.none(p2({} as never))),
+        GetRetiredResource: probeOutcome(
           Retry.none(p3({ retiredResource: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetSingleTenantHsmInstance: outcome(
+        GetSingleTenantHsmInstance: probeOutcome(
           Retry.none(
             p4({ singleTenantHsmInstance: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        GetSingleTenantHsmInstanceProposal: outcome(
+        GetSingleTenantHsmInstanceProposal: probeOutcome(
           Retry.none(
             p5({
               singleTenantHsmInstance: "alchemy-missing",
@@ -56,23 +56,23 @@ export default class KMSGeneratedHost extends GCP.Function<KMSGeneratedHost>()(
             } as never),
           ),
         ),
-        ListEkmConnections: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        ListKeyHandles: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListKeyRings: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListRetiredResources: outcome(Retry.none(p9({ location: "us-central1" } as never))),
-        ListSingleTenantHsmInstanceProposals: outcome(
+        ListEkmConnections: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListKeyHandles: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListKeyRings: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListRetiredResources: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListSingleTenantHsmInstanceProposals: probeOutcome(
           Retry.none(
             p10({ singleTenantHsmInstance: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        ListSingleTenantHsmInstances: outcome(
+        ListSingleTenantHsmInstances: probeOutcome(
           Retry.none(p11({ location: "us-central1" } as never)),
         ),
-        PatchEkmConnection: outcome(
+        PatchEkmConnection: probeOutcome(
           Retry.none(p12({ ekmConnection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        UpdateProjectAutokeyConfig: outcome(Retry.none(p13({} as never))),
-        VerifyEkmConnectionConnectivity: outcome(
+        UpdateProjectAutokeyConfig: probeOutcome(Retry.none(p13({} as never))),
+        VerifyEkmConnectionConnectivity: probeOutcome(
           Retry.none(p14({ ekmConnection: "alchemy-missing", location: "us-central1" } as never)),
         ),
       }),

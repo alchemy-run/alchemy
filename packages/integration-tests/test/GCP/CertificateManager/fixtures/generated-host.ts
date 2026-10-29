@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeCertificate,
   ProbeCertificateMap,
@@ -37,20 +37,20 @@ export default class CertificateManagerGeneratedHost extends GCP.Function<Certif
     const p11 = yield* GCP.CertificateManager.ListTrustConfigs();
     return {
       fetch: serveProbes({
-        GetCertificate: outcome(Retry.none(p0({} as never))),
-        GetCertificateIssuanceConfig: outcome(Retry.none(p1({} as never))),
-        GetCertificateMap: outcome(Retry.none(p2({} as never))),
-        GetCertificateMapEntry: outcome(Retry.none(p3({} as never))),
-        GetDnsAuthorization: outcome(Retry.none(p4({} as never))),
-        GetTrustConfig: outcome(Retry.none(p5({} as never))),
-        ListCertificateIssuanceConfigs: outcome(
+        GetCertificate: probeOutcome(Retry.none(p0({} as never))),
+        GetCertificateIssuanceConfig: probeOutcome(Retry.none(p1({} as never))),
+        GetCertificateMap: probeOutcome(Retry.none(p2({} as never))),
+        GetCertificateMapEntry: probeOutcome(Retry.none(p3({} as never))),
+        GetDnsAuthorization: probeOutcome(Retry.none(p4({} as never))),
+        GetTrustConfig: probeOutcome(Retry.none(p5({} as never))),
+        ListCertificateIssuanceConfigs: probeOutcome(
           Retry.none(p6({ location: "us-central1" } as never)),
         ),
-        ListCertificateMapEntries: outcome(Retry.none(p7({} as never))),
-        ListCertificateMaps: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListCertificates: outcome(Retry.none(p9({ location: "us-central1" } as never))),
-        ListDnsAuthorizations: outcome(Retry.none(p10({ location: "us-central1" } as never))),
-        ListTrustConfigs: outcome(Retry.none(p11({ location: "us-central1" } as never))),
+        ListCertificateMapEntries: probeOutcome(Retry.none(p7({} as never))),
+        ListCertificateMaps: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListCertificates: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListDnsAuthorizations: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListTrustConfigs: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(

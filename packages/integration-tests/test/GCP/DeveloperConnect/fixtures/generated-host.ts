@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeAccountConnector, ProbeConnection, ProbeInsights } from "./generated-resources.ts";
 
 /**
@@ -39,30 +39,32 @@ export default class DeveloperConnectGeneratedHost extends GCP.Function<Develope
     const p19 = yield* GCP.DeveloperConnect.StartUserOAuthFlow(ProbeAccountConnector);
     return {
       fetch: serveProbes({
-        DeleteAccountConnectorUser: outcome(Retry.none(p0({ user: "alchemy-missing" } as never))),
-        DeleteUserSelf: outcome(Retry.none(p1({} as never))),
-        FetchAccountConnectorUserRepositories: outcome(Retry.none(p2({} as never))),
-        FetchConnectionGitHubInstallations: outcome(Retry.none(p3({} as never))),
-        FetchConnectionLinkableGitRepositories: outcome(Retry.none(p4({} as never))),
-        FetchUserAccessToken: outcome(Retry.none(p5({} as never))),
-        FetchUserSelf: outcome(Retry.none(p6({} as never))),
-        FinishUserOAuthFlow: outcome(Retry.none(p7({} as never))),
-        GetAccountConnector: outcome(Retry.none(p8({} as never))),
-        GetConnection: outcome(Retry.none(p9({} as never))),
-        GetInsightsConfig: outcome(Retry.none(p10({} as never))),
-        GetInsightsConfigDeploymentEvent: outcome(
+        DeleteAccountConnectorUser: probeOutcome(
+          Retry.none(p0({ user: "alchemy-missing" } as never)),
+        ),
+        DeleteUserSelf: probeOutcome(Retry.none(p1({} as never))),
+        FetchAccountConnectorUserRepositories: probeOutcome(Retry.none(p2({} as never))),
+        FetchConnectionGitHubInstallations: probeOutcome(Retry.none(p3({} as never))),
+        FetchConnectionLinkableGitRepositories: probeOutcome(Retry.none(p4({} as never))),
+        FetchUserAccessToken: probeOutcome(Retry.none(p5({} as never))),
+        FetchUserSelf: probeOutcome(Retry.none(p6({} as never))),
+        FinishUserOAuthFlow: probeOutcome(Retry.none(p7({} as never))),
+        GetAccountConnector: probeOutcome(Retry.none(p8({} as never))),
+        GetConnection: probeOutcome(Retry.none(p9({} as never))),
+        GetInsightsConfig: probeOutcome(Retry.none(p10({} as never))),
+        GetInsightsConfigDeploymentEvent: probeOutcome(
           Retry.none(p11({ deploymentEvent: "alchemy-missing" } as never)),
         ),
-        ListAccountConnectors: outcome(Retry.none(p12({ location: "us-central1" } as never))),
-        ListAccountConnectorUsers: outcome(Retry.none(p13({} as never))),
-        ListConnectionGitRepositoryLinks: outcome(Retry.none(p14({} as never))),
-        ListConnections: outcome(Retry.none(p15({ location: "us-central1" } as never))),
-        ListInsightsConfigDeploymentEvents: outcome(Retry.none(p16({} as never))),
-        ListInsightsConfigs: outcome(Retry.none(p17({ location: "us-central1" } as never))),
-        ProcessConnectionGitHubEnterpriseWebhook: outcome(
+        ListAccountConnectors: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
+        ListAccountConnectorUsers: probeOutcome(Retry.none(p13({} as never))),
+        ListConnectionGitRepositoryLinks: probeOutcome(Retry.none(p14({} as never))),
+        ListConnections: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListInsightsConfigDeploymentEvents: probeOutcome(Retry.none(p16({} as never))),
+        ListInsightsConfigs: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
+        ProcessConnectionGitHubEnterpriseWebhook: probeOutcome(
           Retry.none(p18({ location: "us-central1" } as never)),
         ),
-        StartUserOAuthFlow: outcome(Retry.none(p19({} as never))),
+        StartUserOAuthFlow: probeOutcome(Retry.none(p19({} as never))),
       }),
     };
   }).pipe(

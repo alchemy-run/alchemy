@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated OrgPolicy binding as its own
@@ -21,10 +21,10 @@ export default class OrgPolicyGeneratedHost extends GCP.Function<OrgPolicyGenera
     const p3 = yield* GCP.OrgPolicy.PatchPolicy();
     return {
       fetch: serveProbes({
-        DeletePolicy: outcome(Retry.none(p0({ policy: "alchemy-missing" } as never))),
-        ListConstraints: outcome(Retry.none(p1({} as never))),
-        ListPolicies: outcome(Retry.none(p2({} as never))),
-        PatchPolicy: outcome(Retry.none(p3({ policy: "alchemy-missing" } as never))),
+        DeletePolicy: probeOutcome(Retry.none(p0({ policy: "alchemy-missing" } as never))),
+        ListConstraints: probeOutcome(Retry.none(p1({} as never))),
+        ListPolicies: probeOutcome(Retry.none(p2({} as never))),
+        PatchPolicy: probeOutcome(Retry.none(p3({ policy: "alchemy-missing" } as never))),
       }),
     };
   }).pipe(

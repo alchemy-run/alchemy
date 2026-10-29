@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeGroup } from "./generated-resources.ts";
 
 /**
@@ -24,14 +24,14 @@ export default class VMMigrationGeneratedHost extends GCP.Function<VMMigrationGe
     const p5 = yield* GCP.VMMigration.RemoveGroupMigration(ProbeGroup);
     return {
       fetch: serveProbes({
-        AddGroupMigration: outcome(
+        AddGroupMigration: probeOutcome(
           Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        GetGroup: outcome(Retry.none(p1({} as never))),
-        ListGroups: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListImageImports: outcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListSources: outcome(Retry.none(p4({ location: "us-central1" } as never))),
-        RemoveGroupMigration: outcome(Retry.none(p5({} as never))),
+        GetGroup: probeOutcome(Retry.none(p1({} as never))),
+        ListGroups: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
+        ListImageImports: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        ListSources: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        RemoveGroupMigration: probeOutcome(Retry.none(p5({} as never))),
       }),
     };
   }).pipe(

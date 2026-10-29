@@ -83,6 +83,25 @@ export const outcome = <A, E extends { readonly _tag: string }, R>(
     ),
   );
 
+/**
+ * {@link outcome} for the generated probe suites: a failure reads
+ * `Tag: message`, so a failed assertion shows what the API answered.
+ * Compare on {@link outcomeTag}.
+ */
+export const probeOutcome = <A, E extends { readonly _tag: string; readonly message?: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.map(() => "succeeded" as string),
+    Effect.catchIf(
+      (error) => error._tag !== "Forbidden" && error._tag !== "PermissionDenied",
+      (error) => Effect.succeed(error.message ? `${error._tag}: ${error.message}` : error._tag),
+    ),
+  );
+
+/** The tag of a {@link probeOutcome}. */
+export const outcomeTag = (outcome: string) => outcome.split(":")[0]!;
+
 /** A probe's query parameter: `/probe/runTask?task=a` → `probeParam("task")` is `"a"`. */
 export const probeParam = Effect.fn(function* (key: string) {
   const request = yield* HttpServerRequest;

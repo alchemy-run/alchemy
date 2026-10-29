@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { TargetFunction } from "./generated-resources.ts";
 
 /**
@@ -28,16 +28,18 @@ export default class CloudFunctionsGeneratedHost extends GCP.Function<CloudFunct
     const p9 = yield* GCP.CloudFunctions.SetupFunctionUpgradeConfig(TargetFunction);
     return {
       fetch: serveProbes({
-        AbortFunctionUpgrade: outcome(Retry.none(p0({} as never))),
-        CommitFunctionUpgrade: outcome(Retry.none(p1({} as never))),
-        CommitFunctionUpgradeAsGen2: outcome(Retry.none(p2({} as never))),
-        DetachFunction: outcome(Retry.none(p3({} as never))),
-        GenerateFunctionUploadUrl: outcome(Retry.none(p4({ location: "us-central1" } as never))),
-        ListFunctions: outcome(Retry.none(p5({ location: "us-central1" } as never))),
-        ListRuntimes: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        RedirectFunctionUpgradeTraffic: outcome(Retry.none(p7({} as never))),
-        RollbackFunctionUpgradeTraffic: outcome(Retry.none(p8({} as never))),
-        SetupFunctionUpgradeConfig: outcome(Retry.none(p9({} as never))),
+        AbortFunctionUpgrade: probeOutcome(Retry.none(p0({} as never))),
+        CommitFunctionUpgrade: probeOutcome(Retry.none(p1({} as never))),
+        CommitFunctionUpgradeAsGen2: probeOutcome(Retry.none(p2({} as never))),
+        DetachFunction: probeOutcome(Retry.none(p3({} as never))),
+        GenerateFunctionUploadUrl: probeOutcome(
+          Retry.none(p4({ location: "us-central1" } as never)),
+        ),
+        ListFunctions: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListRuntimes: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        RedirectFunctionUpgradeTraffic: probeOutcome(Retry.none(p7({} as never))),
+        RollbackFunctionUpgradeTraffic: probeOutcome(Retry.none(p8({} as never))),
+        SetupFunctionUpgradeConfig: probeOutcome(Retry.none(p9({} as never))),
       }),
     };
   }).pipe(

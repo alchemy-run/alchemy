@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeTaxonomy } from "./generated-resources.ts";
 
 /**
@@ -49,12 +49,12 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
     const p30 = yield* GCP.DataCatalog.UnstarEntryGroupEntry();
     return {
       fetch: serveProbes({
-        CreateEntryGroup: outcome(
+        CreateEntryGroup: probeOutcome(
           Retry.none(
             p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        CreateEntryGroupEntry: outcome(
+        CreateEntryGroupEntry: probeOutcome(
           Retry.none(
             p1({
               entryGroup: "alchemy-missing",
@@ -63,7 +63,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        CreateEntryGroupEntryTag: outcome(
+        CreateEntryGroupEntryTag: probeOutcome(
           Retry.none(
             p2({
               entryGroup: "alchemy-missing",
@@ -73,7 +73,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        CreateEntryGroupTag: outcome(
+        CreateEntryGroupTag: probeOutcome(
           Retry.none(
             p3({
               entryGroup: "alchemy-missing",
@@ -82,10 +82,10 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        DeleteEntryGroup: outcome(
+        DeleteEntryGroup: probeOutcome(
           Retry.none(p4({ entryGroup: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        DeleteEntryGroupEntry: outcome(
+        DeleteEntryGroupEntry: probeOutcome(
           Retry.none(
             p5({
               entryGroup: "alchemy-missing",
@@ -94,7 +94,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        DeleteEntryGroupEntryTag: outcome(
+        DeleteEntryGroupEntryTag: probeOutcome(
           Retry.none(
             p6({
               entryGroup: "alchemy-missing",
@@ -104,7 +104,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        DeleteEntryGroupTag: outcome(
+        DeleteEntryGroupTag: probeOutcome(
           Retry.none(
             p7({
               entryGroup: "alchemy-missing",
@@ -113,11 +113,11 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        ExportTaxonomy: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        GetEntryGroup: outcome(
+        ExportTaxonomy: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        GetEntryGroup: probeOutcome(
           Retry.none(p9({ entryGroup: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetEntryGroupEntry: outcome(
+        GetEntryGroupEntry: probeOutcome(
           Retry.none(
             p10({
               entryGroup: "alchemy-missing",
@@ -126,8 +126,8 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        GetTaxonomy: outcome(Retry.none(p11({} as never))),
-        ImportEntryGroupEntry: outcome(
+        GetTaxonomy: probeOutcome(Retry.none(p11({} as never))),
+        ImportEntryGroupEntry: probeOutcome(
           Retry.none(
             p12({
               entryGroup: "alchemy-missing",
@@ -136,15 +136,15 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        ImportTaxonomy: outcome(
+        ImportTaxonomy: probeOutcome(
           Retry.none(
             p13({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        ListEntryGroupEntries: outcome(
+        ListEntryGroupEntries: probeOutcome(
           Retry.none(p14({ entryGroup: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListEntryGroupEntryTags: outcome(
+        ListEntryGroupEntryTags: probeOutcome(
           Retry.none(
             p15({
               entryGroup: "alchemy-missing",
@@ -153,14 +153,14 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        ListEntryGroups: outcome(Retry.none(p16({ location: "us-central1" } as never))),
-        ListEntryGroupTags: outcome(
+        ListEntryGroups: probeOutcome(Retry.none(p16({ location: "us-central1" } as never))),
+        ListEntryGroupTags: probeOutcome(
           Retry.none(p17({ entryGroup: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListTaxonomies: outcome(Retry.none(p18({ location: "us-central1" } as never))),
-        ListTaxonomyPolicyTags: outcome(Retry.none(p19({} as never))),
-        LookupEntry: outcome(Retry.none(p20({} as never))),
-        ModifyEntryContacts: outcome(
+        ListTaxonomies: probeOutcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListTaxonomyPolicyTags: probeOutcome(Retry.none(p19({} as never))),
+        LookupEntry: probeOutcome(Retry.none(p20({} as never))),
+        ModifyEntryContacts: probeOutcome(
           Retry.none(
             p21({
               entryGroup: "alchemy-missing",
@@ -169,7 +169,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        ModifyEntryOverview: outcome(
+        ModifyEntryOverview: probeOutcome(
           Retry.none(
             p22({
               entryGroup: "alchemy-missing",
@@ -178,10 +178,10 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        PatchEntryGroup: outcome(
+        PatchEntryGroup: probeOutcome(
           Retry.none(p23({ entryGroup: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        PatchEntryGroupEntry: outcome(
+        PatchEntryGroupEntry: probeOutcome(
           Retry.none(
             p24({
               entryGroup: "alchemy-missing",
@@ -190,7 +190,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        PatchEntryGroupEntryTag: outcome(
+        PatchEntryGroupEntryTag: probeOutcome(
           Retry.none(
             p25({
               entryGroup: "alchemy-missing",
@@ -200,7 +200,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        PatchEntryGroupTag: outcome(
+        PatchEntryGroupTag: probeOutcome(
           Retry.none(
             p26({
               entryGroup: "alchemy-missing",
@@ -209,7 +209,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        ReconcileEntryGroupEntryTag: outcome(
+        ReconcileEntryGroupEntryTag: probeOutcome(
           Retry.none(
             p27({
               entryGroup: "alchemy-missing",
@@ -218,8 +218,8 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        ReplaceTaxonomy: outcome(Retry.none(p28({} as never))),
-        StarEntryGroupEntry: outcome(
+        ReplaceTaxonomy: probeOutcome(Retry.none(p28({} as never))),
+        StarEntryGroupEntry: probeOutcome(
           Retry.none(
             p29({
               entryGroup: "alchemy-missing",
@@ -228,7 +228,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
-        UnstarEntryGroupEntry: outcome(
+        UnstarEntryGroupEntry: probeOutcome(
           Retry.none(
             p30({
               entryGroup: "alchemy-missing",

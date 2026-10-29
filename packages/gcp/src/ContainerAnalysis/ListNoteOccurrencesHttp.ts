@@ -19,13 +19,16 @@ export const ListNoteOccurrencesHttp = Layer.effect(
         resource: "GCP.ContainerAnalysis.Note",
         operation: containeranalysis.listProjectsNotesOccurrences,
         param: "name",
-        iam: { role: "roles/containeranalysis.occurrences.viewer", on: "containeranalysis.note" },
+        iam: {
+          role: "roles/containeranalysis.notes.occurrences.viewer",
+          on: "containeranalysis.note",
+        },
       },
       {
         resource: "GCP.ContainerAnalysis.LocationsNote",
         operation: containeranalysis.listProjectsLocationsNotesOccurrences,
         param: "name",
-        iam: { role: "roles/containeranalysis.occurrences.viewer" },
+        iam: { role: "roles/containeranalysis.notes.occurrences.viewer" },
       },
     ],
   }),

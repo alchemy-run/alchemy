@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeDataExchange, ProbeListing, ProbeQueryTemplate } from "./generated-resources.ts";
 
 /**
@@ -35,31 +35,31 @@ export default class AnalyticsHubGeneratedHost extends GCP.Function<AnalyticsHub
     const p16 = yield* GCP.AnalyticsHub.SubscribeListing(ProbeListing);
     return {
       fetch: serveProbes({
-        ApproveQueryTemplate: outcome(Retry.none(p0({} as never))),
-        DeleteSubscription: outcome(
+        ApproveQueryTemplate: probeOutcome(Retry.none(p0({} as never))),
+        DeleteSubscription: probeOutcome(
           Retry.none(p1({ subscription: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetDataExchange: outcome(Retry.none(p2({} as never))),
-        GetListing: outcome(Retry.none(p3({} as never))),
-        GetQueryTemplate: outcome(Retry.none(p4({} as never))),
-        GetSubscription: outcome(
+        GetDataExchange: probeOutcome(Retry.none(p2({} as never))),
+        GetListing: probeOutcome(Retry.none(p3({} as never))),
+        GetQueryTemplate: probeOutcome(Retry.none(p4({} as never))),
+        GetSubscription: probeOutcome(
           Retry.none(p5({ subscription: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListDataExchangeListings: outcome(Retry.none(p6({} as never))),
-        ListDataExchangeQueryTemplates: outcome(Retry.none(p7({} as never))),
-        ListDataExchanges: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListDataExchangeSubscriptions: outcome(Retry.none(p9({} as never))),
-        ListListingSubscriptions: outcome(Retry.none(p10({} as never))),
-        ListSubscriptions: outcome(Retry.none(p11({ location: "us-central1" } as never))),
-        RefreshSubscription: outcome(
+        ListDataExchangeListings: probeOutcome(Retry.none(p6({} as never))),
+        ListDataExchangeQueryTemplates: probeOutcome(Retry.none(p7({} as never))),
+        ListDataExchanges: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListDataExchangeSubscriptions: probeOutcome(Retry.none(p9({} as never))),
+        ListListingSubscriptions: probeOutcome(Retry.none(p10({} as never))),
+        ListSubscriptions: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
+        RefreshSubscription: probeOutcome(
           Retry.none(p12({ subscription: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        RevokeSubscription: outcome(
+        RevokeSubscription: probeOutcome(
           Retry.none(p13({ subscription: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        SubmitQueryTemplate: outcome(Retry.none(p14({} as never))),
-        SubscribeDataExchange: outcome(Retry.none(p15({} as never))),
-        SubscribeListing: outcome(Retry.none(p16({} as never))),
+        SubmitQueryTemplate: probeOutcome(Retry.none(p14({} as never))),
+        SubscribeDataExchange: probeOutcome(Retry.none(p15({} as never))),
+        SubscribeListing: probeOutcome(Retry.none(p16({} as never))),
       }),
     };
   }).pipe(

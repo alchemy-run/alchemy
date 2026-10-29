@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeSaa } from "./generated-resources.ts";
 
 /**
@@ -31,27 +31,27 @@ export default class SaasServiceManagementGeneratedHost extends GCP.Function<Saa
     const p12 = yield* GCP.SaasServiceManagement.PatchUnitOperation();
     return {
       fetch: serveProbes({
-        CreateUnitOperation: outcome(
+        CreateUnitOperation: probeOutcome(
           Retry.none(
             p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        DeleteUnitOperation: outcome(
+        DeleteUnitOperation: probeOutcome(
           Retry.none(p1({ unitOperation: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetSaa: outcome(Retry.none(p2({} as never))),
-        GetUnitOperation: outcome(
+        GetSaa: probeOutcome(Retry.none(p2({} as never))),
+        GetUnitOperation: probeOutcome(
           Retry.none(p3({ unitOperation: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListReleases: outcome(Retry.none(p4({ location: "us-central1" } as never))),
-        ListRolloutKinds: outcome(Retry.none(p5({ location: "us-central1" } as never))),
-        ListRollouts: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        ListSaas: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListTenants: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListUnitKinds: outcome(Retry.none(p9({ location: "us-central1" } as never))),
-        ListUnitOperations: outcome(Retry.none(p10({ location: "us-central1" } as never))),
-        ListUnits: outcome(Retry.none(p11({ location: "us-central1" } as never))),
-        PatchUnitOperation: outcome(
+        ListReleases: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListRolloutKinds: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListRollouts: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListSaas: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListTenants: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListUnitKinds: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListUnitOperations: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListUnits: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
+        PatchUnitOperation: probeOutcome(
           Retry.none(p12({ unitOperation: "alchemy-missing", location: "us-central1" } as never)),
         ),
       }),

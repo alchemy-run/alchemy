@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated WorkspaceEvents binding as its own
@@ -50,19 +50,19 @@ export default class WorkspaceEventsGeneratedHost extends GCP.Function<Workspace
     const p32 = yield* GCP.WorkspaceEvents.ValidateSchemaMessage();
     return {
       fetch: serveProbes({
-        AcknowledgeSubscription: outcome(
+        AcknowledgeSubscription: probeOutcome(
           Retry.none(p0({ subscription: "alchemy-missing" } as never)),
         ),
-        CommitSchema: outcome(Retry.none(p1({ schema: "alchemy-missing" } as never))),
-        CreateSchema: outcome(
+        CommitSchema: probeOutcome(Retry.none(p1({ schema: "alchemy-missing" } as never))),
+        CreateSchema: probeOutcome(
           Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        CreateSnapshot: outcome(
+        CreateSnapshot: probeOutcome(
           Retry.none(
             p3({ snapshot: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        CreateSubscription: outcome(
+        CreateSubscription: probeOutcome(
           Retry.none(
             p4({
               subscription: "alchemy-missing",
@@ -70,42 +70,56 @@ export default class WorkspaceEventsGeneratedHost extends GCP.Function<Workspace
             } as never),
           ),
         ),
-        CreateTopic: outcome(
+        CreateTopic: probeOutcome(
           Retry.none(
             p5({ topic: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        DeleteSchema: outcome(Retry.none(p6({ schema: "alchemy-missing" } as never))),
-        DeleteSnapshot: outcome(Retry.none(p7({ snapshot: "alchemy-missing" } as never))),
-        DeleteSubscription: outcome(Retry.none(p8({ subscription: "alchemy-missing" } as never))),
-        DeleteTopic: outcome(Retry.none(p9({ topic: "alchemy-missing" } as never))),
-        DetachSubscription: outcome(Retry.none(p10({ subscription: "alchemy-missing" } as never))),
-        GetSchema: outcome(Retry.none(p11({ schema: "alchemy-missing" } as never))),
-        GetSnapshot: outcome(Retry.none(p12({ snapshot: "alchemy-missing" } as never))),
-        GetSubscription: outcome(Retry.none(p13({ subscription: "alchemy-missing" } as never))),
-        GetTopic: outcome(Retry.none(p14({ topic: "alchemy-missing" } as never))),
-        ListSchemaRevisions: outcome(Retry.none(p15({ schema: "alchemy-missing" } as never))),
-        ListSchemas: outcome(Retry.none(p16({} as never))),
-        ListSnapshots: outcome(Retry.none(p17({} as never))),
-        ListSubscriptions: outcome(Retry.none(p18({} as never))),
-        ListTopics: outcome(Retry.none(p19({} as never))),
-        ListTopicSnapshots: outcome(Retry.none(p20({ topic: "alchemy-missing" } as never))),
-        ListTopicSubscriptions: outcome(Retry.none(p21({ topic: "alchemy-missing" } as never))),
-        ModifySubscriptionAckDeadline: outcome(
+        DeleteSchema: probeOutcome(Retry.none(p6({ schema: "alchemy-missing" } as never))),
+        DeleteSnapshot: probeOutcome(Retry.none(p7({ snapshot: "alchemy-missing" } as never))),
+        DeleteSubscription: probeOutcome(
+          Retry.none(p8({ subscription: "alchemy-missing" } as never)),
+        ),
+        DeleteTopic: probeOutcome(Retry.none(p9({ topic: "alchemy-missing" } as never))),
+        DetachSubscription: probeOutcome(
+          Retry.none(p10({ subscription: "alchemy-missing" } as never)),
+        ),
+        GetSchema: probeOutcome(Retry.none(p11({ schema: "alchemy-missing" } as never))),
+        GetSnapshot: probeOutcome(Retry.none(p12({ snapshot: "alchemy-missing" } as never))),
+        GetSubscription: probeOutcome(
+          Retry.none(p13({ subscription: "alchemy-missing" } as never)),
+        ),
+        GetTopic: probeOutcome(Retry.none(p14({ topic: "alchemy-missing" } as never))),
+        ListSchemaRevisions: probeOutcome(Retry.none(p15({ schema: "alchemy-missing" } as never))),
+        ListSchemas: probeOutcome(Retry.none(p16({} as never))),
+        ListSnapshots: probeOutcome(Retry.none(p17({} as never))),
+        ListSubscriptions: probeOutcome(Retry.none(p18({} as never))),
+        ListTopics: probeOutcome(Retry.none(p19({} as never))),
+        ListTopicSnapshots: probeOutcome(Retry.none(p20({ topic: "alchemy-missing" } as never))),
+        ListTopicSubscriptions: probeOutcome(
+          Retry.none(p21({ topic: "alchemy-missing" } as never)),
+        ),
+        ModifySubscriptionAckDeadline: probeOutcome(
           Retry.none(p22({ subscription: "alchemy-missing" } as never)),
         ),
-        ModifySubscriptionPushConfig: outcome(
+        ModifySubscriptionPushConfig: probeOutcome(
           Retry.none(p23({ subscription: "alchemy-missing" } as never)),
         ),
-        PatchSnapshot: outcome(Retry.none(p24({ snapshot: "alchemy-missing" } as never))),
-        PatchSubscription: outcome(Retry.none(p25({ subscription: "alchemy-missing" } as never))),
-        PatchTopic: outcome(Retry.none(p26({ topic: "alchemy-missing" } as never))),
-        PublishTopic: outcome(Retry.none(p27({ topic: "alchemy-missing" } as never))),
-        PullSubscription: outcome(Retry.none(p28({ subscription: "alchemy-missing" } as never))),
-        RollbackSchema: outcome(Retry.none(p29({ schema: "alchemy-missing" } as never))),
-        SeekSubscription: outcome(Retry.none(p30({ subscription: "alchemy-missing" } as never))),
-        ValidateSchema: outcome(Retry.none(p31({} as never))),
-        ValidateSchemaMessage: outcome(Retry.none(p32({} as never))),
+        PatchSnapshot: probeOutcome(Retry.none(p24({ snapshot: "alchemy-missing" } as never))),
+        PatchSubscription: probeOutcome(
+          Retry.none(p25({ subscription: "alchemy-missing" } as never)),
+        ),
+        PatchTopic: probeOutcome(Retry.none(p26({ topic: "alchemy-missing" } as never))),
+        PublishTopic: probeOutcome(Retry.none(p27({ topic: "alchemy-missing" } as never))),
+        PullSubscription: probeOutcome(
+          Retry.none(p28({ subscription: "alchemy-missing" } as never)),
+        ),
+        RollbackSchema: probeOutcome(Retry.none(p29({ schema: "alchemy-missing" } as never))),
+        SeekSubscription: probeOutcome(
+          Retry.none(p30({ subscription: "alchemy-missing" } as never)),
+        ),
+        ValidateSchema: probeOutcome(Retry.none(p31({} as never))),
+        ValidateSchemaMessage: probeOutcome(Retry.none(p32({} as never))),
       }),
     };
   }).pipe(

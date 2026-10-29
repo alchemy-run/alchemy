@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated DeploymentManager binding as its own
@@ -26,21 +26,21 @@ export default class DeploymentManagerGeneratedHost extends GCP.Function<Deploym
     const p8 = yield* GCP.DeploymentManager.StopDeployment();
     return {
       fetch: serveProbes({
-        CancelDeploymentPreview: outcome(
+        CancelDeploymentPreview: probeOutcome(
           Retry.none(p0({ deployment: "alchemy-missing" } as never)),
         ),
-        GetDeployment: outcome(Retry.none(p1({ deployment: "alchemy-missing" } as never))),
-        GetManifest: outcome(
+        GetDeployment: probeOutcome(Retry.none(p1({ deployment: "alchemy-missing" } as never))),
+        GetManifest: probeOutcome(
           Retry.none(p2({ deployment: "alchemy-missing", manifest: "alchemy-missing" } as never)),
         ),
-        GetResource: outcome(
+        GetResource: probeOutcome(
           Retry.none(p3({ resource: "alchemy-missing", deployment: "alchemy-missing" } as never)),
         ),
-        ListDeployments: outcome(Retry.none(p4({} as never))),
-        ListManifests: outcome(Retry.none(p5({ deployment: "alchemy-missing" } as never))),
-        ListResources: outcome(Retry.none(p6({ deployment: "alchemy-missing" } as never))),
-        ListTypes: outcome(Retry.none(p7({} as never))),
-        StopDeployment: outcome(Retry.none(p8({ deployment: "alchemy-missing" } as never))),
+        ListDeployments: probeOutcome(Retry.none(p4({} as never))),
+        ListManifests: probeOutcome(Retry.none(p5({ deployment: "alchemy-missing" } as never))),
+        ListResources: probeOutcome(Retry.none(p6({ deployment: "alchemy-missing" } as never))),
+        ListTypes: probeOutcome(Retry.none(p7({} as never))),
+        StopDeployment: probeOutcome(Retry.none(p8({ deployment: "alchemy-missing" } as never))),
       }),
     };
   }).pipe(

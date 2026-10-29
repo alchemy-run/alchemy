@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated AssuredWorkloads binding as its own
@@ -23,23 +23,23 @@ export default class AssuredWorkloadsGeneratedHost extends GCP.Function<AssuredW
     const p4 = yield* GCP.AssuredWorkloads.ListDbFrameworkComplianceSummaries();
     return {
       fetch: serveProbes({
-        AggregateDbFrameworkComplianceReport: outcome(
+        AggregateDbFrameworkComplianceReport: probeOutcome(
           Retry.none(
             p0({ dbFrameworkComplianceReport: "alchemy-missing", location: "global" } as never),
           ),
         ),
-        FetchDbFrameworkComplianceReport: outcome(
+        FetchDbFrameworkComplianceReport: probeOutcome(
           Retry.none(
             p1({ dbFrameworkComplianceReport: "alchemy-missing", location: "global" } as never),
           ),
         ),
-        ListDbFindingSummaries: outcome(Retry.none(p2({ location: "global" } as never))),
-        ListDbFrameworkComplianceReportDbControlComplianceSummaries: outcome(
+        ListDbFindingSummaries: probeOutcome(Retry.none(p2({ location: "global" } as never))),
+        ListDbFrameworkComplianceReportDbControlComplianceSummaries: probeOutcome(
           Retry.none(
             p3({ dbFrameworkComplianceReport: "alchemy-missing", location: "global" } as never),
           ),
         ),
-        ListDbFrameworkComplianceSummaries: outcome(
+        ListDbFrameworkComplianceSummaries: probeOutcome(
           Retry.none(p4({ location: "global" } as never)),
         ),
       }),

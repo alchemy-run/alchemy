@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated SecureSourceManager binding as its own
@@ -44,7 +44,7 @@ export default class SecureSourceManagerGeneratedHost extends GCP.Function<Secur
     const p26 = yield* GCP.SecureSourceManager.UnresolveRepositoryPullRequestComment();
     return {
       fetch: serveProbes({
-        BatchPullRequestCommentCreate: outcome(
+        BatchPullRequestCommentCreate: probeOutcome(
           Retry.none(
             p0({
               repository: "alchemy-missing",
@@ -53,7 +53,7 @@ export default class SecureSourceManagerGeneratedHost extends GCP.Function<Secur
             } as never),
           ),
         ),
-        CloseRepositoryPullRequest: outcome(
+        CloseRepositoryPullRequest: probeOutcome(
           Retry.none(
             p1({
               repository: "alchemy-missing",
@@ -62,17 +62,17 @@ export default class SecureSourceManagerGeneratedHost extends GCP.Function<Secur
             } as never),
           ),
         ),
-        CreateInstance: outcome(
+        CreateInstance: probeOutcome(
           Retry.none(
             p2({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        CreateRepository: outcome(
+        CreateRepository: probeOutcome(
           Retry.none(
             p3({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        CreateRepositoryPullRequest: outcome(
+        CreateRepositoryPullRequest: probeOutcome(
           Retry.none(
             p4({
               repository: "alchemy-missing",
@@ -81,28 +81,28 @@ export default class SecureSourceManagerGeneratedHost extends GCP.Function<Secur
             } as never),
           ),
         ),
-        DeleteInstance: outcome(
+        DeleteInstance: probeOutcome(
           Retry.none(p5({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        DeleteRepository: outcome(
+        DeleteRepository: probeOutcome(
           Retry.none(p6({ repository: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        FetchRepositoryBlob: outcome(
+        FetchRepositoryBlob: probeOutcome(
           Retry.none(p7({ repository: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        FetchRepositoryRefs: outcome(
+        FetchRepositoryRefs: probeOutcome(
           Retry.none(p8({ repository: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        FetchRepositoryTree: outcome(
+        FetchRepositoryTree: probeOutcome(
           Retry.none(p9({ repository: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetInstance: outcome(
+        GetInstance: probeOutcome(
           Retry.none(p10({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetRepository: outcome(
+        GetRepository: probeOutcome(
           Retry.none(p11({ repository: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetRepositoryPullRequest: outcome(
+        GetRepositoryPullRequest: probeOutcome(
           Retry.none(
             p12({
               repository: "alchemy-missing",
@@ -111,8 +111,8 @@ export default class SecureSourceManagerGeneratedHost extends GCP.Function<Secur
             } as never),
           ),
         ),
-        ListInstances: outcome(Retry.none(p13({ location: "us-central1" } as never))),
-        ListPullRequestFileDiffs: outcome(
+        ListInstances: probeOutcome(Retry.none(p13({ location: "us-central1" } as never))),
+        ListPullRequestFileDiffs: probeOutcome(
           Retry.none(
             p14({
               repository: "alchemy-missing",
@@ -121,17 +121,17 @@ export default class SecureSourceManagerGeneratedHost extends GCP.Function<Secur
             } as never),
           ),
         ),
-        ListRepositories: outcome(Retry.none(p15({ location: "us-central1" } as never))),
-        ListRepositoryBranchRules: outcome(
+        ListRepositories: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListRepositoryBranchRules: probeOutcome(
           Retry.none(p16({ repository: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListRepositoryHooks: outcome(
+        ListRepositoryHooks: probeOutcome(
           Retry.none(p17({ repository: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListRepositoryIssues: outcome(
+        ListRepositoryIssues: probeOutcome(
           Retry.none(p18({ repository: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListRepositoryPullRequestComments: outcome(
+        ListRepositoryPullRequestComments: probeOutcome(
           Retry.none(
             p19({
               repository: "alchemy-missing",
@@ -140,10 +140,10 @@ export default class SecureSourceManagerGeneratedHost extends GCP.Function<Secur
             } as never),
           ),
         ),
-        ListRepositoryPullRequests: outcome(
+        ListRepositoryPullRequests: probeOutcome(
           Retry.none(p20({ repository: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        MergeRepositoryPullRequest: outcome(
+        MergeRepositoryPullRequest: probeOutcome(
           Retry.none(
             p21({
               repository: "alchemy-missing",
@@ -152,7 +152,7 @@ export default class SecureSourceManagerGeneratedHost extends GCP.Function<Secur
             } as never),
           ),
         ),
-        OpenRepositoryPullRequest: outcome(
+        OpenRepositoryPullRequest: probeOutcome(
           Retry.none(
             p22({
               repository: "alchemy-missing",
@@ -161,10 +161,10 @@ export default class SecureSourceManagerGeneratedHost extends GCP.Function<Secur
             } as never),
           ),
         ),
-        PatchRepository: outcome(
+        PatchRepository: probeOutcome(
           Retry.none(p23({ repository: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        PatchRepositoryPullRequest: outcome(
+        PatchRepositoryPullRequest: probeOutcome(
           Retry.none(
             p24({
               repository: "alchemy-missing",
@@ -173,7 +173,7 @@ export default class SecureSourceManagerGeneratedHost extends GCP.Function<Secur
             } as never),
           ),
         ),
-        ResolveRepositoryPullRequestComment: outcome(
+        ResolveRepositoryPullRequestComment: probeOutcome(
           Retry.none(
             p25({
               repository: "alchemy-missing",
@@ -182,7 +182,7 @@ export default class SecureSourceManagerGeneratedHost extends GCP.Function<Secur
             } as never),
           ),
         ),
-        UnresolveRepositoryPullRequestComment: outcome(
+        UnresolveRepositoryPullRequestComment: probeOutcome(
           Retry.none(
             p26({
               repository: "alchemy-missing",

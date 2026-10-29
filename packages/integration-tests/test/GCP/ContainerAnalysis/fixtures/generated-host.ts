@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { Authority, RegionalNote, RegionalOccurrence, Signed } from "./generated-resources.ts";
 
 /**
@@ -27,15 +27,15 @@ export default class ContainerAnalysisGeneratedHost extends GCP.Function<Contain
     const p8 = yield* GCP.ContainerAnalysis.ListOccurrences();
     return {
       fetch: serveProbes({
-        BatchNoteCreate: outcome(Retry.none(p0({} as never))),
-        BatchOccurrenceCreate: outcome(Retry.none(p1({} as never))),
-        "GetOccurrenceNotes@Occurrence": outcome(Retry.none(p2({} as never))),
-        "GetOccurrenceNotes@LocationsOccurrence": outcome(Retry.none(p3({} as never))),
-        GetOccurrenceVulnerabilitySummary: outcome(Retry.none(p4({} as never))),
-        "ListNoteOccurrences@Note": outcome(Retry.none(p5({} as never))),
-        "ListNoteOccurrences@LocationsNote": outcome(Retry.none(p6({} as never))),
-        ListNotes: outcome(Retry.none(p7({} as never))),
-        ListOccurrences: outcome(Retry.none(p8({} as never))),
+        BatchNoteCreate: probeOutcome(Retry.none(p0({} as never))),
+        BatchOccurrenceCreate: probeOutcome(Retry.none(p1({} as never))),
+        "GetOccurrenceNotes@Occurrence": probeOutcome(Retry.none(p2({} as never))),
+        "GetOccurrenceNotes@LocationsOccurrence": probeOutcome(Retry.none(p3({} as never))),
+        GetOccurrenceVulnerabilitySummary: probeOutcome(Retry.none(p4({} as never))),
+        "ListNoteOccurrences@Note": probeOutcome(Retry.none(p5({} as never))),
+        "ListNoteOccurrences@LocationsNote": probeOutcome(Retry.none(p6({} as never))),
+        ListNotes: probeOutcome(Retry.none(p7({} as never))),
+        ListOccurrences: probeOutcome(Retry.none(p8({} as never))),
       }),
     };
   }).pipe(

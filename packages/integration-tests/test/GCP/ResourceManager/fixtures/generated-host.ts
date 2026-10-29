@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeTagKey, ProbeTagValue } from "./generated-resources.ts";
 
 /**
@@ -32,22 +32,24 @@ export default class ResourceManagerGeneratedHost extends GCP.Function<ResourceM
     const p13 = yield* GCP.ResourceManager.SearchProject();
     return {
       fetch: serveProbes({
-        CreateTagValueTagHold: outcome(
+        CreateTagValueTagHold: probeOutcome(
           Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        DeleteTagValueTagHold: outcome(Retry.none(p1({ tagHold: "alchemy-missing" } as never))),
-        GetTagKey: outcome(Retry.none(p2({} as never))),
-        GetTagKeyNamespaced: outcome(Retry.none(p3({} as never))),
-        GetTagValue: outcome(Retry.none(p4({} as never))),
-        GetTagValueNamespaced: outcome(Retry.none(p5({} as never))),
-        ListFolders: outcome(Retry.none(p6({} as never))),
-        ListProjects: outcome(Retry.none(p7({} as never))),
-        ListTagKeys: outcome(Retry.none(p8({} as never))),
-        ListTagValues: outcome(Retry.none(p9({} as never))),
-        ListTagValueTagHolds: outcome(Retry.none(p10({} as never))),
-        SearchFolder: outcome(Retry.none(p11({} as never))),
-        SearchOrganization: outcome(Retry.none(p12({} as never))),
-        SearchProject: outcome(Retry.none(p13({} as never))),
+        DeleteTagValueTagHold: probeOutcome(
+          Retry.none(p1({ tagHold: "alchemy-missing" } as never)),
+        ),
+        GetTagKey: probeOutcome(Retry.none(p2({} as never))),
+        GetTagKeyNamespaced: probeOutcome(Retry.none(p3({} as never))),
+        GetTagValue: probeOutcome(Retry.none(p4({} as never))),
+        GetTagValueNamespaced: probeOutcome(Retry.none(p5({} as never))),
+        ListFolders: probeOutcome(Retry.none(p6({} as never))),
+        ListProjects: probeOutcome(Retry.none(p7({} as never))),
+        ListTagKeys: probeOutcome(Retry.none(p8({} as never))),
+        ListTagValues: probeOutcome(Retry.none(p9({} as never))),
+        ListTagValueTagHolds: probeOutcome(Retry.none(p10({} as never))),
+        SearchFolder: probeOutcome(Retry.none(p11({} as never))),
+        SearchOrganization: probeOutcome(Retry.none(p12({} as never))),
+        SearchProject: probeOutcome(Retry.none(p13({} as never))),
       }),
     };
   }).pipe(

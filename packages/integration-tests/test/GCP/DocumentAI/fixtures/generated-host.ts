@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { Invoice, OcrBind } from "./generated-resources.ts";
 
 /**
@@ -40,50 +40,50 @@ export default class DocumentAIGeneratedHost extends GCP.Function<DocumentAIGene
     const p21 = yield* GCP.DocumentAI.UndeployProcessorVersion(OcrBind);
     return {
       fetch: serveProbes({
-        BatchProcessorProcess: outcome(Retry.none(p0({} as never))),
-        BatchProcessorVersionProcess: outcome(
+        BatchProcessorProcess: probeOutcome(Retry.none(p0({} as never))),
+        BatchProcessorVersionProcess: probeOutcome(
           Retry.none(p1({ processorVersion: "alchemy-missing" } as never)),
         ),
-        DeleteProcessorVersion: outcome(
+        DeleteProcessorVersion: probeOutcome(
           Retry.none(p2({ processorVersion: "alchemy-missing" } as never)),
         ),
-        DeployProcessorVersion: outcome(
+        DeployProcessorVersion: probeOutcome(
           Retry.none(p3({ processorVersion: "alchemy-missing" } as never)),
         ),
-        DisableProcessor: outcome(Retry.none(p4({} as never))),
-        EnableProcessor: outcome(Retry.none(p5({} as never))),
-        EvaluateProcessorVersion: outcome(
+        DisableProcessor: probeOutcome(Retry.none(p4({} as never))),
+        EnableProcessor: probeOutcome(Retry.none(p5({} as never))),
+        EvaluateProcessorVersion: probeOutcome(
           Retry.none(p6({ processorVersion: "alchemy-missing" } as never)),
         ),
-        GenerateSchemaVersion: outcome(Retry.none(p7({} as never))),
-        GetProcessorType: outcome(
+        GenerateSchemaVersion: probeOutcome(Retry.none(p7({} as never))),
+        GetProcessorType: probeOutcome(
           Retry.none(p8({ processorType: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetProcessorVersion: outcome(
+        GetProcessorVersion: probeOutcome(
           Retry.none(p9({ processorVersion: "alchemy-missing" } as never)),
         ),
-        GetProcessorVersionEvaluation: outcome(
+        GetProcessorVersionEvaluation: probeOutcome(
           Retry.none(
             p10({ processorVersion: "alchemy-missing", evaluation: "alchemy-missing" } as never),
           ),
         ),
-        ListProcessors: outcome(Retry.none(p11({ location: "us-central1" } as never))),
-        ListProcessorTypes: outcome(Retry.none(p12({ location: "us-central1" } as never))),
-        ListProcessorVersionEvaluations: outcome(
+        ListProcessors: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
+        ListProcessorTypes: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
+        ListProcessorVersionEvaluations: probeOutcome(
           Retry.none(p13({ processorVersion: "alchemy-missing" } as never)),
         ),
-        ListProcessorVersions: outcome(Retry.none(p14({} as never))),
-        ListSchemas: outcome(Retry.none(p15({ location: "us-central1" } as never))),
-        ListSchemaVersions: outcome(Retry.none(p16({} as never))),
-        ProcessProcessorVersion: outcome(
+        ListProcessorVersions: probeOutcome(Retry.none(p14({} as never))),
+        ListSchemas: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListSchemaVersions: probeOutcome(Retry.none(p16({} as never))),
+        ProcessProcessorVersion: probeOutcome(
           Retry.none(p17({ processorVersion: "alchemy-missing" } as never)),
         ),
-        ReviewHumanReviewConfigDocument: outcome(
+        ReviewHumanReviewConfigDocument: probeOutcome(
           Retry.none(p18({ processor: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        SetDefaultProcessorVersion: outcome(Retry.none(p19({} as never))),
-        TrainProcessorVersion: outcome(Retry.none(p20({} as never))),
-        UndeployProcessorVersion: outcome(
+        SetDefaultProcessorVersion: probeOutcome(Retry.none(p19({} as never))),
+        TrainProcessorVersion: probeOutcome(Retry.none(p20({} as never))),
+        UndeployProcessorVersion: probeOutcome(
           Retry.none(p21({ processorVersion: "alchemy-missing" } as never)),
         ),
       }),

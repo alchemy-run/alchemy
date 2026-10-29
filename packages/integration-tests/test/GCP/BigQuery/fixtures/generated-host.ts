@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated BigQuery binding as its own
@@ -20,9 +20,11 @@ export default class BigQueryGeneratedHost extends GCP.Function<BigQueryGenerate
     const p2 = yield* GCP.BigQuery.ListJobs();
     return {
       fetch: serveProbes({
-        InsertJob: outcome(Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never))),
-        ListDatasets: outcome(Retry.none(p1({} as never))),
-        ListJobs: outcome(Retry.none(p2({} as never))),
+        InsertJob: probeOutcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        ListDatasets: probeOutcome(Retry.none(p1({} as never))),
+        ListJobs: probeOutcome(Retry.none(p2({} as never))),
       }),
     };
   }).pipe(

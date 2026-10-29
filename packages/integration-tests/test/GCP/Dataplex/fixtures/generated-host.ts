@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeAspectType,
   ProbeAsset,
@@ -97,84 +97,86 @@ export default class DataplexGeneratedHost extends GCP.Function<DataplexGenerate
     const p59 = yield* GCP.Dataplex.RunTask(ProbeTask);
     return {
       fetch: serveProbes({
-        ApproveChangeRequest: outcome(
+        ApproveChangeRequest: probeOutcome(
           Retry.none(p0({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        CancelDataScanJob: outcome(Retry.none(p1({ job: "alchemy-missing" } as never))),
-        CancelMetadataJob: outcome(
+        CancelDataScanJob: probeOutcome(Retry.none(p1({ job: "alchemy-missing" } as never))),
+        CancelMetadataJob: probeOutcome(
           Retry.none(p2({ metadataJob: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        CancelTaskJob: outcome(Retry.none(p3({ job: "alchemy-missing" } as never))),
-        CreateMetadataJob: outcome(
+        CancelTaskJob: probeOutcome(Retry.none(p3({ job: "alchemy-missing" } as never))),
+        CreateMetadataJob: probeOutcome(
           Retry.none(
             p4({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        DeleteChangeRequest: outcome(
+        DeleteChangeRequest: probeOutcome(
           Retry.none(p5({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GenerateDataScanDataQualityRules: outcome(Retry.none(p6({} as never))),
-        GenerateJobDataQualityRules: outcome(Retry.none(p7({ job: "alchemy-missing" } as never))),
-        GetAspectType: outcome(Retry.none(p8({} as never))),
-        GetAsset: outcome(Retry.none(p9({} as never))),
-        GetCategory: outcome(Retry.none(p10({} as never))),
-        GetChangeRequest: outcome(
+        GenerateDataScanDataQualityRules: probeOutcome(Retry.none(p6({} as never))),
+        GenerateJobDataQualityRules: probeOutcome(
+          Retry.none(p7({ job: "alchemy-missing" } as never)),
+        ),
+        GetAspectType: probeOutcome(Retry.none(p8({} as never))),
+        GetAsset: probeOutcome(Retry.none(p9({} as never))),
+        GetCategory: probeOutcome(Retry.none(p10({} as never))),
+        GetChangeRequest: probeOutcome(
           Retry.none(p11({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetDataAsset: outcome(Retry.none(p12({} as never))),
-        GetDataProduct: outcome(Retry.none(p13({} as never))),
-        GetDataScan: outcome(Retry.none(p14({} as never))),
-        GetDataScanJob: outcome(Retry.none(p15({ job: "alchemy-missing" } as never))),
-        GetEntity: outcome(Retry.none(p16({} as never))),
-        GetEntry: outcome(Retry.none(p17({} as never))),
-        GetEntryGroup: outcome(Retry.none(p18({} as never))),
-        GetEntryLink: outcome(Retry.none(p19({} as never))),
-        GetEntryType: outcome(Retry.none(p20({} as never))),
-        GetGlossary: outcome(Retry.none(p21({} as never))),
-        GetLake: outcome(Retry.none(p22({} as never))),
-        GetMetadataFeed: outcome(Retry.none(p23({} as never))),
-        GetMetadataJob: outcome(
+        GetDataAsset: probeOutcome(Retry.none(p12({} as never))),
+        GetDataProduct: probeOutcome(Retry.none(p13({} as never))),
+        GetDataScan: probeOutcome(Retry.none(p14({} as never))),
+        GetDataScanJob: probeOutcome(Retry.none(p15({ job: "alchemy-missing" } as never))),
+        GetEntity: probeOutcome(Retry.none(p16({} as never))),
+        GetEntry: probeOutcome(Retry.none(p17({} as never))),
+        GetEntryGroup: probeOutcome(Retry.none(p18({} as never))),
+        GetEntryLink: probeOutcome(Retry.none(p19({} as never))),
+        GetEntryType: probeOutcome(Retry.none(p20({} as never))),
+        GetGlossary: probeOutcome(Retry.none(p21({} as never))),
+        GetLake: probeOutcome(Retry.none(p22({} as never))),
+        GetMetadataFeed: probeOutcome(Retry.none(p23({} as never))),
+        GetMetadataJob: probeOutcome(
           Retry.none(p24({ metadataJob: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetPartition: outcome(Retry.none(p25({} as never))),
-        GetTask: outcome(Retry.none(p26({} as never))),
-        GetTaskJob: outcome(Retry.none(p27({ job: "alchemy-missing" } as never))),
-        GetTerm: outcome(Retry.none(p28({} as never))),
-        GetZone: outcome(Retry.none(p29({} as never))),
-        ListAspectTypes: outcome(Retry.none(p30({ location: "us-central1" } as never))),
-        ListAssetActions: outcome(Retry.none(p31({} as never))),
-        ListChangeRequests: outcome(Retry.none(p32({ location: "us-central1" } as never))),
-        ListDataDomains: outcome(Retry.none(p33({ location: "us-central1" } as never))),
-        ListDataProductDataAssets: outcome(Retry.none(p34({} as never))),
-        ListDataProducts: outcome(Retry.none(p35({ location: "us-central1" } as never))),
-        ListDataScanJobs: outcome(Retry.none(p36({} as never))),
-        ListDataScans: outcome(Retry.none(p37({ location: "us-central1" } as never))),
-        ListEntityPartitions: outcome(Retry.none(p38({} as never))),
-        ListEntryGroupEntries: outcome(Retry.none(p39({} as never))),
-        ListEntryGroups: outcome(Retry.none(p40({ location: "us-central1" } as never))),
-        ListEntryTypes: outcome(Retry.none(p41({ location: "us-central1" } as never))),
-        ListGlossaries: outcome(Retry.none(p42({ location: "us-central1" } as never))),
-        ListGlossaryCategories: outcome(Retry.none(p43({} as never))),
-        ListGlossaryTerms: outcome(Retry.none(p44({} as never))),
-        ListLakeActions: outcome(Retry.none(p45({} as never))),
-        ListLakes: outcome(Retry.none(p46({ location: "us-central1" } as never))),
-        ListLakeTasks: outcome(Retry.none(p47({} as never))),
-        ListLakeZones: outcome(Retry.none(p48({} as never))),
-        ListMetadataFeeds: outcome(Retry.none(p49({ location: "us-central1" } as never))),
-        ListMetadataJobs: outcome(Retry.none(p50({ location: "us-central1" } as never))),
-        ListTaskJobs: outcome(Retry.none(p51({} as never))),
-        ListZoneActions: outcome(Retry.none(p52({} as never))),
-        ListZoneAssets: outcome(Retry.none(p53({} as never))),
-        ListZoneEntities: outcome(Retry.none(p54({} as never))),
-        PatchChangeRequest: outcome(
+        GetPartition: probeOutcome(Retry.none(p25({} as never))),
+        GetTask: probeOutcome(Retry.none(p26({} as never))),
+        GetTaskJob: probeOutcome(Retry.none(p27({ job: "alchemy-missing" } as never))),
+        GetTerm: probeOutcome(Retry.none(p28({} as never))),
+        GetZone: probeOutcome(Retry.none(p29({} as never))),
+        ListAspectTypes: probeOutcome(Retry.none(p30({ location: "us-central1" } as never))),
+        ListAssetActions: probeOutcome(Retry.none(p31({} as never))),
+        ListChangeRequests: probeOutcome(Retry.none(p32({ location: "us-central1" } as never))),
+        ListDataDomains: probeOutcome(Retry.none(p33({ location: "us-central1" } as never))),
+        ListDataProductDataAssets: probeOutcome(Retry.none(p34({} as never))),
+        ListDataProducts: probeOutcome(Retry.none(p35({ location: "us-central1" } as never))),
+        ListDataScanJobs: probeOutcome(Retry.none(p36({} as never))),
+        ListDataScans: probeOutcome(Retry.none(p37({ location: "us-central1" } as never))),
+        ListEntityPartitions: probeOutcome(Retry.none(p38({} as never))),
+        ListEntryGroupEntries: probeOutcome(Retry.none(p39({} as never))),
+        ListEntryGroups: probeOutcome(Retry.none(p40({ location: "us-central1" } as never))),
+        ListEntryTypes: probeOutcome(Retry.none(p41({ location: "us-central1" } as never))),
+        ListGlossaries: probeOutcome(Retry.none(p42({ location: "us-central1" } as never))),
+        ListGlossaryCategories: probeOutcome(Retry.none(p43({} as never))),
+        ListGlossaryTerms: probeOutcome(Retry.none(p44({} as never))),
+        ListLakeActions: probeOutcome(Retry.none(p45({} as never))),
+        ListLakes: probeOutcome(Retry.none(p46({ location: "us-central1" } as never))),
+        ListLakeTasks: probeOutcome(Retry.none(p47({} as never))),
+        ListLakeZones: probeOutcome(Retry.none(p48({} as never))),
+        ListMetadataFeeds: probeOutcome(Retry.none(p49({ location: "us-central1" } as never))),
+        ListMetadataJobs: probeOutcome(Retry.none(p50({ location: "us-central1" } as never))),
+        ListTaskJobs: probeOutcome(Retry.none(p51({} as never))),
+        ListZoneActions: probeOutcome(Retry.none(p52({} as never))),
+        ListZoneAssets: probeOutcome(Retry.none(p53({} as never))),
+        ListZoneEntities: probeOutcome(Retry.none(p54({} as never))),
+        PatchChangeRequest: probeOutcome(
           Retry.none(p55({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        RejectChangeRequest: outcome(
+        RejectChangeRequest: probeOutcome(
           Retry.none(p56({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        RequestDataProductAccess: outcome(Retry.none(p57({} as never))),
-        RunDataScan: outcome(Retry.none(p58({} as never))),
-        RunTask: outcome(Retry.none(p59({} as never))),
+        RequestDataProductAccess: probeOutcome(Retry.none(p57({} as never))),
+        RunDataScan: probeOutcome(Retry.none(p58({} as never))),
+        RunTask: probeOutcome(Retry.none(p59({} as never))),
       }),
     };
   }).pipe(

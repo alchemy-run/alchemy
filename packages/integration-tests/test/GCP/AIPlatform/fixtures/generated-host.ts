@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   Agent,
   Code,
@@ -331,38 +331,38 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
     const p273 = yield* GCP.AIPlatform.WriteRun(ProbeRun);
     return {
       fetch: serveProbes({
-        AddContextArtifactsAndExecutions: outcome(
+        AddContextArtifactsAndExecutions: probeOutcome(
           Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        AddContextChildren: outcome(
+        AddContextChildren: probeOutcome(
           Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        AddExecutionEvents: outcome(
+        AddExecutionEvents: probeOutcome(
           Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        AddTrialMeasurement: outcome(
+        AddTrialMeasurement: probeOutcome(
           Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        AppendSessionEvent: outcome(Retry.none(p4({} as never))),
-        AssignNotebookRuntime: outcome(Retry.none(p5({ location: "us-central1" } as never))),
-        AsyncReasoningEngineQuery: outcome(Retry.none(p6({} as never))),
-        "AuthorizeSandboxEnvironmentAccess@ReasoningEnginesSandboxEnvironment": outcome(
+        AppendSessionEvent: probeOutcome(Retry.none(p4({} as never))),
+        AssignNotebookRuntime: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        AsyncReasoningEngineQuery: probeOutcome(Retry.none(p6({} as never))),
+        "AuthorizeSandboxEnvironmentAccess@ReasoningEnginesSandboxEnvironment": probeOutcome(
           Retry.none(p7({} as never)),
         ),
-        "AuthorizeSandboxEnvironmentAccess@ReasoningEngine": outcome(
+        "AuthorizeSandboxEnvironmentAccess@ReasoningEngine": probeOutcome(
           Retry.none(p8({ sandboxEnvironment: "alchemy-missing" } as never)),
         ),
-        BatchExperimentCreate: outcome(Retry.none(p9({} as never))),
-        "BatchFeatureCreate@FeaturestoresEntityType": outcome(Retry.none(p10({} as never))),
-        "BatchFeatureCreate@FeatureGroup": outcome(Retry.none(p11({} as never))),
-        BatchFeaturestoreReadFeatureValues: outcome(Retry.none(p12({} as never))),
-        BatchMigratableResourceMigrate: outcome(
+        BatchExperimentCreate: probeOutcome(Retry.none(p9({} as never))),
+        "BatchFeatureCreate@FeaturestoresEntityType": probeOutcome(Retry.none(p10({} as never))),
+        "BatchFeatureCreate@FeatureGroup": probeOutcome(Retry.none(p11({} as never))),
+        BatchFeaturestoreReadFeatureValues: probeOutcome(Retry.none(p12({} as never))),
+        BatchMigratableResourceMigrate: probeOutcome(
           Retry.none(p13({ location: "us-central1" } as never)),
         ),
-        BatchPipelineJobCancel: outcome(Retry.none(p14({ location: "us-central1" } as never))),
-        BatchPipelineJobDelete: outcome(Retry.none(p15({ location: "us-central1" } as never))),
-        BatchRunCreate: outcome(Retry.none(p16({} as never))),
-        BatchSliceImport: outcome(
+        BatchPipelineJobCancel: probeOutcome(Retry.none(p14({ location: "us-central1" } as never))),
+        BatchPipelineJobDelete: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        BatchRunCreate: probeOutcome(Retry.none(p16({} as never))),
+        BatchSliceImport: probeOutcome(
           Retry.none(
             p17({
               model: "alchemy-missing",
@@ -372,20 +372,20 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        BatchTensorboardRead: outcome(Retry.none(p18({} as never))),
-        CancelBatchPredictionJob: outcome(Retry.none(p19({} as never))),
-        CancelCustomJob: outcome(Retry.none(p20({} as never))),
-        CancelEvaluationRun: outcome(Retry.none(p21({} as never))),
-        CancelHyperparameterTuningJob: outcome(Retry.none(p22({} as never))),
-        CancelNasJob: outcome(Retry.none(p23({} as never))),
-        CancelPipelineJob: outcome(Retry.none(p24({} as never))),
-        CancelReasoningEngineAsyncQuery: outcome(Retry.none(p25({} as never))),
-        CheckTrialEarlyStoppingState: outcome(Retry.none(p26({} as never))),
-        CompactSession: outcome(Retry.none(p27({} as never))),
-        CompleteTrial: outcome(Retry.none(p28({} as never))),
-        CompletionsEndpointChat: outcome(Retry.none(p29({} as never))),
-        ComputeEndpointTokens: outcome(Retry.none(p30({} as never))),
-        ComputeModelTokens: outcome(
+        BatchTensorboardRead: probeOutcome(Retry.none(p18({} as never))),
+        CancelBatchPredictionJob: probeOutcome(Retry.none(p19({} as never))),
+        CancelCustomJob: probeOutcome(Retry.none(p20({} as never))),
+        CancelEvaluationRun: probeOutcome(Retry.none(p21({} as never))),
+        CancelHyperparameterTuningJob: probeOutcome(Retry.none(p22({} as never))),
+        CancelNasJob: probeOutcome(Retry.none(p23({} as never))),
+        CancelPipelineJob: probeOutcome(Retry.none(p24({} as never))),
+        CancelReasoningEngineAsyncQuery: probeOutcome(Retry.none(p25({} as never))),
+        CheckTrialEarlyStoppingState: probeOutcome(Retry.none(p26({} as never))),
+        CompactSession: probeOutcome(Retry.none(p27({} as never))),
+        CompleteTrial: probeOutcome(Retry.none(p28({} as never))),
+        CompletionsEndpointChat: probeOutcome(Retry.none(p29({} as never))),
+        ComputeEndpointTokens: probeOutcome(Retry.none(p30({} as never))),
+        ComputeModelTokens: probeOutcome(
           Retry.none(
             p31({
               publisher: "alchemy-missing",
@@ -394,13 +394,13 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        CopyModel: outcome(
+        CopyModel: probeOutcome(
           Retry.none(
             p32({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        CountEndpointTokens: outcome(Retry.none(p33({} as never))),
-        CountModelTokens: outcome(
+        CountEndpointTokens: probeOutcome(Retry.none(p33({} as never))),
+        CountModelTokens: probeOutcome(
           Retry.none(
             p34({
               publisher: "alchemy-missing",
@@ -409,18 +409,18 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        CreateEvaluationMetric: outcome(
+        CreateEvaluationMetric: probeOutcome(
           Retry.none(
             p35({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        CreateMetadataStoreMetadataSchema: outcome(
+        CreateMetadataStoreMetadataSchema: probeOutcome(
           Retry.none(p36({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        DeleteDataset: outcome(
+        DeleteDataset: probeOutcome(
           Retry.none(p37({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        DeleteDatasetSavedQuery: outcome(
+        DeleteDatasetSavedQuery: probeOutcome(
           Retry.none(
             p38({
               dataset: "alchemy-missing",
@@ -429,7 +429,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        DeleteDatasetVersion: outcome(
+        DeleteDatasetVersion: probeOutcome(
           Retry.none(
             p39({
               dataset: "alchemy-missing",
@@ -438,14 +438,16 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        DeleteEndpointResponse: outcome(Retry.none(p40({ response: "alchemy-missing" } as never))),
-        DeleteEntityTypeFeatureValues: outcome(Retry.none(p41({} as never))),
-        DeleteEvaluationMetric: outcome(
+        DeleteEndpointResponse: probeOutcome(
+          Retry.none(p40({ response: "alchemy-missing" } as never)),
+        ),
+        DeleteEntityTypeFeatureValues: probeOutcome(Retry.none(p41({} as never))),
+        DeleteEvaluationMetric: probeOutcome(
           Retry.none(
             p42({ evaluationMetric: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        DeleteMemoryBankMemory: outcome(
+        DeleteMemoryBankMemory: probeOutcome(
           Retry.none(
             p43({
               memoryBank: "alchemy-missing",
@@ -454,30 +456,30 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        DeleteModel: outcome(
+        DeleteModel: probeOutcome(
           Retry.none(p44({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        DeleteModelVersion: outcome(
+        DeleteModelVersion: probeOutcome(
           Retry.none(p45({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        DeleteNotebookRuntime: outcome(
+        DeleteNotebookRuntime: probeOutcome(
           Retry.none(p46({ notebookRuntime: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        DeleteReasoningEngineSandboxEnvironment: outcome(
+        DeleteReasoningEngineSandboxEnvironment: probeOutcome(
           Retry.none(p47({ sandboxEnvironment: "alchemy-missing" } as never)),
         ),
-        DeleteReasoningEngineSandboxEnvironmentSnapshot: outcome(
+        DeleteReasoningEngineSandboxEnvironmentSnapshot: probeOutcome(
           Retry.none(p48({ sandboxEnvironmentSnapshot: "alchemy-missing" } as never)),
         ),
-        DeployEndpointModel: outcome(Retry.none(p49({} as never))),
-        DeployIndexEndpointIndex: outcome(Retry.none(p50({} as never))),
-        DeprovisionSemanticGovernancePolicyEngine: outcome(
+        DeployEndpointModel: probeOutcome(Retry.none(p49({} as never))),
+        DeployIndexEndpointIndex: probeOutcome(Retry.none(p50({} as never))),
+        DeprovisionSemanticGovernancePolicyEngine: probeOutcome(
           Retry.none(p51({ location: "us-central1" } as never)),
         ),
-        DirectEndpointPredict: outcome(Retry.none(p52({} as never))),
-        DirectEndpointRawPredict: outcome(Retry.none(p53({} as never))),
-        DirectFeatureViewWrite: outcome(Retry.none(p54({} as never))),
-        EmbedModelContent: outcome(
+        DirectEndpointPredict: probeOutcome(Retry.none(p52({} as never))),
+        DirectEndpointRawPredict: probeOutcome(Retry.none(p53({} as never))),
+        DirectFeatureViewWrite: probeOutcome(Retry.none(p54({} as never))),
+        EmbedModelContent: probeOutcome(
           Retry.none(
             p55({
               publisher: "alchemy-missing",
@@ -486,23 +488,23 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        ExecuteReasoningEngineCode: outcome(Retry.none(p56({} as never))),
-        ExecuteReasoningEngineSandboxEnvironment: outcome(
+        ExecuteReasoningEngineCode: probeOutcome(Retry.none(p56({} as never))),
+        ExecuteReasoningEngineSandboxEnvironment: probeOutcome(
           Retry.none(p57({ sandboxEnvironment: "alchemy-missing" } as never)),
         ),
-        ExecuteSandboxEnvironment: outcome(Retry.none(p58({} as never))),
-        ExplainEndpoint: outcome(Retry.none(p59({} as never))),
-        ExportDataset: outcome(
+        ExecuteSandboxEnvironment: probeOutcome(Retry.none(p58({} as never))),
+        ExplainEndpoint: probeOutcome(Retry.none(p59({} as never))),
+        ExportDataset: probeOutcome(
           Retry.none(p60({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ExportEntityTypeFeatureValues: outcome(Retry.none(p61({} as never))),
-        ExportModel: outcome(
+        ExportEntityTypeFeatureValues: probeOutcome(Retry.none(p61({} as never))),
+        ExportModel: probeOutcome(
           Retry.none(p62({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ExportTimeSeryTensorboardTimeSeries: outcome(Retry.none(p63({} as never))),
-        FetchEndpointPredictOperation: outcome(Retry.none(p64({} as never))),
-        FetchFeatureViewFeatureValues: outcome(Retry.none(p65({} as never))),
-        FetchModelPredictOperation: outcome(
+        ExportTimeSeryTensorboardTimeSeries: probeOutcome(Retry.none(p63({} as never))),
+        FetchEndpointPredictOperation: probeOutcome(Retry.none(p64({} as never))),
+        FetchFeatureViewFeatureValues: probeOutcome(Retry.none(p65({} as never))),
+        FetchModelPredictOperation: probeOutcome(
           Retry.none(
             p66({
               publisher: "alchemy-missing",
@@ -511,22 +513,22 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        FindIndexEndpointNeighbors: outcome(Retry.none(p67({} as never))),
-        GenerateEndpointContent: outcome(Retry.none(p68({} as never))),
-        GenerateFeatureViewFetchAccessToken: outcome(Retry.none(p69({} as never))),
-        GenerateMemoryBankMemory: outcome(
+        FindIndexEndpointNeighbors: probeOutcome(Retry.none(p67({} as never))),
+        GenerateEndpointContent: probeOutcome(Retry.none(p68({} as never))),
+        GenerateFeatureViewFetchAccessToken: probeOutcome(Retry.none(p69({} as never))),
+        GenerateMemoryBankMemory: probeOutcome(
           Retry.none(p70({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GenerateReasoningEngineMemory: outcome(Retry.none(p71({} as never))),
-        GetArtifact: outcome(Retry.none(p72({} as never))),
-        GetBatchPredictionJob: outcome(Retry.none(p73({} as never))),
-        GetCachedContent: outcome(Retry.none(p74({} as never))),
-        GetContext: outcome(Retry.none(p75({} as never))),
-        GetCustomJob: outcome(Retry.none(p76({} as never))),
-        GetDataset: outcome(
+        GenerateReasoningEngineMemory: probeOutcome(Retry.none(p71({} as never))),
+        GetArtifact: probeOutcome(Retry.none(p72({} as never))),
+        GetBatchPredictionJob: probeOutcome(Retry.none(p73({} as never))),
+        GetCachedContent: probeOutcome(Retry.none(p74({} as never))),
+        GetContext: probeOutcome(Retry.none(p75({} as never))),
+        GetCustomJob: probeOutcome(Retry.none(p76({} as never))),
+        GetDataset: probeOutcome(
           Retry.none(p77({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetDatasetAnnotationSpec: outcome(
+        GetDatasetAnnotationSpec: probeOutcome(
           Retry.none(
             p78({
               dataset: "alchemy-missing",
@@ -535,7 +537,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        GetDatasetVersion: outcome(
+        GetDatasetVersion: probeOutcome(
           Retry.none(
             p79({
               dataset: "alchemy-missing",
@@ -544,34 +546,36 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        GetDeploymentResourcePool: outcome(Retry.none(p80({} as never))),
-        GetEndpoint: outcome(Retry.none(p81({} as never))),
-        GetEndpointResponse: outcome(Retry.none(p82({ response: "alchemy-missing" } as never))),
-        GetEntityType: outcome(Retry.none(p83({} as never))),
-        GetEvaluationItem: outcome(Retry.none(p84({} as never))),
-        GetEvaluationMetric: outcome(
+        GetDeploymentResourcePool: probeOutcome(Retry.none(p80({} as never))),
+        GetEndpoint: probeOutcome(Retry.none(p81({} as never))),
+        GetEndpointResponse: probeOutcome(
+          Retry.none(p82({ response: "alchemy-missing" } as never)),
+        ),
+        GetEntityType: probeOutcome(Retry.none(p83({} as never))),
+        GetEvaluationItem: probeOutcome(Retry.none(p84({} as never))),
+        GetEvaluationMetric: probeOutcome(
           Retry.none(
             p85({ evaluationMetric: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        GetEvaluationRun: outcome(Retry.none(p86({} as never))),
-        GetEvaluationSet: outcome(Retry.none(p87({} as never))),
-        GetExecution: outcome(Retry.none(p88({} as never))),
-        GetExperiment: outcome(Retry.none(p89({} as never))),
-        "GetFeature@FeaturestoresEntityTypesFeature": outcome(Retry.none(p90({} as never))),
-        "GetFeature@FeatureGroupsFeature": outcome(Retry.none(p91({} as never))),
-        GetFeatureGroup: outcome(Retry.none(p92({} as never))),
-        GetFeatureOnlineStore: outcome(Retry.none(p93({} as never))),
-        GetFeaturestore: outcome(Retry.none(p94({} as never))),
-        GetFeatureView: outcome(Retry.none(p95({} as never))),
-        GetFeatureViewSync: outcome(
+        GetEvaluationRun: probeOutcome(Retry.none(p86({} as never))),
+        GetEvaluationSet: probeOutcome(Retry.none(p87({} as never))),
+        GetExecution: probeOutcome(Retry.none(p88({} as never))),
+        GetExperiment: probeOutcome(Retry.none(p89({} as never))),
+        "GetFeature@FeaturestoresEntityTypesFeature": probeOutcome(Retry.none(p90({} as never))),
+        "GetFeature@FeatureGroupsFeature": probeOutcome(Retry.none(p91({} as never))),
+        GetFeatureGroup: probeOutcome(Retry.none(p92({} as never))),
+        GetFeatureOnlineStore: probeOutcome(Retry.none(p93({} as never))),
+        GetFeaturestore: probeOutcome(Retry.none(p94({} as never))),
+        GetFeatureView: probeOutcome(Retry.none(p95({} as never))),
+        GetFeatureViewSync: probeOutcome(
           Retry.none(p96({ featureViewSync: "alchemy-missing" } as never)),
         ),
-        GetHyperparameterTuningJob: outcome(Retry.none(p97({} as never))),
-        GetIndex: outcome(Retry.none(p98({} as never))),
-        GetIndexEndpoint: outcome(Retry.none(p99({} as never))),
-        GetMemory: outcome(Retry.none(p100({} as never))),
-        GetMemoryBankMemory: outcome(
+        GetHyperparameterTuningJob: probeOutcome(Retry.none(p97({} as never))),
+        GetIndex: probeOutcome(Retry.none(p98({} as never))),
+        GetIndexEndpoint: probeOutcome(Retry.none(p99({} as never))),
+        GetMemory: probeOutcome(Retry.none(p100({} as never))),
+        GetMemoryBankMemory: probeOutcome(
           Retry.none(
             p101({
               memoryBank: "alchemy-missing",
@@ -580,7 +584,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        GetMemoryBankMemoryRevision: outcome(
+        GetMemoryBankMemoryRevision: probeOutcome(
           Retry.none(
             p102({
               memoryBank: "alchemy-missing",
@@ -590,15 +594,15 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        GetMemoryRevision: outcome(Retry.none(p103({ revision: "alchemy-missing" } as never))),
-        GetMetadataStore: outcome(Retry.none(p104({} as never))),
-        GetMetadataStoreMetadataSchema: outcome(
+        GetMemoryRevision: probeOutcome(Retry.none(p103({ revision: "alchemy-missing" } as never))),
+        GetMetadataStore: probeOutcome(Retry.none(p104({} as never))),
+        GetMetadataStoreMetadataSchema: probeOutcome(
           Retry.none(p105({ metadataSchema: "alchemy-missing" } as never)),
         ),
-        GetModel: outcome(
+        GetModel: probeOutcome(
           Retry.none(p106({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetModelEvaluation: outcome(
+        GetModelEvaluation: probeOutcome(
           Retry.none(
             p107({
               model: "alchemy-missing",
@@ -607,7 +611,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        GetModelEvaluationSlice: outcome(
+        GetModelEvaluationSlice: probeOutcome(
           Retry.none(
             p108({
               model: "alchemy-missing",
@@ -617,32 +621,32 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        GetNasJob: outcome(Retry.none(p109({} as never))),
-        GetNasJobNasTrialDetail: outcome(
+        GetNasJob: probeOutcome(Retry.none(p109({} as never))),
+        GetNasJobNasTrialDetail: probeOutcome(
           Retry.none(p110({ nasTrialDetail: "alchemy-missing" } as never)),
         ),
-        GetNotebookRuntime: outcome(
+        GetNotebookRuntime: probeOutcome(
           Retry.none(
             p111({ notebookRuntime: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        GetNotebookRuntimeTemplate: outcome(Retry.none(p112({} as never))),
-        GetPipelineJob: outcome(Retry.none(p113({} as never))),
-        GetProjectCacheConfig: outcome(Retry.none(p114({} as never))),
-        GetReasoningEngineSandboxEnvironment: outcome(
+        GetNotebookRuntimeTemplate: probeOutcome(Retry.none(p112({} as never))),
+        GetPipelineJob: probeOutcome(Retry.none(p113({} as never))),
+        GetProjectCacheConfig: probeOutcome(Retry.none(p114({} as never))),
+        GetReasoningEngineSandboxEnvironment: probeOutcome(
           Retry.none(p115({ sandboxEnvironment: "alchemy-missing" } as never)),
         ),
-        GetReasoningEngineSandboxEnvironmentSnapshot: outcome(
+        GetReasoningEngineSandboxEnvironmentSnapshot: probeOutcome(
           Retry.none(p116({ sandboxEnvironmentSnapshot: "alchemy-missing" } as never)),
         ),
-        GetRun: outcome(Retry.none(p117({} as never))),
-        GetSchedule: outcome(Retry.none(p118({} as never))),
-        GetSession: outcome(Retry.none(p119({} as never))),
-        GetStudy: outcome(Retry.none(p120({} as never))),
-        GetTensorboard: outcome(Retry.none(p121({} as never))),
-        GetTimeSery: outcome(Retry.none(p122({} as never))),
-        GetTrial: outcome(Retry.none(p123({} as never))),
-        ImportDataset: outcome(
+        GetRun: probeOutcome(Retry.none(p117({} as never))),
+        GetSchedule: probeOutcome(Retry.none(p118({} as never))),
+        GetSession: probeOutcome(Retry.none(p119({} as never))),
+        GetStudy: probeOutcome(Retry.none(p120({} as never))),
+        GetTensorboard: probeOutcome(Retry.none(p121({} as never))),
+        GetTimeSery: probeOutcome(Retry.none(p122({} as never))),
+        GetTrial: probeOutcome(Retry.none(p123({} as never))),
+        ImportDataset: probeOutcome(
           Retry.none(
             p124({
               dataset: "alchemy-missing",
@@ -651,15 +655,15 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        ImportEntityTypeFeatureValues: outcome(
+        ImportEntityTypeFeatureValues: probeOutcome(
           Retry.none(p125({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ImportEvaluationSet: outcome(
+        ImportEvaluationSet: probeOutcome(
           Retry.none(
             p126({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        ImportModelEvaluation: outcome(
+        ImportModelEvaluation: probeOutcome(
           Retry.none(
             p127({
               model: "alchemy-missing",
@@ -668,17 +672,19 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        IngestMemoryBankEvents: outcome(
+        IngestMemoryBankEvents: probeOutcome(
           Retry.none(p128({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        IngestMemoryEvents: outcome(Retry.none(p129({} as never))),
-        InvokeEndpointDeployedModelInvoke: outcome(
+        IngestMemoryEvents: probeOutcome(Retry.none(p129({} as never))),
+        InvokeEndpointDeployedModelInvoke: probeOutcome(
           Retry.none(
             p130({ deployedModelId: "alchemy-missing", invokeId: "alchemy-missing" } as never),
           ),
         ),
-        InvokeEndpointInvoke: outcome(Retry.none(p131({ invokeId: "alchemy-missing" } as never))),
-        InvokePublisherModelInvoke: outcome(
+        InvokeEndpointInvoke: probeOutcome(
+          Retry.none(p131({ invokeId: "alchemy-missing" } as never)),
+        ),
+        InvokePublisherModelInvoke: probeOutcome(
           Retry.none(
             p132({
               publisher: "alchemy-missing",
@@ -688,12 +694,14 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        ListAgents: outcome(Retry.none(p133({ location: "us-central1" } as never))),
-        ListBatchPredictionJobs: outcome(Retry.none(p134({ location: "us-central1" } as never))),
-        ListCachedContents: outcome(Retry.none(p135({ location: "us-central1" } as never))),
-        ListCustomJobs: outcome(Retry.none(p136({ location: "us-central1" } as never))),
-        ListDataLabelingJobs: outcome(Retry.none(p137({ location: "us-central1" } as never))),
-        ListDatasetDataItemAnnotations: outcome(
+        ListAgents: probeOutcome(Retry.none(p133({ location: "us-central1" } as never))),
+        ListBatchPredictionJobs: probeOutcome(
+          Retry.none(p134({ location: "us-central1" } as never)),
+        ),
+        ListCachedContents: probeOutcome(Retry.none(p135({ location: "us-central1" } as never))),
+        ListCustomJobs: probeOutcome(Retry.none(p136({ location: "us-central1" } as never))),
+        ListDataLabelingJobs: probeOutcome(Retry.none(p137({ location: "us-central1" } as never))),
+        ListDatasetDataItemAnnotations: probeOutcome(
           Retry.none(
             p138({
               dataset: "alchemy-missing",
@@ -702,42 +710,44 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        ListDatasetDataItems: outcome(
+        ListDatasetDataItems: probeOutcome(
           Retry.none(p139({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListDatasets: outcome(Retry.none(p140({ location: "us-central1" } as never))),
-        ListDatasetSavedQueries: outcome(
+        ListDatasets: probeOutcome(Retry.none(p140({ location: "us-central1" } as never))),
+        ListDatasetSavedQueries: probeOutcome(
           Retry.none(p141({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListDatasetVersions: outcome(
+        ListDatasetVersions: probeOutcome(
           Retry.none(p142({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListDeploymentResourcePools: outcome(
+        ListDeploymentResourcePools: probeOutcome(
           Retry.none(p143({ location: "us-central1" } as never)),
         ),
-        ListEndpoints: outcome(Retry.none(p144({ location: "us-central1" } as never))),
-        ListEntityTypeFeatures: outcome(Retry.none(p145({} as never))),
-        ListEvaluationItems: outcome(Retry.none(p146({ location: "us-central1" } as never))),
-        ListEvaluationMetrics: outcome(Retry.none(p147({ location: "us-central1" } as never))),
-        ListEvaluationRuns: outcome(Retry.none(p148({ location: "us-central1" } as never))),
-        ListEvaluationSets: outcome(Retry.none(p149({ location: "us-central1" } as never))),
-        ListExperimentRuns: outcome(Retry.none(p150({} as never))),
-        ListFeatureGroupFeatures: outcome(Retry.none(p151({} as never))),
-        ListFeatureGroups: outcome(Retry.none(p152({ location: "us-central1" } as never))),
-        ListFeatureOnlineStoreFeatureViews: outcome(Retry.none(p153({} as never))),
-        ListFeatureOnlineStores: outcome(Retry.none(p154({ location: "us-central1" } as never))),
-        ListFeaturestoreEntityTypes: outcome(Retry.none(p155({} as never))),
-        ListFeaturestores: outcome(Retry.none(p156({ location: "us-central1" } as never))),
-        ListFeatureViewSyncs: outcome(Retry.none(p157({} as never))),
-        ListHyperparameterTuningJobs: outcome(
+        ListEndpoints: probeOutcome(Retry.none(p144({ location: "us-central1" } as never))),
+        ListEntityTypeFeatures: probeOutcome(Retry.none(p145({} as never))),
+        ListEvaluationItems: probeOutcome(Retry.none(p146({ location: "us-central1" } as never))),
+        ListEvaluationMetrics: probeOutcome(Retry.none(p147({ location: "us-central1" } as never))),
+        ListEvaluationRuns: probeOutcome(Retry.none(p148({ location: "us-central1" } as never))),
+        ListEvaluationSets: probeOutcome(Retry.none(p149({ location: "us-central1" } as never))),
+        ListExperimentRuns: probeOutcome(Retry.none(p150({} as never))),
+        ListFeatureGroupFeatures: probeOutcome(Retry.none(p151({} as never))),
+        ListFeatureGroups: probeOutcome(Retry.none(p152({ location: "us-central1" } as never))),
+        ListFeatureOnlineStoreFeatureViews: probeOutcome(Retry.none(p153({} as never))),
+        ListFeatureOnlineStores: probeOutcome(
+          Retry.none(p154({ location: "us-central1" } as never)),
+        ),
+        ListFeaturestoreEntityTypes: probeOutcome(Retry.none(p155({} as never))),
+        ListFeaturestores: probeOutcome(Retry.none(p156({ location: "us-central1" } as never))),
+        ListFeatureViewSyncs: probeOutcome(Retry.none(p157({} as never))),
+        ListHyperparameterTuningJobs: probeOutcome(
           Retry.none(p158({ location: "us-central1" } as never)),
         ),
-        ListIndexEndpoints: outcome(Retry.none(p159({ location: "us-central1" } as never))),
-        ListIndexes: outcome(Retry.none(p160({ location: "us-central1" } as never))),
-        ListMemoryBankMemories: outcome(
+        ListIndexEndpoints: probeOutcome(Retry.none(p159({ location: "us-central1" } as never))),
+        ListIndexes: probeOutcome(Retry.none(p160({ location: "us-central1" } as never))),
+        ListMemoryBankMemories: probeOutcome(
           Retry.none(p161({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListMemoryBankMemoryRevisions: outcome(
+        ListMemoryBankMemoryRevisions: probeOutcome(
           Retry.none(
             p162({
               memoryBank: "alchemy-missing",
@@ -746,22 +756,22 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        ListMemoryRevisions: outcome(Retry.none(p163({} as never))),
-        ListMetadataStoreArtifacts: outcome(Retry.none(p164({} as never))),
-        ListMetadataStoreContexts: outcome(Retry.none(p165({} as never))),
-        ListMetadataStoreExecutions: outcome(Retry.none(p166({} as never))),
-        ListMetadataStoreMetadataSchemas: outcome(Retry.none(p167({} as never))),
-        ListMetadataStores: outcome(Retry.none(p168({ location: "us-central1" } as never))),
-        ListModelCheckpoints: outcome(
+        ListMemoryRevisions: probeOutcome(Retry.none(p163({} as never))),
+        ListMetadataStoreArtifacts: probeOutcome(Retry.none(p164({} as never))),
+        ListMetadataStoreContexts: probeOutcome(Retry.none(p165({} as never))),
+        ListMetadataStoreExecutions: probeOutcome(Retry.none(p166({} as never))),
+        ListMetadataStoreMetadataSchemas: probeOutcome(Retry.none(p167({} as never))),
+        ListMetadataStores: probeOutcome(Retry.none(p168({ location: "us-central1" } as never))),
+        ListModelCheckpoints: probeOutcome(
           Retry.none(p169({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListModelDeploymentMonitoringJobs: outcome(
+        ListModelDeploymentMonitoringJobs: probeOutcome(
           Retry.none(p170({ location: "us-central1" } as never)),
         ),
-        ListModelEvaluations: outcome(
+        ListModelEvaluations: probeOutcome(
           Retry.none(p171({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListModelEvaluationSlices: outcome(
+        ListModelEvaluationSlices: probeOutcome(
           Retry.none(
             p172({
               model: "alchemy-missing",
@@ -770,51 +780,55 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        ListModels: outcome(Retry.none(p173({ location: "us-central1" } as never))),
-        ListModelVersions: outcome(
+        ListModels: probeOutcome(Retry.none(p173({ location: "us-central1" } as never))),
+        ListModelVersions: probeOutcome(
           Retry.none(p174({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListNasJobNasTrialDetails: outcome(Retry.none(p175({} as never))),
-        ListNasJobs: outcome(Retry.none(p176({ location: "us-central1" } as never))),
-        ListNotebookExecutionJobs: outcome(Retry.none(p177({ location: "us-central1" } as never))),
-        ListNotebookRuntimes: outcome(Retry.none(p178({ location: "us-central1" } as never))),
-        ListNotebookRuntimeTemplates: outcome(
+        ListNasJobNasTrialDetails: probeOutcome(Retry.none(p175({} as never))),
+        ListNasJobs: probeOutcome(Retry.none(p176({ location: "us-central1" } as never))),
+        ListNotebookExecutionJobs: probeOutcome(
+          Retry.none(p177({ location: "us-central1" } as never)),
+        ),
+        ListNotebookRuntimes: probeOutcome(Retry.none(p178({ location: "us-central1" } as never))),
+        ListNotebookRuntimeTemplates: probeOutcome(
           Retry.none(p179({ location: "us-central1" } as never)),
         ),
-        ListOnlineEvaluators: outcome(Retry.none(p180({ location: "us-central1" } as never))),
-        ListOptimalTrials: outcome(Retry.none(p181({} as never))),
-        ListPersistentResources: outcome(Retry.none(p182({ location: "us-central1" } as never))),
-        ListPipelineJobs: outcome(Retry.none(p183({ location: "us-central1" } as never))),
-        ListRagCorpora: outcome(Retry.none(p184({ location: "us-central1" } as never))),
-        ListReasoningEngineMemories: outcome(Retry.none(p185({} as never))),
-        ListReasoningEngines: outcome(Retry.none(p186({ location: "us-central1" } as never))),
-        ListReasoningEngineSandboxEnvironments: outcome(Retry.none(p187({} as never))),
-        ListReasoningEngineSandboxEnvironmentSnapshots: outcome(Retry.none(p188({} as never))),
-        ListReasoningEngineSandboxEnvironmentTemplates: outcome(Retry.none(p189({} as never))),
-        ListReasoningEngineSessions: outcome(Retry.none(p190({} as never))),
-        ListRunTimeSeries: outcome(Retry.none(p191({} as never))),
-        ListSchedules: outcome(Retry.none(p192({ location: "us-central1" } as never))),
-        ListSemanticGovernancePolicies: outcome(
+        ListOnlineEvaluators: probeOutcome(Retry.none(p180({ location: "us-central1" } as never))),
+        ListOptimalTrials: probeOutcome(Retry.none(p181({} as never))),
+        ListPersistentResources: probeOutcome(
+          Retry.none(p182({ location: "us-central1" } as never)),
+        ),
+        ListPipelineJobs: probeOutcome(Retry.none(p183({ location: "us-central1" } as never))),
+        ListRagCorpora: probeOutcome(Retry.none(p184({ location: "us-central1" } as never))),
+        ListReasoningEngineMemories: probeOutcome(Retry.none(p185({} as never))),
+        ListReasoningEngines: probeOutcome(Retry.none(p186({ location: "us-central1" } as never))),
+        ListReasoningEngineSandboxEnvironments: probeOutcome(Retry.none(p187({} as never))),
+        ListReasoningEngineSandboxEnvironmentSnapshots: probeOutcome(Retry.none(p188({} as never))),
+        ListReasoningEngineSandboxEnvironmentTemplates: probeOutcome(Retry.none(p189({} as never))),
+        ListReasoningEngineSessions: probeOutcome(Retry.none(p190({} as never))),
+        ListRunTimeSeries: probeOutcome(Retry.none(p191({} as never))),
+        ListSchedules: probeOutcome(Retry.none(p192({ location: "us-central1" } as never))),
+        ListSemanticGovernancePolicies: probeOutcome(
           Retry.none(p193({ location: "us-central1" } as never)),
         ),
-        ListSessionEvents: outcome(Retry.none(p194({} as never))),
-        ListSpecialistPools: outcome(Retry.none(p195({ location: "us-central1" } as never))),
-        ListStudies: outcome(Retry.none(p196({ location: "us-central1" } as never))),
-        ListStudyTrials: outcome(Retry.none(p197({} as never))),
-        ListTensorboardExperiments: outcome(Retry.none(p198({} as never))),
-        ListTensorboards: outcome(Retry.none(p199({ location: "us-central1" } as never))),
-        ListTrainingPipelines: outcome(Retry.none(p200({ location: "us-central1" } as never))),
-        ListTuningJobs: outcome(Retry.none(p201({ location: "us-central1" } as never))),
-        LookupStudy: outcome(Retry.none(p202({ location: "us-central1" } as never))),
-        MergeModelVersionAliases: outcome(
+        ListSessionEvents: probeOutcome(Retry.none(p194({} as never))),
+        ListSpecialistPools: probeOutcome(Retry.none(p195({ location: "us-central1" } as never))),
+        ListStudies: probeOutcome(Retry.none(p196({ location: "us-central1" } as never))),
+        ListStudyTrials: probeOutcome(Retry.none(p197({} as never))),
+        ListTensorboardExperiments: probeOutcome(Retry.none(p198({} as never))),
+        ListTensorboards: probeOutcome(Retry.none(p199({ location: "us-central1" } as never))),
+        ListTrainingPipelines: probeOutcome(Retry.none(p200({ location: "us-central1" } as never))),
+        ListTuningJobs: probeOutcome(Retry.none(p201({ location: "us-central1" } as never))),
+        LookupStudy: probeOutcome(Retry.none(p202({ location: "us-central1" } as never))),
+        MergeModelVersionAliases: probeOutcome(
           Retry.none(p203({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        MutateEndpointDeployedModel: outcome(Retry.none(p204({} as never))),
-        MutateIndexEndpointDeployedIndex: outcome(Retry.none(p205({} as never))),
-        PatchDataset: outcome(
+        MutateEndpointDeployedModel: probeOutcome(Retry.none(p204({} as never))),
+        MutateIndexEndpointDeployedIndex: probeOutcome(Retry.none(p205({} as never))),
+        PatchDataset: probeOutcome(
           Retry.none(p206({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        PatchDatasetVersion: outcome(
+        PatchDatasetVersion: probeOutcome(
           Retry.none(
             p207({
               dataset: "alchemy-missing",
@@ -823,7 +837,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        PatchMemoryBankMemory: outcome(
+        PatchMemoryBankMemory: probeOutcome(
           Retry.none(
             p208({
               memoryBank: "alchemy-missing",
@@ -832,16 +846,16 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        PatchModel: outcome(
+        PatchModel: probeOutcome(
           Retry.none(p209({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        PauseReasoningEngineSandboxEnvironment: outcome(
+        PauseReasoningEngineSandboxEnvironment: probeOutcome(
           Retry.none(p210({ sandboxEnvironment: "alchemy-missing" } as never)),
         ),
-        PauseSchedule: outcome(Retry.none(p211({} as never))),
-        PredictEndpoint: outcome(Retry.none(p212({} as never))),
-        PredictEndpointLongRunning: outcome(Retry.none(p213({} as never))),
-        PredictModelLongRunning: outcome(
+        PauseSchedule: probeOutcome(Retry.none(p211({} as never))),
+        PredictEndpoint: probeOutcome(Retry.none(p212({} as never))),
+        PredictEndpointLongRunning: probeOutcome(Retry.none(p213({} as never))),
+        PredictModelLongRunning: probeOutcome(
           Retry.none(
             p214({
               publisher: "alchemy-missing",
@@ -850,7 +864,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        PredictPublisherModel: outcome(
+        PredictPublisherModel: probeOutcome(
           Retry.none(
             p215({
               publisher: "alchemy-missing",
@@ -859,22 +873,22 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        PurgeMemoryBankMemory: outcome(
+        PurgeMemoryBankMemory: probeOutcome(
           Retry.none(p216({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        PurgeMetadataStoreArtifact: outcome(Retry.none(p217({} as never))),
-        PurgeMetadataStoreContext: outcome(Retry.none(p218({} as never))),
-        PurgeMetadataStoreExecution: outcome(Retry.none(p219({} as never))),
-        PurgeReasoningEngineMemory: outcome(Retry.none(p220({} as never))),
-        QueryArtifactLineageSubgraph: outcome(Retry.none(p221({} as never))),
-        QueryContextLineageSubgraph: outcome(Retry.none(p222({} as never))),
-        QueryDeploymentResourcePoolDeployedModels: outcome(Retry.none(p223({} as never))),
-        QueryExecutionInputsAndOutputs: outcome(Retry.none(p224({} as never))),
-        QueryReasoningEngineRuntimeRevision: outcome(
+        PurgeMetadataStoreArtifact: probeOutcome(Retry.none(p217({} as never))),
+        PurgeMetadataStoreContext: probeOutcome(Retry.none(p218({} as never))),
+        PurgeMetadataStoreExecution: probeOutcome(Retry.none(p219({} as never))),
+        PurgeReasoningEngineMemory: probeOutcome(Retry.none(p220({} as never))),
+        QueryArtifactLineageSubgraph: probeOutcome(Retry.none(p221({} as never))),
+        QueryContextLineageSubgraph: probeOutcome(Retry.none(p222({} as never))),
+        QueryDeploymentResourcePoolDeployedModels: probeOutcome(Retry.none(p223({} as never))),
+        QueryExecutionInputsAndOutputs: probeOutcome(Retry.none(p224({} as never))),
+        QueryReasoningEngineRuntimeRevision: probeOutcome(
           Retry.none(p225({ runtimeRevision: "alchemy-missing" } as never)),
         ),
-        RawEndpointPredict: outcome(Retry.none(p226({} as never))),
-        RawModelPredict: outcome(
+        RawEndpointPredict: probeOutcome(Retry.none(p226({} as never))),
+        RawModelPredict: probeOutcome(
           Retry.none(
             p227({
               publisher: "alchemy-missing",
@@ -883,16 +897,18 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        ReadEntityTypeFeatureValues: outcome(Retry.none(p228({} as never))),
-        ReadIndexEndpointIndexDatapoints: outcome(Retry.none(p229({} as never))),
-        ReadTensorboardSize: outcome(Retry.none(p230({} as never))),
-        ReadTensorboardUsage: outcome(Retry.none(p231({} as never))),
-        ReadTimeSery: outcome(Retry.none(p232({} as never))),
-        ReadTimeSeryBlobData: outcome(Retry.none(p233({} as never))),
-        RebaseTuningJobTunedModel: outcome(Retry.none(p234({ location: "us-central1" } as never))),
-        RemoveContextChildren: outcome(Retry.none(p235({} as never))),
-        RemoveIndexDatapoints: outcome(Retry.none(p236({} as never))),
-        RestoreDatasetVersion: outcome(
+        ReadEntityTypeFeatureValues: probeOutcome(Retry.none(p228({} as never))),
+        ReadIndexEndpointIndexDatapoints: probeOutcome(Retry.none(p229({} as never))),
+        ReadTensorboardSize: probeOutcome(Retry.none(p230({} as never))),
+        ReadTensorboardUsage: probeOutcome(Retry.none(p231({} as never))),
+        ReadTimeSery: probeOutcome(Retry.none(p232({} as never))),
+        ReadTimeSeryBlobData: probeOutcome(Retry.none(p233({} as never))),
+        RebaseTuningJobTunedModel: probeOutcome(
+          Retry.none(p234({ location: "us-central1" } as never)),
+        ),
+        RemoveContextChildren: probeOutcome(Retry.none(p235({} as never))),
+        RemoveIndexDatapoints: probeOutcome(Retry.none(p236({} as never))),
+        RestoreDatasetVersion: probeOutcome(
           Retry.none(
             p237({
               dataset: "alchemy-missing",
@@ -901,16 +917,16 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        ResumeReasoningEngineSandboxEnvironment: outcome(
+        ResumeReasoningEngineSandboxEnvironment: probeOutcome(
           Retry.none(p238({ sandboxEnvironment: "alchemy-missing" } as never)),
         ),
-        ResumeSchedule: outcome(Retry.none(p239({} as never))),
-        RetrieveMemoryBankMemory: outcome(
+        ResumeSchedule: probeOutcome(Retry.none(p239({} as never))),
+        RetrieveMemoryBankMemory: probeOutcome(
           Retry.none(p240({ memoryBank: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        RetrieveReasoningEngineMemory: outcome(Retry.none(p241({} as never))),
-        RollbackMemory: outcome(Retry.none(p242({} as never))),
-        RollbackMemoryBankMemory: outcome(
+        RetrieveReasoningEngineMemory: probeOutcome(Retry.none(p241({} as never))),
+        RollbackMemory: probeOutcome(Retry.none(p242({} as never))),
+        RollbackMemoryBankMemory: probeOutcome(
           Retry.none(
             p243({
               memoryBank: "alchemy-missing",
@@ -919,14 +935,18 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        SearchDatasetDataItems: outcome(
+        SearchDatasetDataItems: probeOutcome(
           Retry.none(p244({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        SearchFeaturestoreFeatures: outcome(Retry.none(p245({ location: "us-central1" } as never))),
-        SearchFeatureViewNearestEntities: outcome(Retry.none(p246({} as never))),
-        SearchMigratableResource: outcome(Retry.none(p247({ location: "us-central1" } as never))),
-        ServerEndpointStreamingPredict: outcome(Retry.none(p248({} as never))),
-        ServerModelStreamingPredict: outcome(
+        SearchFeaturestoreFeatures: probeOutcome(
+          Retry.none(p245({ location: "us-central1" } as never)),
+        ),
+        SearchFeatureViewNearestEntities: probeOutcome(Retry.none(p246({} as never))),
+        SearchMigratableResource: probeOutcome(
+          Retry.none(p247({ location: "us-central1" } as never)),
+        ),
+        ServerEndpointStreamingPredict: probeOutcome(Retry.none(p248({} as never))),
+        ServerModelStreamingPredict: probeOutcome(
           Retry.none(
             p249({
               publisher: "alchemy-missing",
@@ -935,25 +955,25 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        SnapshotReasoningEngineSandboxEnvironment: outcome(
+        SnapshotReasoningEngineSandboxEnvironment: probeOutcome(
           Retry.none(p250({ sandboxEnvironment: "alchemy-missing" } as never)),
         ),
-        SnapshotSandboxEnvironment: outcome(Retry.none(p251({} as never))),
-        StartNotebookRuntime: outcome(
+        SnapshotSandboxEnvironment: probeOutcome(Retry.none(p251({} as never))),
+        StartNotebookRuntime: probeOutcome(
           Retry.none(
             p252({ notebookRuntime: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        StopNotebookRuntime: outcome(
+        StopNotebookRuntime: probeOutcome(
           Retry.none(
             p253({ notebookRuntime: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        StopTrial: outcome(Retry.none(p254({} as never))),
-        StreamEndpointGenerateContent: outcome(Retry.none(p255({} as never))),
-        StreamEndpointRawPredict: outcome(Retry.none(p256({} as never))),
-        StreamingEntityTypeReadFeatureValues: outcome(Retry.none(p257({} as never))),
-        StreamModelGenerateContent: outcome(
+        StopTrial: probeOutcome(Retry.none(p254({} as never))),
+        StreamEndpointGenerateContent: probeOutcome(Retry.none(p255({} as never))),
+        StreamEndpointRawPredict: probeOutcome(Retry.none(p256({} as never))),
+        StreamingEntityTypeReadFeatureValues: probeOutcome(Retry.none(p257({} as never))),
+        StreamModelGenerateContent: probeOutcome(
           Retry.none(
             p258({
               publisher: "alchemy-missing",
@@ -962,7 +982,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        StreamModelRawPredict: outcome(
+        StreamModelRawPredict: probeOutcome(
           Retry.none(
             p259({
               publisher: "alchemy-missing",
@@ -971,28 +991,28 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
             } as never),
           ),
         ),
-        StreamReasoningEngineQuery: outcome(Retry.none(p260({} as never))),
-        StreamRuntimeRevisionQuery: outcome(
+        StreamReasoningEngineQuery: probeOutcome(Retry.none(p260({} as never))),
+        StreamRuntimeRevisionQuery: probeOutcome(
           Retry.none(p261({ runtimeRevision: "alchemy-missing" } as never)),
         ),
-        SuggestStudyTrial: outcome(Retry.none(p262({} as never))),
-        SyncFeatureView: outcome(Retry.none(p263({} as never))),
-        UndeployEndpointModel: outcome(Retry.none(p264({} as never))),
-        UndeployIndexEndpointIndex: outcome(Retry.none(p265({} as never))),
-        UpdateModelExplanationDataset: outcome(
+        SuggestStudyTrial: probeOutcome(Retry.none(p262({} as never))),
+        SyncFeatureView: probeOutcome(Retry.none(p263({} as never))),
+        UndeployEndpointModel: probeOutcome(Retry.none(p264({} as never))),
+        UndeployIndexEndpointIndex: probeOutcome(Retry.none(p265({} as never))),
+        UpdateModelExplanationDataset: probeOutcome(
           Retry.none(p266({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        UpdateProjectCacheConfig: outcome(Retry.none(p267({} as never))),
-        UpgradeNotebookRuntime: outcome(
+        UpdateProjectCacheConfig: probeOutcome(Retry.none(p267({} as never))),
+        UpgradeNotebookRuntime: probeOutcome(
           Retry.none(
             p268({ notebookRuntime: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        UploadModel: outcome(Retry.none(p269({ location: "us-central1" } as never))),
-        UpsertIndexDatapoints: outcome(Retry.none(p270({} as never))),
-        WriteEntityTypeFeatureValues: outcome(Retry.none(p271({} as never))),
-        WriteExperiment: outcome(Retry.none(p272({} as never))),
-        WriteRun: outcome(Retry.none(p273({} as never))),
+        UploadModel: probeOutcome(Retry.none(p269({ location: "us-central1" } as never))),
+        UpsertIndexDatapoints: probeOutcome(Retry.none(p270({} as never))),
+        WriteEntityTypeFeatureValues: probeOutcome(Retry.none(p271({} as never))),
+        WriteExperiment: probeOutcome(Retry.none(p272({} as never))),
+        WriteRun: probeOutcome(Retry.none(p273({} as never))),
       }),
     };
   }).pipe(

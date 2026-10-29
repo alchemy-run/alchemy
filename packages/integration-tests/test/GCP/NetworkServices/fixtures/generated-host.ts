@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeAuthzExtension,
   ProbeEndpointPolicy,
@@ -58,35 +58,39 @@ export default class NetworkServicesGeneratedHost extends GCP.Function<NetworkSe
     const p28 = yield* GCP.NetworkServices.ListWasmPlugins();
     return {
       fetch: serveProbes({
-        GetAuthzExtension: outcome(Retry.none(p0({} as never))),
-        GetEndpointPolicy: outcome(Retry.none(p1({} as never))),
-        GetGateway: outcome(Retry.none(p2({} as never))),
-        GetGatewayRouteView: outcome(Retry.none(p3({ routeView: "alchemy-missing" } as never))),
-        GetGrpcRoute: outcome(Retry.none(p4({} as never))),
-        GetHttpRoute: outcome(Retry.none(p5({} as never))),
-        GetMeshe: outcome(Retry.none(p6({} as never))),
-        GetMesheRouteView: outcome(Retry.none(p7({ routeView: "alchemy-missing" } as never))),
-        GetServiceBinding: outcome(Retry.none(p8({} as never))),
-        GetServiceLbPolicy: outcome(Retry.none(p9({} as never))),
-        GetTcpRoute: outcome(Retry.none(p10({} as never))),
-        GetTlsRoute: outcome(Retry.none(p11({} as never))),
-        ListAgentGateways: outcome(Retry.none(p12({ location: "us-central1" } as never))),
-        ListAuthzExtensions: outcome(Retry.none(p13({ location: "us-central1" } as never))),
-        ListEndpointPolicies: outcome(Retry.none(p14({ location: "us-central1" } as never))),
-        ListGatewayRouteViews: outcome(Retry.none(p15({} as never))),
-        ListGateways: outcome(Retry.none(p16({ location: "us-central1" } as never))),
-        ListGrpcRoutes: outcome(Retry.none(p17({ location: "us-central1" } as never))),
-        ListHttpRoutes: outcome(Retry.none(p18({ location: "us-central1" } as never))),
-        ListLbEdgeExtensions: outcome(Retry.none(p19({ location: "us-central1" } as never))),
-        ListLbRouteExtensions: outcome(Retry.none(p20({ location: "us-central1" } as never))),
-        ListLbTrafficExtensions: outcome(Retry.none(p21({ location: "us-central1" } as never))),
-        ListMesheRouteViews: outcome(Retry.none(p22({} as never))),
-        ListMeshes: outcome(Retry.none(p23({ location: "us-central1" } as never))),
-        ListServiceBindings: outcome(Retry.none(p24({ location: "us-central1" } as never))),
-        ListServiceLbPolicies: outcome(Retry.none(p25({ location: "us-central1" } as never))),
-        ListTcpRoutes: outcome(Retry.none(p26({ location: "us-central1" } as never))),
-        ListTlsRoutes: outcome(Retry.none(p27({ location: "us-central1" } as never))),
-        ListWasmPlugins: outcome(Retry.none(p28({ location: "us-central1" } as never))),
+        GetAuthzExtension: probeOutcome(Retry.none(p0({} as never))),
+        GetEndpointPolicy: probeOutcome(Retry.none(p1({} as never))),
+        GetGateway: probeOutcome(Retry.none(p2({} as never))),
+        GetGatewayRouteView: probeOutcome(
+          Retry.none(p3({ routeView: "alchemy-missing" } as never)),
+        ),
+        GetGrpcRoute: probeOutcome(Retry.none(p4({} as never))),
+        GetHttpRoute: probeOutcome(Retry.none(p5({} as never))),
+        GetMeshe: probeOutcome(Retry.none(p6({} as never))),
+        GetMesheRouteView: probeOutcome(Retry.none(p7({ routeView: "alchemy-missing" } as never))),
+        GetServiceBinding: probeOutcome(Retry.none(p8({} as never))),
+        GetServiceLbPolicy: probeOutcome(Retry.none(p9({} as never))),
+        GetTcpRoute: probeOutcome(Retry.none(p10({} as never))),
+        GetTlsRoute: probeOutcome(Retry.none(p11({} as never))),
+        ListAgentGateways: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
+        ListAuthzExtensions: probeOutcome(Retry.none(p13({ location: "us-central1" } as never))),
+        ListEndpointPolicies: probeOutcome(Retry.none(p14({ location: "us-central1" } as never))),
+        ListGatewayRouteViews: probeOutcome(Retry.none(p15({} as never))),
+        ListGateways: probeOutcome(Retry.none(p16({ location: "us-central1" } as never))),
+        ListGrpcRoutes: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
+        ListHttpRoutes: probeOutcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListLbEdgeExtensions: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
+        ListLbRouteExtensions: probeOutcome(Retry.none(p20({ location: "us-central1" } as never))),
+        ListLbTrafficExtensions: probeOutcome(
+          Retry.none(p21({ location: "us-central1" } as never)),
+        ),
+        ListMesheRouteViews: probeOutcome(Retry.none(p22({} as never))),
+        ListMeshes: probeOutcome(Retry.none(p23({ location: "us-central1" } as never))),
+        ListServiceBindings: probeOutcome(Retry.none(p24({ location: "us-central1" } as never))),
+        ListServiceLbPolicies: probeOutcome(Retry.none(p25({ location: "us-central1" } as never))),
+        ListTcpRoutes: probeOutcome(Retry.none(p26({ location: "us-central1" } as never))),
+        ListTlsRoutes: probeOutcome(Retry.none(p27({ location: "us-central1" } as never))),
+        ListWasmPlugins: probeOutcome(Retry.none(p28({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(

@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { Nfs } from "./generated-resources.ts";
 
 /**
@@ -26,16 +26,16 @@ export default class FilestoreGeneratedHost extends GCP.Function<FilestoreGenera
     const p7 = yield* GCP.Filestore.RevertInstance(Nfs);
     return {
       fetch: serveProbes({
-        ListBackups: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListInstances: outcome(Retry.none(p1({ location: "us-central1" } as never))),
-        ListInstanceSnapshots: outcome(Retry.none(p2({} as never))),
-        PauseInstanceReplica: outcome(Retry.none(p3({} as never))),
-        PromoteInstanceReplica: outcome(Retry.none(p4({} as never))),
-        RestoreInstance: outcome(
+        ListBackups: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
+        ListInstances: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        ListInstanceSnapshots: probeOutcome(Retry.none(p2({} as never))),
+        PauseInstanceReplica: probeOutcome(Retry.none(p3({} as never))),
+        PromoteInstanceReplica: probeOutcome(Retry.none(p4({} as never))),
+        RestoreInstance: probeOutcome(
           Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ResumeInstanceReplica: outcome(Retry.none(p6({} as never))),
-        RevertInstance: outcome(Retry.none(p7({} as never))),
+        ResumeInstanceReplica: probeOutcome(Retry.none(p6({} as never))),
+        RevertInstance: probeOutcome(Retry.none(p7({} as never))),
       }),
     };
   }).pipe(

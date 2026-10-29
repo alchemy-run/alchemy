@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated ApiHub binding as its own
@@ -36,20 +36,20 @@ export default class ApiHubGeneratedHost extends GCP.Function<ApiHubGeneratedHos
     const p18 = yield* GCP.ApiHub.LookupApiHubInstance();
     return {
       fetch: serveProbes({
-        CreateHostProjectRegistration: outcome(
+        CreateHostProjectRegistration: probeOutcome(
           Retry.none(
             p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        GetAddon: outcome(
+        GetAddon: probeOutcome(
           Retry.none(p1({ addon: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetDiscoveredApiObservation: outcome(
+        GetDiscoveredApiObservation: probeOutcome(
           Retry.none(
             p2({ discoveredApiObservation: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        GetDiscoveredApiObservationDiscoveredApiOperation: outcome(
+        GetDiscoveredApiObservationDiscoveredApiOperation: probeOutcome(
           Retry.none(
             p3({
               discoveredApiObservation: "alchemy-missing",
@@ -58,37 +58,37 @@ export default class ApiHubGeneratedHost extends GCP.Function<ApiHubGeneratedHos
             } as never),
           ),
         ),
-        GetHostProjectRegistration: outcome(
+        GetHostProjectRegistration: probeOutcome(
           Retry.none(
             p4({ hostProjectRegistration: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        GetPluginStyleGuide: outcome(
+        GetPluginStyleGuide: probeOutcome(
           Retry.none(p5({ plugin: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetStyleGuideContents: outcome(
+        GetStyleGuideContents: probeOutcome(
           Retry.none(p6({ plugin: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAddons: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListApis: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListAttributes: outcome(Retry.none(p9({ location: "us-central1" } as never))),
-        ListCurations: outcome(Retry.none(p10({ location: "us-central1" } as never))),
-        ListDependencies: outcome(Retry.none(p11({ location: "us-central1" } as never))),
-        ListDeployments: outcome(Retry.none(p12({ location: "us-central1" } as never))),
-        ListDiscoveredApiObservationDiscoveredApiOperations: outcome(
+        ListAddons: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListApis: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListAttributes: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListCurations: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListDependencies: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
+        ListDeployments: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
+        ListDiscoveredApiObservationDiscoveredApiOperations: probeOutcome(
           Retry.none(
             p13({ discoveredApiObservation: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        ListDiscoveredApiObservations: outcome(
+        ListDiscoveredApiObservations: probeOutcome(
           Retry.none(p14({ location: "us-central1" } as never)),
         ),
-        ListExternalApis: outcome(Retry.none(p15({ location: "us-central1" } as never))),
-        ListHostProjectRegistrations: outcome(
+        ListExternalApis: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListHostProjectRegistrations: probeOutcome(
           Retry.none(p16({ location: "us-central1" } as never)),
         ),
-        ListPlugins: outcome(Retry.none(p17({ location: "us-central1" } as never))),
-        LookupApiHubInstance: outcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListPlugins: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
+        LookupApiHubInstance: probeOutcome(Retry.none(p18({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(

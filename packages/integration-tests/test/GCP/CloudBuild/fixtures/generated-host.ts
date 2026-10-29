@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated CloudBuild binding as its own
@@ -19,8 +19,10 @@ export default class CloudBuildGeneratedHost extends GCP.Function<CloudBuildGene
     const p1 = yield* GCP.CloudBuild.ProcessConnectionWebhook();
     return {
       fetch: serveProbes({
-        ListConnections: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ProcessConnectionWebhook: outcome(Retry.none(p1({ location: "us-central1" } as never))),
+        ListConnections: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
+        ProcessConnectionWebhook: probeOutcome(
+          Retry.none(p1({ location: "us-central1" } as never)),
+        ),
       }),
     };
   }).pipe(

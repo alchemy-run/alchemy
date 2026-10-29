@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeCluster, ProbeConfig, ProbeWorkstation } from "./generated-resources.ts";
 
 /**
@@ -24,12 +24,12 @@ export default class WorkstationsGeneratedHost extends GCP.Function<Workstations
     const p5 = yield* GCP.Workstations.SuspendWorkstation(ProbeWorkstation);
     return {
       fetch: serveProbes({
-        ListWorkstationClusters: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListWorkstationClusterWorkstationConfigs: outcome(Retry.none(p1({} as never))),
-        ListWorkstationConfigUsable: outcome(Retry.none(p2({} as never))),
-        ListWorkstationConfigWorkstations: outcome(Retry.none(p3({} as never))),
-        ListWorkstationUsable: outcome(Retry.none(p4({} as never))),
-        SuspendWorkstation: outcome(Retry.none(p5({} as never))),
+        ListWorkstationClusters: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
+        ListWorkstationClusterWorkstationConfigs: probeOutcome(Retry.none(p1({} as never))),
+        ListWorkstationConfigUsable: probeOutcome(Retry.none(p2({} as never))),
+        ListWorkstationConfigWorkstations: probeOutcome(Retry.none(p3({} as never))),
+        ListWorkstationUsable: probeOutcome(Retry.none(p4({} as never))),
+        SuspendWorkstation: probeOutcome(Retry.none(p5({} as never))),
       }),
     };
   }).pipe(

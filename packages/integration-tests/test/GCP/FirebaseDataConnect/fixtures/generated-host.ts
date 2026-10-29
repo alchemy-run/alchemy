@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { App, ProbeSchema, Queries } from "./generated-resources.ts";
 
 /**
@@ -30,18 +30,18 @@ export default class FirebaseDataConnectGeneratedHost extends GCP.Function<Fireb
     const p11 = yield* GCP.FirebaseDataConnect.MigrateSchema(ProbeSchema);
     return {
       fetch: serveProbes({
-        GenerateServiceQuery: outcome(Retry.none(p0({} as never))),
-        GenerateServiceSchema: outcome(Retry.none(p1({} as never))),
-        GetConnector: outcome(Retry.none(p2({} as never))),
-        GetSchema: outcome(Retry.none(p3({} as never))),
-        GetService: outcome(Retry.none(p4({} as never))),
-        ImpersonateConnectorMutation: outcome(Retry.none(p5({} as never))),
-        ImpersonateConnectorQuery: outcome(Retry.none(p6({} as never))),
-        IntrospectServiceGraphql: outcome(Retry.none(p7({} as never))),
-        ListServiceConnectors: outcome(Retry.none(p8({} as never))),
-        ListServices: outcome(Retry.none(p9({ location: "us-central1" } as never))),
-        ListServiceSchemas: outcome(Retry.none(p10({} as never))),
-        MigrateSchema: outcome(Retry.none(p11({} as never))),
+        GenerateServiceQuery: probeOutcome(Retry.none(p0({} as never))),
+        GenerateServiceSchema: probeOutcome(Retry.none(p1({} as never))),
+        GetConnector: probeOutcome(Retry.none(p2({} as never))),
+        GetSchema: probeOutcome(Retry.none(p3({} as never))),
+        GetService: probeOutcome(Retry.none(p4({} as never))),
+        ImpersonateConnectorMutation: probeOutcome(Retry.none(p5({} as never))),
+        ImpersonateConnectorQuery: probeOutcome(Retry.none(p6({} as never))),
+        IntrospectServiceGraphql: probeOutcome(Retry.none(p7({} as never))),
+        ListServiceConnectors: probeOutcome(Retry.none(p8({} as never))),
+        ListServices: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListServiceSchemas: probeOutcome(Retry.none(p10({} as never))),
+        MigrateSchema: probeOutcome(Retry.none(p11({} as never))),
       }),
     };
   }).pipe(

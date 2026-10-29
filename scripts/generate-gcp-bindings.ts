@@ -1515,7 +1515,7 @@ const emitProbeHost = (service: string, config: ServiceConfig, probes: Probe[]) 
   return `${PROBE_HEADER(service)}import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
-${layers.length ? 'import * as Layer from "effect/Layer";\n' : ""}import { outcome, serveProbes } from "../../bindingHost.ts";
+${layers.length ? 'import * as Layer from "effect/Layer";\n' : ""}import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 ${exports.length ? `import { ${exports.sort().join(", ")} } from "./generated-resources.ts";` : ""}
 
 /**
@@ -1531,7 +1531,7 @@ export default class ${service}GeneratedHost extends GCP.Function<${service}Gene
 ${live.map((p, i) => `    const p${i} = yield* GCP.${service}.${p.binding.name}(${p.key ? config.probes!.resources[p.key] : ""});`).join("\n")}
     return {
       fetch: serveProbes({
-${live.map((p, i) => `        ${JSON.stringify(p.name)}: outcome(Retry.none(p${i}(${p.args} as never))),`).join("\n")}
+${live.map((p, i) => `        ${JSON.stringify(p.name)}: probeOutcome(Retry.none(p${i}(${p.args} as never))),`).join("\n")}
       }),
     };
   })${
@@ -1572,7 +1572,7 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
-import { callProbe } from "../bindingHost.ts";
+import { callProbe, outcomeTag } from "../bindingHost.ts";
 import ${service}GeneratedHost from "./fixtures/generated-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -1606,11 +1606,12 @@ const probe = (name: string, expectSuccess: boolean) =>
         : yield* call.pipe(
             Effect.repeat({
               schedule: Schedule.spaced("10 seconds"),
-              until: (value) => !AMBIGUOUS.includes(value),
+              until: (value) => !AMBIGUOUS.includes(outcomeTag(value)),
               times: 30,
             }),
           );
-    if (expectSuccess) expect(ALLOWED.includes(outcome) ? "succeeded" : outcome).toEqual("succeeded");
+    if (expectSuccess)
+      expect(ALLOWED.includes(outcomeTag(outcome)) ? "succeeded" : outcome).toEqual("succeeded");
     else expect(typeof outcome).toEqual("string");
   });
 

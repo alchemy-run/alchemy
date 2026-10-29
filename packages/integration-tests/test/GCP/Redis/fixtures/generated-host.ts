@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { Acl, Cache } from "./generated-resources.ts";
 
 /**
@@ -49,7 +49,7 @@ export default class RedisGeneratedHost extends GCP.Function<RedisGeneratedHost>
     const p30 = yield* GCP.Redis.UpgradeInstance(Cache);
     return {
       fetch: serveProbes({
-        AddClusterTokenAuthUser: outcome(
+        AddClusterTokenAuthUser: probeOutcome(
           Retry.none(
             p0({
               cluster: "alchemy-missing",
@@ -58,7 +58,7 @@ export default class RedisGeneratedHost extends GCP.Function<RedisGeneratedHost>
             } as never),
           ),
         ),
-        AddTokenAuthUserAuthToken: outcome(
+        AddTokenAuthUserAuthToken: probeOutcome(
           Retry.none(
             p1({
               cluster: "alchemy-missing",
@@ -68,15 +68,15 @@ export default class RedisGeneratedHost extends GCP.Function<RedisGeneratedHost>
             } as never),
           ),
         ),
-        BackupCluster: outcome(
+        BackupCluster: probeOutcome(
           Retry.none(p2({ cluster: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        CreateCluster: outcome(
+        CreateCluster: probeOutcome(
           Retry.none(
             p3({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        DeleteBackupCollectionBackup: outcome(
+        DeleteBackupCollectionBackup: probeOutcome(
           Retry.none(
             p4({
               backupCollection: "alchemy-missing",
@@ -85,10 +85,10 @@ export default class RedisGeneratedHost extends GCP.Function<RedisGeneratedHost>
             } as never),
           ),
         ),
-        DeleteCluster: outcome(
+        DeleteCluster: probeOutcome(
           Retry.none(p5({ cluster: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        DeleteClusterTokenAuthUser: outcome(
+        DeleteClusterTokenAuthUser: probeOutcome(
           Retry.none(
             p6({
               cluster: "alchemy-missing",
@@ -97,7 +97,7 @@ export default class RedisGeneratedHost extends GCP.Function<RedisGeneratedHost>
             } as never),
           ),
         ),
-        DeleteClusterTokenAuthUserAuthToken: outcome(
+        DeleteClusterTokenAuthUserAuthToken: probeOutcome(
           Retry.none(
             p7({
               cluster: "alchemy-missing",
@@ -107,7 +107,7 @@ export default class RedisGeneratedHost extends GCP.Function<RedisGeneratedHost>
             } as never),
           ),
         ),
-        ExportBackupCollectionBackup: outcome(
+        ExportBackupCollectionBackup: probeOutcome(
           Retry.none(
             p8({
               backupCollection: "alchemy-missing",
@@ -116,15 +116,17 @@ export default class RedisGeneratedHost extends GCP.Function<RedisGeneratedHost>
             } as never),
           ),
         ),
-        ExportInstance: outcome(Retry.none(p9({} as never))),
-        FailoverInstance: outcome(Retry.none(p10({} as never))),
-        GetAclPolicyRevision: outcome(Retry.none(p11({ revision: "alchemy-missing" } as never))),
-        GetBackupCollection: outcome(
+        ExportInstance: probeOutcome(Retry.none(p9({} as never))),
+        FailoverInstance: probeOutcome(Retry.none(p10({} as never))),
+        GetAclPolicyRevision: probeOutcome(
+          Retry.none(p11({ revision: "alchemy-missing" } as never)),
+        ),
+        GetBackupCollection: probeOutcome(
           Retry.none(
             p12({ backupCollection: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        GetBackupCollectionBackup: outcome(
+        GetBackupCollectionBackup: probeOutcome(
           Retry.none(
             p13({
               backupCollection: "alchemy-missing",
@@ -133,13 +135,13 @@ export default class RedisGeneratedHost extends GCP.Function<RedisGeneratedHost>
             } as never),
           ),
         ),
-        GetCluster: outcome(
+        GetCluster: probeOutcome(
           Retry.none(p14({ cluster: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetClusterCertificateAuthority: outcome(
+        GetClusterCertificateAuthority: probeOutcome(
           Retry.none(p15({ cluster: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetClusterTokenAuthUser: outcome(
+        GetClusterTokenAuthUser: probeOutcome(
           Retry.none(
             p16({
               cluster: "alchemy-missing",
@@ -148,7 +150,7 @@ export default class RedisGeneratedHost extends GCP.Function<RedisGeneratedHost>
             } as never),
           ),
         ),
-        GetClusterTokenAuthUserAuthToken: outcome(
+        GetClusterTokenAuthUserAuthToken: probeOutcome(
           Retry.none(
             p17({
               cluster: "alchemy-missing",
@@ -158,19 +160,19 @@ export default class RedisGeneratedHost extends GCP.Function<RedisGeneratedHost>
             } as never),
           ),
         ),
-        ImportInstance: outcome(
+        ImportInstance: probeOutcome(
           Retry.none(p18({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ListAclPolicies: outcome(Retry.none(p19({ location: "us-central1" } as never))),
-        ListAclPolicyRevisions: outcome(Retry.none(p20({} as never))),
-        ListBackupCollectionBackups: outcome(
+        ListAclPolicies: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
+        ListAclPolicyRevisions: probeOutcome(Retry.none(p20({} as never))),
+        ListBackupCollectionBackups: probeOutcome(
           Retry.none(
             p21({ backupCollection: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        ListBackupCollections: outcome(Retry.none(p22({ location: "us-central1" } as never))),
-        ListClusters: outcome(Retry.none(p23({ location: "us-central1" } as never))),
-        ListClusterTokenAuthUserAuthTokens: outcome(
+        ListBackupCollections: probeOutcome(Retry.none(p22({ location: "us-central1" } as never))),
+        ListClusters: probeOutcome(Retry.none(p23({ location: "us-central1" } as never))),
+        ListClusterTokenAuthUserAuthTokens: probeOutcome(
           Retry.none(
             p24({
               cluster: "alchemy-missing",
@@ -179,18 +181,18 @@ export default class RedisGeneratedHost extends GCP.Function<RedisGeneratedHost>
             } as never),
           ),
         ),
-        ListClusterTokenAuthUsers: outcome(
+        ListClusterTokenAuthUsers: probeOutcome(
           Retry.none(p25({ cluster: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListInstances: outcome(Retry.none(p26({ location: "us-central1" } as never))),
-        PatchCluster: outcome(
+        ListInstances: probeOutcome(Retry.none(p26({ location: "us-central1" } as never))),
+        PatchCluster: probeOutcome(
           Retry.none(p27({ cluster: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        RescheduleClusterMaintenance: outcome(
+        RescheduleClusterMaintenance: probeOutcome(
           Retry.none(p28({ cluster: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        RescheduleInstanceMaintenance: outcome(Retry.none(p29({} as never))),
-        UpgradeInstance: outcome(Retry.none(p30({} as never))),
+        RescheduleInstanceMaintenance: probeOutcome(Retry.none(p29({} as never))),
+        UpgradeInstance: probeOutcome(Retry.none(p30({} as never))),
       }),
     };
   }).pipe(

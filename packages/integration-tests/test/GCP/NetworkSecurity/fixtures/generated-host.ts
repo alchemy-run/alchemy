@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeAddressGroup,
   ProbeAuthorizationPolicy,
@@ -96,72 +96,88 @@ export default class NetworkSecurityGeneratedHost extends GCP.Function<NetworkSe
     const p49 = yield* GCP.NetworkSecurity.RemoveAddressGroupItems(ProbeAddressGroup);
     return {
       fetch: serveProbes({
-        "AddAddressGroupItems@AddressGroup": outcome(
+        "AddAddressGroupItems@AddressGroup": probeOutcome(
           Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        "CloneAddressGroupItems@AddressGroup": outcome(
+        "CloneAddressGroupItems@AddressGroup": probeOutcome(
           Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        "GetAddressGroup@AddressGroup": outcome(Retry.none(p2({} as never))),
-        GetAuthorizationPolicy: outcome(Retry.none(p3({} as never))),
-        GetBackendAuthenticationConfig: outcome(Retry.none(p4({} as never))),
-        GetClientTlsPolicy: outcome(Retry.none(p5({} as never))),
-        GetDnsThreatDetector: outcome(Retry.none(p6({} as never))),
-        GetGatewaySecurityPolicy: outcome(Retry.none(p7({} as never))),
-        GetInterceptDeployment: outcome(Retry.none(p8({} as never))),
-        GetInterceptDeploymentGroup: outcome(Retry.none(p9({} as never))),
-        GetInterceptEndpointGroup: outcome(Retry.none(p10({} as never))),
-        GetInterceptEndpointGroupAssociation: outcome(Retry.none(p11({} as never))),
-        GetMirroringDeployment: outcome(Retry.none(p12({} as never))),
-        GetMirroringDeploymentGroup: outcome(Retry.none(p13({} as never))),
-        GetMirroringEndpointGroup: outcome(Retry.none(p14({} as never))),
-        GetMirroringEndpointGroupAssociation: outcome(Retry.none(p15({} as never))),
-        GetRule: outcome(Retry.none(p16({} as never))),
-        GetSacRealm: outcome(Retry.none(p17({} as never))),
-        "GetSecurityProfile@SecurityProfile": outcome(Retry.none(p18({} as never))),
-        "GetSecurityProfileGroup@SecurityProfileGroup": outcome(Retry.none(p19({} as never))),
-        GetServerTlsPolicy: outcome(Retry.none(p20({} as never))),
-        GetTlsInspectionPolicy: outcome(Retry.none(p21({} as never))),
-        GetUrlList: outcome(Retry.none(p22({} as never))),
-        "ListAddressGroupReferences@AddressGroup": outcome(Retry.none(p23({} as never))),
-        ListAddressGroups: outcome(Retry.none(p24({ location: "us-central1" } as never))),
-        ListAuthorizationPolicies: outcome(Retry.none(p25({ location: "us-central1" } as never))),
-        ListAuthzPolicies: outcome(Retry.none(p26({ location: "us-central1" } as never))),
-        ListBackendAuthenticationConfigs: outcome(
+        "GetAddressGroup@AddressGroup": probeOutcome(Retry.none(p2({} as never))),
+        GetAuthorizationPolicy: probeOutcome(Retry.none(p3({} as never))),
+        GetBackendAuthenticationConfig: probeOutcome(Retry.none(p4({} as never))),
+        GetClientTlsPolicy: probeOutcome(Retry.none(p5({} as never))),
+        GetDnsThreatDetector: probeOutcome(Retry.none(p6({} as never))),
+        GetGatewaySecurityPolicy: probeOutcome(Retry.none(p7({} as never))),
+        GetInterceptDeployment: probeOutcome(Retry.none(p8({} as never))),
+        GetInterceptDeploymentGroup: probeOutcome(Retry.none(p9({} as never))),
+        GetInterceptEndpointGroup: probeOutcome(Retry.none(p10({} as never))),
+        GetInterceptEndpointGroupAssociation: probeOutcome(Retry.none(p11({} as never))),
+        GetMirroringDeployment: probeOutcome(Retry.none(p12({} as never))),
+        GetMirroringDeploymentGroup: probeOutcome(Retry.none(p13({} as never))),
+        GetMirroringEndpointGroup: probeOutcome(Retry.none(p14({} as never))),
+        GetMirroringEndpointGroupAssociation: probeOutcome(Retry.none(p15({} as never))),
+        GetRule: probeOutcome(Retry.none(p16({} as never))),
+        GetSacRealm: probeOutcome(Retry.none(p17({} as never))),
+        "GetSecurityProfile@SecurityProfile": probeOutcome(Retry.none(p18({} as never))),
+        "GetSecurityProfileGroup@SecurityProfileGroup": probeOutcome(Retry.none(p19({} as never))),
+        GetServerTlsPolicy: probeOutcome(Retry.none(p20({} as never))),
+        GetTlsInspectionPolicy: probeOutcome(Retry.none(p21({} as never))),
+        GetUrlList: probeOutcome(Retry.none(p22({} as never))),
+        "ListAddressGroupReferences@AddressGroup": probeOutcome(Retry.none(p23({} as never))),
+        ListAddressGroups: probeOutcome(Retry.none(p24({ location: "us-central1" } as never))),
+        ListAuthorizationPolicies: probeOutcome(
+          Retry.none(p25({ location: "us-central1" } as never)),
+        ),
+        ListAuthzPolicies: probeOutcome(Retry.none(p26({ location: "us-central1" } as never))),
+        ListBackendAuthenticationConfigs: probeOutcome(
           Retry.none(p27({ location: "us-central1" } as never)),
         ),
-        ListClientTlsPolicies: outcome(Retry.none(p28({ location: "us-central1" } as never))),
-        ListDnsThreatDetectors: outcome(Retry.none(p29({ location: "us-central1" } as never))),
-        ListFirewallEndpointAssociations: outcome(
+        ListClientTlsPolicies: probeOutcome(Retry.none(p28({ location: "us-central1" } as never))),
+        ListDnsThreatDetectors: probeOutcome(Retry.none(p29({ location: "us-central1" } as never))),
+        ListFirewallEndpointAssociations: probeOutcome(
           Retry.none(p30({ location: "us-central1" } as never)),
         ),
-        ListFirewallEndpoints: outcome(Retry.none(p31({ location: "us-central1" } as never))),
-        ListGatewaySecurityPolicies: outcome(Retry.none(p32({ location: "us-central1" } as never))),
-        ListGatewaySecurityPolicyRules: outcome(Retry.none(p33({} as never))),
-        ListInterceptDeploymentGroups: outcome(
+        ListFirewallEndpoints: probeOutcome(Retry.none(p31({ location: "us-central1" } as never))),
+        ListGatewaySecurityPolicies: probeOutcome(
+          Retry.none(p32({ location: "us-central1" } as never)),
+        ),
+        ListGatewaySecurityPolicyRules: probeOutcome(Retry.none(p33({} as never))),
+        ListInterceptDeploymentGroups: probeOutcome(
           Retry.none(p34({ location: "us-central1" } as never)),
         ),
-        ListInterceptDeployments: outcome(Retry.none(p35({ location: "us-central1" } as never))),
-        ListInterceptEndpointGroupAssociations: outcome(
+        ListInterceptDeployments: probeOutcome(
+          Retry.none(p35({ location: "us-central1" } as never)),
+        ),
+        ListInterceptEndpointGroupAssociations: probeOutcome(
           Retry.none(p36({ location: "us-central1" } as never)),
         ),
-        ListInterceptEndpointGroups: outcome(Retry.none(p37({ location: "us-central1" } as never))),
-        ListMirroringDeploymentGroups: outcome(
+        ListInterceptEndpointGroups: probeOutcome(
+          Retry.none(p37({ location: "us-central1" } as never)),
+        ),
+        ListMirroringDeploymentGroups: probeOutcome(
           Retry.none(p38({ location: "us-central1" } as never)),
         ),
-        ListMirroringDeployments: outcome(Retry.none(p39({ location: "us-central1" } as never))),
-        ListMirroringEndpointGroupAssociations: outcome(
+        ListMirroringDeployments: probeOutcome(
+          Retry.none(p39({ location: "us-central1" } as never)),
+        ),
+        ListMirroringEndpointGroupAssociations: probeOutcome(
           Retry.none(p40({ location: "us-central1" } as never)),
         ),
-        ListMirroringEndpointGroups: outcome(Retry.none(p41({ location: "us-central1" } as never))),
-        ListSacAttachments: outcome(Retry.none(p42({ location: "us-central1" } as never))),
-        ListSacRealms: outcome(Retry.none(p43({ location: "us-central1" } as never))),
-        ListSecurityProfileGroups: outcome(Retry.none(p44({ location: "us-central1" } as never))),
-        ListSecurityProfiles: outcome(Retry.none(p45({ location: "us-central1" } as never))),
-        ListServerTlsPolicies: outcome(Retry.none(p46({ location: "us-central1" } as never))),
-        ListTlsInspectionPolicies: outcome(Retry.none(p47({ location: "us-central1" } as never))),
-        ListUrlLists: outcome(Retry.none(p48({ location: "us-central1" } as never))),
-        "RemoveAddressGroupItems@AddressGroup": outcome(Retry.none(p49({} as never))),
+        ListMirroringEndpointGroups: probeOutcome(
+          Retry.none(p41({ location: "us-central1" } as never)),
+        ),
+        ListSacAttachments: probeOutcome(Retry.none(p42({ location: "us-central1" } as never))),
+        ListSacRealms: probeOutcome(Retry.none(p43({ location: "us-central1" } as never))),
+        ListSecurityProfileGroups: probeOutcome(
+          Retry.none(p44({ location: "us-central1" } as never)),
+        ),
+        ListSecurityProfiles: probeOutcome(Retry.none(p45({ location: "us-central1" } as never))),
+        ListServerTlsPolicies: probeOutcome(Retry.none(p46({ location: "us-central1" } as never))),
+        ListTlsInspectionPolicies: probeOutcome(
+          Retry.none(p47({ location: "us-central1" } as never)),
+        ),
+        ListUrlLists: probeOutcome(Retry.none(p48({ location: "us-central1" } as never))),
+        "RemoveAddressGroupItems@AddressGroup": probeOutcome(Retry.none(p49({} as never))),
       }),
     };
   }).pipe(

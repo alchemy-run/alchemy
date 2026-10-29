@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeIndex } from "./generated-resources.ts";
 
 /**
@@ -27,17 +27,17 @@ export default class DatastoreGeneratedHost extends GCP.Function<DatastoreGenera
     const p8 = yield* GCP.Datastore.RunProjectAggregationQuery();
     return {
       fetch: serveProbes({
-        AllocateProjectIds: outcome(Retry.none(p0({} as never))),
-        BeginProjectTransaction: outcome(Retry.none(p1({} as never))),
-        ExportProject: outcome(Retry.none(p2({} as never))),
-        GetIndex: outcome(Retry.none(p3({} as never))),
-        ImportProject: outcome(
+        AllocateProjectIds: probeOutcome(Retry.none(p0({} as never))),
+        BeginProjectTransaction: probeOutcome(Retry.none(p1({} as never))),
+        ExportProject: probeOutcome(Retry.none(p2({} as never))),
+        GetIndex: probeOutcome(Retry.none(p3({} as never))),
+        ImportProject: probeOutcome(
           Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ListIndexes: outcome(Retry.none(p5({} as never))),
-        ReserveProjectIds: outcome(Retry.none(p6({} as never))),
-        RollbackProject: outcome(Retry.none(p7({} as never))),
-        RunProjectAggregationQuery: outcome(Retry.none(p8({} as never))),
+        ListIndexes: probeOutcome(Retry.none(p5({} as never))),
+        ReserveProjectIds: probeOutcome(Retry.none(p6({} as never))),
+        RollbackProject: probeOutcome(Retry.none(p7({} as never))),
+        RunProjectAggregationQuery: probeOutcome(Retry.none(p8({} as never))),
       }),
     };
   }).pipe(

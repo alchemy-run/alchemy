@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { Db, Primary } from "./generated-resources.ts";
 
 /**
@@ -35,39 +35,41 @@ export default class AlloyDBGeneratedHost extends GCP.Function<AlloyDBGeneratedH
     const p16 = yield* GCP.AlloyDB.UpgradeCluster(Db);
     return {
       fetch: serveProbes({
-        CreatesecondaryCluster: outcome(
+        CreatesecondaryCluster: probeOutcome(
           Retry.none(
             p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        CreatesecondaryClusterInstance: outcome(
+        CreatesecondaryClusterInstance: probeOutcome(
           Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ExportCluster: outcome(Retry.none(p2({} as never))),
-        FailoverInstance: outcome(Retry.none(p3({} as never))),
-        ImportCluster: outcome(
+        ExportCluster: probeOutcome(Retry.none(p2({} as never))),
+        FailoverInstance: probeOutcome(Retry.none(p3({} as never))),
+        ImportCluster: probeOutcome(
           Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        InjectInstanceFault: outcome(Retry.none(p5({} as never))),
-        ListBackups: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        ListClusterInstances: outcome(Retry.none(p7({} as never))),
-        ListClusters: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListClusterUsers: outcome(Retry.none(p9({} as never))),
-        ListSupportedDatabaseFlags: outcome(Retry.none(p10({ location: "us-central1" } as never))),
-        PromoteCluster: outcome(Retry.none(p11({} as never))),
-        RestartInstance: outcome(Retry.none(p12({} as never))),
-        RestoreCluster: outcome(
+        InjectInstanceFault: probeOutcome(Retry.none(p5({} as never))),
+        ListBackups: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListClusterInstances: probeOutcome(Retry.none(p7({} as never))),
+        ListClusters: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListClusterUsers: probeOutcome(Retry.none(p9({} as never))),
+        ListSupportedDatabaseFlags: probeOutcome(
+          Retry.none(p10({ location: "us-central1" } as never)),
+        ),
+        PromoteCluster: probeOutcome(Retry.none(p11({} as never))),
+        RestartInstance: probeOutcome(Retry.none(p12({} as never))),
+        RestoreCluster: probeOutcome(
           Retry.none(
             p13({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        RestoreClusterFromCloudSQL: outcome(
+        RestoreClusterFromCloudSQL: probeOutcome(
           Retry.none(
             p14({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        SwitchoverCluster: outcome(Retry.none(p15({} as never))),
-        UpgradeCluster: outcome(Retry.none(p16({} as never))),
+        SwitchoverCluster: probeOutcome(Retry.none(p15({} as never))),
+        UpgradeCluster: probeOutcome(Retry.none(p16({} as never))),
       }),
     };
   }).pipe(

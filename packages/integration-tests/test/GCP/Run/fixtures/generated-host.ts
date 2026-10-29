@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated Run binding as its own
@@ -26,23 +26,23 @@ export default class RunGeneratedHost extends GCP.Function<RunGeneratedHost>()(
     const p8 = yield* GCP.Run.StopInstance();
     return {
       fetch: serveProbes({
-        DeleteInstance: outcome(
+        DeleteInstance: probeOutcome(
           Retry.none(p0({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetInstance: outcome(
+        GetInstance: probeOutcome(
           Retry.none(p1({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListInstances: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListJobs: outcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListServices: outcome(Retry.none(p4({ location: "us-central1" } as never))),
-        ListWorkerPools: outcome(Retry.none(p5({ location: "us-central1" } as never))),
-        PatchInstance: outcome(
+        ListInstances: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
+        ListJobs: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        ListServices: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListWorkerPools: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        PatchInstance: probeOutcome(
           Retry.none(p6({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        StartInstance: outcome(
+        StartInstance: probeOutcome(
           Retry.none(p7({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        StopInstance: outcome(
+        StopInstance: probeOutcome(
           Retry.none(p8({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
       }),

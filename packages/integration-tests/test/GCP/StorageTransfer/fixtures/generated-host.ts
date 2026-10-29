@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { Copy, ProbePool } from "./generated-resources.ts";
 
 /**
@@ -21,9 +21,9 @@ export default class StorageTransferGeneratedHost extends GCP.Function<StorageTr
     const p2 = yield* GCP.StorageTransfer.ListAgentPools();
     return {
       fetch: serveProbes({
-        GetAgentPool: outcome(Retry.none(p0({} as never))),
-        GetTransferJob: outcome(Retry.none(p1({} as never))),
-        ListAgentPools: outcome(Retry.none(p2({} as never))),
+        GetAgentPool: probeOutcome(Retry.none(p0({} as never))),
+        GetTransferJob: probeOutcome(Retry.none(p1({} as never))),
+        ListAgentPools: probeOutcome(Retry.none(p2({} as never))),
       }),
     };
   }).pipe(

@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeArtifact,
   ProbeAttribute,
@@ -96,103 +96,105 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
     const p66 = yield* GCP.Healthcare.StoreStudyInstances(ProbeDicomStore);
     return {
       fetch: serveProbes({
-        ActivateConsent: outcome(Retry.none(p0({} as never))),
-        ApplyFhirStoreAdminConsents: outcome(Retry.none(p1({} as never))),
-        ApplyFhirStoreConsents: outcome(Retry.none(p2({} as never))),
-        ArchiveUserDataMapping: outcome(Retry.none(p3({} as never))),
-        BulkFhirStoreDelete: outcome(Retry.none(p4({} as never))),
-        CapabilitiesFhirStoreFhir: outcome(Retry.none(p5({} as never))),
-        CheckConsentStoreDataAccess: outcome(Retry.none(p6({} as never))),
-        ConditionalFhirDelete: outcome(Retry.none(p7({ type: "alchemy-missing" } as never))),
-        ConditionalFhirPatch: outcome(Retry.none(p8({ type: "alchemy-missing" } as never))),
-        ConditionalFhirUpdate: outcome(Retry.none(p9({ type: "alchemy-missing" } as never))),
-        CreateFhirStoreFhir: outcome(
+        ActivateConsent: probeOutcome(Retry.none(p0({} as never))),
+        ApplyFhirStoreAdminConsents: probeOutcome(Retry.none(p1({} as never))),
+        ApplyFhirStoreConsents: probeOutcome(Retry.none(p2({} as never))),
+        ArchiveUserDataMapping: probeOutcome(Retry.none(p3({} as never))),
+        BulkFhirStoreDelete: probeOutcome(Retry.none(p4({} as never))),
+        CapabilitiesFhirStoreFhir: probeOutcome(Retry.none(p5({} as never))),
+        CheckConsentStoreDataAccess: probeOutcome(Retry.none(p6({} as never))),
+        ConditionalFhirDelete: probeOutcome(Retry.none(p7({ type: "alchemy-missing" } as never))),
+        ConditionalFhirPatch: probeOutcome(Retry.none(p8({ type: "alchemy-missing" } as never))),
+        ConditionalFhirUpdate: probeOutcome(Retry.none(p9({ type: "alchemy-missing" } as never))),
+        CreateFhirStoreFhir: probeOutcome(
           Retry.none(
             p10({ type: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        DeidentifyDataset: outcome(Retry.none(p11({} as never))),
-        DeidentifyDicomStore: outcome(Retry.none(p12({} as never))),
-        DeidentifyFhirStore: outcome(Retry.none(p13({} as never))),
-        DeleteConsentRevision: outcome(Retry.none(p14({} as never))),
-        DeleteDicomStoreStudy: outcome(
+        DeidentifyDataset: probeOutcome(Retry.none(p11({} as never))),
+        DeidentifyDicomStore: probeOutcome(Retry.none(p12({} as never))),
+        DeidentifyFhirStore: probeOutcome(Retry.none(p13({} as never))),
+        DeleteConsentRevision: probeOutcome(Retry.none(p14({} as never))),
+        DeleteDicomStoreStudy: probeOutcome(
           Retry.none(p15({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        DeleteDicomStoreStudySery: outcome(
+        DeleteDicomStoreStudySery: probeOutcome(
           Retry.none(p16({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        DeleteDicomStoreStudySeryInstance: outcome(
+        DeleteDicomStoreStudySeryInstance: probeOutcome(
           Retry.none(p17({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        EvaluateConsentStoreUserConsents: outcome(Retry.none(p18({} as never))),
-        ExecuteFhirBundle: outcome(Retry.none(p19({} as never))),
-        ExplainFhirStoreDataAccess: outcome(Retry.none(p20({} as never))),
-        ExportDicomStore: outcome(Retry.none(p21({} as never))),
-        ExportFhirStore: outcome(Retry.none(p22({} as never))),
-        ExportHl7V2Store: outcome(Retry.none(p23({} as never))),
-        GetAttributeDefinition: outcome(Retry.none(p24({} as never))),
-        GetConsent: outcome(Retry.none(p25({} as never))),
-        GetConsentArtifact: outcome(Retry.none(p26({} as never))),
-        GetConsentStore: outcome(Retry.none(p27({} as never))),
-        GetDataset: outcome(Retry.none(p28({} as never))),
-        GetDicomStore: outcome(Retry.none(p29({} as never))),
-        GetDICOMStoreMetrics: outcome(Retry.none(p30({} as never))),
-        GetFhirStore: outcome(Retry.none(p31({} as never))),
-        GetFHIRStoreMetrics: outcome(Retry.none(p32({} as never))),
-        GetHl7V2Store: outcome(Retry.none(p33({} as never))),
-        GetHL7v2StoreMetrics: outcome(Retry.none(p34({} as never))),
-        GetMessage: outcome(Retry.none(p35({} as never))),
-        GetUserDataMapping: outcome(Retry.none(p36({} as never))),
-        ImportDicomStore: outcome(
+        EvaluateConsentStoreUserConsents: probeOutcome(Retry.none(p18({} as never))),
+        ExecuteFhirBundle: probeOutcome(Retry.none(p19({} as never))),
+        ExplainFhirStoreDataAccess: probeOutcome(Retry.none(p20({} as never))),
+        ExportDicomStore: probeOutcome(Retry.none(p21({} as never))),
+        ExportFhirStore: probeOutcome(Retry.none(p22({} as never))),
+        ExportHl7V2Store: probeOutcome(Retry.none(p23({} as never))),
+        GetAttributeDefinition: probeOutcome(Retry.none(p24({} as never))),
+        GetConsent: probeOutcome(Retry.none(p25({} as never))),
+        GetConsentArtifact: probeOutcome(Retry.none(p26({} as never))),
+        GetConsentStore: probeOutcome(Retry.none(p27({} as never))),
+        GetDataset: probeOutcome(Retry.none(p28({} as never))),
+        GetDicomStore: probeOutcome(Retry.none(p29({} as never))),
+        GetDICOMStoreMetrics: probeOutcome(Retry.none(p30({} as never))),
+        GetFhirStore: probeOutcome(Retry.none(p31({} as never))),
+        GetFHIRStoreMetrics: probeOutcome(Retry.none(p32({} as never))),
+        GetHl7V2Store: probeOutcome(Retry.none(p33({} as never))),
+        GetHL7v2StoreMetrics: probeOutcome(Retry.none(p34({} as never))),
+        GetMessage: probeOutcome(Retry.none(p35({} as never))),
+        GetUserDataMapping: probeOutcome(Retry.none(p36({} as never))),
+        ImportDicomStore: probeOutcome(
           Retry.none(p37({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ImportFhirStore: outcome(
+        ImportFhirStore: probeOutcome(
           Retry.none(p38({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ImportHl7V2Store: outcome(
+        ImportHl7V2Store: probeOutcome(
           Retry.none(p39({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        IngestHl7V2StoreMessage: outcome(Retry.none(p40({} as never))),
-        ListConsentRevisions: outcome(Retry.none(p41({} as never))),
-        ListConsentStoreAttributeDefinitions: outcome(Retry.none(p42({} as never))),
-        ListConsentStoreConsentArtifacts: outcome(Retry.none(p43({} as never))),
-        ListConsentStoreConsents: outcome(Retry.none(p44({} as never))),
-        ListConsentStoreUserDataMappings: outcome(Retry.none(p45({} as never))),
-        ListDatasetConsentStores: outcome(Retry.none(p46({} as never))),
-        ListDatasetDicomStores: outcome(Retry.none(p47({} as never))),
-        ListDatasetFhirStores: outcome(Retry.none(p48({} as never))),
-        ListDatasetHl7V2Stores: outcome(Retry.none(p49({} as never))),
-        ListDatasets: outcome(Retry.none(p50({ location: "us-central1" } as never))),
-        ListHl7V2StoreMessages: outcome(Retry.none(p51({} as never))),
-        QueryConsentStoreAccessibleData: outcome(Retry.none(p52({} as never))),
-        RejectConsent: outcome(Retry.none(p53({} as never))),
-        RevokeConsent: outcome(Retry.none(p54({} as never))),
-        RollbackFhirStore: outcome(Retry.none(p55({} as never))),
-        RollbackHl7V2Store: outcome(Retry.none(p56({} as never))),
-        SearchDicomStoreForInstances: outcome(
+        IngestHl7V2StoreMessage: probeOutcome(Retry.none(p40({} as never))),
+        ListConsentRevisions: probeOutcome(Retry.none(p41({} as never))),
+        ListConsentStoreAttributeDefinitions: probeOutcome(Retry.none(p42({} as never))),
+        ListConsentStoreConsentArtifacts: probeOutcome(Retry.none(p43({} as never))),
+        ListConsentStoreConsents: probeOutcome(Retry.none(p44({} as never))),
+        ListConsentStoreUserDataMappings: probeOutcome(Retry.none(p45({} as never))),
+        ListDatasetConsentStores: probeOutcome(Retry.none(p46({} as never))),
+        ListDatasetDicomStores: probeOutcome(Retry.none(p47({} as never))),
+        ListDatasetFhirStores: probeOutcome(Retry.none(p48({} as never))),
+        ListDatasetHl7V2Stores: probeOutcome(Retry.none(p49({} as never))),
+        ListDatasets: probeOutcome(Retry.none(p50({ location: "us-central1" } as never))),
+        ListHl7V2StoreMessages: probeOutcome(Retry.none(p51({} as never))),
+        QueryConsentStoreAccessibleData: probeOutcome(Retry.none(p52({} as never))),
+        RejectConsent: probeOutcome(Retry.none(p53({} as never))),
+        RevokeConsent: probeOutcome(Retry.none(p54({} as never))),
+        RollbackFhirStore: probeOutcome(Retry.none(p55({} as never))),
+        RollbackHl7V2Store: probeOutcome(Retry.none(p56({} as never))),
+        SearchDicomStoreForInstances: probeOutcome(
           Retry.none(p57({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        SearchDicomStoreForSeries: outcome(
+        SearchDicomStoreForSeries: probeOutcome(
           Retry.none(p58({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        SearchDicomStoreForStudies: outcome(
+        SearchDicomStoreForStudies: probeOutcome(
           Retry.none(p59({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        SearchFhirStoreFhir: outcome(Retry.none(p60({} as never))),
-        SearchSeryForInstances: outcome(
+        SearchFhirStoreFhir: probeOutcome(Retry.none(p60({} as never))),
+        SearchSeryForInstances: probeOutcome(
           Retry.none(p61({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        SearchStudyForInstances: outcome(
+        SearchStudyForInstances: probeOutcome(
           Retry.none(p62({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        SearchStudyForSeries: outcome(
+        SearchStudyForSeries: probeOutcome(
           Retry.none(p63({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        SetDicomStoreBlobStorageSettings: outcome(Retry.none(p64({} as never))),
-        StoreDicomStoreInstances: outcome(
+        SetDicomStoreBlobStorageSettings: probeOutcome(Retry.none(p64({} as never))),
+        StoreDicomStoreInstances: probeOutcome(
           Retry.none(p65({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        StoreStudyInstances: outcome(Retry.none(p66({ dicomWebPath: "alchemy-missing" } as never))),
+        StoreStudyInstances: probeOutcome(
+          Retry.none(p66({ dicomWebPath: "alchemy-missing" } as never)),
+        ),
       }),
     };
   }).pipe(

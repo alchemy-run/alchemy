@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeSecuritySetting } from "./generated-resources.ts";
 
 /**
@@ -63,21 +63,21 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
     const p44 = yield* GCP.Dialogflow.ValidateAgent();
     return {
       fetch: serveProbes({
-        BatchTestCaseDelete: outcome(
+        BatchTestCaseDelete: probeOutcome(
           Retry.none(p0({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        BatchTestCaseRun: outcome(
+        BatchTestCaseRun: probeOutcome(
           Retry.none(p1({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        CalculateTestCaseCoverage: outcome(
+        CalculateTestCaseCoverage: probeOutcome(
           Retry.none(p2({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        CreateAgent: outcome(
+        CreateAgent: probeOutcome(
           Retry.none(
             p3({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        CreateAgentTestCase: outcome(
+        CreateAgentTestCase: probeOutcome(
           Retry.none(
             p4({
               agent: "alchemy-missing",
@@ -86,25 +86,25 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        DeleteAgent: outcome(
+        DeleteAgent: probeOutcome(
           Retry.none(p5({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ExportAgent: outcome(
+        ExportAgent: probeOutcome(
           Retry.none(p6({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ExportAgentEntityType: outcome(
+        ExportAgentEntityType: probeOutcome(
           Retry.none(p7({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ExportAgentIntent: outcome(
+        ExportAgentIntent: probeOutcome(
           Retry.none(p8({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ExportAgentTestCase: outcome(
+        ExportAgentTestCase: probeOutcome(
           Retry.none(p9({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetAgent: outcome(
+        GetAgent: probeOutcome(
           Retry.none(p10({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetAgentChangelog: outcome(
+        GetAgentChangelog: probeOutcome(
           Retry.none(
             p11({
               agent: "alchemy-missing",
@@ -113,10 +113,10 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        GetAgentGenerativeSettings: outcome(
+        GetAgentGenerativeSettings: probeOutcome(
           Retry.none(p12({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetAgentTestCase: outcome(
+        GetAgentTestCase: probeOutcome(
           Retry.none(
             p13({
               agent: "alchemy-missing",
@@ -125,7 +125,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        GetAgentTestCaseResult: outcome(
+        GetAgentTestCaseResult: probeOutcome(
           Retry.none(
             p14({
               agent: "alchemy-missing",
@@ -135,10 +135,10 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        GetAgentValidationResult: outcome(
+        GetAgentValidationResult: probeOutcome(
           Retry.none(p15({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetFlowValidationResult: outcome(
+        GetFlowValidationResult: probeOutcome(
           Retry.none(
             p16({
               agent: "alchemy-missing",
@@ -147,8 +147,8 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        GetSecuritySetting: outcome(Retry.none(p17({} as never))),
-        ImportAgentEntityType: outcome(
+        GetSecuritySetting: probeOutcome(Retry.none(p17({} as never))),
+        ImportAgentEntityType: probeOutcome(
           Retry.none(
             p18({
               agent: "alchemy-missing",
@@ -157,7 +157,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        ImportAgentFlow: outcome(
+        ImportAgentFlow: probeOutcome(
           Retry.none(
             p19({
               agent: "alchemy-missing",
@@ -166,7 +166,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        ImportAgentIntent: outcome(
+        ImportAgentIntent: probeOutcome(
           Retry.none(
             p20({
               agent: "alchemy-missing",
@@ -175,7 +175,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        ImportAgentPlaybook: outcome(
+        ImportAgentPlaybook: probeOutcome(
           Retry.none(
             p21({
               agent: "alchemy-missing",
@@ -184,7 +184,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        ImportAgentTestCase: outcome(
+        ImportAgentTestCase: probeOutcome(
           Retry.none(
             p22({
               agent: "alchemy-missing",
@@ -193,29 +193,29 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        ListAgentChangelogs: outcome(
+        ListAgentChangelogs: probeOutcome(
           Retry.none(p23({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentEntityTypes: outcome(
+        ListAgentEntityTypes: probeOutcome(
           Retry.none(p24({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentEnvironments: outcome(
+        ListAgentEnvironments: probeOutcome(
           Retry.none(p25({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentFlows: outcome(
+        ListAgentFlows: probeOutcome(
           Retry.none(p26({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentGenerators: outcome(
+        ListAgentGenerators: probeOutcome(
           Retry.none(p27({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentIntents: outcome(
+        ListAgentIntents: probeOutcome(
           Retry.none(p28({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentPlaybooks: outcome(
+        ListAgentPlaybooks: probeOutcome(
           Retry.none(p29({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgents: outcome(Retry.none(p30({ location: "us-central1" } as never))),
-        ListAgentSessionEntityTypes: outcome(
+        ListAgents: probeOutcome(Retry.none(p30({ location: "us-central1" } as never))),
+        ListAgentSessionEntityTypes: probeOutcome(
           Retry.none(
             p31({
               agent: "alchemy-missing",
@@ -224,7 +224,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        ListAgentTestCaseResults: outcome(
+        ListAgentTestCaseResults: probeOutcome(
           Retry.none(
             p32({
               agent: "alchemy-missing",
@@ -233,23 +233,23 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        ListAgentTestCases: outcome(
+        ListAgentTestCases: probeOutcome(
           Retry.none(p33({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentTools: outcome(
+        ListAgentTools: probeOutcome(
           Retry.none(p34({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentTransitionRouteGroups: outcome(
+        ListAgentTransitionRouteGroups: probeOutcome(
           Retry.none(p35({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentWebhooks: outcome(
+        ListAgentWebhooks: probeOutcome(
           Retry.none(p36({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListSecuritySettings: outcome(Retry.none(p37({ location: "us-central1" } as never))),
-        PatchAgent: outcome(
+        ListSecuritySettings: probeOutcome(Retry.none(p37({ location: "us-central1" } as never))),
+        PatchAgent: probeOutcome(
           Retry.none(p38({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        PatchAgentTestCase: outcome(
+        PatchAgentTestCase: probeOutcome(
           Retry.none(
             p39({
               agent: "alchemy-missing",
@@ -258,7 +258,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        RestoreAgent: outcome(
+        RestoreAgent: probeOutcome(
           Retry.none(
             p40({
               agent: "alchemy-missing",
@@ -267,7 +267,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        RunAgentTestCase: outcome(
+        RunAgentTestCase: probeOutcome(
           Retry.none(
             p41({
               agent: "alchemy-missing",
@@ -276,7 +276,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        SubmitSessionAnswerFeedback: outcome(
+        SubmitSessionAnswerFeedback: probeOutcome(
           Retry.none(
             p42({
               agent: "alchemy-missing",
@@ -285,10 +285,10 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        UpdateAgentGenerativeSettings: outcome(
+        UpdateAgentGenerativeSettings: probeOutcome(
           Retry.none(p43({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ValidateAgent: outcome(
+        ValidateAgent: probeOutcome(
           Retry.none(p44({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
       }),

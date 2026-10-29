@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   Jobs,
   ProbeRegionScaling,
@@ -54,10 +54,10 @@ export default class DataprocGeneratedHost extends GCP.Function<DataprocGenerate
     const p28 = yield* GCP.Dataproc.SubmitJobAsOperation();
     return {
       fetch: serveProbes({
-        CancelJob: outcome(
+        CancelJob: probeOutcome(
           Retry.none(p0({ jobId: "alchemy-missing", region: "us-central1" } as never)),
         ),
-        CreateRegionClusterNodeGroup: outcome(
+        CreateRegionClusterNodeGroup: probeOutcome(
           Retry.none(
             p1({
               region: "us-central1",
@@ -66,13 +66,13 @@ export default class DataprocGeneratedHost extends GCP.Function<DataprocGenerate
             } as never),
           ),
         ),
-        DiagnoseCluster: outcome(Retry.none(p2({} as never))),
-        "GetAutoscalingPolicy@RegionsAutoscalingPolicy": outcome(Retry.none(p3({} as never))),
-        "GetAutoscalingPolicy@AutoscalingPolicy": outcome(Retry.none(p4({} as never))),
-        GetJob: outcome(
+        DiagnoseCluster: probeOutcome(Retry.none(p2({} as never))),
+        "GetAutoscalingPolicy@RegionsAutoscalingPolicy": probeOutcome(Retry.none(p3({} as never))),
+        "GetAutoscalingPolicy@AutoscalingPolicy": probeOutcome(Retry.none(p4({} as never))),
+        GetJob: probeOutcome(
           Retry.none(p5({ jobId: "alchemy-missing", region: "us-central1" } as never)),
         ),
-        GetRegionClusterNodeGroup: outcome(
+        GetRegionClusterNodeGroup: probeOutcome(
           Retry.none(
             p6({
               region: "us-central1",
@@ -81,30 +81,36 @@ export default class DataprocGeneratedHost extends GCP.Function<DataprocGenerate
             } as never),
           ),
         ),
-        GetSessionTemplate: outcome(Retry.none(p7({} as never))),
-        "GetWorkflowTemplate@RegionsWorkflowTemplate": outcome(Retry.none(p8({} as never))),
-        "GetWorkflowTemplate@WorkflowTemplate": outcome(Retry.none(p9({} as never))),
-        InjectClusterCredentials: outcome(
+        GetSessionTemplate: probeOutcome(Retry.none(p7({} as never))),
+        "GetWorkflowTemplate@RegionsWorkflowTemplate": probeOutcome(Retry.none(p8({} as never))),
+        "GetWorkflowTemplate@WorkflowTemplate": probeOutcome(Retry.none(p9({} as never))),
+        InjectClusterCredentials: probeOutcome(
           Retry.none(p10({ cluster: "alchemy-missing", region: "us-central1" } as never)),
         ),
-        "InstantiateWorkflowTemplate@RegionsWorkflowTemplate": outcome(
+        "InstantiateWorkflowTemplate@RegionsWorkflowTemplate": probeOutcome(
           Retry.none(p11({} as never)),
         ),
-        "InstantiateWorkflowTemplate@WorkflowTemplate": outcome(Retry.none(p12({} as never))),
-        InstantiateWorkflowTemplateInline: outcome(
+        "InstantiateWorkflowTemplate@WorkflowTemplate": probeOutcome(Retry.none(p12({} as never))),
+        InstantiateWorkflowTemplateInline: probeOutcome(
           Retry.none(p13({ region: "us-central1" } as never)),
         ),
-        ListAutoscalingPolicies: outcome(Retry.none(p14({ location: "us-central1" } as never))),
-        ListBatches: outcome(Retry.none(p15({ location: "us-central1" } as never))),
-        ListRegionAutoscalingPolicies: outcome(Retry.none(p16({ region: "us-central1" } as never))),
-        ListRegionClusters: outcome(Retry.none(p17({ region: "us-central1" } as never))),
-        ListRegionJobs: outcome(Retry.none(p18({ region: "us-central1" } as never))),
-        ListRegionWorkflowTemplates: outcome(Retry.none(p19({ region: "us-central1" } as never))),
-        ListSessions: outcome(Retry.none(p20({ location: "us-central1" } as never))),
-        ListSessionTemplates: outcome(Retry.none(p21({ location: "us-central1" } as never))),
-        ListWorkflowTemplates: outcome(Retry.none(p22({ location: "us-central1" } as never))),
-        RepairCluster: outcome(Retry.none(p23({} as never))),
-        RepairRegionClusterNodeGroup: outcome(
+        ListAutoscalingPolicies: probeOutcome(
+          Retry.none(p14({ location: "us-central1" } as never)),
+        ),
+        ListBatches: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListRegionAutoscalingPolicies: probeOutcome(
+          Retry.none(p16({ region: "us-central1" } as never)),
+        ),
+        ListRegionClusters: probeOutcome(Retry.none(p17({ region: "us-central1" } as never))),
+        ListRegionJobs: probeOutcome(Retry.none(p18({ region: "us-central1" } as never))),
+        ListRegionWorkflowTemplates: probeOutcome(
+          Retry.none(p19({ region: "us-central1" } as never)),
+        ),
+        ListSessions: probeOutcome(Retry.none(p20({ location: "us-central1" } as never))),
+        ListSessionTemplates: probeOutcome(Retry.none(p21({ location: "us-central1" } as never))),
+        ListWorkflowTemplates: probeOutcome(Retry.none(p22({ location: "us-central1" } as never))),
+        RepairCluster: probeOutcome(Retry.none(p23({} as never))),
+        RepairRegionClusterNodeGroup: probeOutcome(
           Retry.none(
             p24({
               region: "us-central1",
@@ -113,7 +119,7 @@ export default class DataprocGeneratedHost extends GCP.Function<DataprocGenerate
             } as never),
           ),
         ),
-        ResizeRegionClusterNodeGroup: outcome(
+        ResizeRegionClusterNodeGroup: probeOutcome(
           Retry.none(
             p25({
               region: "us-central1",
@@ -122,9 +128,9 @@ export default class DataprocGeneratedHost extends GCP.Function<DataprocGenerate
             } as never),
           ),
         ),
-        StartCluster: outcome(Retry.none(p26({} as never))),
-        StopCluster: outcome(Retry.none(p27({} as never))),
-        SubmitJobAsOperation: outcome(Retry.none(p28({ region: "us-central1" } as never))),
+        StartCluster: probeOutcome(Retry.none(p26({} as never))),
+        StopCluster: probeOutcome(Retry.none(p27({} as never))),
+        SubmitJobAsOperation: probeOutcome(Retry.none(p28({ region: "us-central1" } as never))),
       }),
     };
   }).pipe(

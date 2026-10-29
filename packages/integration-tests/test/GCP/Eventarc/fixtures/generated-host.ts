@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeApiSource,
   ProbeBus,
@@ -41,24 +41,24 @@ export default class EventarcGeneratedHost extends GCP.Function<EventarcGenerate
     const p15 = yield* GCP.Eventarc.ListTriggers();
     return {
       fetch: serveProbes({
-        GetChannel: outcome(Retry.none(p0({} as never))),
-        GetEnrollment: outcome(Retry.none(p1({} as never))),
-        GetGoogleApiSource: outcome(Retry.none(p2({} as never))),
-        GetMessageBuse: outcome(Retry.none(p3({} as never))),
-        GetPipeline: outcome(Retry.none(p4({} as never))),
-        GetProvider: outcome(
+        GetChannel: probeOutcome(Retry.none(p0({} as never))),
+        GetEnrollment: probeOutcome(Retry.none(p1({} as never))),
+        GetGoogleApiSource: probeOutcome(Retry.none(p2({} as never))),
+        GetMessageBuse: probeOutcome(Retry.none(p3({} as never))),
+        GetPipeline: probeOutcome(Retry.none(p4({} as never))),
+        GetProvider: probeOutcome(
           Retry.none(p5({ provider: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetTrigger: outcome(Retry.none(p6({} as never))),
-        ListChannelConnections: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListChannels: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListEnrollments: outcome(Retry.none(p9({ location: "us-central1" } as never))),
-        ListGoogleApiSources: outcome(Retry.none(p10({ location: "us-central1" } as never))),
-        ListMessageBuseEnrollments: outcome(Retry.none(p11({} as never))),
-        ListMessageBuses: outcome(Retry.none(p12({ location: "us-central1" } as never))),
-        ListPipelines: outcome(Retry.none(p13({ location: "us-central1" } as never))),
-        ListProviders: outcome(Retry.none(p14({ location: "us-central1" } as never))),
-        ListTriggers: outcome(Retry.none(p15({ location: "us-central1" } as never))),
+        GetTrigger: probeOutcome(Retry.none(p6({} as never))),
+        ListChannelConnections: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListChannels: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListEnrollments: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListGoogleApiSources: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListMessageBuseEnrollments: probeOutcome(Retry.none(p11({} as never))),
+        ListMessageBuses: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
+        ListPipelines: probeOutcome(Retry.none(p13({ location: "us-central1" } as never))),
+        ListProviders: probeOutcome(Retry.none(p14({ location: "us-central1" } as never))),
+        ListTriggers: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(

@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated PubSub binding as its own
@@ -22,11 +22,11 @@ export default class PubSubGeneratedHost extends GCP.Function<PubSubGeneratedHos
     const p4 = yield* GCP.PubSub.ValidateSchema();
     return {
       fetch: serveProbes({
-        ListSchemas: outcome(Retry.none(p0({} as never))),
-        ListSnapshots: outcome(Retry.none(p1({} as never))),
-        ListSubscriptions: outcome(Retry.none(p2({} as never))),
-        ListTopics: outcome(Retry.none(p3({} as never))),
-        ValidateSchema: outcome(Retry.none(p4({} as never))),
+        ListSchemas: probeOutcome(Retry.none(p0({} as never))),
+        ListSnapshots: probeOutcome(Retry.none(p1({} as never))),
+        ListSubscriptions: probeOutcome(Retry.none(p2({} as never))),
+        ListTopics: probeOutcome(Retry.none(p3({} as never))),
+        ValidateSchema: probeOutcome(Retry.none(p4({} as never))),
       }),
     };
   }).pipe(

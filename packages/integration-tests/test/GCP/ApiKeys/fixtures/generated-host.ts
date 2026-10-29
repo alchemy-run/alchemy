@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { Maps } from "./generated-resources.ts";
 
 /**
@@ -22,10 +22,10 @@ export default class ApiKeysGeneratedHost extends GCP.Function<ApiKeysGeneratedH
     const p3 = yield* GCP.ApiKeys.UndeleteKey(Maps);
     return {
       fetch: serveProbes({
-        GetKey: outcome(Retry.none(p0({} as never))),
-        ListKeys: outcome(Retry.none(p1({ location: "global" } as never))),
-        LookupKey: outcome(Retry.none(p2({} as never))),
-        UndeleteKey: outcome(Retry.none(p3({} as never))),
+        GetKey: probeOutcome(Retry.none(p0({} as never))),
+        ListKeys: probeOutcome(Retry.none(p1({ location: "global" } as never))),
+        LookupKey: probeOutcome(Retry.none(p2({} as never))),
+        UndeleteKey: probeOutcome(Retry.none(p3({} as never))),
       }),
     };
   }).pipe(

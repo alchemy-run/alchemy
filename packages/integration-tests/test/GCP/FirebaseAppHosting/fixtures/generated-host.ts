@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated FirebaseAppHosting binding as its own
@@ -20,11 +20,11 @@ export default class FirebaseAppHostingGeneratedHost extends GCP.Function<Fireba
     const p2 = yield* GCP.FirebaseAppHosting.PatchBackendTraffic();
     return {
       fetch: serveProbes({
-        GetBackendTraffic: outcome(
+        GetBackendTraffic: probeOutcome(
           Retry.none(p0({ backend: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListBackends: outcome(Retry.none(p1({ location: "us-central1" } as never))),
-        PatchBackendTraffic: outcome(
+        ListBackends: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        PatchBackendTraffic: probeOutcome(
           Retry.none(p2({ backend: "alchemy-missing", location: "us-central1" } as never)),
         ),
       }),

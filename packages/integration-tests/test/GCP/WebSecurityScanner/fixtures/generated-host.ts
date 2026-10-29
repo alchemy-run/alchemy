@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeScanConfig } from "./generated-resources.ts";
 
 /**
@@ -28,24 +28,26 @@ export default class WebSecurityScannerGeneratedHost extends GCP.Function<WebSec
     const p9 = yield* GCP.WebSecurityScanner.StopScanConfigScanRun(ProbeScanConfig);
     return {
       fetch: serveProbes({
-        GetScanConfig: outcome(Retry.none(p0({} as never))),
-        GetScanConfigScanRun: outcome(Retry.none(p1({ scanRun: "alchemy-missing" } as never))),
-        GetScanConfigScanRunFinding: outcome(
+        GetScanConfig: probeOutcome(Retry.none(p0({} as never))),
+        GetScanConfigScanRun: probeOutcome(Retry.none(p1({ scanRun: "alchemy-missing" } as never))),
+        GetScanConfigScanRunFinding: probeOutcome(
           Retry.none(p2({ scanRun: "alchemy-missing", finding: "alchemy-missing" } as never)),
         ),
-        ListScanConfigs: outcome(Retry.none(p3({} as never))),
-        ListScanConfigScanRunCrawledUrls: outcome(
+        ListScanConfigs: probeOutcome(Retry.none(p3({} as never))),
+        ListScanConfigScanRunCrawledUrls: probeOutcome(
           Retry.none(p4({ scanRun: "alchemy-missing" } as never)),
         ),
-        ListScanConfigScanRunFindings: outcome(
+        ListScanConfigScanRunFindings: probeOutcome(
           Retry.none(p5({ scanRun: "alchemy-missing" } as never)),
         ),
-        ListScanConfigScanRunFindingTypeStats: outcome(
+        ListScanConfigScanRunFindingTypeStats: probeOutcome(
           Retry.none(p6({ scanRun: "alchemy-missing" } as never)),
         ),
-        ListScanConfigScanRuns: outcome(Retry.none(p7({} as never))),
-        StartScanConfig: outcome(Retry.none(p8({} as never))),
-        StopScanConfigScanRun: outcome(Retry.none(p9({ scanRun: "alchemy-missing" } as never))),
+        ListScanConfigScanRuns: probeOutcome(Retry.none(p7({} as never))),
+        StartScanConfig: probeOutcome(Retry.none(p8({} as never))),
+        StopScanConfigScanRun: probeOutcome(
+          Retry.none(p9({ scanRun: "alchemy-missing" } as never)),
+        ),
       }),
     };
   }).pipe(

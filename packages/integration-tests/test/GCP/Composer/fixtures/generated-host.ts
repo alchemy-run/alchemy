@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { Airflow } from "./generated-resources.ts";
 
 /**
@@ -31,19 +31,19 @@ export default class ComposerGeneratedHost extends GCP.Function<ComposerGenerate
     const p12 = yield* GCP.Composer.StopEnvironmentAirflowCommand(Airflow);
     return {
       fetch: serveProbes({
-        CheckEnvironmentUpgrade: outcome(Retry.none(p0({} as never))),
-        DatabaseEnvironmentFailover: outcome(Retry.none(p1({} as never))),
-        FetchEnvironmentDatabaseProperties: outcome(Retry.none(p2({} as never))),
-        ListEnvironments: outcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListEnvironmentUserWorkloadsConfigMaps: outcome(Retry.none(p4({} as never))),
-        ListEnvironmentUserWorkloadsSecrets: outcome(Retry.none(p5({} as never))),
-        ListEnvironmentWorkloads: outcome(Retry.none(p6({} as never))),
-        ListImageVersions: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        LoadEnvironmentSnapshot: outcome(Retry.none(p8({} as never))),
-        PollEnvironmentAirflowCommand: outcome(Retry.none(p9({} as never))),
-        RestartEnvironmentWebServer: outcome(Retry.none(p10({} as never))),
-        SaveEnvironmentSnapshot: outcome(Retry.none(p11({} as never))),
-        StopEnvironmentAirflowCommand: outcome(Retry.none(p12({} as never))),
+        CheckEnvironmentUpgrade: probeOutcome(Retry.none(p0({} as never))),
+        DatabaseEnvironmentFailover: probeOutcome(Retry.none(p1({} as never))),
+        FetchEnvironmentDatabaseProperties: probeOutcome(Retry.none(p2({} as never))),
+        ListEnvironments: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        ListEnvironmentUserWorkloadsConfigMaps: probeOutcome(Retry.none(p4({} as never))),
+        ListEnvironmentUserWorkloadsSecrets: probeOutcome(Retry.none(p5({} as never))),
+        ListEnvironmentWorkloads: probeOutcome(Retry.none(p6({} as never))),
+        ListImageVersions: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        LoadEnvironmentSnapshot: probeOutcome(Retry.none(p8({} as never))),
+        PollEnvironmentAirflowCommand: probeOutcome(Retry.none(p9({} as never))),
+        RestartEnvironmentWebServer: probeOutcome(Retry.none(p10({} as never))),
+        SaveEnvironmentSnapshot: probeOutcome(Retry.none(p11({} as never))),
+        StopEnvironmentAirflowCommand: probeOutcome(Retry.none(p12({} as never))),
       }),
     };
   }).pipe(

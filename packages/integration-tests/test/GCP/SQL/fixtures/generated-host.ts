@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeDatabase, ProbeInstance } from "./generated-resources.ts";
 
 /**
@@ -71,87 +71,89 @@ export default class SQLGeneratedHost extends GCP.Function<SQLGeneratedHost>()(
     const p52 = yield* GCP.SQL.VerifyInstanceExternalSyncSettings(ProbeInstance);
     return {
       fetch: serveProbes({
-        AcquireInstanceSsrsLease: outcome(Retry.none(p0({} as never))),
-        AddInstanceEntraIdCertificate: outcome(Retry.none(p1({} as never))),
-        AddInstanceServerCa: outcome(Retry.none(p2({} as never))),
-        AddInstanceServerCertificate: outcome(Retry.none(p3({} as never))),
-        CloneInstance: outcome(
+        AcquireInstanceSsrsLease: probeOutcome(Retry.none(p0({} as never))),
+        AddInstanceEntraIdCertificate: probeOutcome(Retry.none(p1({} as never))),
+        AddInstanceServerCa: probeOutcome(Retry.none(p2({} as never))),
+        AddInstanceServerCertificate: probeOutcome(Retry.none(p3({} as never))),
+        CloneInstance: probeOutcome(
           Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        CreateBlueGreenDeployment: outcome(
+        CreateBlueGreenDeployment: probeOutcome(
           Retry.none(
             p5({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        CreateSslCertEphemeral: outcome(
+        CreateSslCertEphemeral: probeOutcome(
           Retry.none(p6({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        DeleteBlueGreenDeployment: outcome(
+        DeleteBlueGreenDeployment: probeOutcome(
           Retry.none(
             p7({ blueGreenDeployment: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        DeleteUser: outcome(Retry.none(p8({} as never))),
-        DemoteInstance: outcome(Retry.none(p9({} as never))),
-        DemoteInstanceMaster: outcome(Retry.none(p10({} as never))),
-        ExportInstance: outcome(Retry.none(p11({} as never))),
-        FailoverInstance: outcome(Retry.none(p12({} as never))),
-        GenerateConnectEphemeralCert: outcome(Retry.none(p13({} as never))),
-        GetBlueGreenDeployment: outcome(
+        DeleteUser: probeOutcome(Retry.none(p8({} as never))),
+        DemoteInstance: probeOutcome(Retry.none(p9({} as never))),
+        DemoteInstanceMaster: probeOutcome(Retry.none(p10({} as never))),
+        ExportInstance: probeOutcome(Retry.none(p11({} as never))),
+        FailoverInstance: probeOutcome(Retry.none(p12({} as never))),
+        GenerateConnectEphemeralCert: probeOutcome(Retry.none(p13({} as never))),
+        GetBlueGreenDeployment: probeOutcome(
           Retry.none(
             p14({ blueGreenDeployment: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        GetConnect: outcome(Retry.none(p15({} as never))),
-        GetDatabase: outcome(Retry.none(p16({} as never))),
-        GetInstanceDiskShrinkConfig: outcome(Retry.none(p17({} as never))),
-        GetInstanceLatestRecoveryTime: outcome(Retry.none(p18({} as never))),
-        GetSslCert: outcome(Retry.none(p19({ sha1Fingerprint: "alchemy-missing" } as never))),
-        ImportInstance: outcome(
+        GetConnect: probeOutcome(Retry.none(p15({} as never))),
+        GetDatabase: probeOutcome(Retry.none(p16({} as never))),
+        GetInstanceDiskShrinkConfig: probeOutcome(Retry.none(p17({} as never))),
+        GetInstanceLatestRecoveryTime: probeOutcome(Retry.none(p18({} as never))),
+        GetSslCert: probeOutcome(Retry.none(p19({ sha1Fingerprint: "alchemy-missing" } as never))),
+        ImportInstance: probeOutcome(
           Retry.none(p20({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ListBackupRuns: outcome(Retry.none(p21({} as never))),
-        ListBlueGreenDeployments: outcome(Retry.none(p22({ location: "us-central1" } as never))),
-        ListDatabases: outcome(Retry.none(p23({} as never))),
-        ListInstances: outcome(Retry.none(p24({} as never))),
-        ListInstanceServerCas: outcome(Retry.none(p25({} as never))),
-        ListSslCerts: outcome(Retry.none(p26({} as never))),
-        ListUsers: outcome(Retry.none(p27({} as never))),
-        ListWorkloadCaptures: outcome(Retry.none(p28({} as never))),
-        PerformInstanceDiskShrink: outcome(Retry.none(p29({} as never))),
-        PointInstanceInTimeRestore: outcome(Retry.none(p30({} as never))),
-        PreInstanceCheckMajorVersionUpgrade: outcome(Retry.none(p31({} as never))),
-        PromoteInstanceReplica: outcome(Retry.none(p32({} as never))),
-        ReencryptInstance: outcome(Retry.none(p33({} as never))),
-        ReleaseInstanceSsrsLease: outcome(Retry.none(p34({} as never))),
-        RescheduleInstanceMaintenance: outcome(Retry.none(p35({} as never))),
-        ResetInstanceReplicaSize: outcome(Retry.none(p36({} as never))),
-        ResetInstanceSslConfig: outcome(Retry.none(p37({} as never))),
-        RestartInstance: outcome(Retry.none(p38({} as never))),
-        RestoreInstanceBackup: outcome(
+        ListBackupRuns: probeOutcome(Retry.none(p21({} as never))),
+        ListBlueGreenDeployments: probeOutcome(
+          Retry.none(p22({ location: "us-central1" } as never)),
+        ),
+        ListDatabases: probeOutcome(Retry.none(p23({} as never))),
+        ListInstances: probeOutcome(Retry.none(p24({} as never))),
+        ListInstanceServerCas: probeOutcome(Retry.none(p25({} as never))),
+        ListSslCerts: probeOutcome(Retry.none(p26({} as never))),
+        ListUsers: probeOutcome(Retry.none(p27({} as never))),
+        ListWorkloadCaptures: probeOutcome(Retry.none(p28({} as never))),
+        PerformInstanceDiskShrink: probeOutcome(Retry.none(p29({} as never))),
+        PointInstanceInTimeRestore: probeOutcome(Retry.none(p30({} as never))),
+        PreInstanceCheckMajorVersionUpgrade: probeOutcome(Retry.none(p31({} as never))),
+        PromoteInstanceReplica: probeOutcome(Retry.none(p32({} as never))),
+        ReencryptInstance: probeOutcome(Retry.none(p33({} as never))),
+        ReleaseInstanceSsrsLease: probeOutcome(Retry.none(p34({} as never))),
+        RescheduleInstanceMaintenance: probeOutcome(Retry.none(p35({} as never))),
+        ResetInstanceReplicaSize: probeOutcome(Retry.none(p36({} as never))),
+        ResetInstanceSslConfig: probeOutcome(Retry.none(p37({} as never))),
+        RestartInstance: probeOutcome(Retry.none(p38({} as never))),
+        RestoreInstanceBackup: probeOutcome(
           Retry.none(p39({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        RotateInstanceServerCa: outcome(Retry.none(p40({} as never))),
-        StartInstanceExternalSync: outcome(Retry.none(p41({} as never))),
-        StartInstanceReplica: outcome(Retry.none(p42({} as never))),
-        StartWorkloadCapture: outcome(Retry.none(p43({} as never))),
-        StartWorkloadCaptureReplay: outcome(
+        RotateInstanceServerCa: probeOutcome(Retry.none(p40({} as never))),
+        StartInstanceExternalSync: probeOutcome(Retry.none(p41({} as never))),
+        StartInstanceReplica: probeOutcome(Retry.none(p42({} as never))),
+        StartWorkloadCapture: probeOutcome(Retry.none(p43({} as never))),
+        StartWorkloadCaptureReplay: probeOutcome(
           Retry.none(p44({ workloadId: "alchemy-missing" } as never)),
         ),
-        StopInstanceReplica: outcome(Retry.none(p45({} as never))),
-        StopWorkloadCapture: outcome(Retry.none(p46({} as never))),
-        StopWorkloadCaptureReplay: outcome(
+        StopInstanceReplica: probeOutcome(Retry.none(p45({} as never))),
+        StopWorkloadCapture: probeOutcome(Retry.none(p46({} as never))),
+        StopWorkloadCaptureReplay: probeOutcome(
           Retry.none(p47({ workloadId: "alchemy-missing" } as never)),
         ),
-        SwitchoverBlueGreenDeployment: outcome(
+        SwitchoverBlueGreenDeployment: probeOutcome(
           Retry.none(
             p48({ blueGreenDeployment: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        SwitchoverInstance: outcome(Retry.none(p49({} as never))),
-        TruncateInstanceLog: outcome(Retry.none(p50({} as never))),
-        UpdateUser: outcome(Retry.none(p51({} as never))),
-        VerifyInstanceExternalSyncSettings: outcome(Retry.none(p52({} as never))),
+        SwitchoverInstance: probeOutcome(Retry.none(p49({} as never))),
+        TruncateInstanceLog: probeOutcome(Retry.none(p50({} as never))),
+        UpdateUser: probeOutcome(Retry.none(p51({} as never))),
+        VerifyInstanceExternalSyncSettings: probeOutcome(Retry.none(p52({} as never))),
       }),
     };
   }).pipe(

@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated Apigee binding as its own
@@ -18,7 +18,7 @@ export default class ApigeeGeneratedHost extends GCP.Function<ApigeeGeneratedHos
     const p0 = yield* GCP.Apigee.ProvisionProjectOrganization();
     return {
       fetch: serveProbes({
-        ProvisionProjectOrganization: outcome(Retry.none(p0({} as never))),
+        ProvisionProjectOrganization: probeOutcome(Retry.none(p0({} as never))),
       }),
     };
   }).pipe(

@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated Looker binding as its own
@@ -28,21 +28,21 @@ export default class LookerGeneratedHost extends GCP.Function<LookerGeneratedHos
     const p10 = yield* GCP.Looker.UndeleteInstance();
     return {
       fetch: serveProbes({
-        CreateInstance: outcome(
+        CreateInstance: probeOutcome(
           Retry.none(
             p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        DeleteInstance: outcome(
+        DeleteInstance: probeOutcome(
           Retry.none(p1({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ExportInstance: outcome(
+        ExportInstance: probeOutcome(
           Retry.none(p2({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetInstance: outcome(
+        GetInstance: probeOutcome(
           Retry.none(p3({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ImportInstance: outcome(
+        ImportInstance: probeOutcome(
           Retry.none(
             p4({
               instance: "alchemy-missing",
@@ -51,17 +51,17 @@ export default class LookerGeneratedHost extends GCP.Function<LookerGeneratedHos
             } as never),
           ),
         ),
-        ListInstanceBackups: outcome(
+        ListInstanceBackups: probeOutcome(
           Retry.none(p5({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListInstances: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        PatchInstance: outcome(
+        ListInstances: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        PatchInstance: probeOutcome(
           Retry.none(p7({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        RestartInstance: outcome(
+        RestartInstance: probeOutcome(
           Retry.none(p8({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        RestoreInstance: outcome(
+        RestoreInstance: probeOutcome(
           Retry.none(
             p9({
               instance: "alchemy-missing",
@@ -70,7 +70,7 @@ export default class LookerGeneratedHost extends GCP.Function<LookerGeneratedHos
             } as never),
           ),
         ),
-        UndeleteInstance: outcome(
+        UndeleteInstance: probeOutcome(
           Retry.none(p10({ instance: "alchemy-missing", location: "us-central1" } as never)),
         ),
       }),

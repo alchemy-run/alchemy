@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated Firebase binding as its own
@@ -43,40 +43,42 @@ export default class FirebaseGeneratedHost extends GCP.Function<FirebaseGenerate
     const p25 = yield* GCP.Firebase.UndeleteWebApp();
     return {
       fetch: serveProbes({
-        AddProjectFirebase: outcome(
+        AddProjectFirebase: probeOutcome(
           Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        AddProjectGoogleAnalytics: outcome(
+        AddProjectGoogleAnalytics: probeOutcome(
           Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        CreateIosApp: outcome(
+        CreateIosApp: probeOutcome(
           Retry.none(p2({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        CreateWebApp: outcome(
+        CreateWebApp: probeOutcome(
           Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        FinalizeDefaultLocation: outcome(Retry.none(p4({} as never))),
-        GetAndroidAppConfig: outcome(Retry.none(p5({ androidApp: "alchemy-missing" } as never))),
-        GetIosApp: outcome(Retry.none(p6({ iosApp: "alchemy-missing" } as never))),
-        GetIosAppConfig: outcome(Retry.none(p7({ iosApp: "alchemy-missing" } as never))),
-        GetProject: outcome(Retry.none(p8({} as never))),
-        GetProjectAdminSdkConfig: outcome(Retry.none(p9({} as never))),
-        GetProjectAnalyticsDetails: outcome(Retry.none(p10({} as never))),
-        GetWebApp: outcome(Retry.none(p11({ webApp: "alchemy-missing" } as never))),
-        GetWebAppConfig: outcome(Retry.none(p12({ webApp: "alchemy-missing" } as never))),
-        ListAndroidApps: outcome(Retry.none(p13({} as never))),
-        ListAvailableProjects: outcome(Retry.none(p14({} as never))),
-        ListIosApps: outcome(Retry.none(p15({} as never))),
-        ListProjects: outcome(Retry.none(p16({} as never))),
-        ListWebApps: outcome(Retry.none(p17({} as never))),
-        PatchIosApp: outcome(Retry.none(p18({ iosApp: "alchemy-missing" } as never))),
-        PatchWebApp: outcome(Retry.none(p19({ webApp: "alchemy-missing" } as never))),
-        RemoveIosApp: outcome(Retry.none(p20({ iosApp: "alchemy-missing" } as never))),
-        RemoveProjectAnalytics: outcome(Retry.none(p21({} as never))),
-        RemoveWebApp: outcome(Retry.none(p22({ webApp: "alchemy-missing" } as never))),
-        SearchProjectApps: outcome(Retry.none(p23({} as never))),
-        UndeleteIosApp: outcome(Retry.none(p24({ iosApp: "alchemy-missing" } as never))),
-        UndeleteWebApp: outcome(Retry.none(p25({ webApp: "alchemy-missing" } as never))),
+        FinalizeDefaultLocation: probeOutcome(Retry.none(p4({} as never))),
+        GetAndroidAppConfig: probeOutcome(
+          Retry.none(p5({ androidApp: "alchemy-missing" } as never)),
+        ),
+        GetIosApp: probeOutcome(Retry.none(p6({ iosApp: "alchemy-missing" } as never))),
+        GetIosAppConfig: probeOutcome(Retry.none(p7({ iosApp: "alchemy-missing" } as never))),
+        GetProject: probeOutcome(Retry.none(p8({} as never))),
+        GetProjectAdminSdkConfig: probeOutcome(Retry.none(p9({} as never))),
+        GetProjectAnalyticsDetails: probeOutcome(Retry.none(p10({} as never))),
+        GetWebApp: probeOutcome(Retry.none(p11({ webApp: "alchemy-missing" } as never))),
+        GetWebAppConfig: probeOutcome(Retry.none(p12({ webApp: "alchemy-missing" } as never))),
+        ListAndroidApps: probeOutcome(Retry.none(p13({} as never))),
+        ListAvailableProjects: probeOutcome(Retry.none(p14({} as never))),
+        ListIosApps: probeOutcome(Retry.none(p15({} as never))),
+        ListProjects: probeOutcome(Retry.none(p16({} as never))),
+        ListWebApps: probeOutcome(Retry.none(p17({} as never))),
+        PatchIosApp: probeOutcome(Retry.none(p18({ iosApp: "alchemy-missing" } as never))),
+        PatchWebApp: probeOutcome(Retry.none(p19({ webApp: "alchemy-missing" } as never))),
+        RemoveIosApp: probeOutcome(Retry.none(p20({ iosApp: "alchemy-missing" } as never))),
+        RemoveProjectAnalytics: probeOutcome(Retry.none(p21({} as never))),
+        RemoveWebApp: probeOutcome(Retry.none(p22({ webApp: "alchemy-missing" } as never))),
+        SearchProjectApps: probeOutcome(Retry.none(p23({} as never))),
+        UndeleteIosApp: probeOutcome(Retry.none(p24({ iosApp: "alchemy-missing" } as never))),
+        UndeleteWebApp: probeOutcome(Retry.none(p25({ webApp: "alchemy-missing" } as never))),
       }),
     };
   }).pipe(

@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { outcome, serveProbes } from "../../bindingHost.ts";
+import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import { ProbeApi, ProbeConfig, ProbeGateway } from "./generated-resources.ts";
 
 /**
@@ -24,12 +24,12 @@ export default class ApiGatewayGeneratedHost extends GCP.Function<ApiGatewayGene
     const p5 = yield* GCP.ApiGateway.ListGateways();
     return {
       fetch: serveProbes({
-        GetApi: outcome(Retry.none(p0({} as never))),
-        GetConfig: outcome(Retry.none(p1({} as never))),
-        GetGateway: outcome(Retry.none(p2({} as never))),
-        ListApiConfigs: outcome(Retry.none(p3({} as never))),
-        ListApis: outcome(Retry.none(p4({ location: "us-central1" } as never))),
-        ListGateways: outcome(Retry.none(p5({ location: "us-central1" } as never))),
+        GetApi: probeOutcome(Retry.none(p0({} as never))),
+        GetConfig: probeOutcome(Retry.none(p1({} as never))),
+        GetGateway: probeOutcome(Retry.none(p2({} as never))),
+        ListApiConfigs: probeOutcome(Retry.none(p3({} as never))),
+        ListApis: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListGateways: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
