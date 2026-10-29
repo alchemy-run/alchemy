@@ -99,7 +99,7 @@ export const PermissionProvider = () =>
           .pipe(
             Stream.runCollect,
             Effect.map((chunk) => Array.from(chunk).find((p) => p.Principal === principal)),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
       });
 

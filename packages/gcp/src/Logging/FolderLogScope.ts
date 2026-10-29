@@ -122,7 +122,7 @@ export const FolderLogScope = Resource<FolderLogScope>("GCP.Logging.FolderLogSco
 export class FolderLogScopeNotResolved extends Data.TaggedError(
   "GCP.Logging.FolderLogScopeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, location: string, logScopeId: string) =>
@@ -156,7 +156,7 @@ const toAttrs = (scope: logging.LogScope, parent: string, location: string) => {
 const getByName = (name: string) =>
   logging
     .getFoldersLocationsLogScopes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const FolderLogScopeProvider = () =>
   Provider.succeed(FolderLogScope, {
@@ -240,7 +240,7 @@ export const FolderLogScopeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FolderLogScopeNotResolved({ name });
+        return yield* new FolderLogScopeNotResolved({ resourceName: name });
       }
 
       const namesChanged = !jsonEqual(

@@ -101,7 +101,7 @@ export const ViewProvider = () =>
           // current `news.name` always agree by the time we land here.
           const viewId = output?.id ?? news.name;
           const observed = yield* get({ id: viewId }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
 
           // Ensure — POST creates the view under `news.name`.
@@ -122,7 +122,7 @@ export const ViewProvider = () =>
           if (!output?.id) return undefined;
           return yield* get({ id: output.id }).pipe(
             Effect.map((current) => ({ ...current, id: output.id })),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
         }),
       };

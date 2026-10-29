@@ -18,7 +18,6 @@
  * the notification publish ride the local Subscription.
  */
 import { afterAll, expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
 import * as path from "node:path";
 import { DevCli, fetchOk } from "@alchemy.run/test/DevCli";
 
@@ -26,17 +25,14 @@ const root = path.resolve(import.meta.dirname, "..");
 const STAGE = "dev-cli-test";
 const cli = new DevCli({ root, stage: STAGE });
 
-// The whole suite needs docker (floci runs as a container).
-const dockerAvailable = spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
-
 afterAll(async () => {
   await cli.stop();
-  if (!process.env.NO_DESTROY && dockerAvailable) {
+  if (!process.env.NO_DESTROY) {
     cli.destroy();
   }
 }, 180_000);
 
-test.skipIf(!dockerAvailable)(
+test(
   "alchemy dev applies the mixed local/live Job stack and serves jobs",
   async () => {
     cli.start();

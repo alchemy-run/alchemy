@@ -80,3 +80,33 @@ export const directEnvStack = Effect.gen(function* () {
     env: { SANDBOX: AsyncShell, IMAGE_REVISION: "direct" },
   });
 });
+
+/**
+ * An async Worker that gains its second container-backed class,
+ * `NativeAsyncReviewer`, on a later deploy (`withReviewer`).
+ */
+export const growingStack = (withReviewer: boolean) =>
+  Effect.gen(function* () {
+    const worker = yield* Cloudflare.Worker("GrowingAsyncWorker", {
+      main: `${import.meta.dirname}/async-worker.ts`,
+      env: {
+        SANDBOX: Cloudflare.DurableObject<NativeAsyncObject>("NativeAsyncObject", {
+          containers: [AsyncShell],
+        }),
+        ...(withReviewer
+          ? {
+              REVIEWER: Cloudflare.DurableObject<NativeAsyncReviewer>("NativeAsyncReviewer", {
+                containers: [AsyncShell, AsyncLint],
+              }),
+            }
+          : {}),
+        IMAGE_REVISION: "growing",
+      },
+    });
+    return {
+      worker,
+      reviewerApplication: withReviewer
+        ? yield* declareDurableObjectApplication(worker, "NativeAsyncReviewer")
+        : undefined,
+    };
+  });

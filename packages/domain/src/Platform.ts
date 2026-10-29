@@ -1,13 +1,32 @@
 import type { HttpEffect } from "alchemy/Http";
 import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
-import type * as Aggregate from "./Aggregate.ts";
+import * as Aggregate from "./Aggregate.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
 import type * as DomainStream from "./Stream.ts";
-import type { TraceJson } from "./Telemetry.ts";
+import { TraceJson } from "./Telemetry.ts";
 import type * as View from "./View.ts";
+
+/**
+ * Capture the services `R` for later use, minus the `Scope`: a captured
+ * construction-time scope must never replace the scope of a later request or
+ * event (finalizers would attach to the wrong lifetime, and on workerd the
+ * work would be pinned to another request's I/O context). Platforms that host
+ * a model call this when they are built.
+ */
+export const captureContext = <R = never>(): Effect.Effect<
+  Context.Context<Exclude<R, Scope>>,
+  never,
+  R
+> =>
+  Effect.map(
+    Effect.context<R>(),
+    (context) => Context.omit(Scope)(context) as Context.Context<Exclude<R, Scope>>,
+  );
 
 /**
  * Everything a platform persists or sends is plain JSON. The kernel owns the
@@ -18,17 +37,15 @@ export type Json = unknown;
 /**
  * An event envelope in JSON form. `at` is epoch milliseconds.
  */
-export interface EnvelopeJson {
-  readonly id: string;
-  readonly stream: string;
-  readonly seq: number;
-  readonly at: number;
-  readonly commandId: string;
+export const EnvelopeJson = Schema.Struct({
+  ...Aggregate.Envelope.fields,
+  at: Schema.Number,
   /** Absent on events stored before correlation ids: the command id stands in. */
-  readonly correlationId?: string;
+  correlationId: Schema.optionalKey(Schema.String),
   /** The span that committed the event, so its reactions continue or link to it. */
-  readonly trace?: TraceJson;
-}
+  trace: Schema.optionalKey(TraceJson),
+});
+export type EnvelopeJson = typeof EnvelopeJson.Type;
 
 /**
  * A committed event as stored by an aggregate.
@@ -60,7 +77,7 @@ export interface Delivery {
   readonly event: Json;
   readonly envelope: EnvelopeJson;
   /** For an event from a view: the view's encoded state after it. */
-  readonly state?: Json | null;
+  readonly state?: Json;
   /** Seeded history (story `given`): views and projections apply it, policies ignore it. */
   readonly history?: boolean;
 }
@@ -71,19 +88,22 @@ export interface Delivery {
  * attachment, so a hibernated object can resume pushing) and asks the kit's
  * `push` what to send after each commit.
  */
-export interface Subscription {
+export const Subscription = Schema.Struct({
   /** The client's request id, echoed as is (the client matches it by identity). */
-  readonly requestId: string | number;
-  readonly mode: "watch" | "events";
+  requestId: Schema.Union([Schema.String, Schema.Number]),
+  mode: Schema.Literals(["watch", "events"]),
   /** The client's filter: it narrows what a permitted read sends. */
-  readonly where?: Json;
+  where: Schema.optionalKey(Schema.Unknown),
   /** The context the read's middleware provided (see `Domain.RequestContext`), for `validate`. */
-  readonly context: Readonly<Record<string, Json>>;
+  context: Schema.Record(Schema.String, Schema.Unknown),
   /** Progress: the last state version (`watch`) or event `seq` (`events`) sent. */
-  readonly cursor: number;
+  cursor: Schema.Number,
   /** Set when the read was refused before reaching the key: the encoded `Exit` to send. */
-  readonly refused?: Json;
-}
+  refused: Schema.optionalKey(Schema.Unknown),
+  /** `events` only: set once the `CaughtUp` frame after the read's history was sent. */
+  caughtUpSent: Schema.optionalKey(Schema.Boolean),
+});
+export type Subscription = typeof Subscription.Type;
 
 /**
  * What to send a subscriber, from a kit's `push`.
@@ -103,7 +123,7 @@ export interface Push {
 export interface HandleInput {
   readonly id: string;
   /** The stored state, or `null` for an instance that has never committed. */
-  readonly state: Json | null;
+  readonly state: Json;
   readonly version: number;
   readonly command: Json;
   readonly commandId: string;
@@ -129,7 +149,7 @@ export type HandleResult =
       readonly state: Json;
       readonly version: number;
       readonly events: ReadonlyArray<StoredEvent>;
-      readonly reply: Json | null;
+      readonly reply: Json;
       readonly deliveries: ReadonlyArray<Delivery>;
     };
 
@@ -140,7 +160,7 @@ export interface ReceiptJson {
   readonly stream: string;
   readonly version: number;
   readonly events: ReadonlyArray<Json>;
-  readonly reply: Json | null;
+  readonly reply: Json;
 }
 
 /**
@@ -174,7 +194,7 @@ export interface AggregateKit {
   readonly push: (
     id: string,
     subscription: Subscription,
-    current: { readonly state: Json | null; readonly version: number },
+    current: { readonly state: Json; readonly version: number },
     events: ReadonlyArray<StoredEvent>,
   ) => Effect.Effect<Push>;
 }
@@ -184,7 +204,7 @@ export interface AggregateKit {
  */
 export interface SeedInput {
   readonly id: string;
-  readonly state: Json | null;
+  readonly state: Json;
   readonly version: number;
   readonly events: ReadonlyArray<Json>;
   readonly commandId: string;
@@ -215,24 +235,39 @@ export interface AggregateStore {
    * Send a command to one instance when it is due, durably (it survives
    * restarts) and at least once. Replaces a pending one with the same
    * `commandId`. Rejections are impossible: only non-rejecting commands are
-   * scheduled.
+   * scheduled. Returns when it is due, in epoch milliseconds on the
+   * platform's clock. Fails with `AlreadyExecuted` when the instance already
+   * has a receipt for `commandId`, so the command would never run.
    */
   readonly schedule: (
     id: string,
     command: Json,
     meta: Aggregate.SendMeta,
     due: Aggregate.Due,
-  ) => Effect.Effect<void>;
-  /** Read the stored state of an instance. */
-  readonly state: (
+  ) => Effect.Effect<number, Aggregate.AlreadyExecuted>;
+  /**
+   * Cancel the pending scheduled command with this `commandId` on one
+   * instance, durably, and remember the cancel. Once this succeeds, the
+   * command never runs, even one already due. Fails with `AlreadyExecuted`
+   * when the instance has a receipt for `commandId`, `AlreadyCancelled` when
+   * it was cancelled before (and not scheduled again since), and
+   * `NotScheduled` when it was never scheduled.
+   */
+  readonly unschedule: (
     id: string,
-  ) => Effect.Effect<{ readonly state: Json | null; readonly version: number }>;
+    commandId: string,
+  ) => Effect.Effect<
+    void,
+    Aggregate.AlreadyExecuted | Aggregate.AlreadyCancelled | Aggregate.NotScheduled
+  >;
+  /** Read the stored state of an instance. */
+  readonly state: (id: string) => Effect.Effect<{ readonly state: Json; readonly version: number }>;
   /** Read the committed events of an instance (tests and diagnostics; optional). */
   readonly events?: (id: string) => Effect.Effect<ReadonlyArray<StoredEvent>>;
   /** The stored state and version of an instance, then every new one. */
   readonly changes: (
     id: string,
-  ) => Stream.Stream<{ readonly state: Json | null; readonly version: number }>;
+  ) => Stream.Stream<{ readonly state: Json; readonly version: number }>;
   /** Committed events with `seq > after`, then live ones. */
   readonly tail: (id: string, after: number) => Stream.Stream<StoredEvent>;
   /**
@@ -253,7 +288,7 @@ export interface AggregateStore {
  */
 export interface ViewSnapshot {
   /** The encoded state, or `null` when the key does not exist. */
-  readonly state: Json | null;
+  readonly state: Json;
   /** Number of applied deliveries. */
   readonly version: number;
   /** Last applied `seq` per source. */
@@ -272,7 +307,7 @@ export interface ViewEntry {
   readonly seq: number;
   readonly event: Json;
   readonly envelope: EnvelopeJson;
-  readonly state: Json | null;
+  readonly state: Json;
 }
 
 /**

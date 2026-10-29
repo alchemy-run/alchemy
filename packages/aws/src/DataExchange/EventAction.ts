@@ -165,7 +165,7 @@ export const EventActionProvider = () =>
       const getById = Effect.fn(function* (eventActionId: string) {
         return yield* dataexchange
           .getEventAction({ EventActionId: eventActionId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       /**
@@ -185,7 +185,7 @@ export const EventActionProvider = () =>
           Stream.filter((entry) => entry !== undefined),
           Stream.runHead,
           Effect.map((head) => (head._tag === "Some" ? head.value : undefined)),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

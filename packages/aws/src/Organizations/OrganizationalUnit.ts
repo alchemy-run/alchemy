@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import {
@@ -13,6 +14,13 @@ import {
   retryOrganizations,
   updateResourceTags,
 } from "./common.ts";
+
+export class OrganizationalUnitUnexpectedResponse extends Data.TaggedError(
+  "OrganizationalUnitUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type OrganizationalUnitId = string;
 export type OrganizationalUnitArn = string;
@@ -168,9 +176,9 @@ export const OrganizationalUnitProvider = () =>
               name,
             });
             if (!state) {
-              return yield* Effect.fail(
-                new Error(`organizational unit '${name}' not found after create`),
-              );
+              return yield* new OrganizationalUnitUnexpectedResponse({
+                message: `organizational unit '${name}' not found after create`,
+              });
             }
           }
 
@@ -196,9 +204,9 @@ export const OrganizationalUnitProvider = () =>
 
           const updated = yield* readOUById(state.ouId);
           if (!updated) {
-            return yield* Effect.fail(
-              new Error(`organizational unit '${state.ouId}' not found after reconcile`),
-            );
+            return yield* new OrganizationalUnitUnexpectedResponse({
+              message: `organizational unit '${state.ouId}' not found after reconcile`,
+            });
           }
 
           yield* session.note(updated.ouArn);
@@ -285,7 +293,7 @@ const readOUById = Effect.fn(function* (ouId: string) {
       })
       .pipe(
         Effect.map((response) => response.OrganizationalUnit),
-        Effect.catchTag("OrganizationalUnitNotFoundException", () => Effect.succeed(undefined)),
+        Effect.catchTag("OrganizationalUnitNotFoundException", () => Effect.undefined),
       ),
   );
 
@@ -295,7 +303,7 @@ const readOUById = Effect.fn(function* (ouId: string) {
 
   const [parentId, tags] = yield* Effect.all([
     readParentId(described.Id).pipe(
-      Effect.catchTag("ChildNotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("ChildNotFoundException", () => Effect.undefined),
     ),
     readResourceTags(described.Id).pipe(
       Effect.catchTag("TargetNotFoundException", () => Effect.succeed({})),

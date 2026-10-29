@@ -265,7 +265,7 @@ type ObservedAccount =
 const getAccount = (accountId: string) =>
   accounts.getAccount({ accountId }).pipe(
     Effect.map((account): ObservedAccount | undefined => account),
-    Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+    Effect.catchTag("InvalidRoute", () => Effect.undefined),
   );
 
 const toAttributes = (account: ObservedAccount): AccountAttributes => ({

@@ -238,7 +238,7 @@ export const RoomProvider = () =>
       const getByIdentifier = Effect.fn(function* (identifier: string) {
         return yield* ivschat.getRoom({ identifier }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -368,7 +368,7 @@ export const RoomProvider = () =>
                 (summary) =>
                   toAttrs(summary).pipe(
                     // Tolerate a malformed/deleted summary — drop it.
-                    Effect.catchTag("IvsChatRoomIncomplete", () => Effect.succeed(undefined)),
+                    Effect.catchTag("IvsChatRoomIncomplete", () => Effect.undefined),
                   ),
                 { concurrency: 5 },
               ),

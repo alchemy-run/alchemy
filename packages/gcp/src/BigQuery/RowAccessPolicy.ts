@@ -123,7 +123,7 @@ export const RowAccessPolicy = Resource<RowAccessPolicy>("GCP.BigQuery.RowAccess
 export class RowAccessPolicyNotResolved extends Data.TaggedError(
   "GCP.BigQuery.RowAccessPolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -221,7 +221,7 @@ const getByRef = (projectId: string, datasetId: string, tableId: string, policyI
       tableId,
       policyId,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toPolicyBody = (
   projectId: string,
@@ -401,7 +401,7 @@ export const RowAccessPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RowAccessPolicyNotResolved({ name });
+        return yield* new RowAccessPolicyNotResolved({ resourceName: name });
       }
 
       const observedFilter = current.filterPredicate ?? "";
@@ -431,7 +431,7 @@ export const RowAccessPolicyProvider = () =>
             ),
           );
         if (current === undefined) {
-          return yield* new RowAccessPolicyNotResolved({ name });
+          return yield* new RowAccessPolicyNotResolved({ resourceName: name });
         }
       }
 

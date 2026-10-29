@@ -81,7 +81,7 @@ export const BasePathMappingProvider = () =>
               basePath: output.basePath,
               domainNameId: output.domainNameId,
             })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!b?.restApiId) return undefined;
           return {
             domainName: output.domainName,
@@ -109,7 +109,7 @@ export const BasePathMappingProvider = () =>
               basePath,
               domainNameId,
             })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
           // Ensure — create the mapping if it isn't there.
           if (!observed?.restApiId) {

@@ -141,7 +141,7 @@ export const AccessPoliciesAuthorizedOrgsDesc = Resource<AccessPoliciesAuthorize
 export class AccessPoliciesAuthorizedOrgsDescNotResolved extends Data.TaggedError(
   "GCP.AccessContextManager.AccessPoliciesAuthorizedOrgsDescNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (desc: acm.AuthorizedOrgsDesc): AccessPoliciesAuthorizedOrgsDesc["Attributes"] => {
@@ -161,7 +161,7 @@ const toAttrs = (desc: acm.AuthorizedOrgsDesc): AccessPoliciesAuthorizedOrgsDesc
 const getByName = (name: string) =>
   acm
     .getAccessPoliciesAuthorizedOrgsDescs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listDescs = (policy: string) =>
   collectPages(
@@ -261,7 +261,7 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
               orgs: desiredOrgs.length > 0 ? desiredOrgs : undefined,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           yield* waitForOperation(created).pipe(
@@ -275,7 +275,7 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
 
       if (current === undefined) {
         return yield* new AccessPoliciesAuthorizedOrgsDescNotResolved({
-          name,
+          resourceName: name,
         });
       }
 
@@ -294,7 +294,7 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
 
       if (current === undefined) {
         return yield* new AccessPoliciesAuthorizedOrgsDescNotResolved({
-          name,
+          resourceName: name,
         });
       }
 
@@ -304,7 +304,7 @@ export const AccessPoliciesAuthorizedOrgsDescProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* acm
         .deleteAccessPoliciesAuthorizedOrgsDescs({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

@@ -1,5 +1,6 @@
 import type * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Binding from "alchemy/Binding";
+import type { Input } from "alchemy/Input";
 import type * as Effect from "effect/Effect";
 import type { FindImageOptions } from "./Image.ts";
 
@@ -61,4 +62,6 @@ export const GetAmi = Binding.Service<GetAmi>("AWS.EC2.GetAmi");
  * bundle. Prefer {@link image} (or the distro presets) when you only need
  * the AMI ID and want a missing image to fail the plan.
  */
-export const getAmi = GetAmi.execute;
+export const getAmi = <Req = never>(
+  options: Input<FindImageOptions> | Effect.Effect<FindImageOptions, never, Req>,
+) => GetAmi.execute<Req>(options);

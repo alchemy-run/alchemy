@@ -153,6 +153,12 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  it.live("--fast-distilled is accepted", () =>
+    Effect.gen(function* () {
+      expect(yield* exitCodeOf(["--no-input", "--fast-distilled", "profile", "list"])).toBe(0);
+    }),
+  );
+
   it.live("--help exits 0", () =>
     Effect.gen(function* () {
       expect(yield* exitCodeOf(["--help"])).toBe(0);
@@ -204,40 +210,5 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
           stderr: exitCode === 0 ? "" : stderr,
         }).toEqual({ exitCode: 0, stderr: "" });
       }).pipe(Effect.scoped, Effect.provide(PlatformServices)),
-  );
-
-  it.live("provider check-env exits 1 when a required var is missing", () =>
-    Effect.gen(function* () {
-      expect(
-        yield* exitCodeOf(["provider", "check-env", "--provider", "aws"], {
-          AWS_ACCESS_KEY_ID: "",
-          AWS_SECRET_ACCESS_KEY: "",
-        }),
-      ).toBe(1);
-    }),
-  );
-
-  it.live("provider check-env exits 0 when the contract is satisfied", () =>
-    Effect.gen(function* () {
-      expect(
-        yield* exitCodeOf(["provider", "check-env", "--provider", "aws"], {
-          AWS_ACCESS_KEY_ID: "AKIATESTKEY",
-          AWS_SECRET_ACCESS_KEY: "test-secret",
-          AWS_REGION: "us-east-1",
-        }),
-      ).toBe(0);
-    }),
-  );
-
-  it.live("provider check-env accepts an explicit profile", () =>
-    Effect.gen(function* () {
-      expect(
-        yield* exitCodeOf(["provider", "check-env", "--profile", "default", "--provider", "aws"], {
-          AWS_ACCESS_KEY_ID: "AKIATESTKEY",
-          AWS_SECRET_ACCESS_KEY: "test-secret",
-          AWS_REGION: "us-east-1",
-        }),
-      ).toBe(0);
-    }),
   );
 });

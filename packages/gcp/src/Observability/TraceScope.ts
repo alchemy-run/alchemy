@@ -123,7 +123,7 @@ export const TraceScope = Resource<TraceScope>("GCP.Observability.TraceScope");
 export class TraceScopeNotResolved extends Data.TaggedError(
   "GCP.Observability.TraceScopeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const traceScopeIdOf = (scope: observability.TraceScope, fallback?: string) => {
@@ -154,7 +154,7 @@ const toAttrs = (scope: observability.TraceScope, project: string, location: str
 const getByName = (name: string) =>
   observability
     .getProjectsLocationsTraceScopes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const TraceScopeProvider = () =>
   Provider.succeed(TraceScope, {
@@ -232,7 +232,7 @@ export const TraceScopeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new TraceScopeNotResolved({ name });
+        return yield* new TraceScopeNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

@@ -3,8 +3,23 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
+
+export class ResponseHeadersPolicyConflict extends Data.TaggedError(
+  "ResponseHeadersPolicyConflict",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ResponseHeadersPolicyUnexpectedResponse extends Data.TaggedError(
+  "ResponseHeadersPolicyUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ResponseHeadersPolicyProps {
   /**
@@ -134,7 +149,7 @@ export const ResponseHeadersPolicyProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const config = yield* cloudfront
           .getResponseHeadersPolicyConfig({ Id: id })
-          .pipe(Effect.catchTag("NoSuchResponseHeadersPolicy", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchResponseHeadersPolicy", () => Effect.undefined));
         if (!config?.ResponseHeadersPolicyConfig) return undefined;
         return {
           config: config.ResponseHeadersPolicyConfig,
@@ -270,18 +285,18 @@ export const ResponseHeadersPolicyProvider = () =>
                             Location: undefined,
                           })
                         : Effect.fail(
-                            new Error(
-                              `Response headers policy '${name}' already exists but could not be recovered`,
-                            ),
+                            new ResponseHeadersPolicyConflict({
+                              message: `Response headers policy '${name}' already exists but could not be recovered`,
+                            }),
                           ),
                     ),
                   ),
                 ),
               );
             if (!created.ResponseHeadersPolicy?.Id) {
-              return yield* Effect.fail(
-                new Error("createResponseHeadersPolicy returned no identifier"),
-              );
+              return yield* new ResponseHeadersPolicyUnexpectedResponse({
+                message: "createResponseHeadersPolicy returned no identifier",
+              });
             }
             yield* session.note(created.ResponseHeadersPolicy.Id);
             return toAttrs(
@@ -299,9 +314,9 @@ export const ResponseHeadersPolicyProvider = () =>
             ResponseHeadersPolicyConfig: buildConfig(observed.config.Name, news),
           });
           if (!updated.ResponseHeadersPolicy?.Id) {
-            return yield* Effect.fail(
-              new Error("updateResponseHeadersPolicy returned no identifier"),
-            );
+            return yield* new ResponseHeadersPolicyUnexpectedResponse({
+              message: "updateResponseHeadersPolicy returned no identifier",
+            });
           }
           yield* session.note(observed.id);
           return toAttrs(

@@ -119,7 +119,7 @@ export const MuteConfig = Resource<MuteConfig>("GCP.SecurityCenter.MuteConfig");
 export class MuteConfigNotResolved extends Data.TaggedError(
   "GCP.SecurityCenter.MuteConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, muteConfigId: string) =>
@@ -144,10 +144,10 @@ const toAttrs = (config: scc.GoogleCloudSecuritycenterV1MuteConfig, project: str
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : scc
         .getProjectsMuteConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const MuteConfigProvider = () =>
   Provider.succeed(MuteConfig, {
@@ -218,7 +218,7 @@ export const MuteConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MuteConfigNotResolved({ name });
+        return yield* new MuteConfigNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

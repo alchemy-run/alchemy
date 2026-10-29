@@ -102,7 +102,7 @@ type PlanResult<Output> = Effect.Effect<
  * outputs and return void; the entire declaration still evaluates.
  * With an explicit module type, filter-carrying callbacks also specify the input type.
  */
-export function plan<Module = unknown>(
+export function plan<_Module = unknown>(
   input: FilteredPlanInput &
     ({ include: ReadonlyArray<string> } | { exclude: ReadonlyArray<string> }),
 ): PlanResult<undefined>;
@@ -118,7 +118,7 @@ export function plan(input: FilteredPlanInput) {
 }
 
 const planStack = Effect.fn("Alchemist.stack.plan")(function* (input: FilteredPlanInput) {
-  type Output = StackModuleOutput<unknown> | undefined;
+  type Output = StackModuleOutput<unknown>;
   if (
     input.operation === "destroy" &&
     (input.include !== undefined || input.exclude !== undefined)

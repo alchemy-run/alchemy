@@ -148,7 +148,7 @@ export const ReasoningEnginesMemory = Resource<ReasoningEnginesMemory>(
 export class ReasoningEnginesMemoryNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.ReasoningEnginesMemoryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const engineNameOf = (project: string, location: string, reasoningEngine: string) =>
@@ -181,13 +181,13 @@ const toAttrs = (memory: aiplatform.GoogleCloudAiplatformV1Memory, project: stri
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsReasoningEnginesMemories({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (memory): memory is aiplatform.GoogleCloudAiplatformV1Memory => memory !== undefined,
-      () => new AiPlatformNotResolved({ name }),
+      () => new AiPlatformNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.NotResolved",
@@ -200,7 +200,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (memory) => memory === undefined,
-      () => new AiPlatformStillExists({ name }),
+      () => new AiPlatformStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -317,7 +317,7 @@ export const ReasoningEnginesMemoryProvider = () =>
               expireTime: news.expireTime,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
@@ -326,7 +326,7 @@ export const ReasoningEnginesMemoryProvider = () =>
       }
 
       if (current === undefined || current.name === undefined) {
-        return yield* new ReasoningEnginesMemoryNotResolved({ name });
+        return yield* new ReasoningEnginesMemoryNotResolved({ resourceName: name });
       }
 
       const observedName = current.name;
@@ -360,7 +360,7 @@ export const ReasoningEnginesMemoryProvider = () =>
 
       if (current === undefined) {
         return yield* new ReasoningEnginesMemoryNotResolved({
-          name: observedName,
+          resourceName: observedName,
         });
       }
       return toAttrs(current, env.project);
@@ -371,7 +371,7 @@ export const ReasoningEnginesMemoryProvider = () =>
         .deleteProjectsLocationsReasoningEnginesMemories({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

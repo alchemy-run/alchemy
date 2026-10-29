@@ -6,9 +6,17 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Array from "effect/Array";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ResourceShareUnexpectedResponse extends Data.TaggedError(
+  "ResourceShareUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ResourceShareProps {
   /**
@@ -250,9 +258,9 @@ export const ResourceShareProvider = () =>
             });
             const share = created.resourceShare;
             if (!share?.resourceShareArn) {
-              return yield* Effect.fail(
-                new Error(`resource share '${name}' missing ARN after create`),
-              );
+              return yield* new ResourceShareUnexpectedResponse({
+                message: `resource share '${name}' missing ARN after create`,
+              });
             }
             yield* session.note(share.resourceShareArn);
             return toAttrs(share);

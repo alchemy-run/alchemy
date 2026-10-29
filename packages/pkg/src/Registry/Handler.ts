@@ -189,7 +189,7 @@ const publish = Effect.fn("publish")(function* (run: Run, manifestText: string) 
   const base = yield* origin;
 
   yield* requireVouched(run, manifestText);
-  const manifest = yield* Schema.decodeUnknownEffect(ManifestJson)(manifestText).pipe(
+  const manifest = yield* Schema.decodeEffect(ManifestJson)(manifestText).pipe(
     Effect.mapError((e) => BadRequest.make({ message: `invalid manifest: ${String(e)}` })),
   );
   // The run vouched for the manifest, but the tags come from the run's

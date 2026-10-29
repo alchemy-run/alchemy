@@ -86,7 +86,7 @@ const inTransit = <A>(call: Effect.Effect<A>): Effect.Effect<A> =>
       schedule: Schedule.min([Schedule.exponential("100 millis"), Schedule.spaced("2 seconds")]),
       times: 35,
     }),
-    Effect.catch((defect) => Effect.die(defect)),
+    Effect.orDie,
   ) as Effect.Effect<A>;
 
 /**
@@ -105,7 +105,7 @@ const sendEvent = (
       schedule: Schedule.min([Schedule.exponential("100 millis"), Schedule.spaced("2 seconds")]),
       times: 35,
     }),
-    Effect.catch((defect) => Effect.die(defect)),
+    Effect.orDie,
   ) as Effect.Effect<void>;
 
 /** An instance's status, or undefined if there's no such instance. */
@@ -263,7 +263,7 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
           const run = yield* Effect.serviceOption(CurrentRun);
           if (Option.isNone(run)) {
             const result = yield* resultOf(handle, workflow as EffectWorkflow.AnyWithProps, id);
-            return result ?? new EffectWorkflow.Suspended({});
+            return result ?? EffectWorkflow.Suspended.make({});
           }
           // A child workflow: wait for it here, sleeping between checks.
           for (let check = 0; ; check++) {
@@ -294,7 +294,7 @@ export const NativeEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Wor
           (result) =>
             result === null
               ? Option.none()
-              : Option.some(result ?? new EffectWorkflow.Suspended({})),
+              : Option.some(result ?? EffectWorkflow.Suspended.make({})),
         ),
 
       // The run wakes from whatever it waits for, fails there, and runs

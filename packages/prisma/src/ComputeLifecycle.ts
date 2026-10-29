@@ -206,7 +206,7 @@ export const destroyDeployment = Effect.fn(function* (
   options: WaitForDeploymentStatusOptions = {},
 ) {
   const deployment = yield* observeDeployment(deploymentId).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
   if (!deployment) {
     return {
@@ -236,7 +236,7 @@ export const destroyDeployment = Effect.fn(function* (
     }
     // Only a stopped deployment can be deleted.
     const stoppedVersion = yield* waitForDeploymentStatus(deploymentId, "stopped", options).pipe(
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
     statusAtDelete = stoppedVersion?.status ?? "stopped";
   }
@@ -326,7 +326,7 @@ export const destroyProjectApps = Effect.fn(function* (
         cursor = nextCursor;
       }
       return items;
-    }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     if (!apps) return false;
     for (const app of apps) {
       const result = yield* destroyApp(app.id, options);

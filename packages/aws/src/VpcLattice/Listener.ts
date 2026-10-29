@@ -5,10 +5,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, tagRecord } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryOnConflict, waitUntilAbsent } from "./internal.ts";
+
+export class VpcLatticeListenerUnexpectedResponse extends Data.TaggedError(
+  "VpcLatticeListenerUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The action a listener (or rule) applies to matched traffic: forward to
@@ -136,7 +144,7 @@ export const ListenerProvider = () =>
       const observe = (serviceIdentifier: string, listenerIdentifier: string) =>
         vpclattice
           .getListener({ serviceIdentifier, listenerIdentifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findByName = (serviceIdentifier: string, name: string) =>
         vpclattice.listListeners.pages({ serviceIdentifier }).pipe(
@@ -147,10 +155,10 @@ export const ListenerProvider = () =>
               .find((l) => l.name === name),
           ),
           Effect.flatMap((summary) =>
-            summary?.id ? observe(serviceIdentifier, summary.id) : Effect.succeed(undefined),
+            summary?.id ? observe(serviceIdentifier, summary.id) : Effect.undefined,
           ),
           // The owning service may already be gone during teardown races.
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       const syncTags = Effect.fn(function* (arn: string, desiredTags: Record<string, string>) {
@@ -235,7 +243,9 @@ export const ListenerProvider = () =>
               Effect.catchTag("ConflictException", () => findByName(news.serviceIdentifier, name)),
             );
             if (!listener?.arn || !listener.id) {
-              return yield* Effect.fail(new Error(`Failed to create listener ${name}`));
+              return yield* new VpcLatticeListenerUnexpectedResponse({
+                message: `Failed to create listener ${name}`,
+              });
             }
           } else if (
             JSON.stringify(listener.defaultAction) !== JSON.stringify(news.defaultAction)

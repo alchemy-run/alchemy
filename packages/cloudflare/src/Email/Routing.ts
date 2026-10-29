@@ -101,7 +101,7 @@ export const RoutingProvider = () =>
           emailRouting.getEmailRouting({ zoneId }).pipe(
             Effect.map((result) => toAttributes(zoneId, result)),
             // Plan-gated or partial zones reject the route; skip them.
-            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidRoute", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );

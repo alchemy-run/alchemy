@@ -3,16 +3,20 @@ import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import type { DurableDeferred, WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
+import type * as Command from "./Command.ts";
 import * as ExternalSystem from "./ExternalSystem.ts";
 import * as InMemory from "./InMemory.ts";
+import type * as Key from "./Key.ts";
 import * as Model from "./Model.ts";
 import type * as Saga from "./Saga.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -85,23 +89,26 @@ export type Step =
     }
   | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
   | { readonly _tag: "Replied"; readonly reply: unknown }
-  | { readonly _tag: "State"; readonly ref: Aggregate.Ref; readonly assert: (state: any) => void }
+  | { readonly _tag: "State"; readonly ref: Aggregate.Ref; readonly expected: unknown }
   | {
       readonly _tag: "View";
       readonly view: View.Any;
-      readonly key: Aggregate.Ref;
+      /** A ref, or the value of a Schema key. */
+      readonly key: Key.RefOf<Key.Any>;
       readonly expected: unknown;
     }
   | {
       readonly _tag: "Emitted";
       readonly view: View.Any;
-      readonly key: Aggregate.Ref;
+      /** A ref, or the value of a Schema key. */
+      readonly key: Key.RefOf<Key.Any>;
       readonly expected: unknown;
     }
   | {
       readonly _tag: "Streamed";
       readonly stream: DomainStream.Any;
-      readonly key: Aggregate.Ref;
+      /** A ref, or the value of a Schema key. */
+      readonly key: Key.RefOf<Key.Any>;
       readonly events: ReadonlyArray<{ readonly _tag: string }>;
     }
   | {
@@ -126,6 +133,7 @@ export type Step =
         | { readonly _tag: "Died" };
     }
   | { readonly _tag: "Clock"; readonly at: string | number | DateTime.DateTime }
+  | { readonly _tag: "Advance"; readonly by: Duration.Input }
   | {
       readonly _tag: "Signal";
       readonly saga: Saga.Any;
@@ -145,22 +153,111 @@ export type Step =
       readonly value: unknown;
     };
 
+/** The step with this `_tag`. */
+export type StepOf<Tag extends Step["_tag"]> = Extract<Step, { readonly _tag: Tag }>;
+
+/**
+ * A `when` step. Its type carries the command's class, so the steps after it
+ * are checked against what the command declares.
+ */
+export interface WhenStep<C = unknown> extends StepOf<"When"> {
+  readonly "~command"?: C;
+}
+
+/** A `rejected` step; its type carries the rejection. */
+export interface RejectedStep<R = unknown> extends StepOf<"Rejected"> {
+  readonly "~rejection"?: R;
+}
+
+/** A `replied` step; its type carries the reply. */
+export interface RepliedStep<A = unknown> extends StepOf<"Replied"> {
+  readonly "~reply"?: A;
+}
+
+/** A `provide` step; its type carries the service it provides. */
+export interface ProvideStep<I = unknown> extends StepOf<"Provide"> {
+  readonly "~provides"?: I;
+}
+
+type CommandClassOf<A extends Aggregate.Any, Cmd> = Extract<
+  A["definition"]["commands"][number],
+  { readonly tag: Cmd extends { readonly _tag: infer T } ? T : never }
+>;
+type RejectionOf<C extends Command.Any> = Aggregate.InstanceOf<C["rejects"][number]>;
+type ReplyOf<C extends Command.Any> = C["reply"] extends Schema.Top ? C["reply"]["Type"] : void;
+type NameOf<X, Key extends string, Fallback extends string> = X extends {
+  readonly [K in Key]: infer N extends string;
+}
+  ? N
+  : Fallback;
+
+/** What a `when` step must be: an error message when a service it needs is not provided yet. */
+type CheckWhen<H, K extends Command.Any, P> = [Exclude<Command.ContextOf<K>, P>] extends [never]
+  ? H
+  : `${K["tag"]} needs Story.provide(${NameOf<Exclude<Command.ContextOf<K>, P>, "key", "its service">}) before it`;
+
+/** What a `rejected` step must be: an error message when the last command does not declare it. */
+type CheckRejected<H, R, C> = C extends Command.Any
+  ? [R] extends [RejectionOf<C>]
+    ? H
+    : `${C["tag"]} does not reject with ${NameOf<R, "_tag", "this rejection">}`
+  : H;
+
+/** What a `replied` step must be: the last command's reply, or an error message when it declares none. */
+type CheckReplied<H, A, C> = C extends Command.Any
+  ? [A] extends [ReplyOf<C>]
+    ? H
+    : C["reply"] extends Schema.Top
+      ? RepliedStep<ReplyOf<C>>
+      : `${C["tag"]} declares no reply`
+  : H;
+
+/**
+ * The steps of a story, checked in order: a `rejected` step takes only a
+ * rejection the last `when` command declares, a `replied` step only its reply
+ * type, and a `when` needs a `provide` step before it for every service its
+ * command's middleware provides. A failing step is replaced by a message
+ * saying what is wrong, so the type error names it. A step typed as plain
+ * {@link Step} turns the checks off until the next `when`, since it may be any
+ * step.
+ */
+export type Checked<
+  S extends ReadonlyArray<Step>,
+  C = unknown,
+  P = never,
+  Out extends ReadonlyArray<unknown> = [],
+> = S extends readonly [infer H extends Step, ...infer T extends ReadonlyArray<Step>]
+  ? [H] extends [WhenStep<infer K>]
+    ? K extends Command.Any
+      ? Checked<T, K, P, [...Out, CheckWhen<H, K, P>]>
+      : Checked<T, unknown, P, [...Out, H]>
+    : [H] extends [ProvideStep<infer I>]
+      ? Checked<T, C, P | I, [...Out, H]>
+      : [H] extends [RejectedStep<infer R>]
+        ? Checked<T, C, P, [...Out, CheckRejected<H, R, C>]>
+        : [H] extends [RepliedStep<infer A>]
+          ? Checked<T, C, P, [...Out, CheckReplied<H, A, C>]>
+          : [Step] extends [H]
+            ? Checked<T, unknown, any, [...Out, H]>
+            : Checked<T, C, P, [...Out, H]>
+  : [...Out, ...S];
+
 /** History: events already committed on a stream before the story starts. */
 const given = <A extends Aggregate.Any>(
   ref: Aggregate.Ref<A>,
   ...events: ReadonlyArray<Aggregate.EventOf<A>>
-): Step => ({
+): StepOf<"Given"> => ({
   _tag: "Given",
   ref,
   events: events as ReadonlyArray<{ readonly _tag: string }>,
 });
 
 /** Send a command. Its policies run until they finish or suspend on an external system call. */
-const when = <A extends Aggregate.Any>(
+const when = <A extends Aggregate.Any, Cmd extends Aggregate.CommandOf<A>>(
   ref: Aggregate.Ref<A>,
-  command: Aggregate.CommandOf<A>,
+  command: Cmd,
   options?: { readonly commandId?: string },
-): Step => ({
+): WhenStep<CommandClassOf<A, Cmd>> => ({
   _tag: "When",
   ref,
   command: command as { readonly _tag: string },
@@ -171,37 +268,36 @@ const when = <A extends Aggregate.Any>(
 const then = <A extends Aggregate.Any>(
   ref: Aggregate.Ref<A>,
   ...events: ReadonlyArray<Aggregate.EventOf<A>>
-): Step => ({
+): StepOf<"Then"> => ({
   _tag: "Then",
   ref,
   events: events as ReadonlyArray<{ readonly _tag: string }>,
 });
 
-/** The last command was rejected with exactly this rejection. */
-const rejected = (rejection: { readonly _tag: string }): Step => ({
+/**
+ * The last command was rejected with exactly this rejection. It must be one
+ * the last `when` command declares in `rejects`.
+ */
+const rejected = <R extends { readonly _tag: string }>(rejection: R): RejectedStep<R> => ({
   _tag: "Rejected",
   rejection,
 });
 
-/** The last command's reply. */
-const replied = (reply: unknown): Step => ({ _tag: "Replied", reply });
+/** The last command's reply, of the type the last `when` command declares. */
+const replied = <A>(reply: A): RepliedStep<A> => ({ _tag: "Replied", reply });
 
-/** Assert on an aggregate instance's current state. */
+/** Assert on an aggregate instance's current state: an expected (partial) state, or a function. */
 const state = <A extends Aggregate.Any>(
   ref: Aggregate.Ref<A>,
-  assert: (state: Aggregate.StateOf<A>) => void,
-): Step => ({
-  _tag: "State",
-  ref,
-  assert,
-});
+  expected: Partial<Aggregate.StateOf<A>> | ((state: Aggregate.StateOf<A>) => void),
+): StepOf<"State"> => ({ _tag: "State", ref, expected });
 
 /** Assert on a view key: an expected (partial) state, a function, or {@link none}. */
 const view = <V extends View.Any>(
   view: V,
-  key: Aggregate.Ref<View.KeyOf<V>>,
+  key: Key.RefOf<View.KeyOf<V>>,
   expected: Partial<View.StateOf<V>> | ((state: View.StateOf<V>) => void) | typeof none,
-): Step => ({ _tag: "View", view, key, expected });
+): StepOf<"View"> => ({ _tag: "View", view, key, expected });
 
 /**
  * Assert on every event a view key has emitted: the expected (partial) events
@@ -209,11 +305,11 @@ const view = <V extends View.Any>(
  */
 const emitted = <V extends View.Any>(
   view: V,
-  key: Aggregate.Ref<View.KeyOf<V>>,
+  key: Key.RefOf<View.KeyOf<V>>,
   expected:
     | ReadonlyArray<Partial<View.EventOf<V>>>
     | ((entries: ReadonlyArray<View.Entry<View.StateOf<V>, View.EventOf<V>>>) => void),
-): Step => ({ _tag: "Emitted", view, key, expected });
+): StepOf<"Emitted"> => ({ _tag: "Emitted", view, key, expected });
 
 /**
  * The next entries appended to a stream key (by its projection). With no
@@ -221,9 +317,9 @@ const emitted = <V extends View.Any>(
  */
 const streamed = <S extends DomainStream.Any>(
   stream: S,
-  key: Aggregate.Ref<DomainStream.KeyOf<S>>,
+  key: Key.RefOf<DomainStream.KeyOf<S>>,
   ...events: ReadonlyArray<DomainStream.EventOf<S>>
-): Step => ({
+): StepOf<"Streamed"> => ({
   _tag: "Streamed",
   stream,
   key,
@@ -238,15 +334,18 @@ const streamed = <S extends DomainStream.Any>(
  * that call, so a later step can answer or assert exactly it.
  */
 const callStep: {
-  <Args>(op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step;
-  <Args>(tag: string, op: ExternalSystem.Op<Args, any>, args: Partial<Args>): Step;
-} = (...a: ReadonlyArray<any>): Step =>
+  <Args>(op: ExternalSystem.Op<Args, any>, args: Partial<Args>): StepOf<"Call">;
+  <Args>(tag: string, op: ExternalSystem.Op<Args, any>, args: Partial<Args>): StepOf<"Call">;
+} = (...a: ReadonlyArray<any>): StepOf<"Call"> =>
   typeof a[0] === "string"
     ? { _tag: "Call", tag: a[0], op: a[1], args: a[2] }
     : { _tag: "Call", tag: undefined, op: a[0], args: a[1] };
 
 /** Answer a pending call with an exit; the tag, when given, comes first. */
-const answer = (a: ReadonlyArray<any>, exit: (value: any) => Exit.Exit<unknown, unknown>): Step =>
+const answer = (
+  a: ReadonlyArray<any>,
+  exit: (value: any) => Exit.Exit<unknown, unknown>,
+): StepOf<"Answer"> =>
   typeof a[0] === "string"
     ? { _tag: "Answer", tag: a[0], op: a[1], exit: exit(a[2]) }
     : { _tag: "Answer", tag: undefined, op: a[0], exit: exit(a[1]) };
@@ -257,30 +356,34 @@ const answer = (a: ReadonlyArray<any>, exit: (value: any) => Exit.Exit<unknown, 
  * pending call to the operation, and fails if several are pending.
  */
 const succeed: {
-  <Success>(op: ExternalSystem.Op<any, Success>, value: Success): Step;
-  <Success>(tag: string, op: ExternalSystem.Op<any, Success>, value: Success): Step;
-} = (...a: ReadonlyArray<any>): Step => answer(a, Exit.succeed);
+  <Success>(op: ExternalSystem.Op<any, Success>, value: Success): StepOf<"Answer">;
+  <Success>(tag: string, op: ExternalSystem.Op<any, Success>, value: Success): StepOf<"Answer">;
+} = (...a: ReadonlyArray<any>): StepOf<"Answer"> => answer(a, Exit.succeed);
 
 /**
  * Fail an external system call with one of the operation's declared errors,
  * as when the vendor refuses. Finds the call the same way `succeed` does.
  */
 const fail: {
-  <Error>(op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
-  <Error>(tag: string, op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
-} = (...a: ReadonlyArray<any>): Step => answer(a, Exit.fail);
+  <Error>(op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): StepOf<"Answer">;
+  <Error>(
+    tag: string,
+    op: ExternalSystem.Op<any, any, Error>,
+    error: NoInfer<Error>,
+  ): StepOf<"Answer">;
+} = (...a: ReadonlyArray<any>): StepOf<"Answer"> => answer(a, Exit.fail);
 
 /**
  * Fail an external system call with a defect, as when the transport breaks.
  * Finds the call the same way `succeed` does.
  */
 const die: {
-  (op: ExternalSystem.Op, defect: unknown): Step;
-  (tag: string, op: ExternalSystem.Op, defect: unknown): Step;
-} = (...a: ReadonlyArray<any>): Step => answer(a, Exit.die);
+  (op: ExternalSystem.Op, defect: unknown): StepOf<"Answer">;
+  (tag: string, op: ExternalSystem.Op, defect: unknown): StepOf<"Answer">;
+} = (...a: ReadonlyArray<any>): StepOf<"Answer"> => answer(a, Exit.die);
 
 /** Assert how a real call to a system that is not stubbed ended; the tag, when given, comes first. */
-const outcome = (a: ReadonlyArray<any>, expected: (value: any) => any): Step =>
+const outcome = (a: ReadonlyArray<any>, expected: (value: any) => any): StepOf<"Returned"> =>
   typeof a[0] === "string"
     ? { _tag: "Returned", tag: a[0], op: a[1], expected: expected(a[2]) }
     : { _tag: "Returned", tag: undefined, op: a[0], expected: expected(a[1]) };
@@ -292,27 +395,36 @@ const outcome = (a: ReadonlyArray<any>, expected: (value: any) => any): Step =>
  * `returned`, `failed` or `died`.
  */
 const returned: {
-  <Success>(op: ExternalSystem.Op<any, Success>, value: Success): Step;
-  <Success>(tag: string, op: ExternalSystem.Op<any, Success>, value: Success): Step;
-} = (...a: ReadonlyArray<any>): Step => outcome(a, (value) => ({ _tag: "Success", value }));
+  <Success>(op: ExternalSystem.Op<any, Success>, value: Success): StepOf<"Returned">;
+  <Success>(tag: string, op: ExternalSystem.Op<any, Success>, value: Success): StepOf<"Returned">;
+} = (...a: ReadonlyArray<any>): StepOf<"Returned"> =>
+  outcome(a, (value) => ({ _tag: "Success", value }));
 
 /** A real call to an external system that is not stubbed failed with this declared error. */
 const failed: {
-  <Error>(op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
-  <Error>(tag: string, op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): Step;
-} = (...a: ReadonlyArray<any>): Step => outcome(a, (error) => ({ _tag: "Failure", error }));
+  <Error>(op: ExternalSystem.Op<any, any, Error>, error: NoInfer<Error>): StepOf<"Returned">;
+  <Error>(
+    tag: string,
+    op: ExternalSystem.Op<any, any, Error>,
+    error: NoInfer<Error>,
+  ): StepOf<"Returned">;
+} = (...a: ReadonlyArray<any>): StepOf<"Returned"> =>
+  outcome(a, (error) => ({ _tag: "Failure", error }));
 
 /** A real call to an external system that is not stubbed died with a defect. */
 const died: {
-  (op: ExternalSystem.Op): Step;
-  (tag: string, op: ExternalSystem.Op): Step;
-} = (...a: ReadonlyArray<any>): Step =>
+  (op: ExternalSystem.Op): StepOf<"Returned">;
+  (tag: string, op: ExternalSystem.Op): StepOf<"Returned">;
+} = (...a: ReadonlyArray<any>): StepOf<"Returned"> =>
   typeof a[0] === "string"
     ? { _tag: "Returned", tag: a[0], op: a[1], expected: { _tag: "Died" } }
     : { _tag: "Returned", tag: undefined, op: a[0], expected: { _tag: "Died" } };
 
 /** Move the clock: later commands are stamped with it, and scheduled commands now due fire. */
-const clock = (at: string | number | DateTime.DateTime): Step => ({ _tag: "Clock", at });
+const clock = (at: string | number | DateTime.DateTime): StepOf<"Clock"> => ({ _tag: "Clock", at });
+
+/** Move the clock forward by a duration, like `"1 day"`: the same as `clock` at the current time plus `by`. */
+const advance = (by: Duration.Input): StepOf<"Advance"> => ({ _tag: "Advance", by });
 
 type SagaClientOf<S> = S extends Context.Key<any, infer C> ? C : never;
 type SagaKeyOf<S> =
@@ -326,7 +438,7 @@ const signal = <S extends Saga.Any, Success extends Schema.Constraint>(
   key: SagaKeyOf<S>,
   deferred: DurableDeferred.DurableDeferred<Success, any>,
   value: Success["Type"],
-): Step => ({ _tag: "Signal", saga, key, deferred, value });
+): StepOf<"Signal"> => ({ _tag: "Signal", saga, key, deferred, value });
 
 /**
  * Check where a saga run is: running, completed with a result, rejected,
@@ -337,7 +449,7 @@ const saga = <S extends Saga.Any>(
   saga: S,
   key: SagaKeyOf<S>,
   expected: SagaStatusOf<S> | { readonly _tag: "Died" },
-): Step => ({
+): StepOf<"Saga"> => ({
   _tag: "Saga",
   saga,
   key,
@@ -358,7 +470,7 @@ const statusJson = (status: Saga.Status<unknown, unknown> | { readonly _tag: "Di
  * Provide a service to subsequent commands, as their middleware would (for
  * example the current actor). Replaces any earlier value of the same service.
  */
-const provide = <I, S>(service: Context.Key<I, S>, value: S): Step => ({
+const provide = <I, S>(service: Context.Key<I, S>, value: S): ProvideStep<I> => ({
   _tag: "Provide",
   service: service as unknown as Context.Key<unknown, unknown>,
   value,
@@ -409,17 +521,33 @@ const refName = (ref: Aggregate.Ref) => `${ref.aggregate}/${ref.id}`;
 const callName = (tag: string | undefined, op: ExternalSystem.Op) =>
   `${tag === undefined ? "" : `"${tag}" `}${op.system}.${op.op}`;
 
+/** A `clock` step's time in epoch milliseconds; `NaN` for a string that is not a time. */
+const clockMillis = (at: string | number | DateTime.DateTime) =>
+  typeof at === "number"
+    ? at
+    : typeof at === "string"
+      ? Date.parse(at)
+      : DateTime.toEpochMillis(at);
+
+/** An `advance` step's duration; `undefined` for an input that is not a finite duration. */
+const advanceDuration = (by: Duration.Input) =>
+  Option.getOrUndefined(Option.filter(Duration.fromInput(by), Duration.isFinite));
+
+const showDurationInput = (by: Duration.Input): string =>
+  typeof by === "string" ? by : Formatter.format(by);
+
 /** A one-line summary of a step, before it runs. */
 const describeStep = (s: Step): string => {
   switch (s._tag) {
-    case "Clock":
-      return new Date(
-        typeof s.at === "number"
-          ? s.at
-          : typeof s.at === "string"
-            ? Date.parse(s.at)
-            : DateTime.toEpochMillis(s.at),
-      ).toISOString();
+    case "Advance": {
+      const by = advanceDuration(s.by);
+      if (by === undefined) return showDurationInput(s.by);
+      return `${Duration.isNegative(by) ? "" : "+"}${Duration.format(by)}`;
+    }
+    case "Clock": {
+      const at = clockMillis(s.at);
+      return Number.isNaN(at) ? String(s.at) : new Date(at).toISOString();
+    }
     case "Provide":
       return `${s.service.key} = ${summarize(s.value)}`;
     case "Given":
@@ -432,13 +560,13 @@ const describeStep = (s: Step): string => {
     case "Replied":
       return summarize(s.reply);
     case "State":
-      return refName(s.ref);
+      return `${refName(s.ref)}${typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
     case "View":
-      return `${s.view.viewName}(${s.key.id})${s.expected === none ? ": none" : typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
+      return `${s.view.viewName}(${Aggregate.targetId(s.key)})${s.expected === none ? ": none" : typeof s.expected === "function" ? "" : `: ${summarize(s.expected)}`}`;
     case "Emitted":
-      return `${s.view.viewName}(${s.key.id})${typeof s.expected === "function" ? "" : `: ${summarizeAll(s.expected as ReadonlyArray<unknown>)}`}`;
+      return `${s.view.viewName}(${Aggregate.targetId(s.key)})${typeof s.expected === "function" ? "" : `: ${summarizeAll(s.expected as ReadonlyArray<unknown>)}`}`;
     case "Streamed":
-      return `${s.stream.streamName}/${s.key.id}: ${summarizeAll(s.events)}`;
+      return `${s.stream.streamName}/${Aggregate.targetId(s.key)}: ${summarizeAll(s.events)}`;
     case "Call":
       return `${callName(s.tag, s.op)} ${summarize(s.args)}`;
     case "Answer":
@@ -491,7 +619,12 @@ const renderReport = (
     }
     if (failure.detail !== undefined) lines.push(indent + failure.detail);
   }
-  if (failure.atEnd) lines.push(`  ✗ ${" ".repeat(width)} end`);
+  if (failure.atEnd) {
+    const head = `  ✗ ${" ".repeat(width)} ${"end".padEnd(10)} `;
+    const detail = failure.detail?.split("\n") ?? [];
+    lines.push(detail.length > 0 ? head + detail[0] : head.trimEnd());
+    for (const line of detail.slice(1)) lines.push(" ".repeat(head.length) + line);
+  }
   lines.push("  events so far");
   const streams = Object.entries(events);
   if (streams.length === 0) lines.push("    nothing");
@@ -502,6 +635,7 @@ const renderReport = (
 
 const encodeInstance = (value: { readonly _tag: string }): unknown => {
   const schema = (value as any).constructor as Schema.Top;
+  // oxlint-disable-next-line effecttsgo/schema-sync -- encodes a value for a sync story report
   return Schema.encodeUnknownSync(Schema.toCodecJson(schema as any) as any)(value);
 };
 
@@ -617,8 +751,8 @@ const make =
       ? [options?: StoryOptions<Policies, LE, LR, Systems>]
       : [options: StoryOptions<Policies, LE, LR, Systems> & { readonly layer: unknown }]
   ) =>
-  (
-    ...steps: ReadonlyArray<Step>
+  <const S extends ReadonlyArray<Step>>(
+    ...steps: S & Checked<S>
   ): Effect.Effect<
     void,
     StoryFailure | LE,
@@ -654,31 +788,39 @@ const make =
           }),
       };
       const systemLayers = (options.stub ?? []).map((system) =>
-        Layer.succeed(
+        Layer.effect(
           system as Context.Key<unknown, unknown>,
-          ExternalSystem.observeOps(
-            system.systemName,
-            Object.fromEntries(
-              Object.keys(system.ops).map((op) => [
-                op,
-                (args: unknown) =>
-                  platform.control.suspended(
-                    Effect.gen(function* () {
-                      const deferred = yield* Deferred.make<unknown, unknown>();
-                      calls.push({
-                        system: system.systemName,
-                        op,
-                        args,
-                        deferred,
-                        tag: undefined,
-                        expected: false,
-                      });
-                      return yield* Deferred.await(deferred);
-                    }),
+          Effect.map(
+            ExternalSystem.compileChecks(system.systemName, system.ops),
+            (checks) =>
+              ExternalSystem.observeOps(
+                system.systemName,
+                // The story's answers are checked like an adapter's.
+                ExternalSystem.validateOps(
+                  checks,
+                  Object.fromEntries(
+                    Object.keys(system.ops).map((op) => [
+                      op,
+                      (args: unknown) =>
+                        platform.control.suspended(
+                          Effect.gen(function* () {
+                            const deferred = yield* Deferred.make<unknown, unknown>();
+                            calls.push({
+                              system: system.systemName,
+                              op,
+                              args,
+                              deferred,
+                              tag: undefined,
+                              expected: false,
+                            });
+                            return yield* Deferred.await(deferred);
+                          }),
+                        ),
+                    ]),
                   ),
-              ]),
-            ),
-          ) as never,
+                ),
+              ) as never,
+          ),
         ),
       );
       const systems = Layer.mergeAll(Layer.empty, ...systemLayers);
@@ -695,6 +837,12 @@ const make =
       const run = Effect.gen(function* () {
         const internals = yield* Model.Internals;
         const cursors = new Map<string, number>();
+        // The step that committed each event, by `Aggregate/id#index`.
+        const committedAt = new Map<string, number>();
+        const attribute = (step: number) => {
+          for (const { aggregate, id, index } of platform.control.commits.slice(committedAt.size))
+            committedAt.set(`${aggregate}/${id}#${index}`, step);
+        };
         let last:
           | { readonly _tag: "Accepted"; readonly receipt: Aggregate.Receipt }
           | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
@@ -747,6 +895,7 @@ const make =
 
         for (const [index, s] of steps.entries()) {
           const step = index + 1;
+          attribute(index);
           const fail = (
             message: string,
             compared?: {
@@ -761,13 +910,30 @@ const make =
           if ("ref" in s) touched.set(refName(s.ref), s.ref);
           switch (s._tag) {
             case "Clock": {
-              clockState.now =
-                typeof s.at === "number"
-                  ? s.at
-                  : typeof s.at === "string"
-                    ? Date.parse(s.at)
-                    : DateTime.toEpochMillis(s.at);
+              const at = clockMillis(s.at);
+              if (Number.isNaN(at)) return yield* fail(`${String(s.at)} is not a time`);
+              // Once a step has run at the current time, the clock only moves forward.
+              const started = steps.slice(0, index).some((earlier) => earlier._tag !== "Provide");
+              if (started && at < clockState.now) {
+                const now = new Date(clockState.now).toISOString();
+                return yield* fail(
+                  `the clock cannot move back, from ${now} to ${new Date(at).toISOString()}`,
+                  { expected: `${now} or later`, actual: new Date(at).toISOString() },
+                );
+              }
+              clockState.now = at;
               // Scheduled commands that are now due fire, and their policies run.
+              yield* settle(step);
+              break;
+            }
+            case "Advance": {
+              const by = advanceDuration(s.by);
+              if (by === undefined)
+                return yield* fail(`${showDurationInput(s.by)} is not a duration`);
+              if (Duration.isNegative(by)) {
+                return yield* fail(`the clock only moves forward, not by ${Duration.format(by)}`);
+              }
+              clockState.now += Duration.toMillis(by);
               yield* settle(step);
               break;
             }
@@ -872,28 +1038,37 @@ const make =
                 Aggregate.ClientImpl
               >;
               const current = yield* client.state(s.ref);
-              yield* Effect.try({ try: () => s.assert(current), catch: (e) => fail(String(e)) });
+              if (typeof s.expected === "function") {
+                const assert = s.expected as (state: unknown) => void;
+                yield* Effect.try({ try: () => assert(current), catch: (e) => fail(String(e)) });
+              } else if (!partial(s.expected, current)) {
+                const label = refName(s.ref);
+                return yield* fail(
+                  `${label}\n  expected ${show(s.expected)}\n  actual   ${show(current)}`,
+                  { label, expected: summarize(s.expected), actual: summarize(current) },
+                );
+              }
               break;
             }
             case "View": {
               const host = yield* s.view as unknown as Context.Key<
                 never,
-                View.Host<unknown, Aggregate.Any, unknown>
+                View.Host<unknown, Key.Any, unknown>
               >;
               const current = yield* host.query(s.key).pipe(Effect.orDie);
               if (s.expected === none) {
                 if (Option.isSome(current))
                   return yield* fail(
-                    `expected ${s.view.viewName}(${s.key.id}) to not exist, got ${show(current.value)}`,
+                    `expected ${s.view.viewName}(${Aggregate.targetId(s.key)}) to not exist, got ${show(current.value)}`,
                     {
-                      label: `${s.view.viewName}(${s.key.id})`,
+                      label: `${s.view.viewName}(${Aggregate.targetId(s.key)})`,
                       expected: "none",
                       actual: summarize(current.value),
                     },
                   );
                 break;
               }
-              const viewLabel = `${s.view.viewName}(${s.key.id})`;
+              const viewLabel = `${s.view.viewName}(${Aggregate.targetId(s.key)})`;
               if (Option.isNone(current))
                 return yield* fail(`${viewLabel} does not exist`, {
                   label: viewLabel,
@@ -921,7 +1096,7 @@ const make =
             case "Emitted": {
               const host = yield* s.view as unknown as Context.Key<
                 never,
-                View.Host<unknown, Aggregate.Any, unknown>
+                View.Host<unknown, Key.Any, unknown>
               >;
               const { entries } = yield* host.list(s.key);
               if (typeof s.expected === "function") {
@@ -935,15 +1110,16 @@ const make =
                   expected.every((e, i) => partial(e, events[i]));
                 if (!ok)
                   return yield* fail(
-                    `${s.view.viewName}(${s.key.id})\n  expected ${show(expected)}\n  actual   ${show(events)}`,
+                    `${s.view.viewName}(${Aggregate.targetId(s.key)})\n  expected ${show(expected)}\n  actual   ${show(events)}`,
                   );
               }
               break;
             }
             case "Streamed": {
               const store = internals.streams.get(s.stream.streamName)!;
-              const id = `${s.stream.streamName}/${s.key.id}`;
-              const entries = yield* store.list(s.key.id as string);
+              const key = Aggregate.targetId(s.key);
+              const id = `${s.stream.streamName}/${key}`;
+              const entries = yield* store.list(key);
               const from = cursors.get(id) ?? 0;
               const actual = entries.slice(from).map((e) => e.event);
               const expected = s.events.map(encodeInstance);
@@ -1140,6 +1316,32 @@ const make =
             message: `unanswered external system calls at the end of the story: ${show(calls.map((c) => `${c.system}.${c.op}(${show(c.args)})`))}`,
           });
         }
+        attribute(steps.length);
+        // Every committed event past its stream's cursor is one no `then` asserts.
+        const unasserted: Array<string> = [];
+        const streams = new Map<string, Aggregate.Ref>();
+        for (const { aggregate, id } of platform.control.commits)
+          streams.set(`${aggregate}/${id}`, { aggregate, id } as Aggregate.Ref);
+        for (const [stream, ref] of streams) {
+          const events = yield* committed(ref);
+          const from = cursors.get(stream) ?? 0;
+          if (events.length <= from) continue;
+          touched.set(stream, ref);
+          // Decoded, so redacted fields stay redacted in the message.
+          const rest = events.slice(from).map((e) => internals.kernel.decodeEvent(e.event));
+          const first = committedAt.get(`${stream}#${from}`);
+          unasserted.push(
+            `${stream}: ${summarizeAll(rest)}${first === undefined ? "" : ` (from step ${first})`}`,
+          );
+        }
+        if (unasserted.length > 0) {
+          return yield* new StepFailed({
+            step: steps.length,
+            atEnd: true,
+            message: `committed events no step asserts (assert them with then): ${unasserted.join("; ")}`,
+            detail: unasserted.join("\n"),
+          });
+        }
       });
 
       // Turn a failed step into a failure that shows the whole story.
@@ -1194,8 +1396,8 @@ const make =
  * model in memory: policies run for real, calls to stubbed external systems
  * wait until you answer them, calls to the others run through their adapters
  * while the story records them, and a clock you control stamps commands and
- * fires scheduled ones. A story fails on any rejection, external system call
- * or saga defect it doesn't account for.
+ * fires scheduled ones. A story fails on any committed event, rejection,
+ * external system call or saga defect it doesn't account for.
  *
  * ### Writing a story
  * **Example:** A withdrawal and an overdraft
@@ -1226,6 +1428,7 @@ const make =
  * Story.call(FraudCheck.score, { accountId: account.id, amount: 60_000 }),
  * Story.succeed(FraudCheck.score, { risk: 0.95 }),
  * Story.clock("2026-01-02T09:00:00Z"),
+ * Story.advance("1 day"),
  * ```
  *
  * **Example:** Name calls when several are waiting
@@ -1267,11 +1470,11 @@ const make =
 // The steps live on this object rather than as module exports: a module that
 // exports `then` is "thenable", and loaders that await module namespaces
 // would hang on it.
-// oxlint-disable-next-line unicorn/no-thenable -- `Story.then` is the given/when/then vocabulary
 export const Story = {
   make,
   given,
   when,
+  // oxlint-disable-next-line unicorn/no-thenable -- `then` is the given/when/then vocabulary
   then,
   rejected,
   replied,
@@ -1287,6 +1490,7 @@ export const Story = {
   failed,
   died,
   clock,
+  advance,
   provide,
   signal,
   saga,

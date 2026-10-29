@@ -5,9 +5,9 @@ import * as Rpc from "effect/rpc/Rpc";
 import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
 import type * as Aggregate from "./Aggregate.ts";
-import * as Command from "./Command.ts";
 import { type Filter, matches } from "./Filter.ts";
 import { decodeEnvelope, type Kernel } from "./Kernel.ts";
+import * as Key from "./Key.ts";
 import type {
   Json,
   Push,
@@ -72,6 +72,8 @@ type Validate = (request: Read.Request<unknown>, state: unknown) => Effect.Effec
 interface Item {
   readonly state: unknown;
   readonly value: Option.Option<unknown>;
+  /** A marker (`CaughtUp`), sent as is: `validate` does not judge it. */
+  readonly marker?: true;
 }
 
 /**
@@ -81,7 +83,7 @@ interface Item {
 const encode = (
   entry: View.Any | Aggregate.Any | DomainStream.Any,
   subscription: Subscription,
-  ref: Aggregate.Ref,
+  ref: unknown,
   items: ReadonlyArray<Item>,
   cursor: number,
 ): Effect.Effect<Push> =>
@@ -94,7 +96,7 @@ const encode = (
     const values: Array<unknown> = [];
     let rejection: Option.Option<unknown> = Option.none();
     for (const item of items) {
-      if (validate) {
+      if (validate && !item.marker) {
         const judged = yield* validate({ mode: subscription.mode, key: ref }, item.state).pipe(
           Effect.provideContext(context),
           Effect.result,
@@ -128,6 +130,25 @@ const encode = (
     };
   }).pipe(Effect.orDie);
 
+/**
+ * The first push of an `events` read is its history: mark its end once, with
+ * a `CaughtUp` item after the history's items.
+ */
+const markCaughtUp = (subscription: Subscription, items: ReadonlyArray<Item>, cursor: number) =>
+  subscription.caughtUpSent
+    ? { subscription, items }
+    : {
+        subscription: { ...subscription, caughtUpSent: true },
+        items: [
+          ...items,
+          {
+            state: null,
+            value: Option.some({ _tag: "CaughtUp", cursor }),
+            marker: true,
+          } satisfies Item,
+        ],
+      };
+
 const where = (subscription: Subscription) => subscription.where as Filter<unknown> | undefined;
 
 /** What a view key's subscriber receives after a commit (or when it connects). */
@@ -140,7 +161,7 @@ export const viewPush =
     entries: ReadonlyArray<ViewEntry>,
   ): Effect.Effect<Push> =>
     Effect.suspend(() => {
-      const ref = { aggregate: view.definition.key.aggregateName, id: key } as Aggregate.Ref;
+      const ref = Key.refOf(view.definition.key, key);
       if (subscription.mode === "watch") {
         if (snapshot.version <= subscription.cursor) {
           return Effect.succeed({ messages: [], subscription, done: false });
@@ -151,7 +172,7 @@ export const viewPush =
           view,
           subscription,
           ref,
-          [{ state, value: Option.some(visible) }],
+          [{ state, value: Option.some({ state: visible, cursor: snapshot.seq }) }],
           snapshot.version,
         );
       }
@@ -164,7 +185,8 @@ export const viewPush =
         };
       });
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : subscription.cursor;
-      return encode(view, subscription, ref, items, cursor);
+      const marked = markCaughtUp(subscription, items, cursor);
+      return encode(view, marked.subscription, ref, marked.items, cursor);
     });
 
 /** What an aggregate instance's subscriber receives after a commit (or when it connects). */
@@ -173,7 +195,7 @@ export const aggregatePush =
   (
     id: string,
     subscription: Subscription,
-    current: { readonly state: Json | null; readonly version: number },
+    current: { readonly state: Json; readonly version: number },
     events: ReadonlyArray<StoredEvent>,
   ): Effect.Effect<Push> =>
     Effect.suspend(() => {
@@ -187,7 +209,7 @@ export const aggregatePush =
           aggregate,
           subscription,
           ref,
-          [{ state, value: Option.some(state) }],
+          [{ state, value: Option.some({ state, cursor: current.version }) }],
           current.version,
         );
       }
@@ -201,7 +223,8 @@ export const aggregatePush =
         }),
       }));
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.envelope.seq : subscription.cursor;
-      return encode(aggregate, subscription, ref, items, cursor);
+      const marked = markCaughtUp(subscription, items, cursor);
+      return encode(aggregate, marked.subscription, ref, marked.items, cursor);
     });
 
 /** What a stream key's subscriber receives after an append (or when it connects). */
@@ -215,7 +238,7 @@ export const streamPush =
     latest: StreamEntry | undefined,
   ): Effect.Effect<Push> =>
     Effect.suspend(() => {
-      const ref = { aggregate: stream.definition.key.aggregateName, id: key } as Aggregate.Ref;
+      const ref = Key.refOf(stream.definition.key, key);
       if (subscription.mode === "watch") {
         if (meta.seq <= subscription.cursor) {
           return Effect.succeed({ messages: [], subscription, done: false });
@@ -225,7 +248,7 @@ export const streamPush =
           stream,
           subscription,
           ref,
-          [{ state: decoded, value: Option.some(decoded) }],
+          [{ state: decoded, value: Option.some({ state: decoded, cursor: meta.seq }) }],
           meta.seq,
         );
       }
@@ -239,5 +262,6 @@ export const streamPush =
         };
       });
       const cursor = fresh.length > 0 ? fresh[fresh.length - 1]!.seq : subscription.cursor;
-      return encode(stream, subscription, ref, items, cursor);
+      const marked = markCaughtUp(subscription, items, cursor);
+      return encode(stream, marked.subscription, ref, marked.items, cursor);
     });

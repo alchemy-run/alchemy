@@ -15,6 +15,7 @@ import {
   type GcpIamResourceKind,
   type IamCondition,
 } from "./IamPolicy.ts";
+import type { BoundContainer } from "./Run/Container.ts";
 import { parseServiceAccountKey } from "./Token.ts";
 
 export type { GcpIamResourceKind } from "./IamPolicy.ts";
@@ -68,6 +69,11 @@ export type GcpHostBinding = {
    * Unix sockets under `/cloudsql` (Cloud Run services only).
    */
   cloudSqlInstances?: string[];
+  /**
+   * Sidecar containers to add to the host's revision (Cloud Run services
+   * and containers only); see `GCP.Run.bindContainer`.
+   */
+  containers?: BoundContainer[];
 };
 
 /**
@@ -153,6 +159,22 @@ const serviceAccountName = (project: string, email: string) =>
   `projects/${project}/serviceAccounts/${email}`;
 
 /**
+ * The numeric unique ID of a host's runtime service account: the `sub` of
+ * the Google ID tokens it fetches, which AWS roles trust. A just-created
+ * account can read as missing for a few seconds.
+ */
+export const serviceAccountUniqueId = (email: string) =>
+  iam.getProjectsServiceAccounts({ name: `projects/-/serviceAccounts/${email}` }).pipe(
+    Effect.retry({
+      while: (error) => error._tag === "NotFound",
+      times: 8,
+      schedule: Schedule.spaced("2 seconds"),
+    }),
+    Effect.map((account) => account.uniqueId),
+    Effect.catchTag("NotFound", () => Effect.undefined),
+  );
+
+/**
  * Let the deploying principal and the serverless robots `actAs` the host
  * service account so Cloud Run / Functions accept it as the runtime
  * identity.
@@ -172,7 +194,7 @@ const grantActAs = (project: string, email: string) =>
         .pipe(Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed("")));
       if (raw.length > 0) {
         const parsed = yield* parseServiceAccountKey(raw).pipe(
-          Effect.catchTag("AuthError", () => Effect.succeed(undefined)),
+          Effect.catchTag("AuthError", () => Effect.undefined),
         );
         if (parsed?.client_email) {
           members.push(`serviceAccount:${parsed.client_email}`);
@@ -208,7 +230,7 @@ export const ensureHostServiceAccount = (options: {
       .getProjectsServiceAccounts({
         name: serviceAccountName(options.project, email),
       })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     let created = false;
     if (existing?.email === undefined || existing.email.length === 0) {
       created = yield* iam

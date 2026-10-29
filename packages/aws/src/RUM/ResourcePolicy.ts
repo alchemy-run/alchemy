@@ -99,8 +99,9 @@ export const ResourcePolicyProvider = () =>
         return yield* rum
           .getResourcePolicy({ Name: appMonitorName })
           .pipe(
-            Effect.catchTag(["PolicyNotFoundException", "ResourceNotFoundException"], () =>
-              Effect.succeed(undefined),
+            Effect.catchTag(
+              ["PolicyNotFoundException", "ResourceNotFoundException"],
+              () => Effect.undefined,
             ),
           );
       });

@@ -271,7 +271,7 @@ type ObservedCertificate =
 const getCertificate = (accountId: string, certificateId: string) =>
   zeroTrust.getGatewayCertificate({ accountId, certificateId }).pipe(
     Effect.map((c): zeroTrust.GetGatewayCertificateResponse | undefined => c),
-    Effect.catchTag("GatewayCertificateNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("GatewayCertificateNotFound", () => Effect.undefined),
   );
 
 /**

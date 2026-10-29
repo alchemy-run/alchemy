@@ -120,7 +120,7 @@ const toAttributes = (l: ga.Listener, listenerArn: string) => ({
 const describeListener = Effect.fn(function* (listenerArn: string) {
   return yield* withGaRegion(ga.describeListener({ ListenerArn: listenerArn })).pipe(
     Effect.map((r) => r.Listener),
-    Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ListenerNotFoundException", () => Effect.undefined),
   );
 });
 

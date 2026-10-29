@@ -95,6 +95,7 @@ reason the platform forces. References:
 | One operation waiter | `rg -c 'waitFor\w*Operation\|pollOperation' src/<P>` | one definition in a shared module, many call sites |
 | Realistic wait budgets | read each budget against the provider's documented create time | minutes for databases, clusters, environments; never a test-style 10 × 5s |
 | Ready before return | read each `reconcile` | returns after the API reports ready, not after the create call |
+| SQL migrations | for each resource hosting a SQL schema, `rg -n 'runMigrations' src/<P>` | a `migrations` prop driven by `@alchemy.run/sql/Migrations` (see **SQL database migrations** in `AGENTS.md`), with a live test that adds a file and redeploys |
 | Identity change replaces | for each user-chosen name/id prop, read `diff` | `replace`; a rename test proves the old one is deleted |
 | Ownership markers | `rg -n 'alchemy' src/<P> \| rg -v 'label\|tag\|import'` | markers only in labels/tags, never in user-visible fields |
 | Copied helpers | `rg -c 'const (isNotFound\|isMissing\|ignoreMissing\|jsonEqual)' src/<P>` | one shared copy each |
