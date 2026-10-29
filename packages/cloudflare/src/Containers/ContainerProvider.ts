@@ -89,6 +89,8 @@ type ImageBuild =
       readonly kind: "external";
       readonly context: string;
       readonly dockerfile: string;
+      readonly buildArgs?: Record<string, string>;
+      readonly buildSecrets?: Record<string, Redacted.Redacted<string>>;
     }
   | {
       readonly kind: "remote";
@@ -409,7 +411,7 @@ export const LiveContainerProvider = () =>
         const makeRef = (imageHash: string) =>
           `${registryId}/${accountId}/${repositoryName}:${imageHash}`;
 
-        yield* validateContainerImageProps(props);
+        yield* validateContainerImageProps(id, props);
 
         // Preserve serialized imageName keys so existing publication hashes remain valid.
         // Variant 1 — Effect-native program. Bundle `main` and build a
@@ -506,16 +508,26 @@ export const LiveContainerProvider = () =>
           const { context, dockerfile } = yield* materializeInlineDockerfileContext(id, content);
           const imageHash = (yield* sha256Object({
             dockerfile: content,
+            // Absent rather than `{}` when unset, so existing hashes hold.
+            buildArgs: props.build?.args,
             imageName: props.publish?.repository?.toLowerCase(),
           })).slice(0, 16);
           return {
-            build: { kind: "external" as const, context, dockerfile },
+            build: {
+              kind: "external" as const,
+              context,
+              dockerfile,
+              buildArgs: props.build?.args,
+              buildSecrets: props.build?.secrets,
+            },
             imageRef: makeRef(imageHash),
             imageHash,
             // The local runtime builds the same materialized context.
             dev: {
               context: path.relative(process.cwd(), context),
               dockerfile: "Dockerfile",
+              buildArgs: props.build?.args,
+              buildSecrets: props.build?.secrets,
               env,
             },
           };
@@ -530,7 +542,7 @@ export const LiveContainerProvider = () =>
         // Hash what Docker can consume, including gitignored files and file
         // modes, but excluding ancestor lockfiles outside the build context.
         const contextHash = yield* hashDockerBuildInputs(
-          { context, dockerfile, platform: publicationPlatform },
+          { context, dockerfile, platform: publicationPlatform, buildArgs: props.build?.args },
           "effective",
         );
         const imageHash = (yield* sha256Object({
@@ -538,7 +550,13 @@ export const LiveContainerProvider = () =>
           imageName: props.publish?.repository?.toLowerCase(),
         })).slice(0, 16);
         return {
-          build: { kind: "external" as const, context, dockerfile },
+          build: {
+            kind: "external" as const,
+            context,
+            dockerfile,
+            buildArgs: props.build?.args,
+            buildSecrets: props.build?.secrets,
+          },
           imageRef: makeRef(imageHash),
           imageHash,
           // The local runtime builds the user's Dockerfile against the same
@@ -546,6 +564,8 @@ export const LiveContainerProvider = () =>
           dev: {
             context: path.relative(process.cwd(), context),
             dockerfile: path.relative(context, dockerfile),
+            buildArgs: props.build?.args,
+            buildSecrets: props.build?.secrets,
             env,
           },
         };
@@ -627,6 +647,8 @@ export const LiveContainerProvider = () =>
                 context: build.context,
                 platform,
                 file: build.dockerfile,
+                "build-arg": build.buildArgs,
+                secrets: build.buildSecrets,
               },
               session,
               credentials,

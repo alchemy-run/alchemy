@@ -1,12 +1,17 @@
+import * as LocalFlagship from "@alchemy.run/cloudflare-runtime/core/bindings/flagship";
 import * as flagship from "@distilled.cloud/cloudflare/flagship";
 import { deepEqual, isResolved } from "alchemy/Diff";
+import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
+import { localAccountId } from "../LocalAccount.ts";
+import { isLocalId, localStorageDirectory } from "../LocalRuntime.ts";
 import type { Providers } from "../Providers.ts";
 
 const TypeId = "Cloudflare.Flagship.Flag" as const;
@@ -26,7 +31,9 @@ export type FlagConditionOperator =
   | "starts_with"
   | "ends_with"
   | "in"
-  | "not_in";
+  | "not_in"
+  | "has"
+  | "not_has";
 
 /**
  * A single targeting condition: either a flat attribute comparison or a
@@ -301,7 +308,7 @@ export const Flag = Resource<Flag>(TypeId);
 export const isFlag = (value: unknown): value is Flag =>
   Predicate.hasProperty(value, "Type") && value.Type === TypeId;
 
-export const FlagProvider = () =>
+export const FlagProviderLive = () =>
   Provider.succeed(Flag, {
     stables: ["appId", "accountId", "key"],
     diff: Effect.fn(function* ({ olds, news, output }) {
@@ -442,6 +449,116 @@ export const FlagProvider = () =>
       return rows.flat();
     }),
   });
+
+/**
+ * Local (dev) provider — writes the flag's definition into the local
+ * Flagship simulator's store under its (`dev:`) app, where a dev Worker's
+ * `flagship` binding evaluates it. Definitions are plain files under
+ * `.alchemy/local/flagship`, read fresh on every evaluation, so an update
+ * applies to running Workers without a restart.
+ *
+ * The flag's app must be local too: a dev Worker bound to a live app
+ * (`Alchemy.remote()`) evaluates the cloud's flags, so a local definition
+ * would never be read. Opt the flag out of emulation alongside its app.
+ */
+export const FlagProviderLocal = () =>
+  Provider.succeed(Flag, {
+    stables: ["appId", "accountId", "key"],
+    diff: Effect.fn(function* ({ id, news, output }) {
+      if (!output) return { action: "update" } as const;
+      if (!isResolved(news)) return undefined;
+      // Mirror the live provider: a new app or key replaces the flag.
+      if (
+        output.appId !== news.appId ||
+        output.key !== (yield* createFlagKey(id, news.key)) ||
+        output.accountId !== (yield* localAccountId)
+      ) {
+        return { action: "replace" } as const;
+      }
+      // Fall through to the engine's default prop diff (variations, rules,
+      // enablement and description update in place).
+    }),
+    read: Effect.fn(function* ({ output }) {
+      // Virtual identity — the persisted state row is the source of truth
+      // (the written definition converges on every reconcile).
+      return output ?? undefined;
+    }),
+    reconcile: Effect.fn(function* ({ id, news }) {
+      const appId = news.appId as string;
+      const key = yield* createFlagKey(id, news.key);
+      if (!isLocalId(appId)) {
+        return yield* new LocalFlagError({
+          message:
+            `Flag "${key}" is emulated locally but its app ${JSON.stringify(appId)} is live. ` +
+            "A dev Worker bound to a live app evaluates the cloud's flags, so " +
+            "apply Alchemy.remote() to the flag as well as its app.",
+        });
+      }
+      const definition = {
+        enabled: news.enabled ?? true,
+        defaultVariation: news.defaultVariation,
+        variations: news.variations,
+        rules: news.rules ?? [],
+      };
+      // An atomic overwrite — idempotent, so re-running after a crash
+      // converges.
+      yield* LocalFlagship.writeFlag(yield* localFlagshipStore(appId), key, definition);
+      return {
+        appId,
+        accountId: yield* localAccountId,
+        key,
+        ...definition,
+        description: news.description,
+        type: news.type ?? inferFlagType(news.variations),
+        updatedAt: yield* Effect.sync(() => new Date().toISOString()),
+        updatedBy: "local",
+      };
+    }),
+    delete: Effect.fn(function* ({ output }) {
+      if (!isLocalId(output.appId)) return;
+      // Deleting a missing definition is a no-op. A replacement's new
+      // generation has a different app or key, so this never removes its
+      // successor's definition.
+      yield* LocalFlagship.deleteFlag(yield* localFlagshipStore(output.appId), output.key);
+    }),
+  });
+
+export const FlagProvider = () =>
+  ProviderLayer.dual(Flag, {
+    local: () => FlagProviderLocal(),
+    live: () => FlagProviderLive(),
+  });
+
+export class LocalFlagError extends Data.TaggedError("LocalFlagError")<{
+  message: string;
+}> {}
+
+/**
+ * The local Flagship simulator's store for an app — the same storage
+ * directory the local workerd runtime serves.
+ */
+export const localFlagshipStore = (appId: string) =>
+  Effect.map(localStorageDirectory, (storageDirectory) => ({ storageDirectory, appId }));
+
+/**
+ * Infer a flag's value type from its variations, as Cloudflare does on
+ * write.
+ */
+const inferFlagType = (variations: Record<string, unknown>): FlagType | undefined => {
+  const first = Object.values(variations)[0];
+  switch (typeof first) {
+    case "boolean":
+      return "boolean";
+    case "string":
+      return "string";
+    case "number":
+      return "number";
+    case "object":
+      return first === null ? undefined : "json";
+    default:
+      return undefined;
+  }
+};
 
 /**
  * Read a flag by key, mapping "gone" (`FlagshipFlagNotFound`, or a deleted

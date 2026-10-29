@@ -331,6 +331,62 @@ const teardownCommand = Command.make(
   ),
 ).pipe(Command.withDescription("Delete a state store and its backing resources"), Command.unlisted);
 
+const migrateCommand = Command.make(
+  "migrate",
+  {
+    main: config,
+    envFile,
+    profile,
+    backend,
+    name: storeName,
+    stack: Flag.String("stack").pipe(
+      Flag.withDescription("Only migrate this stack's stages"),
+      Flag.optional,
+      Flag.map(Option.getOrUndefined),
+    ),
+    stage: Flag.String("stage").pipe(
+      Flag.withDescription("Only migrate stages of this name"),
+      Flag.optional,
+      Flag.map(Option.getOrUndefined),
+    ),
+    rollback: Flag.Boolean("rollback").pipe(
+      Flag.withDescription("Move stages back to the state store this one replaces"),
+      Flag.withDefault(false),
+    ),
+  },
+  instrumentCommand("state.migrate")(
+    Effect.fn(function* ({ stack, stage, rollback, ...args }) {
+      const result = yield* AlchemistState.migrate(source(args), { stack, stage, rollback });
+      if (result.stages.length === 0) {
+        yield* Interaction.info("No stages to migrate.");
+        return;
+      }
+      for (const entry of result.stages) {
+        const detail =
+          entry.reason ?? (entry.records === undefined ? "" : `${entry.records} records`);
+        yield* Console.log(
+          `${entry.stack}/${entry.stage}: ${entry.status}${detail === "" ? "" : ` (${detail})`}`,
+        );
+      }
+      const unfinished = result.stages.filter(
+        (entry) => entry.status === "blocked" || entry.status === "failed",
+      );
+      if (unfinished.length > 0) {
+        return yield* new UserInputError({
+          message: `${unfinished.length} stage(s) did not move. Run the command again once the deploys holding them finish, or fix the failures above.`,
+        });
+      }
+      yield* Interaction.success(
+        rollback ? "Rolled back the state store" : "Migrated the state store",
+      );
+    }),
+  ),
+).pipe(
+  Command.withDescription(
+    "Move stages into the configured state store from the one it replaces (or --backend)",
+  ),
+);
+
 const logsCommand = Command.make(
   "logs",
   {
@@ -404,6 +460,7 @@ export const stateCommand = Command.make(
     deleteCommand,
     bootstrapCommand,
     teardownCommand,
+    migrateCommand,
     logsCommand,
     unsafeCommand,
   ]),
