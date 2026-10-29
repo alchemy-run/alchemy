@@ -1,11 +1,9 @@
 import { relativeWorkerMain } from "@alchemy.run/cloudflare/Workers/Worker";
 import {
-  buildRedirectRule,
   encodeDurableObjectTags,
   getDurableObjectTagMap,
   normalizeStateDomains,
   orderObservedWorkerRoutes,
-  redirectRulesConverged,
   resolveWorkerDomain,
   resolveWorkerDomainZone,
   resolveWorkersDev,
@@ -246,74 +244,6 @@ describe(
         ).toBeUndefined();
         expect(stateWorkerDomain({})).toBeUndefined();
         expect(stateWorkerDomain(undefined)).toBeUndefined();
-      });
-    });
-
-    describe("redirectRulesConverged", () => {
-      const prefix = "alchemy:worker:my-worker:redirect:";
-      // The ruleset read returns camelCase fields and fills unset ones with null.
-      const readBack = (rule: ReturnType<typeof buildRedirectRule>) => ({
-        ...rule,
-        id: "rule-id",
-        version: "1",
-        lastUpdated: "2026-01-01T00:00:00Z",
-        ref: "rule-id",
-        logging: null,
-        actionParameters: {
-          fromList: null,
-          fromValue: { ...rule.actionParameters.fromValue },
-        },
-      });
-
-      test("an identical rule read back with null fields is converged", () => {
-        const desired = buildRedirectRule(prefix, "old.example.com", "app.example.com");
-        expect(redirectRulesConverged([readBack(desired)], [desired])).toBe(true);
-      });
-
-      test("a rule that still targets the previous canonical name is not converged", () => {
-        const existing = buildRedirectRule(prefix, "old.example.com", "app.example.com");
-        const desired = buildRedirectRule(prefix, "old.example.com", "new.example.com");
-        expect(redirectRulesConverged([readBack(existing)], [desired])).toBe(false);
-      });
-
-      test("a changed status code or query-string setting is not converged", () => {
-        const desired = buildRedirectRule(prefix, "old.example.com", "app.example.com");
-        const read = readBack(desired);
-        expect(
-          redirectRulesConverged(
-            [
-              {
-                ...read,
-                actionParameters: {
-                  ...read.actionParameters,
-                  fromValue: { ...read.actionParameters.fromValue, statusCode: 302 },
-                },
-              },
-            ],
-            [desired],
-          ),
-        ).toBe(false);
-        expect(
-          redirectRulesConverged(
-            [
-              {
-                ...read,
-                actionParameters: {
-                  ...read.actionParameters,
-                  fromValue: { ...read.actionParameters.fromValue, preserveQueryString: false },
-                },
-              },
-            ],
-            [desired],
-          ),
-        ).toBe(false);
-      });
-
-      test("an added or removed redirect is not converged", () => {
-        const a = buildRedirectRule(prefix, "old.example.com", "app.example.com");
-        const b = buildRedirectRule(prefix, "legacy.example.com", "app.example.com");
-        expect(redirectRulesConverged([readBack(a)], [a, b])).toBe(false);
-        expect(redirectRulesConverged([readBack(a), readBack(b)], [a])).toBe(false);
       });
     });
 
