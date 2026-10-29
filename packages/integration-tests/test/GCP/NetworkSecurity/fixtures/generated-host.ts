@@ -133,45 +133,41 @@ export default class NetworkSecurityGeneratedHost extends GCP.Function<NetworkSe
           Retry.none(p27({ location: "us-central1" } as never)),
         ),
         ListClientTlsPolicies: probeOutcome(Retry.none(p28({ location: "us-central1" } as never))),
-        ListDnsThreatDetectors: probeOutcome(Retry.none(p29({ location: "us-central1" } as never))),
+        ListDnsThreatDetectors: probeOutcome(Retry.none(p29({ location: "global" } as never))),
         ListFirewallEndpointAssociations: probeOutcome(
-          Retry.none(p30({ location: "us-central1" } as never)),
+          Retry.none(p30({ location: "us-central1-a" } as never)),
         ),
-        ListFirewallEndpoints: probeOutcome(Retry.none(p31({ location: "us-central1" } as never))),
+        ListFirewallEndpoints: probeOutcome(
+          Retry.none(p31({ location: "us-central1-a" } as never)),
+        ),
         ListGatewaySecurityPolicies: probeOutcome(
           Retry.none(p32({ location: "us-central1" } as never)),
         ),
         ListGatewaySecurityPolicyRules: probeOutcome(Retry.none(p33({} as never))),
         ListInterceptDeploymentGroups: probeOutcome(
-          Retry.none(p34({ location: "us-central1" } as never)),
+          Retry.none(p34({ location: "global" } as never)),
         ),
         ListInterceptDeployments: probeOutcome(
-          Retry.none(p35({ location: "us-central1" } as never)),
+          Retry.none(p35({ location: "us-central1-a" } as never)),
         ),
         ListInterceptEndpointGroupAssociations: probeOutcome(
-          Retry.none(p36({ location: "us-central1" } as never)),
+          Retry.none(p36({ location: "global" } as never)),
         ),
-        ListInterceptEndpointGroups: probeOutcome(
-          Retry.none(p37({ location: "us-central1" } as never)),
-        ),
+        ListInterceptEndpointGroups: probeOutcome(Retry.none(p37({ location: "global" } as never))),
         ListMirroringDeploymentGroups: probeOutcome(
-          Retry.none(p38({ location: "us-central1" } as never)),
+          Retry.none(p38({ location: "global" } as never)),
         ),
         ListMirroringDeployments: probeOutcome(
-          Retry.none(p39({ location: "us-central1" } as never)),
+          Retry.none(p39({ location: "us-central1-a" } as never)),
         ),
         ListMirroringEndpointGroupAssociations: probeOutcome(
-          Retry.none(p40({ location: "us-central1" } as never)),
+          Retry.none(p40({ location: "global" } as never)),
         ),
-        ListMirroringEndpointGroups: probeOutcome(
-          Retry.none(p41({ location: "us-central1" } as never)),
-        ),
+        ListMirroringEndpointGroups: probeOutcome(Retry.none(p41({ location: "global" } as never))),
         ListSacAttachments: probeOutcome(Retry.none(p42({ location: "us-central1" } as never))),
-        ListSacRealms: probeOutcome(Retry.none(p43({ location: "us-central1" } as never))),
-        ListSecurityProfileGroups: probeOutcome(
-          Retry.none(p44({ location: "us-central1" } as never)),
-        ),
-        ListSecurityProfiles: probeOutcome(Retry.none(p45({ location: "us-central1" } as never))),
+        ListSacRealms: probeOutcome(Retry.none(p43({ location: "global" } as never))),
+        ListSecurityProfileGroups: probeOutcome(Retry.none(p44({ location: "global" } as never))),
+        ListSecurityProfiles: probeOutcome(Retry.none(p45({ location: "global" } as never))),
         ListServerTlsPolicies: probeOutcome(Retry.none(p46({ location: "us-central1" } as never))),
         ListTlsInspectionPolicies: probeOutcome(
           Retry.none(p47({ location: "us-central1" } as never)),

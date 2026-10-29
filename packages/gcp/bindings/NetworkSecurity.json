@@ -123,6 +123,22 @@
       "OrganizationsSecurityProfile": "needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
       "OrganizationsSecurityProfileGroup": "needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
       "SacAttachment": "An attachment needs a SAC realm already paired with its SSE partner (Palo Alto Prisma Access / Symantec), which happens outside GCP. Set (GCP_TEST_SAC_PARTNER_REALM)"
+    },
+    "locations": {
+      "ListMirroringEndpointGroups": "global",
+      "ListMirroringEndpointGroupAssociations": "global",
+      "ListInterceptEndpointGroups": "global",
+      "ListInterceptEndpointGroupAssociations": "global",
+      "ListInterceptDeploymentGroups": "global",
+      "ListMirroringDeploymentGroups": "global",
+      "ListDnsThreatDetectors": "global",
+      "ListSecurityProfileGroups": "global",
+      "ListSecurityProfiles": "global",
+      "ListSacRealms": "global",
+      "ListFirewallEndpoints": "us-central1-a",
+      "ListFirewallEndpointAssociations": "us-central1-a",
+      "ListInterceptDeployments": "us-central1-a",
+      "ListMirroringDeployments": "us-central1-a"
     }
   }
 }
