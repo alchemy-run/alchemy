@@ -17,8 +17,9 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
 
-// Deterministic per-test subdomain, reused on every run.
-const NAME_DEFAULT = `alchemy-routesub-default.${zoneName}`;
+// Deterministic per-stage subdomains, reused on every run.
+const subdomainOf = (stage: string, label: string) =>
+  `alchemy-routesub-${label}-${stage.toLowerCase().replace(/[^a-z0-9-]/g, "-")}.${zoneName}`;
 
 const resolveZoneId = Effect.gen(function* () {
   const { accountId } = yield* yield* CloudflareEnvironment;
@@ -51,48 +52,58 @@ const routingMx = (zoneId: string, name: string) =>
     ),
   );
 
+// Every record at the name, so a leftover SPF TXT also fails the assertion.
+const recordsAt = (zoneId: string, name: string) =>
+  retryForbidden(
+    dns.listRecords.items({ zoneId, name: { exact: name } }).pipe(
+      Stream.map((record) => `${record.type} ${record.content}`),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    ),
+  );
+
 test.provider.skipIf(!emailRoutingScoped)(
-  "create and destroy a routing subdomain, leaving the apex routing",
+  "create, rename and destroy a routing subdomain, leaving the apex routing",
   (stack) =>
     Effect.gen(function* () {
       const zoneId = yield* resolveZoneId;
+      const nameA = subdomainOf(stack.stage, "a");
+      const nameB = subdomainOf(stack.stage, "b");
       yield* stack.destroy();
 
       // The subdomain needs Email Routing on the zone; capture it to restore.
       const before = yield* retryForbidden(emailRouting.getEmailRouting({ zoneId }));
       if (!before.enabled) yield* retryForbidden(emailRouting.enableEmailRouting({ zoneId }));
 
-      const subdomain = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Email.RoutingSubdomain("Inbound", {
-            zoneId,
-            name: NAME_DEFAULT,
-          });
-        }),
-      );
+      const deploy = (name: string) =>
+        stack.deploy(
+          Effect.gen(function* () {
+            return yield* Cloudflare.Email.RoutingSubdomain("Inbound", { zoneId, name });
+          }),
+        );
 
+      const subdomain = yield* deploy(nameA);
       expect(subdomain.zoneId).toEqual(zoneId);
-      expect(subdomain.name).toEqual(NAME_DEFAULT);
+      expect(subdomain.name).toEqual(nameA);
       expect(subdomain.mx.length).toBeGreaterThan(0);
 
       // Out-of-band: the subdomain has Email Routing MX records.
-      expect((yield* routingMx(zoneId, NAME_DEFAULT)).length).toBeGreaterThan(0);
+      expect((yield* routingMx(zoneId, nameA)).length).toBeGreaterThan(0);
 
       // A second deploy with the same props is a no-op.
-      const again = yield* stack.deploy(
-        Effect.gen(function* () {
-          return yield* Cloudflare.Email.RoutingSubdomain("Inbound", {
-            zoneId,
-            name: NAME_DEFAULT,
-          });
-        }),
-      );
+      const again = yield* deploy(nameA);
       expect(again.mx).toEqual(subdomain.mx);
+
+      // Renaming replaces it: the new name routes mail, the old one no longer does.
+      const renamed = yield* deploy(nameB);
+      expect(renamed.name).toEqual(nameB);
+      expect((yield* routingMx(zoneId, nameB)).length).toBeGreaterThan(0);
+      expect(yield* recordsAt(zoneId, nameA)).toEqual([]);
 
       yield* stack.destroy();
 
       // The subdomain's records are gone, and the apex still routes mail.
-      expect(yield* routingMx(zoneId, NAME_DEFAULT)).toEqual([]);
+      expect(yield* recordsAt(zoneId, nameB)).toEqual([]);
       const after = yield* retryForbidden(emailRouting.getEmailRouting({ zoneId }));
       expect(after.enabled).toEqual(true);
 

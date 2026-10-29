@@ -1,6 +1,7 @@
 import * as dns from "@distilled.cloud/cloudflare/dns";
 import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
 import { Unowned } from "alchemy/AdoptPolicy";
+import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
@@ -62,6 +63,7 @@ export type RoutingSubdomain = Resource<
  * prior state, `read` reports a subdomain that already routes mail as
  * `Unowned`, so the engine refuses to take it over unless `--adopt` (or
  * `adopt(true)`) is set.
+ *
  * ### Receiving on a subdomain
  * **Example:** Route `docs@in.example.com` to a Worker
  * ```typescript
@@ -112,20 +114,16 @@ export const RoutingSubdomainProvider = () =>
       return rows.flat();
     }),
 
-    diff: Effect.fn(function* ({ olds = {}, news }) {
-      const o = olds as RoutingSubdomainProps;
-      const n = news as RoutingSubdomainProps;
-      if (o.name !== undefined && o.name !== n.name) {
-        return { action: "replace" } as const;
-      }
-      if (typeof o.zoneId === "string" && typeof n.zoneId === "string" && o.zoneId !== n.zoneId) {
+    diff: Effect.fn(function* ({ news, output }) {
+      if (!output || !isResolved(news)) return undefined;
+      if (news.zoneId !== output.zoneId || news.name !== output.name) {
         return { action: "replace" } as const;
       }
       return undefined;
     }),
 
     read: Effect.fn(function* ({ output, olds }) {
-      const zoneId = output?.zoneId ?? (typeof olds?.zoneId === "string" ? olds.zoneId : undefined);
+      const zoneId = output?.zoneId ?? olds?.zoneId;
       const name = output?.name ?? olds?.name;
       if (!zoneId || !name) return undefined;
       const mx = yield* routingMxOf(zoneId, name);
@@ -135,7 +133,7 @@ export const RoutingSubdomainProvider = () =>
     }),
 
     reconcile: Effect.fn(function* ({ news }) {
-      const zoneId = news.zoneId as string;
+      const zoneId = news.zoneId;
       // Observe, then ensure: a subdomain already routing mail needs nothing.
       const existing = yield* routingMxOf(zoneId, news.name);
       if (existing.length > 0) return { zoneId, name: news.name, mx: existing };
@@ -147,7 +145,9 @@ export const RoutingSubdomainProvider = () =>
       const { zoneId, name } = output;
       // Unlock the subdomain's records, then remove the Email Routing ones at
       // this exact name. Idempotent: nothing left to remove is success.
-      yield* emailRouting.patchDns({ zoneId, name }).pipe(Effect.catch(() => Effect.void));
+      yield* emailRouting
+        .patchDns({ zoneId, name })
+        .pipe(Effect.catchTag("EmailRoutingSubdomainNotFound", () => Effect.void));
       const records = yield* dns.listRecords.items({ zoneId, name: { exact: name } }).pipe(
         Stream.filter(
           (record) =>
