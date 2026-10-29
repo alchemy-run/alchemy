@@ -75,3 +75,32 @@ export const ProbeGatewayRule = Effect.gen(function* () {
     sessionMatcher: "true",
   });
 });
+
+/** One VPC for the packet intercept and mirroring groups. */
+const ProbeVpc = GCP.Compute.Network("ProbeSecurityVpc", { autoCreateSubnetworks: false });
+export const ProbeInterceptGroup = Effect.gen(function* () {
+  const vpc = yield* ProbeVpc;
+  return yield* GCP.NetworkSecurity.InterceptDeploymentGroup("ProbeInterceptGroup", {
+    location: "global",
+    network: vpc.selfLink.as<string>(),
+  });
+});
+export const ProbeInterceptEndpoints = Effect.gen(function* () {
+  const group = yield* ProbeInterceptGroup;
+  return yield* GCP.NetworkSecurity.InterceptEndpointGroup("ProbeInterceptEndpoints", {
+    interceptDeploymentGroup: group.name,
+  });
+});
+export const ProbeMirroringGroup = Effect.gen(function* () {
+  const vpc = yield* ProbeVpc;
+  return yield* GCP.NetworkSecurity.MirroringDeploymentGroup("ProbeMirroringGroup", {
+    location: "global",
+    network: vpc.selfLink.as<string>(),
+  });
+});
+export const ProbeMirroringEndpoints = Effect.gen(function* () {
+  const group = yield* ProbeMirroringGroup;
+  return yield* GCP.NetworkSecurity.MirroringEndpointGroup("ProbeMirroringEndpoints", {
+    mirroringDeploymentGroup: group.name,
+  });
+});

@@ -205,16 +205,24 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("InterceptDeploymentGroup", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetInterceptDeploymentGroup (networksecurity.projects.locations.interceptDeploymentGroups.get): InterceptDeploymentGroup: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetInterceptDeploymentGroup (networksecurity.projects.locations.interceptDeploymentGroups.get)",
+        () => probe("GetInterceptDeploymentGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("InterceptEndpointGroup", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetInterceptEndpointGroup (networksecurity.projects.locations.interceptEndpointGroups.get): InterceptEndpointGroup: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetInterceptEndpointGroup (networksecurity.projects.locations.interceptEndpointGroups.get)",
+        () => probe("GetInterceptEndpointGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -233,16 +241,24 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("MirroringDeploymentGroup", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetMirroringDeploymentGroup (networksecurity.projects.locations.mirroringDeploymentGroups.get): MirroringDeploymentGroup: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetMirroringDeploymentGroup (networksecurity.projects.locations.mirroringDeploymentGroups.get)",
+        () => probe("GetMirroringDeploymentGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("MirroringEndpointGroup", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetMirroringEndpointGroup (networksecurity.projects.locations.mirroringEndpointGroups.get): MirroringEndpointGroup: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetMirroringEndpointGroup (networksecurity.projects.locations.mirroringEndpointGroups.get)",
+        () => probe("GetMirroringEndpointGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
