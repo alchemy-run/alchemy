@@ -10,7 +10,7 @@ import * as Option from "effect/Option";
 import * as RpcClientError from "effect/rpc/RpcClientError";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { Client, CounterApi, CounterId } from "./FoldkitCounter.ts";
+import { Client, CounterApi, CounterId, Increment } from "./FoldkitCounter.ts";
 
 const Counter = Foldkit.client(CounterApi);
 const target = CounterId.make("one");
@@ -60,14 +60,19 @@ it.live("keeps transport uncertainty and reads headers only during execution", (
     let calls = 0;
     const uncertain = Layer.succeed(CounterApi.Client, {
       ...client,
-      Increment: () =>
-        Effect.fail(
-          new RpcClientError.RpcClientError({
-            reason: new RpcClientError.RpcClientDefect({
-              cause: "lost reply",
-              message: "lost reply",
-            }),
-          }),
+      // The server applies the command; its reply is lost on the way back.
+      Increment: (...args: Parameters<typeof client.Increment>) =>
+        client.Increment(...args).pipe(
+          Effect.andThen(
+            Effect.fail(
+              new RpcClientError.RpcClientError({
+                reason: new RpcClientError.RpcClientDefect({
+                  cause: "lost reply",
+                  message: "lost reply",
+                }),
+              }),
+            ),
+          ),
         ),
     });
     const command = Counter.Increment({ target, input: { amount: 1 }, commandId: "page:3" });
@@ -285,13 +290,15 @@ it.live("maps command defects to Unknown and preserves interruption", () =>
     const command = Counter.Increment({ target, input: { amount: 1 }, commandId: "page:die" });
     const source = Layer.succeed(CounterApi.Client, {
       ...client,
-      Increment: () => Effect.die("storage failed"),
+      Increment: (...args: Parameters<typeof client.Increment>) =>
+        client.Increment(...args).pipe(Effect.andThen(Effect.die("storage failed"))),
     });
     const result = yield* command.effect.pipe(Effect.provide(source));
     expect(result).toMatchObject({ _tag: "FailedIncrement", failure: { _tag: "Unknown" } });
     const interrupted = Layer.succeed(CounterApi.Client, {
       ...client,
-      Increment: () => Effect.interrupt,
+      Increment: (...args: Parameters<typeof client.Increment>) =>
+        client.Increment(...args).pipe(Effect.andThen(Effect.interrupt)),
     });
     const exit = yield* command.effect.pipe(Effect.provide(interrupted), Effect.exit);
     expect(exit._tag).toBe("Failure");
@@ -308,8 +315,16 @@ it.live("turns watch and event defects into Messages", () =>
       ...client,
       Total: {
         ...client.Total,
-        watch: () => Stream.die("watch failed"),
-        events: () => Stream.die("events failed"),
+        watch: (...args: Parameters<typeof client.Total.watch>) =>
+          client.Total.watch(...args).pipe(
+            Stream.take(1),
+            Stream.concat(Stream.die("watch failed")),
+          ),
+        events: (...args: Parameters<typeof client.Total.events>) =>
+          client.Total.events(...args).pipe(
+            Stream.take(1),
+            Stream.concat(Stream.die("events failed")),
+          ),
       },
     });
     const read = Counter.Total.watch({
@@ -322,12 +337,12 @@ it.live("turns watch and event defects into Messages", () =>
       yield* read
         .dependenciesToStream({ key: target, isEnabled: true })
         .pipe(Stream.runCollect, Effect.provide(source)),
-    ).toEqual(["defect"]);
+    ).toEqual(["snapshot", "defect"]);
     expect(
       yield* feed
         .dependenciesToStream(dependencies, () => dependencies)
         .pipe(Stream.runCollect, Effect.provide(source)),
-    ).toEqual(["defect"]);
+    ).toEqual(["caught:0", "defect"]);
   }).pipe(Effect.provide(Client)),
 );
 
@@ -338,8 +353,16 @@ it.live("preserves interruption in watch and event streams", () =>
       ...client,
       Total: {
         ...client.Total,
-        watch: () => Stream.fromEffect(Effect.interrupt),
-        events: () => Stream.fromEffect(Effect.interrupt),
+        watch: (...args: Parameters<typeof client.Total.watch>) =>
+          client.Total.watch(...args).pipe(
+            Stream.take(1),
+            Stream.concat(Stream.fromEffect(Effect.interrupt)),
+          ),
+        events: (...args: Parameters<typeof client.Total.events>) =>
+          client.Total.events(...args).pipe(
+            Stream.take(1),
+            Stream.concat(Stream.fromEffect(Effect.interrupt)),
+          ),
       },
     });
     const reads = [
@@ -413,14 +436,22 @@ it.live("watches Stream absence and reports CaughtUp", () =>
   }).pipe(Effect.provide(Client)),
 );
 
-it("rejects the reserved Message read name", () => {
+it("reserves Message for command results", () => {
   class MessageView extends Domain.View("Message", {
     from: [],
     key: Schema.String,
     state: Schema.Number,
     initial: 0,
   }) {}
-  class CollisionApi extends Domain.Api("CollisionApi", MessageView) {}
+  class CollisionApi extends Domain.Api("CollisionApi", Increment, MessageView) {}
   // @ts-expect-error Message is reserved for command results
-  expect(() => Foldkit.client(CollisionApi)).toThrow("reserves the Api entry name Message");
+  const collision = Foldkit.client(CollisionApi);
+  expect("watch" in collision.Message).toBe(false);
+  expect(
+    Schema.is(collision.Message)({
+      _tag: "FailedIncrement",
+      commandId: "page:0",
+      failure: { _tag: "Unknown" },
+    }),
+  ).toBe(true);
 });

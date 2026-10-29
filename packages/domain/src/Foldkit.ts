@@ -117,8 +117,8 @@ function commandDefinitions(api: Api.Any): unknown {
         commandId: Schema.String,
       },
       messages: [Message],
-      execute: ({ target, input, commandId }) =>
-        Effect.gen(function* () {
+      execute: Effect.fn(
+        function* ({ target, input, commandId }) {
           const client = (yield* Effect.service(api.Client)) as Record<
             string,
             (
@@ -142,22 +142,25 @@ function commandDefinitions(api: Api.Any): unknown {
             reply,
             receipt: { stream, version },
           };
-        }).pipe(
-          Effect.catchCauseIf(
-            (cause) => Cause.hasFails(cause) || Cause.hasDies(cause),
-            (cause) =>
-              Effect.succeed({
-                _tag: `Failed${command.tag}`,
-                commandId,
-                failure: Cause.hasDies(cause)
-                  ? { _tag: "Unknown" }
-                  : classifyFailure(
-                      command,
-                      cause.pipe(Cause.findErrorOption, Option.getOrUndefined),
-                    ),
-              }),
+        },
+        (effect, { commandId }) =>
+          effect.pipe(
+            Effect.catchCauseIf(
+              (cause) => Cause.hasFails(cause) || Cause.hasDies(cause),
+              (cause) =>
+                Effect.succeed({
+                  _tag: `Failed${command.tag}`,
+                  commandId,
+                  failure: Cause.hasDies(cause)
+                    ? { _tag: "Unknown" }
+                    : classifyFailure(
+                        command,
+                        cause.pipe(Cause.findErrorOption, Option.getOrUndefined),
+                      ),
+                }),
+            ),
           ),
-        ),
+      ),
     });
   }
   return definitions;
@@ -232,13 +235,9 @@ export function client<A extends Api.Any>(
   api: A & ("Message" extends keyof Api.ClientOf<A> ? never : unknown),
 ): ClientOf<A>;
 export function client(api: Api.Any): unknown {
-  if (
-    api.commands.some((command) => command.tag === "Message") ||
-    api.entries.some((entry) => entry.kind !== "Command" && nameOf(entry) === "Message")
-  ) {
-    throw new Error("Foldkit client reserves the Api entry name Message");
-  }
+  // The signature rejects an Api with an entry named Message; the result union is assigned last.
   const definitions = commandDefinitions(api) as Record<string, unknown>;
+  const { Message } = definitions;
   for (const entry of api.entries) {
     if (entry.kind !== "View" && entry.kind !== "Aggregate" && entry.kind !== "Stream") {
       continue;
@@ -265,6 +264,7 @@ export function client(api: Api.Any): unknown {
           }),
     };
   }
+  definitions.Message = Message;
   return definitions;
 }
 

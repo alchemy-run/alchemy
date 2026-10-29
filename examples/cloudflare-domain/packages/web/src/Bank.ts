@@ -137,22 +137,21 @@ const deliver = (accountId: AccountId, intent: Intent) => {
 export const Deliver = Command.define("Deliver", {
   args: { accountId: AccountId, intents: Schema.Array(Intent) },
   messages: [Message.CompletedDeliver],
-  execute: ({ accountId, intents }) =>
-    Effect.gen(function* () {
-      const outcomes: Array<Outcome> = [];
-      for (const intent of intents) {
-        const outcome = yield* deliver(accountId, intent);
-        outcomes.push(outcome);
+  execute: Effect.fn(function* ({ accountId, intents }) {
+    const outcomes: Array<Outcome> = [];
+    for (const intent of intents) {
+      const outcome = yield* deliver(accountId, intent);
+      outcomes.push(outcome);
 
-        if (outcome.result === "Queued") {
-          for (const rest of intents.slice(outcomes.length)) {
-            outcomes.push({ commandId: rest.commandId, result: "Queued", reason: Option.none() });
-          }
-          break;
+      if (outcome.result === "Queued") {
+        for (const rest of intents.slice(outcomes.length)) {
+          outcomes.push({ commandId: rest.commandId, result: "Queued", reason: Option.none() });
         }
+        break;
       }
-      return Message.CompletedDeliver({ outcomes });
-    }),
+    }
+    return Message.CompletedDeliver({ outcomes });
+  }),
 });
 
 export const SaveIntents = Command.define("SaveIntents", {

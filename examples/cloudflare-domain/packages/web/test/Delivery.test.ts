@@ -21,18 +21,24 @@ it.live("retries only the unknown intent with its original id and queues the res
     }).effect.pipe(
       Effect.provideService(CustomerApi.Client, {
         ...client,
-        DepositMoney: (_, __, options) =>
+        // The server applies each send; every reply is lost on the way back.
+        DepositMoney: (target, input, options) =>
           Effect.suspend(() => {
             ids.push(options?.commandId);
-            return Effect.fail(
-              RpcClientError.RpcClientError.make({
-                reason: RpcClientError.RpcClientDefect.make({
-                  cause: "lost reply",
-                  message: "lost reply",
+            return client.DepositMoney(target, input, options);
+          }).pipe(
+            Effect.exit,
+            Effect.andThen(
+              Effect.fail(
+                RpcClientError.RpcClientError.make({
+                  reason: RpcClientError.RpcClientDefect.make({
+                    cause: "lost reply",
+                    message: "lost reply",
+                  }),
                 }),
-              }),
-            );
-          }),
+              ),
+            ),
+          ),
       }),
     );
     expect(ids).toEqual(["page:0", "page:0", "page:0", "page:0"]);
