@@ -3,6 +3,7 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Schedule from "effect/Schedule";
 import { requestWorker } from "../Utils/WorkerRequest.ts";
@@ -48,7 +49,7 @@ const serving = (url: string, version: "v1" | "v2" | "v3" | "v3b") =>
       (body) => body === version,
       (body) => new NotYet({ status: 200, body }),
     ),
-    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 30 }),
+    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 90 }),
   );
 
 const deposit = (url: string, account: string, amount: number) =>
@@ -113,6 +114,21 @@ const historyComplete = (url: string) =>
     }),
   );
 
+/**
+ * Read the view's history once. A deploy waits for the backfill it starts, so
+ * right after one it is already complete; only a host still on the code from
+ * before the deploy (which has no such route) is asked again.
+ */
+const historyNow = (url: string) =>
+  call(url, "GET", "/history").pipe(
+    Effect.map((body) => (JSON.parse(body) as { complete: boolean }).complete),
+    Effect.retry({
+      while: (e) => e._tag === "NotYet" && e.status === 404 && e.body === "Not Found",
+      schedule: Schedule.spaced("2 seconds"),
+      times: 30,
+    }),
+  );
+
 // Locally a redeploy restarts every object at once; live, an object keeps its old
 // code until it has been idle, and the catch-up must wait it out.
 for (const dev of [true, false]) {
@@ -150,6 +166,8 @@ for (const dev of [true, false]) {
             }),
           );
           yield* serving(url, "v2");
+          // The deploy returned once the backfill was done.
+          if (!dev) expect(yield* historyNow(url)).toBe(true);
           for (const [account, amounts] of Object.entries(history)) {
             expect(yield* deposits(url, account, amounts)).toEqual(amounts);
           }
@@ -165,24 +183,30 @@ for (const dev of [true, false]) {
           expect(yield* deposits(url, "a-1", [10, 20, 30])).toEqual([10, 20, 30]);
           expect(yield* historyComplete(url)).toBe(true);
 
-          // Redefine the view (it now doubles each deposit) and bump its version: it is rebuilt.
+          // Redefine the view (it now doubles each deposit) and bump its version: it is
+          // rebuilt. Written while the deploy waits on the rebuild: a new account, and an
+          // account that was inactive.
+          const writes = yield* Effect.forkChild(
+            Effect.gen(function* () {
+              yield* serving(url, "v3");
+              yield* deposit(url, "a-4", 4);
+              yield* deposit(url, "a-2", 6);
+            }),
+          );
           yield* stack.deploy(
             Effect.gen(function* () {
               return { worker: yield* WorkerV3 };
             }),
           );
-          yield* serving(url, "v3");
-          // The first Domain call starts the rebuild; then new code is deployed in the middle of it.
-          yield* call(url, "GET", "/history");
+          yield* Fiber.join(writes);
+          // New code with the same model: no second run, and the history stays complete.
           yield* stack.deploy(
             Effect.gen(function* () {
               return { worker: yield* WorkerV3b };
             }),
           );
           yield* serving(url, "v3b");
-          // Written while it rebuilds: a new account, and an account that was inactive.
-          yield* deposit(url, "a-4", 4);
-          yield* deposit(url, "a-2", 6);
+          if (!dev) expect(yield* historyNow(url)).toBe(true);
           const doubled: Record<string, ReadonlyArray<number>> = {
             "a-1": [20, 40, 60],
             "a-2": [10, 12],

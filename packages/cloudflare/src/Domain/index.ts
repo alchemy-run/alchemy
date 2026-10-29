@@ -44,8 +44,10 @@ import type { WorkflowEngine } from "effect/workflow";
 import { DurableObject as CloudflareDurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
-import type { Worker } from "../Workers/Worker.ts";
+import { Worker as CloudflareWorker, type Worker } from "../Workers/Worker.ts";
 import { DurableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
+import { sleep, task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
+import { Backfill as BackfillRun } from "./Backfill.ts";
 
 const pad = (n: number) => n.toString().padStart(12, "0");
 
@@ -1317,6 +1319,25 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
     };
     directory = yield* inInit(declare("DomainDirectory", directoryObject(net)));
 
+    // A run of the backfill: announce the model's consumers to the directory, then
+    // check the root until every one is complete. Reconciliation starts it and waits.
+    const backfill = yield* inInit(
+      Workflow(
+        "DomainBackfill",
+        Effect.succeed((params: { readonly targets: ReadonlyArray<string> }) =>
+          Effect.gen(function* () {
+            yield* task("announce", net.node.news("", params.targets));
+            for (let check = 0; ; check++) {
+              const { complete } = yield* task(`check-${check}`, net.node.status(""));
+              if (params.targets.every((target) => complete.includes(target)))
+                return { complete: true };
+              yield* sleep(`wait-${check}`, "5 seconds");
+            }
+          }),
+        ) as unknown as Effect.Effect<WorkflowImpl<any, any, unknown>>,
+      ),
+    );
+
     // The first Domain call in each isolate tells one random directory node of
     // the model's consumers: a deploy that adds one starts its catch-up.
     let news: Effect.Effect<void> | undefined;
@@ -1512,17 +1533,35 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           })),
         ),
       start: (targets) =>
-        Effect.sync(() => {
-          model = targets;
-          if (targets.length === 0) return;
-          news = Effect.suspend(() => {
-            // A random node two levels down: the burst after a deploy spreads over 256 of them.
-            const path = Math.floor(Math.random() * 256)
-              .toString(16)
-              .padStart(2, "0");
-            return net.node.news(path, targets);
-          });
-        }),
+        Effect.gen(function* () {
+          // At deploy time: reconciliation runs the backfill of new consumers and waits.
+          if (!globalThis.__ALCHEMY_RUNTIME__ && targets.length > 0) {
+            yield* inInit(
+              Effect.gen(function* () {
+                const worker = yield* CloudflareWorker;
+                yield* BackfillRun("DomainBackfillRun", {
+                  scriptName: worker.workerName as unknown as string,
+                  workflowName: backfill.workflowName as string,
+                  targets: [...targets],
+                }) as unknown as Effect.Effect<unknown>;
+              }),
+            );
+          }
+        }).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              model = targets;
+              if (targets.length === 0) return;
+              news = Effect.suspend(() => {
+                // A random node two levels down: the burst after a deploy spreads over 256 of them.
+                const path = Math.floor(Math.random() * 256)
+                  .toString(16)
+                  .padStart(2, "0");
+                return net.node.news(path, targets);
+              });
+            }),
+          ),
+        ),
       policy: (policy, kit) =>
         inInit(
           Effect.gen(function* () {

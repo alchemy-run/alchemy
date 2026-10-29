@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import { DoubledDeposits, Rebuilt, Timeline } from "./ledger.ts";
 import { hosted, ledgerWorker } from "./worker.ts";
 
-/** The same model as v3 in new code: deployed mid-rebuild, it restarts every object. */
+/** The same model as v3 in new code: redeployed after the rebuild, it starts no second run. */
 export default class DomainCatchUpWorker extends Cloudflare.Worker<DomainCatchUpWorker>()(
   "DomainCatchUpWorker",
   { main: import.meta.url },
