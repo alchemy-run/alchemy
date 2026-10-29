@@ -1,6 +1,6 @@
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { AlchemyContextLive } from "../AlchemyContext.ts";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
@@ -25,13 +25,14 @@ import { routeCacheLayer } from "./Session.ts";
  * )
  * ```
  */
+/** The services {@link layer} provides; every Alchemist route runs under them. */
+export type Services = Layer.Success<ReturnType<typeof layer>>;
+
 export const layer = () =>
   Layer.mergeAll(
-    Layer.mergeAll(
-      AlchemyContextLive,
-      ProfileStoreLive,
-      CredentialsStoreLive,
-    ).pipe(Layer.provideMerge(PlatformServices)),
+    Layer.mergeAll(AlchemyContextLive, ProfileStoreLive, CredentialsStoreLive).pipe(
+      Layer.provideMerge(PlatformServices),
+    ),
     FetchHttpClient.layer,
     ConfigProvider.layer(ConfigProvider.fromEnv()),
     Layer.succeed(ArtifactStore, createArtifactStore()),

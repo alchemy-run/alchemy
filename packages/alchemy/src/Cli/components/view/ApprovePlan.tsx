@@ -1,5 +1,10 @@
-/** @jsxImportSource react */
-import { useMemo, useState, type JSX } from "react";
+/** @jsxRuntime automatic */
+/** @jsxImportSource @alchemy.run/sigil */
+import { useMemo, useState } from "@alchemy.run/sigil/react";
+import type { JSX } from "react";
+import { Screen, type ScreenController } from "../../../Interaction.ts";
+import type { Plan as AlchemyPlan } from "../../../Plan.ts";
+import { theme } from "../../../Util/Theme.ts";
 import {
   ChoiceGroup,
   Box,
@@ -9,9 +14,7 @@ import {
   useKeyGlyphs,
   useTerminalInput,
 } from "../ui/index.ts";
-import { Screen, theme, type ScreenController } from "../../CliKit/index.ts";
-import type { Plan as AlchemyPlan } from "../../../Plan.ts";
-import { Plan, PlanView, PlanViewStore } from "./PlanView.tsx";
+import { Plan, PlanTree } from "./PlanView.tsx";
 
 export interface ApprovePlanProps {
   plan: AlchemyPlan;
@@ -32,11 +35,15 @@ export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
   const action = plan.destroy ? "Destroy" : "Deploy";
   const glyphs = useGlyphs();
   const keys = useKeyGlyphs();
-  const store = useMemo(
-    () => new PlanViewStore(plan, { detailed }),
-    [plan, detailed],
+  const tree = useMemo(
+    () =>
+      new PlanTree(plan, {
+        detailed,
+        mode: "review",
+        label: action,
+      }),
+    [plan, detailed, action],
   );
-
   const complete = (answer: boolean) => {
     const verdict = (
       <Text color={answer ? theme.color.success : theme.color.danger}>
@@ -46,11 +53,12 @@ export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
     // On approval the plan disappears — the apply progress that follows
     // shows every row again. A declined plan stays on screen (complete,
     // unscrolled) so the user can review what they just turned down.
+    if (!answer) tree.setViewport("full");
     const summary = answer ? (
       verdict
     ) : (
       <Box flexDirection="column">
-        <Plan plan={plan} detailed={detailed} />
+        <Plan tree={tree} />
         {verdict}
       </Box>
     );
@@ -65,35 +73,29 @@ export function ApprovePlan(props: ApprovePlanProps): JSX.Element {
     else if (input.toLowerCase() === "n") complete(false);
   });
 
-  return (
-    <Box flexDirection="column" gap={1}>
-      <PlanView
-        store={store}
-        mode="review"
-        detailed={detailed}
-        viewport="virtual"
+  const prompt = (
+    <Box flexDirection="column">
+      <Text bold>{action}?</Text>
+      <ChoiceGroup
+        value={approved}
+        choices={[
+          { value: true, label: action },
+          { value: false, label: "Cancel" },
+        ]}
+        onChange={setApproved}
       />
-      <Box flexDirection="column" marginTop={1}>
-        <Text bold>{action}?</Text>
-        <ChoiceGroup
-          value={approved}
-          choices={[
-            { value: true, label: action },
-            { value: false, label: "Cancel" },
-          ]}
-          onChange={setApproved}
-        />
-        <KeyBar
-          keys={[
-            [keys.upDown, "scroll plan"],
-            [keys.leftRight, "choose"],
-            [keys.enter, "confirm"],
-            [keys.escape, "cancel"],
-          ]}
-        />
-      </Box>
+      <KeyBar
+        keys={[
+          [keys.upDown, "scroll plan"],
+          [keys.leftRight, "choose"],
+          [keys.enter, "confirm"],
+          [keys.escape, "cancel"],
+        ]}
+      />
     </Box>
   );
+
+  return <Plan tree={tree} footer={prompt} />;
 }
 
 export const approvePlanScreen = (plan: AlchemyPlan, detailed = false) =>

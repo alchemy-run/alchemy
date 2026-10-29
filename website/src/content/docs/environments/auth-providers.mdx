@@ -57,10 +57,10 @@ automatically.
 `details` and `read` use the tagged `NeedsReauth` error for missing, expired,
 or rotated credentials. The profile UI renders it as "needs re-login."
 
-`readEnvironment` never receives or creates a profile. It is used when
-`CI=true`, and outside CI when every required variable in the provider's
-contract is explicitly exported in the process environment and no profile
-was explicitly selected. See
+`readEnvironment` never receives or creates a profile. It is used whenever
+every required variable in the provider's contract is present in config (the
+process environment, `.env`, or `--env-file`), taking precedence over any
+selected profile, and always when `CI=true`. See
 [environment variables outside CI](/environments/profiles#environment-variables-outside-ci).
 `environment` declares every variable `readEnvironment` consumes
 (`name`, `required`, `secret`, `description`, `alternatives`). Alchemy validates
@@ -99,7 +99,7 @@ environment services are `Context.Service`s whose **service value is
 itself an Effect**:
 
 ```typescript
-// alchemy/Cloudflare/CloudflareEnvironment
+// @alchemy.run/cloudflare/CloudflareEnvironment
 export class CloudflareEnvironment extends Context.Service<
   CloudflareEnvironment,
   Effect.Effect<CloudflareResolvedCredentials>
@@ -109,11 +109,11 @@ export class CloudflareEnvironment extends Context.Service<
 ```
 
 AWS is the same shape, and goes one level deeper — the resolved
-environment holds its credentials as an Effect too, so expiring SSO
-and assumed-role sessions re-resolve on each access:
+environment holds its credentials as an Effect too, so expiring SSO,
+console-login, and assumed-role sessions re-resolve on each access:
 
 ```typescript
-// alchemy/AWS/Environment
+// @alchemy.run/aws/Environment
 export interface AWSEnvironmentShape {
   accountId: AccountID;
   region: RegionID;
@@ -144,7 +144,7 @@ Inside `reconcile`/`read`/`delete`, a handler yields the environment
 twice — once to get the Effect out of the service, once to run it:
 
 ```typescript
-// Cloudflare (packages/alchemy/src/Cloudflare/Calls/App.ts)
+// Cloudflare (packages/cloudflare/src/Calls/App.ts)
 const { accountId } = yield* yield* CloudflareEnvironment;
 
 // AWS — AWSEnvironment.current does the double yield for you
@@ -178,7 +178,7 @@ to its credential service with a `fromProfile`/`fromAuthProvider`
 Layer:
 
 ```typescript
-// alchemy/Cloudflare/CloudflareEnvironment
+// @alchemy.run/cloudflare/CloudflareEnvironment
 export const fromProfile = () =>
   Layer.effect(
     CloudflareEnvironment,
@@ -210,11 +210,12 @@ the provider's `readEnvironment` capability. It does not manufacture an
 [provider environment-variable table](/environments/profiles#ci-environment-variables-by-provider)
 for the exact inputs.
 
-Outside CI, the same capability runs when the provider's required variables
-are all explicitly exported in `process.env` **and** no profile was selected
-explicitly. Alchemy prints a warning that names the variables it used. Passing
-`--profile` (or setting `ALCHEMY_PROFILE`) restores the profile's authority
-and the variables are ignored.
+Outside CI, the same capability runs first whenever the provider's required
+variables are all present in config (process environment, `.env`, or
+`--env-file`) — even when `--profile` or `ALCHEMY_PROFILE` selected a
+profile. The check is per provider, so one provider can come from the
+environment while the others in the same run come from the profile. Alchemy
+logs the variables it used. Unset them to fall back to the profile.
 
 ## Refresh in practice
 
@@ -222,7 +223,7 @@ Cloudflare's OAuth method shows why `read` is an Effect and not a
 stored value. Every resolve checks expiry and refreshes proactively:
 
 ```typescript
-// alchemy/Cloudflare/Auth/AuthProvider — inside read (method: "oauth")
+// @alchemy.run/cloudflare/Auth/AuthProvider — inside read (method: "oauth")
 const fresh =
   creds.expires > Date.now() + 10_000
     ? creds

@@ -5,7 +5,7 @@ import { Progress } from "../../../Alchemist/Progress.ts";
 import * as Profiles from "../../../Alchemist/routes/profile.ts";
 import { importStack } from "../../../Alchemist/Session.ts";
 import { DEFAULT_PROFILE_NAME } from "../../../Auth/Profile.ts";
-import { CliKit } from "../../CliKit/index.ts";
+import { Interaction } from "../../../Interaction.ts";
 import { isPromptCancellation } from "../errors.ts";
 
 export const profileHub = Effect.fn(function* (options: {
@@ -36,10 +36,10 @@ export const profileHub = Effect.fn(function* (options: {
   // the credential spinner mid-frame. Like deploy's planning session, show a
   // static (non-spinning) row that makes no motion promise. Failures are
   // ignored here — `loadDetails` re-imports from the cache and surfaces them.
-  const cli = yield* CliKit;
+  const cli = yield* Interaction;
   yield* Effect.scoped(
     Effect.gen(function* () {
-      yield* cli.live.progress({
+      yield* cli.progress({
         label: "Importing stack module",
         spinning: false,
       });
@@ -76,15 +76,15 @@ export const profileHub = Effect.fn(function* (options: {
                 ? ("configured" as const)
                 : provider.status === "needs-reauth"
                   ? ("reauth" as const)
-                  : ("error" as const),
+                  : provider.status === "needs-reconfigure"
+                    ? ("reconfigure" as const)
+                    : ("error" as const),
             lines: [
               ...provider.details.map(({ key, value }) => `${key}: ${value}`),
               ...(provider.diagnostic ? [provider.diagnostic.message] : []),
             ],
           })),
-          available: providers
-            .filter(({ connected }) => !connected)
-            .map(({ name }) => name),
+          available: providers.filter(({ connected }) => !connected).map(({ name }) => name),
         };
       }),
     execute: (action) =>
@@ -122,6 +122,7 @@ export const profileHub = Effect.fn(function* (options: {
         if (action.kind === "refresh") {
           yield* Profiles.refresh({
             profile: action.name,
+            providers: action.provider === undefined ? undefined : [action.provider],
             entrypoint: options.main,
             envFile,
           }).pipe(
@@ -131,7 +132,13 @@ export const profileHub = Effect.fn(function* (options: {
                 : Effect.void,
             ),
           );
-          return { ok: true, message: "Credentials refreshed." };
+          return {
+            ok: true,
+            message:
+              action.provider === undefined
+                ? "Credentials refreshed."
+                : `${action.provider} credentials refreshed.`,
+          };
         }
 
         const outcomes: string[] = [];
@@ -156,9 +163,7 @@ export const profileHub = Effect.fn(function* (options: {
               envFile,
               action: kind,
             });
-            outcomes.push(
-              `${provider} ${kind === "add" ? "added" : "updated"}`,
-            );
+            outcomes.push(`${provider} ${kind === "add" ? "added" : "updated"}`);
           }
         }
         return {
@@ -174,8 +179,6 @@ export const profileHub = Effect.fn(function* (options: {
           ),
         ),
       ),
-    reloadEntries: refreshEntries.pipe(
-      Effect.catch(() => Ref.get(lastEntries)),
-    ),
+    reloadEntries: refreshEntries.pipe(Effect.catch(() => Ref.get(lastEntries))),
   });
 });
