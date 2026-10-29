@@ -108,7 +108,7 @@ export const WorkloadIdentityPool = Resource<WorkloadIdentityPool>("GCP.IAM.Work
 
 export class WorkloadIdentityPoolNotResolved extends Data.TaggedError(
   "GCP.IAM.WorkloadIdentityPoolNotResolved",
-)<{ name: string }> {}
+)<{ resourceName: string }> {}
 
 const poolName = (project: string, poolId: string) =>
   `projects/${project}/locations/global/workloadIdentityPools/${poolId}`;
@@ -134,7 +134,7 @@ const toAttrs = (
 const getPool = (name: string) =>
   iam
     .getProjectsLocationsWorkloadIdentityPools({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitForPoolOperation = (operation: iam.Operation) =>
   waitForOperation(operation, (name) =>
@@ -250,7 +250,7 @@ export const WorkloadIdentityPoolProvider = () =>
       current = yield* getPool(name).pipe(
         Effect.flatMap((pool) =>
           pool === undefined || pool.state !== "ACTIVE"
-            ? Effect.fail(new WorkloadIdentityPoolNotResolved({ name }))
+            ? Effect.fail(new WorkloadIdentityPoolNotResolved({ resourceName: name }))
             : Effect.succeed(pool),
         ),
         Effect.retry({
@@ -295,7 +295,7 @@ export const WorkloadIdentityPoolProvider = () =>
       if (current?.state === "DELETED") return;
       const operation = yield* iam
         .deleteProjectsLocationsWorkloadIdentityPools({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) yield* waitForPoolOperation(operation);
     }),
   });

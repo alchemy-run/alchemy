@@ -691,7 +691,7 @@ export const EventSourceMappingProvider = () =>
           if (output?.uuid) {
             config = yield* lambda
               .getEventSourceMapping({ UUID: output.uuid })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           }
           // `updateEventSourceMapping` cannot change the source, so a mapping
           // that reads another source (its source was replaced) is recreated

@@ -85,6 +85,7 @@ export const makeR2ObjectWrappers = (
   nativeStreams = false,
 ) => {
   const wrapR2Object = (object: runtime.R2Object): R2Object => ({
+    // oxlint-disable-next-line typescript/no-misused-spread -- copies the runtime object's own data fields; its only method is replaced below
     ...object,
     writeHttpMetadata: (headers: Headers) => Effect.sync(() => object.writeHttpMetadata(headers)),
   });

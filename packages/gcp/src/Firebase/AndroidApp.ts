@@ -122,10 +122,10 @@ const toAttrs = (app: firebase.AndroidApp) => ({
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : firebase
         .getProjectsAndroidApps({ name })
-        .pipe(Effect.catchTag(["NotFound", "AndroidAppNotFound"], () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag(["NotFound", "AndroidAppNotFound"], () => Effect.undefined));
 
 const findOwned = (project: string, displayName: string, packageName?: string) =>
   listAndroidApps(project).pipe(
@@ -242,7 +242,7 @@ export const AndroidAppProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: output?.name ?? packageName,
+          resourceName: output?.name ?? packageName,
         });
       }
 
@@ -283,7 +283,7 @@ export const AndroidAppProvider = () =>
           name: output.name,
           body: { immediate: true, allowMissing: true },
         })
-        .pipe(Effect.catchTag(["NotFound", "AndroidAppNotFound"], () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag(["NotFound", "AndroidAppNotFound"], () => Effect.undefined));
       if (operation) {
         yield* waitForOperation(operation).pipe(
           Effect.catchIf(

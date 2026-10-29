@@ -246,7 +246,7 @@ const toAttrs = (item: developerconnect.GitRepositoryLink, project: string, regi
 const getByName = (name: string) =>
   developerconnect
     .getProjectsLocationsConnectionsGitRepositoryLinks({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listLinksAt = (parent: string) =>
   listLabeledPages(
@@ -406,7 +406,7 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
               annotations: news.annotations,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -414,7 +414,7 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -425,7 +425,7 @@ export const ConnectionsGitRepositoryLinkProvider = () =>
       if (name === undefined || name.length === 0) return;
       const operation = yield* developerconnect
         .deleteProjectsLocationsConnectionsGitRepositoryLinks({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

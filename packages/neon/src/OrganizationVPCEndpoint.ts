@@ -106,7 +106,7 @@ const request = (scope: { orgId: string; regionId: string; vpcEndpointId: string
 
 const observe = (scope: { orgId: string; regionId: string; vpcEndpointId: string }) =>
   Neon.getOrganizationVPCEndpointDetails(request(scope)).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const OrganizationVPCEndpointProvider = () =>

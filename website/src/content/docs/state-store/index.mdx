@@ -102,10 +102,11 @@ Subsequent runs detect the existing Worker and use it.
 
 In CI (`CI=true`) a missing store fails the run instead: a deploy there
 should find its store provisioned, not create one as a side effect.
-Provision it once ahead of time:
+Provision it once ahead of time. Without `--backend`, the command
+provisions the store your `alchemy.run.ts` configures:
 
 ```sh
-alchemy state bootstrap --backend cloudflare --profile <your-ci-profile>
+alchemy state bootstrap --profile <your-ci-profile>
 ```
 
 `AWS.state()` behaves the same way: it creates its DynamoDB table on
@@ -136,7 +137,13 @@ credentials:
 state: Cloudflare.state({ name: "team-a" }), // Worker alchemy-state-store-team-a
 ```
 
-Address it from the CLI with `--name`:
+Pass `workerName` instead to choose the full Worker name yourself:
+
+```typescript
+state: Cloudflare.state({ workerName: "acme-state" }),
+```
+
+Address a named store from the CLI with `--name`:
 
 ```sh
 alchemy state list --backend cloudflare --name team-a
@@ -145,6 +152,26 @@ alchemy state list --backend cloudflare --name team-a
 `AWS.state({ name })` does the same with a separate DynamoDB table,
 `alchemy-state-<name>`; pass `tableName` to choose the full table name
 yourself. `GCP.state({ name })` uses `alchemy-state-<name>-<project>`.
+
+### Pin the account
+
+The store lives in the Cloudflare account your profile resolves. If your
+credentials reach several accounts, pin it, so logging in to a different one
+fails instead of reading or deploying the store there:
+
+```typescript
+state: Cloudflare.state({ accountId: "c8eeff0e..." }),
+```
+
+### Serve it on your own domain
+
+The store answers on its `workers.dev` URL. Some networks can't reach
+`workers.dev`, so give it a hostname in one of your zones instead. Alchemy
+attaches it to the store's Worker as a custom domain and uses it from then on:
+
+```typescript
+state: Cloudflare.state({ domain: "alchemy-state.example.com" }),
+```
 
 ## AWS state store
 

@@ -15,6 +15,11 @@ import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
 
+export class RouteTableNotReady extends Data.TaggedError("RouteTableNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type RouteTableId<ID extends string = string> = `rtb-${ID}`;
 export const RouteTableId = <ID extends string>(id: ID): ID & RouteTableId<ID> =>
   `rtb-${id}` as ID & RouteTableId<ID>;
@@ -515,7 +520,7 @@ const waitForRouteTableDeleted = (routeTableId: string, session: ScopedPlanStatu
       }
 
       // Still exists, fail to trigger retry
-      return yield* Effect.fail(new Error("Route table still exists"));
+      return yield* new RouteTableNotReady({ message: "Route table still exists" });
     }),
     {
       schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(10)]).pipe(

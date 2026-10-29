@@ -375,7 +375,7 @@ const toAttrs = (subnetwork: compute.Subnetwork, project: string): Subnetwork["A
 const getByName = (project: string, region: string, subnetworkName: string) =>
   compute
     .getSubnetworks({ project, region, subnetwork: subnetworkName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const requireSubnetwork = (project: string, region: string, subnetworkName: string) =>
   getByName(project, region, subnetworkName).pipe(

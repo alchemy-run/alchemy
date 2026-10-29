@@ -356,6 +356,12 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
     effect.pipe(Effect.provideContext(context), Effect.mapError(toError));
 
   const threshold = options.overflowThreshold ?? DEFAULT_OVERFLOW_THRESHOLD;
+  // Only the stack's config describes a store with its own names or key, so
+  // `--backend aws` can't bootstrap it.
+  const configured =
+    options.tableName !== undefined ||
+    options.overflowBucketName !== undefined ||
+    options.kmsKeyId !== undefined;
   const label = "DynamoDB";
 
   // The table, overflow bucket and S3 store this store addresses.
@@ -402,6 +408,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
           {
             backend: DYNAMODB_STATE_BACKEND,
             name: options.name,
+            configured,
             label: `DynamoDB state table '${table}'`,
           },
           provision(table, bucket, region),
@@ -414,6 +421,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
             {
               backend: DYNAMODB_STATE_BACKEND,
               name: options.name,
+              configured,
               label: `DynamoDB state overflow bucket '${bucket}'`,
             },
             provisionStateBucket(bucket, region, options.kmsKeyId),

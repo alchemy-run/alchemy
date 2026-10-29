@@ -142,7 +142,7 @@ export const VariantStoreProvider = () =>
           const name = output?.name ?? (yield* createName(id, olds ?? {}));
           const found = yield* omics
             .getVariantStore({ name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found === undefined) return undefined;
           const attrs = {
             variantStoreId: found.id,
@@ -173,7 +173,7 @@ export const VariantStoreProvider = () =>
 
           let store = yield* omics
             .getVariantStore({ name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (store === undefined) {
             yield* omics

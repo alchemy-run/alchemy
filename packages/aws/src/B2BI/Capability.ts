@@ -107,10 +107,8 @@ export const CapabilityProvider = () =>
             head._tag === "Some"
               ? b2bi
                   .getCapability({ capabilityId: head.value.capabilityId })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  )
-              : Effect.succeed(undefined),
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
+              : Effect.undefined,
           ),
         );
 
@@ -121,7 +119,7 @@ export const CapabilityProvider = () =>
           const found = output?.capabilityId
             ? yield* b2bi
                 .getCapability({ capabilityId: output.capabilityId })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(olds?.name ?? "");
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
@@ -137,7 +135,7 @@ export const CapabilityProvider = () =>
           let live = output?.capabilityId
             ? yield* b2bi
                 .getCapability({ capabilityId: output.capabilityId })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(news.name);
 
           // 2. Ensure.
@@ -189,7 +187,7 @@ export const CapabilityProvider = () =>
             Stream.mapEffect((s) =>
               b2bi.getCapability({ capabilityId: s.capabilityId }).pipe(
                 Effect.map(toAttrs),
-                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
               ),
             ),
             Stream.filter((item) => item !== undefined),

@@ -313,7 +313,7 @@ export const Workload = Resource<Workload>("GCP.AssuredWorkloads.Workload");
 export class WorkloadNotResolved extends Data.TaggedError(
   "GCP.AssuredWorkloads.WorkloadNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -353,10 +353,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : assuredworkloads
         .getOrganizationsLocationsWorkloads({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, organization: string, location: string) =>
   Effect.gen(function* () {
@@ -498,7 +498,7 @@ export const WorkloadProvider = () =>
             externalId: news.externalId,
             body: desiredBody(news, displayName, desiredLabels),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (code 6) is a create race: find the winner below.
           const settled = yield* waitForOperation(created).pipe(
@@ -520,7 +520,7 @@ export const WorkloadProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new WorkloadNotResolved({
-          name: output?.name ?? parent,
+          resourceName: output?.name ?? parent,
         });
       }
 
@@ -568,7 +568,7 @@ export const WorkloadProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new WorkloadNotResolved({ name });
+        return yield* new WorkloadNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);

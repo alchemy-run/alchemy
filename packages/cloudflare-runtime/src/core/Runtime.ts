@@ -82,7 +82,7 @@ export const RuntimeLive = Layer.effect(
           ? Effect.forEach([...new Set(names)], (scriptName) =>
               proxy.api.subscribe({ kind: "worker", scriptName }),
             )
-          : Effect.succeed(undefined);
+          : Effect.undefined;
       const [tails, streamingTails] = yield* Effect.all(
         [subscribeAll(worker.tails), subscribeAll(worker.streamingTails)],
         { concurrency: "unbounded" },

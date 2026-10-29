@@ -11,6 +11,16 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 
+export class KxClusterInvalidProps extends Data.TaggedError("KxClusterInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class KxClusterUnexpectedResponse extends Data.TaggedError("KxClusterUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type KxClusterStatus = finspace.KxClusterStatus;
 export type KxClusterType = finspace.KxClusterType;
 export type KxAzMode = finspace.KxAzMode;
@@ -234,7 +244,7 @@ const isGone = (status: KxClusterStatus | undefined) =>
 const readCluster = Effect.fn(function* (environmentId: string, clusterName: string) {
   const response = yield* finspace
     .getKxCluster({ environmentId, clusterName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!response || isGone(response.status)) return undefined;
   return response;
 });
@@ -294,7 +304,7 @@ const waitForClusterStatus = (
     Effect.gen(function* () {
       const response = yield* finspace
         .getKxCluster({ environmentId, clusterName })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       const status = response?.status;
       if (target === "DELETED") {
         if (response === undefined || status === "DELETED") return;
@@ -374,7 +384,9 @@ export const KxClusterProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("FinSpace KxCluster requires props"));
+            return yield* new KxClusterInvalidProps({
+              message: "FinSpace KxCluster requires props",
+            });
           }
           const environmentId = news.environmentId;
           const clusterName = output?.clusterName ?? (yield* createClusterName(id, news));
@@ -413,14 +425,14 @@ export const KxClusterProvider = () =>
                 executionRole: news.executionRole,
                 tags: { ...internalTags, ...news.tags },
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             yield* session.note(`Creating kdb cluster ${clusterName}...`);
             yield* waitForClusterStatus(environmentId, clusterName, "RUNNING");
             cluster = yield* readCluster(environmentId, clusterName);
             if (cluster === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created kdb cluster ${clusterName}`),
-              );
+              return yield* new KxClusterUnexpectedResponse({
+                message: `failed to read created kdb cluster ${clusterName}`,
+              });
             }
           }
 
@@ -461,9 +473,9 @@ export const KxClusterProvider = () =>
 
           const final = yield* readCluster(environmentId, clusterName);
           if (!final) {
-            return yield* Effect.fail(
-              new Error(`failed to read reconciled kdb cluster ${clusterName}`),
-            );
+            return yield* new KxClusterUnexpectedResponse({
+              message: `failed to read reconciled kdb cluster ${clusterName}`,
+            });
           }
           return toAttributes(final, environmentId, clusterName);
         }),

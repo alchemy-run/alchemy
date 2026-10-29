@@ -267,7 +267,7 @@ type ObservedVnet = zeroTrust.GetNetworkVirtualNetworkResponse;
 const getVnet = (accountId: string, virtualNetworkId: string) =>
   zeroTrust.getNetworkVirtualNetwork({ accountId, virtualNetworkId }).pipe(
     Effect.map((v): ObservedVnet | undefined => (v.deletedAt ? undefined : v)),
-    Effect.catchTag("VirtualNetworkNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("VirtualNetworkNotFound", () => Effect.undefined),
   );
 
 /**

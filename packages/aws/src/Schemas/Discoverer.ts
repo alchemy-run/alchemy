@@ -97,7 +97,7 @@ export const DiscovererProvider = () =>
       const describe = (discovererId: string) =>
         schemas
           .describeDiscoverer({ DiscovererId: discovererId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
       const toAttrs = (d: {
         DiscovererId?: string;

@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
@@ -12,6 +13,13 @@ import type { PolicyDocument } from "../IAM/Policy.ts";
 import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+
+export class ECRRepositoryUnexpectedResponse extends Data.TaggedError(
+  "ECRRepositoryUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type RepositoryName = string;
 export type RepositoryArn = `arn:aws:ecr:${RegionID}:${AccountID}:repository/${RepositoryName}`;
@@ -132,7 +140,7 @@ export const RepositoryProvider = () =>
           Effect.map((response) => response.policyText),
           Effect.catchTag(
             ["RepositoryPolicyNotFoundException", "RepositoryNotFoundException"],
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         );
 
@@ -175,7 +183,7 @@ export const RepositoryProvider = () =>
             .describeRepositories({
               repositoryNames: [repositoryName],
             })
-            .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined));
           const repository = described?.repositories?.[0];
           if (!repository?.repositoryArn || !repository.repositoryUri) {
             return undefined;
@@ -211,7 +219,7 @@ export const RepositoryProvider = () =>
             .describeRepositories({
               repositoryNames: [repositoryName],
             })
-            .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("RepositoryNotFoundException", () => Effect.undefined));
           let repository = described?.repositories?.[0];
 
           // Ensure — create the repository if missing. Tolerate
@@ -243,9 +251,9 @@ export const RepositoryProvider = () =>
               );
             repository = created.repository;
             if (!repository?.repositoryArn || !repository.repositoryUri) {
-              return yield* Effect.fail(
-                new Error(`Failed to create or read repository ${repositoryName}`),
-              );
+              return yield* new ECRRepositoryUnexpectedResponse({
+                message: `Failed to create or read repository ${repositoryName}`,
+              });
             }
           }
 
@@ -362,9 +370,7 @@ export const RepositoryProvider = () =>
                     })
                     .pipe(
                       Effect.map((res) => res.lifecyclePolicyText),
-                      Effect.catchTag("LifecyclePolicyNotFoundException", () =>
-                        Effect.succeed(undefined),
-                      ),
+                      Effect.catchTag("LifecyclePolicyNotFoundException", () => Effect.undefined),
                     );
                   return {
                     repositoryName: repository.repositoryName,

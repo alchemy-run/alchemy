@@ -13,12 +13,18 @@ import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Redacted from "effect/Redacted";
 import { organization } from "./Credentials.ts";
 import * as Hrana from "./Hrana.ts";
 import type { Providers } from "./Providers.ts";
+
+export class DatabaseUnexpectedResponse extends Data.TaggedError("DatabaseUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DatabaseSeed {
   /**
@@ -276,7 +282,9 @@ const withConnection = <A, E, R>(
       authorization: "full-access",
     });
     if (!jwt) {
-      return yield* Effect.fail(new Error(`Turso returned no token for ${database.name}`));
+      return yield* new DatabaseUnexpectedResponse({
+        message: `Turso returned no token for ${database.name}`,
+      });
     }
     return yield* use({ url: `https://${database.hostname}`, authToken: jwt }, client);
   });
@@ -288,7 +296,7 @@ export const DatabaseProvider = () =>
       const observe = (org: string, name: string) =>
         turso.getDatabase({ organizationSlug: org, databaseName: name }).pipe(
           Effect.map((res) => res.database),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
 
       const toAttrs = (
@@ -398,7 +406,9 @@ export const DatabaseProvider = () =>
               .pipe(Effect.catchTag("Conflict", () => Effect.void));
             db = yield* observe(org, name);
             if (!db) {
-              return yield* Effect.fail(new Error(`Turso database ${name} vanished after create`));
+              return yield* new DatabaseUnexpectedResponse({
+                message: `Turso database ${name} vanished after create`,
+              });
             }
           }
 

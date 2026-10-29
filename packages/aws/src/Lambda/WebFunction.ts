@@ -1,7 +1,6 @@
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as iam from "@distilled.cloud/aws/iam";
-import * as lambdacore from "@distilled.cloud/aws/lambda-core";
 import * as LambdaWeb from "@distilled.cloud/aws/lambda-web";
 import type { Region } from "@distilled.cloud/aws/Region";
 import { Unowned } from "alchemy/AdoptPolicy";
@@ -629,7 +628,7 @@ export const WebFunctionProvider = () =>
       const ensureRole = Effect.fn(function* (id: string, roleName: string) {
         const existing = yield* iam
           .getRole({ RoleName: roleName })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         const role =
           existing ??
           (yield* iam
@@ -728,7 +727,7 @@ export const WebFunctionProvider = () =>
       const ensureOperatorRole = Effect.fn(function* (id: string, roleName: string) {
         const existing = yield* iam
           .getRole({ RoleName: roleName })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         const role =
           existing ??
           (yield* iam
@@ -829,12 +828,12 @@ export const WebFunctionProvider = () =>
 
       const getFunction = (functionName: string) =>
         LambdaWeb.getWebFunction({ functionName }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       const getRevision = (functionName: string, revisionId: string) =>
         LambdaWeb.getWebFunctionRevision({ functionName, revisionId }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       const waitForFunctionActive = (
@@ -1025,7 +1024,7 @@ export const WebFunctionProvider = () =>
           .getRolePolicy({ RoleName: roleName, PolicyName: LOG_GROUP_GUARD_POLICY })
           .pipe(
             Effect.map((policy) => decodeURIComponent(policy.PolicyDocument)),
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           );
         if (observed !== document) {
           yield* iam.putRolePolicy({
@@ -1085,7 +1084,7 @@ export const WebFunctionProvider = () =>
             // destroy instead of orphaning it.
             const role = yield* iam
               .getRole({ RoleName: roleName })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
             if (output !== undefined || role === undefined) return undefined;
             const attrs = {
               functionName,
@@ -1232,7 +1231,7 @@ export const WebFunctionProvider = () =>
               functionName,
             ).pipe(
               // Lost a create race: the function exists, converge on it.
-              Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ConflictException", () => Effect.undefined),
             );
           }
           const fn = yield* waitForFunctionActive(functionName, session);

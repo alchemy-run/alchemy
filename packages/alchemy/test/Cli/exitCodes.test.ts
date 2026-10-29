@@ -153,6 +153,12 @@ describe("CLI exit codes", { tags: ["unit", "local"] }, () => {
     }),
   );
 
+  it.live("--fast-distilled is accepted", () =>
+    Effect.gen(function* () {
+      expect(yield* exitCodeOf(["--no-input", "--fast-distilled", "profile", "list"])).toBe(0);
+    }),
+  );
+
   it.live("--help exits 0", () =>
     Effect.gen(function* () {
       expect(yield* exitCodeOf(["--help"])).toBe(0);

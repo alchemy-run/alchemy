@@ -24,14 +24,14 @@ export const makeStorageBucketHelpers = Effect.gen(function* () {
     head: (object) =>
       bucketName.pipe(
         Effect.flatMap((bucket) => getObject({ bucket, object })),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       ),
     get: (object, options) =>
       bucketName.pipe(
         Effect.flatMap((bucket) =>
           media.download({ bucket, object, generation: options?.generation }),
         ),
-        Effect.catchTag("GCP.Storage.ObjectNotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("GCP.Storage.ObjectNotFound", () => Effect.undefined),
       ),
     list: (options) =>
       bucketName.pipe(

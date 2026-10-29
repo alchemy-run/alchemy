@@ -118,7 +118,7 @@ export const BrowserCustomProvider = () =>
       const getLiveOrUndefined = Effect.fn(function* (browserId: string) {
         const found = yield* control
           .getBrowser({ browserId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return found === undefined || found.status === "DELETED" || found.status === "DELETING"
           ? undefined
           : found;
@@ -214,7 +214,7 @@ export const BrowserCustomProvider = () =>
               })
               .pipe(
                 retryWhileValidation,
-                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             browser =
               created === undefined
@@ -243,7 +243,7 @@ export const BrowserCustomProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* control.deleteBrowser({ browserId: output.browserId }).pipe(
             retryWhileConflict,
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
           yield* control.getBrowser({ browserId: output.browserId }).pipe(
             Effect.map((b) => b.status as string),

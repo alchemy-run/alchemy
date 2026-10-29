@@ -122,7 +122,7 @@ catalog:
   "@prisma/client": "7.10.1"
   "@prisma/adapter-d1": "7.10.1"
   arktype: "2.2.8"
-  "@prisma/dev": "^0.20.0"
+  "@prisma/dev": "^0.25.2"
   "@puppeteer/browsers": "^3.2.4"
   "@react-router/dev": "^8.5.0"
   "@react-router/node": "^8.5.0"

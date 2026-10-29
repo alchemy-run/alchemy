@@ -192,7 +192,7 @@ const decode = <S extends Schema.ConstraintDecoder<unknown>>(schema: S, value: u
     Effect.mapError(() => invalidOutput("Invalid Chat Completions response shape")),
   );
 const parseArguments = (value: string) =>
-  Schema.decodeUnknownEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
+  Schema.decodeEffect(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Unknown)))(
     value,
   ).pipe(Effect.mapError(() => invalidOutput("Invalid function-call JSON arguments")));
 
@@ -295,11 +295,9 @@ const httpError = (
     if (status === 429) {
       const seconds = Number(response.headers["retry-after"]);
       return yield* error(
-        AiError.RateLimitError.make({
-          ...(Number.isFinite(seconds) && seconds >= 0
-            ? { retryAfter: Duration.seconds(seconds) }
-            : {}),
-        }),
+        AiError.RateLimitError.make(
+          Number.isFinite(seconds) && seconds >= 0 ? { retryAfter: Duration.seconds(seconds) } : {},
+        ),
       );
     }
     if (status >= 500)
@@ -526,9 +524,9 @@ const completionStream = (
                   description: "Neon AI Gateway stream reported an error",
                 }),
               );
-            const chunk = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Chunk))(
-              event.data,
-            ).pipe(Effect.mapError(() => invalidOutput("Invalid Chat Completions stream chunk")));
+            const chunk = yield* Schema.decodeEffect(Schema.fromJsonString(Chunk))(event.data).pipe(
+              Effect.mapError(() => invalidOutput("Invalid Chat Completions stream chunk")),
+            );
             if (chunk.usage != null) tokenUsage = chunk.usage;
             for (const choice of chunk.choices) {
               if (choice.index !== 0) continue;

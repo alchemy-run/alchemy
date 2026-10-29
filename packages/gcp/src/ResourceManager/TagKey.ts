@@ -124,11 +124,11 @@ export type TagKey = Resource<
 export const TagKey = Resource<TagKey>("GCP.ResourceManager.TagKey");
 
 export class TagKeyNotResolved extends Data.TaggedError("GCP.ResourceManager.TagKeyNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class TagKeyStillExists extends Data.TaggedError("GCP.ResourceManager.TagKeyStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -202,12 +202,12 @@ const toAttrs = (key: resourcemanager.TagKey) => ({
 const getByName = (name: string) =>
   resourcemanager
     .getTagKeys({ name })
-    .pipe(Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.undefined));
 
 const getByNamespaced = (name: string) =>
   resourcemanager
     .getNamespacedTagKeys({ name })
-    .pipe(Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.undefined));
 
 const observe = (resourceName: string | undefined, namespacedName: string) =>
   Effect.gen(function* () {
@@ -229,7 +229,7 @@ const waitUntilExists = (resourceName: string | undefined, namespacedName: strin
       (key): key is resourcemanager.TagKey => key !== undefined,
       () =>
         new TagKeyNotResolved({
-          name: resourceName ?? namespacedName,
+          resourceName: resourceName ?? namespacedName,
         }),
     ),
     Effect.retry({
@@ -242,7 +242,7 @@ const waitUntilExists = (resourceName: string | undefined, namespacedName: strin
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((key) =>
-      key === undefined ? Effect.void : Effect.fail(new TagKeyStillExists({ name })),
+      key === undefined ? Effect.void : Effect.fail(new TagKeyStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.TagKeyStillExists",
@@ -358,7 +358,7 @@ export const TagKeyProvider = () =>
           .createTagKeys({
             body: toCreateBody(parent, shortName, desiredDescription, news),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const settled = yield* waitForCreate(created);
           current = yield* waitUntilExists(
@@ -371,7 +371,7 @@ export const TagKeyProvider = () =>
       }
 
       if (current === undefined || current.name === undefined) {
-        return yield* new TagKeyNotResolved({ name: namespaced });
+        return yield* new TagKeyNotResolved({ resourceName: namespaced });
       }
 
       const resourceName = current.name;
@@ -399,7 +399,7 @@ export const TagKeyProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.succeed(undefined)),
+        Effect.catchTag(["NotFound", "TagKeyNotFound"], () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

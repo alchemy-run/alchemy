@@ -146,7 +146,7 @@ export const SequenceStoreProvider = () =>
           if (output?.sequenceStoreId === undefined) return undefined;
           const found = yield* omics
             .getSequenceStore({ id: output.sequenceStoreId })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
           const tags = yield* fetchOmicsTags(found.arn);
@@ -180,9 +180,7 @@ export const SequenceStoreProvider = () =>
               ? undefined
               : yield* omics
                   .getSequenceStore({ id: output.sequenceStoreId })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  );
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (store === undefined) {
             store = yield* omics.createSequenceStore({

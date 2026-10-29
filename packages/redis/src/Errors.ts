@@ -2,10 +2,10 @@ import * as Data from "effect/Data";
 
 /** No `REDIS_URL` in the Function/Service environment. */
 export class UrlMissing extends Data.TaggedError("Redis.UrlMissing")<{
-  name: string;
+  resourceName: string;
 }> {
   override get message() {
-    return `REDIS_URL missing for ${this.name}`;
+    return `REDIS_URL missing for ${this.resourceName}`;
   }
 }
 
