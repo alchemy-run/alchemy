@@ -18,7 +18,7 @@ import { defineMessageUnion } from "foldkit/message";
 import { modifyFields } from "foldkit/struct";
 
 type Bank = Domain.Api.ClientKey<"CustomerApi">;
-export const BankClient = DomainFoldkit.client(CustomerApi);
+export const BankClient = DomainFoldkit.make(CustomerApi);
 
 // MODEL
 

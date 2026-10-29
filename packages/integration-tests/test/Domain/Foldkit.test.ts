@@ -12,7 +12,7 @@ import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { Client, CounterApi, CounterId, Increment } from "./FoldkitCounter.ts";
 
-const Counter = Foldkit.client(CounterApi);
+const Counter = Foldkit.make(CounterApi);
 const target = CounterId.make("one");
 
 it.live("keeps reply, receipt and the caller's id on success", () =>
@@ -445,7 +445,7 @@ it("reserves Message for command results", () => {
   }) {}
   class CollisionApi extends Domain.Api("CollisionApi", Increment, MessageView) {}
   // @ts-expect-error Message is reserved for command results
-  const collision = Foldkit.client(CollisionApi);
+  const collision = Foldkit.make(CollisionApi);
   expect("watch" in collision.Message).toBe(false);
   expect(
     Schema.is(collision.Message)({

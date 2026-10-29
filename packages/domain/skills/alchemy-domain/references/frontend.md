@@ -48,7 +48,7 @@ import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
 import { Command, Subscription } from "foldkit";
 import * as Option from "effect/Option";
 
-const BankClient = DomainFoldkit.client(CustomerApi);
+const BankClient = DomainFoldkit.make(CustomerApi);
 
 const send = BankClient.DepositMoney({
   target: model.accountId,

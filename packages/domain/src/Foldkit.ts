@@ -230,11 +230,11 @@ export type ClientOf<A extends Api.Any> = CommandDefinitions<A> & {
       : {});
 };
 
-/** Build a Foldkit client. The app provides api.layerClient in its runtime resources. */
-export function client<A extends Api.Any>(
+/** Build the Foldkit Commands and Subscriptions for an Api. The app provides api.layerClient in its runtime resources. */
+export function make<A extends Api.Any>(
   api: A & ("Message" extends keyof Api.ClientOf<A> ? never : unknown),
 ): ClientOf<A>;
-export function client(api: Api.Any): unknown {
+export function make(api: Api.Any): unknown {
   // The signature rejects an Api with an entry named Message; the result union is assigned last.
   const definitions = commandDefinitions(api) as Record<string, unknown>;
   const { Message } = definitions;

@@ -5,7 +5,7 @@ description: Show pending intent, confirm it by commandId from a View feed, and 
 
 Show a deposit when the customer clicks. Confirm it when the bank's event arrives. A successful command reply means the write committed. The line waits for the feed before it becomes confirmed.
 
-This guide uses `Bank = DomainFoldkit.client(CustomerApi)` from [Integrate with Foldkit](/domain/foldkit). The bank example keeps its own queue and line Model. The adapter has no generic pending-state helper.
+This guide uses `Bank = DomainFoldkit.make(CustomerApi)` from [Integrate with Foldkit](/domain/foldkit). The bank example keeps its own queue and line Model. The adapter has no generic pending-state helper.
 
 ## Track each intent
 

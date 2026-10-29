@@ -13,10 +13,10 @@ Install `foldkit` in the web package. Domain's root entry does not import it. Th
 import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 
-export const Bank = DomainFoldkit.client(CustomerApi);
+export const Bank = DomainFoldkit.make(CustomerApi);
 ```
 
-`Bank` has one Command per Api command and a read namespace for each View, Aggregate, and Stream. Each read namespace has `watch` and `events`. View namespaces also have `SnapshotFlags` and `decodeSnapshotFlags`. The name `Message` is reserved: `client` does not compile for an Api with an entry named `Message`. Each Command takes `{ target, input, commandId }`. Its result is `Bank.Message.Succeeded<Name>` or `Bank.Message.Failed<Name>`.
+`Bank` has one Command per Api command and a read namespace for each View, Aggregate, and Stream. Each read namespace has `watch` and `events`. View namespaces also have `SnapshotFlags` and `decodeSnapshotFlags`. The name `Message` is reserved: `make` does not compile for an Api with an entry named `Message`. Each Command takes `{ target, input, commandId }`. Its result is `Bank.Message.Succeeded<Name>` or `Bank.Message.Failed<Name>`.
 
 A success carries `reply` and `receipt: { stream, version }`. Pass the receipt to a read's `atLeast` option when that read must include the write.
 

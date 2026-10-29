@@ -5,7 +5,7 @@ import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import { CounterApi, CounterId, Limit, Unauthenticated } from "./FoldkitCounter.ts";
 
-const Counter = Foldkit.client(CounterApi);
+const Counter = Foldkit.make(CounterApi);
 const target = CounterId.make("one");
 Counter.Reset({ target, input: {}, commandId: "page:0" });
 Counter.Increment({ target, input: { amount: 1 }, commandId: "page:1" });
@@ -112,7 +112,7 @@ class MessageView extends Domain.View("Message", {
 }) {}
 class CollisionApi extends Domain.Api("CollisionApi", MessageView) {}
 // @ts-expect-error Message is reserved for command results
-Foldkit.client(CollisionApi);
+Foldkit.make(CollisionApi);
 
 const decodedFlags = Schema.decodeUnknownOption(Counter.Total.SnapshotFlags)({});
 void decodedFlags;
