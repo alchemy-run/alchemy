@@ -100,31 +100,51 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("LocationsDeidentifyTemplate", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDeidentifyTemplate@LocationsDeidentifyTemplate (dlp.projects.locations.deidentifyTemplates.get): LocationsDeidentifyTemplate: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDeidentifyTemplate@LocationsDeidentifyTemplate (dlp.projects.locations.deidentifyTemplates.get)",
+        () => probe("GetDeidentifyTemplate@LocationsDeidentifyTemplate", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("LocationsInspectTemplate", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetInspectTemplate@LocationsInspectTemplate (dlp.projects.locations.inspectTemplates.get): LocationsInspectTemplate: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetInspectTemplate@LocationsInspectTemplate (dlp.projects.locations.inspectTemplates.get)",
+        () => probe("GetInspectTemplate@LocationsInspectTemplate", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("LocationsJobTrigger", { concurrent: true }, () => {
-      test.provider.todo(
-        "ActivateJobTrigger@LocationsJobTrigger (dlp.projects.locations.jobTriggers.activate): LocationsJobTrigger: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ActivateJobTrigger@LocationsJobTrigger (dlp.projects.locations.jobTriggers.activate)",
+        () => probe("ActivateJobTrigger@LocationsJobTrigger", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetJobTrigger@LocationsJobTrigger (dlp.projects.locations.jobTriggers.get): LocationsJobTrigger: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetJobTrigger@LocationsJobTrigger (dlp.projects.locations.jobTriggers.get)",
+        () => probe("GetJobTrigger@LocationsJobTrigger", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "HybridJobTriggerInspect (dlp.projects.locations.jobTriggers.hybridInspect): LocationsJobTrigger: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "HybridJobTriggerInspect (dlp.projects.locations.jobTriggers.hybridInspect)",
+        () => probe("HybridJobTriggerInspect", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

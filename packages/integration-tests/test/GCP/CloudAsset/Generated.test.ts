@@ -48,16 +48,20 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Feed", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetFeed (cloudasset.feeds.get): Feed: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
-      );
+      test.provider("GetFeed (cloudasset.feeds.get)", () => probe("GetFeed", true), {
+        tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+        timeout: 600_000,
+      });
     });
 
     describe("SavedQuery", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSavedQuery (cloudasset.savedQueries.get): SavedQuery: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetSavedQuery (cloudasset.savedQueries.get)",
+        () => probe("GetSavedQuery", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

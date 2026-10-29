@@ -14,7 +14,9 @@
   },
   "probes": {
     "resources": {
-      "Process": "ProbeProcess"
+      "Process": "ProbeProcess",
+      "ProcessesRun": "ProbeRun",
+      "ProcessesRunsLineageEvent": "ProbeLineageEvent"
     },
     "untestable": {}
   }

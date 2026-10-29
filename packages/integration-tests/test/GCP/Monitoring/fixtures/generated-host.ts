@@ -5,10 +5,12 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
 import {
+  ProbeAlertPolicy,
   ProbeGroup,
   ProbeMetricDescriptor,
   ProbeNotificationChannel,
   ProbeService,
+  ProbeSlo,
   ProbeUptimeCheckConfig,
 } from "./generated-resources.ts";
 
@@ -25,32 +27,34 @@ export default class MonitoringGeneratedHost extends GCP.Function<MonitoringGene
     const p0 = yield* GCP.Monitoring.CreateSnooze();
     const p1 = yield* GCP.Monitoring.CreateTimeSery();
     const p2 = yield* GCP.Monitoring.GetAlert();
-    const p3 = yield* GCP.Monitoring.GetGroup(ProbeGroup);
-    const p4 = yield* GCP.Monitoring.GetMetricDescriptor(ProbeMetricDescriptor);
-    const p5 = yield* GCP.Monitoring.GetMonitoredResourceDescriptor();
-    const p6 = yield* GCP.Monitoring.GetNotificationChannel(ProbeNotificationChannel);
-    const p7 = yield* GCP.Monitoring.GetNotificationChannelDescriptor();
-    const p8 =
+    const p3 = yield* GCP.Monitoring.GetAlertPolicy(ProbeAlertPolicy);
+    const p4 = yield* GCP.Monitoring.GetGroup(ProbeGroup);
+    const p5 = yield* GCP.Monitoring.GetMetricDescriptor(ProbeMetricDescriptor);
+    const p6 = yield* GCP.Monitoring.GetMonitoredResourceDescriptor();
+    const p7 = yield* GCP.Monitoring.GetNotificationChannel(ProbeNotificationChannel);
+    const p8 = yield* GCP.Monitoring.GetNotificationChannelDescriptor();
+    const p9 =
       yield* GCP.Monitoring.GetNotificationChannelVerificationCode(ProbeNotificationChannel);
-    const p9 = yield* GCP.Monitoring.GetService(ProbeService);
-    const p10 = yield* GCP.Monitoring.GetSnooze();
-    const p11 = yield* GCP.Monitoring.GetUptimeCheckConfig(ProbeUptimeCheckConfig);
-    const p12 = yield* GCP.Monitoring.ListAlertPolicies();
-    const p13 = yield* GCP.Monitoring.ListAlerts();
-    const p14 = yield* GCP.Monitoring.ListGroupMembers(ProbeGroup);
-    const p15 = yield* GCP.Monitoring.ListGroups();
-    const p16 = yield* GCP.Monitoring.ListMetricDescriptors();
-    const p17 = yield* GCP.Monitoring.ListMonitoredResourceDescriptors();
-    const p18 = yield* GCP.Monitoring.ListNotificationChannelDescriptors();
-    const p19 = yield* GCP.Monitoring.ListNotificationChannels();
-    const p20 = yield* GCP.Monitoring.ListServiceLevelObjectives(ProbeService);
-    const p21 = yield* GCP.Monitoring.ListSnoozes();
-    const p22 = yield* GCP.Monitoring.ListTimeSeries();
-    const p23 = yield* GCP.Monitoring.ListUptimeCheckConfigs();
-    const p24 = yield* GCP.Monitoring.PatchSnooze();
-    const p25 =
+    const p10 = yield* GCP.Monitoring.GetService(ProbeService);
+    const p11 = yield* GCP.Monitoring.GetServiceLevelObjective(ProbeSlo);
+    const p12 = yield* GCP.Monitoring.GetSnooze();
+    const p13 = yield* GCP.Monitoring.GetUptimeCheckConfig(ProbeUptimeCheckConfig);
+    const p14 = yield* GCP.Monitoring.ListAlertPolicies();
+    const p15 = yield* GCP.Monitoring.ListAlerts();
+    const p16 = yield* GCP.Monitoring.ListGroupMembers(ProbeGroup);
+    const p17 = yield* GCP.Monitoring.ListGroups();
+    const p18 = yield* GCP.Monitoring.ListMetricDescriptors();
+    const p19 = yield* GCP.Monitoring.ListMonitoredResourceDescriptors();
+    const p20 = yield* GCP.Monitoring.ListNotificationChannelDescriptors();
+    const p21 = yield* GCP.Monitoring.ListNotificationChannels();
+    const p22 = yield* GCP.Monitoring.ListServiceLevelObjectives(ProbeService);
+    const p23 = yield* GCP.Monitoring.ListSnoozes();
+    const p24 = yield* GCP.Monitoring.ListTimeSeries();
+    const p25 = yield* GCP.Monitoring.ListUptimeCheckConfigs();
+    const p26 = yield* GCP.Monitoring.PatchSnooze();
+    const p27 =
       yield* GCP.Monitoring.SendNotificationChannelVerificationCode(ProbeNotificationChannel);
-    const p26 = yield* GCP.Monitoring.VerifyNotificationChannel(ProbeNotificationChannel);
+    const p28 = yield* GCP.Monitoring.VerifyNotificationChannel(ProbeNotificationChannel);
     return {
       fetch: serveProbes({
         CreateSnooze: outcome(
@@ -60,34 +64,36 @@ export default class MonitoringGeneratedHost extends GCP.Function<MonitoringGene
           Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         GetAlert: outcome(Retry.none(p2({ alert: "alchemy-missing" } as never))),
-        GetGroup: outcome(Retry.none(p3({} as never))),
-        GetMetricDescriptor: outcome(Retry.none(p4({} as never))),
+        GetAlertPolicy: outcome(Retry.none(p3({} as never))),
+        GetGroup: outcome(Retry.none(p4({} as never))),
+        GetMetricDescriptor: outcome(Retry.none(p5({} as never))),
         GetMonitoredResourceDescriptor: outcome(
-          Retry.none(p5({ monitoredResourceDescriptor: "alchemy-missing" } as never)),
+          Retry.none(p6({ monitoredResourceDescriptor: "alchemy-missing" } as never)),
         ),
-        GetNotificationChannel: outcome(Retry.none(p6({} as never))),
+        GetNotificationChannel: outcome(Retry.none(p7({} as never))),
         GetNotificationChannelDescriptor: outcome(
-          Retry.none(p7({ notificationChannelDescriptor: "alchemy-missing" } as never)),
+          Retry.none(p8({ notificationChannelDescriptor: "alchemy-missing" } as never)),
         ),
-        GetNotificationChannelVerificationCode: outcome(Retry.none(p8({} as never))),
-        GetService: outcome(Retry.none(p9({} as never))),
-        GetSnooze: outcome(Retry.none(p10({ snooze: "alchemy-missing" } as never))),
-        GetUptimeCheckConfig: outcome(Retry.none(p11({} as never))),
-        ListAlertPolicies: outcome(Retry.none(p12({} as never))),
-        ListAlerts: outcome(Retry.none(p13({} as never))),
-        ListGroupMembers: outcome(Retry.none(p14({} as never))),
-        ListGroups: outcome(Retry.none(p15({} as never))),
-        ListMetricDescriptors: outcome(Retry.none(p16({} as never))),
-        ListMonitoredResourceDescriptors: outcome(Retry.none(p17({} as never))),
-        ListNotificationChannelDescriptors: outcome(Retry.none(p18({} as never))),
-        ListNotificationChannels: outcome(Retry.none(p19({} as never))),
-        ListServiceLevelObjectives: outcome(Retry.none(p20({} as never))),
-        ListSnoozes: outcome(Retry.none(p21({} as never))),
-        ListTimeSeries: outcome(Retry.none(p22({} as never))),
-        ListUptimeCheckConfigs: outcome(Retry.none(p23({} as never))),
-        PatchSnooze: outcome(Retry.none(p24({ snooze: "alchemy-missing" } as never))),
-        SendNotificationChannelVerificationCode: outcome(Retry.none(p25({} as never))),
-        VerifyNotificationChannel: outcome(Retry.none(p26({} as never))),
+        GetNotificationChannelVerificationCode: outcome(Retry.none(p9({} as never))),
+        GetService: outcome(Retry.none(p10({} as never))),
+        GetServiceLevelObjective: outcome(Retry.none(p11({} as never))),
+        GetSnooze: outcome(Retry.none(p12({ snooze: "alchemy-missing" } as never))),
+        GetUptimeCheckConfig: outcome(Retry.none(p13({} as never))),
+        ListAlertPolicies: outcome(Retry.none(p14({} as never))),
+        ListAlerts: outcome(Retry.none(p15({} as never))),
+        ListGroupMembers: outcome(Retry.none(p16({} as never))),
+        ListGroups: outcome(Retry.none(p17({} as never))),
+        ListMetricDescriptors: outcome(Retry.none(p18({} as never))),
+        ListMonitoredResourceDescriptors: outcome(Retry.none(p19({} as never))),
+        ListNotificationChannelDescriptors: outcome(Retry.none(p20({} as never))),
+        ListNotificationChannels: outcome(Retry.none(p21({} as never))),
+        ListServiceLevelObjectives: outcome(Retry.none(p22({} as never))),
+        ListSnoozes: outcome(Retry.none(p23({} as never))),
+        ListTimeSeries: outcome(Retry.none(p24({} as never))),
+        ListUptimeCheckConfigs: outcome(Retry.none(p25({} as never))),
+        PatchSnooze: outcome(Retry.none(p26({ snooze: "alchemy-missing" } as never))),
+        SendNotificationChannelVerificationCode: outcome(Retry.none(p27({} as never))),
+        VerifyNotificationChannel: outcome(Retry.none(p28({} as never))),
       }),
     };
   }).pipe(
@@ -97,6 +103,7 @@ export default class MonitoringGeneratedHost extends GCP.Function<MonitoringGene
           GCP.Monitoring.CreateSnoozeHttp,
           GCP.Monitoring.CreateTimeSeryHttp,
           GCP.Monitoring.GetAlertHttp,
+          GCP.Monitoring.GetAlertPolicyHttp,
           GCP.Monitoring.GetGroupHttp,
           GCP.Monitoring.GetMetricDescriptorHttp,
           GCP.Monitoring.GetMonitoredResourceDescriptorHttp,
@@ -104,6 +111,7 @@ export default class MonitoringGeneratedHost extends GCP.Function<MonitoringGene
           GCP.Monitoring.GetNotificationChannelDescriptorHttp,
           GCP.Monitoring.GetNotificationChannelVerificationCodeHttp,
           GCP.Monitoring.GetServiceHttp,
+          GCP.Monitoring.GetServiceLevelObjectiveHttp,
           GCP.Monitoring.GetSnoozeHttp,
           GCP.Monitoring.GetUptimeCheckConfigHttp,
           GCP.Monitoring.ListAlertPoliciesHttp,

@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeDnsAuthorization, ProbeTrustConfig } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated CertificateManager binding as its own
@@ -15,18 +16,24 @@ export default class CertificateManagerGeneratedHost extends GCP.Function<Certif
   "CertificateManagerGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.CertificateManager.ListDnsAuthorizations();
-    const p1 = yield* GCP.CertificateManager.ListTrustConfigs();
+    const p0 = yield* GCP.CertificateManager.GetDnsAuthorization(ProbeDnsAuthorization);
+    const p1 = yield* GCP.CertificateManager.GetTrustConfig(ProbeTrustConfig);
+    const p2 = yield* GCP.CertificateManager.ListDnsAuthorizations();
+    const p3 = yield* GCP.CertificateManager.ListTrustConfigs();
     return {
       fetch: serveProbes({
-        ListDnsAuthorizations: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListTrustConfigs: outcome(Retry.none(p1({ location: "us-central1" } as never))),
+        GetDnsAuthorization: outcome(Retry.none(p0({} as never))),
+        GetTrustConfig: outcome(Retry.none(p1({} as never))),
+        ListDnsAuthorizations: outcome(Retry.none(p2({ location: "us-central1" } as never))),
+        ListTrustConfigs: outcome(Retry.none(p3({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.CertificateManager.GetDnsAuthorizationHttp,
+          GCP.CertificateManager.GetTrustConfigHttp,
           GCP.CertificateManager.ListDnsAuthorizationsHttp,
           GCP.CertificateManager.ListTrustConfigsHttp,
         ),

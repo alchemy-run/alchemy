@@ -4,7 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
-import { ProbeCatalog } from "./generated-resources.ts";
+import { ProbeCatalog, ProbeDatabase, ProbeTable } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated BigLake binding as its own
@@ -17,13 +17,21 @@ export default class BigLakeGeneratedHost extends GCP.Function<BigLakeGeneratedH
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.BigLake.GetCatalog(ProbeCatalog);
-    const p1 = yield* GCP.BigLake.ListCatalogDatabases(ProbeCatalog);
-    const p2 = yield* GCP.BigLake.ListCatalogs();
+    const p1 = yield* GCP.BigLake.GetDatabase(ProbeDatabase);
+    const p2 = yield* GCP.BigLake.GetTable(ProbeTable);
+    const p3 = yield* GCP.BigLake.ListCatalogDatabases(ProbeCatalog);
+    const p4 = yield* GCP.BigLake.ListCatalogs();
+    const p5 = yield* GCP.BigLake.ListDatabaseTables(ProbeDatabase);
+    const p6 = yield* GCP.BigLake.RenameTable(ProbeTable);
     return {
       fetch: serveProbes({
         GetCatalog: outcome(Retry.none(p0({} as never))),
-        ListCatalogDatabases: outcome(Retry.none(p1({} as never))),
-        ListCatalogs: outcome(Retry.none(p2({ location: "us-central1" } as never))),
+        GetDatabase: outcome(Retry.none(p1({} as never))),
+        GetTable: outcome(Retry.none(p2({} as never))),
+        ListCatalogDatabases: outcome(Retry.none(p3({} as never))),
+        ListCatalogs: outcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListDatabaseTables: outcome(Retry.none(p5({} as never))),
+        RenameTable: outcome(Retry.none(p6({} as never))),
       }),
     };
   }).pipe(
@@ -31,8 +39,12 @@ export default class BigLakeGeneratedHost extends GCP.Function<BigLakeGeneratedH
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.BigLake.GetCatalogHttp,
+          GCP.BigLake.GetDatabaseHttp,
+          GCP.BigLake.GetTableHttp,
           GCP.BigLake.ListCatalogDatabasesHttp,
           GCP.BigLake.ListCatalogsHttp,
+          GCP.BigLake.ListDatabaseTablesHttp,
+          GCP.BigLake.RenameTableHttp,
         ),
       ),
     ),

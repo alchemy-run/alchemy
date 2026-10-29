@@ -10,7 +10,10 @@
     }
   },
   "probes": {
-    "resources": {},
+    "resources": {
+      "Feed": "ProbeFeed",
+      "SavedQuery": "ProbeSavedQuery"
+    },
     "untestable": {}
   }
 }

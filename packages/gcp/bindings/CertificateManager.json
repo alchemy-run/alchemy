@@ -23,7 +23,9 @@
   },
   "probes": {
     "resources": {
-      "CertificateMap": "ProbeCertificateMap"
+      "CertificateMap": "ProbeCertificateMap",
+      "DnsAuthorization": "ProbeDnsAuthorization",
+      "TrustConfig": "ProbeTrustConfig"
     },
     "untestable": {}
   }

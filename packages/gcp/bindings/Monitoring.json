@@ -30,7 +30,9 @@
       "MetricDescriptor": "ProbeMetricDescriptor",
       "NotificationChannel": "ProbeNotificationChannel",
       "Service": "ProbeService",
-      "UptimeCheckConfig": "ProbeUptimeCheckConfig"
+      "UptimeCheckConfig": "ProbeUptimeCheckConfig",
+      "AlertPolicy": "ProbeAlertPolicy",
+      "ServicesServiceLevelObjective": "ProbeSlo"
     },
     "untestable": {}
   }

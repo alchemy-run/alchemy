@@ -14,7 +14,9 @@
   },
   "probes": {
     "resources": {
-      "Catalog": "ProbeCatalog"
+      "Catalog": "ProbeCatalog",
+      "CatalogsDatabase": "ProbeDatabase",
+      "CatalogsDatabasesTable": "ProbeTable"
     },
     "untestable": {}
   }

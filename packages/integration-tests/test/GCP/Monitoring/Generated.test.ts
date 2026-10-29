@@ -48,9 +48,13 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AlertPolicy", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetAlertPolicy (monitoring.projects.alertPolicies.get): AlertPolicy: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetAlertPolicy (monitoring.projects.alertPolicies.get)",
+        () => probe("GetAlertPolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -266,9 +270,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ServicesServiceLevelObjective", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetServiceLevelObjective (monitoring.services.serviceLevelObjectives.get): ServicesServiceLevelObjective: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetServiceLevelObjective (monitoring.services.serviceLevelObjectives.get)",
+        () => probe("GetServiceLevelObjective", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

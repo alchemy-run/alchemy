@@ -8,6 +8,9 @@ import {
   ProbeContentPolicy,
   ProbeDeidentify,
   ProbeInspect,
+  ProbeLocDeidentify,
+  ProbeLocInspect,
+  ProbeLocTrigger,
   ProbeLocationsStoredInfoType,
   ProbeStoredInfoType,
   ProbeTrigger,
@@ -24,75 +27,85 @@ export default class DLPGeneratedHost extends GCP.Function<DLPGeneratedHost>()(
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.DLP.ActivateJobTrigger(ProbeTrigger);
-    const p1 = yield* GCP.DLP.DeleteConnection();
-    const p2 = yield* GCP.DLP.DeleteTableDataProfile();
-    const p3 = yield* GCP.DLP.GetColumnDataProfile();
-    const p4 = yield* GCP.DLP.GetConnection();
-    const p5 = yield* GCP.DLP.GetContentPolicy(ProbeContentPolicy);
-    const p6 = yield* GCP.DLP.GetDeidentifyTemplate(ProbeDeidentify);
-    const p7 = yield* GCP.DLP.GetInspectTemplate(ProbeInspect);
-    const p8 = yield* GCP.DLP.GetJobTrigger(ProbeTrigger);
-    const p9 = yield* GCP.DLP.GetProjectDataProfile();
-    const p10 = yield* GCP.DLP.GetStoredInfoType(ProbeStoredInfoType);
-    const p11 = yield* GCP.DLP.GetStoredInfoType(ProbeLocationsStoredInfoType);
-    const p12 = yield* GCP.DLP.GetTableDataProfile();
-    const p13 = yield* GCP.DLP.ListColumnDataProfiles();
-    const p14 = yield* GCP.DLP.ListConnections();
-    const p15 = yield* GCP.DLP.ListContentPolicies();
-    const p16 = yield* GCP.DLP.ListDeidentifyTemplates();
-    const p17 = yield* GCP.DLP.ListInspectTemplates();
-    const p18 = yield* GCP.DLP.ListJobTriggers();
-    const p19 = yield* GCP.DLP.ListProjectDataProfiles();
-    const p20 = yield* GCP.DLP.ListStoredInfoTypes();
-    const p21 = yield* GCP.DLP.ListTableDataProfiles();
-    const p22 = yield* GCP.DLP.PatchConnection();
-    const p23 = yield* GCP.DLP.SearchConnection();
+    const p1 = yield* GCP.DLP.ActivateJobTrigger(ProbeLocTrigger);
+    const p2 = yield* GCP.DLP.DeleteConnection();
+    const p3 = yield* GCP.DLP.DeleteTableDataProfile();
+    const p4 = yield* GCP.DLP.GetColumnDataProfile();
+    const p5 = yield* GCP.DLP.GetConnection();
+    const p6 = yield* GCP.DLP.GetContentPolicy(ProbeContentPolicy);
+    const p7 = yield* GCP.DLP.GetDeidentifyTemplate(ProbeDeidentify);
+    const p8 = yield* GCP.DLP.GetDeidentifyTemplate(ProbeLocDeidentify);
+    const p9 = yield* GCP.DLP.GetInspectTemplate(ProbeInspect);
+    const p10 = yield* GCP.DLP.GetInspectTemplate(ProbeLocInspect);
+    const p11 = yield* GCP.DLP.GetJobTrigger(ProbeTrigger);
+    const p12 = yield* GCP.DLP.GetJobTrigger(ProbeLocTrigger);
+    const p13 = yield* GCP.DLP.GetProjectDataProfile();
+    const p14 = yield* GCP.DLP.GetStoredInfoType(ProbeStoredInfoType);
+    const p15 = yield* GCP.DLP.GetStoredInfoType(ProbeLocationsStoredInfoType);
+    const p16 = yield* GCP.DLP.GetTableDataProfile();
+    const p17 = yield* GCP.DLP.HybridJobTriggerInspect(ProbeLocTrigger);
+    const p18 = yield* GCP.DLP.ListColumnDataProfiles();
+    const p19 = yield* GCP.DLP.ListConnections();
+    const p20 = yield* GCP.DLP.ListContentPolicies();
+    const p21 = yield* GCP.DLP.ListDeidentifyTemplates();
+    const p22 = yield* GCP.DLP.ListInspectTemplates();
+    const p23 = yield* GCP.DLP.ListJobTriggers();
+    const p24 = yield* GCP.DLP.ListProjectDataProfiles();
+    const p25 = yield* GCP.DLP.ListStoredInfoTypes();
+    const p26 = yield* GCP.DLP.ListTableDataProfiles();
+    const p27 = yield* GCP.DLP.PatchConnection();
+    const p28 = yield* GCP.DLP.SearchConnection();
     return {
       fetch: serveProbes({
         "ActivateJobTrigger@JobTrigger": outcome(Retry.none(p0({} as never))),
+        "ActivateJobTrigger@LocationsJobTrigger": outcome(Retry.none(p1({} as never))),
         DeleteConnection: outcome(
-          Retry.none(p1({ connection: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p2({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
         DeleteTableDataProfile: outcome(
-          Retry.none(p2({ tableDataProfile: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p3({ tableDataProfile: "alchemy-missing", location: "us-central1" } as never)),
         ),
         GetColumnDataProfile: outcome(
           Retry.none(
-            p3({ columnDataProfile: "alchemy-missing", location: "us-central1" } as never),
+            p4({ columnDataProfile: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
         GetConnection: outcome(
-          Retry.none(p4({ connection: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p5({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetContentPolicy: outcome(Retry.none(p5({} as never))),
-        "GetDeidentifyTemplate@DeidentifyTemplate": outcome(Retry.none(p6({} as never))),
-        "GetInspectTemplate@InspectTemplate": outcome(Retry.none(p7({} as never))),
-        "GetJobTrigger@JobTrigger": outcome(Retry.none(p8({} as never))),
+        GetContentPolicy: outcome(Retry.none(p6({} as never))),
+        "GetDeidentifyTemplate@DeidentifyTemplate": outcome(Retry.none(p7({} as never))),
+        "GetDeidentifyTemplate@LocationsDeidentifyTemplate": outcome(Retry.none(p8({} as never))),
+        "GetInspectTemplate@InspectTemplate": outcome(Retry.none(p9({} as never))),
+        "GetInspectTemplate@LocationsInspectTemplate": outcome(Retry.none(p10({} as never))),
+        "GetJobTrigger@JobTrigger": outcome(Retry.none(p11({} as never))),
+        "GetJobTrigger@LocationsJobTrigger": outcome(Retry.none(p12({} as never))),
         GetProjectDataProfile: outcome(
           Retry.none(
-            p9({ projectDataProfile: "alchemy-missing", location: "us-central1" } as never),
+            p13({ projectDataProfile: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        "GetStoredInfoType@StoredInfoType": outcome(Retry.none(p10({} as never))),
-        "GetStoredInfoType@LocationsStoredInfoType": outcome(Retry.none(p11({} as never))),
+        "GetStoredInfoType@StoredInfoType": outcome(Retry.none(p14({} as never))),
+        "GetStoredInfoType@LocationsStoredInfoType": outcome(Retry.none(p15({} as never))),
         GetTableDataProfile: outcome(
           Retry.none(
-            p12({ tableDataProfile: "alchemy-missing", location: "us-central1" } as never),
+            p16({ tableDataProfile: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        ListColumnDataProfiles: outcome(Retry.none(p13({ location: "us-central1" } as never))),
-        ListConnections: outcome(Retry.none(p14({ location: "us-central1" } as never))),
-        ListContentPolicies: outcome(Retry.none(p15({ location: "us-central1" } as never))),
-        ListDeidentifyTemplates: outcome(Retry.none(p16({} as never))),
-        ListInspectTemplates: outcome(Retry.none(p17({} as never))),
-        ListJobTriggers: outcome(Retry.none(p18({} as never))),
-        ListProjectDataProfiles: outcome(Retry.none(p19({ location: "us-central1" } as never))),
-        ListStoredInfoTypes: outcome(Retry.none(p20({} as never))),
-        ListTableDataProfiles: outcome(Retry.none(p21({ location: "us-central1" } as never))),
+        HybridJobTriggerInspect: outcome(Retry.none(p17({} as never))),
+        ListColumnDataProfiles: outcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListConnections: outcome(Retry.none(p19({ location: "us-central1" } as never))),
+        ListContentPolicies: outcome(Retry.none(p20({ location: "us-central1" } as never))),
+        ListDeidentifyTemplates: outcome(Retry.none(p21({} as never))),
+        ListInspectTemplates: outcome(Retry.none(p22({} as never))),
+        ListJobTriggers: outcome(Retry.none(p23({} as never))),
+        ListProjectDataProfiles: outcome(Retry.none(p24({ location: "us-central1" } as never))),
+        ListStoredInfoTypes: outcome(Retry.none(p25({} as never))),
+        ListTableDataProfiles: outcome(Retry.none(p26({ location: "us-central1" } as never))),
         PatchConnection: outcome(
-          Retry.none(p22({ connection: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p27({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        SearchConnection: outcome(Retry.none(p23({ location: "us-central1" } as never))),
+        SearchConnection: outcome(Retry.none(p28({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
@@ -111,6 +124,7 @@ export default class DLPGeneratedHost extends GCP.Function<DLPGeneratedHost>()(
           GCP.DLP.GetProjectDataProfileHttp,
           GCP.DLP.GetStoredInfoTypeHttp,
           GCP.DLP.GetTableDataProfileHttp,
+          GCP.DLP.HybridJobTriggerInspectHttp,
           GCP.DLP.ListColumnDataProfilesHttp,
           GCP.DLP.ListConnectionsHttp,
           GCP.DLP.ListContentPoliciesHttp,

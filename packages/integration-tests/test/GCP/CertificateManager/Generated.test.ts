@@ -48,9 +48,13 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("DnsAuthorization", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDnsAuthorization (certificatemanager.projects.locations.dnsAuthorizations.get): DnsAuthorization: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDnsAuthorization (certificatemanager.projects.locations.dnsAuthorizations.get)",
+        () => probe("GetDnsAuthorization", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:certificatemanager", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -74,9 +78,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("TrustConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTrustConfig (certificatemanager.projects.locations.trustConfigs.get): TrustConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTrustConfig (certificatemanager.projects.locations.trustConfigs.get)",
+        () => probe("GetTrustConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:certificatemanager", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

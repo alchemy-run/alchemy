@@ -1,4 +1,5 @@
 import * as GCP from "@alchemy.run/gcp";
+import * as Effect from "effect/Effect";
 
 /** DLP resources the generated bindings bind, mirroring each resource suite's smallest shape. */
 
@@ -59,6 +60,33 @@ export const ProbeInspect = GCP.DLP.InspectTemplate("ProbeInspect", {
   inspectConfig: { infoTypes: [{ name: "EMAIL_ADDRESS" }], includeQuote: true },
 });
 export const ProbeTrigger = GCP.DLP.JobTrigger("ProbeTrigger", {
+  status: "PAUSED",
+  inspectJob: {
+    inspectConfig: { infoTypes: [{ name: "EMAIL_ADDRESS" }] },
+    storageConfig: { hybridOptions: { description: "probe" } },
+  },
+  triggers: [{ manual: {} }],
+});
+
+export const ProbeLocDeidentify = GCP.DLP.LocationsDeidentifyTemplate("ProbeLocDeidentify", {
+  location: "global",
+  deidentifyConfig: {
+    infoTypeTransformations: {
+      transformations: [
+        {
+          infoTypes: [{ name: "EMAIL_ADDRESS" }],
+          primitiveTransformation: { replaceWithInfoTypeConfig: {} },
+        },
+      ],
+    },
+  },
+});
+export const ProbeLocInspect = GCP.DLP.LocationsInspectTemplate("ProbeLocInspect", {
+  location: "global",
+  inspectConfig: { infoTypes: [{ name: "EMAIL_ADDRESS" }], includeQuote: true },
+});
+export const ProbeLocTrigger = GCP.DLP.LocationsJobTrigger("ProbeLocTrigger", {
+  location: "global",
   status: "PAUSED",
   inspectJob: {
     inspectConfig: { infoTypes: [{ name: "EMAIL_ADDRESS" }] },

@@ -2,7 +2,9 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeFeed, ProbeSavedQuery } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated CloudAsset binding as its own
@@ -14,8 +16,17 @@ export default class CloudAssetGeneratedHost extends GCP.Function<CloudAssetGene
   "CloudAssetGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.CloudAsset.GetFeed(ProbeFeed);
+    const p1 = yield* GCP.CloudAsset.GetSavedQuery(ProbeSavedQuery);
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        GetFeed: outcome(Retry.none(p0({} as never))),
+        GetSavedQuery: outcome(Retry.none(p1({} as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(Layer.mergeAll(GCP.CloudAsset.GetFeedHttp, GCP.CloudAsset.GetSavedQueryHttp)),
+    ),
+  ),
 ) {}

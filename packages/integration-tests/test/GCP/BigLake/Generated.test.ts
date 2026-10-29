@@ -67,24 +67,40 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("CatalogsDatabase", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDatabase (biglake.projects.locations.catalogs.databases.get): CatalogsDatabase: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDatabase (biglake.projects.locations.catalogs.databases.get)",
+        () => probe("GetDatabase", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:biglake", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListDatabaseTables (biglake.projects.locations.catalogs.databases.tables.list): CatalogsDatabase: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListDatabaseTables (biglake.projects.locations.catalogs.databases.tables.list)",
+        () => probe("ListDatabaseTables", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:biglake", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("CatalogsDatabasesTable", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTable (biglake.projects.locations.catalogs.databases.tables.get): CatalogsDatabasesTable: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTable (biglake.projects.locations.catalogs.databases.tables.get)",
+        () => probe("GetTable", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:biglake", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RenameTable (biglake.projects.locations.catalogs.databases.tables.rename): CatalogsDatabasesTable: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RenameTable (biglake.projects.locations.catalogs.databases.tables.rename)",
+        () => probe("RenameTable", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:biglake", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

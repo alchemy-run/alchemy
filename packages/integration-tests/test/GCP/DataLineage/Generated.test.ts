@@ -67,20 +67,32 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ProcessesRun", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetRun (datalineage.projects.locations.processes.runs.get): ProcessesRun: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetRun (datalineage.projects.locations.processes.runs.get)",
+        () => probe("GetRun", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datalineage", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListRunLineageEvents (datalineage.projects.locations.processes.runs.lineageEvents.list): ProcessesRun: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListRunLineageEvents (datalineage.projects.locations.processes.runs.lineageEvents.list)",
+        () => probe("ListRunLineageEvents", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datalineage", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ProcessesRunsLineageEvent", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetLineageEvent (datalineage.projects.locations.processes.runs.lineageEvents.get): ProcessesRunsLineageEvent: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetLineageEvent (datalineage.projects.locations.processes.runs.lineageEvents.get)",
+        () => probe("GetLineageEvent", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datalineage", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
