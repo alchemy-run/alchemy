@@ -276,6 +276,13 @@ export interface WorkflowLimits {
 }
 
 /**
+ * Jurisdiction where a Workflow's instances run and store data:
+ * `"eu"` (the European Union), `"us"` (the United States), or `"fedramp"`
+ * (FedRAMP-Moderate data centers).
+ */
+export type WorkflowJurisdiction = workflows.WorkflowJurisdiction;
+
+/**
  * Props for the reference (async) form of {@link Workflow}. Used when binding
  * a Workflow class to a plain async Worker (one without an Effect runtime) via
  * the Worker's `env`. Mirrors `DurableObjectProps`.
@@ -319,6 +326,16 @@ export interface WorkflowRefProps {
    * Account-wide limit: 100 cron expressions.
    */
   schedules?: string[];
+  /**
+   * Restrict where the Workflow's instances run and store data, e.g. for
+   * GDPR or FedRAMP. Workers anywhere can still create and manage instances.
+   *
+   * Cloudflare sets the jurisdiction when it creates the Workflow and can't
+   * change it, so changing or removing it replaces the Workflow and deletes
+   * its instances. Ignored when `scriptName` is set; set it on the Worker
+   * that hosts the Workflow. Local development ignores it.
+   */
+  jurisdiction?: WorkflowJurisdiction;
 }
 
 /**
@@ -350,6 +367,15 @@ export interface WorkflowProps {
    * Account-wide limit: 100 cron expressions.
    */
   schedules?: string[];
+  /**
+   * Restrict where the Workflow's instances run and store data, e.g. for
+   * GDPR or FedRAMP. Workers anywhere can still create and manage instances.
+   *
+   * Cloudflare sets the jurisdiction when it creates the Workflow and can't
+   * change it, so changing or removing it replaces the Workflow and deletes
+   * its instances. Local development ignores it.
+   */
+  jurisdiction?: WorkflowJurisdiction;
 }
 
 /**
@@ -371,6 +397,8 @@ export interface WorkflowLike<Params = unknown> {
   limits?: WorkflowLimits;
   /** @internal phantom */
   schedules?: string[];
+  /** @internal phantom */
+  jurisdiction?: WorkflowJurisdiction;
   /** @internal phantom */
   Params?: Params;
 }
@@ -644,6 +672,36 @@ export class WorkflowScope extends Context.Service<WorkflowScope, WorkflowHandle
  *     });
  *   }),
  * ) {}
+ * ```
+ *
+ * ### Restricting data location
+ * `jurisdiction` keeps every instance's execution and stored state inside
+ * the EU, the US, or FedRAMP-Moderate data centers. Cloudflare fixes it at
+ * creation, so changing it replaces the Workflow and deletes its instances.
+ * **Example:** EU-only Workflow
+ * ```typescript
+ * export default class GdprWorkflow extends Cloudflare.Workflow<GdprWorkflow>()(
+ *   "GdprWorkflow",
+ *   { jurisdiction: "eu" },
+ *   Effect.gen(function* () {
+ *     return Effect.fn(function* (input: { userId: string }) {
+ *       return { processed: input.userId };
+ *     });
+ *   }),
+ * ) {}
+ * ```
+ *
+ * **Example:** EU-only Workflow on an async Worker
+ * ```typescript
+ * export const Worker = Cloudflare.Worker("Worker", {
+ *   main: "./src/worker.ts",
+ *   env: {
+ *     GDPR_WORKFLOW: Cloudflare.Workflow("GdprWorkflow", {
+ *       className: "GdprWorkflow",
+ *       jurisdiction: "eu",
+ *     }),
+ *   },
+ * });
  * ```
  *
  * ### Step Primitives
@@ -992,6 +1050,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
       scriptName: refProps?.scriptName,
       limits: refProps?.limits,
       schedules: refProps?.schedules,
+      jurisdiction: refProps?.jurisdiction,
     } satisfies WorkflowLike;
   }
   const props = Effect.isEffect(second) ? undefined : (second as WorkflowProps);
@@ -1005,6 +1064,7 @@ export const Workflow: WorkflowClass = taggedFunction(WorkflowScope, ((
         scriptName: props?.workflowName === undefined ? worker.workerName : undefined,
         limits: props?.limits,
         schedules: props?.schedules,
+        jurisdiction: props?.jurisdiction,
       });
       // Keep named identities resolvable for the engine's cold-adoption probe.
       if (props?.workflowName !== undefined) {
@@ -1101,6 +1161,11 @@ export interface WorkflowResourceProps {
    * Pass an empty array to remove all schedules.
    */
   schedules?: string[];
+  /**
+   * Jurisdiction where instances run and store data. Fixed at creation;
+   * changing it replaces the Workflow.
+   */
+  jurisdiction?: WorkflowJurisdiction;
 }
 
 export interface WorkflowResourceAttrs {
@@ -1113,6 +1178,11 @@ export interface WorkflowResourceAttrs {
    * Cron expressions currently attached to this Workflow.
    */
   schedules: string[];
+  /**
+   * Jurisdiction where instances run and store data, or `undefined` when
+   * unrestricted.
+   */
+  jurisdiction: WorkflowJurisdiction | undefined;
 }
 
 const WorkflowResourceTypeId = "Cloudflare.Workflow";
@@ -1161,6 +1231,7 @@ export const ProviderLive = () =>
                 scriptName: wf.scriptName ?? "",
                 accountId,
                 schedules: fromObservedSchedules(wf.schedules),
+                jurisdiction: wf.jurisdiction ?? undefined,
               })),
             ),
           ),
@@ -1194,6 +1265,15 @@ export const ProviderLive = () =>
         }
         return { action: "replace" } as const;
       }
+      // Cloudflare fixes the jurisdiction at creation. The replacement keeps
+      // the same account-global name, so the old Workflow goes first.
+      if (
+        "jurisdiction" in news &&
+        isResolved(news.jurisdiction) &&
+        news.jurisdiction !== (output?.jurisdiction ?? olds.jurisdiction)
+      ) {
+        return { action: "replace", deleteFirst: true } as const;
+      }
       if (!isResolved(newBindings) || havePropsChanged(oldBindings, newBindings)) {
         return { action: "update" } as const;
       }
@@ -1218,6 +1298,7 @@ export const ProviderLive = () =>
         scriptName: workflow.scriptName,
         accountId: acct,
         schedules: fromObservedSchedules(workflow.schedules),
+        jurisdiction: workflow.jurisdiction ?? undefined,
       };
       // Explicit names carry no ownership marker; cold reads require adoption.
       return output === undefined && olds?.workflowName !== undefined ? Unowned(attrs) : attrs;
@@ -1255,6 +1336,15 @@ export const ProviderLive = () =>
           physicalName: workflowName,
         });
       }
+      // PUT keeps an existing Workflow's jurisdiction, so a mismatch can't converge.
+      if (existing !== undefined && (existing.jurisdiction ?? undefined) !== news.jurisdiction) {
+        return yield* new WorkflowInvalidProps({
+          message:
+            `Workflow '${workflowName}' has jurisdiction '${existing.jurisdiction ?? "none"}', ` +
+            `but '${news.jurisdiction ?? "none"}' was requested. Cloudflare fixes a ` +
+            "Workflow's jurisdiction at creation; use a new name or delete the Workflow first.",
+        });
+      }
       // PUT clears omitted schedules; preserve observed state unless explicitly set.
       const schedules = news.schedules ?? fromObservedSchedules(existing?.schedules);
 
@@ -1269,6 +1359,7 @@ export const ProviderLive = () =>
         scriptName,
         limits: news.limits,
         schedules: toPutSchedules(schedules),
+        jurisdiction: news.jurisdiction,
       });
       return {
         workflowId: result.id,
@@ -1277,6 +1368,7 @@ export const ProviderLive = () =>
         scriptName: result.scriptName,
         accountId: acct,
         schedules,
+        jurisdiction: result.jurisdiction ?? news.jurisdiction,
       };
     }),
     delete: Effect.fn(function* ({ output }) {
@@ -1344,6 +1436,7 @@ export const ProviderLocal = () =>
         scriptName,
         accountId: output?.accountId ?? accountId,
         schedules: news.schedules ?? output?.schedules ?? [],
+        jurisdiction: news.jurisdiction,
       };
     }),
     delete: Effect.fn(function* () {
