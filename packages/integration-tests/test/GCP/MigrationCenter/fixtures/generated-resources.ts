@@ -45,3 +45,20 @@ export const ProbeReportConfig = Effect.gen(function* () {
     groupPreferencesetAssignments: [{ group: group.name, preferenceSet: prefs.name }],
   });
 });
+
+export const ProbeImportFile = Effect.gen(function* () {
+  const job = yield* ProbeImportJob;
+  return yield* GCP.MigrationCenter.ImportJobsImportDataFile("ProbeImportFile", {
+    importJob: job.name,
+    location: "us-central1",
+    format: "IMPORT_JOB_FORMAT_RVTOOLS_CSV",
+  });
+});
+export const ProbeReport = Effect.gen(function* () {
+  const config = yield* ProbeReportConfig;
+  return yield* GCP.MigrationCenter.ReportConfigsReport("ProbeReport", {
+    reportConfig: config.name,
+    location: "us-central1",
+    type: "TOTAL_COST_OF_OWNERSHIP",
+  });
+});

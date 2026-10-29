@@ -157,9 +157,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ImportJobsImportDataFile", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetImportDataFile (migrationcenter.projects.locations.importJobs.importDataFiles.get): ImportJobsImportDataFile: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetImportDataFile (migrationcenter.projects.locations.importJobs.importDataFiles.get)",
+        () => probe("GetImportDataFile", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -333,9 +337,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ReportConfigsReport", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetReport (migrationcenter.projects.locations.reportConfigs.reports.get): ReportConfigsReport: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetReport (migrationcenter.projects.locations.reportConfigs.reports.get)",
+        () => probe("GetReport", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

@@ -1,4 +1,5 @@
 import * as GCP from "@alchemy.run/gcp";
+import * as Effect from "effect/Effect";
 
 /** Integrations resources the generated bindings bind, mirroring each resource suite's smallest shape. */
 
@@ -36,3 +37,13 @@ export const ProbeIntegrationVersion = GCP.Integrations.IntegrationsVersion(
     ],
   },
 );
+
+export const ProbeTestCase = Effect.gen(function* () {
+  const version = yield* ProbeIntegrationVersion;
+  return yield* GCP.Integrations.IntegrationsVersionsTestCases("ProbeTestCase", {
+    version: version.name,
+    location: "us-central1",
+    displayName: "happy-path",
+    triggerId: "api_trigger/alchemy_probe",
+  });
+});

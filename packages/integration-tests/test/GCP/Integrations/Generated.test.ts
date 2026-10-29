@@ -151,21 +151,37 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("IntegrationsVersionsTestCases", { concurrent: true }, () => {
-      test.provider.todo(
-        "DownloadTestCase (integrations.projects.locations.integrations.versions.testCases.download): IntegrationsVersionsTestCases: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DownloadTestCase (integrations.projects.locations.integrations.versions.testCases.download)",
+        () => probe("DownloadTestCase", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ExecuteTestCaseTest (integrations.projects.locations.integrations.versions.testCases.executeTest): IntegrationsVersionsTestCases: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ExecuteTestCaseTest (integrations.projects.locations.integrations.versions.testCases.executeTest)",
+        () => probe("ExecuteTestCaseTest", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetTestCase (integrations.projects.locations.integrations.versions.testCases.get): IntegrationsVersionsTestCases: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTestCase (integrations.projects.locations.integrations.versions.testCases.get)",
+        () => probe("GetTestCase", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "TakeoverTestCaseEditLock (integrations.projects.locations.integrations.versions.testCases.takeoverEditLock): IntegrationsVersionsTestCases: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "TakeoverTestCaseEditLock (integrations.projects.locations.integrations.versions.testCases.takeoverEditLock)",
+        () => probe("TakeoverTestCaseEditLock", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

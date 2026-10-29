@@ -37,7 +37,9 @@
       "PreferenceSet": "ProbePreferenceSet",
       "Source": "ProbeSource",
       "ImportJob": "ProbeImportJob",
-      "ReportConfig": "ProbeReportConfig"
+      "ReportConfig": "ProbeReportConfig",
+      "ImportJobsImportDataFile": "ProbeImportFile",
+      "ReportConfigsReport": "ProbeReport"
     },
     "untestable": {}
   }
