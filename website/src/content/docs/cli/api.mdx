@@ -150,6 +150,8 @@ yield* state.delete({ stack: "my-app", stage: "prod", fqn: "Api" }); // state de
 yield* Alchemist.State.bootstrap({ type: "provider", backend: "aws" }); // state bootstrap
 ```
 
+The `provider` source needs no stack file, so a script can manage state on its own. See [Use a store without a stack file](/state-store#use-a-store-without-a-stack-file).
+
 ## Events
 
 Operations report progress as typed events instead of rendering it. Events are log records: the CLI's run log and `--log-format json` carry them, and `Alchemist.onEvent` subscribes to the ones an effect emits. `Alchemist.Event` is one Schema union discriminated by `type`, so a reader can decode events with it:
