@@ -51,11 +51,12 @@ export interface DomainVerification extends Resource<
  * The `TXT` record that proves a Prisma workspace owns a hostname. Prisma
  * refuses a `Prisma.CustomDomain` until the record is published.
  *
- * Prisma only reveals the workspace token when it refuses a domain, so the
- * provider asks for one on a hostname no one can ever verify
- * (`alchemy-ownership-probe.invalid`): Prisma checks ownership before DNS,
- * so the request always fails and never creates a domain. Nothing exists in
- * Prisma for this resource; deleting it is a no-op.
+ * Prisma returns the record in the `verification` field of the
+ * `domain-ownership-required` rejection, and the value is the same for every
+ * hostname in the workspace. The provider asks for a domain on a hostname no
+ * one can ever verify (`alchemy-ownership-probe.invalid`): Prisma checks
+ * ownership before DNS, so the request always fails and never creates a
+ * domain. Nothing exists in Prisma for this resource; deleting it is a no-op.
  *
  * `Prisma.Website` composites publish this record for you when `domain`
  * names a DNS host (`domain: { name, dns }`).
