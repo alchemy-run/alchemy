@@ -57,9 +57,15 @@ const command = Command.make(
           new Error(`packages/${name}: export sync exited with ${exitCode}`),
         );
       }
-      const manifest = JSON.parse(
-        yield* fs.readFileString(path.join(directory, "package.json")),
-      ) as { name: string; publishConfig?: { exports?: Record<string, unknown> } };
+      const text = yield* fs.readFileString(path.join(directory, "package.json"));
+      const manifest = yield* Effect.try({
+        try: () =>
+          JSON.parse(text) as {
+            name: string;
+            publishConfig?: { exports?: Record<string, unknown> };
+          },
+        catch: (cause) => new Error(`packages/${name}/package.json is not valid JSON`, { cause }),
+      });
       if (Object.values(manifest.publishConfig?.exports ?? {}).includes(null)) {
         blocking.push(manifest.name.replaceAll(".", String.raw`\.`));
       }
