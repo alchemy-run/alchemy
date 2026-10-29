@@ -76,21 +76,13 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("CustomRange", { concurrent: true }, () => {
-      test.provider(
-        "FindCustomRangeFreeIpRanges (cloudnumberregistry.projects.locations.customRanges.findFreeIpRanges)",
-        () => probe("FindCustomRangeFreeIpRanges", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:cloudnumberregistry", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'FindCustomRangeFreeIpRanges (cloudnumberregistry.projects.locations.customRanges.findFreeIpRanges): CustomRange: registry books need an IPAM admin scope ("Failed to find IPAM admin scope for project"), which is set on an organization; the testing account has none',
+        () => Effect.void,
       );
-      test.provider(
-        "GetCustomRange (cloudnumberregistry.projects.locations.customRanges.get)",
-        () => probe("GetCustomRange", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:cloudnumberregistry", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetCustomRange (cloudnumberregistry.projects.locations.customRanges.get): CustomRange: registry books need an IPAM admin scope ("Failed to find IPAM admin scope for project"), which is set on an organization; the testing account has none',
+        () => Effect.void,
       );
     });
 
@@ -169,32 +161,20 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Realm", { concurrent: true }, () => {
-      test.provider(
-        "GetRealm (cloudnumberregistry.projects.locations.realms.get)",
-        () => probe("GetRealm", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:cloudnumberregistry", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetRealm (cloudnumberregistry.projects.locations.realms.get): Realm: registry books need an IPAM admin scope ("Failed to find IPAM admin scope for project"), which is set on an organization; the testing account has none',
+        () => Effect.void,
       );
     });
 
     describe("RegistryBook", { concurrent: true }, () => {
-      test.provider(
-        "GetRegistryBook (cloudnumberregistry.projects.locations.registryBooks.get)",
-        () => probe("GetRegistryBook", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:cloudnumberregistry", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetRegistryBook (cloudnumberregistry.projects.locations.registryBooks.get): RegistryBook: registry books need an IPAM admin scope ("Failed to find IPAM admin scope for project"), which is set on an organization; the testing account has none',
+        () => Effect.void,
       );
-      test.provider(
-        "SearchRegistryBookIpResources (cloudnumberregistry.projects.locations.registryBooks.searchIpResources)",
-        () => probe("SearchRegistryBookIpResources", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:cloudnumberregistry", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'SearchRegistryBookIpResources (cloudnumberregistry.projects.locations.registryBooks.searchIpResources): RegistryBook: registry books need an IPAM admin scope ("Failed to find IPAM admin scope for project"), which is set on an organization; the testing account has none',
+        () => Effect.void,
       );
     });
 

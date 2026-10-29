@@ -16,13 +16,12 @@
     }
   },
   "probes": {
-    "resources": {
-      "RegistryBook": "ProbeRegistryBook",
-      "Realm": "ProbeRealm",
-      "CustomRange": "ProbeCustomRange"
-    },
+    "resources": {},
     "untestable": {
-      "IpamAdminScope": "scopes IPAM to an organization; the testing account has none"
+      "IpamAdminScope": "scopes IPAM to an organization; the testing account has none",
+      "RegistryBook": "registry books need an IPAM admin scope (\"Failed to find IPAM admin scope for project\"), which is set on an organization; the testing account has none",
+      "Realm": "registry books need an IPAM admin scope (\"Failed to find IPAM admin scope for project\"), which is set on an organization; the testing account has none",
+      "CustomRange": "registry books need an IPAM admin scope (\"Failed to find IPAM admin scope for project\"), which is set on an organization; the testing account has none"
     },
     "enable": [
       "cloudnumberregistry.googleapis.com"
