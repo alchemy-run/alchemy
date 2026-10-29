@@ -282,7 +282,7 @@ export const EvaluationProvider = () =>
 const getEvaluation = (accountId: string, gatewayId: string, id: string) =>
   aiGateway
     .getEvaluation({ accountId, gatewayId, id })
-    .pipe(Effect.catchTag("EvaluationNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("EvaluationNotFound", () => Effect.undefined));
 
 /**
  * Find an evaluation by exact name. Cloudflare's `name` query is a fuzzy

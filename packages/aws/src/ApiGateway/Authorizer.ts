@@ -131,7 +131,7 @@ export const AuthorizerProvider = () =>
               restApiId: output.restApiId,
               authorizerId: output.authorizerId,
             })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!a?.id) return undefined;
           return {
             authorizerId: a.id,
@@ -157,7 +157,7 @@ export const AuthorizerProvider = () =>
                   restApiId,
                   authorizerId: output.authorizerId,
                 })
-                .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined))
             : undefined;
 
           // Ensure — create if missing.

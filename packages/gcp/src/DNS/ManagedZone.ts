@@ -232,7 +232,7 @@ const toAttrs = (zone: dns.ManagedZone, project: string) => ({
 const getByName = (project: string, zoneName: string) =>
   dns
     .getManagedZones({ project, managedZone: zoneName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Cloud DNS operations and changes report `status: "pending" | "done"`. */
 const asLongRunning = (value: { id?: string; status?: string }): LongRunningOperation => ({

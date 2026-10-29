@@ -11,10 +11,5 @@
     "target": "ESNext",
     "jsx": "react-jsx",
     "lib": ["DOM", "DOM.Iterable", "ES2023"]
-  },
-  "references": [
-    {
-      "path": "../alchemy/tsconfig.json"
-    }
-  ]
+  }
 }

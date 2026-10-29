@@ -2,9 +2,17 @@ import * as rds from "@distilled.cloud/aws/rds";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class DBProxyTargetGroupUnexpectedResponse extends Data.TaggedError(
+  "DBProxyTargetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBProxyTargetGroupProps {
   /**
@@ -122,9 +130,7 @@ export const DBProxyTargetGroupProvider = () =>
             DBProxyName: dbProxyName,
             TargetGroupName: targetGroupName,
           })
-          .pipe(
-            Effect.catchTag("DBProxyTargetGroupNotFoundFault", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("DBProxyTargetGroupNotFoundFault", () => Effect.undefined));
         return response?.TargetGroups?.[0];
       });
 
@@ -159,9 +165,9 @@ export const DBProxyTargetGroupProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              DBProxyTargetNotFoundFault: () => Effect.succeed(undefined),
-              DBProxyTargetGroupNotFoundFault: () => Effect.succeed(undefined),
-              DBProxyNotFoundFault: () => Effect.succeed(undefined),
+              DBProxyTargetNotFoundFault: () => Effect.undefined,
+              DBProxyTargetGroupNotFoundFault: () => Effect.undefined,
+              DBProxyNotFoundFault: () => Effect.undefined,
             }),
           );
         const targets = response?.Targets ?? [];
@@ -337,9 +343,9 @@ export const DBProxyTargetGroupProvider = () =>
             targetGroupName,
           });
           if (!observedGroup?.TargetGroupName) {
-            return yield* Effect.fail(
-              new Error(`DB proxy target group '${targetGroupName}' not found`),
-            );
+            return yield* new DBProxyTargetGroupUnexpectedResponse({
+              message: `DB proxy target group '${targetGroupName}' not found`,
+            });
           }
           yield* session.note(
             observedGroup.TargetGroupArn ?? output?.targetGroupArn ?? observedGroup.TargetGroupName,

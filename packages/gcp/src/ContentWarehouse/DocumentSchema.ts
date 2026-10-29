@@ -146,10 +146,10 @@ const toAttrs = (item: cw.GoogleCloudContentwarehouseV1DocumentSchema, project: 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cw
         .getProjectsLocationsDocumentSchemas({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string) =>
   collectPages(
@@ -248,7 +248,7 @@ export const DocumentSchemaProvider = () =>
               propertyDefinitions,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* findInParent);
         if (current === undefined) {
           current = yield* waitUntilExists(
@@ -260,7 +260,7 @@ export const DocumentSchemaProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: output?.name ?? resourceName(env.project, location, documentSchemaId),
+          resourceName: output?.name ?? resourceName(env.project, location, documentSchemaId),
         });
       }
 

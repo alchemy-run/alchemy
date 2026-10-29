@@ -1,16 +1,17 @@
 import * as GitHub from "@alchemy.run/github";
-import { GitHubCredentials } from "@alchemy.run/github/Credentials";
-import { Octokit } from "@alchemy.run/github/Octokit";
 import { expect } from "@alchemy.run/test";
-import { Octokit as OctokitClient } from "@octokit/rest";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Orgs from "@distilled.cloud/github/orgs";
+import * as Repos from "@distilled.cloud/github/repos";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import { gh, mockGitHub, scopedToOwner } from "./scope.ts";
 
 const requireTestOwner = (owner: string) => {
   if (owner !== "alchemy-run-test" && owner !== "alchemy-run-test-2") {
@@ -31,32 +32,29 @@ const { test } = Test.make({
 });
 
 const verifiedMember = Effect.gen(function* () {
-  const client = yield* Octokit;
   const requested = process.env.GITHUB_TEST_COLLABORATOR_USERNAME;
   if (!requested) {
-    const members = yield* Effect.tryPromise({
-      try: () =>
-        client.paginate(client.rest.orgs.listMembers, {
+    const members = yield* gh(
+      Stream.runCollect(
+        Orgs.listMembers.items({
           org: owner,
           role: "member",
           per_page: 100,
         }),
-      catch: (error) => error as Error,
-    });
+      ),
+    );
     return yield* Effect.fail(
       new Error(
         `Set GITHUB_TEST_COLLABORATOR_USERNAME to an explicitly authorized active non-owner member of ${owner}; eligible members: ${members.map((member) => member.login).join(", ") || "none"}. No invitations or owner access changes are permitted.`,
       ),
     );
   }
-  const { data: membership } = yield* Effect.tryPromise({
-    try: () =>
-      client.rest.orgs.getMembershipForUser({
-        org: owner,
-        username: requested,
-      }),
-    catch: (error) => error as Error,
-  });
+  const membership = yield* gh(
+    Orgs.getMembershipForUser({
+      org: owner,
+      username: requested,
+    }),
+  );
   if (membership.state !== "active" || membership.role !== "member") {
     return yield* Effect.fail(
       new Error(
@@ -79,17 +77,16 @@ const repository = (index: number) =>
 
 const directCollaborators = (repo: string) =>
   Effect.gen(function* () {
-    const client = yield* Octokit;
-    return yield* Effect.tryPromise({
-      try: () =>
-        client.paginate(client.rest.repos.listCollaborators, {
+    return yield* gh(
+      Stream.runCollect(
+        Repos.listCollaborators.items({
           owner,
           repo,
           affiliation: "direct",
           per_page: 100,
         }),
-      catch: (error) => error as Error,
-    });
+      ),
+    );
   });
 
 const assertRemoved = (repo: string, username: string) =>
@@ -103,16 +100,15 @@ const assertRemoved = (repo: string, username: string) =>
       }),
     );
     expect(remaining.some((collaborator) => collaborator.login === username)).toBe(false);
-    const client = yield* Octokit;
-    const invitations = yield* Effect.tryPromise({
-      try: () =>
-        client.paginate(client.rest.repos.listInvitations, {
+    const invitations = yield* gh(
+      Stream.runCollect(
+        Repos.listInvitations.items({
           owner,
           repo,
           per_page: 100,
         }),
-      catch: (error) => error as Error,
-    });
+      ),
+    );
     expect(invitations.some((invitation) => invitation.invitee?.login === username)).toBe(false);
   });
 
@@ -185,54 +181,19 @@ test.provider(
     Effect.gen(function* () {
       yield* stack.destroy();
       yield* stack.deploy(repository(2));
-      const client = yield* Octokit;
-      const { data: expected } = yield* Effect.tryPromise({
-        try: () =>
-          client.rest.repos.listCollaborators({
-            owner,
-            repo: fixtureNames[2]!,
-            per_page: 100,
-          }),
-        catch: (error) => error as Error,
-      });
+      const expected = yield* gh(
+        Repos.listCollaborators({
+          owner,
+          repo: fixtureNames[2]!,
+          per_page: 100,
+        }),
+      );
       expect(expected.length).toBeGreaterThan(0);
-      const credentials = yield* yield* GitHubCredentials;
       const provider = yield* Provider.findProvider(GitHub.Collaborator);
       // list() enumerates /user/repos; confine it to this suite's fixture.
-      const listed = yield* provider.list().pipe(
-        Effect.provideService(
-          GitHubCredentials,
-          Effect.succeed({
-            ...credentials,
-            octokit: (override) => {
-              const octokit = credentials.octokit(override);
-              octokit.hook.before("request", (options) => {
-                const url = new URL(options.url, "https://api.github.com");
-                if (url.pathname === "/user/repos") {
-                  url.pathname = `/orgs/${owner}/repos`;
-                  options.url = url.toString();
-                }
-                if (
-                  url.origin !== "https://api.github.com" ||
-                  (url.pathname !== `/orgs/${owner}/repos` &&
-                    url.pathname !== `/repos/${owner}/${fixtureNames[2]!}/collaborators`)
-                ) {
-                  throw new Error(`Unsafe Collaborator list request: ${url}`);
-                }
-              });
-              octokit.hook.after("request", (response, options) => {
-                const url = new URL(options.url, "https://api.github.com");
-                if (url.pathname === `/orgs/${owner}/repos`) {
-                  response.data = (response.data as Array<{ name: string }>).filter(
-                    (repo) => repo.name === fixtureNames[2]!,
-                  );
-                }
-              });
-              return octokit;
-            },
-          }),
-        ),
-      );
+      const listed = yield* provider
+        .list()
+        .pipe(scopedToOwner(owner, { repository: fixtureNames[2]!, path: "collaborators" }));
       for (const member of expected) {
         expect(listed.some((collaborator) => collaborator.username === member.login)).toBe(true);
       }
@@ -244,45 +205,37 @@ test.provider(
   },
 );
 
-const mockCredentials = (calls: string[], access: Map<string, string>) =>
-  Effect.succeed({
-    token: Redacted.make("test-token"),
-    octokit: () =>
-      new OctokitClient({
-        auth: "test-token",
-        request: {
-          fetch: (url: string | URL | Request, options?: RequestInit) =>
-            Effect.runPromise(
-              Effect.sync(() => {
-                const path = new URL(String(url)).pathname;
-                const method = options?.method ?? "GET";
-                calls.push(`${method} ${path}`);
-                if (
-                  !/^\/repos\/alchemy-run-test\/alchemy-pr-1571-unit(?:-replacement)?\/collaborators\/test-member$/.test(
-                    path,
-                  )
-                ) {
-                  throw new Error(`Unexpected mock request ${method} ${path}`);
-                }
-                if (method === "PUT") {
-                  access.set(path, JSON.parse(String(options?.body)).permission);
-                  return new Response(null, { status: 204 });
-                }
-                if (method === "DELETE") {
-                  const existed = access.delete(path);
-                  return existed
-                    ? new Response(null, { status: 204 })
-                    : new Response(JSON.stringify({ message: "Not Found" }), {
-                        status: 404,
-                        headers: { "content-type": "application/json" },
-                      });
-                }
-                throw new Error(`Unexpected mock method ${method}`);
-              }),
-            ),
-        },
+const mockFetch =
+  (calls: string[], access: Map<string, string>) =>
+  (url: string | URL | Request, options?: RequestInit) =>
+    Effect.runPromise(
+      Effect.sync(() => {
+        const path = new URL(String(url)).pathname;
+        const method = options?.method ?? "GET";
+        calls.push(`${method} ${path}`);
+        if (
+          !/^\/repos\/alchemy-run-test\/alchemy-pr-1571-unit(?:-replacement)?\/collaborators\/test-member$/.test(
+            path,
+          )
+        ) {
+          throw new Error(`Unexpected mock request ${method} ${path}`);
+        }
+        if (method === "PUT") {
+          access.set(path, JSON.parse(String(options?.body)).permission);
+          return new Response(null, { status: 204 });
+        }
+        if (method === "DELETE") {
+          const existed = access.delete(path);
+          return existed
+            ? new Response(null, { status: 204 })
+            : new Response(JSON.stringify({ message: "Not Found" }), {
+                status: 404,
+                headers: { "content-type": "application/json" },
+              });
+        }
+        throw new Error(`Unexpected mock method ${method}`);
       }),
-  });
+    );
 
 const unitTest = (
   name: string,
@@ -295,7 +248,7 @@ const unitTest = (
   const calls: string[] = [];
   const access = new Map<string, string>();
   const { test } = Test.make({
-    providers: Layer.succeed(GitHubCredentials, mockCredentials(calls, access)).pipe(
+    providers: mockGitHub(mockFetch(calls, access)).pipe(
       Layer.provideMerge(GitHub.providers({ baseUrl: "github.com" })),
     ),
   });

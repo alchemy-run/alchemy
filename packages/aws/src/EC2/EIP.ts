@@ -3,12 +3,18 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+
+export class EIPUnexpectedResponse extends Data.TaggedError("EIPUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type EIPArn = `arn:aws:ec2:${RegionID}:${AccountID}:elastic-ip/${AllocationId}`;
 
@@ -214,7 +220,9 @@ export const EIPProvider = () =>
 
           const address = result.Addresses?.[0];
           if (!address) {
-            return yield* Effect.fail(new Error(`EIP ${output.allocationId} not found`));
+            return yield* new EIPUnexpectedResponse({
+              message: `EIP ${output.allocationId} not found`,
+            });
           }
 
           return {
@@ -286,9 +294,9 @@ export const EIPProvider = () =>
             });
             address = lookup.Addresses?.[0];
             if (!address) {
-              return yield* Effect.fail(
-                new Error(`EIP ${allocationId} disappeared after allocation`),
-              );
+              return yield* new EIPUnexpectedResponse({
+                message: `EIP ${allocationId} disappeared after allocation`,
+              });
             }
           }
 

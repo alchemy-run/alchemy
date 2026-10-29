@@ -415,11 +415,12 @@ const watchResolved =
         Effect.gen(function* () {
           // Hold a build permit until the watcher's initial build settles.
           yield* buildPermits.take(1);
+          const context = yield* Effect.context();
           let initialBuildSettled = false;
           const settleInitialBuild = () => {
             if (initialBuildSettled) return;
             initialBuildSettled = true;
-            Effect.runFork(buildPermits.release(1));
+            Effect.runForkWith(context)(buildPermits.release(1));
           };
           const watcher = yield* Effect.promise(() => createWatcher(settleInitialBuild)).pipe(
             Effect.onError(() => Effect.sync(settleInitialBuild)),
@@ -454,14 +455,12 @@ const watchResolved =
     );
 
 const ENTRY_PREFIX = "\0virtual:alchemy-entry:";
-// oxlint-disable-next-line no-control-regex
 const ENTRY_REGEX = /^\0virtual:alchemy-entry:/;
 /**
  * Ids the `resolveId` hook looks at: the virtual entry ids themselves, plus
  * bare package specifiers (not starting with `.`, `/` or `\0`) so an
  * unresolvable import in a generated entry fails the build (below).
  */
-// oxlint-disable-next-line no-control-regex
 const ENTRY_OR_BARE_REGEX = /^(?:\0virtual:alchemy-entry:|[^./\0])/;
 
 export const virtualEntryPlugin = Effect.gen(function* () {

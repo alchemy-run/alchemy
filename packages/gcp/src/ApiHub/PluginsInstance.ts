@@ -192,10 +192,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : apihub
         .getProjectsLocationsPluginsInstances({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   apihub.listProjectsLocationsPluginsInstances.pages({ parent, pageSize: 1000 }).pipe(
@@ -214,7 +214,7 @@ const waitUntilReady = (name: string) =>
         current !== undefined &&
         current.state !== "CREATING" &&
         current.state !== "APPLYING_CONFIG",
-      () => new ApihubNotResolved({ name }),
+      () => new ApihubNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ApiHub.ResourceNotResolved",
@@ -225,7 +225,7 @@ const waitUntilReady = (name: string) =>
       if (current.state === "ERROR" || current.state === "FAILED") {
         return Effect.fail(
           new ApihubInstanceFailed({
-            name,
+            resourceName: name,
             state: current.state,
             message: current.errorMessage,
           }),
@@ -354,20 +354,20 @@ export const PluginsInstanceProvider = () =>
               sourceEnvironmentsConfig: news.sourceEnvironmentsConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
           current = yield* waitUntilExists(getByName(name), name);
         }
         if (current === undefined) {
           current = yield* waitUntilExists(getByName(name), name).pipe(
-            Effect.catchTag("GCP.ApiHub.ResourceNotResolved", () => Effect.succeed(undefined)),
+            Effect.catchTag("GCP.ApiHub.ResourceNotResolved", () => Effect.undefined),
           );
         }
       }
 
       if (current === undefined) {
-        return yield* new ApihubNotResolved({ name });
+        return yield* new ApihubNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -405,7 +405,7 @@ export const PluginsInstanceProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForDeleteOperation(operation);

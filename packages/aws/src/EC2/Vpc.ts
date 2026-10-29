@@ -1,5 +1,6 @@
 import * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved, somePropsAreDifferent } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
@@ -9,6 +10,7 @@ import {
   createInternalTags,
   createTagsList,
   diffTags,
+  hasAlchemyTags,
 } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -19,6 +21,11 @@ import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
+
+export class VpcUnexpectedResponse extends Data.TaggedError("VpcUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type VpcId = `vpc-${string}`;
 export const VpcId = <const S extends string>(value: S): S & VpcId => value as S & VpcId;
@@ -167,6 +174,18 @@ export interface Vpc extends Resource<
      * The tags currently assigned to the VPC, including alchemy auto-tags.
      */
     tags?: Record<string, string>;
+
+    /**
+     * Whether DNS resolution is enabled, as observed. Lets `alchemy drift`
+     * detect out-of-band changes.
+     */
+    enableDnsSupport?: boolean;
+
+    /**
+     * Whether instances get public DNS hostnames, as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    enableDnsHostnames?: boolean;
   },
   never,
   Providers
@@ -381,8 +400,38 @@ export const VpcProvider = () =>
           .pipe(Stream.runHead, Effect.map(Option.getOrUndefined));
       });
 
+      const readDnsAttributes = Effect.fn(function* (vpcId: string) {
+        const [support, hostnames] = yield* Effect.all(
+          [
+            ec2.describeVpcAttribute({ VpcId: vpcId, Attribute: "enableDnsSupport" }),
+            ec2.describeVpcAttribute({ VpcId: vpcId, Attribute: "enableDnsHostnames" }),
+          ],
+          { concurrency: "unbounded" },
+        );
+        return {
+          enableDnsSupport: support.EnableDnsSupport?.Value ?? true,
+          enableDnsHostnames: hostnames.EnableDnsHostnames?.Value ?? false,
+        };
+      });
+
       return {
         stables: ["vpcId", "vpcArn", "ownerId", "isDefault"],
+        read: Effect.fn(function* ({ id, instanceId, output }) {
+          const { accountId, region } = yield* AWSEnvironment.current;
+          const vpc = output?.vpcId
+            ? (yield* ec2
+                .describeVpcs({ VpcIds: [output.vpcId] })
+                .pipe(Effect.catchTag("InvalidVpcID.NotFound", () => Effect.succeed({ Vpcs: [] }))))
+                .Vpcs?.[0]
+            : yield* findVpcByInstanceTags(id, instanceId);
+          if (!vpc?.VpcId) return undefined;
+          const tags = tagsFromVpc(vpc);
+          const attrs = {
+            ...vpcToAttributes(vpc, region, accountId, tags),
+            ...(yield* readDnsAttributes(vpc.VpcId)),
+          };
+          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+        }),
         diff: Effect.fn(function* ({ news, olds }) {
           if (!isResolved(news)) return;
           if (
@@ -523,10 +572,16 @@ export const VpcProvider = () =>
           const final = yield* ec2.describeVpcs({ VpcIds: [vpcId] });
           const finalVpc = final.Vpcs?.[0];
           if (!finalVpc) {
-            return yield* Effect.fail(new Error(`VPC ${vpcId} disappeared during reconcile`));
+            return yield* new VpcUnexpectedResponse({
+              message: `VPC ${vpcId} disappeared during reconcile`,
+            });
           }
 
-          return vpcToAttributes(finalVpc, region, accountId, desiredTags);
+          return {
+            ...vpcToAttributes(finalVpc, region, accountId, desiredTags),
+            enableDnsSupport: desiredDnsSupport,
+            enableDnsHostnames: desiredDnsHostnames,
+          };
         }),
 
         list: () =>
@@ -615,7 +670,7 @@ const waitForVpcAvailable = (vpcId: string, session?: ScopedPlanStatusSession) =
     const vpc = result.Vpcs?.[0];
 
     if (!vpc) {
-      return yield* Effect.fail(new Error(`VPC ${vpcId} not found`));
+      return yield* new VpcUnexpectedResponse({ message: `VPC ${vpcId} not found` });
     }
 
     if (vpc.State === "available") {

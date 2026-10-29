@@ -121,7 +121,7 @@ export const fromDurableObjectState = (
       // event's lifetime without blocking the caller.
       const track = yield* Effect.serviceOption(BackgroundWork);
       yield* Effect.sync(() => {
-        const promise = Effect.runPromise(effect.pipe(Effect.provide(context)));
+        const promise = Effect.runPromiseWith(context)(effect);
         if (Option.isSome(track)) track.value(promise);
         state.waitUntil(promise);
       });
@@ -132,9 +132,7 @@ export const fromDurableObjectState = (
       // The failure is typed away as before: a rejected gate is the
       // platform resetting the object, not a value a caller handles.
       return yield* Effect.promise(() =>
-        state.blockConcurrencyWhile(() =>
-          Effect.runPromise(callback().pipe(Effect.provide(context))),
-        ),
+        state.blockConcurrencyWhile(() => Effect.runPromiseWith(context)(callback())),
       );
     }),
   acceptWebSocket: (ws: WebSocket, tags?: string[]) =>

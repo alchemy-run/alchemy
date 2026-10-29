@@ -15,6 +15,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import * as Hetzner from "@alchemy.run/hetzner";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as route53 from "@distilled.cloud/aws/route-53";
 import * as cfdns from "@distilled.cloud/cloudflare/dns";
 import * as HetznerErrors from "@distilled.cloud/hetzner";
@@ -22,7 +23,6 @@ import * as zoneRrsets from "@distilled.cloud/hetzner/zone_rrsets";
 import * as hetznerZones from "@distilled.cloud/hetzner/zones";
 import * as DNS from "alchemy/DNS";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

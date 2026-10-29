@@ -255,7 +255,7 @@ const findWorkerConsumer = (acct: string, queueId: string) =>
     // the fresh queue is visible to the consumers API. Treat that as "no
     // consumer yet" — the caller falls through to createConsumer, which
     // retries QueueNotFound until the queue propagates.
-    Effect.catchTag("QueueNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("QueueNotFound", () => Effect.undefined),
   );
 
 export const ConsumerProviderLive = () =>
@@ -391,7 +391,7 @@ export const ConsumerProviderLive = () =>
       if (isLiveId(output?.consumerId)) {
         const fetched = yield* queues
           .getConsumer({ accountId: acct, queueId, consumerId: output.consumerId })
-          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.undefined));
         if (fetched) {
           observed = toObserved(fetched);
           owned = observed !== undefined;
@@ -438,9 +438,7 @@ export const ConsumerProviderLive = () =>
           const settings = yield* workers
             .getScriptScriptAndVersionSetting({ accountId: acct, scriptName })
             .pipe(
-              Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () => Effect.undefined),
             );
           return settings === undefined ? undefined : new Set(settings.tags ?? []);
         });
@@ -628,7 +626,7 @@ export const ConsumerProviderLive = () =>
             queueId: output.queueId,
             consumerId: output.consumerId,
           })
-          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ConsumerNotFound", () => Effect.undefined));
         if (fetched) {
           return {
             consumerId: fetched.consumerId!,

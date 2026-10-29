@@ -253,7 +253,7 @@ export const lookupProjectBillingAccountId = (project: string) =>
     Effect.map((info) =>
       info.billingAccountName ? billingAccountIdOf(info.billingAccountName) : undefined,
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const resolveBillingAccountId = (
@@ -277,7 +277,7 @@ export const lookupProjectFolderId = (project: string) =>
       const parent = resource.parent ?? "";
       return parent.startsWith("folders/") ? lastSegment(parent) : undefined;
     }),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const resolveFolderId = (explicit: string | undefined, existing: string | undefined) =>
@@ -296,14 +296,14 @@ const parentOf = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         )
-      : Effect.succeed(undefined);
+      : Effect.undefined;
 
 export const tryResolveOrganization = () =>
   Effect.gen(function* () {

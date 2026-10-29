@@ -292,7 +292,7 @@ export const CatalogsDatabaseProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BiglakeNotResolved({ name });
+        return yield* new BiglakeNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

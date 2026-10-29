@@ -186,13 +186,13 @@ export const CollectionsEngine = Resource<CollectionsEngine>(
 export class CollectionsEngineNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEngineNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CollectionsEngineStillExists extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEngineStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, collectionId: string, engineId: string) =>
@@ -211,7 +211,7 @@ const idsOf = (values: readonly string[] | undefined) => (values ?? []).map(data
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEngines({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (engine: discoveryengine.GoogleCloudDiscoveryengineV1Engine, project: string) => {
   const name = engine.name ?? "";
@@ -236,7 +236,9 @@ const toAttrs = (engine: discoveryengine.GoogleCloudDiscoveryengineV1Engine, pro
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((engine) =>
-      engine ? Effect.succeed(engine) : Effect.fail(new CollectionsEngineNotResolved({ name })),
+      engine
+        ? Effect.succeed(engine)
+        : Effect.fail(new CollectionsEngineNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsEngineNotResolved",
@@ -248,7 +250,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((engine) =>
-      engine === undefined ? Effect.void : Effect.fail(new CollectionsEngineStillExists({ name })),
+      engine === undefined
+        ? Effect.void
+        : Effect.fail(new CollectionsEngineStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsEngineStillExists",
@@ -363,7 +367,7 @@ export const CollectionsEngineProvider = () =>
               appType: news.appType,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -371,7 +375,7 @@ export const CollectionsEngineProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CollectionsEngineNotResolved({ name: fallbackName });
+        return yield* new CollectionsEngineNotResolved({ resourceName: fallbackName });
       }
 
       const name = current.name ?? fallbackName;
@@ -427,7 +431,7 @@ export const CollectionsEngineProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -118,7 +118,6 @@ export default function HeroHosts() {
     return () => {
       signal.aborted = true;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [start]);
 
   // On phones the reel is one scrolling line: keep the current host in view.

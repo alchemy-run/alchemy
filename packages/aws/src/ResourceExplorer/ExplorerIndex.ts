@@ -92,7 +92,7 @@ const observeIndex = re2.getIndex({}).pipe(
   Effect.map((r): re2.GetIndexOutput | undefined =>
     r.State === "DELETED" || r.State === "DELETING" ? undefined : r,
   ),
-  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
 );
 
 /**

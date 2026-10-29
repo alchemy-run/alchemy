@@ -22,6 +22,7 @@ import {
   DELAY_FUNCTION_TIMEOUT_MS,
   invokeDelayFunction,
   raceAgainstAbort,
+  schedulerWait,
 } from "./lib/delay.ts";
 import {
   ABORT_REASONS,
@@ -105,28 +106,6 @@ export function toEngineStepConfig(config: ResolvedStepConfig): EngineStepConfig
     return { ...config, retries: { ...retries, delay } };
   }
   return { ...config, retries };
-}
-
-// Signal-aware wrapper around the global `scheduler.wait`. `scheduler.wait`
-// can't itself be cancelled, so an aborted signal resolves the returned promise
-// early and the dangling timer becomes a no-op.
-function schedulerWait(durationMs: number, opts?: { signal?: AbortSignal }): Promise<void> {
-  return new Promise<void>((resolve) => {
-    const signal = opts?.signal;
-    if (signal?.aborted) {
-      resolve();
-      return;
-    }
-    let done = false;
-    const finish = (): void => {
-      if (!done) {
-        done = true;
-        resolve();
-      }
-    };
-    void scheduler.wait(durationMs).then(finish);
-    signal?.addEventListener("abort", finish, { once: true });
-  });
 }
 
 const defaultConfig: ResolvedStepConfig = {
@@ -238,7 +217,7 @@ export class Context extends RpcTarget {
     rollbackOptions?: WorkflowStepRollbackOptions,
   ): Promise<unknown>;
 
-  async do<T>(name: string, ...rest: Array<unknown>): Promise<unknown | void | undefined> {
+  async do<T>(name: string, ...rest: Array<unknown>): Promise<unknown> {
     let closure: (ctx: WorkflowStepContext) => Promise<T>;
     let stepConfig: WorkflowStepConfig;
     let rollbackOptions: WorkflowStepRollbackOptions | undefined;
@@ -503,7 +482,7 @@ export class Context extends RpcTarget {
 
     const doWrapper = async (
       doWrapperClosure: (ctx: WorkflowStepContext) => Promise<unknown>,
-    ): Promise<unknown | void | undefined> => {
+    ): Promise<unknown> => {
       const stepState = ((await this.#state.storage.get(stepStateKey)) as StepState) ?? {
         attemptedCount: 0,
       };
@@ -578,11 +557,16 @@ export class Context extends RpcTarget {
             targetTimestamp: Date.now() + timeout,
             type: "timeout",
           });
-          await scheduler.wait(timeout);
+          await schedulerWait(timeout, { signal: stepExecutionSignal });
+          if (stepExecutionSignal.aborted) {
+            // Step finished or the engine aborted: the native timer is already
+            // cancelled. Hang so Promise.race does not treat this as a timeout.
+            await new Promise<never>(() => {});
+          }
           // if we reach here, means that we can try to delete the timeout from the PQ
           // because we managed to wait in the same lifetime
           // @ts-expect-error priorityQueue is initiated in init
-          await this.#engine.priorityQueue.remove({
+          this.#engine.priorityQueue.remove({
             hash: priorityQueueHash,
             type: "timeout",
           });
@@ -640,22 +624,24 @@ export class Context extends RpcTarget {
           activeTimeoutTask?: Promise<never>,
         ): Promise<unknown> => {
           if (!isReadableStreamLike(value)) {
-            // Typed-array views anywhere in the value tree are copied
-            // into a tight backing buffer so the full backing buffer
-            // does not ride along with each view (issue #14101). View
-            // types are preserved so cached replays observe the same
-            // constructor as the live execution path. The caller still
-            // receives the original `value` below — only the stored
-            // shape changes.
-            const stored = normalizeForStorage(value);
-            await this.#state.storage.put(valueKey, { value: stored });
-            abortController.abort("step finished");
-            // @ts-expect-error priorityQueue is initiated in init
-            this.#engine.priorityQueue.remove({
-              hash: priorityQueueHash,
-              type: "timeout",
-            });
-            return value;
+            try {
+              // Non-stream results must be structured-cloneable. Clone before
+              // normalisation, which can discard unsupported array properties,
+              // and avoid forwarding the callback's RPC disposer to the caller.
+              const cloned = structuredClone(value);
+              // Compact typed-array backing buffers only for storage (#14101).
+              const stored = normalizeForStorage(cloned);
+              await this.#state.storage.put(valueKey, { value: stored });
+              abortController.abort("step finished");
+              // @ts-expect-error priorityQueue is initiated in init
+              this.#engine.priorityQueue.remove({
+                hash: priorityQueueHash,
+                type: "timeout",
+              });
+              return cloned;
+            } finally {
+              (value as Partial<Disposable> | null | undefined)?.[Symbol.dispose]?.();
+            }
           }
 
           streamResultSeen = true;
@@ -706,14 +692,37 @@ export class Context extends RpcTarget {
           }
         } else {
           timeoutTask = timeoutPromise();
-          result = await Promise.race([
-            doWrapperClosure({
-              step: { name, count },
-              attempt: stepState.attemptedCount,
-              config: toEngineStepConfig(config),
-            }),
-            timeoutTask,
-          ]);
+          const callbackTask = doWrapperClosure({
+            step: { name, count },
+            attempt: stepState.attemptedCount,
+            config: toEngineStepConfig(config),
+          });
+          try {
+            result = await Promise.race([callbackTask, timeoutTask]);
+          } catch (error) {
+            // A timeout does not cancel the callback RPC. Release any late
+            // result without waiting for it before retrying. Successful race
+            // winners remain owned by persistStepResult, including streams.
+            // The engine is a Durable Object, which stays active while there
+            // is ongoing work or pending I/O, so this untracked cleanup is
+            // retained without a waitUntil (a documented no-op for Durable
+            // Objects). Once the run() call that owns the callback stub ends,
+            // the stub is torn down with it and there is no result to release.
+            void callbackTask
+              .then(async (value) => {
+                try {
+                  if (isReadableStreamLike(value)) {
+                    await value.cancel(error);
+                  }
+                } finally {
+                  (value as Partial<Disposable> | null | undefined)?.[Symbol.dispose]?.();
+                }
+              })
+              // Late rejection or cleanup failure must not replace the
+              // attempt's original error or become an unhandled rejection.
+              .catch(() => {});
+            throw error;
+          }
         }
 
         // We store the value of `output` in an object with a `value` property. This allows us to store `undefined`,
@@ -821,7 +830,10 @@ export class Context extends RpcTarget {
         });
       } catch (e) {
         const error = e as Error;
-        // if we reach here, means that the closure ran but errored out and we can remove the timeout from the PQ
+        // Cancel the native timeout timer for this attempt. Removing the PQ
+        // entry alone leaves scheduler.wait() holding a workerd timer until
+        // the original deadline (issue #15788).
+        abortController.abort("step errored");
         // @ts-expect-error priorityQueue is initiated in init
         this.#engine.priorityQueue.remove({
           hash: `${cacheKey}-${stepState.attemptedCount}`,
@@ -976,7 +988,10 @@ export class Context extends RpcTarget {
           // takes effect immediately during retries
           {
             const retryPauseSignal = this.#engine.pauseController.signal;
-            await raceAgainstAbort(scheduler.wait(effectiveDuration), retryPauseSignal);
+            await raceAgainstAbort(
+              schedulerWait(effectiveDuration, { signal: retryPauseSignal }),
+              retryPauseSignal,
+            );
             const retryStatus = await this.#engine.getStatus();
             const pausedDuringRetry =
               retryStatus === InstanceStatus.Paused ||
@@ -1087,7 +1102,21 @@ export class Context extends RpcTarget {
       );
       // in case the engine dies while sleeping and wakes up before the retry period
       if (entryPQ !== undefined) {
-        await scheduler.wait(disableSleep ? 0 : entryPQ.targetTimestamp - Date.now());
+        const pauseSignal = this.#engine.pauseController.signal;
+        const raceResult = await raceAgainstAbort(
+          schedulerWait(disableSleep ? 0 : entryPQ.targetTimestamp - Date.now(), {
+            signal: pauseSignal,
+          }),
+          pauseSignal,
+        );
+        const statusAfterSleep = await this.#engine.getStatus();
+        const pausedDuringSleep =
+          raceResult.aborted ||
+          statusAfterSleep === InstanceStatus.Paused ||
+          statusAfterSleep === InstanceStatus.WaitingForPause;
+        if (pausedDuringSleep) {
+          throw new Error(ABORT_REASONS.USER_PAUSE);
+        }
         // @ts-expect-error priorityQueue is initiated in init
         this.#engine.priorityQueue.remove({ hash: cacheKey, type: "sleep" });
       }
@@ -1121,7 +1150,7 @@ export class Context extends RpcTarget {
     const pauseSignal = this.#engine.pauseController.signal;
     const sleepDuration = disableSleep ? 0 : duration;
 
-    await raceAgainstAbort(scheduler.wait(sleepDuration), pauseSignal);
+    await raceAgainstAbort(schedulerWait(sleepDuration, { signal: pauseSignal }), pauseSignal);
 
     // Check if we were paused during the sleep
     const statusAfterSleep = await this.#engine.getStatus();
@@ -1250,6 +1279,10 @@ export class Context extends RpcTarget {
       throw timeoutError;
     }
 
+    const pauseSignal = this.#engine.pauseController.signal;
+    const timeoutAbortController = new AbortController();
+    const timeoutSignal = AbortSignal.any([timeoutAbortController.signal, pauseSignal]);
+
     const timeoutPromise = async (timeoutToWait: number, addToPQ: boolean) => {
       const priorityQueueHash = cacheKey;
       if (addToPQ) {
@@ -1260,7 +1293,12 @@ export class Context extends RpcTarget {
           type: "timeout",
         });
       }
-      await scheduler.wait(timeoutToWait);
+      await schedulerWait(timeoutToWait, { signal: timeoutSignal });
+      if (timeoutSignal.aborted) {
+        // Event arrived or the engine paused: the timer is already cancelled.
+        // Hang so Promise.race does not treat this as a timeout.
+        await new Promise<never>(() => {});
+      }
       // if we reach here, means that we can try to delete the timeout from the PQ
       // because we managed to wait in the same lifetime
 
@@ -1295,49 +1333,58 @@ export class Context extends RpcTarget {
       this.#engine.waiters.set(options.type, callbacks);
     });
 
-    // Race event and timeout against the pause signal.
-    const pauseSignal = this.#engine.pauseController.signal;
-    const raceResult = await raceAgainstAbort(
-      Promise.race([
-        eventPromise,
-        timeoutEntryPQ !== undefined
-          ? timeoutPromise(timeoutEntryPQ.targetTimestamp - Date.now(), false)
-          : timeoutPromise(ms(options.timeout), true),
-      ]),
-      pauseSignal,
-    ).catch(async (error) => {
-      const callbacks = this.#engine.waiters.get(options.type);
-      if (callbacks) {
-        const idx = callbacks.findIndex(([key]) => key === cacheKey);
-        if (idx !== -1) {
-          callbacks.splice(idx, 1);
+    try {
+      // Race event and timeout against the pause signal.
+      const raceResult = await raceAgainstAbort(
+        Promise.race([
+          eventPromise,
+          timeoutEntryPQ !== undefined
+            ? timeoutPromise(timeoutEntryPQ.targetTimestamp - Date.now(), false)
+            : timeoutPromise(ms(options.timeout), true),
+        ]),
+        pauseSignal,
+      ).catch(async (error) => {
+        const callbacks = this.#engine.waiters.get(options.type);
+        if (callbacks) {
+          const idx = callbacks.findIndex(([key]) => key === cacheKey);
+          if (idx !== -1) {
+            callbacks.splice(idx, 1);
+          }
         }
+
+        this.#engine.writeLog(
+          InstanceEvent.WAIT_TIMED_OUT,
+          cacheKey,
+          waitForEventNameWithCounter,
+          error,
+        );
+        await this.#state.storage.put(errorKey, error);
+        throw error;
+      });
+
+      // Pause signal won the race — throw to stop the workflow
+      if (raceResult.aborted) {
+        throw new Error(ABORT_REASONS.USER_PAUSE);
       }
+      const event = raceResult.value;
+
+      // @ts-expect-error priorityQueue is initiated in init
+      this.#engine.priorityQueue.remove({
+        hash: cacheKey,
+        type: "timeout",
+      });
 
       this.#engine.writeLog(
-        InstanceEvent.WAIT_TIMED_OUT,
+        InstanceEvent.WAIT_COMPLETE,
         cacheKey,
         waitForEventNameWithCounter,
-        error,
+        event,
       );
-      await this.#state.storage.put(errorKey, error);
-      throw error;
-    });
+      await this.#state.storage.put(waitForEventKey, event);
 
-    // Pause signal won the race — throw to stop the workflow
-    if (raceResult.aborted) {
-      throw new Error(ABORT_REASONS.USER_PAUSE);
+      return event as WorkflowStepEvent<T>;
+    } finally {
+      timeoutAbortController.abort();
     }
-    const event = raceResult.value;
-
-    this.#engine.writeLog(
-      InstanceEvent.WAIT_COMPLETE,
-      cacheKey,
-      waitForEventNameWithCounter,
-      event,
-    );
-    await this.#state.storage.put(waitForEventKey, event);
-
-    return event as WorkflowStepEvent<T>;
   }
 }

@@ -4,9 +4,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class DBClusterEndpointUnexpectedResponse extends Data.TaggedError(
+  "DBClusterEndpointUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBClusterEndpointProps {
   /**
@@ -147,7 +155,7 @@ export const DBClusterEndpointProvider = () =>
           .describeDBClusterEndpoints({
             DBClusterEndpointIdentifier: identifier,
           })
-          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBClusterNotFoundFault", () => Effect.undefined));
         return response?.DBClusterEndpoints?.[0];
       });
 
@@ -226,9 +234,9 @@ export const DBClusterEndpointProvider = () =>
               .pipe(Effect.catchTag("DBClusterEndpointAlreadyExistsFault", () => Effect.void));
             observed = yield* readEndpoint(identifier);
             if (!observed?.DBClusterEndpointIdentifier) {
-              return yield* Effect.fail(
-                new Error(`DB cluster endpoint '${identifier}' not found after create`),
-              );
+              return yield* new DBClusterEndpointUnexpectedResponse({
+                message: `DB cluster endpoint '${identifier}' not found after create`,
+              });
             }
           } else {
             // Sync mutable endpoint config — push desired shape.
@@ -240,9 +248,9 @@ export const DBClusterEndpointProvider = () =>
             });
             observed = yield* readEndpoint(identifier);
             if (!observed?.DBClusterEndpointIdentifier) {
-              return yield* Effect.fail(
-                new Error(`DB cluster endpoint '${identifier}' not found after update`),
-              );
+              return yield* new DBClusterEndpointUnexpectedResponse({
+                message: `DB cluster endpoint '${identifier}' not found after update`,
+              });
             }
           }
 

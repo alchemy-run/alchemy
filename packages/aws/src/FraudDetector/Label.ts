@@ -69,7 +69,7 @@ export const LabelProvider = () =>
       const get = Effect.fn(function* (name: string) {
         const response = yield* frauddetector
           .getLabels({ name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.labels?.[0];
       });
 

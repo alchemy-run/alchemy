@@ -4,12 +4,18 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { createName, readResourceTags, retryConcurrent, updateResourceTags } from "./common.ts";
+
+export class AlarmUnexpectedResponse extends Data.TaggedError("AlarmUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type AlarmName = string;
 export type AlarmArn = `arn:aws:cloudwatch:${RegionID}:${AccountID}:alarm:${string}`;
@@ -227,7 +233,9 @@ export const AlarmProvider = () =>
 
           const state = yield* readAlarm(name);
           if (!state) {
-            return yield* Effect.fail(new Error(`failed to read reconciled alarm '${name}'`));
+            return yield* new AlarmUnexpectedResponse({
+              message: `failed to read reconciled alarm '${name}'`,
+            });
           }
 
           return {

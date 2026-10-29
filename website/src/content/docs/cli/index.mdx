@@ -47,6 +47,7 @@ Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destro
 | `--yes`             | Yes to all prompts.                                                                                                                       |
 | `--no-input`        | Disable prompts and the interactive TUI. Commands that would need input fail instead of hanging.                                          |
 | `--config, -c <file>` | Stack entrypoint. Defaults to `alchemy.run.ts`; must exist.                                                                            |
+| `--fast-distilled`  | Under Node, load each distilled SDK operation on first use. This lowers the CLI's memory and startup time for stacks that import whole providers. Same as `ALCHEMY_FAST_DISTILLED=1`. |
 
 Use `--profile` with `deploy`, `plan`, `destroy`, `dev`, `logs`, `drift`, or `state`.
 

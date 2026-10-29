@@ -546,8 +546,8 @@ const listRoutes = (accountId: string, gatewayId: string) =>
 const getRoute = (accountId: string, gatewayId: string, id: string) =>
   aiGateway.getDynamicRouting({ accountId, gatewayId, id }).pipe(
     Effect.catchTags({
-      RouteNotFound: () => Effect.succeed(undefined),
-      GatewayNotFound: () => Effect.succeed(undefined),
+      RouteNotFound: () => Effect.undefined,
+      GatewayNotFound: () => Effect.undefined,
     }),
   );
 
@@ -558,7 +558,7 @@ const getRoute = (accountId: string, gatewayId: string, id: string) =>
 const findByName = (accountId: string, gatewayId: string, name: string) =>
   aiGateway.listDynamicRoutings({ accountId, gatewayId, perPage: 50 }).pipe(
     Effect.map((list) => list.data.routes.find((r) => r.name === name)),
-    Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("GatewayNotFound", () => Effect.undefined),
   );
 
 const createRouteName = (id: string, name: string | undefined) =>

@@ -121,7 +121,7 @@ export type ProductSet = Resource<
 export const ProductSet = Resource<ProductSet>("GCP.Vision.ProductSet");
 
 export class ProductSetNotResolved extends Data.TaggedError("GCP.Vision.ProductSetNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (set: vision.ProductSet, project: string, products: string[]) => {
@@ -211,7 +211,7 @@ export const ProductSetProvider = () =>
 
       if (current === undefined) {
         return yield* new ProductSetNotResolved({
-          name: name || productSetNameOf(env.project, location, productSetId),
+          resourceName: name || productSetNameOf(env.project, location, productSetId),
         });
       }
 

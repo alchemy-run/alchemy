@@ -257,22 +257,20 @@ export const RoleProvider = () =>
           Stream.runCollect,
           Effect.map((chunk) => Array.from(chunk)),
         );
-        const entries = yield* Effect.all(
-          policyNames.map((policyName) =>
-            iam
-              .getRolePolicy({
-                RoleName: roleName,
-                PolicyName: policyName,
-              })
-              .pipe(
-                Effect.map(
-                  (response) => [policyName, parsePolicyDocument(response.PolicyDocument)] as const,
-                ),
-                Effect.catchTag("NoSuchEntityException", () =>
-                  Effect.succeed([policyName, undefined] as const),
-                ),
+        const entries = yield* Effect.forEach(policyNames, (policyName) =>
+          iam
+            .getRolePolicy({
+              RoleName: roleName,
+              PolicyName: policyName,
+            })
+            .pipe(
+              Effect.map(
+                (response) => [policyName, parsePolicyDocument(response.PolicyDocument)] as const,
               ),
-          ),
+              Effect.catchTag("NoSuchEntityException", () =>
+                Effect.succeed([policyName, undefined] as const),
+              ),
+            ),
         );
         return Object.fromEntries(
           entries.filter((entry): entry is [string, PolicyDocument] => entry[1] !== undefined),
@@ -413,7 +411,7 @@ export const RoleProvider = () =>
                   };
                 }).pipe(
                   // A role may be deleted concurrently mid-hydration.
-                  Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                 ),
               { concurrency: 8 },
             );
@@ -437,7 +435,7 @@ export const RoleProvider = () =>
             .getRole({
               RoleName: roleName,
             })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
           if (!role?.Role) {
             return undefined;
           }
@@ -507,7 +505,7 @@ export const RoleProvider = () =>
           // upstream so adopting a `Unowned` role is the engine's call.
           let observedRole = yield* iam
             .getRole({ RoleName: roleName })
-            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
 
           // Ensure — create the role when missing. A peer reconciler may
           // have created it concurrently; tolerate that race by reading
@@ -700,7 +698,7 @@ export const RoleProvider = () =>
           for (let attempt = 0; attempt < 30; attempt++) {
             const remaining = yield* iam
               .getRole({ RoleName: output.roleName })
-              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
             if (remaining === undefined) return;
             yield* Effect.sleep("1 second");
           }

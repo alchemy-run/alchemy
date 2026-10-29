@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { Asset, AssetModel, Gateway } from "@alchemy.run/aws/IoTSiteWise";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as sitewise from "@distilled.cloud/aws/iotsitewise";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

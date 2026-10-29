@@ -262,6 +262,12 @@ export type WorkerPool = Resource<
     updateTime: string | undefined;
     /** Runtime service account email. */
     serviceAccount: string | undefined;
+    /**
+     * Numeric unique ID of the runtime service account: the `sub` of the
+     * Google ID tokens the host fetches. An AWS binding's IAM role trusts
+     * it, so the host reaches AWS without an access key.
+     */
+    serviceAccountUniqueId: string | undefined;
     /** True when Alchemy minted the per-host runtime service account. */
     managedServiceAccount: boolean;
     /** IAM roles bindings granted to the runtime service account. */
@@ -357,22 +363,22 @@ export const WorkerPool: Platform<
 });
 
 export class WorkerPoolNotResolved extends Data.TaggedError("GCP.Run.WorkerPoolNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class WorkerPoolNotReady extends Data.TaggedError("GCP.Run.WorkerPoolNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
 
 export class WorkerPoolReconciling extends Data.TaggedError("GCP.Run.WorkerPoolReconciling")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class WorkerPoolStillExists extends Data.TaggedError("GCP.Run.WorkerPoolStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -635,7 +641,11 @@ const toAttrs = (
   pool: cloudrun.GoogleCloudRunV2WorkerPool,
   project: string,
   region: string,
-  extras: { iamGrants?: AppliedIamGrant[]; codeHash?: string } = {},
+  extras: {
+    iamGrants?: AppliedIamGrant[];
+    codeHash?: string;
+    serviceAccountUniqueId?: string;
+  } = {},
 ): WorkerPool["Attributes"] => {
   const name = pool.name ?? "";
   const parsed = parseName(name, region);
@@ -665,6 +675,7 @@ const toAttrs = (
       resourceName: name,
       serviceAccount: pool.template?.serviceAccount,
     }),
+    serviceAccountUniqueId: extras.serviceAccountUniqueId,
     iamGrants: extras.iamGrants ?? [],
     codeHash: extras.codeHash,
   };
@@ -673,7 +684,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   cloudrun
     .getProjectsLocationsWorkerPools({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Waits on a Cloud Run long-running operation (revisions roll out in minutes). */
 const waitForOperation = (
@@ -725,13 +736,13 @@ const waitUntilReady = (name: string) =>
     Effect.filterOrFail(
       (pool): pool is cloudrun.GoogleCloudRunV2WorkerPool =>
         pool !== undefined && pool.deleteTime === undefined,
-      () => new WorkerPoolNotResolved({ name }),
+      () => new WorkerPoolNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (pool) => (pool.terminalCondition?.state ?? "") !== "CONDITION_FAILED",
       (pool) =>
         new WorkerPoolNotReady({
-          name,
+          resourceName: name,
           state: pool.terminalCondition?.state ?? "",
           message: pool.terminalCondition?.message ?? "revision failed",
         }),
@@ -740,7 +751,7 @@ const waitUntilReady = (name: string) =>
       (pool) => !isPendingPool(pool),
       (pool) =>
         new WorkerPoolReconciling({
-          name,
+          resourceName: name,
           state: pool.terminalCondition?.state || "reconciling",
         }),
     ),
@@ -756,7 +767,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool === undefined ? Effect.void : Effect.fail(new WorkerPoolStillExists({ name })),
+      pool === undefined
+        ? Effect.void
+        : Effect.fail(new WorkerPoolStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Run.WorkerPoolStillExists",
@@ -842,6 +855,7 @@ export const WorkerPoolProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region, {
         iamGrants: output?.iamGrants,
         codeHash: output?.codeHash,
+        serviceAccountUniqueId: output?.serviceAccountUniqueId,
       });
       return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
     }),
@@ -939,7 +953,7 @@ export const WorkerPoolProvider = () =>
           })
           .pipe(
             retryActAs,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
@@ -949,7 +963,7 @@ export const WorkerPoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new WorkerPoolNotResolved({ name });
+        return yield* new WorkerPoolNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -1015,12 +1029,13 @@ export const WorkerPoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new WorkerPoolNotResolved({ name });
+        return yield* new WorkerPoolNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region, {
         iamGrants: identity.grants,
         codeHash,
+        serviceAccountUniqueId: identity.uniqueId,
       });
     }),
 
@@ -1033,7 +1048,7 @@ export const WorkerPoolProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

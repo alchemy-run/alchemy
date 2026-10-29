@@ -12,6 +12,16 @@ import * as EffectStream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { fetchSiteWiseTags, syncSiteWiseTags } from "./internal.ts";
 
+export class AssetInvalidProps extends Data.TaggedError("AssetInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class AssetUnexpectedResponse extends Data.TaggedError("AssetUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type AssetState = sitewise.AssetState;
 
 export interface AssetProps {
@@ -108,7 +118,7 @@ interface AssetState_ {
 const readAssetById = Effect.fn(function* (assetId: string) {
   const described = yield* sitewise
     .describeAsset({ assetId, excludeProperties: true })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!described || described.assetStatus.state === "DELETING") {
     return undefined;
   }
@@ -181,7 +191,7 @@ const waitForAssetState = (assetId: string, target: "ACTIVE" | "DELETED") =>
     Effect.gen(function* () {
       const described = yield* sitewise
         .describeAsset({ assetId, excludeProperties: true })
-        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       if (target === "DELETED") {
         if (described === undefined) return;
         return yield* new AssetNotReady({ assetId, state: described.assetStatus.state });
@@ -249,7 +259,7 @@ export const AssetProvider = () =>
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           if (!news) {
-            return yield* Effect.fail(new Error("IoT SiteWise Asset requires props"));
+            return yield* new AssetInvalidProps({ message: "IoT SiteWise Asset requires props" });
           }
           const name = yield* createAssetName(id, news);
           const internalTags = yield* createInternalTags(id);
@@ -277,7 +287,9 @@ export const AssetProvider = () =>
             yield* waitForAssetState(created.assetId, "ACTIVE");
             state = yield* readAssetById(created.assetId);
             if (state === undefined) {
-              return yield* Effect.fail(new Error(`failed to read created asset ${name}`));
+              return yield* new AssetUnexpectedResponse({
+                message: `failed to read created asset ${name}`,
+              });
             }
           }
 
@@ -305,7 +317,9 @@ export const AssetProvider = () =>
 
           const final = yield* readAssetById(state.attrs.assetId);
           if (!final) {
-            return yield* Effect.fail(new Error(`failed to read reconciled asset ${name}`));
+            return yield* new AssetUnexpectedResponse({
+              message: `failed to read reconciled asset ${name}`,
+            });
           }
           return final.attrs;
         }),

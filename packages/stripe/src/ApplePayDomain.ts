@@ -107,7 +107,7 @@ const toAttrs = (domain: StripeApplePayDomain): ApplePayDomainAttributes => ({
 const isMissing = isMissingStripeResource;
 
 const getById = (domain: string) =>
-  GetApplePayDomain({ domain }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+  GetApplePayDomain({ domain }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
 
 const listAllApplePayDomains = Effect.fn(function* () {
   const domains: StripeApplePayDomain[] = [];

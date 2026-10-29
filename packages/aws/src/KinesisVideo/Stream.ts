@@ -135,7 +135,7 @@ export const StreamProvider = () =>
       const observeStream = Effect.fn(function* (streamName: string) {
         return yield* kv.describeStream({ StreamName: streamName }).pipe(
           Effect.map((r) => r.StreamInfo),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

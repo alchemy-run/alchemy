@@ -311,9 +311,7 @@ const toAttrs = (route: compute.Route, project: string) => {
 };
 
 const getByName = (project: string, route: string) =>
-  compute
-    .getRoutes({ project, route })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  compute.getRoutes({ project, route }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const requireRoute = (project: string, routeName: string) =>
   getByName(project, routeName).pipe(
@@ -340,7 +338,7 @@ const removeRoute = (project: string, routeName: string) =>
           times: 8,
           schedule: Schedule.spaced("1 second"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
     if (operation !== undefined) {
       yield* waitGlobalOperation(project, operation, {

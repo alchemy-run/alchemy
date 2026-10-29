@@ -1,4 +1,5 @@
 import { assert, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
@@ -11,7 +12,6 @@ import * as Scope from "effect/Scope";
 import * as pathe from "pathe";
 import * as Command from "@/Command";
 import type { ScopedPlanStatusSession } from "@/Report.ts";
-import * as Test from "@/Test/Alchemy";
 import { assertDead, lifecycleFixture, pgid, pidAlive } from "./fixture/lifecycle-support.ts";
 const { test } = Test.make({ providers: Command.providers() });
 

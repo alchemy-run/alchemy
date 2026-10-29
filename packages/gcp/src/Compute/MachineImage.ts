@@ -210,7 +210,7 @@ const toAttrs = (image: compute.MachineImage, project: string) => ({
 const getByName = (project: string, machineImage: string) =>
   compute
     .getMachineImages({ project, machineImage })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const canonicalizeSourceInstance = (source: string | undefined): string => {
   if (source === undefined || source.length === 0) return "";
@@ -376,7 +376,7 @@ export const MachineImageProvider = () =>
             sourceInstance: news.sourceInstance,
             body: insertBody(machineImageName, news, desiredLabels),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitGlobalOperation(env.project, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -428,7 +428,7 @@ export const MachineImageProvider = () =>
           machineImage: output.machineImageName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

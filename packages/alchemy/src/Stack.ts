@@ -1,6 +1,7 @@
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
-import type { Crypto } from "effect/Crypto";
+import type { Digest } from "effect/crypto/Digest";
+import type { SecureRandom } from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
 import type { HttpClient } from "effect/http/HttpClient";
@@ -36,7 +37,8 @@ export type StackServices =
   | Stage
   | Scope.Scope
   | FileSystem
-  | Crypto
+  | Digest
+  | SecureRandom
   | Path
   | AlchemyContext
   | HttpClient
@@ -154,7 +156,7 @@ export const Stack: Context.ServiceClass<Stack, "Stack", Omit<StackSpec, "output
       };
     };
   };
-  <Self, Shape>(): {
+  <Self, Shape, Stages extends string = string>(): {
     (stackName: string): Effect.Effect<Self> & {
       new (_: never): Output.ToOutput<Shape>;
       readonly stackName: string;
@@ -163,7 +165,7 @@ export const Stack: Context.ServiceClass<Stack, "Stack", Omit<StackSpec, "output
         effect: Effect.Effect<A, ConfigError, Req>,
       ) => Effect.Effect<CompiledStack<A>, ConfigError> & ConfiguredStackMeta<NoInfer<Req>>;
       stage: {
-        [stage: string]: Effect.Effect<Self>;
+        readonly [S in Stages]: Effect.Effect<Self>;
       };
     };
   };

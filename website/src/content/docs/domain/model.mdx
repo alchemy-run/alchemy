@@ -5,9 +5,21 @@ description: What a domain model contains, how it processes every command, and h
 
 import DAG from "../../../components/DAG.astro";
 
-A `Domain.Model` is one bounded context running as a whole. It holds the context's aggregates, the views built from their events, and the policies that act on them, and it guarantees how commands and events move between them. This page describes that in general, with the bank from the [tutorial](/domain/tutorial/part-1) as the example throughout, then shows how to declare, run and call a model.
+A `Domain.Model` is one bounded context running as a whole. It holds the context's aggregates, the views built from their events, and the policies that act on them, and it guarantees how commands and events move between them.
+
+The concept pages that follow read as a manual, one building block per chapter, in the order a command meets them. This first chapter is the map. It describes what every model contains and what happens to every command, with the bank from the [tutorial](/domain/tutorial/part-1) as the example throughout, then shows how to declare, run and call a model.
 
 If the words aggregate, view and policy are new, read [What is Domain-Driven Design?](/domain/what-is-ddd) first.
+
+## A model is a bounded context
+
+A business is too big for one model. The words its people use change meaning from one department to the next: to the bank's tellers, an "account" holds money; to its identity team, an "account" is a login. A single model that tries to serve both meanings ends up with a vague `Account` that serves neither.
+
+So DDD draws boundaries. Inside a **bounded context**, every word means exactly one thing, and the model is written in those words. In the example bank, the banking context knows accounts, deposits, withdrawals and transfers. It doesn't know about login sessions, password resets or support tickets; those belong to other contexts, with models of their own.
+
+A good boundary passes two tests. Every name inside it has one meaning, so a conversation with the business turns straight into code. And the rules inside it can be enforced without asking another context's permission, so the model can decide on its own. When a word starts needing a qualifier, like "billing account" versus "login account", you've found the edge of a context.
+
+A `Domain.Model` is how you write one bounded context down. Everything in this manual lives inside one.
 
 ## What a model contains
 
@@ -33,7 +45,7 @@ Every model has the same shape. Commands enter on the left and are decided by ag
   caption="Solid edges happen within one command. Dashed edges are delivered after it commits."
 />
 
-A model declares which aggregates, views, policies, projections and streams it contains. The commands and events come with them, since each aggregate declares the commands it handles and the events it records. The bank's model contains two aggregates, two views and one policy:
+A model declares which aggregates, views, policies, projections and streams it contains. The commands and events come with them, since each aggregate declares the commands it handles and the events it records. The example bank's model contains two aggregates, two views and one policy:
 
 ```typescript title="src/Bank.model.ts"
 export class Bank extends Domain.Model("Bank", {
@@ -197,6 +209,23 @@ export class Bank extends Domain.Model("Bank", {
 export const BankHandlers = MainAccountProvisioningLive;
 ```
 
+## Check the declaration
+
+Some mistakes in a declaration only show when the model is hosted: a view that reads a source keyed by another aggregate without `keyOf`, a view with `state` but no `initial`, a policy that waits for an event no source emits, a stream with two writers. Building the model's Layer fails on the first one. `Domain.verify` finds all of them without hosting anything, so one unit test covers the whole model:
+
+```typescript
+// packages/domain/test/Bank.model.test.ts
+import * as Domain from "@alchemy.run/domain";
+import { expect, it } from "@effect/vitest";
+import { Bank } from "../src/Bank.model.ts";
+
+it("the model is well defined", () => {
+  expect(Domain.verify(Bank)).toEqual([]);
+});
+```
+
+Each problem is a `Domain.DefinitionError` with a message that names the block and the fix. Mistakes that depend on what a handler returns, like `decide` returning an event its command doesn't declare, still fail when the handler runs.
+
 ## Run it
 
 A declaration doesn't run anything. `Bank.layer(BankHandlers)` turns it into a Layer that hosts the model, and a platform underneath decides where its state lives.
@@ -261,6 +290,8 @@ Clients outside the model, a browser or another service, reach it through an [Ap
 
 A model is one bounded context, so every name in it means one thing. When two parts of the business use a word differently, give each its own model. One model never sends commands to another model's aggregates directly; it calls that model's Api.
 
+That rule keeps each model free to change. A support tool built on another model's Api depends on the commands and reads that model chose to publish, not on how its aggregates store their state today. The model can split an aggregate, rename a state or add a view without the support tool noticing.
+
 <DAG
   nodes={[
     { id: "support", label: "Support", type: "Domain.Model", layer: 0 },
@@ -273,4 +304,10 @@ A model is one bounded context, so every name in it means one thing. When two pa
   ]}
 />
 
-The pages that follow take each building block in turn, in the order a command meets them: [Command](/domain/command), [Event](/domain/event), [Aggregate](/domain/aggregate), [View](/domain/view), [Policy](/domain/policy) and [Api](/domain/api).
+## Read the rest of the manual
+
+The chapters that follow take each building block in turn, in the order a command meets them.
+
+A [Command](/domain/command) asks for a change, and an [Event](/domain/event) records one. An [Aggregate](/domain/aggregate) sits between them, deciding each command against the rules it protects. On the query side, a [View](/domain/view) answers a question from events, a [Projection](/domain/projection) feeds a store you own, and a [Stream](/domain/stream) keeps an ordered log a client can follow. A [Policy](/domain/policy) applies the business's standing rules about what to do next, and a [Saga](/domain/saga) carries out a process that takes several steps. An [External System](/domain/external-system) is how the model talks to the world outside it, and an [Api](/domain/api) is what the model publishes to its clients. Finally, a [Story](/domain/story) states each rule as an example you can run.
+
+Next, [Command](/domain/command): how a change is asked for.

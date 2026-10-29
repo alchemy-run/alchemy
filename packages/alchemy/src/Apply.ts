@@ -4,6 +4,7 @@ import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { PlatformError } from "effect/PlatformError";
@@ -11,7 +12,13 @@ import * as Predicate from "effect/Predicate";
 import type { Simplify } from "effect/Types";
 import type { ActionLike } from "./Action.ts";
 import { makeResolveContext } from "./ActionRuntimeContext.ts";
-import { OwnedBySomeoneElse, stripUnowned, Unowned } from "./AdoptPolicy.ts";
+import {
+  OwnedBySomeoneElse,
+  stripUnowned,
+  Unowned,
+  Unresolved,
+  UnverifiableReplacement,
+} from "./AdoptPolicy.ts";
 import { AlchemyContext } from "./AlchemyContext.ts";
 import {
   Artifacts,
@@ -26,7 +33,7 @@ import {
   failCredentialsRequired,
   demandPlanCredentials,
 } from "./Auth/Demand.ts";
-import { havePropsChanged, isResolved, stripUnresolved } from "./Diff.ts";
+import { havePropsChanged, isResolved, stripEffects, stripUnresolved } from "./Diff.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -74,7 +81,7 @@ import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
 import { hashInput } from "./Util/sha256.ts";
 
 export type AppliedPlan<P extends Plan> = {
-  [id in keyof P["resources"]]: P["resources"][id] extends Delete | undefined | never
+  [id in keyof P["resources"]]: P["resources"][id] extends Delete | undefined
     ? never
     : Simplify<P["resources"][id]["resource"]["attr"]>;
 };
@@ -113,13 +120,18 @@ const track = (
  * props no longer identify the physical resource it was creating (e.g. a
  * stripped namespace makes a name match a different resource), so recovery
  * must not look the resource up from them.
+ *
+ * Effect-valued props don't count: `Output.evaluate` passes them through
+ * untouched, so even fully resolved props carry them (a Function's runtime
+ * wiring). They never name a physical resource, and treating them as holes
+ * would mark every create of such a resource and orphan it on interruption.
  */
 const propsIncomplete = (value: {
   attr?: unknown;
   props?: unknown;
   propsIncomplete?: true;
 }): true | undefined =>
-  value.attr === undefined && (value.propsIncomplete || !isResolved(value.props))
+  value.attr === undefined && (value.propsIncomplete || !isResolved(stripEffects(value.props)))
     ? true
     : undefined;
 
@@ -166,50 +178,37 @@ const instrumentLifecycle =
       }),
     );
 
-/**
- * Whether `observed` is this resource's previous generation: it matches that
- * generation's attributes on every stable property it reports. A provider
- * that cannot prove who owns a name it does not tag — an explicitly named
- * Container application — reports even our own resource as `Unowned`.
- */
-const isPreviousGeneration = (
-  observed: { readonly [key: string]: any },
-  stables: readonly string[] | undefined,
-  previous: { attr?: any } | undefined,
-): boolean => {
-  const keys = (stables ?? []).filter((key) => observed[key] !== undefined);
-  const attr = previous?.attr;
-  return keys.length > 0 && attr !== undefined && keys.every((key) => attr[key] === observed[key]);
+type AdmissionNode = {
+  provider: Pick<ProviderService<any>, "observe" | "read">;
+  props: any;
+  deferredAdoption?: { adopt: boolean };
+  resource: { Type: string };
 };
 
 /**
  * A dependency cycle precreates on raw props, before `read` can check
  * ownership. Ask the provider's `observe` what exists at the identity
  * precreate would claim, and refuse a foreign resource unless adoption is
- * allowed. A provider without `observe` precreates unchecked.
+ * allowed. A provider without `observe` precreates `unchecked`; one whose
+ * identity has not resolved yet reports it `unresolved`, so the engine must
+ * check the resolved identity before reconcile claims it.
  */
 const observeBeforePrecreate = Effect.fn(function* (
-  node: {
-    provider: Pick<ProviderService<any>, "observe" | "stables">;
-    props: any;
-    deferredAdoption?: { adopt: boolean };
-    resource: { Type: string };
-  },
+  node: AdmissionNode,
+  news: any,
   fqn: string,
   logicalId: string,
   instanceId: string,
-  previous?: { attr?: any },
+  previous?: any,
 ) {
-  if (node.provider.observe === undefined || node.deferredAdoption === undefined) return;
+  if (node.provider.observe === undefined || node.deferredAdoption === undefined) {
+    return "unchecked" as const;
+  }
   const observed = yield* node.provider
-    .observe({ id: logicalId, fqn, instanceId, news: node.props })
+    .observe({ id: logicalId, fqn, instanceId, news, previous })
     .pipe(instrumentLifecycle("observe", fqn, node.resource.Type, logicalId, instanceId));
-  if (
-    observed !== undefined &&
-    Unowned.is(observed) &&
-    !node.deferredAdoption.adopt &&
-    !isPreviousGeneration(observed, node.provider.stables, previous)
-  ) {
+  if (observed === Unresolved) return "unresolved" as const;
+  if (observed !== undefined && Unowned.is(observed) && !node.deferredAdoption.adopt) {
     return yield* new OwnedBySomeoneElse({
       message:
         `Cannot pre-create resource '${fqn}' (${node.resource.Type}): ` +
@@ -220,6 +219,47 @@ const observeBeforePrecreate = Effect.fn(function* (
       logicalId,
     });
   }
+  return "admitted" as const;
+});
+
+/** A provider's `observe` reported `Unresolved` for fully resolved props. */
+class UnresolvedObservation extends Data.TaggedError("UnresolvedObservation")<{
+  message: string;
+}> {}
+
+/**
+ * Reports what exists at the resolved identity reconcile will claim: `read`
+ * when the provider implements it, `observe` otherwise. A replacement passes
+ * its `previous` generation's attributes, so the provider can recognize it.
+ */
+const observeResolved = Effect.fn(function* (
+  node: AdmissionNode,
+  news: Record<string, any>,
+  fqn: string,
+  logicalId: string,
+  instanceId: string,
+  previous?: any,
+) {
+  if (node.provider.read) {
+    return yield* node.provider
+      .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined, previous })
+      .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
+  }
+  const observed = yield* node.provider.observe!({
+    id: logicalId,
+    fqn,
+    instanceId,
+    news,
+    previous,
+  }).pipe(instrumentLifecycle("observe", fqn, node.resource.Type, logicalId, instanceId));
+  if (observed === Unresolved) {
+    return yield* Effect.die(
+      new UnresolvedObservation({
+        message: `The provider for '${fqn}' (${node.resource.Type}) reported its identity as Unresolved, but its props are resolved.`,
+      }),
+    );
+  }
+  return observed;
 });
 
 export const apply = <P extends Plan>(
@@ -440,10 +480,8 @@ const executePlan = Effect.fn(function* (
   const allNodes: Record<string, Apply | ActionApply> = { ...plan.resources, ...plan.actions };
 
   const ready = Object.fromEntries(
-    yield* Effect.all(
-      Object.keys(allNodes).map((fqn) =>
-        Effect.map(Deferred.make<void>(), (d) => [fqn, d] as const),
-      ),
+    yield* Effect.forEach(Object.keys(allNodes), (fqn) =>
+      Effect.map(Deferred.make<void>(), (d) => [fqn, d] as const),
     ),
   ) as Record<string, Deferred.Deferred<void>>;
 
@@ -452,50 +490,48 @@ const executePlan = Effect.fn(function* (
   // precreate stubs do NOT signal `readyStable`, so any consumer that
   // requires stable inputs (e.g. Tasks) waits past the precreate phase.
   const readyStable = Object.fromEntries(
-    yield* Effect.all(
-      Object.keys(allNodes).map((fqn) =>
-        Effect.map(Deferred.make<void>(), (d) => [fqn, d] as const),
-      ),
+    yield* Effect.forEach(Object.keys(allNodes), (fqn) =>
+      Effect.map(Deferred.make<void>(), (d) => [fqn, d] as const),
     ),
   ) as Record<string, Deferred.Deferred<void>>;
 
   const waitForDeps = (downstreamFqn: string, fqns: string[]) =>
-    Effect.all(
-      fqns
-        .filter((fqn) => fqn in ready)
-        .map((fqn) =>
-          // Non-cycle upstreams must be observed at their TERMINAL output
-          // (`readyStable`), not their early precreate signal (`ready`). This
-          // is what makes a failed upstream actually interrupt its downstream:
-          // a resource with `precreate` resolves `ready` before its real
-          // `reconcile` runs, so a downstream waiting on `ready` would proceed
-          // (and even finish) even though the upstream's reconcile later
-          // failed. Waiting on `readyStable` means the downstream's
-          // `waitForDeps` short-circuits with the upstream's failure cause.
-          //
-          // Cycle members are the exception: peers in an SCC depend on each
-          // other, so they must rendezvous on the early `ready`/precreate
-          // signal to break the deadlock. Phase 3 (`converge`) re-runs them
-          // against final outputs once the cycle settles. A downstream
-          // outside the cycle must still wait for reconcile: e.g. a queue
-          // consumer cannot attach to a Worker's fetch-only precreate stub.
-          plan.cycleMembers.has(downstreamFqn) && plan.cycleMembers.has(fqn)
-            ? Deferred.await(ready[fqn])
-            : Deferred.await(readyStable[fqn]),
-        ),
+    Effect.forEach(
+      fqns.filter((fqn) => fqn in ready),
+      (fqn) =>
+        // Non-cycle upstreams must be observed at their TERMINAL output
+        // (`readyStable`), not their early precreate signal (`ready`). This
+        // is what makes a failed upstream actually interrupt its downstream:
+        // a resource with `precreate` resolves `ready` before its real
+        // `reconcile` runs, so a downstream waiting on `ready` would proceed
+        // (and even finish) even though the upstream's reconcile later
+        // failed. Waiting on `readyStable` means the downstream's
+        // `waitForDeps` short-circuits with the upstream's failure cause.
+        //
+        // Cycle members are the exception: peers in an SCC depend on each
+        // other, so they must rendezvous on the early `ready`/precreate
+        // signal to break the deadlock. Phase 3 (`converge`) re-runs them
+        // against final outputs once the cycle settles. A downstream
+        // outside the cycle must still wait for reconcile: e.g. a queue
+        // consumer cannot attach to a Worker's fetch-only precreate stub.
+        plan.cycleMembers.has(downstreamFqn) && plan.cycleMembers.has(fqn)
+          ? Deferred.await(ready[fqn])
+          : Deferred.await(readyStable[fqn]),
       { concurrency: "unbounded" },
     );
 
   const waitForStableDeps = (fqns: string[]) =>
-    Effect.all(
-      fqns.filter((fqn) => fqn in readyStable).map((fqn) => Deferred.await(readyStable[fqn])),
+    Effect.forEach(
+      fqns.filter((fqn) => fqn in readyStable),
+      (fqn) => Deferred.await(readyStable[fqn]),
       { concurrency: "unbounded" },
     );
 
   const failures: LifecycleFailure[] = [];
 
-  yield* Effect.all(
-    Object.entries(allNodes).map(([fqn, node]) =>
+  yield* Effect.forEach(
+    Object.entries(allNodes),
+    ([fqn, node]) =>
       (node as ActionApply).kind === "action"
         ? executeActionNode(
             fqn,
@@ -526,9 +562,8 @@ const executePlan = Effect.fn(function* (
             stage,
             (fqns) => waitForDeps(fqn, fqns),
             failures,
-            plan.cycleMembers.has(fqn),
+            plan.cycleMembers,
           ),
-    ),
     { concurrency: "unbounded" },
   );
 
@@ -570,7 +605,9 @@ const failureMessage = (cause: Cause.Cause<unknown>): string | undefined => {
     const message =
       Predicate.hasProperty(error, "message") && typeof error.message === "string"
         ? error.message
-        : String(error);
+        : typeof error === "string"
+          ? error
+          : Formatter.format(error);
     const line = message.split("\n", 1)[0]!;
     return tag !== undefined && !line.includes(tag) ? `${tag}: ${line}` : line;
   }
@@ -607,9 +644,10 @@ const executeNode = (
   stage: string,
   waitForDeps: (fqns: string[]) => Effect.Effect<void[], never, never>,
   failures: LifecycleFailure[],
-  inCycle: boolean,
+  cycleMembers: ReadonlySet<string>,
 ): Effect.Effect<void, never, never> =>
   Effect.gen(function* () {
+    const inCycle = cycleMembers.has(fqn);
     const logicalId = node.resource.LogicalId;
     const namespace = node.resource.Namespace;
 
@@ -785,6 +823,23 @@ const executeNode = (
       return [...new Set([...propDeps, ...bindingDeps])];
     };
 
+    // A cycle precreates before its peers reconcile. An upstream outside the
+    // cycle cannot depend on it, so wait for those upstreams and resolve the
+    // props they determine: only values derived from cycle peers stay
+    // unresolved when precreate and `observe` run.
+    const resolvePrecreateProps = Effect.gen(function* () {
+      const outside = allUpstreamFqns().filter((upstream) => !cycleMembers.has(upstream));
+      yield* waitForDeps(outside);
+      return yield* Output.evaluateAvailable(
+        node.props,
+        Object.fromEntries(
+          outside
+            .filter((upstream) => Object.hasOwn(outputs, upstream))
+            .map((upstream) => [upstream, outputs[upstream]]),
+        ),
+      );
+    });
+
     // ── instance ID ──
 
     const resolveInstanceId = Effect.gen(function* () {
@@ -866,6 +921,8 @@ const executeNode = (
       }
 
       let attr: any = node.state?.attr;
+      // Whether the identity reconcile claims has passed the ownership check.
+      let admitted = node.deferredAdoption === undefined;
 
       if (attr !== undefined) {
         // Precreate/read may already have produced a usable output snapshot. Publish
@@ -879,7 +936,10 @@ const executeNode = (
       // Durable Object classes are empty) can serve traffic while the real
       // version propagates.
       if (inCycle && node.provider.precreate && attr === undefined) {
-        yield* observeBeforePrecreate(node, fqn, logicalId, instanceId);
+        const props = yield* resolvePrecreateProps;
+        // Without `observe`, precreate and reconcile claim the identity unchecked.
+        admitted =
+          (yield* observeBeforePrecreate(node, props, fqn, logicalId, instanceId)) !== "unresolved";
         // Some resources need a placeholder physical resource before their real
         // create can finish. Persist that stub so downstream evaluation can proceed.
         yield* report("pre-creating");
@@ -887,7 +947,7 @@ const executeNode = (
           .precreate({
             id: logicalId,
             fqn,
-            news: node.props,
+            news: props,
             session: scopedSession,
             instanceId,
             bindings: excludeDeletedBindings(node.bindings),
@@ -900,7 +960,9 @@ const executeNode = (
           instanceId,
           resourceType: node.resource.Type,
           props: node.props,
-          attr,
+          // A stub for an unresolved identity claims nothing. Leave the
+          // checkpoint without it, so a retry checks the identity again.
+          attr: admitted ? attr : undefined,
           providerVersion: node.provider.version ?? 0,
           bindings: excludeDeletedBindings(node.bindings),
           downstream: node.downstream,
@@ -926,8 +988,8 @@ const executeNode = (
 
       const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
 
-      if (attr === undefined && node.deferredAdoption && node.provider.read) {
-        const checkpoint = () =>
+      if (!admitted) {
+        const checkpoint = (attr: any) =>
           commit<CreatingResourceState>({
             status: "creating",
             fqn,
@@ -943,13 +1005,12 @@ const executeNode = (
             providerMode: node.mode,
             adoptionBlocked: node.adoptionBlocked,
           });
-        // Refusal or interruption must retain identity, never foreign attributes.
-        yield* checkpoint();
-        const observed = yield* node.provider
-          .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined })
-          .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
+        // Refusal or interruption must retain identity, never foreign
+        // attributes, nor a stub for an identity not yet checked.
+        yield* checkpoint(undefined);
+        const observed = yield* observeResolved(node, news, fqn, logicalId, instanceId);
         if (observed !== undefined) {
-          if (Unowned.is(observed) && !node.deferredAdoption.adopt) {
+          if (Unowned.is(observed) && !node.deferredAdoption?.adopt) {
             return yield* new OwnedBySomeoneElse({
               message:
                 `Cannot adopt resource '${fqn}' (${node.resource.Type}): ` +
@@ -960,9 +1021,10 @@ const executeNode = (
               logicalId,
             });
           }
-          attr = stripUnowned(observed);
+          // Reconcile keeps a precreated stub as its output.
+          attr ??= stripUnowned(observed);
           // A creating checkpoint retains olds: undefined on retry.
-          yield* checkpoint();
+          yield* checkpoint(attr);
         }
       }
 
@@ -1267,19 +1329,16 @@ const executeNode = (
       let admitted = attr !== undefined || node.deferredAdoption === undefined;
       const admit = Effect.fn(function* (props: Record<string, any>) {
         admitted = true;
-        const observed = yield* node.provider.read!({
-          id: logicalId,
+        const observed = yield* observeResolved(
+          node,
+          props,
           fqn,
+          logicalId,
           instanceId,
-          olds: props,
-          output: undefined,
-        }).pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
+          replState.old?.attr,
+        );
         if (observed === undefined) return;
-        if (
-          Unowned.is(observed) &&
-          !node.deferredAdoption?.adopt &&
-          !isPreviousGeneration(observed, node.provider.stables, replState.old)
-        ) {
+        if (Unowned.is(observed) && !node.deferredAdoption?.adopt) {
           return yield* new OwnedBySomeoneElse({
             message:
               `Cannot replace resource '${fqn}' (${node.resource.Type}): ` +
@@ -1292,21 +1351,49 @@ const executeNode = (
         }
         // A delete-first target may be the previous generation itself, which
         // is about to be deleted — never hand its attributes to reconcile.
-        if (!node.deleteFirst) attr = stripUnowned(observed);
+        // Reconcile keeps a precreated stub as its output.
+        if (!node.deleteFirst) attr ??= stripUnowned(observed);
       });
 
-      if (!admitted && isResolved(node.props)) {
-        yield* admit(node.props);
+      // A cycle precreates on the props its upstreams outside the cycle
+      // determine; anything else waits for every upstream.
+      const precreateProps = inCycle ? yield* resolvePrecreateProps : node.props;
+
+      if (!admitted && isResolved(precreateProps)) {
+        yield* admit(precreateProps);
       }
 
       // A cycle precreates before its props resolve, so `observe` admits the
-      // identity precreate will claim — before delete-first, too.
+      // identity precreate will claim — before delete-first, too. Without
+      // `observe`, precreate and reconcile claim it unchecked. An unresolved
+      // identity is admitted once it resolves, before reconcile.
       if (!admitted && inCycle) {
-        yield* observeBeforePrecreate(node, fqn, logicalId, instanceId, replState.old);
+        const observation = yield* observeBeforePrecreate(
+          node,
+          precreateProps,
+          fqn,
+          logicalId,
+          instanceId,
+          replState.old?.attr,
+        );
+        admitted = observation !== "unresolved";
+        if (!admitted && node.deleteFirst && !node.deferredAdoption?.adopt) {
+          return yield* new UnverifiableReplacement({
+            message:
+              `Cannot replace resource '${fqn}' (${node.resource.Type}): ` +
+              "it must be deleted before its replacement is pre-created, but " +
+              "the replacement's identity depends on outputs that are not " +
+              "resolved yet, so its ownership cannot be checked first. Re-run " +
+              "with `--adopt` (or wrap the effect in `adopt(true)`) to replace it anyway.",
+            resourceType: node.resource.Type,
+            logicalId,
+          });
+        }
       }
 
       // A cycle must delete before precreate claims the identity. Plan has
-      // already refused one whose identity could not be admitted first.
+      // already refused one whose identity could not be admitted first
+      // without `observe`; the check above refuses an unresolved one.
       // Otherwise the previous generation survives until reconcile is
       // about to run, so a failed upstream never leaves the resource missing.
       let deletedFirst = false;
@@ -1327,7 +1414,7 @@ const executeNode = (
           .precreate({
             id: logicalId,
             fqn,
-            news: node.props,
+            news: precreateProps,
             session: scopedSession,
             instanceId,
             bindings: excludeDeletedBindings(node.bindings),
@@ -1340,7 +1427,9 @@ const executeNode = (
           instanceId,
           resourceType: node.resource.Type,
           props: node.props,
-          attr,
+          // A stub for an unresolved identity claims nothing. Leave the
+          // checkpoint without it, so a retry checks the identity again.
+          attr: admitted ? attr : undefined,
           providerVersion: node.provider.version ?? 0,
           bindings: excludeDeletedBindings(node.bindings),
           downstream: node.downstream,
@@ -1366,7 +1455,7 @@ const executeNode = (
 
       const bindingOutputs = excludeDeletedBindings(yield* Output.evaluate(node.bindings, outputs));
 
-      if (!admitted && attr === undefined) {
+      if (!admitted) {
         yield* admit(news);
       }
       if (node.deleteFirst && !deletedFirst) {
@@ -1444,7 +1533,7 @@ const executeNode = (
       return;
     }
 
-    return yield* Effect.die(`Unknown action: ${node.action}`);
+    return yield* Effect.die(`Unknown action: ${(node as { action: string }).action}`);
   }).pipe(
     Effect.catchCause((cause) =>
       // Record the failure, propagate it to any downstream resources waiting on
@@ -1726,6 +1815,32 @@ const converge = Effect.fn(function* (
           }),
       } satisfies ScopedPlanStatusSession;
 
+      // A cycle peer resolves against its peers' first outputs, so an
+      // identity checked then may resolve differently now. Check the identity
+      // these props resolve to before reconcile claims it.
+      const deferredAdoption = "deferredAdoption" in node ? node.deferredAdoption : undefined;
+      if (propsChanged && deferredAdoption !== undefined) {
+        const observed = yield* observeResolved(
+          node,
+          newProps,
+          fqn,
+          logicalId,
+          instanceId,
+          tracker[fqn].output,
+        );
+        if (observed !== undefined && Unowned.is(observed) && !deferredAdoption.adopt) {
+          return yield* new OwnedBySomeoneElse({
+            message:
+              `Cannot converge resource '${fqn}' (${node.resource.Type}): ` +
+              "its final identity exists in the cloud but is not owned by this " +
+              "stack/stage/logical-id. Re-run with `--adopt` (or " +
+              "wrap the effect in `adopt(true)`) to take it over.",
+            resourceType: node.resource.Type,
+            logicalId,
+          });
+        }
+      }
+
       const attr = yield* node.provider
         .reconcile({
           id: logicalId,
@@ -1913,8 +2028,9 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
   // Task deletions are pure state drops — no body is invoked. Run them in
   // parallel before resource GC; tasks never have provider-side dependencies
   // to wait on.
-  yield* Effect.all(
-    Object.entries(plan.actionDeletions ?? {}).map(([fqn, node]) =>
+  yield* Effect.forEach(
+    Object.entries(plan.actionDeletions ?? {}),
+    ([fqn, node]) =>
       node === undefined
         ? Effect.void
         : Effect.gen(function* () {
@@ -1934,7 +2050,6 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
               status: "deleted",
             });
           }),
-    ),
     { concurrency: "unbounded" },
   );
 
@@ -2093,8 +2208,9 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
             // this resource legitimately undeletable (dependency violation),
             // so it is skipped with a "blocked by" note instead of surfacing
             // a spurious second error.
-            const dependents = yield* Effect.all(
-              downstream.map((dep) =>
+            const dependents = yield* Effect.forEach(
+              downstream,
+              (dep) =>
                 dep !== fqn && !ancestors.has(dep)
                   ? dep in deletionGraph
                     ? deleteResource(
@@ -2108,7 +2224,6 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
                         outcome: unresolved.has(dep) ? ("failed" as const) : ("deleted" as const),
                       }))
                   : Effect.succeed({ dep, outcome: "deleted" as const }),
-              ),
               { concurrency: "unbounded" },
             );
 
@@ -2358,10 +2473,9 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
     // retained) inside each node's delete effect — the effects resolve to
     // outcomes and never fail, so one bad resource never interrupts sibling
     // deletions mid-flight.
-    yield* Effect.all(
-      Object.values(deletionGraph)
-        .filter((node) => node !== undefined)
-        .map((node) => deleteResource(node)),
+    yield* Effect.forEach(
+      Object.values(deletionGraph).filter((node) => node !== undefined),
+      (node) => deleteResource(node),
       { concurrency: "unbounded" },
     );
   });

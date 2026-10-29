@@ -4,10 +4,18 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class NeptuneDBParameterGroupUnexpectedResponse extends Data.TaggedError(
+  "NeptuneDBParameterGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface DBParameterGroupProps {
   /**
@@ -128,7 +136,7 @@ export const DBParameterGroupProvider = () =>
           .describeDBParameterGroups({
             DBParameterGroupName: groupName,
           })
-          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBParameterGroupNotFoundFault", () => Effect.undefined));
         return response?.DBParameterGroups?.[0];
       });
 
@@ -225,7 +233,9 @@ export const DBParameterGroupProvider = () =>
               .pipe(Effect.catchTag("DBParameterGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.DBParameterGroupName) {
-              return yield* Effect.fail(new Error(`Failed to create DB parameter group '${name}'`));
+              return yield* new NeptuneDBParameterGroupUnexpectedResponse({
+                message: `Failed to create DB parameter group '${name}'`,
+              });
             }
           }
 

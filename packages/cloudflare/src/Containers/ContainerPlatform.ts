@@ -158,8 +158,9 @@ export const ContainerPlatform: Platform<
           })) as unknown as ProcessContext["run"],
         serve,
         exports: Effect.sync(() => ({
-          default: Effect.all(
-            runners.map((eff) =>
+          default: Effect.forEach(
+            runners,
+            (eff) =>
               Effect.forever(
                 eff.pipe(
                   // Log and ignore errors (daemon mode, it should just re-run)
@@ -169,7 +170,6 @@ export const ContainerPlatform: Platform<
                   // Effect.ignoreCause
                 ),
               ),
-            ),
             {
               concurrency: "unbounded",
             },

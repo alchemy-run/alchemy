@@ -155,7 +155,7 @@ export const DatastoreProvider = () =>
       const getById = Effect.fn(function* (datastoreId: string) {
         const response = yield* medicalimaging
           .getDatastore({ datastoreId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         const properties = response?.datastoreProperties;
         if (properties === undefined) return undefined;
         if (properties.datastoreStatus === "DELETED" || properties.datastoreStatus === "DELETING") {
@@ -296,7 +296,7 @@ export const DatastoreProvider = () =>
                 losslessStorageFormat: props.losslessStorageFormat,
                 tags: desiredTags,
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             observed =
               created !== undefined ? yield* getById(created.datastoreId) : yield* findByName(name);
           }
@@ -338,7 +338,7 @@ export const DatastoreProvider = () =>
           // once the retry budget is exhausted.
           const observed = yield* medicalimaging
             .getDatastore({ datastoreId: output.datastoreId })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           const status = observed?.datastoreProperties.datastoreStatus;
           if (status === undefined || status === "DELETING" || status === "DELETED") {
             return;
@@ -362,7 +362,7 @@ export const DatastoreProvider = () =>
                 (summary) =>
                   getById(summary.datastoreId).pipe(
                     Effect.flatMap((properties) =>
-                      properties === undefined ? Effect.succeed(undefined) : toAttrs(properties),
+                      properties === undefined ? Effect.undefined : toAttrs(properties),
                     ),
                   ),
                 { concurrency: 4 },

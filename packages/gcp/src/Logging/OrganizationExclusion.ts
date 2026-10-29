@@ -132,7 +132,7 @@ export const OrganizationExclusion = Resource<OrganizationExclusion>(
 export class OrganizationExclusionNotResolved extends Data.TaggedError(
   "GCP.Logging.OrganizationExclusionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, exclusionId: string) =>
@@ -166,7 +166,7 @@ const toAttrs = (exclusion: logging.LogExclusion, organization: string, project:
 const getByName = (name: string) =>
   logging
     .getOrganizationsExclusions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const OrganizationExclusionProvider = () =>
   Provider.succeed(OrganizationExclusion, {
@@ -247,7 +247,7 @@ export const OrganizationExclusionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OrganizationExclusionNotResolved({ name });
+        return yield* new OrganizationExclusionNotResolved({ resourceName: name });
       }
 
       const desiredDisabled = news.disabled === true;

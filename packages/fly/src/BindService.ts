@@ -114,8 +114,7 @@ const bindTarget = Effect.fn(function* <Shape, Req>(
   }
   // Captured at bind time: the host's runtime context reads the values
   // transported onto the Machine.
-  const read = (key: string) =>
-    ctx === undefined ? Effect.succeed(undefined) : ctx.get<unknown>(key);
+  const read = (key: string) => (ctx === undefined ? Effect.undefined : ctx.get<unknown>(key));
   const required = (key: string) =>
     read(key).pipe(
       Effect.flatMap((value) =>

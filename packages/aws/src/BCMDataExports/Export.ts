@@ -294,7 +294,7 @@ export const ExportProvider = () =>
         for (const arn of arns) {
           const found = yield* bcm
             .getExport({ ExportArn: arn })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found?.Export !== undefined) {
             return { exportArn: arn, export: found.Export };
           }

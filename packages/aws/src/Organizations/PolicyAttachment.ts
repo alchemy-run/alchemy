@@ -2,9 +2,17 @@ import * as organizations from "@distilled.cloud/aws/organizations";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
 import { collectPages, retryOrganizations } from "./common.ts";
+
+export class PolicyAttachmentUnexpectedResponse extends Data.TaggedError(
+  "PolicyAttachmentUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface PolicyAttachmentProps {
   /**
@@ -181,11 +189,9 @@ export const PolicyAttachmentProvider = () =>
             );
             state = yield* readAttachment(news);
             if (!state) {
-              return yield* Effect.fail(
-                new Error(
-                  `policy attachment '${news.policyId}' -> '${news.targetId}' not found after create`,
-                ),
-              );
+              return yield* new PolicyAttachmentUnexpectedResponse({
+                message: `policy attachment '${news.policyId}' -> '${news.targetId}' not found after create`,
+              });
             }
           }
 

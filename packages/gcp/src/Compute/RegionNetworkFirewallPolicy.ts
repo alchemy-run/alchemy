@@ -331,7 +331,7 @@ const toAttrs = (
 const getByName = (project: string, region: string, firewallPolicy: string) =>
   compute
     .getRegionNetworkFirewallPolicies({ project, region, firewallPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, firewallPolicyName: string) =>
   getByName(project, region, firewallPolicyName).pipe(

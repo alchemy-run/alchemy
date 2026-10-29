@@ -151,7 +151,7 @@ export const VirtualClusterProvider = () =>
           Effect.catchTag(
             ["ResourceNotFoundException", "ValidationException"],
             // a malformed/unknown id is "not present", same as not-found
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         );
       });
@@ -295,8 +295,9 @@ export const VirtualClusterProvider = () =>
           // (repeat deletes of a terminated id fail with ValidationException).
           const vc = yield* emrc.describeVirtualCluster({ id: output.virtualClusterId }).pipe(
             Effect.map((response) => response.virtualCluster),
-            Effect.catchTag(["ResourceNotFoundException", "ValidationException"], () =>
-              Effect.succeed(undefined),
+            Effect.catchTag(
+              ["ResourceNotFoundException", "ValidationException"],
+              () => Effect.undefined,
             ),
           );
           if (vc === undefined || !live(vc.state)) {

@@ -28,10 +28,17 @@ export interface StoreRef {
   readonly name?: string;
   /** e.g. `Cloudflare State Store 'alchemy-state-store'`. */
   readonly label: string;
+  /**
+   * Only the stack's config describes this store, e.g. a custom Worker or
+   * bucket name or a pinned account, so `--backend` can't address it.
+   */
+  readonly configured?: boolean;
 }
 
 const required = (store: StoreRef, action: "bootstrap" | "upgrade", problem: string) => {
-  const command = `alchemy state bootstrap --backend ${store.backend}${store.name ? ` --name ${store.name}` : ""}`;
+  const command = store.configured
+    ? "alchemy state bootstrap"
+    : `alchemy state bootstrap --backend ${store.backend}${store.name ? ` --name ${store.name}` : ""}`;
   return new StateStoreError({
     message: `${store.label} ${problem}. Run '${command} --profile <your-ci-profile>' first, or pass --yes.`,
     requires: { action, command },

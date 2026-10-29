@@ -2,14 +2,15 @@ import * as AWS from "@alchemy.run/aws";
 import { ScalableTarget, ScalingPolicy } from "@alchemy.run/aws/ApplicationAutoScaling";
 import { Table } from "@alchemy.run/aws/DynamoDB";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as aas from "@distilled.cloud/aws/application-auto-scaling";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { Stack } from "alchemy/Stack";
 import { State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { driftActions, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -92,6 +93,44 @@ test.provider(
       expect(observed?.PolicyType).toBe("TargetTrackingScaling");
       expect(observed?.TargetTrackingScalingPolicyConfiguration?.TargetValue).toBe(70);
       expect((observed?.Alarms ?? []).length).toBeGreaterThan(0);
+
+      // #2688: `read` must observe the tracking configuration and the
+      // target's tags, or out-of-band changes read as `unchanged`.
+      const allUnchanged = (actions: Record<string, string | undefined>) =>
+        Object.values(actions).every((action) => action === "unchanged");
+      expect(allUnchanged(yield* driftActions(stack))).toBe(true);
+      yield* aas.putScalingPolicy({
+        PolicyName: created.policyName,
+        ServiceNamespace: "dynamodb",
+        ResourceId: created.resourceId,
+        ScalableDimension: "dynamodb:table:ReadCapacityUnits",
+        PolicyType: "TargetTrackingScaling",
+        TargetTrackingScalingPolicyConfiguration: {
+          ...observed!.TargetTrackingScalingPolicyConfiguration!,
+          TargetValue: 40,
+        },
+      });
+      const target = (yield* aas.describeScalableTargets({
+        ServiceNamespace: "dynamodb",
+        ResourceIds: [created.resourceId],
+      })).ScalableTargets?.[0];
+      yield* aas.tagResource({
+        ResourceARN: target!.ScalableTargetARN!,
+        Tags: { team: "out-of-band" },
+      });
+      expect(
+        (yield* waitForDrift(stack, "AasTrackingPolicy", "drifted"))?.attr?.targetTracking
+          ?.TargetValue,
+      ).toBe(40);
+      expect((yield* waitForDrift(stack, "AasPolicyTarget", "drifted"))?.attr?.tags?.team).toBe(
+        "out-of-band",
+      );
+      yield* repairDrift(stack);
+      expect(allUnchanged(yield* driftActions(stack))).toBe(true);
+      expect(
+        (yield* describePolicy(created.policyName))?.TargetTrackingScalingPolicyConfiguration
+          ?.TargetValue,
+      ).toBe(70);
 
       // Update in place — same name and ARN, new target value.
       const updated = yield* deploy(60);
