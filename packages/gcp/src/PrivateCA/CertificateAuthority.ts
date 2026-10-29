@@ -361,20 +361,20 @@ export const CertificateAuthority = Resource<CertificateAuthority>(
 export class CertificateAuthorityNotResolved extends Data.TaggedError(
   "GCP.PrivateCA.CertificateAuthorityNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateAuthorityNotReady extends Data.TaggedError(
   "GCP.PrivateCA.CertificateAuthorityNotReady",
 )<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class CertificateAuthorityStillExists extends Data.TaggedError(
   "GCP.PrivateCA.CertificateAuthorityStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -582,7 +582,7 @@ const configKey = (config: CertificateConfig | undefined) => jsonKey(config);
 const getByName = (name: string) =>
   privateca
     .getProjectsLocationsCaPoolsCertificateAuthorities({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait for a Certificate Authority Service operation; CA creation and
@@ -606,7 +606,9 @@ const waitForOperation = (operation: privateca.Operation, options?: { notFoundOk
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((ca) =>
-      ca ? Effect.succeed(ca) : Effect.fail(new CertificateAuthorityNotResolved({ name })),
+      ca
+        ? Effect.succeed(ca)
+        : Effect.fail(new CertificateAuthorityNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CertificateAuthorityNotResolved",
@@ -619,13 +621,13 @@ const waitUntilSteady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (ca): ca is privateca.CertificateAuthority => ca !== undefined,
-      () => new CertificateAuthorityNotResolved({ name }),
+      () => new CertificateAuthorityNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (ca) => STEADY_STATES.has((ca.state ?? "").toUpperCase()),
       (ca) =>
         new CertificateAuthorityNotReady({
-          name,
+          resourceName: name,
           state: ca.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -644,7 +646,9 @@ const isGone = (ca: privateca.CertificateAuthority | undefined) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((ca) =>
-      isGone(ca) ? Effect.void : Effect.fail(new CertificateAuthorityStillExists({ name })),
+      isGone(ca)
+        ? Effect.void
+        : Effect.fail(new CertificateAuthorityStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CertificateAuthorityStillExists",
@@ -693,9 +697,9 @@ const disableIfNeeded = (current: privateca.CertificateAuthority) => {
     })
     .pipe(
       Effect.catchTags({
-        NotFound: () => Effect.succeed(undefined),
-        BadRequest: () => Effect.succeed(undefined),
-        Conflict: () => Effect.succeed(undefined),
+        NotFound: () => Effect.undefined,
+        BadRequest: () => Effect.undefined,
+        Conflict: () => Effect.undefined,
       }),
       Effect.flatMap((operation) => runOperation(operation)),
       Effect.flatMap(() => waitUntilSteady(name)),
@@ -910,13 +914,13 @@ export const CertificateAuthorityProvider = () =>
             certificateAuthorityId,
             body: toCreateBody(news, certificateAuthorityId, desiredLabels),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         yield* runOperation(created);
         current = yield* waitUntilExists(name);
       }
 
       if (current === undefined) {
-        return yield* new CertificateAuthorityNotResolved({ name });
+        return yield* new CertificateAuthorityNotResolved({ resourceName: name });
       }
 
       current = yield* undeleteIfNeeded(current);
@@ -956,7 +960,7 @@ export const CertificateAuthorityProvider = () =>
               subordinateConfig: news.subordinateConfig,
             },
           })
-          .pipe(Effect.catchTag("BadRequest", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("BadRequest", () => Effect.undefined));
         yield* runOperation(patched);
         current = yield* waitUntilSteady(name);
       }
@@ -982,8 +986,8 @@ export const CertificateAuthorityProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              NotFound: () => Effect.succeed(undefined),
-              BadRequest: () => Effect.succeed(undefined),
+              NotFound: () => Effect.undefined,
+              BadRequest: () => Effect.undefined,
             }),
             Effect.retry({
               while: (error) => error._tag === "Conflict",

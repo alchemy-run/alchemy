@@ -174,7 +174,7 @@ export const AnnotationStoreProvider = () =>
           const name = output?.name ?? (yield* createName(id, olds ?? {}));
           const found = yield* omics
             .getAnnotationStore({ name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found === undefined) return undefined;
           const attrs = {
             annotationStoreId: found.id,
@@ -207,7 +207,7 @@ export const AnnotationStoreProvider = () =>
           // OBSERVE — annotation stores are addressable by name.
           let store = yield* omics
             .getAnnotationStore({ name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // ENSURE — create if missing, tolerating a create race, then wait
           // for the async provisioning to reach a terminal state.

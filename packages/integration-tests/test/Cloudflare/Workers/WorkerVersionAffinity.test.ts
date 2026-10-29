@@ -3,9 +3,9 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { WorkerVersionConfigError } from "@alchemy.run/cloudflare/Workers/WorkerProvider";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as rulesets from "@distilled.cloud/cloudflare/rulesets";
 import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";

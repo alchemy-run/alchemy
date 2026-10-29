@@ -127,7 +127,7 @@ export const PortfolioProvider = () =>
       const observe = Effect.fn(function* (portfolioId: string) {
         return yield* servicecatalog
           .describePortfolio({ Id: portfolioId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return Portfolio.Provider.of({

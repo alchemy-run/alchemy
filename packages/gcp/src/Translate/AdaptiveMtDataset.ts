@@ -136,10 +136,10 @@ const toAttrs = (dataset: translate.AdaptiveMtDataset, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : translate
         .getProjectsLocationsAdaptiveMtDatasets({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const AdaptiveMtDatasetProvider = () =>
   Provider.succeed(AdaptiveMtDataset, {
@@ -208,7 +208,7 @@ export const AdaptiveMtDatasetProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name: hinted || name });
+        return yield* new ResourceNotResolved({ resourceName: hinted || name });
       }
 
       return toAttrs(current, env.project);

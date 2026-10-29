@@ -188,8 +188,8 @@ export const SubscriptionProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              NotFoundException: () => Effect.succeed(undefined),
-              InvalidParameterException: () => Effect.succeed(undefined),
+              NotFoundException: () => Effect.undefined,
+              InvalidParameterException: () => Effect.undefined,
             }),
           );
         if (observed) {
@@ -236,8 +236,8 @@ export const SubscriptionProvider = () =>
         .getSubscriptionAttributes({ SubscriptionArn: subscriptionArn })
         .pipe(
           Effect.catchTags({
-            NotFoundException: () => Effect.succeed(undefined),
-            InvalidParameterException: () => Effect.succeed(undefined),
+            NotFoundException: () => Effect.undefined,
+            InvalidParameterException: () => Effect.undefined,
           }),
         );
       const observedAttributes = toAttributeMap(attrsResponse?.Attributes);
@@ -287,7 +287,7 @@ export const SubscriptionProvider = () =>
           }).pipe(
             // The topic is already gone — SNS drops its subscriptions with
             // it, so there is nothing left to unsubscribe.
-            Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFoundException", () => Effect.undefined),
           )
         : output.subscriptionArn;
 
@@ -373,7 +373,7 @@ const readSubscription = Effect.fn(function* ({
       endpoint,
     }).pipe(
       Effect.map((arn) => ({ arn })),
-      Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFoundException", () => Effect.undefined),
     );
     if (found === undefined) {
       return undefined;
@@ -403,8 +403,8 @@ const readSubscription = Effect.fn(function* ({
     })
     .pipe(
       Effect.catchTags({
-        NotFoundException: () => Effect.succeed(undefined),
-        InvalidParameterException: () => Effect.succeed(undefined),
+        NotFoundException: () => Effect.undefined,
+        InvalidParameterException: () => Effect.undefined,
       }),
     );
 

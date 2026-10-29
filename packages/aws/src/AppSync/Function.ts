@@ -148,7 +148,7 @@ export const FunctionProvider = () =>
       const getFunctionSafe = (apiId: string, functionId: string) =>
         appsync.getFunction({ apiId, functionId }).pipe(
           Effect.map((response) => response.functionConfiguration),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       /** Find a function by name (fallback when no functionId is cached). */

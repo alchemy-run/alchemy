@@ -5,9 +5,17 @@ import type { Input } from "alchemy/Input";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class AccessEntryUnexpectedResponse extends Data.TaggedError(
+  "AccessEntryUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface AccessPolicyAssociation {
   /**
@@ -139,7 +147,7 @@ export const AccessEntryProvider = () =>
           Effect.gen(function* () {
             const cluster = yield* eks.describeCluster({ name: clusterName }).pipe(
               Effect.map((response) => response.cluster),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
             // CONFIG_MAP clusters have no access entries, and EKS rejects
             // ListAccessEntries on them.
@@ -211,9 +219,9 @@ export const AccessEntryProvider = () =>
         });
 
         if (!state) {
-          return yield* Effect.fail(
-            new Error(`AccessEntry '${principalArn}' could not be read after creation`),
-          );
+          return yield* new AccessEntryUnexpectedResponse({
+            message: `AccessEntry '${principalArn}' could not be read after creation`,
+          });
         }
       }
 
@@ -301,7 +309,9 @@ export const AccessEntryProvider = () =>
           finalState
             ? Effect.succeed(finalState)
             : Effect.fail(
-                new Error(`AccessEntry '${principalArn}' could not be read after reconcile`),
+                new AccessEntryUnexpectedResponse({
+                  message: `AccessEntry '${principalArn}' could not be read after reconcile`,
+                }),
               ),
         ),
       );
@@ -390,7 +400,7 @@ const readAccessEntry = Effect.fn(function* ({
       clusterName,
       principalArn,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
   const accessEntry = response?.accessEntry;
   if (!accessEntry?.accessEntryArn || !accessEntry.clusterName || !accessEntry.principalArn) {

@@ -3,9 +3,9 @@ import { Dataset, Job, Recipe } from "@alchemy.run/aws/DataBrew";
 import { Role } from "@alchemy.run/aws/IAM";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as databrew from "@distilled.cloud/aws/databrew";
 import * as s3 from "@distilled.cloud/aws/s3";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

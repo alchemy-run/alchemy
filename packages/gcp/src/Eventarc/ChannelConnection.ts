@@ -140,7 +140,7 @@ const toAttrs = (connection: eventarc.ChannelConnection, project: string, region
 const getByName = (name: string) =>
   eventarc
     .getProjectsLocationsChannelConnections({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ChannelConnectionProvider = () =>
   Provider.succeed(ChannelConnection, {
@@ -248,7 +248,7 @@ export const ChannelConnectionProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -268,7 +268,7 @@ export const ChannelConnectionProvider = () =>
             .deleteProjectsLocationsChannelConnections({
               name: output.name,
             })
-            .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
           if (operation !== undefined) {
             yield* waitForOperation(operation, { notFoundOk: true });
           }

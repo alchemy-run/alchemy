@@ -128,7 +128,7 @@ export const SchemaProvider = () =>
             RegistryName: registryName,
             SchemaName: schemaName,
           })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
       return Schema.Provider.of({
         stables: ["registryName", "schemaName", "schemaArn"],

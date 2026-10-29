@@ -7,16 +7,18 @@ import {
 import type { Worker } from "@alchemy.run/cloudflare/Workers/Worker";
 import { resolveObservability } from "@alchemy.run/cloudflare/Workers/WorkerAsyncBindings";
 import { describe, expect, test as unit } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import type { ResourceBinding } from "alchemy/Resource";
-import * as Test from "alchemy/Test/Alchemy";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as pathe from "pathe";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
+import type { TraceSink } from "./fixtures/native-tracing/collector.ts";
 import NativeTracingWorker, { makeTracedWorker } from "./fixtures/native-tracing/worker.ts";
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -533,6 +535,166 @@ test.provider(
         expect(trace.span("queue.inner").parentSpanId).toBe(trace.root.spanId);
         expect(trace.root.exit).toBe("success");
       }
+
+      yield* stack.destroy();
+      yield* waitForWorkerToBeDeleted(worker.workerName, accountId);
+    }).pipe(logLevel),
+  {
+    tags: [
+      "provider:cloudflare",
+      "provider:cloudflare:kv",
+      "provider:cloudflare:queue",
+      "provider:cloudflare:worker",
+      "live",
+    ],
+    timeout: 480_000,
+  },
+);
+
+// The OTLP collector the export test's observability destination pushes
+// to. Cloudflare's exporter needs a public hostname, so the collector
+// gets a deterministic custom domain on the standing test zone.
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+const collectorHost = `native-trace-collector-${process.env.PULL_REQUEST ?? process.env.USER}.${zoneName}`;
+// Named up front: the traced Worker lists the destination by name.
+const destinationName = `native-trace-export-${process.env.PULL_REQUEST ?? process.env.USER}`;
+const collectorMain = pathe.resolve(import.meta.dirname, "fixtures/native-tracing/collector.ts");
+
+/** An exported OTLP span, reduced to what the status assertions read. */
+interface ExportedSpan {
+  traceId: string;
+  name: string;
+  requestId: unknown;
+  status: { code: "unset" | "ok" | "error"; message?: string };
+}
+
+// OTLP/JSON encodes the status code as its enum number or its name.
+const statusCode = (code: unknown): ExportedSpan["status"]["code"] =>
+  code === 2 || code === "STATUS_CODE_ERROR"
+    ? "error"
+    : code === 1 || code === "STATUS_CODE_OK"
+      ? "ok"
+      : "unset";
+
+// The destination's preflight POST stores a non-OTLP body too.
+const parseJson = (text: string): any => {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return undefined;
+  }
+};
+
+const exportedSpans = (items: ReadonlyArray<string>): ExportedSpan[] =>
+  items.flatMap((item) => {
+    const body = parseJson(item);
+    return (body?.resourceSpans ?? []).flatMap((resource: any) =>
+      (resource.scopeSpans ?? []).flatMap((scope: any) =>
+        (scope.spans ?? []).map((span: any): ExportedSpan => ({
+          traceId: span.traceId,
+          name: span.name,
+          requestId: (span.attributes ?? []).find((a: any) => a.key === "request.id")?.value
+            ?.stringValue,
+          status: { code: statusCode(span.status?.code), message: span.status?.message },
+        })),
+      ),
+    );
+  });
+
+test.provider(
+  "exports a failed Effect span with error status over OTLP",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      yield* stack.destroy();
+
+      // The traced Worker lists the destination by name, so the collector
+      // and destination deploy first and stay declared in the second step.
+      const sink = Effect.gen(function* () {
+        const collector = yield* Cloudflare.Worker("NativeTraceCollector", {
+          main: collectorMain,
+          env: { SINK: Cloudflare.DurableObject<TraceSink>("TraceSink") },
+          domain: collectorHost,
+          compatibility: { date: "2024-09-23" },
+        });
+        yield* Cloudflare.Workers.ObservabilityDestination("NativeTraceDestination", {
+          name: destinationName,
+          url: `https://${collectorHost}/v1/traces`,
+          logpushDataset: "opentelemetry-traces",
+          // The collector's custom domain may not serve yet on create.
+          skipPreflightCheck: true,
+        });
+        return collector;
+      });
+      yield* stack.deploy(sink);
+      const { collector, worker } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const collector = yield* sink;
+          const worker = yield* makeTracedWorker("NativeTracingExport", {
+            observability: {
+              enabled: true,
+              traces: { enabled: true, destinations: [destinationName] },
+            },
+          });
+          return { collector, worker };
+        }),
+      );
+
+      // Read back over workers.dev: a custom domain attached makes
+      // `collector.url` the domain, so derive the workers.dev URL.
+      const { subdomain } = yield* workers.getSubdomain({ accountId });
+      const collected = `https://${collector.workerName}.${subdomain}.workers.dev/collected`;
+      yield* expectUrlContains(collected, "trace-collector-ok", { timeout: "180 seconds" });
+      yield* expectUrlContains(`${worker.url}/exits?id=warmup`, "native-did-exits", {
+        timeout: "180 seconds",
+      });
+
+      // Export runs through Logpush batches, so a request's spans can take
+      // minutes to arrive. Send a fresh `/exits` request every minute until
+      // one request's whole trace has been exported.
+      const client = yield* HttpClient.HttpClient;
+      const sent: string[] = [];
+      const send = Effect.gen(function* () {
+        const id = yield* Effect.sync(() => {
+          const id = globalThis.crypto.randomUUID();
+          sent.push(id);
+          return id;
+        });
+        yield* expectUrlContains(`${worker.url}/exits?id=${id}`, id, { timeout: "120 seconds" });
+      });
+      const traceFor = (spans: ExportedSpan[]) =>
+        sent
+          .map((id) => {
+            const root = spans.find((s) => s.name === "operation" && s.requestId === id);
+            const trace = spans.filter((s) => s.traceId === root?.traceId);
+            const span = (name: string) => trace.find((s) => s.name === name);
+            return root && span("failing.child") && span("interrupted.child")
+              ? { root, failing: span("failing.child")!, interrupted: span("interrupted.child")! }
+              : undefined;
+          })
+          .find((trace) => trace !== undefined);
+      let polls = 0;
+      const trace = yield* Effect.gen(function* () {
+        const count = yield* Effect.sync(() => polls++);
+        if (count % 12 === 0) yield* send;
+        const body = (yield* client.get(collected).pipe(Effect.flatMap((res) => res.json))) as {
+          items: string[];
+        };
+        return traceFor(exportedSpans(body.items));
+      }).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("5 seconds"),
+          until: (trace) => trace !== undefined,
+          times: 72,
+        }),
+      );
+
+      expect(trace).toBeDefined();
+      // A failure maps to the standard error status; success and pure
+      // interruption stay unset.
+      expect(trace!.failing.status).toEqual({ code: "error", message: "boom" });
+      expect(trace!.interrupted.status.code).toBe("unset");
+      expect(trace!.root.status.code).toBe("unset");
 
       yield* stack.destroy();
       yield* waitForWorkerToBeDeleted(worker.workerName, accountId);

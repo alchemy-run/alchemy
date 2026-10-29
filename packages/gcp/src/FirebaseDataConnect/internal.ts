@@ -21,19 +21,19 @@ export const MAX_CONNECTOR_ID_LENGTH = 48;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.FirebaseDataConnect.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError(
   "GCP.FirebaseDataConnect.ResourceStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceReconciling extends Data.TaggedError(
   "GCP.FirebaseDataConnect.ResourceReconciling",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -199,7 +199,7 @@ export const waitUntilExists = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceNotResolved,
@@ -215,11 +215,11 @@ export const waitUntilReady = <A extends { reconciling?: boolean }, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (value) => value.reconciling !== true,
-      () => new ResourceReconciling({ name }),
+      () => new ResourceReconciling({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) =>
@@ -236,7 +236,7 @@ export const waitUntilGone = <A, E, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error instanceof ResourceStillExists,

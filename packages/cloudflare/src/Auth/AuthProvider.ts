@@ -534,6 +534,7 @@ export const CloudflareAuth = AuthProviderLayer<
       profileName: string,
       config: CloudflareAuthConfig,
       updateConfig?: (config: CloudflareAuthConfig) => Effect.Effect<void, AuthError>,
+      reload?: Effect.Effect<CloudflareAuthConfig, AuthError>,
     ) =>
       Match.value(config).pipe(
         Match.when({ method: "stored" }, (config) => Effect.succeed(config)),
@@ -584,40 +585,67 @@ export const CloudflareAuth = AuthProviderLayer<
                 // The silent refresh rotates a single-use refresh token, so
                 // its read-refresh-persist section runs under the profile
                 // lock — a concurrent `read` refreshing the same token would
-                // double-spend it. The lock is held only for this API
-                // round-trip, never across the browser wait below.
+                // double-spend it. It refreshes with the token stored now,
+                // read under the lock, not the one `config` was read with.
+                // The lock is held only for this API round-trip, never
+                // across the browser wait below.
                 const outcome =
                   creds.type === "oauth" && OAuthClient.usesCurrentClient(creds)
                     ? yield* withProfileCredentialsLock(
                         profileName,
-                        Interaction.info("Cloudflare: refreshing OAuth credentials...").pipe(
-                          Effect.andThen(OAuthClient.refresh(creds)),
-                          Effect.flatMap((credentials) => {
-                            const config = {
-                              ...c,
-                              clientId: credentials.clientId,
-                              access: Redacted.value(credentials.access),
-                              refresh: Redacted.value(credentials.refresh),
-                              expires: credentials.expires,
-                              scopes: credentials.scopes,
-                            };
-                            return (updateConfig?.(config) ?? Effect.void).pipe(
-                              Effect.as({ type: "refreshed" as const, config }),
-                            );
-                          }),
-                          Effect.tap(() =>
-                            Interaction.success("Cloudflare: OAuth credentials refreshed."),
-                          ),
-                          Effect.catchTag(
-                            [
-                              "OAuthError",
-                              "OAuthNetworkError",
-                              "OAuthServerUnavailable",
-                              "OAuthInvalidResponse",
-                            ],
-                            () => Effect.succeed({ type: "browser" as const }),
-                          ),
-                        ),
+                        Effect.gen(function* () {
+                          const current = yield* reload ?? Effect.succeed(c);
+                          if (current.method !== "oauth" || !("scopes" in current)) {
+                            return { type: "browser" as const };
+                          }
+                          const currentCredentials: OAuthClient.OAuthCredentials = {
+                            type: "oauth",
+                            clientId: current.clientId,
+                            access: Redacted.make(current.access),
+                            refresh: Redacted.make(current.refresh),
+                            expires: current.expires,
+                            scopes: current.scopes,
+                          };
+                          if (!OAuthClient.usesCurrentClient(currentCredentials)) {
+                            return yield* migrateToCurrentClient;
+                          }
+                          return yield* Interaction.info(
+                            "Cloudflare: refreshing OAuth credentials...",
+                          ).pipe(
+                            Effect.andThen(OAuthClient.refresh(currentCredentials)),
+                            Effect.flatMap((credentials) => {
+                              const config = {
+                                ...current,
+                                clientId: credentials.clientId,
+                                access: Redacted.value(credentials.access),
+                                refresh: Redacted.value(credentials.refresh),
+                                expires: credentials.expires,
+                                scopes: credentials.scopes,
+                              };
+                              // Saved here, under the lock, when the caller can
+                              // take it; otherwise handed back for the caller to save.
+                              const unsaved: Effect.Effect<typeof config | undefined, AuthError> =
+                                updateConfig === undefined
+                                  ? Effect.succeed(config)
+                                  : Effect.as(updateConfig(config), undefined);
+                              return unsaved.pipe(
+                                Effect.map((config) => ({ type: "refreshed" as const, config })),
+                              );
+                            }),
+                            Effect.tap(() =>
+                              Interaction.success("Cloudflare: OAuth credentials refreshed."),
+                            ),
+                            Effect.catchTag(
+                              [
+                                "OAuthError",
+                                "OAuthNetworkError",
+                                "OAuthServerUnavailable",
+                                "OAuthInvalidResponse",
+                              ],
+                              () => Effect.succeed({ type: "browser" as const }),
+                            ),
+                          );
+                        }),
                       )
                     : yield* migrateToCurrentClient;
                 if (outcome.type === "browser") {
@@ -645,12 +673,12 @@ export const CloudflareAuth = AuthProviderLayer<
         Clock.currentTimeMillis,
       ]).pipe(
         Effect.map(([creds, now]) => {
+          const resolvedSource: CloudflareResolvedCredentials["source"] = creds.source;
           const source = {
             key: "source",
-            value:
-              "details" in creds.source && creds.source.details
-                ? `${creds.source.type} - ${creds.source.details}`
-                : creds.source.type,
+            value: resolvedSource.details
+              ? `${resolvedSource.type} - ${resolvedSource.details}`
+              : resolvedSource.type,
           };
           return {
             lines: Match.value(creds).pipe(

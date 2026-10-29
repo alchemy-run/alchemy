@@ -173,7 +173,7 @@ export const CloudExadataInfrastructure = Resource<CloudExadataInfrastructure>(
 const mergedProperties = (
   news: CloudExadataInfrastructureProps,
 ): CloudExadataInfrastructurePropertiesInput => ({
-  ...(news.properties ?? {}),
+  ...news.properties,
   shape: news.shape ?? news.properties?.shape,
   computeCount: news.computeCount ?? news.properties?.computeCount,
   storageCount: news.storageCount ?? news.properties?.storageCount,
@@ -235,7 +235,7 @@ const toAttrs = (infra: oracle.CloudExadataInfrastructure, project: string) => {
 
 const getByName = (name: string) =>
   retryQuota(oracle.getProjectsLocationsCloudExadataInfrastructures({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listInfras = (project: string, region: string) => {
@@ -329,7 +329,7 @@ export const CloudExadataInfrastructureProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -338,7 +338,7 @@ export const CloudExadataInfrastructureProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new OracleDatabaseNotResolved({ name });
+        return yield* new OracleDatabaseNotResolved({ resourceName: name });
       }
 
       const ready = yield* waitUntilReady(
@@ -358,7 +358,7 @@ export const CloudExadataInfrastructureProvider = () =>
         })
         .pipe(
           retryConflict,
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

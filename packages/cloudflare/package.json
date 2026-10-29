@@ -754,6 +754,7 @@
         "default": "./lib/Zone/index.js"
       },
       "./Basin/internal/*": null,
+      "./R2/internal/*": null,
       "./*/internal": null,
       "./*": {
         "types": "./lib/*.d.ts",
@@ -775,6 +776,7 @@
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/sql": "workspace:*",
+    "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/aws4signer": "workspace:*",
     "@distilled.cloud/cloudflare": "workspace:*",
     "@distilled.cloud/core": "workspace:*",
@@ -804,7 +806,7 @@
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:frontend-peer"
   },
   "peerDependenciesMeta": {
     "@alchemy.run/domain": {

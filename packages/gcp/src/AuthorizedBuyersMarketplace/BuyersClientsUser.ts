@@ -124,15 +124,15 @@ export class BuyersClientsUserNotResolved extends Data.TaggedError(
   "GCP.AuthorizedBuyersMarketplace.BuyersClientsUserNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 const getByName = (name: string) =>
   !name
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : marketplace
         .getBuyersClientsUsers({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const lookupName = (
   parent: string,
@@ -223,7 +223,7 @@ export const BuyersClientsUserProvider = () =>
       if (current === undefined) {
         return yield* new BuyersClientsUserNotResolved({
           parent,
-          name: name || email,
+          resourceName: name || email,
         });
       }
 

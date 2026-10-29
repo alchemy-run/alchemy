@@ -195,6 +195,7 @@ export const makeGcsState = (options: GcsStateOptions = {}) =>
               backend: "gcp",
               name: options.name,
               label: `Cloud Storage state bucket '${bucketName}'`,
+              configured: options.bucketName !== undefined,
             },
             ensure,
           );
@@ -245,7 +246,7 @@ const gcsObjects = (
           text: new TextDecoder().decode(object.body),
           version: object.generation ?? "",
         })),
-        Effect.catchTag("GCP.Storage.ObjectNotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("GCP.Storage.ObjectNotFound", () => Effect.undefined),
       ),
     ),
   write: (key, body, condition) =>
@@ -267,7 +268,7 @@ const gcsObjects = (
           // A lost condition answers 412.
           Effect.catchIf(
             (error) => error._tag === "GCP.Storage.ObjectRequestFailed" && error.status === 412,
-            () => Effect.succeed(undefined),
+            () => Effect.undefined,
           ),
         ),
     ),
@@ -357,7 +358,7 @@ const ensureStateBucket = (bucket: string, project: string, location: string) =>
   Effect.gen(function* () {
     const observed = yield* storage
       .getBuckets({ bucket })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     if (observed === undefined) {
       yield* Effect.logInfo(`Cloud Storage state store: creating bucket ${bucket} in ${location}`);
       yield* storage

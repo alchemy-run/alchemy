@@ -1,7 +1,7 @@
 import { expect } from "@alchemy.run/test";
+import type { ScratchStack } from "@alchemy.run/test/Alchemy";
+import { scratchStack } from "@alchemy.run/test/Core";
 import type * as machines from "@distilled.cloud/fly-io/machines";
-import type { ScratchStack } from "alchemy/Test/Alchemy";
-import { scratchStack } from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";

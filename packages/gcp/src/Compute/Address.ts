@@ -268,7 +268,7 @@ const toAttrs = (address: compute.Address, project: string) => ({
 const getByName = (project: string, region: string, address: string) =>
   compute
     .getAddresses({ project, region, address })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilReady = (project: string, region: string, addressName: string) =>
   getByName(project, region, addressName).pipe(

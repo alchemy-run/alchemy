@@ -108,7 +108,7 @@ export const ThingTypeProvider = () =>
           const thingTypeName = output?.thingTypeName ?? (yield* createName(id, olds ?? {}));
           const found = yield* iot
             .describeThingType({ thingTypeName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (!found) return undefined;
           const attrs = {
             thingTypeName,
@@ -135,7 +135,7 @@ export const ThingTypeProvider = () =>
           // OBSERVE
           let live = yield* iot
             .describeThingType({ thingTypeName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // ENSURE
           if (live === undefined) {
@@ -180,7 +180,7 @@ export const ThingTypeProvider = () =>
           // they share this account-global type.
           const initial = yield* iot
             .describeThingType({ thingTypeName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (initial === undefined) return;
 
           if (!initial.thingTypeMetadata?.deprecated) {

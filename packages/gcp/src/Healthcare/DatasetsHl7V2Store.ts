@@ -139,7 +139,7 @@ export const DatasetsHl7V2Store = Resource<DatasetsHl7V2Store>("GCP.Healthcare.D
 export class DatasetsHl7V2StoreNotResolved extends Data.TaggedError(
   "GCP.Healthcare.DatasetsHl7V2StoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const datasetOf = (dataset: string, project: string, location: string) =>
@@ -174,10 +174,10 @@ const toAttrs = (store: healthcare.Hl7V2Store, project: string, region: string) 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : healthcare
         .getProjectsLocationsDatasetsHl7V2Stores({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DatasetsHl7V2StoreProvider = () =>
   Provider.succeed(DatasetsHl7V2Store, {
@@ -267,7 +267,7 @@ export const DatasetsHl7V2StoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatasetsHl7V2StoreNotResolved({ name });
+        return yield* new DatasetsHl7V2StoreNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -24,7 +24,7 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
-import { ChildProcess } from "effect/process";
+import { ChildProcess, CommandLine } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 
 type Services = FileSystem.FileSystem | Path.Path | ChildProcessSpawner;
@@ -73,24 +73,36 @@ const workspaceRoot = Effect.gen(function* () {
 /** Give a step a readable name for the timing logs. */
 export const named = (name: string, step: Step): Step => ({ ...step, name });
 
+/**
+ * Build a command that runs on every platform. node_modules/.bin entries and
+ * pnpm are `.cmd` shims on Windows, which only a shell can run, and a shell
+ * takes one script, so the arguments are joined into it there.
+ */
+export const command = Effect.fn(function* (
+  bin: string,
+  args: ReadonlyArray<string>,
+  options: ChildProcess.CommandOptions,
+) {
+  if (process.platform !== "win32") return ChildProcess.make(bin, args, options);
+  const script = yield* Effect.fromResult(CommandLine.join([bin, ...args], { format: "windows" }));
+  return ChildProcess.make(script, [], { ...options, shell: true });
+});
+
 /** Run a command; fails when it exits non-zero. */
-export const exec = (command: string, ...args: Array<string>): Step => ({
-  name: [command, ...args].join(" "),
+export const exec = (bin: string, ...args: Array<string>): Step => ({
+  name: [bin, ...args].join(" "),
   run: Effect.fn(function* (packageDirectory) {
     const spawner = yield* ChildProcessSpawner;
     const exitCode = yield* spawner.exitCode(
-      ChildProcess.make(command, args, {
+      yield* command(bin, args, {
         cwd: packageDirectory,
-        // node_modules/.bin entries are `.cmd` shims on Windows, which only a
-        // shell can run.
-        shell: process.platform === "win32",
         stdin: "inherit",
         stdout: "inherit",
         stderr: "inherit",
       }),
     );
     if (exitCode !== 0) {
-      return yield* Effect.fail(new Error(`${command} exited with code ${exitCode}`));
+      return yield* Effect.fail(new Error(`${bin} exited with code ${exitCode}`));
     }
   }),
 });

@@ -206,7 +206,7 @@ const toAttrs = (snapshot: compute.InstantSnapshot, project: string) => ({
 const getByName = (project: string, region: string, instantSnapshot: string) =>
   compute
     .getRegionInstantSnapshots({ project, region, instantSnapshot })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitReady = (project: string, region: string, instantSnapshotName: string) =>
   getByName(project, region, instantSnapshotName).pipe(
@@ -373,7 +373,7 @@ export const RegionInstantSnapshotProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((inserted) =>
               inserted === undefined
                 ? Effect.void
@@ -444,7 +444,7 @@ export const RegionInstantSnapshotProvider = () =>
           instantSnapshot: output.instantSnapshotName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

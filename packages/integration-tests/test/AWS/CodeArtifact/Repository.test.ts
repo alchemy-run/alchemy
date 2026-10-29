@@ -2,9 +2,9 @@ import * as AWS from "@alchemy.run/aws";
 import { Domain } from "@alchemy.run/aws/CodeArtifact/Domain";
 import { Repository } from "@alchemy.run/aws/CodeArtifact/Repository";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as codeartifact from "@distilled.cloud/aws/codeartifact";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

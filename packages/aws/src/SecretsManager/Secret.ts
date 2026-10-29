@@ -14,6 +14,11 @@ import type { PolicyDocument } from "../IAM/Policy.ts";
 import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
+export class SecretUnexpectedResponse extends Data.TaggedError("SecretUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface GenerateSecretStringProps extends secretsmanager.GetRandomPasswordRequest {
   /**
    * JSON template merged with the generated password.
@@ -113,6 +118,11 @@ export interface Secret extends Resource<
      * Tags on the secret.
      */
     tags: Record<string, string>;
+    /**
+     * The resource-based policy (canonical JSON), as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    resourcePolicy?: string;
   },
   never,
   Providers
@@ -282,12 +292,37 @@ export const SecretProvider = () =>
         return {} as const;
       });
 
+      /**
+       * The attributes `read` and `reconcile` both report, observed on the
+       * secret, so a converged secret reads unchanged. The version is the
+       * live `AWSCURRENT` one, so a value written out of band shows up.
+       */
+      const observeSecretAttributes = Effect.fn(function* (
+        described: secretsmanager.DescribeSecretResponse & { ARN: string; Name: string },
+      ) {
+        const policy = yield* secretsmanager.getResourcePolicy({ SecretId: described.ARN }).pipe(
+          Effect.map((response) => response.ResourcePolicy),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
+        );
+        return {
+          secretArn: described.ARN,
+          secretName: described.Name,
+          versionId: Object.entries(described.VersionIdsToStages ?? {}).find(([, stages]) =>
+            stages?.includes("AWSCURRENT"),
+          )?.[0],
+          description: described.Description,
+          kmsKeyId: described.KmsKeyId,
+          tags: toTagRecord(described.Tags),
+          resourcePolicy: policy === undefined ? undefined : normalizePolicyDocument(policy),
+        };
+      });
+
       const readSecret = Effect.fn(function* (secretId: string) {
         const described = yield* secretsmanager
           .describeSecret({
             SecretId: secretId,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         // A secret with `DeletedDate` set is scheduled for deletion (our
         // delete uses `ForceDeleteWithoutRecovery`, which still completes
         // asynchronously). It cannot be updated, so treat it as missing —
@@ -323,7 +358,7 @@ export const SecretProvider = () =>
       const restoreIfPendingDeletion = Effect.fn(function* (id: string, secretId: string) {
         const described = yield* secretsmanager
           .describeSecret({ SecretId: secretId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         if (!described?.DeletedDate) {
           return;
         }
@@ -367,14 +402,11 @@ export const SecretProvider = () =>
             return undefined;
           }
 
-          return {
-            secretArn: described.ARN,
-            secretName: described.Name,
-            versionId: output?.versionId,
-            description: described.Description,
-            kmsKeyId: described.KmsKeyId,
-            tags: toTagRecord(described.Tags),
-          };
+          return yield* observeSecretAttributes({
+            ...described,
+            ARN: described.ARN,
+            Name: described.Name,
+          });
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           yield* validateRecoveryWindow(news.recoveryWindowInDays);
@@ -426,7 +458,9 @@ export const SecretProvider = () =>
           }
 
           if (!observed?.ARN || !observed.Name) {
-            return yield* Effect.fail(new Error(`Failed to describe Secret '${secretName}'`));
+            return yield* new SecretUnexpectedResponse({
+              message: `Failed to describe Secret '${secretName}'`,
+            });
           }
 
           const secretArn = observed.ARN;
@@ -477,7 +511,7 @@ export const SecretProvider = () =>
             .getResourcePolicy({ SecretId: secretArn })
             .pipe(
               Effect.map((response) => response.ResourcePolicy),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
 
           if (desiredPolicy !== undefined) {
@@ -497,12 +531,32 @@ export const SecretProvider = () =>
           }
 
           yield* session.note(secretArn);
+          // DescribeSecret lags writes (and a just-restored secret), so poll
+          // until it reflects the description written above.
+          const final = yield* secretsmanager.describeSecret({ SecretId: secretArn }).pipe(
+            Effect.retry({
+              while: (e) => e._tag === "ResourceNotFoundException",
+              schedule: Schedule.spaced("1 second"),
+              times: 10,
+            }),
+            Effect.repeat({
+              until: (described) =>
+                news.description === undefined || described.Description === news.description,
+              schedule: Schedule.spaced("1 second"),
+              times: 10,
+            }),
+          );
+          const attributes = yield* observeSecretAttributes({
+            ...final,
+            ARN: secretArn,
+            Name: observed.Name,
+          });
           return {
-            secretArn,
-            secretName: observed.Name,
-            versionId: hasNewValue ? (updated.VersionId ?? output?.versionId) : output?.versionId,
-            description: news.description,
-            kmsKeyId: news.kmsKeyId,
+            ...attributes,
+            // DescribeSecret can lag a just-written value.
+            versionId: hasNewValue
+              ? (updated.VersionId ?? attributes.versionId)
+              : attributes.versionId,
             tags: desiredTags,
           };
         }),

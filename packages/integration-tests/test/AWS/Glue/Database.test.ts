@@ -1,9 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import { Database } from "@alchemy.run/aws/Glue";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as glue from "@distilled.cloud/aws/glue";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
+import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -62,6 +63,48 @@ test.provider(
       yield* stack.destroy();
       const gone = yield* getDatabase(created.databaseName);
       expect(gone).toBeUndefined();
+    }),
+  { tags: ["provider:aws", "provider:aws:glue", "live"] },
+);
+
+// #2688: `read` must observe the description, location and parameters, or
+// an out-of-band change reads as `unchanged`.
+test.provider(
+  "drift detects and repairs out-of-band database changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const db = yield* stack.deploy(
+        Database("DriftDb", {
+          description: "declared",
+          parameters: { classification: "parquet" },
+        }),
+      );
+      expect((yield* driftOf(stack, "DriftDb"))?.action).toBe("unchanged");
+
+      const observed = yield* getDatabase(db.databaseName);
+      yield* glue.updateDatabase({
+        Name: db.databaseName,
+        DatabaseInput: {
+          Name: db.databaseName,
+          Description: "out-of-band",
+          Parameters: { ...observed?.Parameters, classification: "json" },
+        },
+      });
+
+      const drifted = yield* waitForDrift(stack, "DriftDb", "drifted");
+      expect(drifted?.attr?.configuration?.description).toBe("out-of-band");
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.DriftDb?.action).toBe("repaired");
+      expect((yield* driftOf(stack, "DriftDb"))?.action).toBe("unchanged");
+      const restored = yield* getDatabase(db.databaseName);
+      expect(restored?.Description).toBe("declared");
+      expect(restored?.Parameters?.classification).toBe("parquet");
+
+      yield* stack.destroy();
+      expect(yield* getDatabase(db.databaseName)).toBeUndefined();
     }),
   { tags: ["provider:aws", "provider:aws:glue", "live"] },
 );

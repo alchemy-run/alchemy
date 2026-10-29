@@ -3,12 +3,18 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class CustomPageUnexpectedResponse extends Data.TaggedError("CustomPageUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type CustomPageType = "identity_denied" | "forbidden";
 
@@ -130,7 +136,7 @@ export const CustomPageProvider = () =>
             accountId: acct,
             customPageId: output.customPageId,
           })
-          .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.undefined));
         if (direct && direct.uid) {
           return toAttrs(direct, acct);
         }
@@ -140,7 +146,7 @@ export const CustomPageProvider = () =>
       if (!existing || !existing.uid) return undefined;
       const full = yield* zeroTrust
         .getAccessCustomPage({ accountId: acct, customPageId: existing.uid })
-        .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.undefined));
       if (!full || !full.uid) return undefined;
       return toAttrs(full, acct);
     }),
@@ -158,14 +164,14 @@ export const CustomPageProvider = () =>
             accountId: acct,
             customPageId: output.customPageId,
           })
-          .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.undefined));
       }
       if (!observed || !observed.uid) {
         const byName = yield* findPageByName(acct, name);
         if (byName?.uid) {
           observed = yield* zeroTrust
             .getAccessCustomPage({ accountId: acct, customPageId: byName.uid })
-            .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("AccessCustomPageNotFound", () => Effect.undefined));
         }
       }
 
@@ -189,7 +195,9 @@ export const CustomPageProvider = () =>
             ),
           );
         if (!created.uid) {
-          return yield* Effect.fail(new Error("CustomPage: created page missing uid"));
+          return yield* new CustomPageUnexpectedResponse({
+            message: "CustomPage: created page missing uid",
+          });
         }
         return toAttrs({ ...created, type: news.type }, acct);
       }

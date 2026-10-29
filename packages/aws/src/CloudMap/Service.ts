@@ -212,7 +212,7 @@ export const ServiceProvider = () =>
         if (serviceId !== undefined) {
           const byId = yield* sd.getService({ Id: serviceId }).pipe(
             Effect.map((r) => r.Service),
-            Effect.catchTag("ServiceNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("ServiceNotFound", () => Effect.undefined),
           );
           if (byId !== undefined) {
             return byId;
@@ -234,7 +234,7 @@ export const ServiceProvider = () =>
         }
         return yield* sd.getService({ Id: summary.Id }).pipe(
           Effect.map((r) => r.Service),
-          Effect.catchTag("ServiceNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("ServiceNotFound", () => Effect.undefined),
         );
       });
 
@@ -289,7 +289,7 @@ export const ServiceProvider = () =>
                   if (summary.Id === undefined) return undefined;
                   const service = yield* sd.getService({ Id: summary.Id }).pipe(
                     Effect.map((r) => r.Service),
-                    Effect.catchTag("ServiceNotFound", () => Effect.succeed(undefined)),
+                    Effect.catchTag("ServiceNotFound", () => Effect.undefined),
                   );
                   if (
                     service?.Id === undefined ||

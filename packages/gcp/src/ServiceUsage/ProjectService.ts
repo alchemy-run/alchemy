@@ -93,7 +93,7 @@ const serviceName = (project: string, service: string) =>
 const getService = (project: string, service: string) =>
   serviceusage
     .getServices({ name: serviceName(project, service) })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 // Enabling an API usually finishes in well under a minute, but first-time
 // enables of heavier APIs (Compute, GKE) can take a few.

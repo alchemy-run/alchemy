@@ -7,8 +7,8 @@ import {
 import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { Bucket } from "@alchemy.run/aws/S3/Bucket";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudtrail from "@distilled.cloud/aws/cloudtrail";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

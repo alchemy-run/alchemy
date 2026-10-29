@@ -105,7 +105,7 @@ const findCloudDomainById = (input: {
     Effect.map((serviceDomains) =>
       serviceDomains.find((candidate) => candidate.id === input.domainId),
     ),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 export const findServiceDomainById = Effect.fn(function* (input: {
@@ -362,7 +362,7 @@ const syncDomain = (input: {
   const observedPort = input.current.targetPort ?? undefined;
   const rename = domainName !== undefined && domainName !== input.current.domain;
   const retarget = input.targetPort !== undefined && input.targetPort !== observedPort;
-  if (!rename && !retarget) return Effect.succeed(undefined);
+  if (!rename && !retarget) return Effect.undefined;
   return withEnvironmentConfigLock(
     input.current.environmentId,
     serviceDomainUpdate({

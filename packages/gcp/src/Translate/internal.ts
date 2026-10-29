@@ -10,11 +10,11 @@ const MAX_DISPLAY_NAME_LENGTH = 32;
 const MAX_ID_LENGTH = 63;
 
 export class ResourceNotResolved extends Data.TaggedError("GCP.Translate.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError("GCP.Translate.ResourceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -186,7 +186,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new ResourceStillExists({ name }),
+      () => new ResourceStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Translate.ResourceStillExists",

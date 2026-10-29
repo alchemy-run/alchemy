@@ -1,11 +1,11 @@
 import { assert, describe, expect, it } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
 import * as Command from "@/Command/index.ts";
 import * as Provider from "@/Provider.ts";
-import * as Test from "@/Test/Alchemy";
 import { assertDead, lifecycleFixture } from "./fixture/lifecycle-support.ts";
 
 const { test } = Test.make({
@@ -398,6 +398,110 @@ test.provider(
 
       yield* stack.destroy();
       yield* waitForDeath(pid);
+    }),
+  { tags: ["local"], timeout: 30_000 },
+);
+
+test.provider(
+  "waitForUrl waits past the default 5 seconds for the URL",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const output = yield* stack.deploy(
+        Command.Dev("Dev", {
+          command: `node ${urlServerScript}`,
+          env: {
+            PID_FILE: pidFile,
+            MARKER: "wait-for-url",
+            URL_LINE: "Local: http://localhost:5173/",
+            // Printed after the 5 seconds the resource waits by default.
+            URL_DELAY_MS: "6000",
+          },
+          waitForUrl: true,
+        }),
+      );
+
+      expect(output.url).toBe("http://localhost:5173/");
+
+      const { pid } = yield* waitForPidFile(pidFile, "wait-for-url");
+      yield* stack.destroy();
+      yield* waitForDeath(pid);
+    }),
+  { tags: ["local"], timeout: 30_000 },
+);
+
+test.provider(
+  "waitForUrl settles with a late non-local URL when no localhost URL follows",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const output = yield* stack.deploy(
+        Command.Dev("Dev", {
+          command: `node ${urlServerScript}`,
+          env: {
+            PID_FILE: pidFile,
+            MARKER: "wait-for-url-fallback",
+            URL_LINE: "https://docs.astro.build/en/guides/content-collections/",
+            URL_DELAY_MS: "6000",
+          },
+          waitForUrl: true,
+        }),
+      );
+
+      expect(output.url).toBe("https://docs.astro.build/en/guides/content-collections/");
+
+      const { pid } = yield* waitForPidFile(pidFile, "wait-for-url-fallback");
+      yield* stack.destroy();
+      yield* waitForDeath(pid);
+    }),
+  { tags: ["local"], timeout: 30_000 },
+);
+
+inProcessTest.provider(
+  "waitForUrl keeps waiting for a command that prints no URL",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const result = yield* stack
+        .deploy(
+          Command.Dev("Dev", {
+            command: `node ${urlServerScript}`,
+            // URL_LINE intentionally unset — the process stays silent.
+            env: { PID_FILE: pidFile, MARKER: "wait-for-url-none" },
+            waitForUrl: true,
+          }),
+        )
+        // Well past the 5 seconds the resource waits by default.
+        .pipe(Effect.timeoutOption("8 seconds"));
+      expect(result._tag).toBe("None");
+
+      // Interrupting the deploy (Ctrl+C) leaves no process behind.
+      const { pid } = yield* waitForPidFile(pidFile, "wait-for-url-none");
+      yield* waitForDeath(pid);
+      yield* stack.destroy();
+    }),
+  { tags: ["local"], timeout: 30_000 },
+);
+
+inProcessTest.provider(
+  "waitForUrl fails with UnexpectedExit when the command exits first",
+  (stack) =>
+    Effect.gen(function* () {
+      const error = yield* stack
+        .deploy(Command.Dev("Dev", { command: `node ${dieScript}`, waitForUrl: true }))
+        .pipe(Effect.flip);
+      assert(Command.isCommandError(error));
+      assert(error.reason._tag === "UnexpectedExit");
+      expect(error.reason.exitCode).toBe(1);
     }),
   { tags: ["local"], timeout: 30_000 },
 );

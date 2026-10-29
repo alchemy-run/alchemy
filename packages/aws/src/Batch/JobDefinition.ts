@@ -37,6 +37,16 @@ import type { PolicyStatement } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
+export class JobDefinitionOperationFailed extends Data.TaggedError("JobDefinitionOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class JobDefinitionConflict extends Data.TaggedError("JobDefinitionConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type JobDefinitionName = string;
 /** Revision-qualified job definition ARN (`.../job-definition/{name}:{revision}`). */
 export type JobDefinitionArn =
@@ -591,7 +601,7 @@ export const JobDefinitionProvider = () =>
             Effect.map((response) => response.taskDefinition?.status),
             // Not-found means ECS already completed the asynchronous
             // deletion and is therefore terminal as well.
-            Effect.catchTag("ClientException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ClientException", () => Effect.undefined),
           );
           if (status !== undefined && status !== "DELETE_IN_PROGRESS") {
             return yield* new JobDefinitionStillVisible({
@@ -651,16 +661,14 @@ export const JobDefinitionProvider = () =>
               taskDefinitions: inactive.slice(i, i + 10),
             });
             if ((response.failures?.length ?? 0) > 0) {
-              return yield* Effect.fail(
-                new Error(
-                  `ECS failed to delete Batch backing task definitions for ${family}: ${response.failures
-                    ?.map(
-                      (failure) =>
-                        `${failure.arn ?? "unknown"}: ${failure.reason ?? "unknown"} (${failure.detail ?? "no detail"})`,
-                    )
-                    .join(", ")}`,
-                ),
-              );
+              return yield* new JobDefinitionOperationFailed({
+                message: `ECS failed to delete Batch backing task definitions for ${family}: ${response.failures
+                  ?.map(
+                    (failure) =>
+                      `${failure.arn ?? "unknown"}: ${failure.reason ?? "unknown"} (${failure.detail ?? "no detail"})`,
+                  )
+                  .join(", ")}`,
+              });
             }
           }
           yield* Effect.forEach(
@@ -705,7 +713,9 @@ export const JobDefinitionProvider = () =>
                 Effect.filterOrFail(
                   (existing) => hasTags(tags, existing.Role?.Tags),
                   () =>
-                    new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
+                    new JobDefinitionConflict({
+                      message: `Role '${roleName}' already exists and is not managed by alchemy`,
+                    }),
                 ),
               ),
             ),

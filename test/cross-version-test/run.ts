@@ -306,7 +306,7 @@ async function verify(url: string, expectedMarker: string): Promise<void> {
     await new Promise((r) => setTimeout(r, Math.min(1000 * attempt, 5000)));
   }
   throw new Error(
-    `verification failed for ${url} (expected marker "${expectedMarker}"): ${lastErr}`,
+    `verification failed for ${url} (expected marker "${expectedMarker}"): ${lastErr instanceof Error ? lastErr.message : String(lastErr)}`,
   );
 }
 

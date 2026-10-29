@@ -512,7 +512,7 @@ const toAttrs = (cluster: dataproc.Cluster, project: string, region: string) => 
 const getById = (projectId: string, region: string, clusterName: string) =>
   dataproc
     .getProjectsRegionsClusters({ projectId, region, clusterName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (projectId: string, region: string, clusterName: string) =>
   getById(projectId, region, clusterName).pipe(
@@ -580,7 +580,7 @@ const deleteCluster = (projectId: string, region: string, clusterName: string) =
     const operation = yield* dataproc
       .deleteProjectsRegionsClusters({ projectId, region, clusterName })
       .pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.retry({
           while: (error) => error._tag === "Conflict",
           times: 8,
@@ -622,7 +622,7 @@ const createCluster = (
     }
     const created = yield* dataproc
       .createProjectsRegionsClusters({ projectId, region, body })
-      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (created !== undefined) {
       yield* waitForOperation(created);
     }
