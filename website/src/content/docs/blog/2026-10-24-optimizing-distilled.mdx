@@ -11,7 +11,6 @@ import BenchChart from "../../../components/blog/bench/BenchChart.astro";
 import StubWalkthrough from "../../../components/blog/StubWalkthrough.astro";
 import DedupeFigure from "../../../components/blog/DedupeFigure.astro";
 import BarrelFigure from "../../../components/blog/BarrelFigure.astro";
-import ExperimentBranches from "../../../components/blog/ExperimentBranches.astro";
 
 Every Alchemy resource talks to its cloud through
 [distilled](https://distilled.cloud), our Effect-native SDKs covering
@@ -312,11 +311,7 @@ branch:
 While a subagent worked on a big bet, the main thread kept landing
 small wins. 38 of our 84 benchmark runs were experiments. Some ideas
 took three or four experiments to try different implementations, and
-we kept the best one. These are the experiment branches from the run:
-
-<ExperimentBranches />
-
-The biggest experiment was replacing Effect Schema, and the dashed line
+we kept the best one. The biggest experiment was replacing Effect Schema, and the dashed line
 at the bottom of the chart above is the version that won.
 
 ### Why Effect Schema had to go
