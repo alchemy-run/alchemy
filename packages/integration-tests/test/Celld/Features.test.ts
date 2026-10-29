@@ -13,6 +13,9 @@ import { FeatureApi, FeatureCells, FeatureService } from "./fixtures/features/re
 import FeatureServiceLive from "./fixtures/features/service.ts";
 import FeatureApiLive from "./fixtures/features/worker.ts";
 
+// The worker fixture's `Config.Redacted` reads this at deploy time.
+const SECRET_VALUE = (process.env.CELLD_FEATURE_SECRET = "celld-feature-secret");
+
 const testOptions = {
   providers: Layer.mergeAll(
     AWS.providers(),
@@ -104,6 +107,16 @@ describe.skipIf(!!process.env.FAST)(
       Effect.gen(function* () {
         expect(baseUrl).toMatch(/^http:\/\/.+\.elb\.amazonaws\.com$/);
         expect(yield* json("GET", "/health")).toEqual({ runtime: "celld" });
+      }),
+    );
+
+    test(
+      "binds env values and Config read at deploy time",
+      Effect.gen(function* () {
+        expect(yield* json("GET", "/config")).toEqual({
+          greeting: "hello from env",
+          secret: SECRET_VALUE,
+        });
       }),
     );
 

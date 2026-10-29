@@ -1,10 +1,12 @@
 import * as Celld from "@alchemy.run/celld";
 import * as Cause from "effect/Cause";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import { Notes, NotesLive } from "./object.ts";
 import {
@@ -36,6 +38,7 @@ export default FeatureApi.make(
   {
     main: import.meta.url,
     assets: { directory: "public", binding: "ASSETS", runWorkerFirst: true },
+    env: { GREETING: "hello from env" },
   },
   Effect.gen(function* () {
     const observations = yield* Celld.KV.ReadWriteNamespace(yield* Observations);
@@ -48,6 +51,8 @@ export default FeatureApi.make(
     const service = yield* Celld.Fetch(yield* FeatureService, { bindingName: "SERVICE" });
     const loader = yield* Celld.WorkerLoader();
     const notes = yield* Notes;
+    // Read from the deployer's environment and bound onto the Worker.
+    const secret = yield* Config.Redacted("CELLD_FEATURE_SECRET");
     const observe = (key: string, value: unknown) =>
       Effect.sync(() => JSON.stringify(value)).pipe(
         Effect.flatMap((json) => observations.put(key, json)),
@@ -108,6 +113,11 @@ export default FeatureApi.make(
         const url = yield* Effect.sync(() => new URL(request.url, "http://feature"));
         const [, route, action = "", id = ""] = url.pathname.split("/");
         if (route === "health") return yield* HttpServerResponse.json({ runtime: "celld" });
+        if (route === "config")
+          return yield* HttpServerResponse.json({
+            greeting: yield* Config.String("GREETING"),
+            secret: Redacted.value(secret),
+          });
         if (route === "observe")
           return yield* HttpServerResponse.json(
             yield* observations.get(decodeURIComponent(action), "json"),

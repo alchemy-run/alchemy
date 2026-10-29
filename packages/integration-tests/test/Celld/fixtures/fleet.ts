@@ -1,6 +1,4 @@
 import * as Celld from "@alchemy.run/celld";
-import { Namespace } from "alchemy/Namespace";
-import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 
 /**
@@ -23,13 +21,7 @@ export class ConformanceCells extends Celld.Fleet<ConformanceCells>()("Conforman
  */
 export class ConformanceWorker extends Celld.Worker<ConformanceWorker>()("ConformanceWorker") {}
 
-/** Shared root publication, including when referenced from the Lambda's scope. */
-const application = Celld.Application("ConformanceApp", {
+/** Shared root publication, also referenced from the Lambda's scope. */
+export const ConformanceApplication = Celld.Application("ConformanceApp", {
   entrypoint: ConformanceWorker,
 }).pipe(Effect.provide(Celld.Fleet.layer(ConformanceCells)));
-
-export const ConformanceApplication = application.pipe(
-  Effect.updateContext((context: Context.Context<Effect.Services<typeof application>>) =>
-    Context.omit(Namespace)(context),
-  ),
-);

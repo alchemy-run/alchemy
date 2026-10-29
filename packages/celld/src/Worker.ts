@@ -531,7 +531,11 @@ export const bindWorker = <Shape = {}>(
     | Effect.Effect<CelldWorker, never, any>,
 ): Effect.Effect<Shape & CelldWorkerClient> =>
   Effect.gen(function* () {
-    const app = Effect.isEffect(application) ? yield* application : application;
+    // An Application constructor resolves at the ROOT namespace, where the
+    // stack declares it, not under the caller's (e.g. a Lambda's) namespace.
+    const app = Effect.isEffect(application)
+      ? yield* application.pipe(Effect.updateContext(Context.omit(Namespace)))
+      : application;
     const target = yield* worker;
     const secret = yield* mintGatewaySecret(target.LogicalId);
     // Resolving this binding requires activation, not merely Worker staging.

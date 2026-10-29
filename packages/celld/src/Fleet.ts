@@ -61,6 +61,13 @@ export interface FleetProps extends PlatformProps {
    */
   image?: string;
   /**
+   * Celld release the nodes run. Set `image` to the same release. A change
+   * within the 0.6 series rolls the nodes one at a time; a release from
+   * another series is refused.
+   * @default the pinned Celld release (0.6.3)
+   */
+  runtimeVersion?: string;
+  /**
    * CPU units per node, as the host's compute platform counts them
    * (Fargate: 256, 512, 1024, …).
    * @default 512
