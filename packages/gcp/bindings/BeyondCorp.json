@@ -26,6 +26,9 @@
       "AppGateway": "Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
       "SecurityGateway": "Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)",
       "SecurityGatewaysApplication": "Needs a Chrome Enterprise Premium (BeyondCorp Enterprise) subscription (GCP_TEST_CHROME_ENTERPRISE_PREMIUM)"
+    },
+    "locations": {
+      "ListSecurityGateways": "global"
     }
   }
 }

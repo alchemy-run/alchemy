@@ -219,6 +219,8 @@ interface ProbeConfig {
   skip?: Record<string, string>;
   /** The location probes call in, when the service has no `us-central1` (API Keys: `global`). */
   location?: string;
+  /** Binding name → the location its probe calls in, when it differs from {@link location}. */
+  locations?: Record<string, string>;
   /**
    * The suite that already calls every resource-bound binding live
    * (`Bindings.test.ts`): the generated suite then probes only the
@@ -1465,7 +1467,7 @@ const probesOf = (config: ServiceConfig, bindings: Binding[]): Probe[] => {
         .filter(([field]) => !(creates && hasBody && field === "body"))
         .map(
           ([field, type]) =>
-            `${JSON.stringify(field)}: ${placeholder(field, type, probes.location)}`,
+            `${JSON.stringify(field)}: ${placeholder(field, type, probes.locations?.[binding.name] ?? probes.location)}`,
         );
       if (creates && hasBody) entries.push(`"body": { alchemyProbe: "${PLACEHOLDER}" }`);
       const args = probes.args?.[binding.name] ?? `{ ${entries.join(", ")} }`;

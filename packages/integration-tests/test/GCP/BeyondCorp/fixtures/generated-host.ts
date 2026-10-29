@@ -25,7 +25,7 @@ export default class BeyondCorpGeneratedHost extends GCP.Function<BeyondCorpGene
         ListAppConnections: outcome(Retry.none(p0({ location: "us-central1" } as never))),
         ListAppConnectors: outcome(Retry.none(p1({ location: "us-central1" } as never))),
         ListAppGateways: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListSecurityGateways: outcome(Retry.none(p3({ location: "us-central1" } as never))),
+        ListSecurityGateways: outcome(Retry.none(p3({ location: "global" } as never))),
         ResolveAppConnection: outcome(Retry.none(p4({ location: "us-central1" } as never))),
       }),
     };
