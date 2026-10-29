@@ -590,8 +590,10 @@ describe("WikiPage Git fixtures", (it) => {
               expect(env.GIT_CONFIG_KEY_0).toBe(`http.${repository.remote}.extraHeader`);
               expect(env.GIT_CONFIG_VALUE_0).toMatch(/^Authorization: Basic /);
               expect(env.GIT_TRACE).toBeUndefined();
-              directories.add(env.HOME!);
-              expect(yield* fs.readFileString(env.GIT_CONFIG_GLOBAL!)).toBe("");
+              const plain = (value: string | Redacted.Redacted<string> | undefined) =>
+                Redacted.isRedacted(value) ? Redacted.value(value) : value!;
+              directories.add(plain(env.HOME));
+              expect(yield* fs.readFileString(plain(env.GIT_CONFIG_GLOBAL))).toBe("");
             }
             return yield* spawner.spawn(command);
           }),

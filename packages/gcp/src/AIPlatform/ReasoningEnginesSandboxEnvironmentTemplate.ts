@@ -124,13 +124,13 @@ export const ReasoningEnginesSandboxEnvironmentTemplate =
 export class ReasoningEnginesSandboxEnvironmentTemplateNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.ReasoningEnginesSandboxEnvironmentTemplateNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ReasoningEnginesSandboxEnvironmentTemplateStillExists extends Data.TaggedError(
   "GCP.AIPlatform.ReasoningEnginesSandboxEnvironmentTemplateStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const engineNameOf = (project: string, location: string, reasoningEngine: string) =>
@@ -166,15 +166,15 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getProjectsLocationsReasoningEnginesSandboxEnvironmentTemplates({
           name,
         })
         .pipe(
           Effect.catchTags({
-            NotFound: () => Effect.succeed(undefined),
-            SandboxEnvironmentsNotEnabled: () => Effect.succeed(undefined),
+            NotFound: () => Effect.undefined,
+            SandboxEnvironmentsNotEnabled: () => Effect.undefined,
           }),
         );
 
@@ -193,7 +193,6 @@ const findOwned = (id: string, parent: string) =>
   Effect.gen(function* () {
     const templates = yield* listAt(parent);
     for (const template of templates) {
-      const parsed = parseDisplayName(template.displayName);
       if (yield* ownsDisplayName(id, template.displayName)) {
         return template;
       }
@@ -208,7 +207,7 @@ const waitUntilGone = (name: string) =>
         ? Effect.void
         : Effect.fail(
             new ReasoningEnginesSandboxEnvironmentTemplateStillExists({
-              name,
+              resourceName: name,
             }),
           ),
     ),
@@ -270,7 +269,6 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
         (yield* findOwned(id, parent));
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
-      const parsed = parseDisplayName(existing.displayName);
       return (yield* ownsDisplayName(id, existing.displayName)) ? attrs : Unowned(attrs);
     }),
 
@@ -313,7 +311,7 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
               egressControlConfig: news.egressControlConfig,
             }),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         const done =
           created !== undefined
             ? yield* waitForOperation(created, { alreadyExistsOk: true })
@@ -325,7 +323,7 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new ReasoningEnginesSandboxEnvironmentTemplateNotResolved({
-          name: output?.name ?? parent,
+          resourceName: output?.name ?? parent,
         });
       }
       return toAttrs(current, env.project);
@@ -336,7 +334,7 @@ export const ReasoningEnginesSandboxEnvironmentTemplateProvider = () =>
         .deleteProjectsLocationsReasoningEnginesSandboxEnvironmentTemplates({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

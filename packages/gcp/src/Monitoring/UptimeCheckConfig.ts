@@ -300,7 +300,7 @@ export const UptimeCheckConfig = Resource<UptimeCheckConfig>("GCP.Monitoring.Upt
 export class UptimeCheckConfigNotResolved extends Data.TaggedError(
   "GCP.Monitoring.UptimeCheckConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -405,7 +405,7 @@ const desiredMonitoredResource = (
   if (news.resourceGroup !== undefined) return news.monitoredResource;
   const resource = news.monitoredResource ?? defaultMonitoredResource(project);
   const labels = {
-    ...(resource.labels ?? {}),
+    ...resource.labels,
   };
   if (labels.project_id === undefined) labels.project_id = project;
   if (
@@ -482,7 +482,7 @@ const toAttrs = (config: monitoring.UptimeCheckConfig, project: string) => {
 const getByName = (name: string) =>
   monitoring
     .getProjectsUptimeCheckConfigs({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOwned = (project: string) =>
   monitoring.listProjectsUptimeCheckConfigs
@@ -624,7 +624,7 @@ export const UptimeCheckConfigProvider = () =>
 
       if (current === undefined) {
         return yield* new UptimeCheckConfigNotResolved({
-          name: output?.name ?? displayName,
+          resourceName: output?.name ?? displayName,
         });
       }
 

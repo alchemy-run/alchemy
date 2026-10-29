@@ -100,7 +100,7 @@ const getLookupDevOrigin = (lookup: ConnectionLookup) =>
   Output.map(
     Output.all(
       lookup.hyperdriveId,
-      Output.asOutput(
+      lookup.dev.pipe(
         Output.mapEffect((dev: DevOrigin | undefined) =>
           dev
             ? Effect.succeed(toDevOrigin(dev))
@@ -114,7 +114,8 @@ const getLookupDevOrigin = (lookup: ConnectionLookup) =>
                     "Set the `dev` property to an origin reachable from your machine.",
                 }),
               ),
-        )(lookup.dev),
+        ),
+        Output.asOutput,
       ),
     ),
     ([id, origin]) => ({ [id]: origin }),

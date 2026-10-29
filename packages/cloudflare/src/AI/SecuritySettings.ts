@@ -117,8 +117,8 @@ export const SecuritySettingsProvider = () =>
             // Entitlement-gated or out-of-band-deleted zones reject the
             // route; skip them rather than failing the whole enumeration.
             Effect.catchTags({
-              AiSecurityNotEntitled: () => Effect.succeed(undefined),
-              ZoneNotAuthorized: () => Effect.succeed(undefined),
+              AiSecurityNotEntitled: () => Effect.undefined,
+              ZoneNotAuthorized: () => Effect.undefined,
             }),
           ),
         { concurrency: 10 },
@@ -142,7 +142,7 @@ export const SecuritySettingsProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* aiSecurity.getAiSecurity({ zoneId }).pipe(
         // Zone deleted out-of-band — the singleton is gone with it.
-        Effect.catchTag("ZoneNotAuthorized", () => Effect.succeed(undefined)),
+        Effect.catchTag("ZoneNotAuthorized", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
@@ -187,8 +187,8 @@ export const SecuritySettingsProvider = () =>
       // nothing we can restore.
       const observed = yield* aiSecurity.getAiSecurity({ zoneId }).pipe(
         Effect.catchTags({
-          ZoneNotAuthorized: () => Effect.succeed(undefined),
-          AiSecurityNotEntitled: () => Effect.succeed(undefined),
+          ZoneNotAuthorized: () => Effect.undefined,
+          AiSecurityNotEntitled: () => Effect.undefined,
         }),
       );
       if (observed === undefined) return;

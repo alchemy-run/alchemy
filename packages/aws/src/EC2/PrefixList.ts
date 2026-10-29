@@ -190,7 +190,7 @@ export const PrefixListProvider = () =>
       const describePrefixList = (prefixListId: string) =>
         ec2.describeManagedPrefixLists({ PrefixListIds: [prefixListId] }).pipe(
           Effect.map((r) => r.PrefixLists?.[0]),
-          Effect.catchTag("InvalidPrefixListID.NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("InvalidPrefixListID.NotFound", () => Effect.undefined),
         );
 
       // Poll until the list leaves any "-in-progress" state.

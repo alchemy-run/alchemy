@@ -199,7 +199,7 @@ export const DataStoresControl = Resource<DataStoresControl>(
 export class DataStoresControlNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresControlNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_SOLUTION = "SOLUTION_TYPE_SEARCH";
@@ -286,10 +286,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsDataStoresControls({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DataStoresControlProvider = () =>
   Provider.succeed(DataStoresControl, {
@@ -374,7 +374,7 @@ export const DataStoresControlProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataStoresControlNotResolved({ name });
+        return yield* new DataStoresControlNotResolved({ resourceName: name });
       }
 
       const desired = toBody(news, displayName);

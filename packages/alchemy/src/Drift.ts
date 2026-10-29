@@ -433,13 +433,13 @@ const runDrift = (
         return undefined;
       });
 
-    const observed = yield* Effect.all(
-      fqns.map((fqn) =>
+    const observed = yield* Effect.forEach(
+      fqns,
+      (fqn) =>
         driftResource(fqn).pipe(
           Effect.catchCause(recordFailure(fqn)),
           Effect.tap(resourceObserved),
         ),
-      ),
       { concurrency: "unbounded" },
     );
 
@@ -473,8 +473,9 @@ const runDrift = (
     ) {
       const settled = new Map<string, Deferred.Deferred<void>>();
       for (const node of nodes) settled.set(node.fqn, yield* Deferred.make<void>());
-      return yield* Effect.all(
-        nodes.map((node) =>
+      return yield* Effect.forEach(
+        nodes,
+        (node) =>
           Effect.gen(function* () {
             const ups = upstreamOf(node.fqn);
             yield* Effect.all(
@@ -500,7 +501,6 @@ const runDrift = (
               ),
             );
           }).pipe(Effect.ensuring(Deferred.succeed(settled.get(node.fqn)!, undefined))),
-        ),
         { concurrency: "unbounded" },
       );
     });

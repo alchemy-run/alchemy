@@ -240,6 +240,7 @@ export const DurableFunctionEngine = <
           }
           const functionName = yield* fn.functionName;
           // Runs start on the host's alias when it sets one.
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the host provides RuntimeContext at runtime
           const qualifier = yield* qualifierOf(fn).bind(
             `${fn.LogicalId}.qualifier`,
           ) as Effect.Effect<Effect.Effect<string>>;
@@ -355,7 +356,7 @@ const makeWorkflowRunner = <ROut, E, RIn>(
           return yield* Effect.die(new Error(`Workflow ${workflow._tag} suspended unexpectedly`));
         }
         return yield* encodeResult(workflow, result.exit);
-      }) as Effect.Effect<string, never, never>;
+      });
   }) as Effect.Effect<
     DurableFunctionImpl<WorkflowInvocation, string>,
     E,
@@ -614,7 +615,7 @@ const makeEngine = (options: {
           const result = arn
             ? yield* readResult(calls, workflow as Workflow.AnyWithProps, arn)
             : undefined;
-          return result ?? new Workflow.Suspended({});
+          return result ?? Workflow.Suspended.make({});
         }
         // A child workflow: wait for it here, with durable waits between checks.
         for (let check = 0; ; check++) {
@@ -641,7 +642,7 @@ const makeEngine = (options: {
         const arn = yield* calls.find(executionNameOf(workflow._tag, executionId));
         if (!arn) return Option.none();
         const result = yield* readResult(calls, workflow as Workflow.AnyWithProps, arn);
-        return Option.some(result ?? new Workflow.Suspended({}));
+        return Option.some(result ?? Workflow.Suspended.make({}));
       }),
 
     // A run waiting on a signal is woken with an interrupt, so its

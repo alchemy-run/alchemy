@@ -163,7 +163,7 @@ export type ArrayExpr<A extends any[], Req = any> = Output<A, Req> & {
 };
 
 export const isResourceExpr = <Value = any, Req = any>(
-  node: Expr<Value, Req> | any,
+  node: any,
 ): node is ResourceExpr<Value, Req> => exprKind(node) === "ResourceExpr";
 
 export class ResourceExpr<Value, Req = never> extends BaseExpr<Value, Req> {
@@ -629,7 +629,7 @@ export const evaluate: <A, Req = never>(
         const value = yield* evaluate(expr.expr, upstream);
         return yield* evaluate(expr.f(value), upstream);
       } else if (isAllExpr(expr)) {
-        return yield* Effect.all(expr.outs.map((out) => evaluate(out, upstream)));
+        return yield* Effect.forEach(expr.outs, (out) => evaluate(out, upstream));
       } else if (isPropExpr(expr)) {
         return (yield* evaluate(expr.expr, upstream))?.[expr.identifier];
       } else if (isNamedExpr(expr)) {
@@ -682,13 +682,11 @@ export const evaluate: <A, Req = never>(
       }
       const nested = new Set(ancestors).add(expr);
       if (Array.isArray(expr)) {
-        return yield* Effect.all(expr.map((item) => evaluate(item, upstream, nested)));
+        return yield* Effect.forEach(expr, (item) => evaluate(item, upstream, nested));
       }
       return Object.fromEntries(
-        yield* Effect.all(
-          Object.entries(expr).map(([key, value]) =>
-            evaluate(value, upstream, nested).pipe(Effect.map((value) => [key, value])),
-          ),
+        yield* Effect.forEach(Object.entries(expr), ([key, value]) =>
+          evaluate(value, upstream, nested).pipe(Effect.map((value) => [key, value])),
         ),
       );
     }
@@ -700,6 +698,49 @@ export const evaluate: <A, Req = never>(
     // `Config.isConfig` on purpose — Configs are Effects but must resolve.
     return expr;
   }) as Effect.Effect<any>;
+
+/**
+ * Evaluate the parts of `expr` that `upstream` can resolve. An Output whose
+ * sources are all in `upstream` is evaluated, plain data is walked, and an
+ * Output with any other source is returned unevaluated.
+ */
+export const evaluateAvailable = (
+  expr: any,
+  upstream: {
+    [Id in string]: any;
+  },
+  ancestors: ReadonlySet<object> = new Set(),
+): Effect.Effect<
+  any,
+  InvalidReferenceError | MissingSourceError | Config.ConfigError,
+  State.State
+> =>
+  Effect.gen(function* () {
+    if (isResource(expr) || isOutput(expr)) {
+      const sources = Object.keys(upstreamAny(expr));
+      return sources.every((fqn) => Object.hasOwn(upstream, fqn))
+        ? yield* evaluate(expr, upstream)
+        : expr;
+    }
+    if (Config.isConfig(expr)) {
+      return yield* evaluate(expr, upstream);
+    }
+    if (isPlainData(expr)) {
+      if (ancestors.has(expr)) {
+        return undefined;
+      }
+      const nested = new Set(ancestors).add(expr);
+      if (Array.isArray(expr)) {
+        return yield* Effect.forEach(expr, (item) => evaluateAvailable(item, upstream, nested));
+      }
+      return Object.fromEntries(
+        yield* Effect.forEach(Object.entries(expr), ([key, value]) =>
+          evaluateAvailable(value, upstream, nested).pipe(Effect.map((value) => [key, value])),
+        ),
+      );
+    }
+    return expr;
+  });
 
 export const hasOutputs = (value: any): value is Output<any, any> =>
   Object.keys(upstreamAny(value)).length > 0;

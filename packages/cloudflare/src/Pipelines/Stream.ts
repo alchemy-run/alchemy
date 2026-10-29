@@ -564,8 +564,8 @@ const getStream = (accountId: string, streamId: string) =>
   pipelines.getStream({ accountId, streamId }).pipe(
     Effect.map((s): ObservedStream | undefined => s),
     Effect.catchTags({
-      StreamNotFound: () => Effect.succeed(undefined),
-      InvalidStreamId: () => Effect.succeed(undefined),
+      StreamNotFound: () => Effect.undefined,
+      InvalidStreamId: () => Effect.undefined,
     }),
   );
 

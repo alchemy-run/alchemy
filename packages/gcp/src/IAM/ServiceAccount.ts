@@ -113,7 +113,7 @@ export const ServiceAccount = Resource<ServiceAccount>("GCP.IAM.ServiceAccount")
 
 export class ServiceAccountNotResolved extends Data.TaggedError(
   "GCP.IAM.ServiceAccountNotResolved",
-)<{ name: string }> {}
+)<{ resourceName: string }> {}
 
 const accountIdFromEmail = (email: string) => email.split("@")[0] ?? email;
 const emailOf = (project: string, accountId: string) =>
@@ -140,7 +140,7 @@ const toAttrs = (account: iam.ServiceAccount, project: string): ServiceAccount["
 const getByName = (name: string) =>
   iam
     .getProjectsServiceAccounts({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAccountId = (id: string, explicit: string | undefined, existing: string | undefined) =>
   Effect.gen(function* () {
@@ -235,14 +235,14 @@ export const ServiceAccountProvider = () =>
           );
       }
       if (current === undefined) {
-        return yield* new ServiceAccountNotResolved({ name });
+        return yield* new ServiceAccountNotResolved({ resourceName: name });
       }
       // A new account is eventually consistent: reads (and IAM bindings that
       // name it) fail with NotFound for a few seconds after create.
       current = yield* getByName(current.name ?? name).pipe(
         Effect.flatMap((account) =>
           account === undefined
-            ? Effect.fail(new ServiceAccountNotResolved({ name }))
+            ? Effect.fail(new ServiceAccountNotResolved({ resourceName: name }))
             : Effect.succeed(account),
         ),
         Effect.retry({

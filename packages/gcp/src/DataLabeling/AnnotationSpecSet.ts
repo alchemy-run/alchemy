@@ -128,7 +128,7 @@ export const AnnotationSpecSet = Resource<AnnotationSpecSet>("GCP.DataLabeling.A
 export class AnnotationSpecSetNotResolved extends Data.TaggedError(
   "GCP.DataLabeling.AnnotationSpecSetNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, annotationSpecSetId: string) =>
@@ -164,12 +164,12 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : datalabeling.getProjectsAnnotationSpecSets({ name }).pipe(
         Effect.provide(noRetryLayer),
         Effect.catchTags({
-          NotFound: () => Effect.succeed(undefined),
-          BadGateway: () => Effect.succeed(undefined),
+          NotFound: () => Effect.undefined,
+          BadGateway: () => Effect.undefined,
         }),
       );
 
@@ -253,7 +253,7 @@ export const AnnotationSpecSetProvider = () =>
 
       if (current === undefined) {
         return yield* new AnnotationSpecSetNotResolved({
-          name: name || projectParent(env.project),
+          resourceName: name || projectParent(env.project),
         });
       }
 

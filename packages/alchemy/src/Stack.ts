@@ -1,6 +1,7 @@
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
-import type { Crypto } from "effect/Crypto";
+import type { Digest } from "effect/crypto/Digest";
+import type { SecureRandom } from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
 import type { HttpClient } from "effect/http/HttpClient";
@@ -36,7 +37,8 @@ export type StackServices =
   | Stage
   | Scope.Scope
   | FileSystem
-  | Crypto
+  | Digest
+  | SecureRandom
   | Path
   | AlchemyContext
   | HttpClient

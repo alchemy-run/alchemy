@@ -186,7 +186,7 @@ export const BillingSavedQuery = Resource<BillingSavedQuery>("GCP.Logging.Billin
 export class BillingSavedQueryNotResolved extends Data.TaggedError(
   "GCP.Logging.BillingSavedQueryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (billingAccountId: string, location: string, savedQueryId: string) =>
@@ -245,7 +245,7 @@ const toAttrs = (query: logging.SavedQuery, billingAccountId: string, location: 
 const getByName = (name: string) =>
   logging
     .getBillingAccountsLocationsSavedQueries({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toBody = (props: BillingSavedQueryProps, description: string): logging.SavedQuery => ({
   displayName: props.displayName,
@@ -352,7 +352,7 @@ export const BillingSavedQueryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BillingSavedQueryNotResolved({ name });
+        return yield* new BillingSavedQueryNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

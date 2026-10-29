@@ -41,7 +41,7 @@ export const inChatbotRegion = <A, E, R>(
     // No region configured falls back to the home region too.
     const region = Option.isSome(ambient)
       ? yield* ambient.value.pipe(
-          Effect.catchTag("Alchemy::AWS::MissingRegion", () => Effect.succeed(undefined)),
+          Effect.catchTag("Alchemy::AWS::MissingRegion", () => Effect.undefined),
         )
       : undefined;
     return region !== undefined && CHATBOT_REGIONS.has(region)

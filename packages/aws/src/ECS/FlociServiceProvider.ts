@@ -109,7 +109,8 @@ export const FlociServiceProvider = () =>
         byoTaskDefinitionArn: taskRefOf(news)?.taskDefinitionArn,
         main: source.main,
         handler: source.handler,
-        build: source.build,
+        // Secrets stay out, as in the image hash: rotating one does not rebuild.
+        build: source.build === undefined ? undefined : { ...source.build, secrets: undefined },
         isExternal: news.isExternal,
         context: source.context,
         dockerfile: source.dockerfile,

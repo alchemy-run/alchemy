@@ -141,8 +141,9 @@ const handleDelivery = <Req>(
       signature,
       secret: Redacted.value(resolved),
     }).pipe(
-      Effect.catchTag(["StripeWebhookSignatureError", "StripeWebhookPayloadParseError"], () =>
-        Effect.succeed(undefined),
+      Effect.catchTag(
+        ["StripeWebhookSignatureError", "StripeWebhookPayloadParseError"],
+        () => Effect.undefined,
       ),
     );
     if (parsed === undefined) {

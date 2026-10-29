@@ -133,7 +133,7 @@ export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, nev
             );
             if (options.discard) return undefined;
             return result === null
-              ? new Workflow.Suspended({})
+              ? Workflow.Suspended.make({})
               : yield* decodeResult(workflow as AnyWorkflow, result);
           }) as Effect.Effect<any>,
 
@@ -145,7 +145,7 @@ export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, nev
               readonly result: string | null;
             }>(stub.poll());
             if (!polled.started) return Option.none();
-            if (polled.result === null) return Option.some(new Workflow.Suspended({}));
+            if (polled.result === null) return Option.some(Workflow.Suspended.make({}));
             return Option.some(yield* decodeResult(workflow as AnyWorkflow, polled.result));
           }),
 
@@ -414,7 +414,7 @@ const executionObject = (registration: Registration) =>
             if (row.interrupted !== 1) return Effect.void;
             instance.interrupted = true;
             instance.suspended = false;
-            return Effect.withFiber((fiber) => Effect.interruptible(Fiber.interrupt(fiber)));
+            return Effect.withFiber((fiber) => fiber.pipe(Fiber.interrupt, Effect.interruptible));
           }),
           Workflow.intoResult,
           Effect.provide(
@@ -525,7 +525,7 @@ const call = <A = void>(effect: Effect.Effect<unknown, unknown>): Effect.Effect<
       schedule: Schedule.min([Schedule.exponential("100 millis"), Schedule.spaced("2 seconds")]),
       times: 35,
     }),
-    Effect.catch((error) => Effect.die(error)),
+    Effect.orDie,
     Effect.flatMap((value) =>
       value !== null && typeof value === "object" && DefectTag in value
         ? Effect.die(new Error(String((value as Record<string, unknown>)[DefectTag])))

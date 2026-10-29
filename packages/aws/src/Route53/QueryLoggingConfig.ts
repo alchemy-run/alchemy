@@ -134,7 +134,7 @@ export const QueryLoggingConfigProvider = () =>
       const observeById = Effect.fn(function* (id: string) {
         const response = yield* route53
           .getQueryLoggingConfig({ Id: id })
-          .pipe(Effect.catchTag("NoSuchQueryLoggingConfig", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchQueryLoggingConfig", () => Effect.undefined));
         return response?.QueryLoggingConfig;
       });
 

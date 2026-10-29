@@ -626,7 +626,7 @@ const toAttrs = (router: compute.Router, project: string): Router["Attributes"] 
 const getByName = (project: string, region: string, router: string) =>
   compute
     .getRouters({ project, region, router })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const requireRouter = (project: string, region: string, routerName: string) =>
   getByName(project, region, routerName).pipe(

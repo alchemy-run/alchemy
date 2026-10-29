@@ -7,7 +7,33 @@ import DAG from "../../../components/DAG.astro";
 
 An Api is the interface a model publishes. It lists what one kind of client may reach: the commands it may send, and the views, streams and aggregates it may read. Everything else in the model stays private.
 
-An Api has no handlers of its own. Aggregates already decide commands and views already answer reads, so an Api only chooses which of them to expose. This page covers what it can expose, declaring one, serving it, and calling it.
+An Api has no handlers of its own. Aggregates already decide commands and views already answer reads, so an Api only chooses which of them to expose. This chapter starts with what it means to publish a model, then covers what an Api can expose, declaring one, serving it, and calling it.
+
+## Publish the model, keep the rest private
+
+A bounded context is meant to be used: by a web app, by a support console, by another context. DDD calls the interface it offers them a **published language**. It's the part of the model other people may depend on, and it's chosen on purpose.
+
+Publishing a slice of the model, rather than all of it, is what keeps the model free to change. Clients depend on `DepositMoney` and `AccountSummary`. They don't depend on how `Account` stores its state, which policies exist, or which projection feeds which table. You can rework all of those without breaking a client, as long as what you published still works.
+
+<DAG
+  nodes={[
+    { id: "app", label: "Customer app", type: "a client", kind: "client", col: 0, row: 0 },
+    { id: "api", label: "CustomerApi", type: "the published part", kind: "api", col: 1, row: 0 },
+    { id: "deposit", label: "DepositMoney", type: "published", kind: "command", col: 2, row: 0 },
+    { id: "summary", label: "AccountSummary", type: "published", kind: "view", col: 2, row: 1 },
+    { id: "open", label: "OpenAccount", type: "internal", kind: "command", col: 2, row: 2 },
+    { id: "policy", label: "a policy", type: "internal", kind: "policy", col: 1, row: 2 },
+  ]}
+  edges={[
+    { from: "app", to: "api" },
+    { from: "api", to: "deposit" },
+    { from: "api", to: "summary" },
+    { from: "policy", to: "open" },
+  ]}
+  caption="Clients reach what the Api lists. Everything else stays inside the model."
+/>
+
+It's also the first line of the model's security. What isn't published can't be reached from outside at all.
 
 ## What an Api can expose
 
@@ -41,7 +67,7 @@ Policies, projections and external systems are never on an Api. They run inside 
 A command becomes a method that takes its target and input together, and returns the receipt with the reply. Its middleware runs first, and its aggregate's `decide` has the final say.
 
 ```typescript title="packages/server/test/apiEntries.ts"
-const { reply } = yield* bank.DepositMoney({ target: accountId, amount: 500 });
+const { reply } = yield* bank.DepositMoney(accountId, { amount: 500 });
 ```
 
 ### Views
@@ -171,19 +197,13 @@ See [Cloudflare Durable Objects](/domain/cloudflare) for how the model is hosted
 
 ## Call it with a typed client
 
-`Api.client` builds a client typed from the Api's entries. Each command is a method that takes the target and the input together. Each view or aggregate is a namespace with its reads.
+`Api.client` builds a client typed from the Api's entries. Each command is a method that takes the target, the input, and optional call options like `headers`. Each view or aggregate is a namespace with its reads.
 
-```typescript
-// packages/domain/test/depositAndWatch.ts
-import * as Effect from "effect/Effect";
-import * as Stream from "effect/Stream";
-import { AccountId } from "../src/Account/Account.id.ts";
-import { CustomerApi } from "../src/CustomerApi.api.ts";
-
+```typescript title="packages/domain/test/depositAndWatch.ts"
 export const depositAndWatch = Effect.gen(function* () {
   const bank = yield* CustomerApi.client;
   const accountId = AccountId.make("c-1-main");
-  const { reply } = yield* bank.DepositMoney({ target: accountId, amount: 1_000 });
+  const { reply } = yield* bank.DepositMoney(accountId, { amount: 1_000 });
   yield* Effect.log(`balance ${reply.balance}`);
   yield* bank.AccountSummary.watch(accountId).pipe(
     Stream.take(2),
@@ -191,6 +211,8 @@ export const depositAndWatch = Effect.gen(function* () {
   );
 });
 ```
+
+## Choose a protocol
 
 The client needs to know how to reach the server. `Domain.protocolWebSocket(url)` sends commands and one-off reads over HTTP and opens a WebSocket for each live read; if the connection drops, the client reconnects and resumes from the last change it saw. `Domain.protocolHttp(url)` uses HTTP for everything, streaming live reads as long-running responses.
 
@@ -206,14 +228,9 @@ const bank = yield* CustomerApi.clientWebSocket(url);
 
 Every call's error type says exactly what can fail. It's one of the rejections the entry declares, like `InsufficientFunds`; an error from its middleware, like `Unauthorized`; or an `RpcClientError` when the server can't be reached. Because each is a tagged error, `Effect.catchTag` handles the cases you expect and leaves the rest to propagate.
 
-```typescript
-// packages/server/test/withdraw.ts
-import * as Effect from "effect/Effect";
-import type { AccountId } from "@bank/domain/Account/Account.id";
-import { type CustomerClient, mfa } from "./flows.ts";
-
+```typescript title="packages/server/test/withdraw.ts"
 export const withdraw = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
-  const receipt = yield* bank.WithdrawMoney({ target: accountId, amount: 2_000 }, mfa).pipe(
+  const receipt = yield* bank.WithdrawMoney(accountId, { amount: 2_000 }, mfa).pipe(
     Effect.catchTag("InsufficientFunds", (r) => Effect.fail(`only ${r.balance} available`)),
   );
   return receipt.reply.balance;
@@ -270,7 +287,7 @@ const asSystem = Layer.succeed(Session, (effect) =>
 
 export const depositFromWebhook = Effect.fn(function* (accountId: AccountId, amount: number) {
   const bank = yield* CustomerApi.clientInProcess.pipe(Effect.provide(asSystem));
-  return yield* bank.DepositMoney({ target: accountId, amount });
+  return yield* bank.DepositMoney(accountId, { amount });
 }, Effect.scoped);
 ```
 
@@ -279,3 +296,5 @@ The caller's `decide` and `validate` read the `CurrentActor` the trusted Layer p
 `clientInProcess` needs a `Scope`. In a Worker, build it per request, like the served Api: Workers forbid sharing I/O across requests. In a long-lived process, `CustomerApi.layerClientInProcess` provides `CustomerApi.Client` in process for the life of the Layer, so code that asks for the client runs the same in process or over the network.
 
 Tests use the same client. To test an Api end to end, including its middleware and every rejection, see [Testing an Api](/domain/testing-apis).
+
+Next, [Story](/domain/story): how to state each rule as an example, and run it.

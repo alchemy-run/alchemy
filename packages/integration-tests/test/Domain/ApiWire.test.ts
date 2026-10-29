@@ -1,6 +1,7 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as NodeHttpClient from "@effect/platform-node/NodeHttpClient";
 import * as NodeHttpServer from "@effect/platform-node/NodeHttpServer";
 import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
@@ -69,13 +70,32 @@ class Bookings extends Domain.View("Bookings", {
   evolve: { Booked: (s) => ({ count: s.count + 1 }) },
 }) {}
 
+// A parcel's input names the fields a call's target and command id use.
+class Shipped extends Domain.Event("Shipped", { to: Schema.String, ref: Schema.String }) {}
+class Ship extends Domain.Command("Ship", {
+  target: Schema.String,
+  input: { target: Schema.String, commandId: Schema.String },
+  events: [Shipped],
+  reply: { to: Schema.String, ref: Schema.String },
+}) {}
+class Parcel extends Domain.Aggregate("Parcel", {
+  id: Schema.String,
+  state: Schema.Struct({ to: Schema.String, ref: Schema.String }),
+  initial: { to: "", ref: "" },
+  commands: [Ship],
+  decide: { Ship: (_, { target, commandId }) => [new Shipped({ to: target, ref: commandId })] },
+  evolve: { Shipped: (_, e) => ({ to: e.to, ref: e.ref }) },
+  reply: { Ship: (s) => s },
+  read: {},
+}) {}
+
 class Bank extends Domain.Model("Bank", {
-  aggregates: [Wallet, Ledger],
+  aggregates: [Wallet, Ledger, Parcel],
   views: [Bookings],
   policies: [BookDeposits],
 }) {}
 
-class BankApi extends Domain.Api("BankApi", Deposit, Wallet, Ledger, Bookings) {}
+class BankApi extends Domain.Api("BankApi", Deposit, Ship, Wallet, Ledger, Bookings, Parcel) {}
 
 const Hosted = Bank.layer(BookDepositsLive).pipe(Layer.provide(InMemory));
 
@@ -90,11 +110,33 @@ const Wire = Domain.protocolHttp("").pipe(
 );
 
 describe("Domain Api over the wire", () => {
+  it.live("an input may name its fields target and commandId", () =>
+    Effect.gen(function* () {
+      const bank = yield* BankApi.client;
+      const receipt = yield* bank.Ship(
+        "p-1",
+        { target: "Lisbon", commandId: "ref-7" },
+        { commandId: "ship-1" },
+      );
+      expect(receipt).toMatchObject({
+        reply: { to: "Lisbon", ref: "ref-7" },
+        stream: "Parcel/p-1",
+      });
+
+      const [shipped] = yield* bank.Parcel.events("p-1").pipe(
+        Stream.filter(Domain.Read.isEvent),
+        Stream.take(1),
+        Stream.runCollect,
+      );
+      expect(shipped!.envelope.commandId).toBe("ship-1");
+    }).pipe(Effect.scoped, Effect.provide(Wire)),
+  );
+
   it.live("an envelope keeps its command id and correlation id", () =>
     Effect.gen(function* () {
       const bank = yield* BankApi.client;
       const local = yield* BankApi.clientInProcess;
-      yield* bank.Deposit({ target: "w-1", amount: 5, commandId: "deposit-1" });
+      yield* bank.Deposit("w-1", { amount: 5 }, { commandId: "deposit-1" });
 
       const [wallet] = yield* bank.Wallet.events("w-1").pipe(
         Stream.filter(Domain.Read.isEvent),
@@ -136,7 +178,7 @@ describe("Domain Api over the wire", () => {
   it.live("a filter on a DateTime field works over the wire", () =>
     Effect.gen(function* () {
       const bank = yield* BankApi.client;
-      yield* bank.Deposit({ target: "w-1", amount: 5, commandId: "deposit-1" });
+      yield* bank.Deposit("w-1", { amount: 5 }, { commandId: "deposit-1" });
       yield* bank.Ledger.events("main").pipe(Stream.take(1), Stream.runCollect);
       const now = yield* DateTime.now;
 
@@ -150,7 +192,7 @@ describe("Domain Api over the wire", () => {
   it.live("a malformed filter is refused before it is evaluated", () =>
     Effect.gen(function* () {
       const bank = yield* BankApi.client;
-      yield* bank.Deposit({ target: "w-1", amount: 5, commandId: "deposit-1" });
+      yield* bank.Deposit("w-1", { amount: 5 }, { commandId: "deposit-1" });
       yield* bank.Ledger.events("main").pipe(Stream.take(1), Stream.runCollect);
 
       // `in` takes a list: the filter fails to encode, rather than throwing where it is evaluated.
@@ -166,7 +208,11 @@ describe("Domain Api over the wire", () => {
 
   it.live("a live read whose request does not decode gets a 400", () =>
     Effect.gen(function* () {
-      const client = yield* HttpClient.HttpClient;
+      // fetch refuses requests carrying an `upgrade` header; node:http sends
+      // them and hands back a refusal response.
+      const client = yield* HttpServer.makeTestClient.pipe(
+        Effect.provide(NodeHttpClient.layerNodeHttp),
+      );
       const response = yield* client.execute(
         HttpClientRequest.get(`/?read=${encodeURIComponent("{not json")}`).pipe(
           HttpClientRequest.setHeader("upgrade", "websocket"),

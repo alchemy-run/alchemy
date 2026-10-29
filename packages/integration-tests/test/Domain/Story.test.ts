@@ -423,6 +423,22 @@ describe("Domain Story", () => {
     ),
   );
 
+  it.effect("an answer the success schema rejects fails the policy", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.call(Approval.check, { total: 16 }),
+      Story.succeed(Approval.check, { ok: "yes" } as never),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toMatch(
+          /a policy or projection failed: .*Approval\.check returned a value its success schema rejects/s,
+        ),
+      ),
+    ),
+  );
+
   it.effect("asserts what a real call was sent and returned", () =>
     real(
       Story.given(c1, new Incremented({ by: 10, total: 10 })),
@@ -643,15 +659,16 @@ describe("Domain Story", () => {
       const counters = yield* Counter;
       yield* counters.send(c1, new Increment({ by: 3 }));
       const reset = yield* client.ResetCounter(
-        { target: "c-1" },
+        "c-1",
+        {},
         { headers: Headers.fromInput({ "x-operator": "sam" }) },
       );
       expect(reset).toEqual({ reply: { total: 0 }, stream: "Counter/c-1", version: 2 });
       const denied = yield* client
-        .ResetCounter({ target: "c-1" }, { headers: Headers.fromInput({ "x-operator": "guest" }) })
+        .ResetCounter("c-1", {}, { headers: Headers.fromInput({ "x-operator": "guest" }) })
         .pipe(Effect.flip);
       expect(denied._tag).toBe("NotAnOperator");
-      const anonymous = yield* client.ResetCounter({ target: "c-1" }).pipe(Effect.flip);
+      const anonymous = yield* client.ResetCounter("c-1").pipe(Effect.flip);
       expect(anonymous._tag).toBe("Unauthenticated");
     }).pipe(
       Effect.scoped,
@@ -707,6 +724,25 @@ describe("Domain Story", () => {
       expect((yield* client.Counter.get("c-1", guest).pipe(Effect.flip))._tag).toBe(
         "NotAnOperator",
       );
+
+      // A read without a session fails with the middleware's error, and the client's type has it.
+      const anonymous = [
+        yield* client.Totals.get("c-1").pipe(
+          Effect.catchTag("Unauthenticated", (e) => Effect.succeed(e._tag)),
+        ),
+        yield* client.Totals.watch("c-1").pipe(
+          Stream.runCollect,
+          Effect.catchTag("Unauthenticated", (e) => Effect.succeed(e._tag)),
+        ),
+        yield* client.Counter.get("c-1").pipe(
+          Effect.catchTag("Unauthenticated", (e) => Effect.succeed(e._tag)),
+        ),
+        yield* client.Counter.watch("c-1").pipe(
+          Stream.runCollect,
+          Effect.catchTag("Unauthenticated", (e) => Effect.succeed(e._tag)),
+        ),
+      ];
+      expect(anonymous).toEqual(Array(4).fill("Unauthenticated"));
 
       // A watch sees the current state, then each change.
       const totals = yield* client.Totals.watch("c-1", sam).pipe(

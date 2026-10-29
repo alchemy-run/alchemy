@@ -146,7 +146,7 @@ export const MatchingWorkflowProvider = () =>
       const getByName = Effect.fn(function* (workflowName: string) {
         return yield* entityresolution
           .getMatchingWorkflow({ workflowName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return {

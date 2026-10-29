@@ -279,7 +279,7 @@ export const CollectionProvider = () =>
               .pipe(
                 Effect.map((r) => r.createCollectionDetail),
                 // a concurrent reconciler already created it — fall through
-                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             const collectionId = created?.id ?? (yield* observeByName(name))?.id;
             if (collectionId === undefined) {

@@ -280,7 +280,7 @@ type ObservedSync = mcn.GetCatalogSyncResponse | mcn.CreateCatalogSyncResponse;
 const getSync = (accountId: string, syncId: string) =>
   mcn.getCatalogSync({ accountId, syncId }).pipe(
     Effect.map((sync): ObservedSync | undefined => sync),
-    Effect.catchTag("CatalogSyncNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("CatalogSyncNotFound", () => Effect.undefined),
   );
 
 /**

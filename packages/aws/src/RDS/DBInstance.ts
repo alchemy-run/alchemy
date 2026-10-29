@@ -486,6 +486,11 @@ export interface DBInstance extends Resource<
      */
     deletionProtection: boolean | undefined;
     /**
+     * Whether minor engine upgrades are applied automatically, as observed.
+     * Lets `alchemy drift` detect out-of-band changes.
+     */
+    autoMinorVersionUpgrade?: boolean;
+    /**
      * Immutable region-unique instance resource ID (used in IAM auth ARNs).
      */
     dbiResourceId: string | undefined;
@@ -1070,6 +1075,7 @@ const toAttrs = ({
   enhancedMonitoringResourceArn: instance.EnhancedMonitoringResourceArn,
   enabledCloudwatchLogsExports: instance.EnabledCloudwatchLogsExports ?? [],
   deletionProtection: instance.DeletionProtection,
+  autoMinorVersionUpgrade: instance.AutoMinorVersionUpgrade,
   dbiResourceId: instance.DbiResourceId,
   masterUsername: instance.MasterUsername,
   masterUserSecretArn: instance.MasterUserSecret?.SecretArn,
@@ -1633,7 +1639,7 @@ export const DBInstanceProvider = () =>
           .describeDBInstances({
             DBInstanceIdentifier: instanceId,
           })
-          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("DBInstanceNotFoundFault", () => Effect.undefined));
         return response?.DBInstances?.[0];
       });
 
@@ -1810,7 +1816,7 @@ export const DBInstanceProvider = () =>
       const readObservedSecretPolicy = (instance: rds.DBInstance) =>
         instance.MasterUserSecret?.SecretArn === undefined ||
         instance.DBClusterIdentifier !== undefined
-          ? Effect.succeed(undefined)
+          ? Effect.undefined
           : readMasterSecretPolicy(instance.MasterUserSecret.SecretArn).pipe(
               Effect.retry({
                 while: (error) => error._tag === "ResourceNotFoundException",

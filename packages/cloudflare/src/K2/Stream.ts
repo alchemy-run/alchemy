@@ -421,7 +421,7 @@ const streamName = (id: string, name: string | undefined) =>
 const getStream = (accountId: string, streamId: string) =>
   k2.getStream({ accountId, streamId }).pipe(
     Effect.map((s): ObservedStream | undefined => s),
-    Effect.catchTag("K2StreamNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("K2StreamNotFound", () => Effect.undefined),
   );
 
 /** Names are unique per account and not case-sensitive. */

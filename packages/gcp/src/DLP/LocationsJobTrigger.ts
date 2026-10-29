@@ -155,7 +155,7 @@ export const LocationsJobTrigger = Resource<LocationsJobTrigger>("GCP.DLP.Locati
 export class LocationsJobTriggerNotResolved extends Data.TaggedError(
   "GCP.DLP.LocationsJobTriggerNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, triggerId: string) =>
@@ -182,10 +182,10 @@ const toAttrs = (trigger: dlp.GooglePrivacyDlpV2JobTrigger, project: string, reg
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsLocationsJobTriggers({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const LocationsJobTriggerProvider = () =>
   Provider.succeed(LocationsJobTrigger, {
@@ -269,7 +269,7 @@ export const LocationsJobTriggerProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LocationsJobTriggerNotResolved({ name });
+        return yield* new LocationsJobTriggerNotResolved({ resourceName: name });
       }
 
       const displayChanged = !jsonEqual(current.displayName, news.displayName);

@@ -23,7 +23,6 @@ import {
   parseJobName,
   parseOwnership,
   replaceOnIdentity,
-  sameStringList,
   sameText,
   tenantNameOf,
   toGeneratedName,
@@ -303,7 +302,7 @@ export type TenantsJob = Resource<
 export const TenantsJob = Resource<TenantsJob>("GCP.Jobs.TenantsJob");
 
 export class TenantsJobNotResolved extends Data.TaggedError("GCP.Jobs.TenantsJobNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toParent = (project: string, parent: string) => tenantNameOf(project, parent);
@@ -458,7 +457,7 @@ export const TenantsJobProvider = () =>
 
       if (current === undefined) {
         return yield* new TenantsJobNotResolved({
-          name: name || `${parent}/jobs/${requisition}`,
+          resourceName: name || `${parent}/jobs/${requisition}`,
         });
       }
 

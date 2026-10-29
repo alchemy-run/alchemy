@@ -176,7 +176,7 @@ export const ApiProvider = () =>
       const getApiSafe = (apiId: string) =>
         agw2
           .getApi({ ApiId: apiId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
       return Api.Provider.of({
         stables: ["apiId", "apiEndpoint"],

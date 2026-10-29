@@ -1330,9 +1330,10 @@ describe.concurrent(
     );
 
     // #2533: a cyclic dispatch-namespace Worker precreates a stub that uploads
-    // nothing. Its namespace is still unresolved, so the checkpoint keeps no
-    // stub (#2540). When the upload then fails, destroy must not read that as
-    // an account-level Worker and delete the same-name script there.
+    // nothing. Its namespace comes from outside the cycle, so it resolves
+    // before precreate and the stub records it. When the upload then fails,
+    // destroy must not read that as an account-level Worker and delete the
+    // same-name script there.
     test.provider(
       "destroy preserves the account Worker after an interrupted dispatch precreate",
       (stack) =>
@@ -1376,7 +1377,10 @@ describe.concurrent(
             expect(checkpoint).toMatchObject({ status: "creating" });
             if (!isResourceState(checkpoint))
               return yield* Effect.die("Missing resource checkpoint");
-            expect(checkpoint.attr).toBeUndefined();
+            expect(checkpoint.attr).toMatchObject({
+              workerId: "",
+              namespace: scriptName(stack, "unavailable-ns"),
+            });
             expect(yield* deployments()).toEqual(before);
 
             yield* stack.destroy();
@@ -1737,6 +1741,57 @@ describe.concurrent(
           yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["live"], timeout: 360_000 },
+    );
+
+    // Cloudflare keeps a `secret_text` binding that a script upload omits, so
+    // a secret removed from `env` stayed bound to the deployed Worker. The
+    // cleanup must not touch a secret set outside Alchemy.
+    test.provider(
+      "a secret removed from env is unbound; one set outside Alchemy is kept",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const program = (env: Record<string, Redacted.Redacted<string>>) =>
+            Cloudflare.Worker("RemovedSecretWorker", { main, env });
+          const secretBindings = (scriptName: string) =>
+            workers.getScriptScriptAndVersionSetting({ accountId, scriptName }).pipe(
+              Effect.map((settings) =>
+                (settings.bindings ?? [])
+                  .filter((binding) => binding.type === "secret_text")
+                  .map((binding) => binding.name)
+                  .sort(),
+              ),
+            );
+
+          const v1 = yield* stack.deploy(
+            program({ DROPPED: Redacted.make("dropped"), KEPT: Redacted.make("kept") }),
+          );
+          expect(yield* secretBindings(v1.workerName)).toEqual(["DROPPED", "KEPT"]);
+          yield* workers.putScriptSecret({
+            accountId,
+            scriptName: v1.workerName,
+            name: "OUTSIDE",
+            text: "set-outside-alchemy",
+            type: "secret_text",
+          });
+
+          const v2 = yield* stack.deploy(program({ KEPT: Redacted.make("kept") }));
+          expect(yield* secretBindings(v2.workerName)).toEqual(["KEPT", "OUTSIDE"]);
+          expect(v2.secretNames).toEqual(["KEPT"]);
+
+          const settledPlan = yield* stack.plan(program({ KEPT: Redacted.make("kept") }));
+          const action = Object.values(settledPlan.resources).find(
+            (node) => node.resource.LogicalId === "RemovedSecretWorker",
+          )?.action;
+          expect(action).toBe("noop");
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 240_000 },
     );
 
     test.provider(

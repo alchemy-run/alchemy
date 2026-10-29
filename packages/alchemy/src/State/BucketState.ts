@@ -40,6 +40,9 @@ const OUTPUT_FILE = "__stack_output__.json";
  * the lock outlives the objects it was guarding; the store deletes it on
  * close.
  */
+/** The lease token `alchemy state migrate` leaves on a stage it moved to DynamoDB. */
+const MIGRATED_TOKEN = "migrated:dynamodb";
+
 const LEASE_FILE = "__lease__.json";
 
 /** How long a lease stays valid without a refresh. */
@@ -182,7 +185,7 @@ export const makeBucketState = (options: BucketStateOptions) =>
       use((o) => o.read(key)).pipe(
         Effect.flatMap((object) =>
           object === undefined
-            ? Effect.succeed(undefined)
+            ? Effect.undefined
             : Effect.try({
                 try: () => JSON.parse(object.text, reviveState) as T,
                 catch: (cause) =>
@@ -240,12 +243,17 @@ export const makeBucketState = (options: BucketStateOptions) =>
         if (version === undefined) {
           const existing = yield* readLease(key);
           const stillHeld = existing === undefined || existing.record.expiresAt > now;
+          if (existing?.record.token === MIGRATED_TOKEN) {
+            return yield* new StateStoreError({
+              message: `${heldError(stack, stage).message}: the stage moved to a DynamoDB state store. Deploy it with a version of alchemy that has AWS.state() on DynamoDB, or run 'alchemy state migrate --rollback' with that version to move it back.`,
+            });
+          }
           if (stillHeld) {
-            return yield* Effect.fail(heldError(stack, stage));
+            return yield* heldError(stack, stage);
           }
           const replaced = yield* putLease(key, fresh, { ifVersion: existing.version });
           if (replaced === undefined) {
-            return yield* Effect.fail(heldError(stack, stage));
+            return yield* heldError(stack, stage);
           }
           version = replaced;
         }
@@ -286,16 +294,29 @@ export const makeBucketState = (options: BucketStateOptions) =>
           1,
         )(
           Effect.gen(function* () {
-            if (cursor.lost) return yield* Effect.fail(lostError(stack, stage));
+            if (cursor.lost) return yield* lostError(stack, stage);
             const existing = yield* readLease(key);
-            const observedAt = yield* Clock.currentTimeMillis;
-            const leaseLost =
-              existing === undefined ||
-              existing.record.token !== token ||
-              existing.record.expiresAt <= observedAt;
-            if (leaseLost) {
+            if (existing === undefined || existing.record.token !== token) {
               cursor.lost = true;
-              return yield* Effect.fail(lostError(stack, stage));
+              return yield* lostError(stack, stage);
+            }
+            const observedAt = yield* Clock.currentTimeMillis;
+            if (existing.record.expiresAt <= observedAt) {
+              // The lease lapsed without anyone taking it: a refresh queued
+              // behind a large deploy's writes missed its window. Take it
+              // back at the version we read, so a deploy that took it in
+              // the meantime wins and this one stops.
+              const reclaimed = yield* putLease(
+                key,
+                { token, expiresAt: observedAt + LEASE_TTL_MS },
+                { ifVersion: existing.version },
+              );
+              if (reclaimed === undefined) {
+                cursor.lost = true;
+                return yield* lostError(stack, stage);
+              }
+              cursor.version = reclaimed;
+              return;
             }
             cursor.version = existing.version;
           }),
@@ -393,14 +414,12 @@ export const makeBucketState = (options: BucketStateOptions) =>
         verifyHeldLeases.pipe(Effect.andThen(listChildren(`${prefix}${stack}/`))),
       get: (request) => guarded(request, readJson<PersistedState>(resourceKey(request))),
       getReplacedResources: Effect.fn(function* (request) {
-        return (yield* Effect.all(
-          (yield* state.list(request)).map((fqn) =>
-            state.get({
-              stack: request.stack,
-              stage: request.stage,
-              fqn,
-            }),
-          ),
+        return (yield* Effect.forEach(yield* state.list(request), (fqn) =>
+          state.get({
+            stack: request.stack,
+            stage: request.stage,
+            fqn,
+          }),
         )).filter((r) => r?.status === "replaced");
       }),
       set: (request) =>

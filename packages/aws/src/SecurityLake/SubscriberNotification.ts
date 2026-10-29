@@ -158,8 +158,9 @@ export const SubscriberNotificationProvider = () =>
           // A missing subscriber (or an account that never onboarded
           // Security Lake) means "no notification", not a failure.
           const endpoint = yield* getSubscriberEndpoint(subscriberId).pipe(
-            Effect.catchTag(["ResourceNotFoundException", "UnauthorizedException"], () =>
-              Effect.succeed(undefined),
+            Effect.catchTag(
+              ["ResourceNotFoundException", "UnauthorizedException"],
+              () => Effect.undefined,
             ),
           );
           // Notifications carry no tags, so ownership can't be

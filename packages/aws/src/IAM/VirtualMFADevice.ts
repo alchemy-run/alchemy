@@ -4,12 +4,20 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { toRedactedBytes, toTagRecord } from "./common.ts";
+
+export class VirtualMFADeviceUnexpectedResponse extends Data.TaggedError(
+  "VirtualMFADeviceUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface VirtualMFADeviceProps {
   /**
@@ -121,7 +129,7 @@ export const VirtualMFADeviceProvider = () =>
             SerialNumber: serialNumber,
             UserName: userName,
           })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
       });
 
       return {
@@ -231,9 +239,9 @@ export const VirtualMFADeviceProvider = () =>
               Tags: createTagsList(desiredTags),
             });
             if (!created.VirtualMFADevice.SerialNumber) {
-              return yield* Effect.fail(
-                new Error(`createVirtualMFADevice returned no serial number`),
-              );
+              return yield* new VirtualMFADeviceUnexpectedResponse({
+                message: `createVirtualMFADevice returned no serial number`,
+              });
             }
             serialNumber = created.VirtualMFADevice.SerialNumber;
             base32StringSeed = toRedactedBytes(created.VirtualMFADevice.Base32StringSeed);
@@ -254,7 +262,9 @@ export const VirtualMFADeviceProvider = () =>
           }
 
           if (!serialNumber) {
-            return yield* Effect.fail(new Error(`Virtual MFA device has no serial number`));
+            return yield* new VirtualMFADeviceUnexpectedResponse({
+              message: `Virtual MFA device has no serial number`,
+            });
           }
 
           // Sync tags against the cloud's actual tags.
