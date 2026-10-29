@@ -337,7 +337,7 @@ Clients call commands as methods (`bank.WithdrawMoney(accountId, { amount }, { c
 
 More: [Api](https://alchemy.run/domain/api).
 
-`Domain.Api.describe(CustomerApi)` lists every call the Api serves as plain JSON: entry, kind, operation (`send`, `get`, `peek`, `watch`, `events`, `list`), RPC tag, `mode` (`read` or `write`), whether it streams, and JSON Schemas for its input, success and typed errors. Build tool lists, CLI help or OpenAPI from it instead of a second hand-written list, and snapshot it in a test to catch a change to the public surface.
+`Domain.Api.describe(CustomerApi)` lists every call the Api serves as plain JSON: entry, kind, operation (`send`, `get`, `peek`, `watch`, `events`, `list`, `snapshot`), RPC tag, `mode` (`read` or `write`), whether it streams, and JSON Schemas for its input, success and typed errors. Build tool lists, CLI help or OpenAPI from it instead of a second hand-written list, and snapshot it in a test to catch a change to the public surface.
 
 ## Model
 

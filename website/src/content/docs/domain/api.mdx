@@ -320,7 +320,7 @@ Each operation has these fields:
 | `api`         | The Api's name.                                                               |
 | `entry`       | The command's tag, or the view's, stream's or aggregate's name.               |
 | `kind`        | `Command`, `View`, `Aggregate` or `Stream`.                                   |
-| `operation`   | `send` for a command; `get`, `peek`, `watch`, `events` or `list` for a read.  |
+| `operation`   | `send` for a command; `get`, `peek`, `watch`, `events`, `list` or `snapshot` for a read. |
 | `rpc`         | The RPC tag the server answers to, like `AccountSummary.get`.                 |
 | `mode`        | `write` for a command, `read` for everything else.                            |
 | `stream`      | `true` for `watch` and `events`, which answer with a stream of values.        |
