@@ -568,6 +568,30 @@ layer(services)("bin and env", (it) => {
       }).pipe(Effect.provide(NodeServices.layer)),
     { timeout: 30_000 },
   );
+
+  it.effect.skipIf(process.platform === "win32")(
+    `runs the binary in ${Workerd.PATH_ENV}`,
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dir = yield* fs.makeTempDirectoryScoped();
+        const marker = path.join(dir, "marker");
+        const bin = path.join(dir, "workerd");
+        yield* fs.writeFileString(
+          bin,
+          `#!/bin/sh\nprintf env > ${JSON.stringify(marker)}\nexec ${JSON.stringify(workerdBin)} "$@"\n`,
+        );
+        yield* fs.chmod(bin, 0o755);
+        vi.stubEnv(Workerd.PATH_ENV, bin);
+        yield* serveGcProbe();
+        expect(yield* fs.readFileString(marker)).toBe("env");
+      }).pipe(
+        Effect.provide(NodeServices.layer),
+        Effect.ensuring(Effect.sync(() => vi.unstubAllEnvs())),
+      ),
+    { timeout: 30_000 },
+  );
 });
 
 describe("parseAddressInUse", () => {

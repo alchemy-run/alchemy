@@ -154,7 +154,8 @@ export interface WorkerdLogging {
 export interface WorkerdOptions {
   /**
    * Path to the workerd binary, instead of the one from the `workerd`
-   * package. Useful where the npm binary can't run, e.g. NixOS.
+   * package and `ALCHEMY_WORKERD_PATH`. Useful where the npm binary can't
+   * run, e.g. NixOS.
    */
   readonly path?: string;
   /**

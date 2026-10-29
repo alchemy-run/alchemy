@@ -45,7 +45,7 @@ export interface ServeOptions {
   readonly onExit?: (exit: WorkerdExit) => void;
   /**
    * Path to the workerd binary to run instead of the one from the `workerd`
-   * package.
+   * package. Takes precedence over {@link PATH_ENV}.
    */
   readonly bin?: string;
   /** Extra environment variables for the workerd process. */
@@ -116,6 +116,14 @@ interface ProcessHandle {
  */
 export const V8_FLAGS_ENV = "ALCHEMY_WORKERD_V8_FLAGS";
 
+/**
+ * Environment variable holding the path to the workerd binary every workerd
+ * process this package spawns runs, instead of the one from the `workerd`
+ * package. Useful where the npm binary can't start, e.g. NixOS. A
+ * per-Worker `bin` takes precedence.
+ */
+export const PATH_ENV = "ALCHEMY_WORKERD_PATH";
+
 /** Splits the value of {@link V8_FLAGS_ENV} into individual flags. */
 export const parseV8Flags = (value: string | undefined): Array<string> =>
   (value ?? "").split(/\s+/).filter((flag) => flag.length > 0);
@@ -169,7 +177,7 @@ const make = (
           }
         }
         const handle = yield* spawn(
-          options?.bin ?? workerd.bin,
+          options?.bin || process.env[PATH_ENV] || workerd.bin,
           [
             "serve",
             "--binary",

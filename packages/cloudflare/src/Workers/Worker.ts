@@ -1040,7 +1040,8 @@ export interface WorkerProps<
           /**
            * Path to the workerd binary to run instead of the one from the
            * `workerd` npm package. Use it where the npm binary can't
-           * start, e.g. NixOS.
+           * start, e.g. NixOS. Set `ALCHEMY_WORKERD_PATH` instead to
+           * change the binary for every workerd process alchemy starts.
            */
           path?: string;
           /**
@@ -2028,7 +2029,8 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * `dev.workerd` configures the local `workerd` process: `path` swaps
  * the binary from the `workerd` npm package (e.g. on NixOS, where it
  * can't start), `v8Flags` adds V8 flags and `env` adds environment
- * variables.
+ * variables. `ALCHEMY_WORKERD_PATH` sets the binary for every workerd
+ * process instead, including ones shared across Workers.
  * ```typescript
  * {
  *   main: "./src/worker.ts",
