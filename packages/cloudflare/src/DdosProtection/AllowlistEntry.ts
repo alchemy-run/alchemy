@@ -229,7 +229,7 @@ type ObservedEntry = ddos.GetAdvancedTcpProtectionAllowlistItemResponse;
 const getEntry = (accountId: string, prefixId: string) =>
   ddos.getAdvancedTcpProtectionAllowlistItem({ accountId, prefixId }).pipe(
     Effect.map((entry): ObservedEntry | undefined => entry),
-    Effect.catchTag("AllowlistEntryNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("AllowlistEntryNotFound", () => Effect.undefined),
   );
 
 /**

@@ -195,7 +195,7 @@ export const SubscriberProvider = () =>
       const getById = (subscriberId: string) =>
         securitylake.getSubscriber({ subscriberId }).pipe(
           Effect.map((response) => response.subscriber),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       // Subscriber names are unique per account/region — find the live
@@ -216,7 +216,7 @@ export const SubscriberProvider = () =>
             output?.subscriberId
               ? getById(output.subscriberId)
               : Effect.flatMap(createName(id, olds ?? {}), findByName)
-          ).pipe(Effect.catchTag("UnauthorizedException", () => Effect.succeed(undefined)));
+          ).pipe(Effect.catchTag("UnauthorizedException", () => Effect.undefined));
           if (subscriber === undefined) return undefined;
           const attrs = buildAttrs(subscriber);
           const tags = yield* readSecurityLakeTags(attrs.subscriberArn);

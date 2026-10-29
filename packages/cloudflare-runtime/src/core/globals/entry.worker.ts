@@ -337,7 +337,7 @@ async function handleEmail(
   );
 
   // Propagate `.setReject()` reasons to the caller
-  let maybeClientError: string | undefined = undefined;
+  let maybeClientError = undefined as string | undefined;
 
   // Construct a ForwardableEmailMessage-like object. We need
   // - it to be able to be passed across JSRPC (to support e.g.
@@ -402,19 +402,44 @@ async function handleEmail(
   return new Response("Worker successfully processed email", { status: 200 });
 }
 
+/**
+ * Parses the original client protocol from an `X-Forwarded-Proto` header
+ * (Miniflare's `shared/forwarded-proto.ts`): the first entry of a proxy
+ * chain, or `undefined` if it is missing or unsupported.
+ */
+function parseForwardedProto(value: string | null | undefined): "http:" | "https:" | undefined {
+  const protocol = value?.split(",")[0]?.trim().toLowerCase();
+  if (protocol === "http" || protocol === "https") return `${protocol}:`;
+  return undefined;
+}
+
 export default <ExportedHandler<Env>>{
   async fetch(request, env) {
     // The proxy connects to a private runtime address. Only a trusted proxy
     // may restore the client-facing URL and Host (matching Miniflare).
     let url = new URL(request.url);
+    let originalUrl: string | null = null;
     const secret = request.headers.get(HEADER_PROXY_SHARED_SECRET);
     if (secret !== null) {
       if (!secret || secret !== env[BINDING_PROXY_SHARED_SECRET]) {
         return new Response("Invalid proxy shared secret", { status: 400 });
       }
-      const originalUrl = request.headers.get(HEADER_ORIGINAL_URL);
+      originalUrl = request.headers.get(HEADER_ORIGINAL_URL);
       if (originalUrl !== null) {
         url = new URL(originalUrl);
+      }
+    }
+    // Match the Vite dev server's handling of TLS-terminating proxies
+    // (Miniflare's `getUserRequest`). Explicit URLs supplied by a trusted
+    // proxy remain authoritative.
+    if (originalUrl === null) {
+      const protocol = parseForwardedProto(request.headers.get("X-Forwarded-Proto"));
+      if (protocol !== undefined) {
+        url.protocol = protocol;
+        // Parsing request.url may have removed a default port for the
+        // physical protocol. Restore the original authority after changing
+        // the scheme.
+        url.host = request.headers.get("Host") ?? url.host;
       }
     }
     if (url.pathname === "/cdn-cgi/handler/queue") {

@@ -188,7 +188,7 @@ export const Conversation = Resource<Conversation>("GCP.ContactCenterInsights.Co
 export class ConversationNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.ConversationNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_MEDIUM = "CHAT";
@@ -252,10 +252,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsConversations({ name, view: "BASIC" })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsConversations.pages({ parent, pageSize: 100, view: "BASIC" }).pipe(
@@ -354,7 +354,7 @@ export const ConversationProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConversationNotResolved({ name });
+        return yield* new ConversationNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

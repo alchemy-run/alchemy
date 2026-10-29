@@ -253,7 +253,7 @@ export const AgentProvider = () =>
       const getAgentOrUndefined = Effect.fn(function* (agentId: string) {
         return yield* bedrock.getAgent({ agentId }).pipe(
           Effect.map((r) => r.agent),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -279,7 +279,7 @@ export const AgentProvider = () =>
       const waitForSettled = Effect.fn(function* (agentId: string) {
         return yield* bedrock.getAgent({ agentId }).pipe(
           Effect.map((r) => r.agent),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           Effect.repeat({
             schedule: Schedule.fixed("3 seconds"),
             until: (agent) => agent === undefined || !AGENT_TRANSIENT.has(agent.agentStatus),

@@ -26,6 +26,7 @@ wrangler.jsonc
 smoke
 .svelte-kit
 .astro
+.vinext
 .wrangler
 
 *.tgz
@@ -60,7 +61,6 @@ packages/cloudflare-runtime/src/rolldown/out/
 .turbo
 coverage
 test-results
-.external
 .bundle-benchmark
 packages/alchemy/docs
 .sonda

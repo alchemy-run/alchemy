@@ -467,7 +467,7 @@ const createListName = (id: string, name: string | undefined) =>
 const getListById = (accountId: string, listId: string) =>
   rules
     .getList({ accountId, listId })
-    .pipe(Effect.catchTag("ListNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ListNotFound", () => Effect.undefined));
 
 /**
  * Find a list by exact name. List names are unique per account.

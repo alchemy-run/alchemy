@@ -5,7 +5,7 @@ import {
   stampedOf,
   type MigrationsInput,
 } from "@alchemy.run/sql/Migrations";
-import { hashImports, readSqlFile } from "@alchemy.run/sql/SqlFile";
+import { hashImports } from "@alchemy.run/sql/SqlFile";
 import {
   createProjectBranch,
   createProjectEndpoint,
@@ -33,7 +33,7 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { runPgMigrations, runSql } from "./Migrations.ts";
+import { runImports, runPgMigrations } from "./Migrations.ts";
 import { parsePostgresOrigin, type PostgresOrigin } from "./PostgresOrigin.ts";
 import { DeletionPending, type Project, waitForOperations } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
@@ -344,7 +344,7 @@ export const BranchProvider = () =>
           branch_id: output.branchId,
         }).pipe(
           Effect.flatMap(({ branch }) => hydrateBranch(output.projectId, branch, output)),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       }
       if (!olds?.project) return undefined;
@@ -397,7 +397,7 @@ export const BranchProvider = () =>
               branch_id: output.branchId,
             }).pipe(
               Effect.map(({ branch }) => branch),
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             )
           : undefined;
       if (!observed) {
@@ -652,7 +652,7 @@ const hydrateBranch = (
     return attributes;
   }).pipe(
     // A branch/database/endpoint can disappear mid-enumeration — skip it.
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const rootDir = Effect.sync(() => process.cwd());
@@ -834,28 +834,4 @@ const fetchConnection = (
       pooled: true,
     });
     return { uri: direct.uri, pooled: pooled.uri };
-  });
-
-const runImports = (
-  connectionUri: Redacted.Redacted<string>,
-  importFiles: ReadonlyArray<string>,
-  rootDir: string,
-  previous: Record<string, string>,
-) =>
-  Effect.gen(function* () {
-    const hashes: Record<string, string> = { ...previous };
-    for (const filePath of importFiles) {
-      const file = yield* readSqlFile(rootDir, filePath);
-      if (previous[filePath] === file.hash) {
-        hashes[filePath] = file.hash;
-        continue;
-      }
-      yield* runSql(connectionUri, file.sql);
-      hashes[filePath] = file.hash;
-    }
-    const tracked = new Set(importFiles);
-    for (const key of Object.keys(hashes)) {
-      if (!tracked.has(key)) delete hashes[key];
-    }
-    return hashes;
   });

@@ -805,9 +805,7 @@ const getInstance = (accountId: string, namespace: string, id: string) =>
   aisearch
     .readNamespaceInstance({ accountId, namespace, id })
     .pipe(
-      Effect.catchTag(["AiSearchInstanceNotFound", "NamespaceNotFound"], () =>
-        Effect.succeed(undefined),
-      ),
+      Effect.catchTag(["AiSearchInstanceNotFound", "NamespaceNotFound"], () => Effect.undefined),
     );
 
 const createInstanceId = (id: string, instanceId: string | undefined) =>

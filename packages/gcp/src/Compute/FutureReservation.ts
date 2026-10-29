@@ -304,7 +304,7 @@ const needsUpdate = (current: compute.FutureReservation, desired: compute.Future
 const getByName = (project: string, zone: string, futureReservation: string) =>
   compute
     .getFutureReservations({ project, zone, futureReservation })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, zone: string, futureReservationName: string) =>
   getByName(project, zone, futureReservationName).pipe(
@@ -411,7 +411,7 @@ export const FutureReservationProvider = () =>
                 ignore: ["RESOURCE_ALREADY_EXISTS"],
               }),
             ),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* awaitResource(env.project, zone, futureReservationName);
       }
@@ -459,7 +459,7 @@ export const FutureReservationProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
             times: 8,
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitZoneOperation(env.project, zone, operation).pipe(

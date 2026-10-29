@@ -46,7 +46,7 @@ export const viteSupportsPortZero = (version: string | null | undefined): boolea
  */
 export const resolveViteDevPort = (
   viteVersion: string | null | undefined,
-  explicitPort?: number | undefined,
+  explicitPort?: number,
 ): Effect.Effect<number, FrameworkError> =>
   explicitPort
     ? Effect.succeed(explicitPort)

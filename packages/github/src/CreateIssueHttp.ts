@@ -1,15 +1,12 @@
+import * as Issues from "@distilled.cloud/github/issues";
 import * as Layer from "effect/Layer";
 import * as BindingHttp from "./BindingHttp.ts";
 import { CreateIssue, type CreateIssueRequest } from "./CreateIssue.ts";
 
 export const createIssueOperation = BindingHttp.operation(
   "issues.create",
-  (octokit, repo) => (request: CreateIssueRequest) =>
-    octokit.rest.issues.create({
-      owner: repo.owner,
-      repo: repo.repository,
-      ...request,
-    }),
+  (repo) => (request: CreateIssueRequest) =>
+    Issues.create({ owner: repo.owner, repo: repo.repository, ...request }),
 );
 
 /**

@@ -5,11 +5,19 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { readQuickSightTags, syncQuickSightTags, toWireTags, waitForSettled } from "./internal.ts";
+
+export class QuickSightDashboardUnexpectedResponse extends Data.TaggedError(
+  "QuickSightDashboardUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Properties for an Amazon QuickSight dashboard — a published, read-only view
@@ -133,7 +141,7 @@ export const DashboardProvider = () =>
             AwsAccountId: accountId,
             DashboardId: dashboardId,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.Dashboard;
       });
 
@@ -215,9 +223,9 @@ export const DashboardProvider = () =>
 
           observed = yield* settle(accountId, dashboardId);
           if (observed === undefined) {
-            return yield* Effect.fail(
-              new Error(`QuickSight dashboard '${dashboardId}' not found after reconcile`),
-            );
+            return yield* new QuickSightDashboardUnexpectedResponse({
+              message: `QuickSight dashboard '${dashboardId}' not found after reconcile`,
+            });
           }
 
           // 3b. Sync tags.

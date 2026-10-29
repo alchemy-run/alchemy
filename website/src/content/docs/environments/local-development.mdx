@@ -169,32 +169,9 @@ that stage. They keep running after you stop `alchemy dev`.
 ### One dev stage per worktree
 
 Every checkout on your machine shares `dev_$USER`, so two worktrees
-running `alchemy dev` fight over one stage. Give each worktree its
-own stage, named after its directory:
-
-```json
-{
-  "scripts": {
-    "dev": "alchemy dev --stage dev_$(basename $(git rev-parse --show-toplevel))",
-    "dev:destroy": "alchemy destroy --stage dev_$(basename $(git rev-parse --show-toplevel))"
-  }
-}
-```
-
-Run `dev:destroy` before you delete the worktree, or its cloud
-resources outlive it.
-
-You can also set `ALCHEMY_STAGE` in the worktree's `.env`. Every
-command reads it, `alchemy deploy` included, so dev and deploy then
-share one stage and switching between them replaces it
-([local ⇄ live](#switching-is-a-replacement)).
-
-Tests have their own stage, `test_$USER`. Set `ALCHEMY_TEST_STAGE`
-to isolate them per worktree too:
-
-```sh
-ALCHEMY_TEST_STAGE=test_$(basename $(git rev-parse --show-toplevel)) pnpm test
-```
+running `alchemy dev` fight over one stage. See
+[Worktrees](/environments/worktrees) to give each worktree its own
+dev, deploy, and test stages.
 
 ## Testing in dev mode
 

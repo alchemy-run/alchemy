@@ -278,7 +278,7 @@ export const ConnectionProvider = () =>
             output?.connectionName ?? (yield* createConnectionName(id, olds ?? {}));
           const described = yield* eventbridge
             .describeConnection({ Name: connectionName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (!described?.Name || !described.ConnectionArn) {
             return undefined;
           }
@@ -323,7 +323,7 @@ export const ConnectionProvider = () =>
           // connection falls through to create.
           const observed = yield* eventbridge
             .describeConnection({ Name: connectionName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!observed?.ConnectionArn) {
             // Ensure — create the connection; tolerate an AlreadyExists race

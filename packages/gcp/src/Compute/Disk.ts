@@ -244,7 +244,7 @@ const toAttrs = (disk: compute.Disk, project: string) => ({
 const getByName = (project: string, zone: string, disk: string) =>
   compute
     .getDisks({ project, zone, disk })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitDiskReady = (project: string, zone: string, diskName: string) =>
   getByName(project, zone, diskName).pipe(
@@ -416,7 +416,7 @@ export const DiskProvider = () =>
               enableConfidentialCompute: news.enableConfidentialCompute,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitZoneOperation(env.project, zone, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -513,7 +513,7 @@ export const DiskProvider = () =>
           zone: output.zone,
           disk: output.diskName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitZoneOperation(output.project, output.zone, deleted, {
           ignore: ["RESOURCE_NOT_FOUND"],

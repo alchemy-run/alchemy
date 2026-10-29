@@ -217,7 +217,7 @@ export const KeyPairProvider = () =>
                     },
                   ],
                 })
-                .pipe(Effect.catchTag("InvalidKeyPair.Duplicate", () => Effect.succeed(undefined)));
+                .pipe(Effect.catchTag("InvalidKeyPair.Duplicate", () => Effect.undefined));
               if (imported?.KeyPairId) {
                 info = {
                   KeyPairId: imported.KeyPairId,
@@ -241,7 +241,7 @@ export const KeyPairProvider = () =>
                     },
                   ],
                 })
-                .pipe(Effect.catchTag("InvalidKeyPair.Duplicate", () => Effect.succeed(undefined)));
+                .pipe(Effect.catchTag("InvalidKeyPair.Duplicate", () => Effect.undefined));
               if (created?.KeyPairId) {
                 privateKey = asRedacted(created.KeyMaterial) ?? privateKey;
                 info = {

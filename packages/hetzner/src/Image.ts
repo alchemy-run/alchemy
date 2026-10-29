@@ -302,7 +302,7 @@ const toDescription = (id: string, description: string | undefined, existing?: s
 const getById = (id: number) =>
   Hetzner.images.getImage({ id }).pipe(
     Effect.map(({ image }) => image),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const getByLabels = (labels: Record<string, string>) =>

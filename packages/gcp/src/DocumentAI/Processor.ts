@@ -185,10 +185,10 @@ const toAttrs = (processor: documentai.GoogleCloudDocumentaiV1Processor, project
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : documentai
         .getProjectsLocationsProcessors({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findOwned = (id: string, project: string, parent: string, hinted?: string) =>
   Effect.gen(function* () {
@@ -206,13 +206,13 @@ const waitUntilReady = (name: string) =>
     Effect.filterOrFail(
       (processor): processor is documentai.GoogleCloudDocumentaiV1Processor =>
         processor !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (processor) => processor.state !== "FAILED",
       (processor) =>
         new ProcessorFailed({
-          name,
+          resourceName: name,
           state: processor.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -220,7 +220,7 @@ const waitUntilReady = (name: string) =>
       (processor) => processor.state === "ENABLED" || processor.state === "DISABLED",
       (processor) =>
         new ProcessorPending({
-          name,
+          resourceName: name,
           state: processor.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -236,13 +236,13 @@ const waitUntilState = (name: string, desired: "ENABLED" | "DISABLED") =>
     Effect.filterOrFail(
       (processor): processor is documentai.GoogleCloudDocumentaiV1Processor =>
         processor !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (processor) => processor.state !== "FAILED",
       (processor) =>
         new ProcessorFailed({
-          name,
+          resourceName: name,
           state: processor.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -250,7 +250,7 @@ const waitUntilState = (name: string, desired: "ENABLED" | "DISABLED") =>
       (processor) => processor.state === desired,
       (processor) =>
         new ProcessorPending({
-          name,
+          resourceName: name,
           state: processor.state ?? "STATE_UNSPECIFIED",
         }),
     ),
@@ -353,7 +353,7 @@ export const ProcessorProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: hinted || `${parent}/processors`,
+          resourceName: hinted || `${parent}/processors`,
         });
       }
 
@@ -409,7 +409,7 @@ export const ProcessorProvider = () =>
         documentai.deleteProjectsLocationsProcessors({
           name: output.name,
         }),
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

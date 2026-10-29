@@ -270,7 +270,7 @@ export const ModelProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -311,7 +311,7 @@ export const ModelProvider = () =>
         yield* deleteVersions(name);
         const operation = yield* ml
           .deleteProjectsModels({ name })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (operation !== undefined) {
           yield* waitForOperation(operation, { notFoundOk: true });
         }

@@ -39,9 +39,9 @@ export const BatchExecuteStatementHttp = Layer.effect(
         DynamoDB.batchExecuteStatement,
         tablesRegion(sortedTables),
       );
-      return Effect.fn(`AWS.DynamoDB.BatchExecuteStatement(${sortedTables})`)(function* (
-        request: BatchExecuteStatementRequest,
-      ) {
+      return Effect.fn(
+        `AWS.DynamoDB.BatchExecuteStatement(${sortedTables.map((table) => table.LogicalId).join(", ")})`,
+      )(function* (request: BatchExecuteStatementRequest) {
         return yield* batchExecuteStatement(request);
       });
     });

@@ -114,7 +114,7 @@ export const ApplicationProvider = () =>
       const observe = (arnOrId: string) =>
         appintegrations
           .getApplication({ Arn: arnOrId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       /**
        * Find an application ARN by namespace via list enumeration. The

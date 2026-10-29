@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { executionNameOf } from "@alchemy.run/aws/Lambda/WorkflowFunction";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as Lambda from "@distilled.cloud/aws/lambda";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import type { Status } from "alchemy/Workflows";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";

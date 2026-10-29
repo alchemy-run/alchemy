@@ -1,9 +1,9 @@
 import * as Hetzner from "@alchemy.run/hetzner";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as servers from "@distilled.cloud/hetzner/servers";
 import * as sshKeys from "@distilled.cloud/hetzner/ssh_keys";
 import { isActionState, State } from "alchemy/State/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: Hetzner.providers() });

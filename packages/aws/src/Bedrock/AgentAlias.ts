@@ -128,7 +128,7 @@ export const AgentAliasProvider = () =>
       const getAliasOrUndefined = Effect.fn(function* (agentId: string, agentAliasId: string) {
         return yield* bedrock.getAgentAlias({ agentId, agentAliasId }).pipe(
           Effect.map((r) => r.agentAlias),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -151,7 +151,7 @@ export const AgentAliasProvider = () =>
       const waitForSettled = Effect.fn(function* (agentId: string, agentAliasId: string) {
         return yield* bedrock.getAgentAlias({ agentId, agentAliasId }).pipe(
           Effect.map((r) => r.agentAlias),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           Effect.repeat({
             schedule: Schedule.fixed("3 seconds"),
             until: (alias) => alias === undefined || !ALIAS_TRANSIENT.has(alias.agentAliasStatus),

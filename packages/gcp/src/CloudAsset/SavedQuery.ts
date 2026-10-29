@@ -152,7 +152,7 @@ export const SavedQuery = Resource<SavedQuery>("GCP.CloudAsset.SavedQuery");
 export class SavedQueryNotResolved extends Data.TaggedError(
   "GCP.CloudAsset.SavedQueryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, savedQueryId: string) =>
@@ -188,10 +188,10 @@ const toAttrs = (query: cloudasset.SavedQuery, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cloudasset
         .getSavedQueries({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const observe = (project: string, savedQueryId: string, outputName?: string) =>
   Effect.gen(function* () {
@@ -273,7 +273,7 @@ export const SavedQueryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SavedQueryNotResolved({ name });
+        return yield* new SavedQueryNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -1,8 +1,8 @@
 import * as AWS from "@alchemy.run/aws";
 import { DBProxy } from "@alchemy.run/aws/RDS";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

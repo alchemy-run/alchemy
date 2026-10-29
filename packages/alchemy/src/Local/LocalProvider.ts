@@ -349,8 +349,12 @@ export const make = <
           Effect.onExit((exit) =>
             exit._tag === "Failure"
               ? // A failed start must not linger as "running" — the next
-                // plan should report `update` and try again.
-                invalidate
+                // plan should report `update` and try again — nor keep what
+                // it acquired: the instance scope would otherwise hold a
+                // process that outlived its start (one still waiting for
+                // its URL when the deploy was interrupted, say) until the
+                // provider shut down.
+                invalidate.pipe(Effect.andThen(Scope.close(scope, exit)))
               : Effect.void,
           ),
         );

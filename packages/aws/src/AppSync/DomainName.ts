@@ -77,7 +77,7 @@ export const DomainNameProvider = () =>
       const getDomainSafe = (domainName: string) =>
         appsync.getDomainName({ domainName }).pipe(
           Effect.map((response) => response.domainNameConfig),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       const toAttributes = (config: appsync.DomainNameConfig): AppSyncDomainName["Attributes"] => ({

@@ -186,7 +186,7 @@ export default function DeployTerminal({
       }
     };
 
-    run();
+    void run();
     return () => {
       cancelRef.current = true;
     };

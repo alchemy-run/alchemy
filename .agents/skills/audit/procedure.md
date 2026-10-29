@@ -66,7 +66,8 @@ Read the full diff against `origin/main` and apply AGENTS.md. The standards:
   fake-cloud engine tests. Cause drift for real through the cloud API (e.g.
   a point-in-time restore swapped into place), then redeploy and verify. Use
   real local infrastructure where it helps (a `registry:2` container, a kind
-  cluster, Docker Postgres + `cloudflared`), gated on the tool being present.
+  cluster, Docker Postgres + `cloudflared`). Assume Docker is installed:
+  never `skipIf` on Docker availability; a missing daemon fails the test.
   A spy that wraps the real service is fine; a fake is not.
 - **Also audit the existing tests the PR touches.** If a suite already fakes
   what it claims to test, say so plainly — don't mention it in passing.

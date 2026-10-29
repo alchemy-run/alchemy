@@ -248,9 +248,7 @@ export const ProviderLive = () =>
             accountId: acct,
             queueId: output.queueId,
           })
-          .pipe(
-            Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.undefined));
       }
       if (!observed) {
         observed = yield* findQueueByName(queueName);
@@ -395,7 +393,7 @@ export const ProviderLive = () =>
           })
           .pipe(
             Effect.map((queue) => toAttributes(queue, output.accountId)),
-            Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.succeed(undefined)),
+            Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.undefined),
           );
       }
       const queueName = yield* createQueueName(id, olds?.name);
@@ -494,7 +492,7 @@ const deleteOwnedProducerScripts = Effect.fn(function* (accountId: string, queue
   const stack = yield* Stack;
   const queue = yield* queues
     .getQueue({ accountId, queueId })
-    .pipe(Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["QueueNotFound", "InvalidRoute"], () => Effect.undefined));
   const producerScripts = Array.from(
     new Set(
       (queue?.producers ?? []).flatMap((producer) =>
@@ -508,9 +506,7 @@ const deleteOwnedProducerScripts = Effect.fn(function* (accountId: string, queue
   for (const scriptName of producerScripts) {
     const settings = yield* workers
       .getScriptScriptAndVersionSetting({ accountId, scriptName })
-      .pipe(
-        Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () => Effect.succeed(undefined)),
-      );
+      .pipe(Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () => Effect.undefined));
     const tags = new Set(settings?.tags ?? []);
     if (!tags.has(`alchemy:stack:${stack.name}`) || !tags.has(`alchemy:stage:${stack.stage}`)) {
       continue;

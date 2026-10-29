@@ -10,8 +10,8 @@ import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { GitHubCredentials } from "./Credentials.ts";
-import { effectiveGitHubBaseUrl, gitHubBaseUrlChanged } from "./Octokit.ts";
+import { effectiveGitHubBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
+import { Credentials } from "./Credentials.ts";
 import type * as GitHub from "./Providers.ts";
 
 export interface WikiPageProps {
@@ -123,7 +123,7 @@ export interface WikiPage extends Resource<
  * current page file, not its Git history. Authentication uses a transient
  * process-environment header; tokens are not stored in clone URLs or Git config.
  *
- * Authentication is resolved via the `GitHubCredentials` service supplied by
+ * Authentication is resolved via the GitHub `Credentials` service supplied by
  * `GitHub.providers()` (env, stored PAT, `gh` CLI, or OAuth). The token needs
  * `repo` scope for private repositories or `public_repo` for public ones.
  * ### Creating Wiki Pages
@@ -264,6 +264,7 @@ const pageNameFor = (title: string) =>
     if (
       title.trim() !== title ||
       title.length === 0 ||
+      // oxlint-disable-next-line no-control-regex -- rejects control characters on purpose
       /[\x00-\x1f\x7f/\\]/.test(title) ||
       title === "." ||
       title === ".."
@@ -289,8 +290,13 @@ export const wikiRepository = Effect.fn(function* (props: WikiPageProps) {
   }
   const baseUrl = yield* effectiveGitHubBaseUrl(props.baseUrl);
   const origin = yield* Effect.sync(() => {
-    const url = new URL(baseUrl ?? "https://github.com");
-    if (url.hostname.startsWith("api.") && url.hostname.endsWith(".ghe.com")) {
+    const url = new URL(baseUrl);
+    // The API host's Git host: api.github.com → github.com, and
+    // api.<tenant>.ghe.com → <tenant>.ghe.com (data residency).
+    if (
+      url.hostname === "api.github.com" ||
+      (url.hostname.startsWith("api.") && url.hostname.endsWith(".ghe.com"))
+    ) {
       url.hostname = url.hostname.slice(4);
     }
     return url.origin;
@@ -300,7 +306,7 @@ export const wikiRepository = Effect.fn(function* (props: WikiPageProps) {
       message: "Wiki Git authentication requires an HTTPS GitHub host.",
     });
   }
-  const credentials = yield* yield* GitHubCredentials;
+  const credentials = yield* yield* Credentials;
   const repositoryUrl = `${origin}/${props.owner}/${props.repository}`;
   return {
     remote: `${repositoryUrl}.wiki.git`,
@@ -439,8 +445,7 @@ export const readWikiPage = Effect.fn(
     return file === undefined ? undefined : yield* attributes(repository, props, wiki, file);
   },
   Effect.scoped,
-  (effect) =>
-    effect.pipe(Effect.catchTag("WikiRepositoryUnavailable", () => Effect.succeed(undefined))),
+  (effect) => effect.pipe(Effect.catchTag("WikiRepositoryUnavailable", () => Effect.undefined)),
 );
 
 const retryConcurrentPush = <A, E, R>(effect: Effect.Effect<A, E | WikiGitError, R>) =>

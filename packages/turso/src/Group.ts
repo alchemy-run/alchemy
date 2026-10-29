@@ -4,9 +4,15 @@ import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { organization } from "./Credentials.ts";
 import type { Providers } from "./Providers.ts";
+
+export class GroupUnexpectedResponse extends Data.TaggedError("GroupUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * A Turso location code, e.g. `"aws-us-east-1"`. List the locations
@@ -125,7 +131,7 @@ export const GroupProvider = () =>
       const observe = (org: string, name: string) =>
         turso.getGroup({ organizationSlug: org, groupName: name }).pipe(
           Effect.map((res) => res.group),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
 
       const toAttrs = (
@@ -157,15 +163,20 @@ export const GroupProvider = () =>
             return { action: "replace", deleteFirst: news.name !== undefined } as const;
           }
         }),
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const org = output?.organization ?? (yield* organization);
           const name = output?.name ?? (yield* groupName(id, olds?.name));
           const group = yield* observe(org, name);
           if (!group) return undefined;
           const attrs = toAttrs(org, group, group.delete_protection ?? false);
           // Turso has no tags: a group found under an explicit, user-chosen
-          // name without prior state may belong to someone else.
-          return output === undefined && olds?.name !== undefined ? Unowned(attrs) : attrs;
+          // name without prior state may belong to someone else — unless it
+          // is the generation a delete-first replacement is about to free.
+          const ours =
+            output !== undefined ||
+            olds?.name === undefined ||
+            (previous?.organization === org && previous.name === name);
+          return ours ? attrs : Unowned(attrs);
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const org = output?.organization ?? (yield* organization);
@@ -190,7 +201,9 @@ export const GroupProvider = () =>
                 Effect.catchTag("Conflict", () => observe(org, name)),
               );
             if (!group) {
-              return yield* Effect.fail(new Error(`Turso group ${name} vanished after create`));
+              return yield* new GroupUnexpectedResponse({
+                message: `Turso group ${name} vanished after create`,
+              });
             }
           }
 

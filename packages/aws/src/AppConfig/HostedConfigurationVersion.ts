@@ -90,7 +90,7 @@ export const HostedConfigurationVersionProvider = () =>
             ConfigurationProfileId: configurationProfileId,
             VersionNumber: versionNumber,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return {

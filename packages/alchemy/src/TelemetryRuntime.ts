@@ -2,6 +2,7 @@ import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Formatter from "effect/Formatter";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
@@ -14,7 +15,6 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import type * as Scope from "effect/Scope";
 import { unpackEnvValue } from "./RuntimeContext.ts";
-import type { layer, layerOtlp } from "./Telemetry.ts";
 
 /**
  * The shape of the {@link Telemetry} reference: a Layer of telemetry
@@ -37,7 +37,7 @@ const readBoundValue = (key: string): Effect.Effect<unknown> =>
     // directly instead of constructing a Config/Schema error for each absence.
     Effect.orDie,
     Effect.catchDefect((defect) =>
-      Predicate.isTagged(defect, "SourceError") ? Effect.succeed(undefined) : Effect.die(defect),
+      Predicate.isTagged(defect, "SourceError") ? Effect.undefined : Effect.die(defect),
     ),
     Effect.map((node) => {
       const raw = node?.value;
@@ -52,7 +52,7 @@ const readBoundValue = (key: string): Effect.Effect<unknown> =>
 const readBound = (key: string): Effect.Effect<string | undefined> =>
   readBoundValue(key).pipe(
     Effect.map((inner) =>
-      inner === undefined ? undefined : typeof inner === "string" ? inner : String(inner),
+      inner === undefined ? undefined : typeof inner === "string" ? inner : Formatter.format(inner),
     ),
   );
 
@@ -198,8 +198,9 @@ const fanoutClient = (
           return effect;
         }
         return Effect.gen(function* () {
-          const results = yield* Effect.all(
-            targets.map((target) =>
+          const results = yield* Effect.forEach(
+            targets,
+            (target) =>
               Effect.result(
                 base.execute(
                   request.pipe(
@@ -208,7 +209,6 @@ const fanoutClient = (
                   ),
                 ),
               ),
-            ),
             { concurrency: "unbounded" },
           );
           const healthy = results.find(
@@ -411,8 +411,8 @@ const reference = Telemetry;
 export const buildEventTelemetry = (
   context: Context.Context<never>,
   scope: Scope.Scope,
-  override?: TelemetryLayer | undefined,
-  base?: TelemetryLayer | undefined,
+  override?: TelemetryLayer,
+  base?: TelemetryLayer,
 ): Effect.Effect<Context.Context<never>> =>
   Effect.suspend(() => {
     const bound = base ?? Context.get(context, reference);

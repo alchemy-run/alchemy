@@ -118,7 +118,7 @@ export const ResourceAssociationProvider = () =>
       const observeApplication = Effect.fn(function* (specifier: string) {
         return yield* appregistry
           .getApplication({ application: specifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const observeAssociation = Effect.fn(function* (
@@ -128,7 +128,7 @@ export const ResourceAssociationProvider = () =>
       ) {
         return yield* appregistry
           .getAssociatedResource({ application, resourceType, resource })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return ResourceAssociation.Provider.of({

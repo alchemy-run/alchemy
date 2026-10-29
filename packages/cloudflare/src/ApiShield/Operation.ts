@@ -268,7 +268,7 @@ export const normalizeEndpoint = (endpoint: string): string => {
 const getOperation = (zoneId: string, operationId: string) =>
   apiGateway.getOperation({ zoneId, operationId }).pipe(
     Effect.map((op): ObservedOperation | undefined => op),
-    Effect.catchTag("OperationNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("OperationNotFound", () => Effect.undefined),
   );
 
 /**
