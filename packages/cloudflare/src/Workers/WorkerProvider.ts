@@ -614,6 +614,69 @@ const urlHostname = (url: string): string => {
 type PutZoneRedirectRules = rulesets.PutPhasForZoneRequest["rules"];
 
 /**
+ * The dynamic redirect rule sending `hostname` to the Worker's canonical
+ * `targetName`, tagged with the Worker's redirect description prefix.
+ *
+ * @internal exported for unit testing.
+ */
+export const buildRedirectRule = (prefix: string, hostname: string, targetName: string) => ({
+  action: "redirect" as const,
+  expression: `http.host eq "${hostname}"`,
+  description: `${prefix}${hostname}`,
+  enabled: true,
+  actionParameters: {
+    fromValue: {
+      statusCode: 301,
+      preserveQueryString: true,
+      targetUrl: {
+        expression: `concat("https://${targetName}", http.request.uri.path)`,
+      },
+    },
+  },
+});
+
+/**
+ * Whether a zone's existing redirect rules owned by this Worker already
+ * match the desired set: same descriptions, match expressions, and redirect
+ * target, status code, and query-string handling. Fields are compared
+ * individually because the ruleset read fills unset fields with `null`.
+ *
+ * @internal exported for unit testing.
+ */
+export const redirectRulesConverged = (
+  existing: readonly {
+    description?: string | null;
+    expression?: string | null;
+    actionParameters?: unknown;
+  }[],
+  desired: readonly ReturnType<typeof buildRedirectRule>[],
+): boolean =>
+  existing.length === desired.length &&
+  desired.every((rule) =>
+    existing.some((candidate) => {
+      const fromValue = (
+        candidate.actionParameters as
+          | {
+              fromValue?: {
+                statusCode?: unknown;
+                preserveQueryString?: unknown;
+                targetUrl?: { expression?: unknown } | null;
+              } | null;
+            }
+          | null
+          | undefined
+      )?.fromValue;
+      return (
+        candidate.description === rule.description &&
+        candidate.expression === rule.expression &&
+        fromValue?.targetUrl?.expression === rule.actionParameters.fromValue.targetUrl.expression &&
+        fromValue?.statusCode === rule.actionParameters.fromValue.statusCode &&
+        fromValue?.preserveQueryString === rule.actionParameters.fromValue.preserveQueryString
+      );
+    }),
+  );
+
+/**
  * The *custom domain* hostnames recorded in a Worker's persisted legacy
  * `domains` state — minus the workers.dev (stable or preview) and local-dev
  * entries that shared the list in older formats.
@@ -1586,8 +1649,8 @@ export const LiveWorkerProvider = () =>
         previousRedirects: readonly string[];
       }) {
         const prefix = `alchemy:worker:${params.scriptName}:redirect:`;
-        const desired = params.domain?.redirects ?? [];
-        const targetName = params.domain?.name;
+        const domain = params.domain;
+        const desired = domain?.redirects ?? [];
         // Zones to touch: every zone hosting a desired redirect, plus every
         // zone that hosted one before (so removals converge). Hostnames
         // whose zone we can't resolve (e.g. the domain was already
@@ -1607,36 +1670,14 @@ export const LiveWorkerProvider = () =>
             // empty would delete every other rule in the zone.
             .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
           const existingRules = entrypoint?.rules ?? [];
-          const ourDesired = desired
-            .filter((hostname) => params.zoneIdByHostname.get(hostname) === zoneId)
-            .map((hostname) => ({
-              action: "redirect" as const,
-              expression: `http.host eq "${hostname}"`,
-              description: `${prefix}${hostname}`,
-              enabled: true,
-              actionParameters: {
-                fromValue: {
-                  statusCode: 301,
-                  preserveQueryString: true,
-                  targetUrl: {
-                    expression: `concat("https://${targetName}", http.request.uri.path)`,
-                  },
-                },
-              },
-            }));
+          const ourDesired = domain
+            ? desired
+                .filter((hostname) => params.zoneIdByHostname.get(hostname) === zoneId)
+                .map((hostname) => buildRedirectRule(prefix, hostname, domain.name))
+            : [];
           const isOurs = (rule: { description?: string | null }) =>
             (rule.description ?? "").startsWith(prefix);
-          const ourExisting = existingRules.filter(isOurs);
-          const converged =
-            ourExisting.length === ourDesired.length &&
-            ourDesired.every((rule) =>
-              ourExisting.some(
-                (existing) =>
-                  existing.description === rule.description &&
-                  existing.expression === rule.expression,
-              ),
-            );
-          if (converged) continue;
+          if (redirectRulesConverged(existingRules.filter(isOurs), ourDesired)) continue;
           // Pass foreign rules through untouched (minus the read-only
           // fields the PUT schema doesn't accept) and replace our own set.
           const foreign = existingRules
