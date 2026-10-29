@@ -585,10 +585,7 @@ const hashAstroInput = (
 > =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
-    const salt = [
-      `${PROVIDER}@${packageVersion}`,
-      ...(main === undefined ? [] : [`main:${main}`]),
-    ];
+    const salt = [`${PROVIDER}@${packageVersion}`, ...(main === undefined ? [] : [`main:${main}`])];
     // Normalize workspace directories to a root-relative, `/`-separated
     // form so the hash label is identical whether the workspace came
     // from the build (absolute) or from persisted state (relative) —
@@ -640,11 +637,7 @@ const hashAstroInput = (
       (cwd) => hashWorkspaceDirectory(cwd),
       { concurrency: "unbounded" },
     );
-    const hash = yield* sha256Object([
-      ...salt,
-      root,
-      ...workspaceHashes.sort(),
-    ]);
+    const hash = yield* sha256Object([...salt, root, ...workspaceHashes.sort()]);
     return { hash, workspaces: relativeWorkspaces };
   });
 
@@ -849,10 +842,7 @@ const makeAstroSourceProvider = (options: AstroSourceOptions): SourceProvider =>
           // it constructs the Cloudflare deploy target directly (as a value)
           // rather than resolving the default specifier.
           target: cloudflareTarget({
-            worker:
-              options.main === undefined
-                ? vite
-                : { ...vite, main: options.main },
+            worker: options.main === undefined ? vite : { ...vite, main: options.main },
             sessionKVBindingName: options.sessionKVBindingName,
             sessions: options.sessions,
             sessionDevKV: options.sessionDevKV,

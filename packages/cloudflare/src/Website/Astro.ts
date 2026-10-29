@@ -239,6 +239,31 @@ type AstroInput<Bindings extends WorkerBindingProps> = InputProps<
  * const site = yield* Cloudflare.Website.Astro("Website");
  * ```
  *
+ * ### Custom Worker Entry
+ * By default the deployed Worker entry is Astro's server entrypoint.
+ * When the Worker must export more than Astro's fetch handler — Durable
+ * Object classes, a `scheduled` handler — point `main` at your own module
+ * that wraps Astro's handler (imported from
+ * `@alchemy.run/frontend-frameworks/astro/entrypoints/server`) and
+ * re-exports the extras.
+ *
+ * **Example:** Custom entry hosting a Durable Object
+ * ```typescript
+ * // src/worker-entry.ts
+ * // import handler from "@alchemy.run/frontend-frameworks/astro/entrypoints/server";
+ * // export class Counter extends DurableObject { ... }
+ * // export default { ...handler, scheduled: async () => { ... } };
+ *
+ * const site = yield* Cloudflare.Website.Astro("Website", {
+ *   main: "src/worker-entry.ts",
+ *   env: {
+ *     COUNTER: Cloudflare.DurableObject("Counter", {
+ *       className: "Counter",
+ *     }),
+ *   },
+ * });
+ * ```
+ *
  * ### Custom Rebuild Scope
  * By default, every non-gitignored file is hashed to decide whether a
  * rebuild is needed. Use `memo` to narrow the scope when your project
