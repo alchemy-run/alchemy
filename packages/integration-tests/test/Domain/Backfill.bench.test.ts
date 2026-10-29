@@ -11,15 +11,21 @@ import { Sim } from "./Backfill.sim.ts";
  * event at a time. Each run prints a `BENCH` line of JSON.
  */
 
-type Shape = "own" | "hot" | "fan";
+type Shape = "keyed" | "own" | "hot" | "fan";
 
-/** Which key an instance's events go to: its own, one shared by all, or one per 100 instances. */
+/**
+ * Which key an instance's events go to: the key named after it (a view keyed by
+ * its aggregate, no `keyOf`), its own key through `keyOf`, one shared by all,
+ * or one per 100 instances.
+ */
 const keyFor = (shape: Shape, instance: number, instances: number) =>
-  shape === "own"
-    ? `k${instance}`
-    : shape === "hot"
-      ? "all"
-      : `k${instance % Math.max(1, Math.floor(instances / 100))}`;
+  shape === "keyed"
+    ? `s${instance}`
+    : shape === "own"
+      ? `k${instance}`
+      : shape === "hot"
+        ? "all"
+        : `k${instance % Math.max(1, Math.floor(instances / 100))}`;
 
 const bench = (
   shape: Shape,
@@ -29,6 +35,8 @@ const bench = (
 ) =>
   Effect.gen(function* () {
     const sim = new Sim(1, "view:V#1", undefined, limits);
+    sim.singleSource = shape === "keyed";
+    sim.timed = true;
     // History before the consumer exists, spread over time.
     for (let e = 0; e < events; e++) {
       for (let i = 0; i < instances; i++) {
@@ -70,6 +78,20 @@ const bench = (
   });
 
 describe("Domain backfill benchmarks (simulated)", () => {
+  it.effect.skipIf(!!process.env.FAST)(
+    "keyed by its aggregate: cost per event is flat, wall time does not grow with width",
+    () =>
+      Effect.gen(function* () {
+        const runs = [];
+        for (const instances of [100, 1_000, 10_000])
+          runs.push(yield* bench("keyed", instances, 10));
+        const [small, , large] = runs;
+        expect(large!.requestsPerEvent).toBeLessThan(small!.requestsPerEvent * 1.5);
+        expect(large!.wallSeconds).toBeLessThan(small!.wallSeconds * 2);
+      }),
+    { timeout: 600_000 },
+  );
+
   it.effect.skipIf(!!process.env.FAST)(
     "one key per instance: cost per event is flat, wall time does not grow with width",
     () =>

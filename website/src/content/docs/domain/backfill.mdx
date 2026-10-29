@@ -26,15 +26,53 @@ What coordinates them is a directory: a tree of Durable Objects that every insta
 
 A view keyed by its aggregate, like a summary per account, is the cheapest and fastest case. Each of its keys hears from exactly one instance, so the key starts as soon as that instance has read its history, applies what it pulls directly, and nothing waits on the rest of the Domain.
 
-On Cloudflare, backfilling 1,000 accounts with 10 events each took about 3 seconds of work, and 10,000 accounts about 10.
-
 ## What makes a deploy wait longer
 
 A deploy waits for two things beyond that work.
 
-The new code has to reach your instances. An instance still running the previous deploy's code can't read its history for a consumer it doesn't know yet, and Cloudflare decides when each Durable Object moves to the deployed version: for idle objects that took around 30 seconds in our runs, and for objects that were active at the deploy up to five or eight minutes. The backfill waits for them, retrying after 1 second, then 2, 4 and so on up to every 2 minutes. That made the deploy itself take about 30 seconds for 1,000 accounts and about 6 minutes for 10,000. Restarting an object doesn't move it to the new code sooner.
+The new code has to reach your instances. An instance still running the previous deploy's code can't read its history for a consumer it doesn't know yet, and Cloudflare decides when each Durable Object moves to the deployed version: for idle objects that took around 30 seconds in our runs, and for objects that were active at the deploy up to five or eight minutes. The backfill waits for them, retrying after 1 second, then 2, 4 and so on up to every 2 minutes. That made the deploy itself take about 30 seconds for 1,000 accounts and 6 to 8 minutes for 10,000. Restarting an object doesn't move it to the new code sooner.
 
 A long history behind one key takes longer. Each key applies its history in order, a page of 100 events per round trip, so a key with a million events behind it takes a while however wide the rest is. A single key fed by every instance, like a global timeline, is the extreme case: it merges every instance's history alone.
+
+## How long it takes
+
+Measured on Cloudflare, with a view keyed by account added to accounts that each had 10 deposits:
+
+| Accounts | Events | Backfill work | The deploy waited |
+| --- | --- | --- | --- |
+| 1,000 | 10,000 | about 3 seconds | about 30 seconds |
+| 10,000 | 100,000 | about 10 seconds | 6 to 8 minutes |
+
+The work is the time from the last instance running the new code to the view being complete. The rest of the deploy's wait is Cloudflare moving instances onto the new code, described above.
+
+## How it scales
+
+A backfill's time is the depth of the directory, plus the longest history behind one key. The directory's depth grows with the logarithm of your instances (one level per 16 times more), so a hundred times more instances adds a step or two, not a hundred times the wait. The longest history is the part that can't be spread: one key applies its events in order.
+
+The simulator in the test suite runs the same protocol code with a model of Cloudflare's timing (a 10 ms round trip, 50 ms for an alarm to fire, 1 ms per event, one event at a time per object). It shows how each shape of consumer scales with width, 10 events per instance:
+
+| Consumer | Instances | Keys | Time |
+| --- | --- | --- | --- |
+| Keyed by its aggregate | 100 | 100 | 5.6 s |
+| | 1,000 | 1,000 | 5.9 s |
+| | 10,000 | 10,000 | 7.5 s |
+| 100 instances per key, through `keyOf` | 1,000 | 10 | 5.8 s |
+| | 10,000 | 100 | 7.1 s |
+| One key fed by every instance | 100 | 1 | 5.6 s |
+| | 1,000 | 1 | 40.3 s |
+
+The first two shapes take the same time whatever the width. The last grows with the one key's history: 10,000 events applied in order.
+
+Cost grows in proportion to the instances and the events, never faster:
+
+| | Grows with |
+| --- | --- |
+| Time | the logarithm of the instances, plus the longest history behind one key |
+| Requests | a fixed number per instance (listing, scanning, a key's first pull), plus one per 100 events a key pulls |
+| Rows written and read | a fixed number per instance, plus a fixed number per event |
+| Load on one object | at most 256 instances per directory node; a key serves only its own sources and history |
+
+In the simulator, a thousand instances with 1, 10 and 100 events each wrote 49, 8.5 and 4.5 rows per event: the per-instance part is spread over more events as histories grow. The live figure below, 12 rows per event, is for 10 events per instance.
 
 ## What it costs
 

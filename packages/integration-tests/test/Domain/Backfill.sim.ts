@@ -51,8 +51,19 @@ class SimObject {
   /** Pending jobs by id: when due, and a version so a replaced job's queue entry is skipped. */
   readonly jobs = new Map<string, { readonly due: number; readonly version: number }>();
   readonly stats: Stats = { requests: 0, rowsRead: 0, rowsWritten: 0 };
-  /** In the wall-time model: when this object is next free (it runs one event at a time). */
-  busyUntil = 0;
+  /**
+   * In the wall-time model: the milliseconds this object spends running events,
+   * one at a time. An event runs in the first free one at or after it arrives;
+   * awaiting its own outgoing calls doesn't keep the object busy.
+   */
+  busy = new Set<number>();
+  /** Run an event that arrives at `at`: when it ends. */
+  occupy(at: number, service: number) {
+    let slot = Math.ceil(at);
+    while (this.busy.has(slot)) slot++;
+    this.busy.add(slot);
+    return slot + service;
+  }
   private sorted: Array<string> = [];
   private dirty = false;
   constructor(
@@ -298,6 +309,12 @@ export class Sim {
    * time an object spends on one event, and how long an alarm takes to fire.
    */
   latency = { rpc: 10, service: 1, alarm: 50 };
+  /**
+   * Run work due at the same time in wall-time order, as a real system would,
+   * rather than in a random order (which explores interleavings, but makes a
+   * busy object's queue hold work that started later).
+   */
+  timed = false;
   /** In the wall-time model: the time of the work running now, and the latest time anything ended. */
   vt = 0;
   makespan = 0;
@@ -316,11 +333,10 @@ export class Sim {
         return Effect.die(new Crash("call failed in transit"));
       }
       const caller = this.vt;
-      this.vt = Math.max(caller + this.latency.rpc / 2, target.busyUntil) + this.latency.service;
+      this.vt = target.occupy(caller + this.latency.rpc / 2, this.latency.service);
       return effect().pipe(
         Effect.tap(() =>
           Effect.sync(() => {
-            target.busyUntil = this.vt;
             this.vt += this.latency.rpc / 2;
             this.makespan = Math.max(this.makespan, this.vt);
           }),
@@ -357,7 +373,9 @@ export class Sim {
     }
   }
   private before(a: (typeof this.queue)[number], b: (typeof this.queue)[number]) {
-    return a.due < b.due || (a.due === b.due && a.tie <= b.tie);
+    if (a.due !== b.due) return a.due < b.due;
+    if (this.timed && a.vt !== b.vt) return a.vt < b.vt;
+    return a.tie <= b.tie;
   }
   private pop() {
     const q = this.queue;
@@ -397,7 +415,7 @@ export class Sim {
           if (object.jobs.get(id)?.version !== version) return Effect.void;
           object.jobs.delete(id);
           object.stats.requests += 1;
-          this.vt = Math.max(vt, object.busyUntil) + this.latency.service;
+          this.vt = object.occupy(vt, this.latency.service);
           return object.run(id).pipe(
             // A failed job is retried, like a durable callback.
             Effect.catchCause(() =>
@@ -407,7 +425,6 @@ export class Sim {
             ),
             Effect.ensuring(
               Effect.sync(() => {
-                object.busyUntil = this.vt;
                 this.makespan = Math.max(this.makespan, this.vt);
               }),
             ),
@@ -722,7 +739,7 @@ export class Sim {
   private sendOne(delivery: Delivery) {
     const key = this.key(delivery.key);
     key.object.stats.requests += 1;
-    this.vt = Math.max(this.vt + this.latency.rpc / 2, key.object.busyUntil) + this.latency.service;
+    this.vt = key.object.occupy(this.vt + this.latency.rpc / 2, this.latency.service);
     // Older code refuses a newer generation's delivery (its apply dies); the sender retries.
     if (this.now < this.busy(key).staleUntil)
       return Effect.die(new Crash("key still on older code"));
@@ -734,7 +751,6 @@ export class Sim {
       ),
       Effect.ensuring(
         Effect.sync(() => {
-          key.object.busyUntil = this.vt;
           this.makespan = Math.max(this.makespan, this.vt);
         }),
       ),
@@ -800,7 +816,7 @@ export class Sim {
       object.stats.requests = 0;
       object.stats.rowsRead = 0;
       object.stats.rowsWritten = 0;
-      object.busyUntil = 0;
+      object.busy.clear();
     }
     this.vt = 0;
     this.makespan = 0;

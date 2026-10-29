@@ -125,6 +125,11 @@ export interface Pulled {
    * even when those rows held nothing for the key.
    */
   readonly through?: number;
+  /**
+   * Nothing followed this page when it was read: the key pulls again at once to
+   * switch to live, rather than wait until its merge runs out of this source.
+   */
+  readonly end?: boolean;
 }
 
 export interface ConsumerRpc {
@@ -665,6 +670,7 @@ export const makeSource = (
                   deliveries: rows.flatMap((row) => row.deliveries).filter((d) => d.key === key),
                   live: false,
                   through: rows[rows.length - 1]!.seq,
+                  end: rows.length < limits.page,
                 };
             } else {
               const prefix = indexPrefix(target, key);
@@ -675,7 +681,8 @@ export const makeSource = (
               });
               const seqs = rows.map(([row]) => Number(row.slice(prefix.length)));
               const deliveries = (yield* host.rowsAt(seqs, target)).filter((d) => d.key === key);
-              if (rows.length > 0) return { deliveries, live: false };
+              if (rows.length > 0)
+                return { deliveries, live: false, end: rows.length < limits.page };
             }
             // Nothing after the key's cursor, so it holds everything: live from now,
             // atomically with this answer. A lost answer is safe to ask again: a live
@@ -867,45 +874,47 @@ export const makeConsumer = (
       const streams = starved.map(([row]) =>
         decodeURIComponent(row.slice(starvedPrefix(target).length)),
       );
-      const failed = yield* Effect.forEach(
-        streams,
-        (stream) =>
-          Effect.gen(function* () {
-            const feed = yield* storage.get<Feed>(feedKey(target, stream));
-            if (!feed || feed.live || feed.ref === null) return false;
-            const pulled = yield* net.source
-              .pull(feed.ref, target, host.key, feed.cursor)
-              // Refused (still on older code) or lost in transit: pull it again later.
-              .pipe(Effect.catchCause(() => Effect.succeed(undefined)));
-            if (pulled === undefined) return true;
-            yield* storage.exclusive(
-              Effect.gen(function* () {
-                const current = yield* storage.get<Feed>(feedKey(target, stream));
-                if (!current || current.cursor !== feed.cursor) return;
-                // Its only source, and nothing buffered ahead: the page is already in
-                // order, so apply it rather than buffer it.
-                const direct =
-                  host.singleSource?.() === true &&
-                  (yield* storage.list({ prefix: bufferPrefix(target), limit: 1 })).length === 0;
-                if (direct) {
-                  for (const delivery of pulled.deliveries) yield* host.apply([delivery]);
-                } else yield* buffer(target, pulled.deliveries, false);
-                const after = (yield* storage.get<Feed>(feedKey(target, stream)))!;
-                yield* putFeed(target, stream, {
-                  ...after,
-                  cursor: Math.max(
-                    after.cursor,
-                    pulled.through ?? 0,
-                    ...pulled.deliveries.map((d) => d.seq),
-                  ),
-                  live: pulled.live,
-                });
-              }),
-            );
-            return false;
-          }),
-        { concurrency: limits.concurrency },
-      );
+      // A page that reached the end of its source is followed at once by the pull
+      // that switches the feed to live, so the merge never stops to wait for it.
+      const pullFeed = (stream: string): Effect.Effect<boolean> =>
+        Effect.gen(function* () {
+          const feed = yield* storage.get<Feed>(feedKey(target, stream));
+          if (!feed || feed.live || feed.ref === null) return false;
+          const pulled = yield* net.source
+            .pull(feed.ref, target, host.key, feed.cursor)
+            // Refused (still on older code) or lost in transit: pull it again later.
+            .pipe(Effect.catchCause(() => Effect.succeed(undefined)));
+          if (pulled === undefined) return true;
+          yield* storage.exclusive(
+            Effect.gen(function* () {
+              const current = yield* storage.get<Feed>(feedKey(target, stream));
+              if (!current || current.cursor !== feed.cursor) return;
+              // Its only source, and nothing buffered ahead: the page is already in
+              // order, so apply it rather than buffer it.
+              const direct =
+                host.singleSource?.() === true &&
+                (yield* storage.list({ prefix: bufferPrefix(target), limit: 1 })).length === 0;
+              if (direct) {
+                for (const delivery of pulled.deliveries) yield* host.apply([delivery]);
+              } else yield* buffer(target, pulled.deliveries, false);
+              const after = (yield* storage.get<Feed>(feedKey(target, stream)))!;
+              yield* putFeed(target, stream, {
+                ...after,
+                cursor: Math.max(
+                  after.cursor,
+                  pulled.through ?? 0,
+                  ...pulled.deliveries.map((d) => d.seq),
+                ),
+                live: pulled.live,
+              });
+            }),
+          );
+          if (pulled.end === true && !pulled.live) return yield* pullFeed(stream);
+          return false;
+        });
+      const failed = yield* Effect.forEach(streams, pullFeed, {
+        concurrency: limits.concurrency,
+      });
       return failed.some((stale) => stale);
     });
 
