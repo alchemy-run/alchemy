@@ -5,17 +5,18 @@ import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import * as HttpApiSchema from "effect/http-api/HttpApiSchema";
-import * as OpenApi from "effect/http-api/OpenApi";
 import type { HttpServerRequest } from "effect/http/HttpServerRequest";
 import type * as Layer from "effect/Layer";
 import type * as Rpc from "effect/rpc/Rpc";
+import type * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
-import { type Describable, describe, type Operation } from "./ApiCatalog.ts";
+import type { Entry } from "./Api.ts";
+import { nameOf, readRpcs, type ReadRpcs } from "./ReadRpcs.ts";
 
 /**
  * The names `include` accepts for one entry: the entry's name (all its
@@ -32,13 +33,53 @@ type CallsOf<E> = E extends { readonly kind: "Command"; readonly tag: infer N ex
         : never;
 
 /**
- * What {@link toHttpApi} reads from an Api class: its catalog, and its
- * in-process client (`clientInProcess`), which runs every call through the
- * Api's own handlers and middleware.
+ * What {@link toHttpApi} reads from an Api class: its entries, the RPCs it
+ * serves, and its in-process client (`clientInProcess`), which runs every
+ * call through the Api's own handlers and middleware.
  */
-export interface Publishable extends Describable {
+export interface Publishable {
+  readonly apiName: string;
+  readonly entries: ReadonlyArray<Entry>;
+  readonly group: RpcGroup.RpcGroup<Rpc.Any>;
   readonly clientInProcess: Effect.Effect<unknown, never, any>;
 }
+
+/** One call an Api serves: the entry it belongs to, the client method, and its RPC tag. */
+interface Operation {
+  /** A command's tag, or a view's, stream's or aggregate's name. */
+  readonly entry: string;
+  /** `send` for a command; the read's client method otherwise (`get`, `peek`, `watch`, ...). */
+  readonly operation: string;
+  /** The RPC tag the server answers to (`Deposit`, `Balance.get`). */
+  readonly rpc: string;
+  /** Whether the call answers with a stream of values (`watch`, `events`). */
+  readonly stream: boolean;
+}
+
+/** Every call an Api serves, in the order it lists its entries. */
+const operationsOf = (api: Publishable): ReadonlyArray<Operation> =>
+  api.entries.flatMap((entry): ReadonlyArray<Operation> => {
+    if (entry.kind === "Command") {
+      return [{ entry: entry.tag, operation: "send", rpc: entry.rpc._tag, stream: false }];
+    }
+    const name = nameOf(entry);
+    return Object.entries(readRpcs(entry)).flatMap(([call, rpc]) => {
+      if (rpc === undefined) return [];
+      // The group's RPC also carries middleware applied to the whole Api.
+      const served = (api.group.requests.get(rpc._tag) ?? rpc) as Rpc.AnyWithProps;
+      // A stream's `get` RPC is its client's `peek`.
+      const operation =
+        (call as keyof ReadRpcs) === "get" && entry.kind === "Stream" ? "peek" : call;
+      return [
+        {
+          entry: name,
+          operation,
+          rpc: served._tag,
+          stream: RpcSchema.isStreamSchema(served.successSchema),
+        },
+      ];
+    });
+  });
 
 /** The entries and calls of an Api that {@link toHttpApi} can publish. */
 export type Includable<A extends Publishable> = CallsOf<A["entries"][number]>;
@@ -276,11 +317,7 @@ const endpointOf = (
                 error,
               },
             );
-  const described =
-    operation.description === undefined
-      ? endpoint
-      : endpoint.annotate(OpenApi.Description, operation.description);
-  return described as unknown as HttpApiEndpoint.Top;
+  return endpoint as unknown as HttpApiEndpoint.Top;
 };
 
 /**
@@ -349,8 +386,7 @@ export const toHttpApi = <A extends Publishable>(
   options: Options<A>,
 ): HttpApiSurface<A["apiName"], Requirements<A>> => {
   const name = api.apiName;
-  const catalog = describe(api);
-  const calls = catalog.operations;
+  const calls = operationsOf(api);
   // Follow-up once `expose` lands (#2585): default `include` to the entries
   // whose `exposureOf(entry).http` is true.
   const included = new Set<string>();
@@ -366,7 +402,7 @@ export const toHttpApi = <A extends Publishable>(
 
   // A status for a tag no call can fail with is a typo.
   const tags = new Set<string | undefined>();
-  for (const operation of catalog.operations) {
+  for (const operation of calls) {
     const rpc = api.group.requests.get(operation.rpc) as Rpc.AnyWithProps;
     for (const failure of failuresOf(rpc)) tags.add(tagOf(failure));
   }
