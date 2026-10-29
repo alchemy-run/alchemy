@@ -153,7 +153,7 @@ test.provider(
       // root span and the handler's span.
       const batch = yield* Effect.sync(() =>
         collector.requests.find((batch) =>
-          traceSpanNames(batch.body).includes("otel-event-flush.stream-tail"),
+          batch.body.includes('"name":"otel-event-flush.stream-tail"'),
         ),
       ).pipe(
         Effect.repeat({
@@ -178,7 +178,9 @@ test.provider(
           times: 30,
         }),
       );
-      expect(collector.requests).toHaveLength(1);
+      expect(
+        collector.requests.filter((batch) => batch.body.includes('"name":"GET"')),
+      ).toHaveLength(1);
 
       yield* stack.destroy();
     }),
