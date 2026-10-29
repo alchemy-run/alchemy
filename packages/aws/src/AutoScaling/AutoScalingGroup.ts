@@ -101,6 +101,15 @@ export interface AutoScalingGroupProps {
    */
   terminationPolicies?: string[];
   /**
+   * Instance attributes to launch by. When set, Auto Scaling picks the
+   * instance types, through a mixed instances policy.
+   */
+  instanceRequirements?: autoscaling.InstanceRequirements;
+  /**
+   * How instances are spread across Availability Zones.
+   */
+  availabilityZoneDistribution?: autoscaling.AvailabilityZoneDistribution;
+  /**
    * Tags to apply to the Auto Scaling Group itself.
    */
   tags?: Record<string, string>;
@@ -457,7 +466,16 @@ export const AutoScalingGroupProvider = () =>
             ...news.tags,
           };
           const targetGroupArns = sortStrings((news.targetGroupArns ?? []) as string[]);
-          const launchTemplate = toLaunchTemplateSpec(news.launchTemplate);
+          const launchTemplate = news.instanceRequirements
+            ? {
+                MixedInstancesPolicy: {
+                  LaunchTemplate: {
+                    LaunchTemplateSpecification: toLaunchTemplateSpec(news.launchTemplate),
+                    Overrides: [{ InstanceRequirements: news.instanceRequirements }],
+                  },
+                },
+              }
+            : { LaunchTemplate: toLaunchTemplateSpec(news.launchTemplate) };
           const healthCheckType =
             news.healthCheckType ?? (targetGroupArns.length > 0 ? "ELB" : "EC2");
 
@@ -476,7 +494,8 @@ export const AutoScalingGroupProvider = () =>
                 MinSize: news.minSize,
                 MaxSize: news.maxSize,
                 DesiredCapacity: news.desiredCapacity ?? news.minSize,
-                LaunchTemplate: launchTemplate,
+                ...launchTemplate,
+                AvailabilityZoneDistribution: news.availabilityZoneDistribution,
                 VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
                 TargetGroupARNs: targetGroupArns,
                 HealthCheckType: healthCheckType,
@@ -515,7 +534,8 @@ export const AutoScalingGroupProvider = () =>
               MinSize: news.minSize,
               MaxSize: news.maxSize,
               DesiredCapacity: news.desiredCapacity,
-              LaunchTemplate: launchTemplate,
+              ...launchTemplate,
+              AvailabilityZoneDistribution: news.availabilityZoneDistribution,
               VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
               HealthCheckType: healthCheckType,
               HealthCheckGracePeriod: toSeconds(news.healthCheckGracePeriod),
