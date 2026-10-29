@@ -13,7 +13,15 @@
     "resources": {
       "CustomClass": "Ships",
       "PhraseSet": "Hints"
+    },
+    "locations": {
+      "ListCustomClasses": "global",
+      "ListPhraseSets": "global"
     }
   },
-  "defaultPermission": "serviceusage.services.use"
+  "defaultPermission": "serviceusage.services.use",
+  "roles": {
+    "speech.speech.longrunningrecognize": "roles/speech.client",
+    "speech.speech.recognize": "roles/speech.client"
+  }
 }

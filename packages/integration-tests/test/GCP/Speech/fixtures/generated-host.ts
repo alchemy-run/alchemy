@@ -20,8 +20,8 @@ export default class SpeechGeneratedHost extends GCP.Function<SpeechGeneratedHos
     const p2 = yield* GCP.Speech.LongrunningrecognizeSpeech();
     return {
       fetch: serveProbes({
-        ListCustomClasses: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListPhraseSets: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        ListCustomClasses: probeOutcome(Retry.none(p0({ location: "global" } as never))),
+        ListPhraseSets: probeOutcome(Retry.none(p1({ location: "global" } as never))),
         LongrunningrecognizeSpeech: probeOutcome(Retry.none(p2({} as never))),
       }),
     };

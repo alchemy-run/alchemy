@@ -21,7 +21,7 @@ export const LongrunningrecognizeSpeechHttp = Layer.effect(
       {
         operation: speech.longrunningrecognizeSpeech,
         // A global call: nothing names the project.
-        role: "roles/serviceusage.serviceUsageConsumer",
+        role: "roles/speech.client",
       },
     ],
   }),

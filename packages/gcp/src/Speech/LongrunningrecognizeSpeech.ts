@@ -19,7 +19,7 @@ export type LongrunningrecognizeSpeechShape = () => Effect.Effect<
  * Performs asynchronous speech recognition: receive results via the google.longrunning.Operations interface.
  *
  * A call on the stack's project, so it takes no resource.
- * Provide {@link LongrunningrecognizeSpeechHttp}. The host gets `roles/serviceusage.serviceUsageConsumer` on the project.
+ * Provide {@link LongrunningrecognizeSpeechHttp}. The host gets `roles/speech.client` on the project.
  *
  * ### Usage
  * **Example:** Call `speech.longrunningrecognize`
