@@ -22,7 +22,15 @@
     }
   },
   "probes": {
-    "resources": {},
-    "untestable": {}
+    "resources": {
+      "BackupChannel": "ProbeBackupChannel",
+      "RestoreChannel": "ProbeRestoreChannel"
+    },
+    "untestable": {
+      "BackupPlan": "a backup or restore plan needs a GKE cluster with the Backup for GKE add-on",
+      "BackupPlansBackup": "a backup or restore plan needs a GKE cluster with the Backup for GKE add-on",
+      "RestorePlan": "a backup or restore plan needs a GKE cluster with the Backup for GKE add-on",
+      "RestorePlansRestore": "a backup or restore plan needs a GKE cluster with the Backup for GKE add-on"
+    }
   }
 }

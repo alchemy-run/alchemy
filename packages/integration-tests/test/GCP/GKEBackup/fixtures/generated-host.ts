@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeBackupChannel, ProbeRestoreChannel } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated GKEBackup binding as its own
@@ -15,24 +16,46 @@ export default class GKEBackupGeneratedHost extends GCP.Function<GKEBackupGenera
   "GKEBackupGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.GKEBackup.ListBackupChannels();
-    const p1 = yield* GCP.GKEBackup.ListBackupPlans();
-    const p2 = yield* GCP.GKEBackup.ListRestoreChannels();
-    const p3 = yield* GCP.GKEBackup.ListRestorePlans();
+    const p0 = yield* GCP.GKEBackup.GetBackupChannel(ProbeBackupChannel);
+    const p1 = yield* GCP.GKEBackup.GetBackupChannelBackupPlanBinding(ProbeBackupChannel);
+    const p2 = yield* GCP.GKEBackup.GetRestoreChannel(ProbeRestoreChannel);
+    const p3 = yield* GCP.GKEBackup.GetRestoreChannelRestorePlanBinding(ProbeRestoreChannel);
+    const p4 = yield* GCP.GKEBackup.ListBackupChannelBackupPlanBindings(ProbeBackupChannel);
+    const p5 = yield* GCP.GKEBackup.ListBackupChannels();
+    const p6 = yield* GCP.GKEBackup.ListBackupPlans();
+    const p7 = yield* GCP.GKEBackup.ListRestoreChannelRestorePlanBindings(ProbeRestoreChannel);
+    const p8 = yield* GCP.GKEBackup.ListRestoreChannels();
+    const p9 = yield* GCP.GKEBackup.ListRestorePlans();
     return {
       fetch: serveProbes({
-        ListBackupChannels: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListBackupPlans: outcome(Retry.none(p1({ location: "us-central1" } as never))),
-        ListRestoreChannels: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListRestorePlans: outcome(Retry.none(p3({ location: "us-central1" } as never))),
+        GetBackupChannel: outcome(Retry.none(p0({} as never))),
+        GetBackupChannelBackupPlanBinding: outcome(
+          Retry.none(p1({ backupPlanBinding: "alchemy-missing" } as never)),
+        ),
+        GetRestoreChannel: outcome(Retry.none(p2({} as never))),
+        GetRestoreChannelRestorePlanBinding: outcome(
+          Retry.none(p3({ restorePlanBinding: "alchemy-missing" } as never)),
+        ),
+        ListBackupChannelBackupPlanBindings: outcome(Retry.none(p4({} as never))),
+        ListBackupChannels: outcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListBackupPlans: outcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListRestoreChannelRestorePlanBindings: outcome(Retry.none(p7({} as never))),
+        ListRestoreChannels: outcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListRestorePlans: outcome(Retry.none(p9({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.GKEBackup.GetBackupChannelHttp,
+          GCP.GKEBackup.GetBackupChannelBackupPlanBindingHttp,
+          GCP.GKEBackup.GetRestoreChannelHttp,
+          GCP.GKEBackup.GetRestoreChannelRestorePlanBindingHttp,
+          GCP.GKEBackup.ListBackupChannelBackupPlanBindingsHttp,
           GCP.GKEBackup.ListBackupChannelsHttp,
           GCP.GKEBackup.ListBackupPlansHttp,
+          GCP.GKEBackup.ListRestoreChannelRestorePlanBindingsHttp,
           GCP.GKEBackup.ListRestoreChannelsHttp,
           GCP.GKEBackup.ListRestorePlansHttp,
         ),

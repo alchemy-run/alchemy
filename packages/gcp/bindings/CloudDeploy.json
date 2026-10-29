@@ -20,7 +20,10 @@
   },
   "probes": {
     "resources": {
-      "CustomTargetType": "ProbeCustomTargetType"
+      "CustomTargetType": "ProbeCustomTargetType",
+      "Target": "ProbeTarget",
+      "DeliveryPipeline": "ProbePipeline",
+      "DeployPolicy": "ProbePolicy"
     },
     "untestable": {
       "DeliveryPipelinesAutomation": "needs GCP_TEST_CLOUDDEPLOY_SA (an external prerequisite the testing project lacks)"

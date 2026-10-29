@@ -59,89 +59,173 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("DeliveryPipeline", { concurrent: true }, () => {
-      test.provider.todo(
-        "AbandonDeliveryPipelineRelease (clouddeploy.projects.locations.deliveryPipelines.releases.abandon): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "AbandonDeliveryPipelineRelease (clouddeploy.projects.locations.deliveryPipelines.releases.abandon)",
+        () => probe("AbandonDeliveryPipelineRelease", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "AdvanceDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.advance): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "AdvanceDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.advance)",
+        () => probe("AdvanceDeliveryPipelineReleaseRollout", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ApproveDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.approve): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ApproveDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.approve)",
+        () => probe("ApproveDeliveryPipelineReleaseRollout", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "CancelDeliveryPipelineAutomationRun (clouddeploy.projects.locations.deliveryPipelines.automationRuns.cancel): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CancelDeliveryPipelineAutomationRun (clouddeploy.projects.locations.deliveryPipelines.automationRuns.cancel)",
+        () => probe("CancelDeliveryPipelineAutomationRun", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "CancelDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.cancel): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CancelDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.cancel)",
+        () => probe("CancelDeliveryPipelineReleaseRollout", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "CreateDeliveryPipelineRelease (clouddeploy.projects.locations.deliveryPipelines.releases.create): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CreateDeliveryPipelineRelease (clouddeploy.projects.locations.deliveryPipelines.releases.create)",
+        () => probe("CreateDeliveryPipelineRelease", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "CreateDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.create): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CreateDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.create)",
+        () => probe("CreateDeliveryPipelineReleaseRollout", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetDeliveryPipeline (clouddeploy.projects.locations.deliveryPipelines.get): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDeliveryPipeline (clouddeploy.projects.locations.deliveryPipelines.get)",
+        () => probe("GetDeliveryPipeline", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetDeliveryPipelineAutomationRun (clouddeploy.projects.locations.deliveryPipelines.automationRuns.get): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDeliveryPipelineAutomationRun (clouddeploy.projects.locations.deliveryPipelines.automationRuns.get)",
+        () => probe("GetDeliveryPipelineAutomationRun", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetDeliveryPipelineRelease (clouddeploy.projects.locations.deliveryPipelines.releases.get): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDeliveryPipelineRelease (clouddeploy.projects.locations.deliveryPipelines.releases.get)",
+        () => probe("GetDeliveryPipelineRelease", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.get): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.get)",
+        () => probe("GetDeliveryPipelineReleaseRollout", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetDeliveryPipelineReleaseRolloutJobRun (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.jobRuns.get): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDeliveryPipelineReleaseRolloutJobRun (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.jobRuns.get)",
+        () => probe("GetDeliveryPipelineReleaseRolloutJobRun", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "IgnoreRolloutJob (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.ignoreJob): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "IgnoreRolloutJob (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.ignoreJob)",
+        () => probe("IgnoreRolloutJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListDeliveryPipelineAutomationRuns (clouddeploy.projects.locations.deliveryPipelines.automationRuns.list): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListDeliveryPipelineAutomationRuns (clouddeploy.projects.locations.deliveryPipelines.automationRuns.list)",
+        () => probe("ListDeliveryPipelineAutomationRuns", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListDeliveryPipelineAutomations (clouddeploy.projects.locations.deliveryPipelines.automations.list): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListDeliveryPipelineAutomations (clouddeploy.projects.locations.deliveryPipelines.automations.list)",
+        () => probe("ListDeliveryPipelineAutomations", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListDeliveryPipelineReleaseRolloutJobRuns (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.jobRuns.list): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListDeliveryPipelineReleaseRolloutJobRuns (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.jobRuns.list)",
+        () => probe("ListDeliveryPipelineReleaseRolloutJobRuns", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListDeliveryPipelineReleaseRollouts (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.list): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListDeliveryPipelineReleaseRollouts (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.list)",
+        () => probe("ListDeliveryPipelineReleaseRollouts", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListDeliveryPipelineReleases (clouddeploy.projects.locations.deliveryPipelines.releases.list): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListDeliveryPipelineReleases (clouddeploy.projects.locations.deliveryPipelines.releases.list)",
+        () => probe("ListDeliveryPipelineReleases", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RetryRolloutJob (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.retryJob): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RetryRolloutJob (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.retryJob)",
+        () => probe("RetryRolloutJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RollbackDeliveryPipelineTarget (clouddeploy.projects.locations.deliveryPipelines.rollbackTarget): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RollbackDeliveryPipelineTarget (clouddeploy.projects.locations.deliveryPipelines.rollbackTarget)",
+        () => probe("RollbackDeliveryPipelineTarget", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "TerminateDeliveryPipelineReleaseRolloutJobRun (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.jobRuns.terminate): DeliveryPipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "TerminateDeliveryPipelineReleaseRolloutJobRun (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.jobRuns.terminate)",
+        () => probe("TerminateDeliveryPipelineReleaseRolloutJobRun", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -153,9 +237,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("DeployPolicy", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDeployPolicy (clouddeploy.projects.locations.deployPolicies.get): DeployPolicy: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDeployPolicy (clouddeploy.projects.locations.deployPolicies.get)",
+        () => probe("GetDeployPolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -195,9 +283,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Target", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTarget (clouddeploy.projects.locations.targets.get): Target: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTarget (clouddeploy.projects.locations.targets.get)",
+        () => probe("GetTarget", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

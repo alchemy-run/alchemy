@@ -4,7 +4,12 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
-import { ProbeCustomTargetType } from "./generated-resources.ts";
+import {
+  ProbeCustomTargetType,
+  ProbePipeline,
+  ProbePolicy,
+  ProbeTarget,
+} from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated CloudDeploy binding as its own
@@ -16,29 +21,144 @@ export default class CloudDeployGeneratedHost extends GCP.Function<CloudDeployGe
   "CloudDeployGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.CloudDeploy.GetCustomTargetType(ProbeCustomTargetType);
-    const p1 = yield* GCP.CloudDeploy.ListCustomTargetTypes();
-    const p2 = yield* GCP.CloudDeploy.ListDeliveryPipelines();
-    const p3 = yield* GCP.CloudDeploy.ListDeployPolicies();
-    const p4 = yield* GCP.CloudDeploy.ListTargets();
+    const p0 = yield* GCP.CloudDeploy.AbandonDeliveryPipelineRelease(ProbePipeline);
+    const p1 = yield* GCP.CloudDeploy.AdvanceDeliveryPipelineReleaseRollout(ProbePipeline);
+    const p2 = yield* GCP.CloudDeploy.ApproveDeliveryPipelineReleaseRollout(ProbePipeline);
+    const p3 = yield* GCP.CloudDeploy.CancelDeliveryPipelineAutomationRun(ProbePipeline);
+    const p4 = yield* GCP.CloudDeploy.CancelDeliveryPipelineReleaseRollout(ProbePipeline);
+    const p5 = yield* GCP.CloudDeploy.CreateDeliveryPipelineRelease(ProbePipeline);
+    const p6 = yield* GCP.CloudDeploy.CreateDeliveryPipelineReleaseRollout(ProbePipeline);
+    const p7 = yield* GCP.CloudDeploy.GetCustomTargetType(ProbeCustomTargetType);
+    const p8 = yield* GCP.CloudDeploy.GetDeliveryPipeline(ProbePipeline);
+    const p9 = yield* GCP.CloudDeploy.GetDeliveryPipelineAutomationRun(ProbePipeline);
+    const p10 = yield* GCP.CloudDeploy.GetDeliveryPipelineRelease(ProbePipeline);
+    const p11 = yield* GCP.CloudDeploy.GetDeliveryPipelineReleaseRollout(ProbePipeline);
+    const p12 = yield* GCP.CloudDeploy.GetDeliveryPipelineReleaseRolloutJobRun(ProbePipeline);
+    const p13 = yield* GCP.CloudDeploy.GetDeployPolicy(ProbePolicy);
+    const p14 = yield* GCP.CloudDeploy.GetTarget(ProbeTarget);
+    const p15 = yield* GCP.CloudDeploy.IgnoreRolloutJob(ProbePipeline);
+    const p16 = yield* GCP.CloudDeploy.ListCustomTargetTypes();
+    const p17 = yield* GCP.CloudDeploy.ListDeliveryPipelineAutomationRuns(ProbePipeline);
+    const p18 = yield* GCP.CloudDeploy.ListDeliveryPipelineAutomations(ProbePipeline);
+    const p19 = yield* GCP.CloudDeploy.ListDeliveryPipelineReleaseRolloutJobRuns(ProbePipeline);
+    const p20 = yield* GCP.CloudDeploy.ListDeliveryPipelineReleaseRollouts(ProbePipeline);
+    const p21 = yield* GCP.CloudDeploy.ListDeliveryPipelineReleases(ProbePipeline);
+    const p22 = yield* GCP.CloudDeploy.ListDeliveryPipelines();
+    const p23 = yield* GCP.CloudDeploy.ListDeployPolicies();
+    const p24 = yield* GCP.CloudDeploy.ListTargets();
+    const p25 = yield* GCP.CloudDeploy.RetryRolloutJob(ProbePipeline);
+    const p26 = yield* GCP.CloudDeploy.RollbackDeliveryPipelineTarget(ProbePipeline);
+    const p27 = yield* GCP.CloudDeploy.TerminateDeliveryPipelineReleaseRolloutJobRun(ProbePipeline);
     return {
       fetch: serveProbes({
-        GetCustomTargetType: outcome(Retry.none(p0({} as never))),
-        ListCustomTargetTypes: outcome(Retry.none(p1({ location: "us-central1" } as never))),
-        ListDeliveryPipelines: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListDeployPolicies: outcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListTargets: outcome(Retry.none(p4({ location: "us-central1" } as never))),
+        AbandonDeliveryPipelineRelease: outcome(
+          Retry.none(p0({ release: "alchemy-missing" } as never)),
+        ),
+        AdvanceDeliveryPipelineReleaseRollout: outcome(
+          Retry.none(p1({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
+        ),
+        ApproveDeliveryPipelineReleaseRollout: outcome(
+          Retry.none(p2({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
+        ),
+        CancelDeliveryPipelineAutomationRun: outcome(
+          Retry.none(p3({ automationRun: "alchemy-missing" } as never)),
+        ),
+        CancelDeliveryPipelineReleaseRollout: outcome(
+          Retry.none(p4({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
+        ),
+        CreateDeliveryPipelineRelease: outcome(
+          Retry.none(p5({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CreateDeliveryPipelineReleaseRollout: outcome(
+          Retry.none(
+            p6({ release: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        GetCustomTargetType: outcome(Retry.none(p7({} as never))),
+        GetDeliveryPipeline: outcome(Retry.none(p8({} as never))),
+        GetDeliveryPipelineAutomationRun: outcome(
+          Retry.none(p9({ automationRun: "alchemy-missing" } as never)),
+        ),
+        GetDeliveryPipelineRelease: outcome(
+          Retry.none(p10({ release: "alchemy-missing" } as never)),
+        ),
+        GetDeliveryPipelineReleaseRollout: outcome(
+          Retry.none(p11({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
+        ),
+        GetDeliveryPipelineReleaseRolloutJobRun: outcome(
+          Retry.none(
+            p12({
+              release: "alchemy-missing",
+              rollout: "alchemy-missing",
+              jobRun: "alchemy-missing",
+            } as never),
+          ),
+        ),
+        GetDeployPolicy: outcome(Retry.none(p13({} as never))),
+        GetTarget: outcome(Retry.none(p14({} as never))),
+        IgnoreRolloutJob: outcome(
+          Retry.none(p15({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
+        ),
+        ListCustomTargetTypes: outcome(Retry.none(p16({ location: "us-central1" } as never))),
+        ListDeliveryPipelineAutomationRuns: outcome(Retry.none(p17({} as never))),
+        ListDeliveryPipelineAutomations: outcome(Retry.none(p18({} as never))),
+        ListDeliveryPipelineReleaseRolloutJobRuns: outcome(
+          Retry.none(p19({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
+        ),
+        ListDeliveryPipelineReleaseRollouts: outcome(
+          Retry.none(p20({ release: "alchemy-missing" } as never)),
+        ),
+        ListDeliveryPipelineReleases: outcome(Retry.none(p21({} as never))),
+        ListDeliveryPipelines: outcome(Retry.none(p22({ location: "us-central1" } as never))),
+        ListDeployPolicies: outcome(Retry.none(p23({ location: "us-central1" } as never))),
+        ListTargets: outcome(Retry.none(p24({ location: "us-central1" } as never))),
+        RetryRolloutJob: outcome(
+          Retry.none(p25({ release: "alchemy-missing", rollout: "alchemy-missing" } as never)),
+        ),
+        RollbackDeliveryPipelineTarget: outcome(Retry.none(p26({} as never))),
+        TerminateDeliveryPipelineReleaseRolloutJobRun: outcome(
+          Retry.none(
+            p27({
+              release: "alchemy-missing",
+              rollout: "alchemy-missing",
+              jobRun: "alchemy-missing",
+            } as never),
+          ),
+        ),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.CloudDeploy.AbandonDeliveryPipelineReleaseHttp,
+          GCP.CloudDeploy.AdvanceDeliveryPipelineReleaseRolloutHttp,
+          GCP.CloudDeploy.ApproveDeliveryPipelineReleaseRolloutHttp,
+          GCP.CloudDeploy.CancelDeliveryPipelineAutomationRunHttp,
+          GCP.CloudDeploy.CancelDeliveryPipelineReleaseRolloutHttp,
+          GCP.CloudDeploy.CreateDeliveryPipelineReleaseHttp,
+          GCP.CloudDeploy.CreateDeliveryPipelineReleaseRolloutHttp,
           GCP.CloudDeploy.GetCustomTargetTypeHttp,
+          GCP.CloudDeploy.GetDeliveryPipelineHttp,
+          GCP.CloudDeploy.GetDeliveryPipelineAutomationRunHttp,
+          GCP.CloudDeploy.GetDeliveryPipelineReleaseHttp,
+          GCP.CloudDeploy.GetDeliveryPipelineReleaseRolloutHttp,
+          GCP.CloudDeploy.GetDeliveryPipelineReleaseRolloutJobRunHttp,
+          GCP.CloudDeploy.GetDeployPolicyHttp,
+          GCP.CloudDeploy.GetTargetHttp,
+          GCP.CloudDeploy.IgnoreRolloutJobHttp,
           GCP.CloudDeploy.ListCustomTargetTypesHttp,
+          GCP.CloudDeploy.ListDeliveryPipelineAutomationRunsHttp,
+          GCP.CloudDeploy.ListDeliveryPipelineAutomationsHttp,
+          GCP.CloudDeploy.ListDeliveryPipelineReleaseRolloutJobRunsHttp,
+          GCP.CloudDeploy.ListDeliveryPipelineReleaseRolloutsHttp,
+          GCP.CloudDeploy.ListDeliveryPipelineReleasesHttp,
           GCP.CloudDeploy.ListDeliveryPipelinesHttp,
           GCP.CloudDeploy.ListDeployPoliciesHttp,
           GCP.CloudDeploy.ListTargetsHttp,
+          GCP.CloudDeploy.RetryRolloutJobHttp,
+          GCP.CloudDeploy.RollbackDeliveryPipelineTargetHttp,
+          GCP.CloudDeploy.TerminateDeliveryPipelineReleaseRolloutJobRunHttp,
         ),
       ),
     ),
