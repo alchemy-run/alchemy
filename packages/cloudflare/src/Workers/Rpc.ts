@@ -14,6 +14,7 @@ import { RpcClient, RpcSerialization, type Rpc, type RpcGroup } from "effect/rpc
 import type * as RpcClientError from "effect/rpc/RpcClientError";
 import * as Schedule from "effect/Schedule";
 import { fromCloudflareFetcher } from "../Fetcher.ts";
+import { withRpcTraceContext } from "./internal/RpcTraceContext.ts";
 import { isPlaceholderReset } from "./Placeholder.ts";
 
 // The transport-agnostic RPC wire protocol (envelopes, error types, stream
@@ -61,8 +62,11 @@ export const makeRpcStub = <Shape>(
           Effect.gen(function* () {
             // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- untyped lazy stub source
             const stub = isLazy ? yield* stubSource as Effect.Effect<any> : stubSource;
+            // The callee parents its spans on the caller's, like `traceparent`
+            // does for a `fetch` into the object.
+            const callArgs = yield* withRpcTraceContext(args);
             return yield* Effect.tryPromise({
-              try: () => (stub as any)[prop](...args),
+              try: () => (stub as any)[prop](...callArgs),
               catch: (cause) => new RpcCallError({ method: String(prop), cause }),
             }).pipe(
               // Right after a deploy, an object can still start on the
