@@ -18,7 +18,8 @@
       "Product": "Product Search is closed to new projects: creates fail with BadRequest \"Product Search doesn't onboard new projects. For image search, please use (GCP_TEST_VISION_PRODUCT_SEARCH)",
       "ProductSet": "Product Search is closed to new projects: creates fail with BadRequest \"Product Search doesn't onboard new projects. For image search, please use (GCP_TEST_VISION_PRODUCT_SEARCH)",
       "ProductsReferenceImage": "Product Search is closed to new projects: creates fail with BadRequest \"Product Search doesn't onboard new projects. For image search, please use (GCP_TEST_VISION_PRODUCT_SEARCH)"
-    }
+    },
+    "location": "us-west1"
   },
   "defaultPermission": "serviceusage.services.use"
 }

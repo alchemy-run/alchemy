@@ -31,12 +31,12 @@ export default class VisionGeneratedHost extends GCP.Function<VisionGeneratedHos
         AsyncImageBatchAnnotate: probeOutcome(Retry.none(p3({} as never))),
         ImportProductSet: probeOutcome(
           Retry.none(
-            p4({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p4({ location: "us-west1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        ListProducts: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
-        ListProductSets: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
-        PurgeProduct: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListProducts: probeOutcome(Retry.none(p5({ location: "us-west1" } as never))),
+        ListProductSets: probeOutcome(Retry.none(p6({ location: "us-west1" } as never))),
+        PurgeProduct: probeOutcome(Retry.none(p7({ location: "us-west1" } as never))),
       }),
     };
   }).pipe(
