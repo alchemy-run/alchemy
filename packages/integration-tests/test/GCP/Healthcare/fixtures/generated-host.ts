@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeDataset } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Healthcare binding as its own
@@ -15,11 +16,37 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
   "HealthcareGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.Healthcare.ListDatasets();
+    const p0 = yield* GCP.Healthcare.DeidentifyDataset(ProbeDataset);
+    const p1 = yield* GCP.Healthcare.GetDataset(ProbeDataset);
+    const p2 = yield* GCP.Healthcare.ListDatasetConsentStores(ProbeDataset);
+    const p3 = yield* GCP.Healthcare.ListDatasetDicomStores(ProbeDataset);
+    const p4 = yield* GCP.Healthcare.ListDatasetFhirStores(ProbeDataset);
+    const p5 = yield* GCP.Healthcare.ListDatasetHl7V2Stores(ProbeDataset);
+    const p6 = yield* GCP.Healthcare.ListDatasets();
     return {
       fetch: serveProbes({
-        ListDatasets: outcome(Retry.none(p0({ location: "us-central1" } as never))),
+        DeidentifyDataset: outcome(Retry.none(p0({} as never))),
+        GetDataset: outcome(Retry.none(p1({} as never))),
+        ListDatasetConsentStores: outcome(Retry.none(p2({} as never))),
+        ListDatasetDicomStores: outcome(Retry.none(p3({} as never))),
+        ListDatasetFhirStores: outcome(Retry.none(p4({} as never))),
+        ListDatasetHl7V2Stores: outcome(Retry.none(p5({} as never))),
+        ListDatasets: outcome(Retry.none(p6({ location: "us-central1" } as never))),
       }),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Layer.mergeAll(GCP.Healthcare.ListDatasetsHttp)))),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.Healthcare.DeidentifyDatasetHttp,
+          GCP.Healthcare.GetDatasetHttp,
+          GCP.Healthcare.ListDatasetConsentStoresHttp,
+          GCP.Healthcare.ListDatasetDicomStoresHttp,
+          GCP.Healthcare.ListDatasetFhirStoresHttp,
+          GCP.Healthcare.ListDatasetHl7V2StoresHttp,
+          GCP.Healthcare.ListDatasetsHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

@@ -27,6 +27,7 @@ const probe = (name: string, expectSuccess: boolean) =>
   });
 
 // Deploys one of every bindable resource: slow, so `--fast` skips it.
+// Resource-bound bindings run live in Bindings.test.ts.
 describe.skipIf(!!process.env.FAST)(
   "Storage generated bindings",
   { tags: ["provider:gcp", "provider:gcp:storage", "live"], concurrent: true },
@@ -46,140 +47,6 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
-
-    describe("Bucket", { concurrent: true }, () => {
-      test.provider.skip(
-        "BulkObjectRestore (storage.objects.bulkRestore): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ComposeObject (storage.objects.compose): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "CopyObject (storage.objects.copy): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "DeleteFolderRecursive (storage.folders.deleteRecursive): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "DisableAnywhereCache (storage.anywhereCaches.disable): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetAnywhereCache (storage.anywhereCaches.get): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetBucket (storage.buckets.get): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetBucketAccessControl (storage.bucketAccessControls.get): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetBucketStorageLayout (storage.buckets.getStorageLayout): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetDefaultObjectAccessControl (storage.defaultObjectAccessControls.get): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetFolder (storage.folders.get): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetManagedFolder (storage.managedFolders.get): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetNotification (storage.notifications.get): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetObjectAccessControl (storage.objectAccessControls.get): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListAnywhereCaches (storage.anywhereCaches.list): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListBucketAccessControls (storage.bucketAccessControls.list): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListDefaultObjectAccessControls (storage.defaultObjectAccessControls.list): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListFolders (storage.folders.list): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListManagedFolders (storage.managedFolders.list): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListNotifications (storage.notifications.list): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListObjectAccessControls (storage.objectAccessControls.list): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "MoveObject (storage.objects.move): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "PatchObject (storage.objects.patch): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RenameFolder (storage.folders.rename): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RestoreBucket (storage.buckets.restore): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RestoreObject (storage.objects.restore): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ResumeAnywhereCache (storage.anywhereCaches.resume): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RewriteObject (storage.objects.rewrite): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "UpdateAnywhereCache (storage.anywhereCaches.update): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "UpdateObject (storage.objects.update): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ViewObjectFullContext (storage.objects.viewFullContext): Bucket: no deployable fixture",
-        () => Effect.void,
-      );
-    });
-
-    describe("HmacKey", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetHmacKey (storage.projects.hmacKeys.get): HmacKey: no deployable fixture",
-        () => Effect.void,
-      );
-    });
 
     describe("project", { concurrent: true }, () => {
       test.provider("ListBuckets (storage.buckets.list)", () => probe("ListBuckets", true), {

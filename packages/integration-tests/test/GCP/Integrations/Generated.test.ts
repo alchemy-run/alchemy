@@ -48,114 +48,114 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AuthConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAuthConfig@AuthConfig (integrations.projects.locations.authConfigs.get): AuthConfig: no deployable fixture",
+      test.provider.todo(
+        "GetAuthConfig@AuthConfig (integrations.projects.locations.authConfigs.get): AuthConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("IntegrationsVersion", { concurrent: true }, () => {
-      test.provider.skip(
-        "DownloadVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.download): IntegrationsVersion: no deployable fixture",
+      test.provider.todo(
+        "DownloadVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.download): IntegrationsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "DownloadVersionJsonPackage (integrations.projects.locations.integrations.versions.downloadJsonPackage): IntegrationsVersion: no deployable fixture",
+      test.provider.todo(
+        "DownloadVersionJsonPackage (integrations.projects.locations.integrations.versions.downloadJsonPackage): IntegrationsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ExecuteVersionTestCase (integrations.projects.locations.integrations.versions.testCases.execute): IntegrationsVersion: no deployable fixture",
+      test.provider.todo(
+        "ExecuteVersionTestCase (integrations.projects.locations.integrations.versions.testCases.execute): IntegrationsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.get): IntegrationsVersion: no deployable fixture",
+      test.provider.todo(
+        "GetVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.get): IntegrationsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListVersionTestCases (integrations.projects.locations.integrations.versions.testCases.list): IntegrationsVersion: no deployable fixture",
+      test.provider.todo(
+        "ListVersionTestCases (integrations.projects.locations.integrations.versions.testCases.list): IntegrationsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "PublishVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.publish): IntegrationsVersion: no deployable fixture",
+      test.provider.todo(
+        "PublishVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.publish): IntegrationsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "TestVersion (integrations.projects.locations.integrations.versions.test): IntegrationsVersion: no deployable fixture",
+      test.provider.todo(
+        "TestVersion (integrations.projects.locations.integrations.versions.test): IntegrationsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "UnpublishVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.unpublish): IntegrationsVersion: no deployable fixture",
+      test.provider.todo(
+        "UnpublishVersion@IntegrationsVersion (integrations.projects.locations.integrations.versions.unpublish): IntegrationsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "UploadVersionTestCase (integrations.projects.locations.integrations.versions.testCases.upload): IntegrationsVersion: no deployable fixture",
+      test.provider.todo(
+        "UploadVersionTestCase (integrations.projects.locations.integrations.versions.testCases.upload): IntegrationsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("IntegrationsVersionsTestCases", { concurrent: true }, () => {
-      test.provider.skip(
-        "DownloadTestCase (integrations.projects.locations.integrations.versions.testCases.download): IntegrationsVersionsTestCases: no deployable fixture",
+      test.provider.todo(
+        "DownloadTestCase (integrations.projects.locations.integrations.versions.testCases.download): IntegrationsVersionsTestCases: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ExecuteTestCaseTest (integrations.projects.locations.integrations.versions.testCases.executeTest): IntegrationsVersionsTestCases: no deployable fixture",
+      test.provider.todo(
+        "ExecuteTestCaseTest (integrations.projects.locations.integrations.versions.testCases.executeTest): IntegrationsVersionsTestCases: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetTestCase (integrations.projects.locations.integrations.versions.testCases.get): IntegrationsVersionsTestCases: no deployable fixture",
+      test.provider.todo(
+        "GetTestCase (integrations.projects.locations.integrations.versions.testCases.get): IntegrationsVersionsTestCases: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "TakeoverTestCaseEditLock (integrations.projects.locations.integrations.versions.testCases.takeoverEditLock): IntegrationsVersionsTestCases: no deployable fixture",
+      test.provider.todo(
+        "TakeoverTestCaseEditLock (integrations.projects.locations.integrations.versions.testCases.takeoverEditLock): IntegrationsVersionsTestCases: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ProductsAuthConfig", { concurrent: true }, () => {
       test.provider.skip(
-        "GetAuthConfig@ProductsAuthConfig (integrations.projects.locations.products.authConfigs.get): ProductsAuthConfig: no deployable fixture",
+        'GetAuthConfig@ProductsAuthConfig (integrations.projects.locations.products.authConfigs.get): ProductsAuthConfig: Product-scoped (`products/IP`) auth configs are rejected on a standard project with Forbidden ("User is not authorized to create AuthConfig with name … as they don\'t have membership of project {number}"), and product (GCP_TEST_INTEGRATIONS_PRODUCT_AUTH)',
         () => Effect.void,
       );
     });
 
     describe("ProductsIntegrationsVersion", { concurrent: true }, () => {
-      test.provider.skip(
-        "DownloadVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.download): ProductsIntegrationsVersion: no deployable fixture",
+      test.provider.todo(
+        "DownloadVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.download): ProductsIntegrationsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.get): ProductsIntegrationsVersion: no deployable fixture",
+      test.provider.todo(
+        "GetVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.get): ProductsIntegrationsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "PublishVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.publish): ProductsIntegrationsVersion: no deployable fixture",
+      test.provider.todo(
+        "PublishVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.publish): ProductsIntegrationsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "TakeoverVersionEditLock (integrations.projects.locations.products.integrations.versions.takeoverEditLock): ProductsIntegrationsVersion: no deployable fixture",
+      test.provider.todo(
+        "TakeoverVersionEditLock (integrations.projects.locations.products.integrations.versions.takeoverEditLock): ProductsIntegrationsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "UnpublishVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.unpublish): ProductsIntegrationsVersion: no deployable fixture",
+      test.provider.todo(
+        "UnpublishVersion@ProductsIntegrationsVersion (integrations.projects.locations.products.integrations.versions.unpublish): ProductsIntegrationsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ProductsSfdcInstance", { concurrent: true }, () => {
       test.provider.skip(
-        "GetSfdcInstance@ProductsSfdcInstance (integrations.projects.locations.products.sfdcInstances.get): ProductsSfdcInstance: no deployable fixture",
+        'GetSfdcInstance@ProductsSfdcInstance (integrations.projects.locations.products.sfdcInstances.get): ProductsSfdcInstance: Product-scoped (`products/IP`) auth configs are rejected on a standard project with Forbidden ("User is not authorized to create AuthConfig with name … as they don\'t have membership of project {number}"), and product (GCP_TEST_INTEGRATIONS_PRODUCT_AUTH)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ListSfdcInstanceSfdcChannels@ProductsSfdcInstance (integrations.projects.locations.products.sfdcInstances.sfdcChannels.list): ProductsSfdcInstance: no deployable fixture",
+        'ListSfdcInstanceSfdcChannels@ProductsSfdcInstance (integrations.projects.locations.products.sfdcInstances.sfdcChannels.list): ProductsSfdcInstance: Product-scoped (`products/IP`) auth configs are rejected on a standard project with Forbidden ("User is not authorized to create AuthConfig with name … as they don\'t have membership of project {number}"), and product (GCP_TEST_INTEGRATIONS_PRODUCT_AUTH)',
         () => Effect.void,
       );
     });
 
     describe("ProductsSfdcInstancesSfdcChannel", { concurrent: true }, () => {
       test.provider.skip(
-        "GetSfdcChannel@ProductsSfdcInstancesSfdcChannel (integrations.projects.locations.products.sfdcInstances.sfdcChannels.get): ProductsSfdcInstancesSfdcChannel: no deployable fixture",
+        'GetSfdcChannel@ProductsSfdcInstancesSfdcChannel (integrations.projects.locations.products.sfdcInstances.sfdcChannels.get): ProductsSfdcInstancesSfdcChannel: Product-scoped (`products/IP`) auth configs are rejected on a standard project with Forbidden ("User is not authorized to create AuthConfig with name … as they don\'t have membership of project {number}"), and product (GCP_TEST_INTEGRATIONS_PRODUCT_AUTH)',
         () => Effect.void,
       );
     });
@@ -493,46 +493,70 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("SfdcInstance", { concurrent: true }, () => {
       test.provider.skip(
-        "GetSfdcInstance@SfdcInstance (integrations.projects.locations.sfdcInstances.get): SfdcInstance: no deployable fixture",
+        'GetSfdcInstance@SfdcInstance (integrations.projects.locations.sfdcInstances.get): SfdcInstance: Updating a Salesforce instance that points at a placeholder org fails with InternalServerError ("Unknown Error."); set (GCP_TEST_INTEGRATIONS_SFDC)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ListSfdcInstanceSfdcChannels@SfdcInstance (integrations.projects.locations.sfdcInstances.sfdcChannels.list): SfdcInstance: no deployable fixture",
+        'ListSfdcInstanceSfdcChannels@SfdcInstance (integrations.projects.locations.sfdcInstances.sfdcChannels.list): SfdcInstance: Updating a Salesforce instance that points at a placeholder org fails with InternalServerError ("Unknown Error."); set (GCP_TEST_INTEGRATIONS_SFDC)',
         () => Effect.void,
       );
     });
 
     describe("SfdcInstancesSfdcChannel", { concurrent: true }, () => {
       test.provider.skip(
-        "GetSfdcChannel@SfdcInstancesSfdcChannel (integrations.projects.locations.sfdcInstances.sfdcChannels.get): SfdcInstancesSfdcChannel: no deployable fixture",
+        'GetSfdcChannel@SfdcInstancesSfdcChannel (integrations.projects.locations.sfdcInstances.sfdcChannels.get): SfdcInstancesSfdcChannel: Updating a Salesforce instance that points at a placeholder org fails with InternalServerError ("Unknown Error."); set (GCP_TEST_INTEGRATIONS_SFDC)',
         () => Effect.void,
       );
     });
 
     describe("Template", { concurrent: true }, () => {
-      test.provider.skip(
-        "DownloadTemplate (integrations.projects.locations.templates.download): Template: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "DownloadTemplate (integrations.projects.locations.templates.download)",
+        () => probe("DownloadTemplate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetTemplate (integrations.projects.locations.templates.get): Template: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetTemplate (integrations.projects.locations.templates.get)",
+        () => probe("GetTemplate", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ImportTemplate (integrations.projects.locations.templates.import): Template: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ImportTemplate (integrations.projects.locations.templates.import)",
+        () => probe("ImportTemplate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ShareTemplate (integrations.projects.locations.templates.share): Template: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ShareTemplate (integrations.projects.locations.templates.share)",
+        () => probe("ShareTemplate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UnshareTemplate (integrations.projects.locations.templates.unshare): Template: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "UnshareTemplate (integrations.projects.locations.templates.unshare)",
+        () => probe("UnshareTemplate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UseTemplate (integrations.projects.locations.templates.use): Template: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "UseTemplate (integrations.projects.locations.templates.use)",
+        () => probe("UseTemplate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:integrations", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

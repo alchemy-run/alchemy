@@ -95,6 +95,7 @@
     "storage.buckets.restore": "a soft-deleted bucket has no IAM policy: restore is authorized on the project"
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
   }
 }

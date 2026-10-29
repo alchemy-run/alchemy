@@ -67,6 +67,22 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "ContentPolicy": "ProbeContentPolicy",
+      "DlpJob": "ProbeDlpJob",
+      "LocationsStoredInfoType": "ProbeLocationsStoredInfoType",
+      "StoredInfoType": "ProbeStoredInfoType"
+    },
+    "untestable": {
+      "OrganizationStoredInfoType": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsDeidentifyTemplate": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsInspectTemplate": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsLocationsConnection": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsLocationsDeidentifyTemplate": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsLocationsDiscoveryConfig": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsLocationsInspectTemplate": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsLocationsJobTrigger": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationsLocationsStoredInfoType": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)"
+    }
   }
 }

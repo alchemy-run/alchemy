@@ -26,6 +26,7 @@
     "workflowexecutions.projects.locations.workflows.executions.callbacks.list": "rejects execution names with the project id, and the project number only works for the basic Owner/Editor roles"
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
   }
 }

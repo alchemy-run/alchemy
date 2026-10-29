@@ -27,6 +27,7 @@ const probe = (name: string, expectSuccess: boolean) =>
   });
 
 // Deploys one of every bindable resource: slow, so `--fast` skips it.
+// Resource-bound bindings run live in Bindings.test.ts.
 describe.skipIf(!!process.env.FAST)(
   "CloudScheduler generated bindings",
   { tags: ["provider:gcp", "provider:gcp:cloudscheduler", "live"], concurrent: true },
@@ -46,13 +47,6 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
-
-    describe("Job", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetJob (cloudscheduler.projects.locations.jobs.get): Job: no deployable fixture",
-        () => Effect.void,
-      );
-    });
 
     describe("project", { concurrent: true }, () => {
       test.provider(

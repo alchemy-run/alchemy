@@ -49,250 +49,314 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("BillingBucket", { concurrent: true }, () => {
       test.provider.skip(
-        "GetBucket@BillingBucket (logging.billingAccounts.locations.buckets.get): BillingBucket: no deployable fixture",
+        "GetBucket@BillingBucket (logging.billingAccounts.locations.buckets.get): BillingBucket: needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListBucketLinks@BillingBucket (logging.billingAccounts.locations.buckets.links.list): BillingBucket: no deployable fixture",
+        "ListBucketLinks@BillingBucket (logging.billingAccounts.locations.buckets.links.list): BillingBucket: needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListBucketViews@BillingBucket (logging.billingAccounts.locations.buckets.views.list): BillingBucket: no deployable fixture",
+        "ListBucketViews@BillingBucket (logging.billingAccounts.locations.buckets.views.list): BillingBucket: needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "UndeleteBucket@BillingBucket (logging.billingAccounts.locations.buckets.undelete): BillingBucket: no deployable fixture",
+        "UndeleteBucket@BillingBucket (logging.billingAccounts.locations.buckets.undelete): BillingBucket: needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "UpdateBucketAsync@BillingBucket (logging.billingAccounts.locations.buckets.updateAsync): BillingBucket: no deployable fixture",
+        "UpdateBucketAsync@BillingBucket (logging.billingAccounts.locations.buckets.updateAsync): BillingBucket: needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("BillingBucketsLink", { concurrent: true }, () => {
       test.provider.skip(
-        "GetLink@BillingBucketsLink (logging.billingAccounts.locations.buckets.links.get): BillingBucketsLink: no deployable fixture",
+        "GetLink@BillingBucketsLink (logging.billingAccounts.locations.buckets.links.get): BillingBucketsLink: needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("BillingBucketsView", { concurrent: true }, () => {
       test.provider.skip(
-        "GetView@BillingBucketsView (logging.billingAccounts.locations.buckets.views.get): BillingBucketsView: no deployable fixture",
+        "GetView@BillingBucketsView (logging.billingAccounts.locations.buckets.views.get): BillingBucketsView: needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListViewLogs@BillingBucketsView (logging.billingAccounts.locations.buckets.views.logs.list): BillingBucketsView: no deployable fixture",
+        "ListViewLogs@BillingBucketsView (logging.billingAccounts.locations.buckets.views.logs.list): BillingBucketsView: needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("BillingExclusion", { concurrent: true }, () => {
       test.provider.skip(
-        "GetExclusion@BillingExclusion (logging.billingAccounts.exclusions.get): BillingExclusion: no deployable fixture",
+        "GetExclusion@BillingExclusion (logging.billingAccounts.exclusions.get): BillingExclusion: needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("BucketsLink", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetLink@BucketsLink (logging.projects.locations.buckets.links.get): BucketsLink: no deployable fixture",
+      test.provider.todo(
+        "GetLink@BucketsLink (logging.projects.locations.buckets.links.get): BucketsLink: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("BucketsView", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetView@BucketsView (logging.projects.locations.buckets.views.get): BucketsView: no deployable fixture",
+      test.provider.todo(
+        "GetView@BucketsView (logging.projects.locations.buckets.views.get): BucketsView: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListViewLogs@BucketsView (logging.projects.locations.buckets.views.logs.list): BucketsView: no deployable fixture",
+      test.provider.todo(
+        "ListViewLogs@BucketsView (logging.projects.locations.buckets.views.logs.list): BucketsView: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Exclusion", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetExclusion@Exclusion (logging.projects.exclusions.get): Exclusion: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetExclusion@Exclusion (logging.projects.exclusions.get)",
+        () => probe("GetExclusion@Exclusion", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("FolderBucket", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBucket@FolderBucket (logging.folders.locations.buckets.get): FolderBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetBucket@FolderBucket (logging.folders.locations.buckets.get)",
+        () => probe("GetBucket@FolderBucket", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListBucketLinks@FolderBucket (logging.folders.locations.buckets.links.list): FolderBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListBucketLinks@FolderBucket (logging.folders.locations.buckets.links.list)",
+        () => probe("ListBucketLinks@FolderBucket", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListBucketViews@FolderBucket (logging.folders.locations.buckets.views.list): FolderBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListBucketViews@FolderBucket (logging.folders.locations.buckets.views.list)",
+        () => probe("ListBucketViews@FolderBucket", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UndeleteBucket@FolderBucket (logging.folders.locations.buckets.undelete): FolderBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "UndeleteBucket@FolderBucket (logging.folders.locations.buckets.undelete)",
+        () => probe("UndeleteBucket@FolderBucket", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UpdateBucketAsync@FolderBucket (logging.folders.locations.buckets.updateAsync): FolderBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "UpdateBucketAsync@FolderBucket (logging.folders.locations.buckets.updateAsync)",
+        () => probe("UpdateBucketAsync@FolderBucket", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("FolderBucketsLink", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetLink@FolderBucketsLink (logging.folders.locations.buckets.links.get): FolderBucketsLink: no deployable fixture",
+      test.provider.todo(
+        "GetLink@FolderBucketsLink (logging.folders.locations.buckets.links.get): FolderBucketsLink: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("FolderBucketsView", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetView@FolderBucketsView (logging.folders.locations.buckets.views.get): FolderBucketsView: no deployable fixture",
+      test.provider.todo(
+        "GetView@FolderBucketsView (logging.folders.locations.buckets.views.get): FolderBucketsView: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListViewLogs@FolderBucketsView (logging.folders.locations.buckets.views.logs.list): FolderBucketsView: no deployable fixture",
+      test.provider.todo(
+        "ListViewLogs@FolderBucketsView (logging.folders.locations.buckets.views.logs.list): FolderBucketsView: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("FolderExclusion", { concurrent: true }, () => {
       test.provider.skip(
-        "GetExclusion@FolderExclusion (logging.folders.exclusions.get): FolderExclusion: no deployable fixture",
+        "GetExclusion@FolderExclusion (logging.folders.exclusions.get): FolderExclusion: needs GOOGLE_FOLDER_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("FolderLogScope", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetLogScope@FolderLogScope (logging.folders.locations.logScopes.get): FolderLogScope: no deployable fixture",
+      test.provider.todo(
+        "GetLogScope@FolderLogScope (logging.folders.locations.logScopes.get): FolderLogScope: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("LocationsBucket", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBucket@LocationsBucket (logging.locations.buckets.get): LocationsBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetBucket@LocationsBucket (logging.locations.buckets.get)",
+        () => probe("GetBucket@LocationsBucket", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListBucketLinks@LocationsBucket (logging.locations.buckets.links.list): LocationsBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListBucketLinks@LocationsBucket (logging.locations.buckets.links.list)",
+        () => probe("ListBucketLinks@LocationsBucket", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListBucketViews@LocationsBucket (logging.locations.buckets.views.list): LocationsBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListBucketViews@LocationsBucket (logging.locations.buckets.views.list)",
+        () => probe("ListBucketViews@LocationsBucket", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UndeleteBucket@LocationsBucket (logging.locations.buckets.undelete): LocationsBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "UndeleteBucket@LocationsBucket (logging.locations.buckets.undelete)",
+        () => probe("UndeleteBucket@LocationsBucket", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UpdateBucketAsync@LocationsBucket (logging.locations.buckets.updateAsync): LocationsBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "UpdateBucketAsync@LocationsBucket (logging.locations.buckets.updateAsync)",
+        () => probe("UpdateBucketAsync@LocationsBucket", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("LocationsBucketsLink", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetLink@LocationsBucketsLink (logging.locations.buckets.links.get): LocationsBucketsLink: no deployable fixture",
+      test.provider.todo(
+        "GetLink@LocationsBucketsLink (logging.locations.buckets.links.get): LocationsBucketsLink: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("LocationsBucketsView", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetView@LocationsBucketsView (logging.locations.buckets.views.get): LocationsBucketsView: no deployable fixture",
+      test.provider.todo(
+        "GetView@LocationsBucketsView (logging.locations.buckets.views.get): LocationsBucketsView: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("LogBucket", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBucket@LogBucket (logging.projects.locations.buckets.get): LogBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetBucket@LogBucket (logging.projects.locations.buckets.get)",
+        () => probe("GetBucket@LogBucket", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListBucketLinks@LogBucket (logging.projects.locations.buckets.links.list): LogBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListBucketLinks@LogBucket (logging.projects.locations.buckets.links.list)",
+        () => probe("ListBucketLinks@LogBucket", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListBucketViews@LogBucket (logging.projects.locations.buckets.views.list): LogBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListBucketViews@LogBucket (logging.projects.locations.buckets.views.list)",
+        () => probe("ListBucketViews@LogBucket", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UndeleteBucket@LogBucket (logging.projects.locations.buckets.undelete): LogBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "UndeleteBucket@LogBucket (logging.projects.locations.buckets.undelete)",
+        () => probe("UndeleteBucket@LogBucket", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UpdateBucketAsync@LogBucket (logging.projects.locations.buckets.updateAsync): LogBucket: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "UpdateBucketAsync@LogBucket (logging.projects.locations.buckets.updateAsync)",
+        () => probe("UpdateBucketAsync@LogBucket", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("LogScope", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetLogScope@LogScope (logging.projects.locations.logScopes.get): LogScope: no deployable fixture",
+      test.provider.todo(
+        "GetLogScope@LogScope (logging.projects.locations.logScopes.get): LogScope: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("OrganizationBucketsLink", { concurrent: true }, () => {
       test.provider.skip(
-        "GetLink@OrganizationBucketsLink (logging.organizations.locations.buckets.links.get): OrganizationBucketsLink: no deployable fixture",
+        "GetLink@OrganizationBucketsLink (logging.organizations.locations.buckets.links.get): OrganizationBucketsLink: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationBucketsView", { concurrent: true }, () => {
       test.provider.skip(
-        "GetView@OrganizationBucketsView (logging.organizations.locations.buckets.views.get): OrganizationBucketsView: no deployable fixture",
+        "GetView@OrganizationBucketsView (logging.organizations.locations.buckets.views.get): OrganizationBucketsView: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListViewLogs@OrganizationBucketsView (logging.organizations.locations.buckets.views.logs.list): OrganizationBucketsView: no deployable fixture",
+        "ListViewLogs@OrganizationBucketsView (logging.organizations.locations.buckets.views.logs.list): OrganizationBucketsView: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationExclusion", { concurrent: true }, () => {
       test.provider.skip(
-        "GetExclusion@OrganizationExclusion (logging.organizations.exclusions.get): OrganizationExclusion: no deployable fixture",
+        "GetExclusion@OrganizationExclusion (logging.organizations.exclusions.get): OrganizationExclusion: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationLogBucket", { concurrent: true }, () => {
       test.provider.skip(
-        "GetBucket@OrganizationLogBucket (logging.organizations.locations.buckets.get): OrganizationLogBucket: no deployable fixture",
+        "GetBucket@OrganizationLogBucket (logging.organizations.locations.buckets.get): OrganizationLogBucket: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListBucketLinks@OrganizationLogBucket (logging.organizations.locations.buckets.links.list): OrganizationLogBucket: no deployable fixture",
+        "ListBucketLinks@OrganizationLogBucket (logging.organizations.locations.buckets.links.list): OrganizationLogBucket: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListBucketViews@OrganizationLogBucket (logging.organizations.locations.buckets.views.list): OrganizationLogBucket: no deployable fixture",
+        "ListBucketViews@OrganizationLogBucket (logging.organizations.locations.buckets.views.list): OrganizationLogBucket: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "UndeleteBucket@OrganizationLogBucket (logging.organizations.locations.buckets.undelete): OrganizationLogBucket: no deployable fixture",
+        "UndeleteBucket@OrganizationLogBucket (logging.organizations.locations.buckets.undelete): OrganizationLogBucket: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "UpdateBucketAsync@OrganizationLogBucket (logging.organizations.locations.buckets.updateAsync): OrganizationLogBucket: no deployable fixture",
+        "UpdateBucketAsync@OrganizationLogBucket (logging.organizations.locations.buckets.updateAsync): OrganizationLogBucket: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationLogScope", { concurrent: true }, () => {
       test.provider.skip(
-        "GetLogScope@OrganizationLogScope (logging.organizations.locations.logScopes.get): OrganizationLogScope: no deployable fixture",
+        "GetLogScope@OrganizationLogScope (logging.organizations.locations.logScopes.get): OrganizationLogScope: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });

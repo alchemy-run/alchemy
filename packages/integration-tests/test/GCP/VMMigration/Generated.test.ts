@@ -48,35 +48,35 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Group", { concurrent: true }, () => {
-      test.provider.skip(
-        "AddGroupMigration (vmmigration.projects.locations.groups.addGroupMigration): Group: no deployable fixture",
+      test.provider.todo(
+        "AddGroupMigration (vmmigration.projects.locations.groups.addGroupMigration): Group: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetGroup (vmmigration.projects.locations.groups.get): Group: no deployable fixture",
+      test.provider.todo(
+        "GetGroup (vmmigration.projects.locations.groups.get): Group: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RemoveGroupMigration (vmmigration.projects.locations.groups.removeGroupMigration): Group: no deployable fixture",
+      test.provider.todo(
+        "RemoveGroupMigration (vmmigration.projects.locations.groups.removeGroupMigration): Group: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ImageImport", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelImageImportJob (vmmigration.projects.locations.imageImports.imageImportJobs.cancel): ImageImport: no deployable fixture",
+      test.provider.todo(
+        "CancelImageImportJob (vmmigration.projects.locations.imageImports.imageImportJobs.cancel): ImageImport: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetImageImport (vmmigration.projects.locations.imageImports.get): ImageImport: no deployable fixture",
+      test.provider.todo(
+        "GetImageImport (vmmigration.projects.locations.imageImports.get): ImageImport: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetImageImportJob (vmmigration.projects.locations.imageImports.imageImportJobs.get): ImageImport: no deployable fixture",
+      test.provider.todo(
+        "GetImageImportJob (vmmigration.projects.locations.imageImports.imageImportJobs.get): ImageImport: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListImageImportJobs (vmmigration.projects.locations.imageImports.imageImportJobs.list): ImageImport: no deployable fixture",
+      test.provider.todo(
+        "ListImageImportJobs (vmmigration.projects.locations.imageImports.imageImportJobs.list): ImageImport: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -109,132 +109,132 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Source", { concurrent: true }, () => {
-      test.provider.skip(
-        "FetchSourceInventory (vmmigration.projects.locations.sources.fetchInventory): Source: no deployable fixture",
+      test.provider.todo(
+        "FetchSourceInventory (vmmigration.projects.locations.sources.fetchInventory): Source: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "FetchSourceStorageInventory (vmmigration.projects.locations.sources.fetchStorageInventory): Source: no deployable fixture",
+      test.provider.todo(
+        "FetchSourceStorageInventory (vmmigration.projects.locations.sources.fetchStorageInventory): Source: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetSource (vmmigration.projects.locations.sources.get): Source: no deployable fixture",
+      test.provider.todo(
+        "GetSource (vmmigration.projects.locations.sources.get): Source: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListSourceDatacenterConnectors (vmmigration.projects.locations.sources.datacenterConnectors.list): Source: no deployable fixture",
+      test.provider.todo(
+        "ListSourceDatacenterConnectors (vmmigration.projects.locations.sources.datacenterConnectors.list): Source: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListSourceDiskMigrationJobs (vmmigration.projects.locations.sources.diskMigrationJobs.list): Source: no deployable fixture",
+      test.provider.todo(
+        "ListSourceDiskMigrationJobs (vmmigration.projects.locations.sources.diskMigrationJobs.list): Source: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListSourceMigratingVms (vmmigration.projects.locations.sources.migratingVms.list): Source: no deployable fixture",
+      test.provider.todo(
+        "ListSourceMigratingVms (vmmigration.projects.locations.sources.migratingVms.list): Source: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListSourceUtilizationReports (vmmigration.projects.locations.sources.utilizationReports.list): Source: no deployable fixture",
+      test.provider.todo(
+        "ListSourceUtilizationReports (vmmigration.projects.locations.sources.utilizationReports.list): Source: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("SourcesDatacenterConnector", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDatacenterConnector (vmmigration.projects.locations.sources.datacenterConnectors.get): SourcesDatacenterConnector: no deployable fixture",
+      test.provider.todo(
+        "GetDatacenterConnector (vmmigration.projects.locations.sources.datacenterConnectors.get): SourcesDatacenterConnector: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "UpgradeDatacenterConnectorAppliance (vmmigration.projects.locations.sources.datacenterConnectors.upgradeAppliance): SourcesDatacenterConnector: no deployable fixture",
+      test.provider.todo(
+        "UpgradeDatacenterConnectorAppliance (vmmigration.projects.locations.sources.datacenterConnectors.upgradeAppliance): SourcesDatacenterConnector: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("SourcesDiskMigrationJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelDiskMigrationJob (vmmigration.projects.locations.sources.diskMigrationJobs.cancel): SourcesDiskMigrationJob: no deployable fixture",
+      test.provider.todo(
+        "CancelDiskMigrationJob (vmmigration.projects.locations.sources.diskMigrationJobs.cancel): SourcesDiskMigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetDiskMigrationJob (vmmigration.projects.locations.sources.diskMigrationJobs.get): SourcesDiskMigrationJob: no deployable fixture",
+      test.provider.todo(
+        "GetDiskMigrationJob (vmmigration.projects.locations.sources.diskMigrationJobs.get): SourcesDiskMigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RunDiskMigrationJob (vmmigration.projects.locations.sources.diskMigrationJobs.run): SourcesDiskMigrationJob: no deployable fixture",
+      test.provider.todo(
+        "RunDiskMigrationJob (vmmigration.projects.locations.sources.diskMigrationJobs.run): SourcesDiskMigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("SourcesMigratingVm", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelMigratingVmCloneJob (vmmigration.projects.locations.sources.migratingVms.cloneJobs.cancel): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "CancelMigratingVmCloneJob (vmmigration.projects.locations.sources.migratingVms.cloneJobs.cancel): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CancelMigratingVmCutoverJob (vmmigration.projects.locations.sources.migratingVms.cutoverJobs.cancel): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "CancelMigratingVmCutoverJob (vmmigration.projects.locations.sources.migratingVms.cutoverJobs.cancel): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CreateMigratingVmCloneJob (vmmigration.projects.locations.sources.migratingVms.cloneJobs.create): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "CreateMigratingVmCloneJob (vmmigration.projects.locations.sources.migratingVms.cloneJobs.create): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CreateMigratingVmCutoverJob (vmmigration.projects.locations.sources.migratingVms.cutoverJobs.create): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "CreateMigratingVmCutoverJob (vmmigration.projects.locations.sources.migratingVms.cutoverJobs.create): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ExtendMigratingVmMigration (vmmigration.projects.locations.sources.migratingVms.extendMigration): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "ExtendMigratingVmMigration (vmmigration.projects.locations.sources.migratingVms.extendMigration): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "FinalizeMigratingVmMigration (vmmigration.projects.locations.sources.migratingVms.finalizeMigration): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "FinalizeMigratingVmMigration (vmmigration.projects.locations.sources.migratingVms.finalizeMigration): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetMigratingVm (vmmigration.projects.locations.sources.migratingVms.get): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "GetMigratingVm (vmmigration.projects.locations.sources.migratingVms.get): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetMigratingVmCloneJob (vmmigration.projects.locations.sources.migratingVms.cloneJobs.get): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "GetMigratingVmCloneJob (vmmigration.projects.locations.sources.migratingVms.cloneJobs.get): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetMigratingVmCutoverJob (vmmigration.projects.locations.sources.migratingVms.cutoverJobs.get): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "GetMigratingVmCutoverJob (vmmigration.projects.locations.sources.migratingVms.cutoverJobs.get): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetMigratingVmReplicationCycle (vmmigration.projects.locations.sources.migratingVms.replicationCycles.get): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "GetMigratingVmReplicationCycle (vmmigration.projects.locations.sources.migratingVms.replicationCycles.get): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListMigratingVmCloneJobs (vmmigration.projects.locations.sources.migratingVms.cloneJobs.list): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "ListMigratingVmCloneJobs (vmmigration.projects.locations.sources.migratingVms.cloneJobs.list): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListMigratingVmCutoverJobs (vmmigration.projects.locations.sources.migratingVms.cutoverJobs.list): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "ListMigratingVmCutoverJobs (vmmigration.projects.locations.sources.migratingVms.cutoverJobs.list): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListMigratingVmReplicationCycles (vmmigration.projects.locations.sources.migratingVms.replicationCycles.list): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "ListMigratingVmReplicationCycles (vmmigration.projects.locations.sources.migratingVms.replicationCycles.list): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "PauseMigratingVmMigration (vmmigration.projects.locations.sources.migratingVms.pauseMigration): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "PauseMigratingVmMigration (vmmigration.projects.locations.sources.migratingVms.pauseMigration): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ResumeMigratingVmMigration (vmmigration.projects.locations.sources.migratingVms.resumeMigration): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "ResumeMigratingVmMigration (vmmigration.projects.locations.sources.migratingVms.resumeMigration): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StartMigratingVmMigration (vmmigration.projects.locations.sources.migratingVms.startMigration): SourcesMigratingVm: no deployable fixture",
+      test.provider.todo(
+        "StartMigratingVmMigration (vmmigration.projects.locations.sources.migratingVms.startMigration): SourcesMigratingVm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("SourcesUtilizationReport", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetUtilizationReport (vmmigration.projects.locations.sources.utilizationReports.get): SourcesUtilizationReport: no deployable fixture",
+      test.provider.todo(
+        "GetUtilizationReport (vmmigration.projects.locations.sources.utilizationReports.get): SourcesUtilizationReport: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

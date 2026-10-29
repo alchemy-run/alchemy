@@ -91,6 +91,27 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "AddressGroup": "ProbeAddressGroup",
+      "AuthorizationPolicy": "ProbeAuthorizationPolicy",
+      "BackendAuthenticationConfig": "ProbeBackendAuthenticationConfig",
+      "ClientTlsPolicy": "ProbeClientTlsPolicy",
+      "DnsThreatDetector": "ProbeDnsThreatDetector",
+      "GatewaySecurityPolicy": "ProbeGatewaySecurityPolicy",
+      "SacRealm": "ProbeSacRealm",
+      "SecurityProfile": "ProbeSecurityProfile",
+      "ServerTlsPolicy": "ProbeServerTlsPolicy",
+      "UrlList": "ProbeUrlList"
+    },
+    "untestable": {
+      "AuthzPolicy": "Needs an existing application load balancer forwarding rule; set (GCP_TEST_AUTHZ_POLICY_TARGET)",
+      "FirewallEndpoint": "Firewall endpoints (Cloud NGFW Enterprise) bill hourly and take well over 5 (GCP_TEST_NGFW)",
+      "FirewallEndpointAssociation": "Firewall endpoints (Cloud NGFW Enterprise) bill hourly and take well over 5 (GCP_TEST_NGFW)",
+      "OrganizationsAddressGroup": "needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
+      "OrganizationsFirewallEndpoint": "needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
+      "OrganizationsSecurityProfile": "needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
+      "OrganizationsSecurityProfileGroup": "needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
+      "SacAttachment": "An attachment needs a SAC realm already paired with its SSE partner (Palo Alto Prisma Access / Symantec), which happens outside GCP. Set (GCP_TEST_SAC_PARTNER_REALM)"
+    }
   }
 }

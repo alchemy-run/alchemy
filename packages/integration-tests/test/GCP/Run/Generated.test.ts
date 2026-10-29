@@ -27,6 +27,7 @@ const probe = (name: string, expectSuccess: boolean) =>
   });
 
 // Deploys one of every bindable resource: slow, so `--fast` skips it.
+// Resource-bound bindings run live in Bindings.test.ts.
 describe.skipIf(!!process.env.FAST)(
   "Run generated bindings",
   { tags: ["provider:gcp", "provider:gcp:run", "live"], concurrent: true },
@@ -46,37 +47,6 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
-
-    describe("Job", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelJobExecution (run.projects.locations.jobs.executions.cancel): Job: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "DeleteJobExecution (run.projects.locations.jobs.executions.delete): Job: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetJob (run.projects.locations.jobs.get): Job: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetJobExecution (run.projects.locations.jobs.executions.get): Job: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetJobExecutionTask (run.projects.locations.jobs.executions.tasks.get): Job: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListJobExecutions (run.projects.locations.jobs.executions.list): Job: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListJobExecutionTasks (run.projects.locations.jobs.executions.tasks.list): Job: no deployable fixture",
-        () => Effect.void,
-      );
-    });
 
     describe("project", { concurrent: true }, () => {
       test.provider(
@@ -146,36 +116,6 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:run", "live"],
           timeout: 600_000,
         },
-      );
-    });
-
-    describe("Service", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeleteServiceRevision (run.projects.locations.services.revisions.delete): Service: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetServiceRevision (run.projects.locations.services.revisions.get): Service: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListServiceRevisions (run.projects.locations.services.revisions.list): Service: no deployable fixture",
-        () => Effect.void,
-      );
-    });
-
-    describe("WorkerPool", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeleteWorkerPoolRevision (run.projects.locations.workerPools.revisions.delete): WorkerPool: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetWorkerPoolRevision (run.projects.locations.workerPools.revisions.get): WorkerPool: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListWorkerPoolRevisions (run.projects.locations.workerPools.revisions.list): WorkerPool: no deployable fixture",
-        () => Effect.void,
       );
     });
   },

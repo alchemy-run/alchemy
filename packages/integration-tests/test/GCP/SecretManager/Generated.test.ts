@@ -27,6 +27,7 @@ const probe = (name: string, expectSuccess: boolean) =>
   });
 
 // Deploys one of every bindable resource: slow, so `--fast` skips it.
+// Resource-bound bindings run live in Bindings.test.ts.
 describe.skipIf(!!process.env.FAST)(
   "SecretManager generated bindings",
   { tags: ["provider:gcp", "provider:gcp:secretmanager", "live"], concurrent: true },
@@ -47,33 +48,6 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
-    describe("LocationsSecret", { concurrent: true }, () => {
-      test.provider.skip(
-        "EnableSecretManagedRotation@LocationsSecret (secretmanager.projects.locations.secrets.enableManagedRotation): LocationsSecret: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "EnableSecretVersion@LocationsSecret (secretmanager.projects.locations.secrets.versions.enable): LocationsSecret: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetSecret@LocationsSecret (secretmanager.projects.locations.secrets.get): LocationsSecret: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetSecretVersion@LocationsSecret (secretmanager.projects.locations.secrets.versions.get): LocationsSecret: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListSecretVersions@LocationsSecret (secretmanager.projects.locations.secrets.versions.list): LocationsSecret: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RotateSecret@LocationsSecret (secretmanager.projects.locations.secrets.rotateSecret): LocationsSecret: no deployable fixture",
-        () => Effect.void,
-      );
-    });
-
     describe("project", { concurrent: true }, () => {
       test.provider(
         "ListSecrets (secretmanager.projects.secrets.list)",
@@ -82,33 +56,6 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:secretmanager", "live"],
           timeout: 600_000,
         },
-      );
-    });
-
-    describe("Secret", { concurrent: true }, () => {
-      test.provider.skip(
-        "EnableSecretManagedRotation@Secret (secretmanager.projects.secrets.enableManagedRotation): Secret: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "EnableSecretVersion@Secret (secretmanager.projects.secrets.versions.enable): Secret: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetSecret@Secret (secretmanager.projects.secrets.get): Secret: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetSecretVersion@Secret (secretmanager.projects.secrets.versions.get): Secret: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListSecretVersions@Secret (secretmanager.projects.secrets.versions.list): Secret: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RotateSecret@Secret (secretmanager.projects.secrets.rotateSecret): Secret: no deployable fixture",
-        () => Effect.void,
       );
     });
   },

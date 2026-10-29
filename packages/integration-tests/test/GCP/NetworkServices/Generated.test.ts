@@ -48,88 +48,120 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AgentGateway", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAgentGateway (networkservices.projects.locations.agentGateways.get): AgentGateway: no deployable fixture",
+      test.provider.todo(
+        "GetAgentGateway (networkservices.projects.locations.agentGateways.get): AgentGateway: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AuthzExtension", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAuthzExtension (networkservices.projects.locations.authzExtensions.get): AuthzExtension: no deployable fixture",
+      test.provider.todo(
+        "GetAuthzExtension (networkservices.projects.locations.authzExtensions.get): AuthzExtension: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("EndpointPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEndpointPolicy (networkservices.projects.locations.endpointPolicies.get): EndpointPolicy: no deployable fixture",
+      test.provider.todo(
+        "GetEndpointPolicy (networkservices.projects.locations.endpointPolicies.get): EndpointPolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Gateway", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetGateway (networkservices.projects.locations.gateways.get): Gateway: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetGateway (networkservices.projects.locations.gateways.get)",
+        () => probe("GetGateway", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetGatewayRouteView (networkservices.projects.locations.gateways.routeViews.get): Gateway: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetGatewayRouteView (networkservices.projects.locations.gateways.routeViews.get)",
+        () => probe("GetGatewayRouteView", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListGatewayRouteViews (networkservices.projects.locations.gateways.routeViews.list): Gateway: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListGatewayRouteViews (networkservices.projects.locations.gateways.routeViews.list)",
+        () => probe("ListGatewayRouteViews", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("GrpcRoute", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetGrpcRoute (networkservices.projects.locations.grpcRoutes.get): GrpcRoute: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetGrpcRoute (networkservices.projects.locations.grpcRoutes.get)",
+        () => probe("GetGrpcRoute", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("HttpRoute", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetHttpRoute (networkservices.projects.locations.httpRoutes.get): HttpRoute: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetHttpRoute (networkservices.projects.locations.httpRoutes.get)",
+        () => probe("GetHttpRoute", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("LbEdgeExtension", { concurrent: true }, () => {
       test.provider.skip(
-        "GetLbEdgeExtension (networkservices.projects.locations.lbEdgeExtensions.get): LbEdgeExtension: no deployable fixture",
+        "GetLbEdgeExtension (networkservices.projects.locations.lbEdgeExtensions.get): LbEdgeExtension: Edge extensions need a WasmPlugin with a main version; the fixture's bare plugin makes create fail with BadRequest \"MAIN_VERSION_ID_EMPTY: Main (GCP_TEST_LB_EDGE_EXTENSION)",
         () => Effect.void,
       );
     });
 
     describe("LbRouteExtension", { concurrent: true }, () => {
       test.provider.skip(
-        "GetLbRouteExtension (networkservices.projects.locations.lbRouteExtensions.get): LbRouteExtension: no deployable fixture",
+        "GetLbRouteExtension (networkservices.projects.locations.lbRouteExtensions.get): LbRouteExtension: needs GCP_TEST_LB_ROUTE_EXTENSION (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("LbTrafficExtension", { concurrent: true }, () => {
       test.provider.skip(
-        "GetLbTrafficExtension (networkservices.projects.locations.lbTrafficExtensions.get): LbTrafficExtension: no deployable fixture",
+        "GetLbTrafficExtension (networkservices.projects.locations.lbTrafficExtensions.get): LbTrafficExtension: The fixture's INTERNAL_MANAGED address currently fails with BadRequest \"Invalid value for field 'resource.network': ... The field cannot be specified with subnetwork address.\" — it needs a subnetwork plus a (GCP_TEST_LB_TRAFFIC_EXTENSION)",
         () => Effect.void,
       );
     });
 
     describe("Mesh", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetMeshe (networkservices.projects.locations.meshes.get): Mesh: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetMeshe (networkservices.projects.locations.meshes.get)",
+        () => probe("GetMeshe", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetMesheRouteView (networkservices.projects.locations.meshes.routeViews.get): Mesh: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetMesheRouteView (networkservices.projects.locations.meshes.routeViews.get)",
+        () => probe("GetMesheRouteView", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListMesheRouteViews (networkservices.projects.locations.meshes.routeViews.list): Mesh: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListMesheRouteViews (networkservices.projects.locations.meshes.routeViews.list)",
+        () => probe("ListMesheRouteViews", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -257,47 +289,55 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ServiceBinding", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetServiceBinding (networkservices.projects.locations.serviceBindings.get): ServiceBinding: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetServiceBinding (networkservices.projects.locations.serviceBindings.get)",
+        () => probe("GetServiceBinding", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ServiceLbPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetServiceLbPolicy (networkservices.projects.locations.serviceLbPolicies.get): ServiceLbPolicy: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetServiceLbPolicy (networkservices.projects.locations.serviceLbPolicies.get)",
+        () => probe("GetServiceLbPolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("TcpRoute", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTcpRoute (networkservices.projects.locations.tcpRoutes.get): TcpRoute: no deployable fixture",
+      test.provider.todo(
+        "GetTcpRoute (networkservices.projects.locations.tcpRoutes.get): TcpRoute: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("TlsRoute", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTlsRoute (networkservices.projects.locations.tlsRoutes.get): TlsRoute: no deployable fixture",
+      test.provider.todo(
+        "GetTlsRoute (networkservices.projects.locations.tlsRoutes.get): TlsRoute: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("WasmPlugin", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetWasmPlugin (networkservices.projects.locations.wasmPlugins.get): WasmPlugin: no deployable fixture",
+      test.provider.todo(
+        "GetWasmPlugin (networkservices.projects.locations.wasmPlugins.get): WasmPlugin: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListWasmPluginVersions (networkservices.projects.locations.wasmPlugins.versions.list): WasmPlugin: no deployable fixture",
+      test.provider.todo(
+        "ListWasmPluginVersions (networkservices.projects.locations.wasmPlugins.versions.list): WasmPlugin: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("WasmPluginsVersion", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetVersion (networkservices.projects.locations.wasmPlugins.versions.get): WasmPluginsVersion: no deployable fixture",
+      test.provider.todo(
+        "GetVersion (networkservices.projects.locations.wasmPlugins.versions.get): WasmPluginsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

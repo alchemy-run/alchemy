@@ -137,12 +137,12 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ServicesSchema", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSchema (firebasedataconnect.projects.locations.services.schemas.get): ServicesSchema: no deployable fixture",
+      test.provider.todo(
+        "GetSchema (firebasedataconnect.projects.locations.services.schemas.get): ServicesSchema: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "MigrateSchema (firebasedataconnect.projects.locations.services.schemas.migrate): ServicesSchema: no deployable fixture",
+      test.provider.todo(
+        "MigrateSchema (firebasedataconnect.projects.locations.services.schemas.migrate): ServicesSchema: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

@@ -31,7 +31,16 @@
   },
   "probes": {
     "resources": {
-      "Cluster": "Jobs"
+      "Cluster": "Jobs",
+      "AutoscalingPolicy": "ProbeScaling",
+      "RegionsAutoscalingPolicy": "ProbeRegionScaling",
+      "SessionTemplate": "ProbeSessionTemplate",
+      "WorkflowTemplate": "ProbeWorkflow",
+      "RegionsWorkflowTemplate": "ProbeRegionWorkflow"
+    },
+    "untestable": {
+      "Batch": "a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
+      "Session": "a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)"
     }
   }
 }

@@ -48,19 +48,19 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Posture", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPosture (securityposture.organizations.locations.postures.get): Posture: no deployable fixture",
+      test.provider.todo(
+        "GetPosture (securityposture.organizations.locations.postures.get): Posture: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListPostureRevisions (securityposture.organizations.locations.postures.listRevisions): Posture: no deployable fixture",
+      test.provider.todo(
+        "ListPostureRevisions (securityposture.organizations.locations.postures.listRevisions): Posture: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("PostureDeployment", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPostureDeployment (securityposture.organizations.locations.postureDeployments.get): PostureDeployment: no deployable fixture",
+      test.provider.todo(
+        "GetPostureDeployment (securityposture.organizations.locations.postureDeployments.get): PostureDeployment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

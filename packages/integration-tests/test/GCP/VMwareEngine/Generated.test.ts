@@ -48,179 +48,179 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Datastore", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDatastore (vmwareengine.projects.locations.datastores.get): Datastore: no deployable fixture",
+      test.provider.todo(
+        "GetDatastore (vmwareengine.projects.locations.datastores.get): Datastore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("NetworkPeering", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetNetworkPeering (vmwareengine.projects.locations.networkPeerings.get): NetworkPeering: no deployable fixture",
+      test.provider.todo(
+        "GetNetworkPeering (vmwareengine.projects.locations.networkPeerings.get): NetworkPeering: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListNetworkPeeringPeeringRoutes (vmwareengine.projects.locations.networkPeerings.peeringRoutes.list): NetworkPeering: no deployable fixture",
+      test.provider.todo(
+        "ListNetworkPeeringPeeringRoutes (vmwareengine.projects.locations.networkPeerings.peeringRoutes.list): NetworkPeering: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("NetworkPoliciesExternalAccessRule", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetExternalAccessRule (vmwareengine.projects.locations.networkPolicies.externalAccessRules.get): NetworkPoliciesExternalAccessRule: no deployable fixture",
+      test.provider.todo(
+        "GetExternalAccessRule (vmwareengine.projects.locations.networkPolicies.externalAccessRules.get): NetworkPoliciesExternalAccessRule: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("NetworkPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "FetchNetworkPolicyExternalAddresses (vmwareengine.projects.locations.networkPolicies.fetchExternalAddresses): NetworkPolicy: no deployable fixture",
+      test.provider.todo(
+        "FetchNetworkPolicyExternalAddresses (vmwareengine.projects.locations.networkPolicies.fetchExternalAddresses): NetworkPolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetNetworkPolicy (vmwareengine.projects.locations.networkPolicies.get): NetworkPolicy: no deployable fixture",
+      test.provider.todo(
+        "GetNetworkPolicy (vmwareengine.projects.locations.networkPolicies.get): NetworkPolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListNetworkPolicyExternalAccessRules (vmwareengine.projects.locations.networkPolicies.externalAccessRules.list): NetworkPolicy: no deployable fixture",
+      test.provider.todo(
+        "ListNetworkPolicyExternalAccessRules (vmwareengine.projects.locations.networkPolicies.externalAccessRules.list): NetworkPolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("PrivateCloud", { concurrent: true }, () => {
-      test.provider.skip(
-        "CreatePrivateCloudHcxActivationKey (vmwareengine.projects.locations.privateClouds.hcxActivationKeys.create): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "CreatePrivateCloudHcxActivationKey (vmwareengine.projects.locations.privateClouds.hcxActivationKeys.create): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetPrivateCloud (vmwareengine.projects.locations.privateClouds.get): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "GetPrivateCloud (vmwareengine.projects.locations.privateClouds.get): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetPrivateCloudHcxActivationKey (vmwareengine.projects.locations.privateClouds.hcxActivationKeys.get): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "GetPrivateCloudHcxActivationKey (vmwareengine.projects.locations.privateClouds.hcxActivationKeys.get): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetPrivateCloudSubnet (vmwareengine.projects.locations.privateClouds.subnets.get): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "GetPrivateCloudSubnet (vmwareengine.projects.locations.privateClouds.subnets.get): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetPrivateCloudUpgrade (vmwareengine.projects.locations.privateClouds.upgrades.get): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "GetPrivateCloudUpgrade (vmwareengine.projects.locations.privateClouds.upgrades.get): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListPrivateCloudClusters (vmwareengine.projects.locations.privateClouds.clusters.list): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "ListPrivateCloudClusters (vmwareengine.projects.locations.privateClouds.clusters.list): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListPrivateCloudExternalAddresses (vmwareengine.projects.locations.privateClouds.externalAddresses.list): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "ListPrivateCloudExternalAddresses (vmwareengine.projects.locations.privateClouds.externalAddresses.list): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListPrivateCloudHcxActivationKeys (vmwareengine.projects.locations.privateClouds.hcxActivationKeys.list): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "ListPrivateCloudHcxActivationKeys (vmwareengine.projects.locations.privateClouds.hcxActivationKeys.list): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListPrivateCloudLoggingServers (vmwareengine.projects.locations.privateClouds.loggingServers.list): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "ListPrivateCloudLoggingServers (vmwareengine.projects.locations.privateClouds.loggingServers.list): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListPrivateCloudManagementDnsZoneBindings (vmwareengine.projects.locations.privateClouds.managementDnsZoneBindings.list): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "ListPrivateCloudManagementDnsZoneBindings (vmwareengine.projects.locations.privateClouds.managementDnsZoneBindings.list): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListPrivateCloudSubnets (vmwareengine.projects.locations.privateClouds.subnets.list): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "ListPrivateCloudSubnets (vmwareengine.projects.locations.privateClouds.subnets.list): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListPrivateCloudUpgrades (vmwareengine.projects.locations.privateClouds.upgrades.list): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "ListPrivateCloudUpgrades (vmwareengine.projects.locations.privateClouds.upgrades.list): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "MigratePrivateCloudManagementVms (vmwareengine.projects.locations.privateClouds.migrateManagementVms): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "MigratePrivateCloudManagementVms (vmwareengine.projects.locations.privateClouds.migrateManagementVms): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "PatchPrivateCloudSubnet (vmwareengine.projects.locations.privateClouds.subnets.patch): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "PatchPrivateCloudSubnet (vmwareengine.projects.locations.privateClouds.subnets.patch): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "PatchPrivateCloudUpgrade (vmwareengine.projects.locations.privateClouds.upgrades.patch): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "PatchPrivateCloudUpgrade (vmwareengine.projects.locations.privateClouds.upgrades.patch): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "PrivateCloudDeletionNow (vmwareengine.projects.locations.privateClouds.privateCloudDeletionNow): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "PrivateCloudDeletionNow (vmwareengine.projects.locations.privateClouds.privateCloudDeletionNow): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ResetPrivateCloudNsxCredentials (vmwareengine.projects.locations.privateClouds.resetNsxCredentials): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "ResetPrivateCloudNsxCredentials (vmwareengine.projects.locations.privateClouds.resetNsxCredentials): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ResetPrivateCloudVcenterCredentials (vmwareengine.projects.locations.privateClouds.resetVcenterCredentials): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "ResetPrivateCloudVcenterCredentials (vmwareengine.projects.locations.privateClouds.resetVcenterCredentials): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "UndeletePrivateCloud (vmwareengine.projects.locations.privateClouds.undelete): PrivateCloud: no deployable fixture",
+      test.provider.todo(
+        "UndeletePrivateCloud (vmwareengine.projects.locations.privateClouds.undelete): PrivateCloud: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("PrivateCloudsCluster", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetCluster (vmwareengine.projects.locations.privateClouds.clusters.get): PrivateCloudsCluster: no deployable fixture",
+      test.provider.todo(
+        "GetCluster (vmwareengine.projects.locations.privateClouds.clusters.get): PrivateCloudsCluster: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetClusterNode (vmwareengine.projects.locations.privateClouds.clusters.nodes.get): PrivateCloudsCluster: no deployable fixture",
+      test.provider.todo(
+        "GetClusterNode (vmwareengine.projects.locations.privateClouds.clusters.nodes.get): PrivateCloudsCluster: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListClusterNodes (vmwareengine.projects.locations.privateClouds.clusters.nodes.list): PrivateCloudsCluster: no deployable fixture",
+      test.provider.todo(
+        "ListClusterNodes (vmwareengine.projects.locations.privateClouds.clusters.nodes.list): PrivateCloudsCluster: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "MountClusterDatastore (vmwareengine.projects.locations.privateClouds.clusters.mountDatastore): PrivateCloudsCluster: no deployable fixture",
+      test.provider.todo(
+        "MountClusterDatastore (vmwareengine.projects.locations.privateClouds.clusters.mountDatastore): PrivateCloudsCluster: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "UnmountClusterDatastore (vmwareengine.projects.locations.privateClouds.clusters.unmountDatastore): PrivateCloudsCluster: no deployable fixture",
+      test.provider.todo(
+        "UnmountClusterDatastore (vmwareengine.projects.locations.privateClouds.clusters.unmountDatastore): PrivateCloudsCluster: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("PrivateCloudsExternalAddress", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetExternalAddress (vmwareengine.projects.locations.privateClouds.externalAddresses.get): PrivateCloudsExternalAddress: no deployable fixture",
+      test.provider.todo(
+        "GetExternalAddress (vmwareengine.projects.locations.privateClouds.externalAddresses.get): PrivateCloudsExternalAddress: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("PrivateCloudsLoggingServer", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetLoggingServer (vmwareengine.projects.locations.privateClouds.loggingServers.get): PrivateCloudsLoggingServer: no deployable fixture",
+      test.provider.todo(
+        "GetLoggingServer (vmwareengine.projects.locations.privateClouds.loggingServers.get): PrivateCloudsLoggingServer: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("PrivateCloudsManagementDnsZoneBinding", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetManagementDnsZoneBinding (vmwareengine.projects.locations.privateClouds.managementDnsZoneBindings.get): PrivateCloudsManagementDnsZoneBinding: no deployable fixture",
+      test.provider.todo(
+        "GetManagementDnsZoneBinding (vmwareengine.projects.locations.privateClouds.managementDnsZoneBindings.get): PrivateCloudsManagementDnsZoneBinding: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RepairManagementDnsZoneBinding (vmwareengine.projects.locations.privateClouds.managementDnsZoneBindings.repair): PrivateCloudsManagementDnsZoneBinding: no deployable fixture",
+      test.provider.todo(
+        "RepairManagementDnsZoneBinding (vmwareengine.projects.locations.privateClouds.managementDnsZoneBindings.repair): PrivateCloudsManagementDnsZoneBinding: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("PrivateConnection", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPrivateConnection (vmwareengine.projects.locations.privateConnections.get): PrivateConnection: no deployable fixture",
+      test.provider.todo(
+        "GetPrivateConnection (vmwareengine.projects.locations.privateConnections.get): PrivateConnection: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListPrivateConnectionPeeringRoutes (vmwareengine.projects.locations.privateConnections.peeringRoutes.list): PrivateConnection: no deployable fixture",
+      test.provider.todo(
+        "ListPrivateConnectionPeeringRoutes (vmwareengine.projects.locations.privateConnections.peeringRoutes.list): PrivateConnection: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -325,8 +325,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("VmwareEngineNetwork", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetVmwareEngineNetwork (vmwareengine.projects.locations.vmwareEngineNetworks.get): VmwareEngineNetwork: no deployable fixture",
+      test.provider.todo(
+        "GetVmwareEngineNetwork (vmwareengine.projects.locations.vmwareEngineNetworks.get): VmwareEngineNetwork: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

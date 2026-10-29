@@ -37,6 +37,19 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "ActiveDirectory": "ProbeActiveDirectory",
+      "BackupPolicy": "ProbeBackupPolicy",
+      "BackupVault": "ProbeBackupVault",
+      "HostGroup": "ProbeHostGroup",
+      "StoragePool": "ProbeStoragePool"
+    },
+    "untestable": {
+      "BackupVaultsBackup": "Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service\u2026 (GCP_TEST_NETAPP_VOLUMES)",
+      "Volume": "Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service\u2026 (GCP_TEST_NETAPP_VOLUMES)",
+      "VolumesQuotaRule": "Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service\u2026 (GCP_TEST_NETAPP_VOLUMES)",
+      "VolumesReplication": "Two pools + volume + replication: skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with\u2026 (GCP_TEST_NETAPP_VOLUMES)",
+      "VolumesSnapshot": "Pool + volume provisioning is multi-minute; skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails\u2026 (GCP_TEST_NETAPP_VOLUMES)"
+    }
   }
 }

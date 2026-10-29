@@ -48,6 +48,7 @@
     "GetCryptoKeyVersionPublicKey": "GetPublicKey"
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
   }
 }

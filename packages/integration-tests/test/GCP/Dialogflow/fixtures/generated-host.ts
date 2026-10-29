@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeSecuritySetting } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Dialogflow binding as its own
@@ -32,33 +33,34 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
     const p14 = yield* GCP.Dialogflow.GetAgentTestCaseResult();
     const p15 = yield* GCP.Dialogflow.GetAgentValidationResult();
     const p16 = yield* GCP.Dialogflow.GetFlowValidationResult();
-    const p17 = yield* GCP.Dialogflow.ImportAgentEntityType();
-    const p18 = yield* GCP.Dialogflow.ImportAgentFlow();
-    const p19 = yield* GCP.Dialogflow.ImportAgentIntent();
-    const p20 = yield* GCP.Dialogflow.ImportAgentPlaybook();
-    const p21 = yield* GCP.Dialogflow.ImportAgentTestCase();
-    const p22 = yield* GCP.Dialogflow.ListAgentChangelogs();
-    const p23 = yield* GCP.Dialogflow.ListAgentEntityTypes();
-    const p24 = yield* GCP.Dialogflow.ListAgentEnvironments();
-    const p25 = yield* GCP.Dialogflow.ListAgentFlows();
-    const p26 = yield* GCP.Dialogflow.ListAgentGenerators();
-    const p27 = yield* GCP.Dialogflow.ListAgentIntents();
-    const p28 = yield* GCP.Dialogflow.ListAgentPlaybooks();
-    const p29 = yield* GCP.Dialogflow.ListAgents();
-    const p30 = yield* GCP.Dialogflow.ListAgentSessionEntityTypes();
-    const p31 = yield* GCP.Dialogflow.ListAgentTestCaseResults();
-    const p32 = yield* GCP.Dialogflow.ListAgentTestCases();
-    const p33 = yield* GCP.Dialogflow.ListAgentTools();
-    const p34 = yield* GCP.Dialogflow.ListAgentTransitionRouteGroups();
-    const p35 = yield* GCP.Dialogflow.ListAgentWebhooks();
-    const p36 = yield* GCP.Dialogflow.ListSecuritySettings();
-    const p37 = yield* GCP.Dialogflow.PatchAgent();
-    const p38 = yield* GCP.Dialogflow.PatchAgentTestCase();
-    const p39 = yield* GCP.Dialogflow.RestoreAgent();
-    const p40 = yield* GCP.Dialogflow.RunAgentTestCase();
-    const p41 = yield* GCP.Dialogflow.SubmitSessionAnswerFeedback();
-    const p42 = yield* GCP.Dialogflow.UpdateAgentGenerativeSettings();
-    const p43 = yield* GCP.Dialogflow.ValidateAgent();
+    const p17 = yield* GCP.Dialogflow.GetSecuritySetting(ProbeSecuritySetting);
+    const p18 = yield* GCP.Dialogflow.ImportAgentEntityType();
+    const p19 = yield* GCP.Dialogflow.ImportAgentFlow();
+    const p20 = yield* GCP.Dialogflow.ImportAgentIntent();
+    const p21 = yield* GCP.Dialogflow.ImportAgentPlaybook();
+    const p22 = yield* GCP.Dialogflow.ImportAgentTestCase();
+    const p23 = yield* GCP.Dialogflow.ListAgentChangelogs();
+    const p24 = yield* GCP.Dialogflow.ListAgentEntityTypes();
+    const p25 = yield* GCP.Dialogflow.ListAgentEnvironments();
+    const p26 = yield* GCP.Dialogflow.ListAgentFlows();
+    const p27 = yield* GCP.Dialogflow.ListAgentGenerators();
+    const p28 = yield* GCP.Dialogflow.ListAgentIntents();
+    const p29 = yield* GCP.Dialogflow.ListAgentPlaybooks();
+    const p30 = yield* GCP.Dialogflow.ListAgents();
+    const p31 = yield* GCP.Dialogflow.ListAgentSessionEntityTypes();
+    const p32 = yield* GCP.Dialogflow.ListAgentTestCaseResults();
+    const p33 = yield* GCP.Dialogflow.ListAgentTestCases();
+    const p34 = yield* GCP.Dialogflow.ListAgentTools();
+    const p35 = yield* GCP.Dialogflow.ListAgentTransitionRouteGroups();
+    const p36 = yield* GCP.Dialogflow.ListAgentWebhooks();
+    const p37 = yield* GCP.Dialogflow.ListSecuritySettings();
+    const p38 = yield* GCP.Dialogflow.PatchAgent();
+    const p39 = yield* GCP.Dialogflow.PatchAgentTestCase();
+    const p40 = yield* GCP.Dialogflow.RestoreAgent();
+    const p41 = yield* GCP.Dialogflow.RunAgentTestCase();
+    const p42 = yield* GCP.Dialogflow.SubmitSessionAnswerFeedback();
+    const p43 = yield* GCP.Dialogflow.UpdateAgentGenerativeSettings();
+    const p44 = yield* GCP.Dialogflow.ValidateAgent();
     return {
       fetch: serveProbes({
         BatchTestCaseDelete: outcome(
@@ -145,16 +147,8 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
+        GetSecuritySetting: outcome(Retry.none(p17({} as never))),
         ImportAgentEntityType: outcome(
-          Retry.none(
-            p17({
-              agent: "alchemy-missing",
-              location: "us-central1",
-              body: { alchemyProbe: "alchemy-missing" },
-            } as never),
-          ),
-        ),
-        ImportAgentFlow: outcome(
           Retry.none(
             p18({
               agent: "alchemy-missing",
@@ -163,7 +157,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        ImportAgentIntent: outcome(
+        ImportAgentFlow: outcome(
           Retry.none(
             p19({
               agent: "alchemy-missing",
@@ -172,7 +166,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        ImportAgentPlaybook: outcome(
+        ImportAgentIntent: outcome(
           Retry.none(
             p20({
               agent: "alchemy-missing",
@@ -181,7 +175,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        ImportAgentTestCase: outcome(
+        ImportAgentPlaybook: outcome(
           Retry.none(
             p21({
               agent: "alchemy-missing",
@@ -190,31 +184,40 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
             } as never),
           ),
         ),
-        ListAgentChangelogs: outcome(
-          Retry.none(p22({ agent: "alchemy-missing", location: "us-central1" } as never)),
+        ImportAgentTestCase: outcome(
+          Retry.none(
+            p22({
+              agent: "alchemy-missing",
+              location: "us-central1",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
         ),
-        ListAgentEntityTypes: outcome(
+        ListAgentChangelogs: outcome(
           Retry.none(p23({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentEnvironments: outcome(
+        ListAgentEntityTypes: outcome(
           Retry.none(p24({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentFlows: outcome(
+        ListAgentEnvironments: outcome(
           Retry.none(p25({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentGenerators: outcome(
+        ListAgentFlows: outcome(
           Retry.none(p26({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentIntents: outcome(
+        ListAgentGenerators: outcome(
           Retry.none(p27({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentPlaybooks: outcome(
+        ListAgentIntents: outcome(
           Retry.none(p28({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgents: outcome(Retry.none(p29({ location: "us-central1" } as never))),
+        ListAgentPlaybooks: outcome(
+          Retry.none(p29({ agent: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ListAgents: outcome(Retry.none(p30({ location: "us-central1" } as never))),
         ListAgentSessionEntityTypes: outcome(
           Retry.none(
-            p30({
+            p31({
               agent: "alchemy-missing",
               session: "alchemy-missing",
               location: "us-central1",
@@ -223,7 +226,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
         ),
         ListAgentTestCaseResults: outcome(
           Retry.none(
-            p31({
+            p32({
               agent: "alchemy-missing",
               testCase: "alchemy-missing",
               location: "us-central1",
@@ -231,24 +234,24 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
           ),
         ),
         ListAgentTestCases: outcome(
-          Retry.none(p32({ agent: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        ListAgentTools: outcome(
           Retry.none(p33({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentTransitionRouteGroups: outcome(
+        ListAgentTools: outcome(
           Retry.none(p34({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAgentWebhooks: outcome(
+        ListAgentTransitionRouteGroups: outcome(
           Retry.none(p35({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListSecuritySettings: outcome(Retry.none(p36({ location: "us-central1" } as never))),
+        ListAgentWebhooks: outcome(
+          Retry.none(p36({ agent: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ListSecuritySettings: outcome(Retry.none(p37({ location: "us-central1" } as never))),
         PatchAgent: outcome(
-          Retry.none(p37({ agent: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p38({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
         PatchAgentTestCase: outcome(
           Retry.none(
-            p38({
+            p39({
               agent: "alchemy-missing",
               testCase: "alchemy-missing",
               location: "us-central1",
@@ -257,7 +260,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
         ),
         RestoreAgent: outcome(
           Retry.none(
-            p39({
+            p40({
               agent: "alchemy-missing",
               location: "us-central1",
               body: { alchemyProbe: "alchemy-missing" },
@@ -266,7 +269,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
         ),
         RunAgentTestCase: outcome(
           Retry.none(
-            p40({
+            p41({
               agent: "alchemy-missing",
               testCase: "alchemy-missing",
               location: "us-central1",
@@ -275,7 +278,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
         ),
         SubmitSessionAnswerFeedback: outcome(
           Retry.none(
-            p41({
+            p42({
               agent: "alchemy-missing",
               session: "alchemy-missing",
               location: "us-central1",
@@ -283,10 +286,10 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
           ),
         ),
         UpdateAgentGenerativeSettings: outcome(
-          Retry.none(p42({ agent: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p43({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ValidateAgent: outcome(
-          Retry.none(p43({ agent: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p44({ agent: "alchemy-missing", location: "us-central1" } as never)),
         ),
       }),
     };
@@ -311,6 +314,7 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
           GCP.Dialogflow.GetAgentTestCaseResultHttp,
           GCP.Dialogflow.GetAgentValidationResultHttp,
           GCP.Dialogflow.GetFlowValidationResultHttp,
+          GCP.Dialogflow.GetSecuritySettingHttp,
           GCP.Dialogflow.ImportAgentEntityTypeHttp,
           GCP.Dialogflow.ImportAgentFlowHttp,
           GCP.Dialogflow.ImportAgentIntentHttp,
@@ -333,9 +337,9 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
           GCP.Dialogflow.ListSecuritySettingsHttp,
           GCP.Dialogflow.PatchAgentHttp,
           GCP.Dialogflow.PatchAgentTestCaseHttp,
-          GCP.Dialogflow.RestoreAgentHttp,
         ),
         Layer.mergeAll(
+          GCP.Dialogflow.RestoreAgentHttp,
           GCP.Dialogflow.RunAgentTestCaseHttp,
           GCP.Dialogflow.SubmitSessionAnswerFeedbackHttp,
           GCP.Dialogflow.UpdateAgentGenerativeSettingsHttp,

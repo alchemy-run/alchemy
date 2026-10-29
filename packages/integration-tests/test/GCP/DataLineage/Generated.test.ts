@@ -48,30 +48,30 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Process", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetProcess (datalineage.projects.locations.processes.get): Process: no deployable fixture",
+      test.provider.todo(
+        "GetProcess (datalineage.projects.locations.processes.get): Process: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListProcessRuns (datalineage.projects.locations.processes.runs.list): Process: no deployable fixture",
+      test.provider.todo(
+        "ListProcessRuns (datalineage.projects.locations.processes.runs.list): Process: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ProcessesRun", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetRun (datalineage.projects.locations.processes.runs.get): ProcessesRun: no deployable fixture",
+      test.provider.todo(
+        "GetRun (datalineage.projects.locations.processes.runs.get): ProcessesRun: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListRunLineageEvents (datalineage.projects.locations.processes.runs.lineageEvents.list): ProcessesRun: no deployable fixture",
+      test.provider.todo(
+        "ListRunLineageEvents (datalineage.projects.locations.processes.runs.lineageEvents.list): ProcessesRun: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ProcessesRunsLineageEvent", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetLineageEvent (datalineage.projects.locations.processes.runs.lineageEvents.get): ProcessesRunsLineageEvent: no deployable fixture",
+      test.provider.todo(
+        "GetLineageEvent (datalineage.projects.locations.processes.runs.lineageEvents.get): ProcessesRunsLineageEvent: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

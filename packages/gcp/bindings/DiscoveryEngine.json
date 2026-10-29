@@ -76,6 +76,17 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "CollectionsDataStore": "ProbeCollectionsDataStore",
+      "DataStore": "ProbeDataStore"
+    },
+    "untestable": {
+      "CollectionsDataStoresConversation": "Conversations need the Large Language Model add-on (BadRequest \"This feature is only available when Large Language Model add-on is enabled.\"). (GCP_TEST_DISCOVERYENGINE_LLM)",
+      "CollectionsEnginesAssistant": "createAssistants is rejected on a plain search engine with BadRequest \"Only default_assistant is allowed.\" even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)",
+      "CollectionsEnginesAssistantsAgentsA2aV1TasksPushNotificationConfig": "createAssistants is rejected on a plain search engine with BadRequest \"Only default_assistant is allowed.\" even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)",
+      "CollectionsEnginesConversation": "Conversations need the Large Language Model add-on (BadRequest \"This feature is only available when Large Language Model add-on is enabled.\"). (GCP_TEST_DISCOVERYENGINE_LLM)",
+      "DataStoresConversation": "Conversations need the Large Language Model add-on (BadRequest \"This feature is only available when Large Language Model add-on is enabled.\"). (GCP_TEST_DISCOVERYENGINE_LLM)",
+      "IdentityMappingStore": "Identity mapping stores need a workforce identity provider configured for the project (BadRequest \"IdP must be configured before creating an Identity (GCP_TEST_DISCOVERYENGINE_IDP)"
+    }
   }
 }

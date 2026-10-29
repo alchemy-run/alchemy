@@ -48,105 +48,137 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ConnectionProfile", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetConnectionProfile (datamigration.projects.locations.connectionProfiles.get): ConnectionProfile: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetConnectionProfile (datamigration.projects.locations.connectionProfiles.get)",
+        () => probe("GetConnectionProfile", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ConversionWorkspace", { concurrent: true }, () => {
-      test.provider.skip(
-        "ApplyConversionWorkspace (datamigration.projects.locations.conversionWorkspaces.apply): ConversionWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ApplyConversionWorkspace (datamigration.projects.locations.conversionWorkspaces.apply)",
+        () => probe("ApplyConversionWorkspace", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "CommitConversionWorkspace (datamigration.projects.locations.conversionWorkspaces.commit): ConversionWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "CommitConversionWorkspace (datamigration.projects.locations.conversionWorkspaces.commit)",
+        () => probe("CommitConversionWorkspace", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ConvertConversionWorkspace (datamigration.projects.locations.conversionWorkspaces.convert): ConversionWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ConvertConversionWorkspace (datamigration.projects.locations.conversionWorkspaces.convert)",
+        () => probe("ConvertConversionWorkspace", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetConversionWorkspace (datamigration.projects.locations.conversionWorkspaces.get): ConversionWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetConversionWorkspace (datamigration.projects.locations.conversionWorkspaces.get)",
+        () => probe("GetConversionWorkspace", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ImportConversionWorkspaceMappingRule (datamigration.projects.locations.conversionWorkspaces.mappingRules.import): ConversionWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ImportConversionWorkspaceMappingRule (datamigration.projects.locations.conversionWorkspaces.mappingRules.import)",
+        () => probe("ImportConversionWorkspaceMappingRule", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RollbackConversionWorkspace (datamigration.projects.locations.conversionWorkspaces.rollback): ConversionWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "RollbackConversionWorkspace (datamigration.projects.locations.conversionWorkspaces.rollback)",
+        () => probe("RollbackConversionWorkspace", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SeedConversionWorkspace (datamigration.projects.locations.conversionWorkspaces.seed): ConversionWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "SeedConversionWorkspace (datamigration.projects.locations.conversionWorkspaces.seed)",
+        () => probe("SeedConversionWorkspace", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("MigrationJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "DemoteMigrationJobDestination (datamigration.projects.locations.migrationJobs.demoteDestination): MigrationJob: no deployable fixture",
+      test.provider.todo(
+        "DemoteMigrationJobDestination (datamigration.projects.locations.migrationJobs.demoteDestination): MigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "FetchMigrationJobSourceObjects (datamigration.projects.locations.migrationJobs.fetchSourceObjects): MigrationJob: no deployable fixture",
+      test.provider.todo(
+        "FetchMigrationJobSourceObjects (datamigration.projects.locations.migrationJobs.fetchSourceObjects): MigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GenerateMigrationJobSshScript (datamigration.projects.locations.migrationJobs.generateSshScript): MigrationJob: no deployable fixture",
+      test.provider.todo(
+        "GenerateMigrationJobSshScript (datamigration.projects.locations.migrationJobs.generateSshScript): MigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GenerateMigrationJobTcpProxyScript (datamigration.projects.locations.migrationJobs.generateTcpProxyScript): MigrationJob: no deployable fixture",
+      test.provider.todo(
+        "GenerateMigrationJobTcpProxyScript (datamigration.projects.locations.migrationJobs.generateTcpProxyScript): MigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetMigrationJob (datamigration.projects.locations.migrationJobs.get): MigrationJob: no deployable fixture",
+      test.provider.todo(
+        "GetMigrationJob (datamigration.projects.locations.migrationJobs.get): MigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetMigrationJobObject (datamigration.projects.locations.migrationJobs.objects.get): MigrationJob: no deployable fixture",
+      test.provider.todo(
+        "GetMigrationJobObject (datamigration.projects.locations.migrationJobs.objects.get): MigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListMigrationJobObjects (datamigration.projects.locations.migrationJobs.objects.list): MigrationJob: no deployable fixture",
+      test.provider.todo(
+        "ListMigrationJobObjects (datamigration.projects.locations.migrationJobs.objects.list): MigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "LookupMigrationJobObject (datamigration.projects.locations.migrationJobs.objects.lookup): MigrationJob: no deployable fixture",
+      test.provider.todo(
+        "LookupMigrationJobObject (datamigration.projects.locations.migrationJobs.objects.lookup): MigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "PromoteMigrationJob (datamigration.projects.locations.migrationJobs.promote): MigrationJob: no deployable fixture",
+      test.provider.todo(
+        "PromoteMigrationJob (datamigration.projects.locations.migrationJobs.promote): MigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RestartMigrationJob (datamigration.projects.locations.migrationJobs.restart): MigrationJob: no deployable fixture",
+      test.provider.todo(
+        "RestartMigrationJob (datamigration.projects.locations.migrationJobs.restart): MigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ResumeMigrationJob (datamigration.projects.locations.migrationJobs.resume): MigrationJob: no deployable fixture",
+      test.provider.todo(
+        "ResumeMigrationJob (datamigration.projects.locations.migrationJobs.resume): MigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StartMigrationJob (datamigration.projects.locations.migrationJobs.start): MigrationJob: no deployable fixture",
+      test.provider.todo(
+        "StartMigrationJob (datamigration.projects.locations.migrationJobs.start): MigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StopMigrationJob (datamigration.projects.locations.migrationJobs.stop): MigrationJob: no deployable fixture",
+      test.provider.todo(
+        "StopMigrationJob (datamigration.projects.locations.migrationJobs.stop): MigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "VerifyMigrationJob (datamigration.projects.locations.migrationJobs.verify): MigrationJob: no deployable fixture",
+      test.provider.todo(
+        "VerifyMigrationJob (datamigration.projects.locations.migrationJobs.verify): MigrationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("PrivateConnection", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPrivateConnection (datamigration.projects.locations.privateConnections.get): PrivateConnection: no deployable fixture",
+      test.provider.todo(
+        "GetPrivateConnection (datamigration.projects.locations.privateConnections.get): PrivateConnection: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

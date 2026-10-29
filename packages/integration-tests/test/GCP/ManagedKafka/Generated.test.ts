@@ -99,16 +99,16 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ClustersAcl", { concurrent: true }, () => {
-      test.provider.skip(
-        "AddAclEntry (managedkafka.projects.locations.clusters.acls.addAclEntry): ClustersAcl: no deployable fixture",
+      test.provider.todo(
+        "AddAclEntry (managedkafka.projects.locations.clusters.acls.addAclEntry): ClustersAcl: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetAcl (managedkafka.projects.locations.clusters.acls.get): ClustersAcl: no deployable fixture",
+      test.provider.todo(
+        "GetAcl (managedkafka.projects.locations.clusters.acls.get): ClustersAcl: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RemoveAclEntry (managedkafka.projects.locations.clusters.acls.removeAclEntry): ClustersAcl: no deployable fixture",
+      test.provider.todo(
+        "RemoveAclEntry (managedkafka.projects.locations.clusters.acls.removeAclEntry): ClustersAcl: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -125,24 +125,24 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ConnectClustersConnector", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetConnector (managedkafka.projects.locations.connectClusters.connectors.get): ConnectClustersConnector: no deployable fixture",
+      test.provider.todo(
+        "GetConnector (managedkafka.projects.locations.connectClusters.connectors.get): ConnectClustersConnector: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "PauseConnector (managedkafka.projects.locations.connectClusters.connectors.pause): ConnectClustersConnector: no deployable fixture",
+      test.provider.todo(
+        "PauseConnector (managedkafka.projects.locations.connectClusters.connectors.pause): ConnectClustersConnector: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RestartConnector (managedkafka.projects.locations.connectClusters.connectors.restart): ConnectClustersConnector: no deployable fixture",
+      test.provider.todo(
+        "RestartConnector (managedkafka.projects.locations.connectClusters.connectors.restart): ConnectClustersConnector: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ResumeConnector (managedkafka.projects.locations.connectClusters.connectors.resume): ConnectClustersConnector: no deployable fixture",
+      test.provider.todo(
+        "ResumeConnector (managedkafka.projects.locations.connectClusters.connectors.resume): ConnectClustersConnector: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StopConnector (managedkafka.projects.locations.connectClusters.connectors.stop): ConnectClustersConnector: no deployable fixture",
+      test.provider.todo(
+        "StopConnector (managedkafka.projects.locations.connectClusters.connectors.stop): ConnectClustersConnector: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -175,31 +175,31 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("SchemaRegistriesContextsSubjectsVersion", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetVersion@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.get): SchemaRegistriesContextsSubjectsVersion: no deployable fixture",
+      test.provider.todo(
+        "GetVersion@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.get): SchemaRegistriesContextsSubjectsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetVersionSchema@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.getSchema): SchemaRegistriesContextsSubjectsVersion: no deployable fixture",
+      test.provider.todo(
+        "GetVersionSchema@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.getSchema): SchemaRegistriesContextsSubjectsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListVersionReferencedby@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.referencedby.list): SchemaRegistriesContextsSubjectsVersion: no deployable fixture",
+      test.provider.todo(
+        "ListVersionReferencedby@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.referencedby.list): SchemaRegistriesContextsSubjectsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("SchemaRegistriesSubjectsVersion", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetVersion@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.get): SchemaRegistriesSubjectsVersion: no deployable fixture",
+      test.provider.todo(
+        "GetVersion@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.get): SchemaRegistriesSubjectsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetVersionSchema@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.getSchema): SchemaRegistriesSubjectsVersion: no deployable fixture",
+      test.provider.todo(
+        "GetVersionSchema@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.getSchema): SchemaRegistriesSubjectsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListVersionReferencedby@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.referencedby.list): SchemaRegistriesSubjectsVersion: no deployable fixture",
+      test.provider.todo(
+        "ListVersionReferencedby@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.referencedby.list): SchemaRegistriesSubjectsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

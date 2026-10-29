@@ -4,6 +4,11 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import {
+  ProbeContentPolicy,
+  ProbeLocationsStoredInfoType,
+  ProbeStoredInfoType,
+} from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated DLP binding as its own
@@ -19,19 +24,22 @@ export default class DLPGeneratedHost extends GCP.Function<DLPGeneratedHost>()(
     const p1 = yield* GCP.DLP.DeleteTableDataProfile();
     const p2 = yield* GCP.DLP.GetColumnDataProfile();
     const p3 = yield* GCP.DLP.GetConnection();
-    const p4 = yield* GCP.DLP.GetProjectDataProfile();
-    const p5 = yield* GCP.DLP.GetTableDataProfile();
-    const p6 = yield* GCP.DLP.ListColumnDataProfiles();
-    const p7 = yield* GCP.DLP.ListConnections();
-    const p8 = yield* GCP.DLP.ListContentPolicies();
-    const p9 = yield* GCP.DLP.ListDeidentifyTemplates();
-    const p10 = yield* GCP.DLP.ListInspectTemplates();
-    const p11 = yield* GCP.DLP.ListJobTriggers();
-    const p12 = yield* GCP.DLP.ListProjectDataProfiles();
-    const p13 = yield* GCP.DLP.ListStoredInfoTypes();
-    const p14 = yield* GCP.DLP.ListTableDataProfiles();
-    const p15 = yield* GCP.DLP.PatchConnection();
-    const p16 = yield* GCP.DLP.SearchConnection();
+    const p4 = yield* GCP.DLP.GetContentPolicy(ProbeContentPolicy);
+    const p5 = yield* GCP.DLP.GetProjectDataProfile();
+    const p6 = yield* GCP.DLP.GetStoredInfoType(ProbeStoredInfoType);
+    const p7 = yield* GCP.DLP.GetStoredInfoType(ProbeLocationsStoredInfoType);
+    const p8 = yield* GCP.DLP.GetTableDataProfile();
+    const p9 = yield* GCP.DLP.ListColumnDataProfiles();
+    const p10 = yield* GCP.DLP.ListConnections();
+    const p11 = yield* GCP.DLP.ListContentPolicies();
+    const p12 = yield* GCP.DLP.ListDeidentifyTemplates();
+    const p13 = yield* GCP.DLP.ListInspectTemplates();
+    const p14 = yield* GCP.DLP.ListJobTriggers();
+    const p15 = yield* GCP.DLP.ListProjectDataProfiles();
+    const p16 = yield* GCP.DLP.ListStoredInfoTypes();
+    const p17 = yield* GCP.DLP.ListTableDataProfiles();
+    const p18 = yield* GCP.DLP.PatchConnection();
+    const p19 = yield* GCP.DLP.SearchConnection();
     return {
       fetch: serveProbes({
         DeleteConnection: outcome(
@@ -48,27 +56,30 @@ export default class DLPGeneratedHost extends GCP.Function<DLPGeneratedHost>()(
         GetConnection: outcome(
           Retry.none(p3({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
+        GetContentPolicy: outcome(Retry.none(p4({} as never))),
         GetProjectDataProfile: outcome(
           Retry.none(
-            p4({ projectDataProfile: "alchemy-missing", location: "us-central1" } as never),
+            p5({ projectDataProfile: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
+        "GetStoredInfoType@StoredInfoType": outcome(Retry.none(p6({} as never))),
+        "GetStoredInfoType@LocationsStoredInfoType": outcome(Retry.none(p7({} as never))),
         GetTableDataProfile: outcome(
-          Retry.none(p5({ tableDataProfile: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p8({ tableDataProfile: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListColumnDataProfiles: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        ListConnections: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListContentPolicies: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListDeidentifyTemplates: outcome(Retry.none(p9({} as never))),
-        ListInspectTemplates: outcome(Retry.none(p10({} as never))),
-        ListJobTriggers: outcome(Retry.none(p11({} as never))),
-        ListProjectDataProfiles: outcome(Retry.none(p12({ location: "us-central1" } as never))),
-        ListStoredInfoTypes: outcome(Retry.none(p13({} as never))),
-        ListTableDataProfiles: outcome(Retry.none(p14({ location: "us-central1" } as never))),
+        ListColumnDataProfiles: outcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListConnections: outcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListContentPolicies: outcome(Retry.none(p11({ location: "us-central1" } as never))),
+        ListDeidentifyTemplates: outcome(Retry.none(p12({} as never))),
+        ListInspectTemplates: outcome(Retry.none(p13({} as never))),
+        ListJobTriggers: outcome(Retry.none(p14({} as never))),
+        ListProjectDataProfiles: outcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListStoredInfoTypes: outcome(Retry.none(p16({} as never))),
+        ListTableDataProfiles: outcome(Retry.none(p17({ location: "us-central1" } as never))),
         PatchConnection: outcome(
-          Retry.none(p15({ connection: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p18({ connection: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        SearchConnection: outcome(Retry.none(p16({ location: "us-central1" } as never))),
+        SearchConnection: outcome(Retry.none(p19({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
@@ -79,7 +90,9 @@ export default class DLPGeneratedHost extends GCP.Function<DLPGeneratedHost>()(
           GCP.DLP.DeleteTableDataProfileHttp,
           GCP.DLP.GetColumnDataProfileHttp,
           GCP.DLP.GetConnectionHttp,
+          GCP.DLP.GetContentPolicyHttp,
           GCP.DLP.GetProjectDataProfileHttp,
+          GCP.DLP.GetStoredInfoTypeHttp,
           GCP.DLP.GetTableDataProfileHttp,
           GCP.DLP.ListColumnDataProfilesHttp,
           GCP.DLP.ListConnectionsHttp,

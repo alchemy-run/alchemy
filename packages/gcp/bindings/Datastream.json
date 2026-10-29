@@ -16,6 +16,7 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "untestable": {}
   }
 }

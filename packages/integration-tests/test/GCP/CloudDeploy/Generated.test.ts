@@ -48,109 +48,113 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("CustomTargetType", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetCustomTargetType (clouddeploy.projects.locations.customTargetTypes.get): CustomTargetType: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetCustomTargetType (clouddeploy.projects.locations.customTargetTypes.get)",
+        () => probe("GetCustomTargetType", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:clouddeploy", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DeliveryPipeline", { concurrent: true }, () => {
-      test.provider.skip(
-        "AbandonDeliveryPipelineRelease (clouddeploy.projects.locations.deliveryPipelines.releases.abandon): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "AbandonDeliveryPipelineRelease (clouddeploy.projects.locations.deliveryPipelines.releases.abandon): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "AdvanceDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.advance): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "AdvanceDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.advance): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ApproveDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.approve): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "ApproveDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.approve): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CancelDeliveryPipelineAutomationRun (clouddeploy.projects.locations.deliveryPipelines.automationRuns.cancel): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "CancelDeliveryPipelineAutomationRun (clouddeploy.projects.locations.deliveryPipelines.automationRuns.cancel): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CancelDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.cancel): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "CancelDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.cancel): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CreateDeliveryPipelineRelease (clouddeploy.projects.locations.deliveryPipelines.releases.create): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "CreateDeliveryPipelineRelease (clouddeploy.projects.locations.deliveryPipelines.releases.create): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CreateDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.create): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "CreateDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.create): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetDeliveryPipeline (clouddeploy.projects.locations.deliveryPipelines.get): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "GetDeliveryPipeline (clouddeploy.projects.locations.deliveryPipelines.get): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetDeliveryPipelineAutomationRun (clouddeploy.projects.locations.deliveryPipelines.automationRuns.get): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "GetDeliveryPipelineAutomationRun (clouddeploy.projects.locations.deliveryPipelines.automationRuns.get): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetDeliveryPipelineRelease (clouddeploy.projects.locations.deliveryPipelines.releases.get): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "GetDeliveryPipelineRelease (clouddeploy.projects.locations.deliveryPipelines.releases.get): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.get): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "GetDeliveryPipelineReleaseRollout (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.get): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetDeliveryPipelineReleaseRolloutJobRun (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.jobRuns.get): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "GetDeliveryPipelineReleaseRolloutJobRun (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.jobRuns.get): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "IgnoreRolloutJob (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.ignoreJob): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "IgnoreRolloutJob (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.ignoreJob): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListDeliveryPipelineAutomationRuns (clouddeploy.projects.locations.deliveryPipelines.automationRuns.list): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "ListDeliveryPipelineAutomationRuns (clouddeploy.projects.locations.deliveryPipelines.automationRuns.list): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListDeliveryPipelineAutomations (clouddeploy.projects.locations.deliveryPipelines.automations.list): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "ListDeliveryPipelineAutomations (clouddeploy.projects.locations.deliveryPipelines.automations.list): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListDeliveryPipelineReleaseRolloutJobRuns (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.jobRuns.list): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "ListDeliveryPipelineReleaseRolloutJobRuns (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.jobRuns.list): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListDeliveryPipelineReleaseRollouts (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.list): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "ListDeliveryPipelineReleaseRollouts (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.list): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListDeliveryPipelineReleases (clouddeploy.projects.locations.deliveryPipelines.releases.list): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "ListDeliveryPipelineReleases (clouddeploy.projects.locations.deliveryPipelines.releases.list): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RetryRolloutJob (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.retryJob): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "RetryRolloutJob (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.retryJob): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RollbackDeliveryPipelineTarget (clouddeploy.projects.locations.deliveryPipelines.rollbackTarget): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "RollbackDeliveryPipelineTarget (clouddeploy.projects.locations.deliveryPipelines.rollbackTarget): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "TerminateDeliveryPipelineReleaseRolloutJobRun (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.jobRuns.terminate): DeliveryPipeline: no deployable fixture",
+      test.provider.todo(
+        "TerminateDeliveryPipelineReleaseRolloutJobRun (clouddeploy.projects.locations.deliveryPipelines.releases.rollouts.jobRuns.terminate): DeliveryPipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DeliveryPipelinesAutomation", { concurrent: true }, () => {
       test.provider.skip(
-        "GetAutomation (clouddeploy.projects.locations.deliveryPipelines.automations.get): DeliveryPipelinesAutomation: no deployable fixture",
+        "GetAutomation (clouddeploy.projects.locations.deliveryPipelines.automations.get): DeliveryPipelinesAutomation: needs GCP_TEST_CLOUDDEPLOY_SA (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("DeployPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDeployPolicy (clouddeploy.projects.locations.deployPolicies.get): DeployPolicy: no deployable fixture",
+      test.provider.todo(
+        "GetDeployPolicy (clouddeploy.projects.locations.deployPolicies.get): DeployPolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -191,8 +195,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Target", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTarget (clouddeploy.projects.locations.targets.get): Target: no deployable fixture",
+      test.provider.todo(
+        "GetTarget (clouddeploy.projects.locations.targets.get): Target: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

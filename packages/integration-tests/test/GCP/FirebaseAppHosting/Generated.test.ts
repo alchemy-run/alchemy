@@ -48,42 +48,42 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Backend", { concurrent: true }, () => {
-      test.provider.skip(
-        "CreateBackendRollout (firebaseapphosting.projects.locations.backends.rollouts.create): Backend: no deployable fixture",
+      test.provider.todo(
+        "CreateBackendRollout (firebaseapphosting.projects.locations.backends.rollouts.create): Backend: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetBackend (firebaseapphosting.projects.locations.backends.get): Backend: no deployable fixture",
+      test.provider.todo(
+        "GetBackend (firebaseapphosting.projects.locations.backends.get): Backend: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetBackendRollout (firebaseapphosting.projects.locations.backends.rollouts.get): Backend: no deployable fixture",
+      test.provider.todo(
+        "GetBackendRollout (firebaseapphosting.projects.locations.backends.rollouts.get): Backend: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListBackendBuilds (firebaseapphosting.projects.locations.backends.builds.list): Backend: no deployable fixture",
+      test.provider.todo(
+        "ListBackendBuilds (firebaseapphosting.projects.locations.backends.builds.list): Backend: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListBackendDomains (firebaseapphosting.projects.locations.backends.domains.list): Backend: no deployable fixture",
+      test.provider.todo(
+        "ListBackendDomains (firebaseapphosting.projects.locations.backends.domains.list): Backend: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListBackendRollouts (firebaseapphosting.projects.locations.backends.rollouts.list): Backend: no deployable fixture",
+      test.provider.todo(
+        "ListBackendRollouts (firebaseapphosting.projects.locations.backends.rollouts.list): Backend: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("BackendsBuild", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBuild (firebaseapphosting.projects.locations.backends.builds.get): BackendsBuild: no deployable fixture",
+      test.provider.todo(
+        "GetBuild (firebaseapphosting.projects.locations.backends.builds.get): BackendsBuild: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("BackendsDomain", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDomain (firebaseapphosting.projects.locations.backends.domains.get): BackendsDomain: no deployable fixture",
+      test.provider.todo(
+        "GetDomain (firebaseapphosting.projects.locations.backends.domains.get): BackendsDomain: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

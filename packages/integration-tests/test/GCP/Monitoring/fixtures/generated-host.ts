@@ -4,6 +4,13 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import {
+  ProbeGroup,
+  ProbeMetricDescriptor,
+  ProbeNotificationChannel,
+  ProbeService,
+  ProbeUptimeCheckConfig,
+} from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Monitoring binding as its own
@@ -18,20 +25,32 @@ export default class MonitoringGeneratedHost extends GCP.Function<MonitoringGene
     const p0 = yield* GCP.Monitoring.CreateSnooze();
     const p1 = yield* GCP.Monitoring.CreateTimeSery();
     const p2 = yield* GCP.Monitoring.GetAlert();
-    const p3 = yield* GCP.Monitoring.GetMonitoredResourceDescriptor();
-    const p4 = yield* GCP.Monitoring.GetNotificationChannelDescriptor();
-    const p5 = yield* GCP.Monitoring.GetSnooze();
-    const p6 = yield* GCP.Monitoring.ListAlertPolicies();
-    const p7 = yield* GCP.Monitoring.ListAlerts();
-    const p8 = yield* GCP.Monitoring.ListGroups();
-    const p9 = yield* GCP.Monitoring.ListMetricDescriptors();
-    const p10 = yield* GCP.Monitoring.ListMonitoredResourceDescriptors();
-    const p11 = yield* GCP.Monitoring.ListNotificationChannelDescriptors();
-    const p12 = yield* GCP.Monitoring.ListNotificationChannels();
-    const p13 = yield* GCP.Monitoring.ListSnoozes();
-    const p14 = yield* GCP.Monitoring.ListTimeSeries();
-    const p15 = yield* GCP.Monitoring.ListUptimeCheckConfigs();
-    const p16 = yield* GCP.Monitoring.PatchSnooze();
+    const p3 = yield* GCP.Monitoring.GetGroup(ProbeGroup);
+    const p4 = yield* GCP.Monitoring.GetMetricDescriptor(ProbeMetricDescriptor);
+    const p5 = yield* GCP.Monitoring.GetMonitoredResourceDescriptor();
+    const p6 = yield* GCP.Monitoring.GetNotificationChannel(ProbeNotificationChannel);
+    const p7 = yield* GCP.Monitoring.GetNotificationChannelDescriptor();
+    const p8 =
+      yield* GCP.Monitoring.GetNotificationChannelVerificationCode(ProbeNotificationChannel);
+    const p9 = yield* GCP.Monitoring.GetService(ProbeService);
+    const p10 = yield* GCP.Monitoring.GetSnooze();
+    const p11 = yield* GCP.Monitoring.GetUptimeCheckConfig(ProbeUptimeCheckConfig);
+    const p12 = yield* GCP.Monitoring.ListAlertPolicies();
+    const p13 = yield* GCP.Monitoring.ListAlerts();
+    const p14 = yield* GCP.Monitoring.ListGroupMembers(ProbeGroup);
+    const p15 = yield* GCP.Monitoring.ListGroups();
+    const p16 = yield* GCP.Monitoring.ListMetricDescriptors();
+    const p17 = yield* GCP.Monitoring.ListMonitoredResourceDescriptors();
+    const p18 = yield* GCP.Monitoring.ListNotificationChannelDescriptors();
+    const p19 = yield* GCP.Monitoring.ListNotificationChannels();
+    const p20 = yield* GCP.Monitoring.ListServiceLevelObjectives(ProbeService);
+    const p21 = yield* GCP.Monitoring.ListSnoozes();
+    const p22 = yield* GCP.Monitoring.ListTimeSeries();
+    const p23 = yield* GCP.Monitoring.ListUptimeCheckConfigs();
+    const p24 = yield* GCP.Monitoring.PatchSnooze();
+    const p25 =
+      yield* GCP.Monitoring.SendNotificationChannelVerificationCode(ProbeNotificationChannel);
+    const p26 = yield* GCP.Monitoring.VerifyNotificationChannel(ProbeNotificationChannel);
     return {
       fetch: serveProbes({
         CreateSnooze: outcome(
@@ -41,24 +60,34 @@ export default class MonitoringGeneratedHost extends GCP.Function<MonitoringGene
           Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         GetAlert: outcome(Retry.none(p2({ alert: "alchemy-missing" } as never))),
+        GetGroup: outcome(Retry.none(p3({} as never))),
+        GetMetricDescriptor: outcome(Retry.none(p4({} as never))),
         GetMonitoredResourceDescriptor: outcome(
-          Retry.none(p3({ monitoredResourceDescriptor: "alchemy-missing" } as never)),
+          Retry.none(p5({ monitoredResourceDescriptor: "alchemy-missing" } as never)),
         ),
+        GetNotificationChannel: outcome(Retry.none(p6({} as never))),
         GetNotificationChannelDescriptor: outcome(
-          Retry.none(p4({ notificationChannelDescriptor: "alchemy-missing" } as never)),
+          Retry.none(p7({ notificationChannelDescriptor: "alchemy-missing" } as never)),
         ),
-        GetSnooze: outcome(Retry.none(p5({ snooze: "alchemy-missing" } as never))),
-        ListAlertPolicies: outcome(Retry.none(p6({} as never))),
-        ListAlerts: outcome(Retry.none(p7({} as never))),
-        ListGroups: outcome(Retry.none(p8({} as never))),
-        ListMetricDescriptors: outcome(Retry.none(p9({} as never))),
-        ListMonitoredResourceDescriptors: outcome(Retry.none(p10({} as never))),
-        ListNotificationChannelDescriptors: outcome(Retry.none(p11({} as never))),
-        ListNotificationChannels: outcome(Retry.none(p12({} as never))),
-        ListSnoozes: outcome(Retry.none(p13({} as never))),
-        ListTimeSeries: outcome(Retry.none(p14({} as never))),
-        ListUptimeCheckConfigs: outcome(Retry.none(p15({} as never))),
-        PatchSnooze: outcome(Retry.none(p16({ snooze: "alchemy-missing" } as never))),
+        GetNotificationChannelVerificationCode: outcome(Retry.none(p8({} as never))),
+        GetService: outcome(Retry.none(p9({} as never))),
+        GetSnooze: outcome(Retry.none(p10({ snooze: "alchemy-missing" } as never))),
+        GetUptimeCheckConfig: outcome(Retry.none(p11({} as never))),
+        ListAlertPolicies: outcome(Retry.none(p12({} as never))),
+        ListAlerts: outcome(Retry.none(p13({} as never))),
+        ListGroupMembers: outcome(Retry.none(p14({} as never))),
+        ListGroups: outcome(Retry.none(p15({} as never))),
+        ListMetricDescriptors: outcome(Retry.none(p16({} as never))),
+        ListMonitoredResourceDescriptors: outcome(Retry.none(p17({} as never))),
+        ListNotificationChannelDescriptors: outcome(Retry.none(p18({} as never))),
+        ListNotificationChannels: outcome(Retry.none(p19({} as never))),
+        ListServiceLevelObjectives: outcome(Retry.none(p20({} as never))),
+        ListSnoozes: outcome(Retry.none(p21({} as never))),
+        ListTimeSeries: outcome(Retry.none(p22({} as never))),
+        ListUptimeCheckConfigs: outcome(Retry.none(p23({} as never))),
+        PatchSnooze: outcome(Retry.none(p24({ snooze: "alchemy-missing" } as never))),
+        SendNotificationChannelVerificationCode: outcome(Retry.none(p25({} as never))),
+        VerifyNotificationChannel: outcome(Retry.none(p26({} as never))),
       }),
     };
   }).pipe(
@@ -68,20 +97,30 @@ export default class MonitoringGeneratedHost extends GCP.Function<MonitoringGene
           GCP.Monitoring.CreateSnoozeHttp,
           GCP.Monitoring.CreateTimeSeryHttp,
           GCP.Monitoring.GetAlertHttp,
+          GCP.Monitoring.GetGroupHttp,
+          GCP.Monitoring.GetMetricDescriptorHttp,
           GCP.Monitoring.GetMonitoredResourceDescriptorHttp,
+          GCP.Monitoring.GetNotificationChannelHttp,
           GCP.Monitoring.GetNotificationChannelDescriptorHttp,
+          GCP.Monitoring.GetNotificationChannelVerificationCodeHttp,
+          GCP.Monitoring.GetServiceHttp,
           GCP.Monitoring.GetSnoozeHttp,
+          GCP.Monitoring.GetUptimeCheckConfigHttp,
           GCP.Monitoring.ListAlertPoliciesHttp,
           GCP.Monitoring.ListAlertsHttp,
+          GCP.Monitoring.ListGroupMembersHttp,
           GCP.Monitoring.ListGroupsHttp,
           GCP.Monitoring.ListMetricDescriptorsHttp,
           GCP.Monitoring.ListMonitoredResourceDescriptorsHttp,
           GCP.Monitoring.ListNotificationChannelDescriptorsHttp,
           GCP.Monitoring.ListNotificationChannelsHttp,
+          GCP.Monitoring.ListServiceLevelObjectivesHttp,
           GCP.Monitoring.ListSnoozesHttp,
           GCP.Monitoring.ListTimeSeriesHttp,
           GCP.Monitoring.ListUptimeCheckConfigsHttp,
           GCP.Monitoring.PatchSnoozeHttp,
+          GCP.Monitoring.SendNotificationChannelVerificationCodeHttp,
+          GCP.Monitoring.VerifyNotificationChannelHttp,
         ),
       ),
     ),

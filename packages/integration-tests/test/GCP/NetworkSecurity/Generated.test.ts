@@ -48,215 +48,259 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AddressGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "AddAddressGroupItems@AddressGroup (networksecurity.projects.locations.addressGroups.addItems): AddressGroup: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "AddAddressGroupItems@AddressGroup (networksecurity.projects.locations.addressGroups.addItems)",
+        () => probe("AddAddressGroupItems@AddressGroup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "CloneAddressGroupItems@AddressGroup (networksecurity.projects.locations.addressGroups.cloneItems): AddressGroup: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "CloneAddressGroupItems@AddressGroup (networksecurity.projects.locations.addressGroups.cloneItems)",
+        () => probe("CloneAddressGroupItems@AddressGroup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAddressGroup@AddressGroup (networksecurity.projects.locations.addressGroups.get): AddressGroup: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetAddressGroup@AddressGroup (networksecurity.projects.locations.addressGroups.get)",
+        () => probe("GetAddressGroup@AddressGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAddressGroupReferences@AddressGroup (networksecurity.projects.locations.addressGroups.listReferences): AddressGroup: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListAddressGroupReferences@AddressGroup (networksecurity.projects.locations.addressGroups.listReferences)",
+        () => probe("ListAddressGroupReferences@AddressGroup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RemoveAddressGroupItems@AddressGroup (networksecurity.projects.locations.addressGroups.removeItems): AddressGroup: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "RemoveAddressGroupItems@AddressGroup (networksecurity.projects.locations.addressGroups.removeItems)",
+        () => probe("RemoveAddressGroupItems@AddressGroup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("AuthorizationPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAuthorizationPolicy (networksecurity.projects.locations.authorizationPolicies.get): AuthorizationPolicy: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetAuthorizationPolicy (networksecurity.projects.locations.authorizationPolicies.get)",
+        () => probe("GetAuthorizationPolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("AuthzPolicy", { concurrent: true }, () => {
       test.provider.skip(
-        "GetAuthzPolicy (networksecurity.projects.locations.authzPolicies.get): AuthzPolicy: no deployable fixture",
+        "GetAuthzPolicy (networksecurity.projects.locations.authzPolicies.get): AuthzPolicy: Needs an existing application load balancer forwarding rule; set (GCP_TEST_AUTHZ_POLICY_TARGET)",
         () => Effect.void,
       );
     });
 
     describe("BackendAuthenticationConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBackendAuthenticationConfig (networksecurity.projects.locations.backendAuthenticationConfigs.get): BackendAuthenticationConfig: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetBackendAuthenticationConfig (networksecurity.projects.locations.backendAuthenticationConfigs.get)",
+        () => probe("GetBackendAuthenticationConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ClientTlsPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetClientTlsPolicy (networksecurity.projects.locations.clientTlsPolicies.get): ClientTlsPolicy: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetClientTlsPolicy (networksecurity.projects.locations.clientTlsPolicies.get)",
+        () => probe("GetClientTlsPolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DnsThreatDetector", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDnsThreatDetector (networksecurity.projects.locations.dnsThreatDetectors.get): DnsThreatDetector: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetDnsThreatDetector (networksecurity.projects.locations.dnsThreatDetectors.get)",
+        () => probe("GetDnsThreatDetector", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("FirewallEndpoint", { concurrent: true }, () => {
       test.provider.skip(
-        "CreateFirewallEndpointWildfireVerdictChangeRequest@FirewallEndpoint (networksecurity.projects.locations.firewallEndpoints.wildfireVerdictChangeRequests.create): FirewallEndpoint: no deployable fixture",
+        "CreateFirewallEndpointWildfireVerdictChangeRequest@FirewallEndpoint (networksecurity.projects.locations.firewallEndpoints.wildfireVerdictChangeRequests.create): FirewallEndpoint: Firewall endpoints (Cloud NGFW Enterprise) bill hourly and take well over 5 (GCP_TEST_NGFW)",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetFirewallEndpoint@FirewallEndpoint (networksecurity.projects.locations.firewallEndpoints.get): FirewallEndpoint: no deployable fixture",
+        "GetFirewallEndpoint@FirewallEndpoint (networksecurity.projects.locations.firewallEndpoints.get): FirewallEndpoint: Firewall endpoints (Cloud NGFW Enterprise) bill hourly and take well over 5 (GCP_TEST_NGFW)",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetFirewallEndpointWildfireVerdictChangeRequest@FirewallEndpoint (networksecurity.projects.locations.firewallEndpoints.wildfireVerdictChangeRequests.get): FirewallEndpoint: no deployable fixture",
+        "GetFirewallEndpointWildfireVerdictChangeRequest@FirewallEndpoint (networksecurity.projects.locations.firewallEndpoints.wildfireVerdictChangeRequests.get): FirewallEndpoint: Firewall endpoints (Cloud NGFW Enterprise) bill hourly and take well over 5 (GCP_TEST_NGFW)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListFirewallEndpointWildfireVerdictChangeRequests@FirewallEndpoint (networksecurity.projects.locations.firewallEndpoints.wildfireVerdictChangeRequests.list): FirewallEndpoint: no deployable fixture",
+        "ListFirewallEndpointWildfireVerdictChangeRequests@FirewallEndpoint (networksecurity.projects.locations.firewallEndpoints.wildfireVerdictChangeRequests.list): FirewallEndpoint: Firewall endpoints (Cloud NGFW Enterprise) bill hourly and take well over 5 (GCP_TEST_NGFW)",
         () => Effect.void,
       );
     });
 
     describe("FirewallEndpointAssociation", { concurrent: true }, () => {
       test.provider.skip(
-        "GetFirewallEndpointAssociation (networksecurity.projects.locations.firewallEndpointAssociations.get): FirewallEndpointAssociation: no deployable fixture",
+        "GetFirewallEndpointAssociation (networksecurity.projects.locations.firewallEndpointAssociations.get): FirewallEndpointAssociation: Firewall endpoints (Cloud NGFW Enterprise) bill hourly and take well over 5 (GCP_TEST_NGFW)",
         () => Effect.void,
       );
     });
 
     describe("GatewaySecurityPoliciesRule", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetRule (networksecurity.projects.locations.gatewaySecurityPolicies.rules.get): GatewaySecurityPoliciesRule: no deployable fixture",
+      test.provider.todo(
+        "GetRule (networksecurity.projects.locations.gatewaySecurityPolicies.rules.get): GatewaySecurityPoliciesRule: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("GatewaySecurityPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetGatewaySecurityPolicy (networksecurity.projects.locations.gatewaySecurityPolicies.get): GatewaySecurityPolicy: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetGatewaySecurityPolicy (networksecurity.projects.locations.gatewaySecurityPolicies.get)",
+        () => probe("GetGatewaySecurityPolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListGatewaySecurityPolicyRules (networksecurity.projects.locations.gatewaySecurityPolicies.rules.list): GatewaySecurityPolicy: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListGatewaySecurityPolicyRules (networksecurity.projects.locations.gatewaySecurityPolicies.rules.list)",
+        () => probe("ListGatewaySecurityPolicyRules", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("InterceptDeployment", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetInterceptDeployment (networksecurity.projects.locations.interceptDeployments.get): InterceptDeployment: no deployable fixture",
+      test.provider.todo(
+        "GetInterceptDeployment (networksecurity.projects.locations.interceptDeployments.get): InterceptDeployment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("InterceptDeploymentGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetInterceptDeploymentGroup (networksecurity.projects.locations.interceptDeploymentGroups.get): InterceptDeploymentGroup: no deployable fixture",
+      test.provider.todo(
+        "GetInterceptDeploymentGroup (networksecurity.projects.locations.interceptDeploymentGroups.get): InterceptDeploymentGroup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("InterceptEndpointGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetInterceptEndpointGroup (networksecurity.projects.locations.interceptEndpointGroups.get): InterceptEndpointGroup: no deployable fixture",
+      test.provider.todo(
+        "GetInterceptEndpointGroup (networksecurity.projects.locations.interceptEndpointGroups.get): InterceptEndpointGroup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("InterceptEndpointGroupAssociation", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetInterceptEndpointGroupAssociation (networksecurity.projects.locations.interceptEndpointGroupAssociations.get): InterceptEndpointGroupAssociation: no deployable fixture",
+      test.provider.todo(
+        "GetInterceptEndpointGroupAssociation (networksecurity.projects.locations.interceptEndpointGroupAssociations.get): InterceptEndpointGroupAssociation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("MirroringDeployment", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetMirroringDeployment (networksecurity.projects.locations.mirroringDeployments.get): MirroringDeployment: no deployable fixture",
+      test.provider.todo(
+        "GetMirroringDeployment (networksecurity.projects.locations.mirroringDeployments.get): MirroringDeployment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("MirroringDeploymentGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetMirroringDeploymentGroup (networksecurity.projects.locations.mirroringDeploymentGroups.get): MirroringDeploymentGroup: no deployable fixture",
+      test.provider.todo(
+        "GetMirroringDeploymentGroup (networksecurity.projects.locations.mirroringDeploymentGroups.get): MirroringDeploymentGroup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("MirroringEndpointGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetMirroringEndpointGroup (networksecurity.projects.locations.mirroringEndpointGroups.get): MirroringEndpointGroup: no deployable fixture",
+      test.provider.todo(
+        "GetMirroringEndpointGroup (networksecurity.projects.locations.mirroringEndpointGroups.get): MirroringEndpointGroup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("MirroringEndpointGroupAssociation", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetMirroringEndpointGroupAssociation (networksecurity.projects.locations.mirroringEndpointGroupAssociations.get): MirroringEndpointGroupAssociation: no deployable fixture",
+      test.provider.todo(
+        "GetMirroringEndpointGroupAssociation (networksecurity.projects.locations.mirroringEndpointGroupAssociations.get): MirroringEndpointGroupAssociation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("OrganizationsAddressGroup", { concurrent: true }, () => {
       test.provider.skip(
-        "AddAddressGroupItems@OrganizationsAddressGroup (networksecurity.organizations.locations.addressGroups.addItems): OrganizationsAddressGroup: no deployable fixture",
+        "AddAddressGroupItems@OrganizationsAddressGroup (networksecurity.organizations.locations.addressGroups.addItems): OrganizationsAddressGroup: needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "CloneAddressGroupItems@OrganizationsAddressGroup (networksecurity.organizations.locations.addressGroups.cloneItems): OrganizationsAddressGroup: no deployable fixture",
+        "CloneAddressGroupItems@OrganizationsAddressGroup (networksecurity.organizations.locations.addressGroups.cloneItems): OrganizationsAddressGroup: needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetAddressGroup@OrganizationsAddressGroup (networksecurity.organizations.locations.addressGroups.get): OrganizationsAddressGroup: no deployable fixture",
+        "GetAddressGroup@OrganizationsAddressGroup (networksecurity.organizations.locations.addressGroups.get): OrganizationsAddressGroup: needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListAddressGroupReferences@OrganizationsAddressGroup (networksecurity.organizations.locations.addressGroups.listReferences): OrganizationsAddressGroup: no deployable fixture",
+        "ListAddressGroupReferences@OrganizationsAddressGroup (networksecurity.organizations.locations.addressGroups.listReferences): OrganizationsAddressGroup: needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "RemoveAddressGroupItems@OrganizationsAddressGroup (networksecurity.organizations.locations.addressGroups.removeItems): OrganizationsAddressGroup: no deployable fixture",
+        "RemoveAddressGroupItems@OrganizationsAddressGroup (networksecurity.organizations.locations.addressGroups.removeItems): OrganizationsAddressGroup: needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationsFirewallEndpoint", { concurrent: true }, () => {
       test.provider.skip(
-        "CreateFirewallEndpointWildfireVerdictChangeRequest@OrganizationsFirewallEndpoint (networksecurity.organizations.locations.firewallEndpoints.wildfireVerdictChangeRequests.create): OrganizationsFirewallEndpoint: no deployable fixture",
+        "CreateFirewallEndpointWildfireVerdictChangeRequest@OrganizationsFirewallEndpoint (networksecurity.organizations.locations.firewallEndpoints.wildfireVerdictChangeRequests.create): OrganizationsFirewallEndpoint: needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetFirewallEndpoint@OrganizationsFirewallEndpoint (networksecurity.organizations.locations.firewallEndpoints.get): OrganizationsFirewallEndpoint: no deployable fixture",
+        "GetFirewallEndpoint@OrganizationsFirewallEndpoint (networksecurity.organizations.locations.firewallEndpoints.get): OrganizationsFirewallEndpoint: needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetFirewallEndpointWildfireVerdictChangeRequest@OrganizationsFirewallEndpoint (networksecurity.organizations.locations.firewallEndpoints.wildfireVerdictChangeRequests.get): OrganizationsFirewallEndpoint: no deployable fixture",
+        "GetFirewallEndpointWildfireVerdictChangeRequest@OrganizationsFirewallEndpoint (networksecurity.organizations.locations.firewallEndpoints.wildfireVerdictChangeRequests.get): OrganizationsFirewallEndpoint: needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListFirewallEndpointWildfireVerdictChangeRequests@OrganizationsFirewallEndpoint (networksecurity.organizations.locations.firewallEndpoints.wildfireVerdictChangeRequests.list): OrganizationsFirewallEndpoint: no deployable fixture",
+        "ListFirewallEndpointWildfireVerdictChangeRequests@OrganizationsFirewallEndpoint (networksecurity.organizations.locations.firewallEndpoints.wildfireVerdictChangeRequests.list): OrganizationsFirewallEndpoint: needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationsSecurityProfile", { concurrent: true }, () => {
       test.provider.skip(
-        "GetSecurityProfile@OrganizationsSecurityProfile (networksecurity.organizations.locations.securityProfiles.get): OrganizationsSecurityProfile: no deployable fixture",
+        "GetSecurityProfile@OrganizationsSecurityProfile (networksecurity.organizations.locations.securityProfiles.get): OrganizationsSecurityProfile: needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationsSecurityProfileGroup", { concurrent: true }, () => {
       test.provider.skip(
-        "GetSecurityProfileGroup@OrganizationsSecurityProfileGroup (networksecurity.organizations.locations.securityProfileGroups.get): OrganizationsSecurityProfileGroup: no deployable fixture",
+        "GetSecurityProfileGroup@OrganizationsSecurityProfileGroup (networksecurity.organizations.locations.securityProfileGroups.get): OrganizationsSecurityProfileGroup: needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
@@ -458,50 +502,66 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("SacAttachment", { concurrent: true }, () => {
       test.provider.skip(
-        "GetSacAttachment (networksecurity.projects.locations.sacAttachments.get): SacAttachment: no deployable fixture",
+        "GetSacAttachment (networksecurity.projects.locations.sacAttachments.get): SacAttachment: An attachment needs a SAC realm already paired with its SSE partner (Palo Alto Prisma Access / Symantec), which happens outside GCP. Set (GCP_TEST_SAC_PARTNER_REALM)",
         () => Effect.void,
       );
     });
 
     describe("SacRealm", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSacRealm (networksecurity.projects.locations.sacRealms.get): SacRealm: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetSacRealm (networksecurity.projects.locations.sacRealms.get)",
+        () => probe("GetSacRealm", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("SecurityProfile", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSecurityProfile@SecurityProfile (networksecurity.projects.locations.securityProfiles.get): SecurityProfile: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetSecurityProfile@SecurityProfile (networksecurity.projects.locations.securityProfiles.get)",
+        () => probe("GetSecurityProfile@SecurityProfile", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("SecurityProfileGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSecurityProfileGroup@SecurityProfileGroup (networksecurity.projects.locations.securityProfileGroups.get): SecurityProfileGroup: no deployable fixture",
+      test.provider.todo(
+        "GetSecurityProfileGroup@SecurityProfileGroup (networksecurity.projects.locations.securityProfileGroups.get): SecurityProfileGroup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ServerTlsPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetServerTlsPolicy (networksecurity.projects.locations.serverTlsPolicies.get): ServerTlsPolicy: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetServerTlsPolicy (networksecurity.projects.locations.serverTlsPolicies.get)",
+        () => probe("GetServerTlsPolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("TlsInspectionPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTlsInspectionPolicy (networksecurity.projects.locations.tlsInspectionPolicies.get): TlsInspectionPolicy: no deployable fixture",
+      test.provider.todo(
+        "GetTlsInspectionPolicy (networksecurity.projects.locations.tlsInspectionPolicies.get): TlsInspectionPolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("UrlList", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetUrlList (networksecurity.projects.locations.urlLists.get): UrlList: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetUrlList (networksecurity.projects.locations.urlLists.get)",
+        () => probe("GetUrlList", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

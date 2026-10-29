@@ -48,15 +48,15 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Feed", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetFeed (cloudasset.feeds.get): Feed: no deployable fixture",
+      test.provider.todo(
+        "GetFeed (cloudasset.feeds.get): Feed: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("SavedQuery", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSavedQuery (cloudasset.savedQueries.get): SavedQuery: no deployable fixture",
+      test.provider.todo(
+        "GetSavedQuery (cloudasset.savedQueries.get): SavedQuery: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

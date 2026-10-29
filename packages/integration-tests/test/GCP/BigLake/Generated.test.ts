@@ -48,34 +48,34 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Catalog", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetCatalog (biglake.projects.locations.catalogs.get): Catalog: no deployable fixture",
+      test.provider.todo(
+        "GetCatalog (biglake.projects.locations.catalogs.get): Catalog: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListCatalogDatabases (biglake.projects.locations.catalogs.databases.list): Catalog: no deployable fixture",
+      test.provider.todo(
+        "ListCatalogDatabases (biglake.projects.locations.catalogs.databases.list): Catalog: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("CatalogsDatabase", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDatabase (biglake.projects.locations.catalogs.databases.get): CatalogsDatabase: no deployable fixture",
+      test.provider.todo(
+        "GetDatabase (biglake.projects.locations.catalogs.databases.get): CatalogsDatabase: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListDatabaseTables (biglake.projects.locations.catalogs.databases.tables.list): CatalogsDatabase: no deployable fixture",
+      test.provider.todo(
+        "ListDatabaseTables (biglake.projects.locations.catalogs.databases.tables.list): CatalogsDatabase: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("CatalogsDatabasesTable", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTable (biglake.projects.locations.catalogs.databases.tables.get): CatalogsDatabasesTable: no deployable fixture",
+      test.provider.todo(
+        "GetTable (biglake.projects.locations.catalogs.databases.tables.get): CatalogsDatabasesTable: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RenameTable (biglake.projects.locations.catalogs.databases.tables.rename): CatalogsDatabasesTable: no deployable fixture",
+      test.provider.todo(
+        "RenameTable (biglake.projects.locations.catalogs.databases.tables.rename): CatalogsDatabasesTable: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

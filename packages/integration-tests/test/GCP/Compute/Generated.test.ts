@@ -1032,8 +1032,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("InstantSnapshotGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetInstantSnapshotGroup (compute.instantSnapshotGroups.get): InstantSnapshotGroup: no deployable fixture",
+      test.provider.todo(
+        "GetInstantSnapshotGroup (compute.instantSnapshotGroups.get): InstantSnapshotGroup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -1390,8 +1390,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("PacketMirroring", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPacketMirroring (compute.packetMirrorings.get): PacketMirroring: no deployable fixture",
+      test.provider.todo(
+        "GetPacketMirroring (compute.packetMirrorings.get): PacketMirroring: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -3195,12 +3195,12 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("RegionCompositeHealthCheck", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetRegionCompositeHealthCheck (compute.regionCompositeHealthChecks.get): RegionCompositeHealthCheck: no deployable fixture",
+      test.provider.todo(
+        "GetRegionCompositeHealthCheck (compute.regionCompositeHealthChecks.get): RegionCompositeHealthCheck: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetRegionCompositeHealthCheckHealth (compute.regionCompositeHealthChecks.getHealth): RegionCompositeHealthCheck: no deployable fixture",
+      test.provider.todo(
+        "GetRegionCompositeHealthCheckHealth (compute.regionCompositeHealthChecks.getHealth): RegionCompositeHealthCheck: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -3534,8 +3534,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("RegionInstantSnapshotGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetRegionInstantSnapshotGroup (compute.regionInstantSnapshotGroups.get): RegionInstantSnapshotGroup: no deployable fixture",
+      test.provider.todo(
+        "GetRegionInstantSnapshotGroup (compute.regionInstantSnapshotGroups.get): RegionInstantSnapshotGroup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -4100,8 +4100,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ServiceAttachment", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetServiceAttachment (compute.serviceAttachments.get): ServiceAttachment: no deployable fixture",
+      test.provider.todo(
+        "GetServiceAttachment (compute.serviceAttachments.get): ServiceAttachment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

@@ -48,181 +48,277 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("App", { concurrent: true }, () => {
-      test.provider.skip(
-        "BatchConversationDelete (ces.projects.locations.apps.conversations.batchDelete): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "BatchConversationDelete (ces.projects.locations.apps.conversations.batchDelete)",
+        () => probe("BatchConversationDelete", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "CancelAssistantSessionAssistantTurn (ces.projects.locations.apps.assistantSessions.cancelAssistantTurn): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "CancelAssistantSessionAssistantTurn (ces.projects.locations.apps.assistantSessions.cancelAssistantTurn)",
+        () => probe("CancelAssistantSessionAssistantTurn", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteAppConversation (ces.projects.locations.apps.conversations.delete): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "DeleteAppConversation (ces.projects.locations.apps.conversations.delete)",
+        () => probe("DeleteAppConversation", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ExecuteAppTool (ces.projects.locations.apps.executeTool): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ExecuteAppTool (ces.projects.locations.apps.executeTool)",
+        () => probe("ExecuteAppTool", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ExportApp (ces.projects.locations.apps.exportApp): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ExportApp (ces.projects.locations.apps.exportApp)",
+        () => probe("ExportApp", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GenerateAppOnboardingSuggestions (ces.projects.locations.apps.generateOnboardingSuggestions): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GenerateAppOnboardingSuggestions (ces.projects.locations.apps.generateOnboardingSuggestions)",
+        () => probe("GenerateAppOnboardingSuggestions", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GenerateSessionChatToken (ces.projects.locations.apps.sessions.generateChatToken): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GenerateSessionChatToken (ces.projects.locations.apps.sessions.generateChatToken)",
+        () => probe("GenerateSessionChatToken", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetApp (ces.projects.locations.apps.get): App: no deployable fixture",
-        () => Effect.void,
+      test.provider("GetApp (ces.projects.locations.apps.get)", () => probe("GetApp", true), {
+        tags: ["provider:gcp", "provider:gcp:ces", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "GetAppChangelog (ces.projects.locations.apps.changelogs.get)",
+        () => probe("GetAppChangelog", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAppChangelog (ces.projects.locations.apps.changelogs.get): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetAppConversation (ces.projects.locations.apps.conversations.get)",
+        () => probe("GetAppConversation", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAppConversation (ces.projects.locations.apps.conversations.get): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetAppExtendedAgentCard (ces.projects.locations.apps.getExtendedAgentCard)",
+        () => probe("GetAppExtendedAgentCard", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAppExtendedAgentCard (ces.projects.locations.apps.getExtendedAgentCard): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListAppAgents (ces.projects.locations.apps.agents.list)",
+        () => probe("ListAppAgents", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAppAgents (ces.projects.locations.apps.agents.list): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListAppChangelogs (ces.projects.locations.apps.changelogs.list)",
+        () => probe("ListAppChangelogs", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAppChangelogs (ces.projects.locations.apps.changelogs.list): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListAppConversations (ces.projects.locations.apps.conversations.list)",
+        () => probe("ListAppConversations", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAppConversations (ces.projects.locations.apps.conversations.list): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListAppDeployments (ces.projects.locations.apps.deployments.list)",
+        () => probe("ListAppDeployments", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAppDeployments (ces.projects.locations.apps.deployments.list): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListAppExamples (ces.projects.locations.apps.examples.list)",
+        () => probe("ListAppExamples", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAppExamples (ces.projects.locations.apps.examples.list): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListAppGuardrails (ces.projects.locations.apps.guardrails.list)",
+        () => probe("ListAppGuardrails", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAppGuardrails (ces.projects.locations.apps.guardrails.list): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListAppTools (ces.projects.locations.apps.tools.list)",
+        () => probe("ListAppTools", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAppTools (ces.projects.locations.apps.tools.list): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListAppToolsets (ces.projects.locations.apps.toolsets.list)",
+        () => probe("ListAppToolsets", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAppToolsets (ces.projects.locations.apps.toolsets.list): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListAppVersions (ces.projects.locations.apps.versions.list)",
+        () => probe("ListAppVersions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAppVersions (ces.projects.locations.apps.versions.list): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "RunSession (ces.projects.locations.apps.sessions.runSession)",
+        () => probe("RunSession", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RunSession (ces.projects.locations.apps.sessions.runSession): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "SendAppMessage (ces.projects.locations.apps.message.send)",
+        () => probe("SendAppMessage", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SendAppMessage (ces.projects.locations.apps.message.send): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "StreamAppMessage (ces.projects.locations.apps.message.stream)",
+        () => probe("StreamAppMessage", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "StreamAppMessage (ces.projects.locations.apps.message.stream): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "StreamAssistantSessionChatAiAssistant (ces.projects.locations.apps.assistantSessions.streamChatAiAssistant)",
+        () => probe("StreamAssistantSessionChatAiAssistant", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "StreamAssistantSessionChatAiAssistant (ces.projects.locations.apps.assistantSessions.streamChatAiAssistant): App: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "StreamRunSession (ces.projects.locations.apps.sessions.streamRunSession): App: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "StreamRunSession (ces.projects.locations.apps.sessions.streamRunSession)",
+        () => probe("StreamRunSession", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("AppsAgent", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAgent (ces.projects.locations.apps.agents.get): AppsAgent: no deployable fixture",
+      test.provider.todo(
+        "GetAgent (ces.projects.locations.apps.agents.get): AppsAgent: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AppsDeployment", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDeployment (ces.projects.locations.apps.deployments.get): AppsDeployment: no deployable fixture",
+      test.provider.todo(
+        "GetDeployment (ces.projects.locations.apps.deployments.get): AppsDeployment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetDeploymentExtendedAgentCard (ces.projects.locations.apps.deployments.getExtendedAgentCard): AppsDeployment: no deployable fixture",
+      test.provider.todo(
+        "GetDeploymentExtendedAgentCard (ces.projects.locations.apps.deployments.getExtendedAgentCard): AppsDeployment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SendDeploymentMessage (ces.projects.locations.apps.deployments.message.send): AppsDeployment: no deployable fixture",
+      test.provider.todo(
+        "SendDeploymentMessage (ces.projects.locations.apps.deployments.message.send): AppsDeployment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StreamDeploymentMessage (ces.projects.locations.apps.deployments.message.stream): AppsDeployment: no deployable fixture",
+      test.provider.todo(
+        "StreamDeploymentMessage (ces.projects.locations.apps.deployments.message.stream): AppsDeployment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AppsExample", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetExample (ces.projects.locations.apps.examples.get): AppsExample: no deployable fixture",
+      test.provider.todo(
+        "GetExample (ces.projects.locations.apps.examples.get): AppsExample: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AppsGuardrail", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetGuardrail (ces.projects.locations.apps.guardrails.get): AppsGuardrail: no deployable fixture",
+      test.provider.todo(
+        "GetGuardrail (ces.projects.locations.apps.guardrails.get): AppsGuardrail: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AppsTool", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTool (ces.projects.locations.apps.tools.get): AppsTool: no deployable fixture",
+      test.provider.todo(
+        "GetTool (ces.projects.locations.apps.tools.get): AppsTool: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AppsToolset", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetToolset (ces.projects.locations.apps.toolsets.get): AppsToolset: no deployable fixture",
+      test.provider.todo(
+        "GetToolset (ces.projects.locations.apps.toolsets.get): AppsToolset: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AppsVersion", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetVersion (ces.projects.locations.apps.versions.get): AppsVersion: no deployable fixture",
+      test.provider.todo(
+        "GetVersion (ces.projects.locations.apps.versions.get): AppsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetVersionExtendedAgentCard (ces.projects.locations.apps.versions.getExtendedAgentCard): AppsVersion: no deployable fixture",
+      test.provider.todo(
+        "GetVersionExtendedAgentCard (ces.projects.locations.apps.versions.getExtendedAgentCard): AppsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RestoreVersion (ces.projects.locations.apps.versions.restore): AppsVersion: no deployable fixture",
+      test.provider.todo(
+        "RestoreVersion (ces.projects.locations.apps.versions.restore): AppsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SendVersionMessage (ces.projects.locations.apps.versions.message.send): AppsVersion: no deployable fixture",
+      test.provider.todo(
+        "SendVersionMessage (ces.projects.locations.apps.versions.message.send): AppsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StreamVersionMessage (ces.projects.locations.apps.versions.message.stream): AppsVersion: no deployable fixture",
+      test.provider.todo(
+        "StreamVersionMessage (ces.projects.locations.apps.versions.message.stream): AppsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

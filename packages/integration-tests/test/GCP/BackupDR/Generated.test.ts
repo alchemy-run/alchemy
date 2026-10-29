@@ -48,90 +48,154 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("BackupPlan", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBackupPlan (backupdr.projects.locations.backupPlans.get): BackupPlan: no deployable fixture",
+      test.provider.todo(
+        "GetBackupPlan (backupdr.projects.locations.backupPlans.get): BackupPlan: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetBackupPlanRevision (backupdr.projects.locations.backupPlans.revisions.get): BackupPlan: no deployable fixture",
+      test.provider.todo(
+        "GetBackupPlanRevision (backupdr.projects.locations.backupPlans.revisions.get): BackupPlan: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListBackupPlanRevisions (backupdr.projects.locations.backupPlans.revisions.list): BackupPlan: no deployable fixture",
+      test.provider.todo(
+        "ListBackupPlanRevisions (backupdr.projects.locations.backupPlans.revisions.list): BackupPlan: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("BackupVault", { concurrent: true }, () => {
-      test.provider.skip(
-        "AbandonDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.abandonBackup): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "AbandonDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.abandonBackup)",
+        () => probe("AbandonDataSourceBackup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteBackupVaultDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.backups.delete): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "DeleteBackupVaultDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.backups.delete)",
+        () => probe("DeleteBackupVaultDataSourceBackup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "FetchBackupForResourceType (backupdr.projects.locations.backupVaults.dataSources.backups.fetchForResourceType): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "FetchBackupForResourceType (backupdr.projects.locations.backupVaults.dataSources.backups.fetchForResourceType)",
+        () => probe("FetchBackupForResourceType", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "FetchDataSourceAccessToken (backupdr.projects.locations.backupVaults.dataSources.fetchAccessToken): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "FetchDataSourceAccessToken (backupdr.projects.locations.backupVaults.dataSources.fetchAccessToken)",
+        () => probe("FetchDataSourceAccessToken", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "FinalizeDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.finalizeBackup): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "FinalizeDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.finalizeBackup)",
+        () => probe("FinalizeDataSourceBackup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetBackupVault (backupdr.projects.locations.backupVaults.get): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetBackupVault (backupdr.projects.locations.backupVaults.get)",
+        () => probe("GetBackupVault", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetBackupVaultDataSource (backupdr.projects.locations.backupVaults.dataSources.get): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetBackupVaultDataSource (backupdr.projects.locations.backupVaults.dataSources.get)",
+        () => probe("GetBackupVaultDataSource", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetBackupVaultDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.backups.get): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetBackupVaultDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.backups.get)",
+        () => probe("GetBackupVaultDataSourceBackup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "InitiateDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.initiateBackup): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "InitiateDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.initiateBackup)",
+        () => probe("InitiateDataSourceBackup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListBackupVaultDataSourceBackups (backupdr.projects.locations.backupVaults.dataSources.backups.list): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListBackupVaultDataSourceBackups (backupdr.projects.locations.backupVaults.dataSources.backups.list)",
+        () => probe("ListBackupVaultDataSourceBackups", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListBackupVaultDataSources (backupdr.projects.locations.backupVaults.dataSources.list): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListBackupVaultDataSources (backupdr.projects.locations.backupVaults.dataSources.list)",
+        () => probe("ListBackupVaultDataSources", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchBackupVaultDataSource (backupdr.projects.locations.backupVaults.dataSources.patch): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PatchBackupVaultDataSource (backupdr.projects.locations.backupVaults.dataSources.patch)",
+        () => probe("PatchBackupVaultDataSource", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchBackupVaultDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.backups.patch): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PatchBackupVaultDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.backups.patch)",
+        () => probe("PatchBackupVaultDataSourceBackup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RemoveBackupVaultDataSource (backupdr.projects.locations.backupVaults.dataSources.remove): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "RemoveBackupVaultDataSource (backupdr.projects.locations.backupVaults.dataSources.remove)",
+        () => probe("RemoveBackupVaultDataSource", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RestoreBackupVaultDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.backups.restore): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "RestoreBackupVaultDataSourceBackup (backupdr.projects.locations.backupVaults.dataSources.backups.restore)",
+        () => probe("RestoreBackupVaultDataSourceBackup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SetDataSourceInternalStatus (backupdr.projects.locations.backupVaults.dataSources.setInternalStatus): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "SetDataSourceInternalStatus (backupdr.projects.locations.backupVaults.dataSources.setInternalStatus)",
+        () => probe("SetDataSourceInternalStatus", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ManagementServer", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetManagementServer (backupdr.projects.locations.managementServers.get): ManagementServer: no deployable fixture",
+      test.provider.todo(
+        "GetManagementServer (backupdr.projects.locations.managementServers.get): ManagementServer: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

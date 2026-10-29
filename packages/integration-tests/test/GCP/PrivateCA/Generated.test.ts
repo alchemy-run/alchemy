@@ -174,8 +174,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("CertificateTemplate", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetCertificateTemplate (privateca.projects.locations.certificateTemplates.get): CertificateTemplate: no deployable fixture",
+      test.provider.todo(
+        "GetCertificateTemplate (privateca.projects.locations.certificateTemplates.get): CertificateTemplate: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

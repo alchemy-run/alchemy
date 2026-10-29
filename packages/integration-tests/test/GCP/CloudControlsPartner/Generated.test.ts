@@ -48,28 +48,28 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Customer", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetCustomer (cloudcontrolspartner.organizations.locations.customers.get): Customer: no deployable fixture",
+      test.provider.todo(
+        "GetCustomer (cloudcontrolspartner.organizations.locations.customers.get): Customer: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetCustomerWorkload (cloudcontrolspartner.organizations.locations.customers.workloads.get): Customer: no deployable fixture",
+      test.provider.todo(
+        "GetCustomerWorkload (cloudcontrolspartner.organizations.locations.customers.workloads.get): Customer: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetCustomerWorkloadViolation (cloudcontrolspartner.organizations.locations.customers.workloads.violations.get): Customer: no deployable fixture",
+      test.provider.todo(
+        "GetCustomerWorkloadViolation (cloudcontrolspartner.organizations.locations.customers.workloads.violations.get): Customer: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListCustomerWorkloadAccessApprovalRequests (cloudcontrolspartner.organizations.locations.customers.workloads.accessApprovalRequests.list): Customer: no deployable fixture",
+      test.provider.todo(
+        "ListCustomerWorkloadAccessApprovalRequests (cloudcontrolspartner.organizations.locations.customers.workloads.accessApprovalRequests.list): Customer: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListCustomerWorkloads (cloudcontrolspartner.organizations.locations.customers.workloads.list): Customer: no deployable fixture",
+      test.provider.todo(
+        "ListCustomerWorkloads (cloudcontrolspartner.organizations.locations.customers.workloads.list): Customer: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListCustomerWorkloadViolations (cloudcontrolspartner.organizations.locations.customers.workloads.violations.list): Customer: no deployable fixture",
+      test.provider.todo(
+        "ListCustomerWorkloadViolations (cloudcontrolspartner.organizations.locations.customers.workloads.violations.list): Customer: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

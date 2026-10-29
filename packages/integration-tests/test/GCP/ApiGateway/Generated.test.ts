@@ -48,8 +48,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ApisConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetConfig (apigateway.projects.locations.apis.configs.get): ApisConfig: no deployable fixture",
+      test.provider.todo(
+        "GetConfig (apigateway.projects.locations.apis.configs.get): ApisConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

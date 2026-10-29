@@ -54,6 +54,7 @@
   },
   "auditServices": ["bigtableadmin.googleapis.com", "bigtable.googleapis.com"],
   "probes": {
-    "resources": {}
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
   }
 }

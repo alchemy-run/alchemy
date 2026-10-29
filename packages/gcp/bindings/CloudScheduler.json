@@ -10,6 +10,7 @@
     "cloudscheduler.projects.locations.jobs.resume": "cloudscheduler.jobs.enable"
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
   }
 }

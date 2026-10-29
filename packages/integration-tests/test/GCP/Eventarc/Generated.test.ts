@@ -48,47 +48,47 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Channel", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetChannel (eventarc.projects.locations.channels.get): Channel: no deployable fixture",
+      test.provider.todo(
+        "GetChannel (eventarc.projects.locations.channels.get): Channel: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ChannelConnection", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetChannelConnection (eventarc.projects.locations.channelConnections.get): ChannelConnection: no deployable fixture",
+      test.provider.todo(
+        "GetChannelConnection (eventarc.projects.locations.channelConnections.get): ChannelConnection: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Enrollment", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEnrollment (eventarc.projects.locations.enrollments.get): Enrollment: no deployable fixture",
+      test.provider.todo(
+        "GetEnrollment (eventarc.projects.locations.enrollments.get): Enrollment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("GoogleApiSource", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetGoogleApiSource (eventarc.projects.locations.googleApiSources.get): GoogleApiSource: no deployable fixture",
+      test.provider.todo(
+        "GetGoogleApiSource (eventarc.projects.locations.googleApiSources.get): GoogleApiSource: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("MessageBus", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetMessageBuse (eventarc.projects.locations.messageBuses.get): MessageBus: no deployable fixture",
+      test.provider.todo(
+        "GetMessageBuse (eventarc.projects.locations.messageBuses.get): MessageBus: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListMessageBuseEnrollments (eventarc.projects.locations.messageBuses.listEnrollments): MessageBus: no deployable fixture",
+      test.provider.todo(
+        "ListMessageBuseEnrollments (eventarc.projects.locations.messageBuses.listEnrollments): MessageBus: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Pipeline", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPipeline (eventarc.projects.locations.pipelines.get): Pipeline: no deployable fixture",
+      test.provider.todo(
+        "GetPipeline (eventarc.projects.locations.pipelines.get): Pipeline: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -169,8 +169,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Trigger", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTrigger (eventarc.projects.locations.triggers.get): Trigger: no deployable fixture",
+      test.provider.todo(
+        "GetTrigger (eventarc.projects.locations.triggers.get): Trigger: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

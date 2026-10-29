@@ -13,6 +13,9 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "DataExchange": "ProbeDataExchange"
+    },
+    "untestable": {}
   }
 }

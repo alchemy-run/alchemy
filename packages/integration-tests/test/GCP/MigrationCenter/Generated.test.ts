@@ -48,72 +48,96 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AssetsExportJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAssetsExportJob (migrationcenter.projects.locations.assetsExportJobs.get): AssetsExportJob: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetAssetsExportJob (migrationcenter.projects.locations.assetsExportJobs.get)",
+        () => probe("GetAssetsExportJob", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RunAssetsExportJob (migrationcenter.projects.locations.assetsExportJobs.run): AssetsExportJob: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "RunAssetsExportJob (migrationcenter.projects.locations.assetsExportJobs.run)",
+        () => probe("RunAssetsExportJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DiscoveryClient", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDiscoveryClient (migrationcenter.projects.locations.discoveryClients.get): DiscoveryClient: no deployable fixture",
+      test.provider.todo(
+        "GetDiscoveryClient (migrationcenter.projects.locations.discoveryClients.get): DiscoveryClient: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SendDiscoveryClientHeartbeat (migrationcenter.projects.locations.discoveryClients.sendHeartbeat): DiscoveryClient: no deployable fixture",
+      test.provider.todo(
+        "SendDiscoveryClientHeartbeat (migrationcenter.projects.locations.discoveryClients.sendHeartbeat): DiscoveryClient: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Group", { concurrent: true }, () => {
-      test.provider.skip(
-        "AddGroupAssets (migrationcenter.projects.locations.groups.addAssets): Group: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "AddGroupAssets (migrationcenter.projects.locations.groups.addAssets)",
+        () => probe("AddGroupAssets", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetGroup (migrationcenter.projects.locations.groups.get): Group: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetGroup (migrationcenter.projects.locations.groups.get)",
+        () => probe("GetGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RemoveGroupAssets (migrationcenter.projects.locations.groups.removeAssets): Group: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "RemoveGroupAssets (migrationcenter.projects.locations.groups.removeAssets)",
+        () => probe("RemoveGroupAssets", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ImportJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetImportJob (migrationcenter.projects.locations.importJobs.get): ImportJob: no deployable fixture",
+      test.provider.todo(
+        "GetImportJob (migrationcenter.projects.locations.importJobs.get): ImportJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListImportJobImportDataFiles (migrationcenter.projects.locations.importJobs.importDataFiles.list): ImportJob: no deployable fixture",
+      test.provider.todo(
+        "ListImportJobImportDataFiles (migrationcenter.projects.locations.importJobs.importDataFiles.list): ImportJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RunImportJob (migrationcenter.projects.locations.importJobs.run): ImportJob: no deployable fixture",
+      test.provider.todo(
+        "RunImportJob (migrationcenter.projects.locations.importJobs.run): ImportJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ValidateImportJob (migrationcenter.projects.locations.importJobs.validate): ImportJob: no deployable fixture",
+      test.provider.todo(
+        "ValidateImportJob (migrationcenter.projects.locations.importJobs.validate): ImportJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ImportJobsImportDataFile", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetImportDataFile (migrationcenter.projects.locations.importJobs.importDataFiles.get): ImportJobsImportDataFile: no deployable fixture",
+      test.provider.todo(
+        "GetImportDataFile (migrationcenter.projects.locations.importJobs.importDataFiles.get): ImportJobsImportDataFile: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("PreferenceSet", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPreferenceSet (migrationcenter.projects.locations.preferenceSets.get): PreferenceSet: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetPreferenceSet (migrationcenter.projects.locations.preferenceSets.get)",
+        () => probe("GetPreferenceSet", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -257,35 +281,47 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ReportConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetReportConfig (migrationcenter.projects.locations.reportConfigs.get): ReportConfig: no deployable fixture",
+      test.provider.todo(
+        "GetReportConfig (migrationcenter.projects.locations.reportConfigs.get): ReportConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListReportConfigReports (migrationcenter.projects.locations.reportConfigs.reports.list): ReportConfig: no deployable fixture",
+      test.provider.todo(
+        "ListReportConfigReports (migrationcenter.projects.locations.reportConfigs.reports.list): ReportConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ReportConfigsReport", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetReport (migrationcenter.projects.locations.reportConfigs.reports.get): ReportConfigsReport: no deployable fixture",
+      test.provider.todo(
+        "GetReport (migrationcenter.projects.locations.reportConfigs.reports.get): ReportConfigsReport: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Source", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSource (migrationcenter.projects.locations.sources.get): Source: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetSource (migrationcenter.projects.locations.sources.get)",
+        () => probe("GetSource", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetSourceErrorFrame (migrationcenter.projects.locations.sources.errorFrames.get): Source: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetSourceErrorFrame (migrationcenter.projects.locations.sources.errorFrames.get)",
+        () => probe("GetSourceErrorFrame", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSourceErrorFrames (migrationcenter.projects.locations.sources.errorFrames.list): Source: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListSourceErrorFrames (migrationcenter.projects.locations.sources.errorFrames.list)",
+        () => probe("ListSourceErrorFrames", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

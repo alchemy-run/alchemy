@@ -48,54 +48,74 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("DataExchange", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDataExchange (analyticshub.projects.locations.dataExchanges.get): DataExchange: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetDataExchange (analyticshub.projects.locations.dataExchanges.get)",
+        () => probe("GetDataExchange", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:analyticshub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataExchangeListings (analyticshub.projects.locations.dataExchanges.listings.list): DataExchange: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataExchangeListings (analyticshub.projects.locations.dataExchanges.listings.list)",
+        () => probe("ListDataExchangeListings", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:analyticshub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataExchangeQueryTemplates (analyticshub.projects.locations.dataExchanges.queryTemplates.list): DataExchange: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataExchangeQueryTemplates (analyticshub.projects.locations.dataExchanges.queryTemplates.list)",
+        () => probe("ListDataExchangeQueryTemplates", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:analyticshub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataExchangeSubscriptions (analyticshub.projects.locations.dataExchanges.listSubscriptions): DataExchange: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataExchangeSubscriptions (analyticshub.projects.locations.dataExchanges.listSubscriptions)",
+        () => probe("ListDataExchangeSubscriptions", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:analyticshub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SubscribeDataExchange (analyticshub.projects.locations.dataExchanges.subscribe): DataExchange: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "SubscribeDataExchange (analyticshub.projects.locations.dataExchanges.subscribe)",
+        () => probe("SubscribeDataExchange", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:analyticshub", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DataExchangesListing", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetListing (analyticshub.projects.locations.dataExchanges.listings.get): DataExchangesListing: no deployable fixture",
+      test.provider.todo(
+        "GetListing (analyticshub.projects.locations.dataExchanges.listings.get): DataExchangesListing: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListListingSubscriptions (analyticshub.projects.locations.dataExchanges.listings.listSubscriptions): DataExchangesListing: no deployable fixture",
+      test.provider.todo(
+        "ListListingSubscriptions (analyticshub.projects.locations.dataExchanges.listings.listSubscriptions): DataExchangesListing: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SubscribeListing (analyticshub.projects.locations.dataExchanges.listings.subscribe): DataExchangesListing: no deployable fixture",
+      test.provider.todo(
+        "SubscribeListing (analyticshub.projects.locations.dataExchanges.listings.subscribe): DataExchangesListing: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DataExchangesQueryTemplate", { concurrent: true }, () => {
-      test.provider.skip(
-        "ApproveQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.approve): DataExchangesQueryTemplate: no deployable fixture",
+      test.provider.todo(
+        "ApproveQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.approve): DataExchangesQueryTemplate: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.get): DataExchangesQueryTemplate: no deployable fixture",
+      test.provider.todo(
+        "GetQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.get): DataExchangesQueryTemplate: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SubmitQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.submit): DataExchangesQueryTemplate: no deployable fixture",
+      test.provider.todo(
+        "SubmitQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.submit): DataExchangesQueryTemplate: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

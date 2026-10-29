@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeBackupVault } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated BackupDR binding as its own
@@ -15,46 +16,128 @@ export default class BackupDRGeneratedHost extends GCP.Function<BackupDRGenerate
   "BackupDRGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.BackupDR.EndTrial();
-    const p1 = yield* GCP.BackupDR.FetchBackupVaultUsable();
-    const p2 = yield* GCP.BackupDR.FetchResourceBackupConfig();
-    const p3 = yield* GCP.BackupDR.InitializeServiceConfig();
-    const p4 = yield* GCP.BackupDR.ListBackupPlanAssociations();
-    const p5 = yield* GCP.BackupDR.ListBackupPlans();
-    const p6 = yield* GCP.BackupDR.ListBackupVaults();
-    const p7 = yield* GCP.BackupDR.ListDataSourceReferences();
-    const p8 = yield* GCP.BackupDR.ListManagementServers();
-    const p9 = yield* GCP.BackupDR.ListResourceBackupConfigs();
-    const p10 = yield* GCP.BackupDR.SubscribeTrial();
+    const p0 = yield* GCP.BackupDR.AbandonDataSourceBackup(ProbeBackupVault);
+    const p1 = yield* GCP.BackupDR.DeleteBackupVaultDataSourceBackup(ProbeBackupVault);
+    const p2 = yield* GCP.BackupDR.EndTrial();
+    const p3 = yield* GCP.BackupDR.FetchBackupForResourceType(ProbeBackupVault);
+    const p4 = yield* GCP.BackupDR.FetchBackupVaultUsable();
+    const p5 = yield* GCP.BackupDR.FetchDataSourceAccessToken(ProbeBackupVault);
+    const p6 = yield* GCP.BackupDR.FetchResourceBackupConfig();
+    const p7 = yield* GCP.BackupDR.FinalizeDataSourceBackup(ProbeBackupVault);
+    const p8 = yield* GCP.BackupDR.GetBackupVault(ProbeBackupVault);
+    const p9 = yield* GCP.BackupDR.GetBackupVaultDataSource(ProbeBackupVault);
+    const p10 = yield* GCP.BackupDR.GetBackupVaultDataSourceBackup(ProbeBackupVault);
+    const p11 = yield* GCP.BackupDR.InitializeServiceConfig();
+    const p12 = yield* GCP.BackupDR.InitiateDataSourceBackup(ProbeBackupVault);
+    const p13 = yield* GCP.BackupDR.ListBackupPlanAssociations();
+    const p14 = yield* GCP.BackupDR.ListBackupPlans();
+    const p15 = yield* GCP.BackupDR.ListBackupVaultDataSourceBackups(ProbeBackupVault);
+    const p16 = yield* GCP.BackupDR.ListBackupVaultDataSources(ProbeBackupVault);
+    const p17 = yield* GCP.BackupDR.ListBackupVaults();
+    const p18 = yield* GCP.BackupDR.ListDataSourceReferences();
+    const p19 = yield* GCP.BackupDR.ListManagementServers();
+    const p20 = yield* GCP.BackupDR.ListResourceBackupConfigs();
+    const p21 = yield* GCP.BackupDR.PatchBackupVaultDataSource(ProbeBackupVault);
+    const p22 = yield* GCP.BackupDR.PatchBackupVaultDataSourceBackup(ProbeBackupVault);
+    const p23 = yield* GCP.BackupDR.RemoveBackupVaultDataSource(ProbeBackupVault);
+    const p24 = yield* GCP.BackupDR.RestoreBackupVaultDataSourceBackup(ProbeBackupVault);
+    const p25 = yield* GCP.BackupDR.SetDataSourceInternalStatus(ProbeBackupVault);
+    const p26 = yield* GCP.BackupDR.SubscribeTrial();
     return {
       fetch: serveProbes({
-        EndTrial: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        FetchBackupVaultUsable: outcome(Retry.none(p1({ location: "us-central1" } as never))),
-        FetchResourceBackupConfig: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        InitializeServiceConfig: outcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListBackupPlanAssociations: outcome(Retry.none(p4({ location: "us-central1" } as never))),
-        ListBackupPlans: outcome(Retry.none(p5({ location: "us-central1" } as never))),
-        ListBackupVaults: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        ListDataSourceReferences: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListManagementServers: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListResourceBackupConfigs: outcome(Retry.none(p9({ location: "us-central1" } as never))),
-        SubscribeTrial: outcome(Retry.none(p10({ location: "us-central1" } as never))),
+        AbandonDataSourceBackup: outcome(
+          Retry.none(p0({ dataSource: "alchemy-missing" } as never)),
+        ),
+        DeleteBackupVaultDataSourceBackup: outcome(
+          Retry.none(p1({ dataSource: "alchemy-missing", backup: "alchemy-missing" } as never)),
+        ),
+        EndTrial: outcome(Retry.none(p2({ location: "us-central1" } as never))),
+        FetchBackupForResourceType: outcome(
+          Retry.none(p3({ dataSource: "alchemy-missing" } as never)),
+        ),
+        FetchBackupVaultUsable: outcome(Retry.none(p4({ location: "us-central1" } as never))),
+        FetchDataSourceAccessToken: outcome(
+          Retry.none(p5({ dataSource: "alchemy-missing" } as never)),
+        ),
+        FetchResourceBackupConfig: outcome(Retry.none(p6({ location: "us-central1" } as never))),
+        FinalizeDataSourceBackup: outcome(
+          Retry.none(p7({ dataSource: "alchemy-missing" } as never)),
+        ),
+        GetBackupVault: outcome(Retry.none(p8({} as never))),
+        GetBackupVaultDataSource: outcome(
+          Retry.none(p9({ dataSource: "alchemy-missing" } as never)),
+        ),
+        GetBackupVaultDataSourceBackup: outcome(
+          Retry.none(p10({ dataSource: "alchemy-missing", backup: "alchemy-missing" } as never)),
+        ),
+        InitializeServiceConfig: outcome(Retry.none(p11({ location: "us-central1" } as never))),
+        InitiateDataSourceBackup: outcome(
+          Retry.none(p12({ dataSource: "alchemy-missing" } as never)),
+        ),
+        ListBackupPlanAssociations: outcome(Retry.none(p13({ location: "us-central1" } as never))),
+        ListBackupPlans: outcome(Retry.none(p14({ location: "us-central1" } as never))),
+        ListBackupVaultDataSourceBackups: outcome(
+          Retry.none(p15({ dataSource: "alchemy-missing" } as never)),
+        ),
+        ListBackupVaultDataSources: outcome(Retry.none(p16({} as never))),
+        ListBackupVaults: outcome(Retry.none(p17({ location: "us-central1" } as never))),
+        ListDataSourceReferences: outcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListManagementServers: outcome(Retry.none(p19({ location: "us-central1" } as never))),
+        ListResourceBackupConfigs: outcome(Retry.none(p20({ location: "us-central1" } as never))),
+        PatchBackupVaultDataSource: outcome(
+          Retry.none(p21({ dataSource: "alchemy-missing" } as never)),
+        ),
+        PatchBackupVaultDataSourceBackup: outcome(
+          Retry.none(p22({ dataSource: "alchemy-missing", backup: "alchemy-missing" } as never)),
+        ),
+        RemoveBackupVaultDataSource: outcome(
+          Retry.none(p23({ dataSource: "alchemy-missing" } as never)),
+        ),
+        RestoreBackupVaultDataSourceBackup: outcome(
+          Retry.none(
+            p24({
+              dataSource: "alchemy-missing",
+              backup: "alchemy-missing",
+              body: { alchemyProbe: "alchemy-missing" },
+            } as never),
+          ),
+        ),
+        SetDataSourceInternalStatus: outcome(
+          Retry.none(p25({ dataSource: "alchemy-missing" } as never)),
+        ),
+        SubscribeTrial: outcome(Retry.none(p26({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.BackupDR.AbandonDataSourceBackupHttp,
+          GCP.BackupDR.DeleteBackupVaultDataSourceBackupHttp,
           GCP.BackupDR.EndTrialHttp,
+          GCP.BackupDR.FetchBackupForResourceTypeHttp,
           GCP.BackupDR.FetchBackupVaultUsableHttp,
+          GCP.BackupDR.FetchDataSourceAccessTokenHttp,
           GCP.BackupDR.FetchResourceBackupConfigHttp,
+          GCP.BackupDR.FinalizeDataSourceBackupHttp,
+          GCP.BackupDR.GetBackupVaultHttp,
+          GCP.BackupDR.GetBackupVaultDataSourceHttp,
+          GCP.BackupDR.GetBackupVaultDataSourceBackupHttp,
           GCP.BackupDR.InitializeServiceConfigHttp,
+          GCP.BackupDR.InitiateDataSourceBackupHttp,
           GCP.BackupDR.ListBackupPlanAssociationsHttp,
           GCP.BackupDR.ListBackupPlansHttp,
+          GCP.BackupDR.ListBackupVaultDataSourceBackupsHttp,
+          GCP.BackupDR.ListBackupVaultDataSourcesHttp,
           GCP.BackupDR.ListBackupVaultsHttp,
           GCP.BackupDR.ListDataSourceReferencesHttp,
           GCP.BackupDR.ListManagementServersHttp,
           GCP.BackupDR.ListResourceBackupConfigsHttp,
+          GCP.BackupDR.PatchBackupVaultDataSourceHttp,
+          GCP.BackupDR.PatchBackupVaultDataSourceBackupHttp,
+          GCP.BackupDR.RemoveBackupVaultDataSourceHttp,
+          GCP.BackupDR.RestoreBackupVaultDataSourceBackupHttp,
+          GCP.BackupDR.SetDataSourceInternalStatusHttp,
           GCP.BackupDR.SubscribeTrialHttp,
         ),
       ),

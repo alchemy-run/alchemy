@@ -70,6 +70,27 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "AnalysisRule": "ProbeAnalysisRule",
+      "QaQuestionTag": "ProbeQaQuestionTag",
+      "View": "ProbeView"
+    },
+    "untestable": {
+      "AssessmentRule": "Needs Contact Center AI Insights features the testing project does not have enabled: create returns 404 NOT_FOUND \"Requested entity was not found.\" and list returns 400 INVALID_ARGUMENT. (GCP_TEST_CCAI_QUALITY)",
+      "AuthorizedViewSet": "Needs Contact Center AI Insights features the testing project does not have enabled: create returns 404 NOT_FOUND \"Requested entity was not found.\" and list returns 400 INVALID_ARGUMENT. (GCP_TEST_CCAI_QUALITY)",
+      "AuthorizedViewSetsAuthorizedView": "Needs Contact Center AI Insights features the testing project does not have enabled: creating the parent authorized view set returns 404 NOT_FOUND \"Requested entity was not found.\" (GCP_TEST_CCAI_QUALITY)",
+      "AuthorizedViewSetsAuthorizedViewsConversationsAssessment": "Creating through an authorized view fails with BadRequest \"subject length must be at most 127\" on the testing project (cause not yet isolated). (GCP_TEST_CCI_AUTHORIZED_VIEW_WRITES)",
+      "AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel": "Creating through an authorized view fails with BadRequest \"subject length must be at most 127\" on the testing project (cause not yet isolated). (GCP_TEST_CCI_AUTHORIZED_VIEW_WRITES)",
+      "AutoLabelingRule": "Needs Contact Center AI Insights features the testing project does not have enabled: create returns 404 NOT_FOUND \"Requested entity was not found.\" and list returns 400 INVALID_ARGUMENT. (GCP_TEST_CCAI_QUALITY)",
+      "ConversationsFeedbackLabel": "Feedback label create fails with BadRequest \"Request contains an invalid argument.\" on the testing project (cause not yet isolated). (GCP_TEST_CCI_FEEDBACK_LABELS)",
+      "Dashboard": "The testing project rejects every dashboard create with BadRequest (GCP_TEST_CCI_DASHBOARDS)",
+      "DashboardsChart": "The testing project rejects every dashboard create with BadRequest (GCP_TEST_CCI_DASHBOARDS)",
+      "DatasetsConversationsFeedbackLabel": "The fixture creates its dataset conversation with createProjectsLocationsConversations under a dataset parent, which the testing project answers with NotFound \"404\"; dataset conversations have (GCP_TEST_CCI_DATASETS)",
+      "IssueModel": "Needs a project with at least 100 analyzed conversations; otherwise create fails with BadRequest \"Project: `...` has too few conversations with the given filters. Current number: 0. Minimum requirement is: 100.\" (GCP_TEST_CCI_ISSUE_MODELS)",
+      "IssueModelsIssue": "Needs a project with at least 100 analyzed conversations; otherwise create fails with BadRequest \"Project: `...` has too few conversations with the given filters. Current number: 0. Minimum requirement is: 100.\" (GCP_TEST_CCI_ISSUE_MODELS)",
+      "QaScorecard": "Needs Contact Center AI Insights features the testing project does not have enabled: create succeeds but every PATCH returns 404 NOT_FOUND \"Requested entity was not found.\" (GCP_TEST_CCAI_QUALITY)",
+      "QaScorecardsRevision": "Needs Contact Center AI Insights features the testing project does not have enabled: the parent scorecard's PATCH returns 404 NOT_FOUND \"Requested entity was not found.\" (GCP_TEST_CCAI_QUALITY)",
+      "QaScorecardsRevisionsQaQuestion": "Needs Contact Center AI Insights features the testing project does not have enabled: the parent scorecard's PATCH returns 404 NOT_FOUND \"Requested entity was not found.\" (GCP_TEST_CCAI_QUALITY)"
+    }
   }
 }

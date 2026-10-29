@@ -31,6 +31,12 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "AssetsExportJob": "ProbeAssetsExportJob",
+      "Group": "ProbeGroup",
+      "PreferenceSet": "ProbePreferenceSet",
+      "Source": "ProbeSource"
+    },
+    "untestable": {}
   }
 }

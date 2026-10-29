@@ -67,207 +67,371 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ProjectsLocationsFolder", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeleteFolderTree (dataform.projects.locations.folders.deleteTree): ProjectsLocationsFolder: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "DeleteFolderTree (dataform.projects.locations.folders.deleteTree)",
+        () => probe("DeleteFolderTree", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetFolder (dataform.projects.locations.folders.get): ProjectsLocationsFolder: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetFolder (dataform.projects.locations.folders.get)",
+        () => probe("GetFolder", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "MoveFolder (dataform.projects.locations.folders.move): ProjectsLocationsFolder: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "MoveFolder (dataform.projects.locations.folders.move)",
+        () => probe("MoveFolder", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "QueryFolderContents (dataform.projects.locations.folders.queryFolderContents): ProjectsLocationsFolder: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "QueryFolderContents (dataform.projects.locations.folders.queryFolderContents)",
+        () => probe("QueryFolderContents", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("RepositoriesReleaseConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetReleaseConfig (dataform.projects.locations.repositories.releaseConfigs.get): RepositoriesReleaseConfig: no deployable fixture",
+      test.provider.todo(
+        "GetReleaseConfig (dataform.projects.locations.repositories.releaseConfigs.get): RepositoriesReleaseConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("RepositoriesWorkflowConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetWorkflowConfig (dataform.projects.locations.repositories.workflowConfigs.get): RepositoriesWorkflowConfig: no deployable fixture",
+      test.provider.todo(
+        "GetWorkflowConfig (dataform.projects.locations.repositories.workflowConfigs.get): RepositoriesWorkflowConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("RepositoriesWorkflowInvocation", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelWorkflowInvocation (dataform.projects.locations.repositories.workflowInvocations.cancel): RepositoriesWorkflowInvocation: no deployable fixture",
+      test.provider.todo(
+        "CancelWorkflowInvocation (dataform.projects.locations.repositories.workflowInvocations.cancel): RepositoriesWorkflowInvocation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetWorkflowInvocation (dataform.projects.locations.repositories.workflowInvocations.get): RepositoriesWorkflowInvocation: no deployable fixture",
+      test.provider.todo(
+        "GetWorkflowInvocation (dataform.projects.locations.repositories.workflowInvocations.get): RepositoriesWorkflowInvocation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "QueryWorkflowInvocation (dataform.projects.locations.repositories.workflowInvocations.query): RepositoriesWorkflowInvocation: no deployable fixture",
+      test.provider.todo(
+        "QueryWorkflowInvocation (dataform.projects.locations.repositories.workflowInvocations.query): RepositoriesWorkflowInvocation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("RepositoriesWorkspace", { concurrent: true }, () => {
-      test.provider.skip(
-        "CommitWorkspace (dataform.projects.locations.repositories.workspaces.commit): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "CommitWorkspace (dataform.projects.locations.repositories.workspaces.commit)",
+        () => probe("CommitWorkspace", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "FetchWorkspaceFileDiff (dataform.projects.locations.repositories.workspaces.fetchFileDiff): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "FetchWorkspaceFileDiff (dataform.projects.locations.repositories.workspaces.fetchFileDiff)",
+        () => probe("FetchWorkspaceFileDiff", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "FetchWorkspaceFileGitStatuses (dataform.projects.locations.repositories.workspaces.fetchFileGitStatuses): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "FetchWorkspaceFileGitStatuses (dataform.projects.locations.repositories.workspaces.fetchFileGitStatuses)",
+        () => probe("FetchWorkspaceFileGitStatuses", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "FetchWorkspaceGitAheadBehind (dataform.projects.locations.repositories.workspaces.fetchGitAheadBehind): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "FetchWorkspaceGitAheadBehind (dataform.projects.locations.repositories.workspaces.fetchGitAheadBehind)",
+        () => probe("FetchWorkspaceGitAheadBehind", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetWorkspace (dataform.projects.locations.repositories.workspaces.get): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetWorkspace (dataform.projects.locations.repositories.workspaces.get)",
+        () => probe("GetWorkspace", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "InstallWorkspaceNpmPackages (dataform.projects.locations.repositories.workspaces.installNpmPackages): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "InstallWorkspaceNpmPackages (dataform.projects.locations.repositories.workspaces.installNpmPackages)",
+        () => probe("InstallWorkspaceNpmPackages", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "MakeWorkspaceDirectory (dataform.projects.locations.repositories.workspaces.makeDirectory): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "MakeWorkspaceDirectory (dataform.projects.locations.repositories.workspaces.makeDirectory)",
+        () => probe("MakeWorkspaceDirectory", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "MoveWorkspaceDirectory (dataform.projects.locations.repositories.workspaces.moveDirectory): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "MoveWorkspaceDirectory (dataform.projects.locations.repositories.workspaces.moveDirectory)",
+        () => probe("MoveWorkspaceDirectory", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "MoveWorkspaceFile (dataform.projects.locations.repositories.workspaces.moveFile): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "MoveWorkspaceFile (dataform.projects.locations.repositories.workspaces.moveFile)",
+        () => probe("MoveWorkspaceFile", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PullWorkspace (dataform.projects.locations.repositories.workspaces.pull): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PullWorkspace (dataform.projects.locations.repositories.workspaces.pull)",
+        () => probe("PullWorkspace", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PushWorkspace (dataform.projects.locations.repositories.workspaces.push): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PushWorkspace (dataform.projects.locations.repositories.workspaces.push)",
+        () => probe("PushWorkspace", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "QueryWorkspaceDirectoryContents (dataform.projects.locations.repositories.workspaces.queryDirectoryContents): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "QueryWorkspaceDirectoryContents (dataform.projects.locations.repositories.workspaces.queryDirectoryContents)",
+        () => probe("QueryWorkspaceDirectoryContents", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ReadWorkspaceFile (dataform.projects.locations.repositories.workspaces.readFile): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ReadWorkspaceFile (dataform.projects.locations.repositories.workspaces.readFile)",
+        () => probe("ReadWorkspaceFile", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RemoveWorkspaceDirectory (dataform.projects.locations.repositories.workspaces.removeDirectory): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "RemoveWorkspaceDirectory (dataform.projects.locations.repositories.workspaces.removeDirectory)",
+        () => probe("RemoveWorkspaceDirectory", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RemoveWorkspaceFile (dataform.projects.locations.repositories.workspaces.removeFile): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "RemoveWorkspaceFile (dataform.projects.locations.repositories.workspaces.removeFile)",
+        () => probe("RemoveWorkspaceFile", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ResetWorkspace (dataform.projects.locations.repositories.workspaces.reset): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ResetWorkspace (dataform.projects.locations.repositories.workspaces.reset)",
+        () => probe("ResetWorkspace", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SearchWorkspaceFiles (dataform.projects.locations.repositories.workspaces.searchFiles): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "SearchWorkspaceFiles (dataform.projects.locations.repositories.workspaces.searchFiles)",
+        () => probe("SearchWorkspaceFiles", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "WriteWorkspaceFile (dataform.projects.locations.repositories.workspaces.writeFile): RepositoriesWorkspace: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "WriteWorkspaceFile (dataform.projects.locations.repositories.workspaces.writeFile)",
+        () => probe("WriteWorkspaceFile", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("Repository", { concurrent: true }, () => {
-      test.provider.skip(
-        "CommitRepository (dataform.projects.locations.repositories.commit): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "CommitRepository (dataform.projects.locations.repositories.commit)",
+        () => probe("CommitRepository", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ComputeRepositoryAccessTokenStatus (dataform.projects.locations.repositories.computeAccessTokenStatus): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ComputeRepositoryAccessTokenStatus (dataform.projects.locations.repositories.computeAccessTokenStatus)",
+        () => probe("ComputeRepositoryAccessTokenStatus", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "CreateRepositoryCompilationResult (dataform.projects.locations.repositories.compilationResults.create): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "CreateRepositoryCompilationResult (dataform.projects.locations.repositories.compilationResults.create)",
+        () => probe("CreateRepositoryCompilationResult", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "FetchRepositoryHistory (dataform.projects.locations.repositories.fetchHistory): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "FetchRepositoryHistory (dataform.projects.locations.repositories.fetchHistory)",
+        () => probe("FetchRepositoryHistory", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "FetchRepositoryRemoteBranches (dataform.projects.locations.repositories.fetchRemoteBranches): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "FetchRepositoryRemoteBranches (dataform.projects.locations.repositories.fetchRemoteBranches)",
+        () => probe("FetchRepositoryRemoteBranches", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetRepository (dataform.projects.locations.repositories.get): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetRepository (dataform.projects.locations.repositories.get)",
+        () => probe("GetRepository", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetRepositoryCompilationResult (dataform.projects.locations.repositories.compilationResults.get): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetRepositoryCompilationResult (dataform.projects.locations.repositories.compilationResults.get)",
+        () => probe("GetRepositoryCompilationResult", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListRepositoryCompilationResults (dataform.projects.locations.repositories.compilationResults.list): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListRepositoryCompilationResults (dataform.projects.locations.repositories.compilationResults.list)",
+        () => probe("ListRepositoryCompilationResults", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListRepositoryReleaseConfigs (dataform.projects.locations.repositories.releaseConfigs.list): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListRepositoryReleaseConfigs (dataform.projects.locations.repositories.releaseConfigs.list)",
+        () => probe("ListRepositoryReleaseConfigs", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListRepositoryWorkflowConfigs (dataform.projects.locations.repositories.workflowConfigs.list): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListRepositoryWorkflowConfigs (dataform.projects.locations.repositories.workflowConfigs.list)",
+        () => probe("ListRepositoryWorkflowConfigs", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListRepositoryWorkflowInvocations (dataform.projects.locations.repositories.workflowInvocations.list): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListRepositoryWorkflowInvocations (dataform.projects.locations.repositories.workflowInvocations.list)",
+        () => probe("ListRepositoryWorkflowInvocations", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListRepositoryWorkspaces (dataform.projects.locations.repositories.workspaces.list): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListRepositoryWorkspaces (dataform.projects.locations.repositories.workspaces.list)",
+        () => probe("ListRepositoryWorkspaces", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "MoveRepository (dataform.projects.locations.repositories.move): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "MoveRepository (dataform.projects.locations.repositories.move)",
+        () => probe("MoveRepository", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "QueryRepositoryCompilationResult (dataform.projects.locations.repositories.compilationResults.query): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "QueryRepositoryCompilationResult (dataform.projects.locations.repositories.compilationResults.query)",
+        () => probe("QueryRepositoryCompilationResult", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "QueryRepositoryDirectoryContents (dataform.projects.locations.repositories.queryDirectoryContents): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "QueryRepositoryDirectoryContents (dataform.projects.locations.repositories.queryDirectoryContents)",
+        () => probe("QueryRepositoryDirectoryContents", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ReadRepositoryFile (dataform.projects.locations.repositories.readFile): Repository: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ReadRepositoryFile (dataform.projects.locations.repositories.readFile)",
+        () => probe("ReadRepositoryFile", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("Team", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeleteTeamFolderTree (dataform.projects.locations.teamFolders.deleteTree): Team: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "DeleteTeamFolderTree (dataform.projects.locations.teamFolders.deleteTree)",
+        () => probe("DeleteTeamFolderTree", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetTeamFolder (dataform.projects.locations.teamFolders.get): Team: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetTeamFolder (dataform.projects.locations.teamFolders.get)",
+        () => probe("GetTeamFolder", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "QueryTeamFolderContents (dataform.projects.locations.teamFolders.queryContents): Team: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "QueryTeamFolderContents (dataform.projects.locations.teamFolders.queryContents)",
+        () => probe("QueryTeamFolderContents", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

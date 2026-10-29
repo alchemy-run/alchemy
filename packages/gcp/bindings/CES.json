@@ -28,6 +28,9 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "App": "ProbeApp"
+    },
+    "untestable": {}
   }
 }

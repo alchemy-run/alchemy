@@ -48,55 +48,75 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ActiveDirectory", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetActiveDirectory (netapp.projects.locations.activeDirectories.get): ActiveDirectory: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetActiveDirectory (netapp.projects.locations.activeDirectories.get)",
+        () => probe("GetActiveDirectory", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("BackupPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBackupPolicy (netapp.projects.locations.backupPolicies.get): BackupPolicy: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetBackupPolicy (netapp.projects.locations.backupPolicies.get)",
+        () => probe("GetBackupPolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("BackupVault", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBackupVault (netapp.projects.locations.backupVaults.get): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetBackupVault (netapp.projects.locations.backupVaults.get)",
+        () => probe("GetBackupVault", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListBackupVaultBackups (netapp.projects.locations.backupVaults.backups.list): BackupVault: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListBackupVaultBackups (netapp.projects.locations.backupVaults.backups.list)",
+        () => probe("ListBackupVaultBackups", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("BackupVaultsBackup", { concurrent: true }, () => {
       test.provider.skip(
-        "GetBackup (netapp.projects.locations.backupVaults.backups.get): BackupVaultsBackup: no deployable fixture",
+        "GetBackup (netapp.projects.locations.backupVaults.backups.get): BackupVaultsBackup: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
     });
 
     describe("HostGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetHostGroup (netapp.projects.locations.hostGroups.get): HostGroup: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetHostGroup (netapp.projects.locations.hostGroups.get)",
+        () => probe("GetHostGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("KmsConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "EncryptKmsConfig (netapp.projects.locations.kmsConfigs.encrypt): KmsConfig: no deployable fixture",
+      test.provider.todo(
+        "EncryptKmsConfig (netapp.projects.locations.kmsConfigs.encrypt): KmsConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetKmsConfig (netapp.projects.locations.kmsConfigs.get): KmsConfig: no deployable fixture",
+      test.provider.todo(
+        "GetKmsConfig (netapp.projects.locations.kmsConfigs.get): KmsConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "VerifyKmsConfig (netapp.projects.locations.kmsConfigs.verify): KmsConfig: no deployable fixture",
+      test.provider.todo(
+        "VerifyKmsConfig (netapp.projects.locations.kmsConfigs.verify): KmsConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -161,124 +181,164 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("StoragePool", { concurrent: true }, () => {
-      test.provider.skip(
-        "ExecuteOntapDelete (netapp.projects.locations.storagePools.ontap.executeOntapDelete): StoragePool: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ExecuteOntapDelete (netapp.projects.locations.storagePools.ontap.executeOntapDelete)",
+        () => probe("ExecuteOntapDelete", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ExecuteOntapGet (netapp.projects.locations.storagePools.ontap.executeOntapGet): StoragePool: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ExecuteOntapGet (netapp.projects.locations.storagePools.ontap.executeOntapGet)",
+        () => probe("ExecuteOntapGet", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ExecuteOntapPatch (netapp.projects.locations.storagePools.ontap.executeOntapPatch): StoragePool: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ExecuteOntapPatch (netapp.projects.locations.storagePools.ontap.executeOntapPatch)",
+        () => probe("ExecuteOntapPatch", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ExecuteOntapPost (netapp.projects.locations.storagePools.ontap.executeOntapPost): StoragePool: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ExecuteOntapPost (netapp.projects.locations.storagePools.ontap.executeOntapPost)",
+        () => probe("ExecuteOntapPost", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetStoragePool (netapp.projects.locations.storagePools.get): StoragePool: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetStoragePool (netapp.projects.locations.storagePools.get)",
+        () => probe("GetStoragePool", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListStoragePoolBackupConfigs (netapp.projects.locations.storagePools.backupConfigs.list): StoragePool: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListStoragePoolBackupConfigs (netapp.projects.locations.storagePools.backupConfigs.list)",
+        () => probe("ListStoragePoolBackupConfigs", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RestoreStoragePoolVolume (netapp.projects.locations.storagePools.restoreVolume): StoragePool: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "RestoreStoragePoolVolume (netapp.projects.locations.storagePools.restoreVolume)",
+        () => probe("RestoreStoragePoolVolume", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SwitchStoragePool (netapp.projects.locations.storagePools.switch): StoragePool: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "SwitchStoragePool (netapp.projects.locations.storagePools.switch)",
+        () => probe("SwitchStoragePool", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UpdateStoragePoolBackupConfig (netapp.projects.locations.storagePools.updateBackupConfig): StoragePool: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "UpdateStoragePoolBackupConfig (netapp.projects.locations.storagePools.updateBackupConfig)",
+        () => probe("UpdateStoragePoolBackupConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ValidateStoragePoolDirectoryService (netapp.projects.locations.storagePools.validateDirectoryService): StoragePool: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ValidateStoragePoolDirectoryService (netapp.projects.locations.storagePools.validateDirectoryService)",
+        () => probe("ValidateStoragePoolDirectoryService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("Volume", { concurrent: true }, () => {
       test.provider.skip(
-        "EstablishVolumePeering (netapp.projects.locations.volumes.establishPeering): Volume: no deployable fixture",
+        "EstablishVolumePeering (netapp.projects.locations.volumes.establishPeering): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetVolume (netapp.projects.locations.volumes.get): Volume: no deployable fixture",
+        "GetVolume (netapp.projects.locations.volumes.get): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetVolumeSplitStatus (netapp.projects.locations.volumes.getSplitStatus): Volume: no deployable fixture",
+        "GetVolumeSplitStatus (netapp.projects.locations.volumes.getSplitStatus): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListVolumeQuotaRules (netapp.projects.locations.volumes.quotaRules.list): Volume: no deployable fixture",
+        "ListVolumeQuotaRules (netapp.projects.locations.volumes.quotaRules.list): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListVolumeReplications (netapp.projects.locations.volumes.replications.list): Volume: no deployable fixture",
+        "ListVolumeReplications (netapp.projects.locations.volumes.replications.list): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListVolumeSnapshots (netapp.projects.locations.volumes.snapshots.list): Volume: no deployable fixture",
+        "ListVolumeSnapshots (netapp.projects.locations.volumes.snapshots.list): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
       test.provider.skip(
-        "RestoreVolume (netapp.projects.locations.volumes.restore): Volume: no deployable fixture",
+        "RestoreVolume (netapp.projects.locations.volumes.restore): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
       test.provider.skip(
-        "RevertVolume (netapp.projects.locations.volumes.revert): Volume: no deployable fixture",
+        "RevertVolume (netapp.projects.locations.volumes.revert): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
       test.provider.skip(
-        "StartVolumeSplit (netapp.projects.locations.volumes.startSplit): Volume: no deployable fixture",
+        "StartVolumeSplit (netapp.projects.locations.volumes.startSplit): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
     });
 
     describe("VolumesQuotaRule", { concurrent: true }, () => {
       test.provider.skip(
-        "GetQuotaRule (netapp.projects.locations.volumes.quotaRules.get): VolumesQuotaRule: no deployable fixture",
+        "GetQuotaRule (netapp.projects.locations.volumes.quotaRules.get): VolumesQuotaRule: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
     });
 
     describe("VolumesReplication", { concurrent: true }, () => {
       test.provider.skip(
-        "EstablishReplicationPeering (netapp.projects.locations.volumes.replications.establishPeering): VolumesReplication: no deployable fixture",
+        "EstablishReplicationPeering (netapp.projects.locations.volumes.replications.establishPeering): VolumesReplication: Two pools + volume + replication: skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetReplication (netapp.projects.locations.volumes.replications.get): VolumesReplication: no deployable fixture",
+        "GetReplication (netapp.projects.locations.volumes.replications.get): VolumesReplication: Two pools + volume + replication: skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ResumeReplication (netapp.projects.locations.volumes.replications.resume): VolumesReplication: no deployable fixture",
+        "ResumeReplication (netapp.projects.locations.volumes.replications.resume): VolumesReplication: Two pools + volume + replication: skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ReverseReplicationDirection (netapp.projects.locations.volumes.replications.reverseDirection): VolumesReplication: no deployable fixture",
+        "ReverseReplicationDirection (netapp.projects.locations.volumes.replications.reverseDirection): VolumesReplication: Two pools + volume + replication: skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
       test.provider.skip(
-        "StopReplication (netapp.projects.locations.volumes.replications.stop): VolumesReplication: no deployable fixture",
+        "StopReplication (netapp.projects.locations.volumes.replications.stop): VolumesReplication: Two pools + volume + replication: skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SyncReplication (netapp.projects.locations.volumes.replications.sync): VolumesReplication: no deployable fixture",
+        "SyncReplication (netapp.projects.locations.volumes.replications.sync): VolumesReplication: Two pools + volume + replication: skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
     });
 
     describe("VolumesSnapshot", { concurrent: true }, () => {
       test.provider.skip(
-        "GetSnapshot (netapp.projects.locations.volumes.snapshots.get): VolumesSnapshot: no deployable fixture",
+        "GetSnapshot (netapp.projects.locations.volumes.snapshots.get): VolumesSnapshot: Pool + volume provisioning is multi-minute; skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails… (GCP_TEST_NETAPP_VOLUMES)",
         () => Effect.void,
       );
     });

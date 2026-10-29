@@ -147,50 +147,50 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Release", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetRelease (saasservicemgmt.projects.locations.releases.get): Release: no deployable fixture",
+      test.provider.todo(
+        "GetRelease (saasservicemgmt.projects.locations.releases.get): Release: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Rollout", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetRollout (saasservicemgmt.projects.locations.rollouts.get): Rollout: no deployable fixture",
+      test.provider.todo(
+        "GetRollout (saasservicemgmt.projects.locations.rollouts.get): Rollout: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("RolloutKind", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetRolloutKind (saasservicemgmt.projects.locations.rolloutKinds.get): RolloutKind: no deployable fixture",
+      test.provider.todo(
+        "GetRolloutKind (saasservicemgmt.projects.locations.rolloutKinds.get): RolloutKind: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Saa", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSaa (saasservicemgmt.projects.locations.saas.get): Saa: no deployable fixture",
+      test.provider.todo(
+        "GetSaa (saasservicemgmt.projects.locations.saas.get): Saa: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Tenant", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTenant (saasservicemgmt.projects.locations.tenants.get): Tenant: no deployable fixture",
+      test.provider.todo(
+        "GetTenant (saasservicemgmt.projects.locations.tenants.get): Tenant: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Unit", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetUnit (saasservicemgmt.projects.locations.units.get): Unit: no deployable fixture",
+      test.provider.todo(
+        "GetUnit (saasservicemgmt.projects.locations.units.get): Unit: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("UnitKind", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetUnitKind (saasservicemgmt.projects.locations.unitKinds.get): UnitKind: no deployable fixture",
+      test.provider.todo(
+        "GetUnitKind (saasservicemgmt.projects.locations.unitKinds.get): UnitKind: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

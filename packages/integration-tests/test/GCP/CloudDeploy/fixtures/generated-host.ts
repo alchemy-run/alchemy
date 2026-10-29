@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeCustomTargetType } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated CloudDeploy binding as its own
@@ -15,22 +16,25 @@ export default class CloudDeployGeneratedHost extends GCP.Function<CloudDeployGe
   "CloudDeployGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.CloudDeploy.ListCustomTargetTypes();
-    const p1 = yield* GCP.CloudDeploy.ListDeliveryPipelines();
-    const p2 = yield* GCP.CloudDeploy.ListDeployPolicies();
-    const p3 = yield* GCP.CloudDeploy.ListTargets();
+    const p0 = yield* GCP.CloudDeploy.GetCustomTargetType(ProbeCustomTargetType);
+    const p1 = yield* GCP.CloudDeploy.ListCustomTargetTypes();
+    const p2 = yield* GCP.CloudDeploy.ListDeliveryPipelines();
+    const p3 = yield* GCP.CloudDeploy.ListDeployPolicies();
+    const p4 = yield* GCP.CloudDeploy.ListTargets();
     return {
       fetch: serveProbes({
-        ListCustomTargetTypes: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListDeliveryPipelines: outcome(Retry.none(p1({ location: "us-central1" } as never))),
-        ListDeployPolicies: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListTargets: outcome(Retry.none(p3({ location: "us-central1" } as never))),
+        GetCustomTargetType: outcome(Retry.none(p0({} as never))),
+        ListCustomTargetTypes: outcome(Retry.none(p1({ location: "us-central1" } as never))),
+        ListDeliveryPipelines: outcome(Retry.none(p2({ location: "us-central1" } as never))),
+        ListDeployPolicies: outcome(Retry.none(p3({ location: "us-central1" } as never))),
+        ListTargets: outcome(Retry.none(p4({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.CloudDeploy.GetCustomTargetTypeHttp,
           GCP.CloudDeploy.ListCustomTargetTypesHttp,
           GCP.CloudDeploy.ListDeliveryPipelinesHttp,
           GCP.CloudDeploy.ListDeployPoliciesHttp,

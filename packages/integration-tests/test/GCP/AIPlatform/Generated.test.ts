@@ -48,59 +48,59 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Agent", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAgent (aiplatform.projects.locations.agents.get): Agent: no deployable fixture",
+      test.provider.todo(
+        "GetAgent (aiplatform.projects.locations.agents.get): Agent: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("BatchPredictionJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelBatchPredictionJob (aiplatform.projects.locations.batchPredictionJobs.cancel): BatchPredictionJob: no deployable fixture",
+      test.provider.todo(
+        "CancelBatchPredictionJob (aiplatform.projects.locations.batchPredictionJobs.cancel): BatchPredictionJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetBatchPredictionJob (aiplatform.projects.locations.batchPredictionJobs.get): BatchPredictionJob: no deployable fixture",
+      test.provider.todo(
+        "GetBatchPredictionJob (aiplatform.projects.locations.batchPredictionJobs.get): BatchPredictionJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("CachedContent", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetCachedContent (aiplatform.projects.locations.cachedContents.get): CachedContent: no deployable fixture",
+      test.provider.todo(
+        "GetCachedContent (aiplatform.projects.locations.cachedContents.get): CachedContent: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("CustomJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelCustomJob (aiplatform.projects.locations.customJobs.cancel): CustomJob: no deployable fixture",
+      test.provider.todo(
+        "CancelCustomJob (aiplatform.projects.locations.customJobs.cancel): CustomJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetCustomJob (aiplatform.projects.locations.customJobs.get): CustomJob: no deployable fixture",
+      test.provider.todo(
+        "GetCustomJob (aiplatform.projects.locations.customJobs.get): CustomJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DataLabelingJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelDataLabelingJob (aiplatform.projects.locations.dataLabelingJobs.cancel): DataLabelingJob: no deployable fixture",
+      test.provider.todo(
+        "CancelDataLabelingJob (aiplatform.projects.locations.dataLabelingJobs.cancel): DataLabelingJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetDataLabelingJob (aiplatform.projects.locations.dataLabelingJobs.get): DataLabelingJob: no deployable fixture",
+      test.provider.todo(
+        "GetDataLabelingJob (aiplatform.projects.locations.dataLabelingJobs.get): DataLabelingJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DeploymentResourcePool", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDeploymentResourcePool (aiplatform.projects.locations.deploymentResourcePools.get): DeploymentResourcePool: no deployable fixture",
+      test.provider.todo(
+        "GetDeploymentResourcePool (aiplatform.projects.locations.deploymentResourcePools.get): DeploymentResourcePool: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "QueryDeploymentResourcePoolDeployedModels (aiplatform.projects.locations.deploymentResourcePools.queryDeployedModels): DeploymentResourcePool: no deployable fixture",
+      test.provider.todo(
+        "QueryDeploymentResourcePoolDeployedModels (aiplatform.projects.locations.deploymentResourcePools.queryDeployedModels): DeploymentResourcePool: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -285,19 +285,19 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("EvaluationItem", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEvaluationItem (aiplatform.projects.locations.evaluationItems.get): EvaluationItem: no deployable fixture",
+      test.provider.todo(
+        "GetEvaluationItem (aiplatform.projects.locations.evaluationItems.get): EvaluationItem: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("EvaluationRun", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelEvaluationRun (aiplatform.projects.locations.evaluationRuns.cancel): EvaluationRun: no deployable fixture",
+      test.provider.todo(
+        "CancelEvaluationRun (aiplatform.projects.locations.evaluationRuns.cancel): EvaluationRun: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetEvaluationRun (aiplatform.projects.locations.evaluationRuns.get): EvaluationRun: no deployable fixture",
+      test.provider.todo(
+        "GetEvaluationRun (aiplatform.projects.locations.evaluationRuns.get): EvaluationRun: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -314,156 +314,156 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("FeatureGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "BatchFeatureCreate@FeatureGroup (aiplatform.projects.locations.featureGroups.features.batchCreate): FeatureGroup: no deployable fixture",
+      test.provider.todo(
+        "BatchFeatureCreate@FeatureGroup (aiplatform.projects.locations.featureGroups.features.batchCreate): FeatureGroup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetFeatureGroup (aiplatform.projects.locations.featureGroups.get): FeatureGroup: no deployable fixture",
+      test.provider.todo(
+        "GetFeatureGroup (aiplatform.projects.locations.featureGroups.get): FeatureGroup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListFeatureGroupFeatures (aiplatform.projects.locations.featureGroups.features.list): FeatureGroup: no deployable fixture",
+      test.provider.todo(
+        "ListFeatureGroupFeatures (aiplatform.projects.locations.featureGroups.features.list): FeatureGroup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("FeatureGroupsFeature", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetFeature@FeatureGroupsFeature (aiplatform.projects.locations.featureGroups.features.get): FeatureGroupsFeature: no deployable fixture",
+      test.provider.todo(
+        "GetFeature@FeatureGroupsFeature (aiplatform.projects.locations.featureGroups.features.get): FeatureGroupsFeature: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("FeatureOnlineStore", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetFeatureOnlineStore (aiplatform.projects.locations.featureOnlineStores.get): FeatureOnlineStore: no deployable fixture",
+      test.provider.todo(
+        "GetFeatureOnlineStore (aiplatform.projects.locations.featureOnlineStores.get): FeatureOnlineStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListFeatureOnlineStoreFeatureViews (aiplatform.projects.locations.featureOnlineStores.featureViews.list): FeatureOnlineStore: no deployable fixture",
+      test.provider.todo(
+        "ListFeatureOnlineStoreFeatureViews (aiplatform.projects.locations.featureOnlineStores.featureViews.list): FeatureOnlineStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("FeatureOnlineStoresFeatureView", { concurrent: true }, () => {
-      test.provider.skip(
-        "DirectFeatureViewWrite (aiplatform.projects.locations.featureOnlineStores.featureViews.directWrite): FeatureOnlineStoresFeatureView: no deployable fixture",
+      test.provider.todo(
+        "DirectFeatureViewWrite (aiplatform.projects.locations.featureOnlineStores.featureViews.directWrite): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "FetchFeatureViewFeatureValues (aiplatform.projects.locations.featureOnlineStores.featureViews.fetchFeatureValues): FeatureOnlineStoresFeatureView: no deployable fixture",
+      test.provider.todo(
+        "FetchFeatureViewFeatureValues (aiplatform.projects.locations.featureOnlineStores.featureViews.fetchFeatureValues): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GenerateFeatureViewFetchAccessToken (aiplatform.projects.locations.featureOnlineStores.featureViews.generateFetchAccessToken): FeatureOnlineStoresFeatureView: no deployable fixture",
+      test.provider.todo(
+        "GenerateFeatureViewFetchAccessToken (aiplatform.projects.locations.featureOnlineStores.featureViews.generateFetchAccessToken): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetFeatureView (aiplatform.projects.locations.featureOnlineStores.featureViews.get): FeatureOnlineStoresFeatureView: no deployable fixture",
+      test.provider.todo(
+        "GetFeatureView (aiplatform.projects.locations.featureOnlineStores.featureViews.get): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetFeatureViewSync (aiplatform.projects.locations.featureOnlineStores.featureViews.featureViewSyncs.get): FeatureOnlineStoresFeatureView: no deployable fixture",
+      test.provider.todo(
+        "GetFeatureViewSync (aiplatform.projects.locations.featureOnlineStores.featureViews.featureViewSyncs.get): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListFeatureViewSyncs (aiplatform.projects.locations.featureOnlineStores.featureViews.featureViewSyncs.list): FeatureOnlineStoresFeatureView: no deployable fixture",
+      test.provider.todo(
+        "ListFeatureViewSyncs (aiplatform.projects.locations.featureOnlineStores.featureViews.featureViewSyncs.list): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchFeatureViewNearestEntities (aiplatform.projects.locations.featureOnlineStores.featureViews.searchNearestEntities): FeatureOnlineStoresFeatureView: no deployable fixture",
+      test.provider.todo(
+        "SearchFeatureViewNearestEntities (aiplatform.projects.locations.featureOnlineStores.featureViews.searchNearestEntities): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SyncFeatureView (aiplatform.projects.locations.featureOnlineStores.featureViews.sync): FeatureOnlineStoresFeatureView: no deployable fixture",
+      test.provider.todo(
+        "SyncFeatureView (aiplatform.projects.locations.featureOnlineStores.featureViews.sync): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Featurestore", { concurrent: true }, () => {
-      test.provider.skip(
-        "BatchFeaturestoreReadFeatureValues (aiplatform.projects.locations.featurestores.batchReadFeatureValues): Featurestore: no deployable fixture",
+      test.provider.todo(
+        "BatchFeaturestoreReadFeatureValues (aiplatform.projects.locations.featurestores.batchReadFeatureValues): Featurestore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetFeaturestore (aiplatform.projects.locations.featurestores.get): Featurestore: no deployable fixture",
+      test.provider.todo(
+        "GetFeaturestore (aiplatform.projects.locations.featurestores.get): Featurestore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListFeaturestoreEntityTypes (aiplatform.projects.locations.featurestores.entityTypes.list): Featurestore: no deployable fixture",
+      test.provider.todo(
+        "ListFeaturestoreEntityTypes (aiplatform.projects.locations.featurestores.entityTypes.list): Featurestore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("FeaturestoresEntityType", { concurrent: true }, () => {
-      test.provider.skip(
-        "BatchFeatureCreate@FeaturestoresEntityType (aiplatform.projects.locations.featurestores.entityTypes.features.batchCreate): FeaturestoresEntityType: no deployable fixture",
+      test.provider.todo(
+        "BatchFeatureCreate@FeaturestoresEntityType (aiplatform.projects.locations.featurestores.entityTypes.features.batchCreate): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "DeleteEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.deleteFeatureValues): FeaturestoresEntityType: no deployable fixture",
+      test.provider.todo(
+        "DeleteEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.deleteFeatureValues): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ExportEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.exportFeatureValues): FeaturestoresEntityType: no deployable fixture",
+      test.provider.todo(
+        "ExportEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.exportFeatureValues): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetEntityType (aiplatform.projects.locations.featurestores.entityTypes.get): FeaturestoresEntityType: no deployable fixture",
+      test.provider.todo(
+        "GetEntityType (aiplatform.projects.locations.featurestores.entityTypes.get): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ImportEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.importFeatureValues): FeaturestoresEntityType: no deployable fixture",
+      test.provider.todo(
+        "ImportEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.importFeatureValues): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListEntityTypeFeatures (aiplatform.projects.locations.featurestores.entityTypes.features.list): FeaturestoresEntityType: no deployable fixture",
+      test.provider.todo(
+        "ListEntityTypeFeatures (aiplatform.projects.locations.featurestores.entityTypes.features.list): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ReadEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.readFeatureValues): FeaturestoresEntityType: no deployable fixture",
+      test.provider.todo(
+        "ReadEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.readFeatureValues): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StreamingEntityTypeReadFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.streamingReadFeatureValues): FeaturestoresEntityType: no deployable fixture",
+      test.provider.todo(
+        "StreamingEntityTypeReadFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.streamingReadFeatureValues): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "WriteEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.writeFeatureValues): FeaturestoresEntityType: no deployable fixture",
+      test.provider.todo(
+        "WriteEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.writeFeatureValues): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("FeaturestoresEntityTypesFeature", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetFeature@FeaturestoresEntityTypesFeature (aiplatform.projects.locations.featurestores.entityTypes.features.get): FeaturestoresEntityTypesFeature: no deployable fixture",
+      test.provider.todo(
+        "GetFeature@FeaturestoresEntityTypesFeature (aiplatform.projects.locations.featurestores.entityTypes.features.get): FeaturestoresEntityTypesFeature: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("HyperparameterTuningJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelHyperparameterTuningJob (aiplatform.projects.locations.hyperparameterTuningJobs.cancel): HyperparameterTuningJob: no deployable fixture",
+      test.provider.todo(
+        "CancelHyperparameterTuningJob (aiplatform.projects.locations.hyperparameterTuningJobs.cancel): HyperparameterTuningJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetHyperparameterTuningJob (aiplatform.projects.locations.hyperparameterTuningJobs.get): HyperparameterTuningJob: no deployable fixture",
+      test.provider.todo(
+        "GetHyperparameterTuningJob (aiplatform.projects.locations.hyperparameterTuningJobs.get): HyperparameterTuningJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Index", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetIndex (aiplatform.projects.locations.indexes.get): Index: no deployable fixture",
+      test.provider.todo(
+        "GetIndex (aiplatform.projects.locations.indexes.get): Index: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RemoveIndexDatapoints (aiplatform.projects.locations.indexes.removeDatapoints): Index: no deployable fixture",
+      test.provider.todo(
+        "RemoveIndexDatapoints (aiplatform.projects.locations.indexes.removeDatapoints): Index: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "UpsertIndexDatapoints (aiplatform.projects.locations.indexes.upsertDatapoints): Index: no deployable fixture",
+      test.provider.todo(
+        "UpsertIndexDatapoints (aiplatform.projects.locations.indexes.upsertDatapoints): Index: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -692,46 +692,46 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ModelDeploymentMonitoringJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.get): ModelDeploymentMonitoringJob: no deployable fixture",
+      test.provider.todo(
+        "GetModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.get): ModelDeploymentMonitoringJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "PauseModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.pause): ModelDeploymentMonitoringJob: no deployable fixture",
+      test.provider.todo(
+        "PauseModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.pause): ModelDeploymentMonitoringJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ResumeModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.resume): ModelDeploymentMonitoringJob: no deployable fixture",
+      test.provider.todo(
+        "ResumeModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.resume): ModelDeploymentMonitoringJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchModelDeploymentMonitoringJobModelDeploymentMonitoringStatsAnomalies (aiplatform.projects.locations.modelDeploymentMonitoringJobs.searchModelDeploymentMonitoringStatsAnomalies): ModelDeploymentMonitoringJob: no deployable fixture",
+      test.provider.todo(
+        "SearchModelDeploymentMonitoringJobModelDeploymentMonitoringStatsAnomalies (aiplatform.projects.locations.modelDeploymentMonitoringJobs.searchModelDeploymentMonitoringStatsAnomalies): ModelDeploymentMonitoringJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("NasJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelNasJob (aiplatform.projects.locations.nasJobs.cancel): NasJob: no deployable fixture",
+      test.provider.todo(
+        "CancelNasJob (aiplatform.projects.locations.nasJobs.cancel): NasJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetNasJob (aiplatform.projects.locations.nasJobs.get): NasJob: no deployable fixture",
+      test.provider.todo(
+        "GetNasJob (aiplatform.projects.locations.nasJobs.get): NasJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetNasJobNasTrialDetail (aiplatform.projects.locations.nasJobs.nasTrialDetails.get): NasJob: no deployable fixture",
+      test.provider.todo(
+        "GetNasJobNasTrialDetail (aiplatform.projects.locations.nasJobs.nasTrialDetails.get): NasJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListNasJobNasTrialDetails (aiplatform.projects.locations.nasJobs.nasTrialDetails.list): NasJob: no deployable fixture",
+      test.provider.todo(
+        "ListNasJobNasTrialDetails (aiplatform.projects.locations.nasJobs.nasTrialDetails.list): NasJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("NotebookExecutionJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetNotebookExecutionJob (aiplatform.projects.locations.notebookExecutionJobs.get): NotebookExecutionJob: no deployable fixture",
+      test.provider.todo(
+        "GetNotebookExecutionJob (aiplatform.projects.locations.notebookExecutionJobs.get): NotebookExecutionJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -748,34 +748,34 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("OnlineEvaluator", { concurrent: true }, () => {
-      test.provider.skip(
-        "ActivateOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.activate): OnlineEvaluator: no deployable fixture",
+      test.provider.todo(
+        "ActivateOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.activate): OnlineEvaluator: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.get): OnlineEvaluator: no deployable fixture",
+      test.provider.todo(
+        "GetOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.get): OnlineEvaluator: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SuspendOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.suspend): OnlineEvaluator: no deployable fixture",
+      test.provider.todo(
+        "SuspendOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.suspend): OnlineEvaluator: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("PersistentResource", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPersistentResource (aiplatform.projects.locations.persistentResources.get): PersistentResource: no deployable fixture",
+      test.provider.todo(
+        "GetPersistentResource (aiplatform.projects.locations.persistentResources.get): PersistentResource: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("PipelineJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelPipelineJob (aiplatform.projects.locations.pipelineJobs.cancel): PipelineJob: no deployable fixture",
+      test.provider.todo(
+        "CancelPipelineJob (aiplatform.projects.locations.pipelineJobs.cancel): PipelineJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetPipelineJob (aiplatform.projects.locations.pipelineJobs.get): PipelineJob: no deployable fixture",
+      test.provider.todo(
+        "GetPipelineJob (aiplatform.projects.locations.pipelineJobs.get): PipelineJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -1640,24 +1640,24 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("RagCorpora", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeleteRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.delete): RagCorpora: no deployable fixture",
+      test.provider.todo(
+        "DeleteRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.delete): RagCorpora: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetRagCorpora (aiplatform.projects.locations.ragCorpora.get): RagCorpora: no deployable fixture",
+      test.provider.todo(
+        "GetRagCorpora (aiplatform.projects.locations.ragCorpora.get): RagCorpora: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.get): RagCorpora: no deployable fixture",
+      test.provider.todo(
+        "GetRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.get): RagCorpora: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ImportRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.import): RagCorpora: no deployable fixture",
+      test.provider.todo(
+        "ImportRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.import): RagCorpora: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListRagCorporaRagFiles (aiplatform.projects.locations.ragCorpora.ragFiles.list): RagCorpora: no deployable fixture",
+      test.provider.todo(
+        "ListRagCorporaRagFiles (aiplatform.projects.locations.ragCorpora.ragFiles.list): RagCorpora: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -1858,20 +1858,20 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ReasoningEnginesMemory", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetMemory (aiplatform.projects.locations.reasoningEngines.memories.get): ReasoningEnginesMemory: no deployable fixture",
+      test.provider.todo(
+        "GetMemory (aiplatform.projects.locations.reasoningEngines.memories.get): ReasoningEnginesMemory: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetMemoryRevision (aiplatform.projects.locations.reasoningEngines.memories.revisions.get): ReasoningEnginesMemory: no deployable fixture",
+      test.provider.todo(
+        "GetMemoryRevision (aiplatform.projects.locations.reasoningEngines.memories.revisions.get): ReasoningEnginesMemory: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListMemoryRevisions (aiplatform.projects.locations.reasoningEngines.memories.revisions.list): ReasoningEnginesMemory: no deployable fixture",
+      test.provider.todo(
+        "ListMemoryRevisions (aiplatform.projects.locations.reasoningEngines.memories.revisions.list): ReasoningEnginesMemory: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RollbackMemory (aiplatform.projects.locations.reasoningEngines.memories.rollback): ReasoningEnginesMemory: no deployable fixture",
+      test.provider.todo(
+        "RollbackMemory (aiplatform.projects.locations.reasoningEngines.memories.rollback): ReasoningEnginesMemory: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -1939,53 +1939,53 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Schedule", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSchedule (aiplatform.projects.locations.schedules.get): Schedule: no deployable fixture",
+      test.provider.todo(
+        "GetSchedule (aiplatform.projects.locations.schedules.get): Schedule: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "PauseSchedule (aiplatform.projects.locations.schedules.pause): Schedule: no deployable fixture",
+      test.provider.todo(
+        "PauseSchedule (aiplatform.projects.locations.schedules.pause): Schedule: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ResumeSchedule (aiplatform.projects.locations.schedules.resume): Schedule: no deployable fixture",
+      test.provider.todo(
+        "ResumeSchedule (aiplatform.projects.locations.schedules.resume): Schedule: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("SemanticGovernancePolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSemanticGovernancePolicy (aiplatform.projects.locations.semanticGovernancePolicies.get): SemanticGovernancePolicy: no deployable fixture",
+      test.provider.todo(
+        "GetSemanticGovernancePolicy (aiplatform.projects.locations.semanticGovernancePolicies.get): SemanticGovernancePolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("SpecialistPool", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSpecialistPool (aiplatform.projects.locations.specialistPools.get): SpecialistPool: no deployable fixture",
+      test.provider.todo(
+        "GetSpecialistPool (aiplatform.projects.locations.specialistPools.get): SpecialistPool: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("StudiesTrial", { concurrent: true }, () => {
-      test.provider.skip(
-        "AddTrialMeasurement (aiplatform.projects.locations.studies.trials.addTrialMeasurement): StudiesTrial: no deployable fixture",
+      test.provider.todo(
+        "AddTrialMeasurement (aiplatform.projects.locations.studies.trials.addTrialMeasurement): StudiesTrial: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CheckTrialEarlyStoppingState (aiplatform.projects.locations.studies.trials.checkTrialEarlyStoppingState): StudiesTrial: no deployable fixture",
+      test.provider.todo(
+        "CheckTrialEarlyStoppingState (aiplatform.projects.locations.studies.trials.checkTrialEarlyStoppingState): StudiesTrial: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CompleteTrial (aiplatform.projects.locations.studies.trials.complete): StudiesTrial: no deployable fixture",
+      test.provider.todo(
+        "CompleteTrial (aiplatform.projects.locations.studies.trials.complete): StudiesTrial: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetTrial (aiplatform.projects.locations.studies.trials.get): StudiesTrial: no deployable fixture",
+      test.provider.todo(
+        "GetTrial (aiplatform.projects.locations.studies.trials.get): StudiesTrial: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StopTrial (aiplatform.projects.locations.studies.trials.stop): StudiesTrial: no deployable fixture",
+      test.provider.todo(
+        "StopTrial (aiplatform.projects.locations.studies.trials.stop): StudiesTrial: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -2139,31 +2139,31 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("TensorboardsExperimentsRunsTimeSeries", { concurrent: true }, () => {
-      test.provider.skip(
-        "ExportTimeSeryTensorboardTimeSeries (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.exportTensorboardTimeSeries): TensorboardsExperimentsRunsTimeSeries: no deployable fixture",
+      test.provider.todo(
+        "ExportTimeSeryTensorboardTimeSeries (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.exportTensorboardTimeSeries): TensorboardsExperimentsRunsTimeSeries: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetTimeSery (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.get): TensorboardsExperimentsRunsTimeSeries: no deployable fixture",
+      test.provider.todo(
+        "GetTimeSery (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.get): TensorboardsExperimentsRunsTimeSeries: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ReadTimeSery (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.read): TensorboardsExperimentsRunsTimeSeries: no deployable fixture",
+      test.provider.todo(
+        "ReadTimeSery (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.read): TensorboardsExperimentsRunsTimeSeries: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ReadTimeSeryBlobData (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.readBlobData): TensorboardsExperimentsRunsTimeSeries: no deployable fixture",
+      test.provider.todo(
+        "ReadTimeSeryBlobData (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.readBlobData): TensorboardsExperimentsRunsTimeSeries: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("TuningJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelTuningJob (aiplatform.projects.locations.tuningJobs.cancel): TuningJob: no deployable fixture",
+      test.provider.todo(
+        "CancelTuningJob (aiplatform.projects.locations.tuningJobs.cancel): TuningJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetTuningJob (aiplatform.projects.locations.tuningJobs.get): TuningJob: no deployable fixture",
+      test.provider.todo(
+        "GetTuningJob (aiplatform.projects.locations.tuningJobs.get): TuningJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

@@ -25,6 +25,13 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "Group": "ProbeGroup",
+      "MetricDescriptor": "ProbeMetricDescriptor",
+      "NotificationChannel": "ProbeNotificationChannel",
+      "Service": "ProbeService",
+      "UptimeCheckConfig": "ProbeUptimeCheckConfig"
+    },
+    "untestable": {}
   }
 }

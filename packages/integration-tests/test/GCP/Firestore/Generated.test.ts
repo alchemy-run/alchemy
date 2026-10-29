@@ -27,6 +27,7 @@ const probe = (name: string, expectSuccess: boolean) =>
   });
 
 // Deploys one of every bindable resource: slow, so `--fast` skips it.
+// Resource-bound bindings run live in Bindings.test.ts.
 describe.skipIf(!!process.env.FAST)(
   "Firestore generated bindings",
   { tags: ["provider:gcp", "provider:gcp:firestore", "live"], concurrent: true },
@@ -46,141 +47,6 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
-
-    describe("Database", { concurrent: true }, () => {
-      test.provider.skip(
-        "BatchGetDocuments (firestore.projects.databases.documents.batchGet): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "BatchWriteDocuments (firestore.projects.databases.documents.batchWrite): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "BeginTransaction (firestore.projects.databases.documents.beginTransaction): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "BulkDeleteDocuments (firestore.projects.databases.bulkDeleteDocuments): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "Commit (firestore.projects.databases.documents.commit): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "CreateDatabaseBackupSchedule (firestore.projects.databases.backupSchedules.create): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "CreateDatabaseCollectionGroupIndex (firestore.projects.databases.collectionGroups.indexes.create): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "CreateDatabaseUserCred (firestore.projects.databases.userCreds.create): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "DeleteDatabaseBackupSchedule (firestore.projects.databases.backupSchedules.delete): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "DeleteDatabaseCollectionGroupIndex (firestore.projects.databases.collectionGroups.indexes.delete): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "DeleteDatabaseUserCred (firestore.projects.databases.userCreds.delete): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "DisableDatabaseUserCred (firestore.projects.databases.userCreds.disable): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "EnableDatabaseUserCred (firestore.projects.databases.userCreds.enable): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ExecutePipeline (firestore.projects.databases.documents.executePipeline): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ExportDocuments (firestore.projects.databases.exportDocuments): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetDatabase (firestore.projects.databases.get): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetDatabaseBackupSchedule (firestore.projects.databases.backupSchedules.get): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetDatabaseCollectionGroupField (firestore.projects.databases.collectionGroups.fields.get): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetDatabaseCollectionGroupIndex (firestore.projects.databases.collectionGroups.indexes.get): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetDatabaseUserCred (firestore.projects.databases.userCreds.get): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ImportDocuments (firestore.projects.databases.importDocuments): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListCollectionIds (firestore.projects.databases.documents.listCollectionIds): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListDatabaseBackupSchedules (firestore.projects.databases.backupSchedules.list): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListDatabaseCollectionGroupFields (firestore.projects.databases.collectionGroups.fields.list): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListDatabaseCollectionGroupIndexes (firestore.projects.databases.collectionGroups.indexes.list): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListDatabaseUserCreds (firestore.projects.databases.userCreds.list): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListDocuments (firestore.projects.databases.documents.listDocuments): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "PartitionQuery (firestore.projects.databases.documents.partitionQuery): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "PatchDatabaseBackupSchedule (firestore.projects.databases.backupSchedules.patch): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "PatchDatabaseCollectionGroupField (firestore.projects.databases.collectionGroups.fields.patch): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ResetUserCredPassword (firestore.projects.databases.userCreds.resetPassword): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "Rollback (firestore.projects.databases.documents.rollback): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RunAggregationQuery (firestore.projects.databases.documents.runAggregationQuery): Database: no deployable fixture",
-        () => Effect.void,
-      );
-    });
 
     describe("project", { concurrent: true }, () => {
       test.provider(

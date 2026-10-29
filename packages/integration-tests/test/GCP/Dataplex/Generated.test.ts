@@ -48,217 +48,269 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AspectType", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAspectType (dataplex.projects.locations.aspectTypes.get): AspectType: no deployable fixture",
+      test.provider.todo(
+        "GetAspectType (dataplex.projects.locations.aspectTypes.get): AspectType: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DataDomain", { concurrent: true }, () => {
       test.provider.skip(
-        "GetDataDomain (dataplex.projects.locations.dataDomains.get): DataDomain: no deployable fixture",
+        "GetDataDomain (dataplex.projects.locations.dataDomains.get): DataDomain: Data domains are allowlisted: the testing project gets Forbidden \"Permission 'dataplex.dataDomains.get' denied\". Set (GCP_TEST_DATAPLEX_DATA_DOMAIN)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListDataDomainBindings (dataplex.projects.locations.dataDomains.bindings.list): DataDomain: no deployable fixture",
+        "ListDataDomainBindings (dataplex.projects.locations.dataDomains.bindings.list): DataDomain: Data domains are allowlisted: the testing project gets Forbidden \"Permission 'dataplex.dataDomains.get' denied\". Set (GCP_TEST_DATAPLEX_DATA_DOMAIN)",
         () => Effect.void,
       );
     });
 
     describe("DataDomainsBinding", { concurrent: true }, () => {
       test.provider.skip(
-        "GetBinding (dataplex.projects.locations.dataDomains.bindings.get): DataDomainsBinding: no deployable fixture",
+        "GetBinding (dataplex.projects.locations.dataDomains.bindings.get): DataDomainsBinding: Data domains are allowlisted: the testing project gets Forbidden \"Permission 'dataplex.dataDomains.get' denied\". Set (GCP_TEST_DATAPLEX_DATA_DOMAIN)",
         () => Effect.void,
       );
     });
 
     describe("DataProduct", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDataProduct (dataplex.projects.locations.dataProducts.get): DataProduct: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetDataProduct (dataplex.projects.locations.dataProducts.get)",
+        () => probe("GetDataProduct", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataProductDataAssets (dataplex.projects.locations.dataProducts.dataAssets.list): DataProduct: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataProductDataAssets (dataplex.projects.locations.dataProducts.dataAssets.list)",
+        () => probe("ListDataProductDataAssets", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RequestDataProductAccess (dataplex.projects.locations.dataProducts.requestAccess): DataProduct: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "RequestDataProductAccess (dataplex.projects.locations.dataProducts.requestAccess)",
+        () => probe("RequestDataProductAccess", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DataProductsDataAsset", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDataAsset (dataplex.projects.locations.dataProducts.dataAssets.get): DataProductsDataAsset: no deployable fixture",
+      test.provider.todo(
+        "GetDataAsset (dataplex.projects.locations.dataProducts.dataAssets.get): DataProductsDataAsset: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DataScan", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDataScan (dataplex.projects.locations.dataScans.get): DataScan: no deployable fixture",
+      test.provider.todo(
+        "GetDataScan (dataplex.projects.locations.dataScans.get): DataScan: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RunDataScan (dataplex.projects.locations.dataScans.run): DataScan: no deployable fixture",
+      test.provider.todo(
+        "RunDataScan (dataplex.projects.locations.dataScans.run): DataScan: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("EntryGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEntryGroup (dataplex.projects.locations.entryGroups.get): EntryGroup: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetEntryGroup (dataplex.projects.locations.entryGroups.get)",
+        () => probe("GetEntryGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListEntryGroupEntries (dataplex.projects.locations.entryGroups.entries.list): EntryGroup: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListEntryGroupEntries (dataplex.projects.locations.entryGroups.entries.list)",
+        () => probe("ListEntryGroupEntries", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("EntryGroupsEntry", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEntry (dataplex.projects.locations.entryGroups.entries.get): EntryGroupsEntry: no deployable fixture",
+      test.provider.todo(
+        "GetEntry (dataplex.projects.locations.entryGroups.entries.get): EntryGroupsEntry: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("EntryGroupsEntryLink", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEntryLink (dataplex.projects.locations.entryGroups.entryLinks.get): EntryGroupsEntryLink: no deployable fixture",
+      test.provider.todo(
+        "GetEntryLink (dataplex.projects.locations.entryGroups.entryLinks.get): EntryGroupsEntryLink: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("EntryType", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEntryType (dataplex.projects.locations.entryTypes.get): EntryType: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetEntryType (dataplex.projects.locations.entryTypes.get)",
+        () => probe("GetEntryType", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("GlossariesCategory", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetCategory (dataplex.projects.locations.glossaries.categories.get): GlossariesCategory: no deployable fixture",
+      test.provider.todo(
+        "GetCategory (dataplex.projects.locations.glossaries.categories.get): GlossariesCategory: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("GlossariesTerm", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTerm (dataplex.projects.locations.glossaries.terms.get): GlossariesTerm: no deployable fixture",
+      test.provider.todo(
+        "GetTerm (dataplex.projects.locations.glossaries.terms.get): GlossariesTerm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Glossary", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetGlossary (dataplex.projects.locations.glossaries.get): Glossary: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetGlossary (dataplex.projects.locations.glossaries.get)",
+        () => probe("GetGlossary", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListGlossaryCategories (dataplex.projects.locations.glossaries.categories.list): Glossary: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListGlossaryCategories (dataplex.projects.locations.glossaries.categories.list)",
+        () => probe("ListGlossaryCategories", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListGlossaryTerms (dataplex.projects.locations.glossaries.terms.list): Glossary: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListGlossaryTerms (dataplex.projects.locations.glossaries.terms.list)",
+        () => probe("ListGlossaryTerms", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("Lake", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetLake (dataplex.projects.locations.lakes.get): Lake: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetLake (dataplex.projects.locations.lakes.get)",
+        () => probe("GetLake", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListLakeActions (dataplex.projects.locations.lakes.actions.list): Lake: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListLakeActions (dataplex.projects.locations.lakes.actions.list)",
+        () => probe("ListLakeActions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListLakeTasks (dataplex.projects.locations.lakes.tasks.list): Lake: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListLakeTasks (dataplex.projects.locations.lakes.tasks.list)",
+        () => probe("ListLakeTasks", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListLakeZones (dataplex.projects.locations.lakes.zones.list): Lake: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListLakeZones (dataplex.projects.locations.lakes.zones.list)",
+        () => probe("ListLakeZones", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("LakesAsset", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAsset (dataplex.projects.locations.lakes.zones.assets.get): LakesAsset: no deployable fixture",
+      test.provider.todo(
+        "GetAsset (dataplex.projects.locations.lakes.zones.assets.get): LakesAsset: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListAssetActions (dataplex.projects.locations.lakes.zones.assets.actions.list): LakesAsset: no deployable fixture",
+      test.provider.todo(
+        "ListAssetActions (dataplex.projects.locations.lakes.zones.assets.actions.list): LakesAsset: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("LakesEntitiesPartition", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPartition (dataplex.projects.locations.lakes.zones.entities.partitions.get): LakesEntitiesPartition: no deployable fixture",
+      test.provider.todo(
+        "GetPartition (dataplex.projects.locations.lakes.zones.entities.partitions.get): LakesEntitiesPartition: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("LakesEntity", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEntity (dataplex.projects.locations.lakes.zones.entities.get): LakesEntity: no deployable fixture",
+      test.provider.todo(
+        "GetEntity (dataplex.projects.locations.lakes.zones.entities.get): LakesEntity: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListEntityPartitions (dataplex.projects.locations.lakes.zones.entities.partitions.list): LakesEntity: no deployable fixture",
+      test.provider.todo(
+        "ListEntityPartitions (dataplex.projects.locations.lakes.zones.entities.partitions.list): LakesEntity: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("LakesTask", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelTaskJob (dataplex.projects.locations.lakes.tasks.jobs.cancel): LakesTask: no deployable fixture",
+      test.provider.todo(
+        "CancelTaskJob (dataplex.projects.locations.lakes.tasks.jobs.cancel): LakesTask: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetTask (dataplex.projects.locations.lakes.tasks.get): LakesTask: no deployable fixture",
+      test.provider.todo(
+        "GetTask (dataplex.projects.locations.lakes.tasks.get): LakesTask: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetTaskJob (dataplex.projects.locations.lakes.tasks.jobs.get): LakesTask: no deployable fixture",
+      test.provider.todo(
+        "GetTaskJob (dataplex.projects.locations.lakes.tasks.jobs.get): LakesTask: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListTaskJobs (dataplex.projects.locations.lakes.tasks.jobs.list): LakesTask: no deployable fixture",
+      test.provider.todo(
+        "ListTaskJobs (dataplex.projects.locations.lakes.tasks.jobs.list): LakesTask: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RunTask (dataplex.projects.locations.lakes.tasks.run): LakesTask: no deployable fixture",
+      test.provider.todo(
+        "RunTask (dataplex.projects.locations.lakes.tasks.run): LakesTask: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("LakesZone", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetZone (dataplex.projects.locations.lakes.zones.get): LakesZone: no deployable fixture",
+      test.provider.todo(
+        "GetZone (dataplex.projects.locations.lakes.zones.get): LakesZone: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListZoneActions (dataplex.projects.locations.lakes.zones.actions.list): LakesZone: no deployable fixture",
+      test.provider.todo(
+        "ListZoneActions (dataplex.projects.locations.lakes.zones.actions.list): LakesZone: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListZoneAssets (dataplex.projects.locations.lakes.zones.assets.list): LakesZone: no deployable fixture",
+      test.provider.todo(
+        "ListZoneAssets (dataplex.projects.locations.lakes.zones.assets.list): LakesZone: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListZoneEntities (dataplex.projects.locations.lakes.zones.entities.list): LakesZone: no deployable fixture",
+      test.provider.todo(
+        "ListZoneEntities (dataplex.projects.locations.lakes.zones.entities.list): LakesZone: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("MetadataFeed", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetMetadataFeed (dataplex.projects.locations.metadataFeeds.get): MetadataFeed: no deployable fixture",
+      test.provider.todo(
+        "GetMetadataFeed (dataplex.projects.locations.metadataFeeds.get): MetadataFeed: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

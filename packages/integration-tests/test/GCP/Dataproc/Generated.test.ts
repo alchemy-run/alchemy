@@ -48,111 +48,115 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AutoscalingPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAutoscalingPolicy@AutoscalingPolicy (dataproc.projects.locations.autoscalingPolicies.get): AutoscalingPolicy: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetAutoscalingPolicy@AutoscalingPolicy (dataproc.projects.locations.autoscalingPolicies.get)",
+        () => probe("GetAutoscalingPolicy@AutoscalingPolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataproc", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("Batch", { concurrent: true }, () => {
       test.provider.skip(
-        "AccessBatchSparkApplication (dataproc.projects.locations.batches.sparkApplications.access): Batch: no deployable fixture",
+        "AccessBatchSparkApplication (dataproc.projects.locations.batches.sparkApplications.access): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationEnvironmentInfo@Batch (dataproc.projects.locations.batches.sparkApplications.accessEnvironmentInfo): Batch: no deployable fixture",
+        "AccessSparkApplicationEnvironmentInfo@Batch (dataproc.projects.locations.batches.sparkApplications.accessEnvironmentInfo): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationJob@Batch (dataproc.projects.locations.batches.sparkApplications.accessJob): Batch: no deployable fixture",
+        "AccessSparkApplicationJob@Batch (dataproc.projects.locations.batches.sparkApplications.accessJob): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationNativeBuildInfo@Batch (dataproc.projects.locations.batches.sparkApplications.accessNativeBuildInfo): Batch: no deployable fixture",
+        "AccessSparkApplicationNativeBuildInfo@Batch (dataproc.projects.locations.batches.sparkApplications.accessNativeBuildInfo): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationNativeSqlQuery@Batch (dataproc.projects.locations.batches.sparkApplications.accessNativeSqlQuery): Batch: no deployable fixture",
+        "AccessSparkApplicationNativeSqlQuery@Batch (dataproc.projects.locations.batches.sparkApplications.accessNativeSqlQuery): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationSqlPlan@Batch (dataproc.projects.locations.batches.sparkApplications.accessSqlPlan): Batch: no deployable fixture",
+        "AccessSparkApplicationSqlPlan@Batch (dataproc.projects.locations.batches.sparkApplications.accessSqlPlan): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationSqlQuery@Batch (dataproc.projects.locations.batches.sparkApplications.accessSqlQuery): Batch: no deployable fixture",
+        "AccessSparkApplicationSqlQuery@Batch (dataproc.projects.locations.batches.sparkApplications.accessSqlQuery): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationStageAttempt@Batch (dataproc.projects.locations.batches.sparkApplications.accessStageAttempt): Batch: no deployable fixture",
+        "AccessSparkApplicationStageAttempt@Batch (dataproc.projects.locations.batches.sparkApplications.accessStageAttempt): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationStageRddGraph@Batch (dataproc.projects.locations.batches.sparkApplications.accessStageRddGraph): Batch: no deployable fixture",
+        "AccessSparkApplicationStageRddGraph@Batch (dataproc.projects.locations.batches.sparkApplications.accessStageRddGraph): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AnalyzeBatch (dataproc.projects.locations.batches.analyze): Batch: no deployable fixture",
+        "AnalyzeBatch (dataproc.projects.locations.batches.analyze): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ComputeSparkApplicationTuningConfig (dataproc.projects.locations.batches.sparkApplications.computeTuningConfig): Batch: no deployable fixture",
+        "ComputeSparkApplicationTuningConfig (dataproc.projects.locations.batches.sparkApplications.computeTuningConfig): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetBatch (dataproc.projects.locations.batches.get): Batch: no deployable fixture",
+        "GetBatch (dataproc.projects.locations.batches.get): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchBatchSparkApplication (dataproc.projects.locations.batches.sparkApplications.search): Batch: no deployable fixture",
+        "SearchBatchSparkApplication (dataproc.projects.locations.batches.sparkApplications.search): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationExecutors@Batch (dataproc.projects.locations.batches.sparkApplications.searchExecutors): Batch: no deployable fixture",
+        "SearchSparkApplicationExecutors@Batch (dataproc.projects.locations.batches.sparkApplications.searchExecutors): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationExecutorStageSummary@Batch (dataproc.projects.locations.batches.sparkApplications.searchExecutorStageSummary): Batch: no deployable fixture",
+        "SearchSparkApplicationExecutorStageSummary@Batch (dataproc.projects.locations.batches.sparkApplications.searchExecutorStageSummary): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationJobs@Batch (dataproc.projects.locations.batches.sparkApplications.searchJobs): Batch: no deployable fixture",
+        "SearchSparkApplicationJobs@Batch (dataproc.projects.locations.batches.sparkApplications.searchJobs): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationNativeSqlQueries@Batch (dataproc.projects.locations.batches.sparkApplications.searchNativeSqlQueries): Batch: no deployable fixture",
+        "SearchSparkApplicationNativeSqlQueries@Batch (dataproc.projects.locations.batches.sparkApplications.searchNativeSqlQueries): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationSqlQueries@Batch (dataproc.projects.locations.batches.sparkApplications.searchSqlQueries): Batch: no deployable fixture",
+        "SearchSparkApplicationSqlQueries@Batch (dataproc.projects.locations.batches.sparkApplications.searchSqlQueries): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationStageAttempts@Batch (dataproc.projects.locations.batches.sparkApplications.searchStageAttempts): Batch: no deployable fixture",
+        "SearchSparkApplicationStageAttempts@Batch (dataproc.projects.locations.batches.sparkApplications.searchStageAttempts): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationStageAttemptTasks@Batch (dataproc.projects.locations.batches.sparkApplications.searchStageAttemptTasks): Batch: no deployable fixture",
+        "SearchSparkApplicationStageAttemptTasks@Batch (dataproc.projects.locations.batches.sparkApplications.searchStageAttemptTasks): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationStages@Batch (dataproc.projects.locations.batches.sparkApplications.searchStages): Batch: no deployable fixture",
+        "SearchSparkApplicationStages@Batch (dataproc.projects.locations.batches.sparkApplications.searchStages): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SummarizeSparkApplicationExecutors@Batch (dataproc.projects.locations.batches.sparkApplications.summarizeExecutors): Batch: no deployable fixture",
+        "SummarizeSparkApplicationExecutors@Batch (dataproc.projects.locations.batches.sparkApplications.summarizeExecutors): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SummarizeSparkApplicationJobs@Batch (dataproc.projects.locations.batches.sparkApplications.summarizeJobs): Batch: no deployable fixture",
+        "SummarizeSparkApplicationJobs@Batch (dataproc.projects.locations.batches.sparkApplications.summarizeJobs): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SummarizeSparkApplicationStageAttemptTasks@Batch (dataproc.projects.locations.batches.sparkApplications.summarizeStageAttemptTasks): Batch: no deployable fixture",
+        "SummarizeSparkApplicationStageAttemptTasks@Batch (dataproc.projects.locations.batches.sparkApplications.summarizeStageAttemptTasks): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SummarizeSparkApplicationStages@Batch (dataproc.projects.locations.batches.sparkApplications.summarizeStages): Batch: no deployable fixture",
+        "SummarizeSparkApplicationStages@Batch (dataproc.projects.locations.batches.sparkApplications.summarizeStages): Batch: a serverless batch reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
     });
@@ -336,137 +340,161 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("RegionsAutoscalingPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAutoscalingPolicy@RegionsAutoscalingPolicy (dataproc.projects.regions.autoscalingPolicies.get): RegionsAutoscalingPolicy: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetAutoscalingPolicy@RegionsAutoscalingPolicy (dataproc.projects.regions.autoscalingPolicies.get)",
+        () => probe("GetAutoscalingPolicy@RegionsAutoscalingPolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataproc", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("RegionsWorkflowTemplate", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetWorkflowTemplate@RegionsWorkflowTemplate (dataproc.projects.regions.workflowTemplates.get): RegionsWorkflowTemplate: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetWorkflowTemplate@RegionsWorkflowTemplate (dataproc.projects.regions.workflowTemplates.get)",
+        () => probe("GetWorkflowTemplate@RegionsWorkflowTemplate", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataproc", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "InstantiateWorkflowTemplate@RegionsWorkflowTemplate (dataproc.projects.regions.workflowTemplates.instantiate): RegionsWorkflowTemplate: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "InstantiateWorkflowTemplate@RegionsWorkflowTemplate (dataproc.projects.regions.workflowTemplates.instantiate)",
+        () => probe("InstantiateWorkflowTemplate@RegionsWorkflowTemplate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataproc", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("Session", { concurrent: true }, () => {
       test.provider.skip(
-        "AccessSessionSparkApplication (dataproc.projects.locations.sessions.sparkApplications.access): Session: no deployable fixture",
+        "AccessSessionSparkApplication (dataproc.projects.locations.sessions.sparkApplications.access): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationEnvironmentInfo@Session (dataproc.projects.locations.sessions.sparkApplications.accessEnvironmentInfo): Session: no deployable fixture",
+        "AccessSparkApplicationEnvironmentInfo@Session (dataproc.projects.locations.sessions.sparkApplications.accessEnvironmentInfo): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationJob@Session (dataproc.projects.locations.sessions.sparkApplications.accessJob): Session: no deployable fixture",
+        "AccessSparkApplicationJob@Session (dataproc.projects.locations.sessions.sparkApplications.accessJob): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationNativeBuildInfo@Session (dataproc.projects.locations.sessions.sparkApplications.accessNativeBuildInfo): Session: no deployable fixture",
+        "AccessSparkApplicationNativeBuildInfo@Session (dataproc.projects.locations.sessions.sparkApplications.accessNativeBuildInfo): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationNativeSqlQuery@Session (dataproc.projects.locations.sessions.sparkApplications.accessNativeSqlQuery): Session: no deployable fixture",
+        "AccessSparkApplicationNativeSqlQuery@Session (dataproc.projects.locations.sessions.sparkApplications.accessNativeSqlQuery): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationSqlPlan@Session (dataproc.projects.locations.sessions.sparkApplications.accessSqlPlan): Session: no deployable fixture",
+        "AccessSparkApplicationSqlPlan@Session (dataproc.projects.locations.sessions.sparkApplications.accessSqlPlan): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationSqlQuery@Session (dataproc.projects.locations.sessions.sparkApplications.accessSqlQuery): Session: no deployable fixture",
+        "AccessSparkApplicationSqlQuery@Session (dataproc.projects.locations.sessions.sparkApplications.accessSqlQuery): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationStageAttempt@Session (dataproc.projects.locations.sessions.sparkApplications.accessStageAttempt): Session: no deployable fixture",
+        "AccessSparkApplicationStageAttempt@Session (dataproc.projects.locations.sessions.sparkApplications.accessStageAttempt): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "AccessSparkApplicationStageRddGraph@Session (dataproc.projects.locations.sessions.sparkApplications.accessStageRddGraph): Session: no deployable fixture",
+        "AccessSparkApplicationStageRddGraph@Session (dataproc.projects.locations.sessions.sparkApplications.accessStageRddGraph): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetSession (dataproc.projects.locations.sessions.get): Session: no deployable fixture",
+        "GetSession (dataproc.projects.locations.sessions.get): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSessionSparkApplication (dataproc.projects.locations.sessions.sparkApplications.search): Session: no deployable fixture",
+        "SearchSessionSparkApplication (dataproc.projects.locations.sessions.sparkApplications.search): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationExecutors@Session (dataproc.projects.locations.sessions.sparkApplications.searchExecutors): Session: no deployable fixture",
+        "SearchSparkApplicationExecutors@Session (dataproc.projects.locations.sessions.sparkApplications.searchExecutors): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationExecutorStageSummary@Session (dataproc.projects.locations.sessions.sparkApplications.searchExecutorStageSummary): Session: no deployable fixture",
+        "SearchSparkApplicationExecutorStageSummary@Session (dataproc.projects.locations.sessions.sparkApplications.searchExecutorStageSummary): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationJobs@Session (dataproc.projects.locations.sessions.sparkApplications.searchJobs): Session: no deployable fixture",
+        "SearchSparkApplicationJobs@Session (dataproc.projects.locations.sessions.sparkApplications.searchJobs): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationNativeSqlQueries@Session (dataproc.projects.locations.sessions.sparkApplications.searchNativeSqlQueries): Session: no deployable fixture",
+        "SearchSparkApplicationNativeSqlQueries@Session (dataproc.projects.locations.sessions.sparkApplications.searchNativeSqlQueries): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationSqlQueries@Session (dataproc.projects.locations.sessions.sparkApplications.searchSqlQueries): Session: no deployable fixture",
+        "SearchSparkApplicationSqlQueries@Session (dataproc.projects.locations.sessions.sparkApplications.searchSqlQueries): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationStageAttempts@Session (dataproc.projects.locations.sessions.sparkApplications.searchStageAttempts): Session: no deployable fixture",
+        "SearchSparkApplicationStageAttempts@Session (dataproc.projects.locations.sessions.sparkApplications.searchStageAttempts): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationStageAttemptTasks@Session (dataproc.projects.locations.sessions.sparkApplications.searchStageAttemptTasks): Session: no deployable fixture",
+        "SearchSparkApplicationStageAttemptTasks@Session (dataproc.projects.locations.sessions.sparkApplications.searchStageAttemptTasks): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchSparkApplicationStages@Session (dataproc.projects.locations.sessions.sparkApplications.searchStages): Session: no deployable fixture",
+        "SearchSparkApplicationStages@Session (dataproc.projects.locations.sessions.sparkApplications.searchStages): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SummarizeSparkApplicationExecutors@Session (dataproc.projects.locations.sessions.sparkApplications.summarizeExecutors): Session: no deployable fixture",
+        "SummarizeSparkApplicationExecutors@Session (dataproc.projects.locations.sessions.sparkApplications.summarizeExecutors): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SummarizeSparkApplicationJobs@Session (dataproc.projects.locations.sessions.sparkApplications.summarizeJobs): Session: no deployable fixture",
+        "SummarizeSparkApplicationJobs@Session (dataproc.projects.locations.sessions.sparkApplications.summarizeJobs): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SummarizeSparkApplicationStageAttemptTasks@Session (dataproc.projects.locations.sessions.sparkApplications.summarizeStageAttemptTasks): Session: no deployable fixture",
+        "SummarizeSparkApplicationStageAttemptTasks@Session (dataproc.projects.locations.sessions.sparkApplications.summarizeStageAttemptTasks): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "SummarizeSparkApplicationStages@Session (dataproc.projects.locations.sessions.sparkApplications.summarizeStages): Session: no deployable fixture",
+        "SummarizeSparkApplicationStages@Session (dataproc.projects.locations.sessions.sparkApplications.summarizeStages): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
       test.provider.skip(
-        "TerminateSession (dataproc.projects.locations.sessions.terminate): Session: no deployable fixture",
+        "TerminateSession (dataproc.projects.locations.sessions.terminate): Session: a serverless session reserves 12 vCPUs and hundreds of GB of Hyperdisk; the testing project's quota runs out (GCP_TEST_DATAPROC_SERVERLESS)",
         () => Effect.void,
       );
     });
 
     describe("SessionTemplate", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSessionTemplate (dataproc.projects.locations.sessionTemplates.get): SessionTemplate: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetSessionTemplate (dataproc.projects.locations.sessionTemplates.get)",
+        () => probe("GetSessionTemplate", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataproc", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("WorkflowTemplate", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetWorkflowTemplate@WorkflowTemplate (dataproc.projects.locations.workflowTemplates.get): WorkflowTemplate: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetWorkflowTemplate@WorkflowTemplate (dataproc.projects.locations.workflowTemplates.get)",
+        () => probe("GetWorkflowTemplate@WorkflowTemplate", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataproc", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "InstantiateWorkflowTemplate@WorkflowTemplate (dataproc.projects.locations.workflowTemplates.instantiate): WorkflowTemplate: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "InstantiateWorkflowTemplate@WorkflowTemplate (dataproc.projects.locations.workflowTemplates.instantiate)",
+        () => probe("InstantiateWorkflowTemplate@WorkflowTemplate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataproc", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

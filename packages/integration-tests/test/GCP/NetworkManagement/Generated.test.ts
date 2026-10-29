@@ -48,46 +48,46 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ConnectivityTest", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetConnectivityTest (networkmanagement.projects.locations.global.connectivityTests.get): ConnectivityTest: no deployable fixture",
+      test.provider.todo(
+        "GetConnectivityTest (networkmanagement.projects.locations.global.connectivityTests.get): ConnectivityTest: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RerunConnectivityTest (networkmanagement.projects.locations.global.connectivityTests.rerun): ConnectivityTest: no deployable fixture",
+      test.provider.todo(
+        "RerunConnectivityTest (networkmanagement.projects.locations.global.connectivityTests.rerun): ConnectivityTest: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("NetworkMonitoringProvider", { concurrent: true }, () => {
       test.provider.skip(
-        "GetNetworkMonitoringProviderMonitoringPoint (networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.get): NetworkMonitoringProvider: no deployable fixture",
+        "GetNetworkMonitoringProviderMonitoringPoint (networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.get): NetworkMonitoringProvider: Monitoring providers (AppNeta) need the provider's Terms of Service accepted for the project; otherwise the create operation fails with \"Terms of Service (GCP_TEST_NETWORKMANAGEMENT_APPNETA)",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetNetworkMonitoringProviderNetworkPath (networkmanagement.projects.locations.networkMonitoringProviders.networkPaths.get): NetworkMonitoringProvider: no deployable fixture",
+        "GetNetworkMonitoringProviderNetworkPath (networkmanagement.projects.locations.networkMonitoringProviders.networkPaths.get): NetworkMonitoringProvider: Monitoring providers (AppNeta) need the provider's Terms of Service accepted for the project; otherwise the create operation fails with \"Terms of Service (GCP_TEST_NETWORKMANAGEMENT_APPNETA)",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetNetworkMonitoringProviderWebPath (networkmanagement.projects.locations.networkMonitoringProviders.webPaths.get): NetworkMonitoringProvider: no deployable fixture",
+        "GetNetworkMonitoringProviderWebPath (networkmanagement.projects.locations.networkMonitoringProviders.webPaths.get): NetworkMonitoringProvider: Monitoring providers (AppNeta) need the provider's Terms of Service accepted for the project; otherwise the create operation fails with \"Terms of Service (GCP_TEST_NETWORKMANAGEMENT_APPNETA)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListNetworkMonitoringProviderMonitoringPoints (networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.list): NetworkMonitoringProvider: no deployable fixture",
+        "ListNetworkMonitoringProviderMonitoringPoints (networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.list): NetworkMonitoringProvider: Monitoring providers (AppNeta) need the provider's Terms of Service accepted for the project; otherwise the create operation fails with \"Terms of Service (GCP_TEST_NETWORKMANAGEMENT_APPNETA)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListNetworkMonitoringProviderNetworkPaths (networkmanagement.projects.locations.networkMonitoringProviders.networkPaths.list): NetworkMonitoringProvider: no deployable fixture",
+        "ListNetworkMonitoringProviderNetworkPaths (networkmanagement.projects.locations.networkMonitoringProviders.networkPaths.list): NetworkMonitoringProvider: Monitoring providers (AppNeta) need the provider's Terms of Service accepted for the project; otherwise the create operation fails with \"Terms of Service (GCP_TEST_NETWORKMANAGEMENT_APPNETA)",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListNetworkMonitoringProviderWebPaths (networkmanagement.projects.locations.networkMonitoringProviders.webPaths.list): NetworkMonitoringProvider: no deployable fixture",
+        "ListNetworkMonitoringProviderWebPaths (networkmanagement.projects.locations.networkMonitoringProviders.webPaths.list): NetworkMonitoringProvider: Monitoring providers (AppNeta) need the provider's Terms of Service accepted for the project; otherwise the create operation fails with \"Terms of Service (GCP_TEST_NETWORKMANAGEMENT_APPNETA)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationsVpcFlowLogsConfig", { concurrent: true }, () => {
       test.provider.skip(
-        "GetVpcFlowLogsConfig@OrganizationsVpcFlowLogsConfig (networkmanagement.organizations.locations.vpcFlowLogsConfigs.get): OrganizationsVpcFlowLogsConfig: no deployable fixture",
+        "GetVpcFlowLogsConfig@OrganizationsVpcFlowLogsConfig (networkmanagement.organizations.locations.vpcFlowLogsConfigs.get): OrganizationsVpcFlowLogsConfig: Organization flow-log configs need Network Management admin on the org; the (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
     });
@@ -104,8 +104,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("VpcFlowLogsConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetVpcFlowLogsConfig@VpcFlowLogsConfig (networkmanagement.projects.locations.vpcFlowLogsConfigs.get): VpcFlowLogsConfig: no deployable fixture",
+      test.provider.todo(
+        "GetVpcFlowLogsConfig@VpcFlowLogsConfig (networkmanagement.projects.locations.vpcFlowLogsConfigs.get): VpcFlowLogsConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

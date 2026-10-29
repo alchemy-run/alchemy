@@ -58,6 +58,20 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "Gateway": "ProbeGateway",
+      "GrpcRoute": "ProbeGrpcRoute",
+      "HttpRoute": "ProbeHttpRoute",
+      "Mesh": "ProbeMesh",
+      "ServiceBinding": "ProbeServiceBinding",
+      "ServiceLbPolicy": "ProbeServiceLbPolicy"
+    },
+    "untestable": {
+      "LbEdgeExtension": "Edge extensions need a WasmPlugin with a main version; the fixture's bare plugin makes create fail with BadRequest \"MAIN_VERSION_ID_EMPTY: Main (GCP_TEST_LB_EDGE_EXTENSION)",
+      "LbRouteExtension": "needs GCP_TEST_LB_ROUTE_EXTENSION (an external prerequisite the testing project lacks)",
+      "LbTrafficExtension": "The fixture's INTERNAL_MANAGED address currently fails with BadRequest \"Invalid value for field 'resource.network': ... The field cannot be specified with subnetwork address.\" \u2014 it needs a subnetwork plus a (GCP_TEST_LB_TRAFFIC_EXTENSION)",
+      "MulticastConsumerAssociation": "Multicast needs a multicast domain activation in the project; without one create fails with BadRequest \"The request was invalid: missing (GCP_TEST_MULTICAST)",
+      "MulticastGroupConsumerActivation": "Multicast needs a multicast domain activation in the project; without one create fails with BadRequest \"The request was invalid: missing (GCP_TEST_MULTICAST)"
+    }
   }
 }

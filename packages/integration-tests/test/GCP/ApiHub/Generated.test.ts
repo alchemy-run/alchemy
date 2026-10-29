@@ -49,113 +49,113 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("Api", { concurrent: true }, () => {
       test.provider.skip(
-        "GetApi (apihub.projects.locations.apis.get): Api: no deployable fixture",
+        'GetApi (apihub.projects.locations.apis.get): Api: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ListApiVersions (apihub.projects.locations.apis.versions.list): Api: no deployable fixture",
+        'ListApiVersions (apihub.projects.locations.apis.versions.list): Api: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
     });
 
     describe("ApiHubInstance", { concurrent: true }, () => {
       test.provider.skip(
-        "GetApiHubInstance (apihub.projects.locations.apiHubInstances.get): ApiHubInstance: no deployable fixture",
+        'GetApiHubInstance (apihub.projects.locations.apiHubInstances.get): ApiHubInstance: API Hub needs a host project registration first; without it instance create fails with BadRequest ("Unable to find host project registration (GCP_TEST_APIHUB_HOST_PROJECT)',
         () => Effect.void,
       );
     });
 
     describe("ApisVersion", { concurrent: true }, () => {
       test.provider.skip(
-        "GetVersion (apihub.projects.locations.apis.versions.get): ApisVersion: no deployable fixture",
+        'GetVersion (apihub.projects.locations.apis.versions.get): ApisVersion: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetVersionDefinition (apihub.projects.locations.apis.versions.definitions.get): ApisVersion: no deployable fixture",
+        'GetVersionDefinition (apihub.projects.locations.apis.versions.definitions.get): ApisVersion: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ListVersionSpecs (apihub.projects.locations.apis.versions.specs.list): ApisVersion: no deployable fixture",
+        'ListVersionSpecs (apihub.projects.locations.apis.versions.specs.list): ApisVersion: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
     });
 
     describe("ApisVersionsSpec", { concurrent: true }, () => {
       test.provider.skip(
-        "FetchAdditionalSpecContent (apihub.projects.locations.apis.versions.specs.fetchAdditionalSpecContent): ApisVersionsSpec: no deployable fixture",
+        'FetchAdditionalSpecContent (apihub.projects.locations.apis.versions.specs.fetchAdditionalSpecContent): ApisVersionsSpec: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetSpec (apihub.projects.locations.apis.versions.specs.get): ApisVersionsSpec: no deployable fixture",
+        'GetSpec (apihub.projects.locations.apis.versions.specs.get): ApisVersionsSpec: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetSpecContents (apihub.projects.locations.apis.versions.specs.getContents): ApisVersionsSpec: no deployable fixture",
+        'GetSpecContents (apihub.projects.locations.apis.versions.specs.getContents): ApisVersionsSpec: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
       test.provider.skip(
-        "LintSpec (apihub.projects.locations.apis.versions.specs.lint): ApisVersionsSpec: no deployable fixture",
+        'LintSpec (apihub.projects.locations.apis.versions.specs.lint): ApisVersionsSpec: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
     });
 
     describe("Attribute", { concurrent: true }, () => {
       test.provider.skip(
-        "GetAttribute (apihub.projects.locations.attributes.get): Attribute: no deployable fixture",
+        'GetAttribute (apihub.projects.locations.attributes.get): Attribute: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
     });
 
     describe("Curation", { concurrent: true }, () => {
       test.provider.skip(
-        "GetCuration (apihub.projects.locations.curations.get): Curation: no deployable fixture",
+        'GetCuration (apihub.projects.locations.curations.get): Curation: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
     });
 
     describe("Dependency", { concurrent: true }, () => {
       test.provider.skip(
-        "GetDependency (apihub.projects.locations.dependencies.get): Dependency: no deployable fixture",
+        'GetDependency (apihub.projects.locations.dependencies.get): Dependency: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
     });
 
     describe("Deployment", { concurrent: true }, () => {
       test.provider.skip(
-        "GetDeployment (apihub.projects.locations.deployments.get): Deployment: no deployable fixture",
+        'GetDeployment (apihub.projects.locations.deployments.get): Deployment: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
     });
 
     describe("ExternalApi", { concurrent: true }, () => {
       test.provider.skip(
-        "GetExternalApi (apihub.projects.locations.externalApis.get): ExternalApi: no deployable fixture",
+        'GetExternalApi (apihub.projects.locations.externalApis.get): ExternalApi: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
     });
 
     describe("Plugin", { concurrent: true }, () => {
       test.provider.skip(
-        "DisablePlugin (apihub.projects.locations.plugins.disable): Plugin: no deployable fixture",
+        'DisablePlugin (apihub.projects.locations.plugins.disable): Plugin: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
       test.provider.skip(
-        "EnablePlugin (apihub.projects.locations.plugins.enable): Plugin: no deployable fixture",
+        'EnablePlugin (apihub.projects.locations.plugins.enable): Plugin: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetPlugin (apihub.projects.locations.plugins.get): Plugin: no deployable fixture",
+        'GetPlugin (apihub.projects.locations.plugins.get): Plugin: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ListPluginInstances (apihub.projects.locations.plugins.instances.list): Plugin: no deployable fixture",
+        'ListPluginInstances (apihub.projects.locations.plugins.instances.list): Plugin: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
     });
 
     describe("PluginsInstance", { concurrent: true }, () => {
       test.provider.skip(
-        "GetInstance (apihub.projects.locations.plugins.instances.get): PluginsInstance: no deployable fixture",
+        'GetInstance (apihub.projects.locations.plugins.instances.get): PluginsInstance: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
         () => Effect.void,
       );
     });

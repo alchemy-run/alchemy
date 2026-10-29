@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeTemplate } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Integrations binding as its own
@@ -20,42 +21,48 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
     const p2 = yield* GCP.Integrations.DeleteIntegration();
     const p3 = yield* GCP.Integrations.DownloadIntegrationExecution();
     const p4 = yield* GCP.Integrations.DownloadProductIntegrationExecution();
-    const p5 = yield* GCP.Integrations.ExecuteIntegration();
-    const p6 = yield* GCP.Integrations.ExecuteIntegrationEvent();
-    const p7 = yield* GCP.Integrations.ExecuteProductIntegration();
-    const p8 = yield* GCP.Integrations.GetCertificate();
-    const p9 = yield* GCP.Integrations.GetIntegrationExecution();
-    const p10 = yield* GCP.Integrations.GetProductIntegrationExecution();
-    const p11 = yield* GCP.Integrations.LiftIntegrationExecutionSuspension();
-    const p12 = yield* GCP.Integrations.LiftProductIntegrationExecutionSuspension();
-    const p13 = yield* GCP.Integrations.ListAuthConfigs();
-    const p14 = yield* GCP.Integrations.ListCertificates();
-    const p15 = yield* GCP.Integrations.ListIntegrationExecutions();
-    const p16 = yield* GCP.Integrations.ListIntegrationExecutionSuspensions();
-    const p17 = yield* GCP.Integrations.ListIntegrations();
-    const p18 = yield* GCP.Integrations.ListIntegrationVersions();
-    const p19 = yield* GCP.Integrations.ListProductAuthConfigs();
-    const p20 = yield* GCP.Integrations.ListProductCertificates();
-    const p21 = yield* GCP.Integrations.ListProductIntegrationExecutions();
-    const p22 = yield* GCP.Integrations.ListProductIntegrationExecutionSuspensions();
-    const p23 = yield* GCP.Integrations.ListProductIntegrations();
-    const p24 = yield* GCP.Integrations.ListProductIntegrationVersions();
-    const p25 = yield* GCP.Integrations.ListProductSfdcInstances();
-    const p26 = yield* GCP.Integrations.ListSfdcInstances();
-    const p27 = yield* GCP.Integrations.ListTemplates();
-    const p28 = yield* GCP.Integrations.PatchCertificate();
-    const p29 = yield* GCP.Integrations.ReplayIntegrationExecution();
-    const p30 = yield* GCP.Integrations.ResolveIntegrationExecutionSuspension();
-    const p31 = yield* GCP.Integrations.ResolveProductIntegrationExecutionSuspension();
-    const p32 = yield* GCP.Integrations.ScheduleIntegration();
-    const p33 = yield* GCP.Integrations.ScheduleProductIntegration();
-    const p34 = yield* GCP.Integrations.SearchIntegration();
-    const p35 = yield* GCP.Integrations.SearchTemplate();
-    const p36 = yield* GCP.Integrations.TestIntegration();
-    const p37 = yield* GCP.Integrations.TestProductIntegration();
-    const p38 = yield* GCP.Integrations.UploadIntegrationVersion();
-    const p39 = yield* GCP.Integrations.UploadProductIntegrationVersion();
-    const p40 = yield* GCP.Integrations.UploadTemplate();
+    const p5 = yield* GCP.Integrations.DownloadTemplate(ProbeTemplate);
+    const p6 = yield* GCP.Integrations.ExecuteIntegration();
+    const p7 = yield* GCP.Integrations.ExecuteIntegrationEvent();
+    const p8 = yield* GCP.Integrations.ExecuteProductIntegration();
+    const p9 = yield* GCP.Integrations.GetCertificate();
+    const p10 = yield* GCP.Integrations.GetIntegrationExecution();
+    const p11 = yield* GCP.Integrations.GetProductIntegrationExecution();
+    const p12 = yield* GCP.Integrations.GetTemplate(ProbeTemplate);
+    const p13 = yield* GCP.Integrations.ImportTemplate(ProbeTemplate);
+    const p14 = yield* GCP.Integrations.LiftIntegrationExecutionSuspension();
+    const p15 = yield* GCP.Integrations.LiftProductIntegrationExecutionSuspension();
+    const p16 = yield* GCP.Integrations.ListAuthConfigs();
+    const p17 = yield* GCP.Integrations.ListCertificates();
+    const p18 = yield* GCP.Integrations.ListIntegrationExecutions();
+    const p19 = yield* GCP.Integrations.ListIntegrationExecutionSuspensions();
+    const p20 = yield* GCP.Integrations.ListIntegrations();
+    const p21 = yield* GCP.Integrations.ListIntegrationVersions();
+    const p22 = yield* GCP.Integrations.ListProductAuthConfigs();
+    const p23 = yield* GCP.Integrations.ListProductCertificates();
+    const p24 = yield* GCP.Integrations.ListProductIntegrationExecutions();
+    const p25 = yield* GCP.Integrations.ListProductIntegrationExecutionSuspensions();
+    const p26 = yield* GCP.Integrations.ListProductIntegrations();
+    const p27 = yield* GCP.Integrations.ListProductIntegrationVersions();
+    const p28 = yield* GCP.Integrations.ListProductSfdcInstances();
+    const p29 = yield* GCP.Integrations.ListSfdcInstances();
+    const p30 = yield* GCP.Integrations.ListTemplates();
+    const p31 = yield* GCP.Integrations.PatchCertificate();
+    const p32 = yield* GCP.Integrations.ReplayIntegrationExecution();
+    const p33 = yield* GCP.Integrations.ResolveIntegrationExecutionSuspension();
+    const p34 = yield* GCP.Integrations.ResolveProductIntegrationExecutionSuspension();
+    const p35 = yield* GCP.Integrations.ScheduleIntegration();
+    const p36 = yield* GCP.Integrations.ScheduleProductIntegration();
+    const p37 = yield* GCP.Integrations.SearchIntegration();
+    const p38 = yield* GCP.Integrations.SearchTemplate();
+    const p39 = yield* GCP.Integrations.ShareTemplate(ProbeTemplate);
+    const p40 = yield* GCP.Integrations.TestIntegration();
+    const p41 = yield* GCP.Integrations.TestProductIntegration();
+    const p42 = yield* GCP.Integrations.UnshareTemplate(ProbeTemplate);
+    const p43 = yield* GCP.Integrations.UploadIntegrationVersion();
+    const p44 = yield* GCP.Integrations.UploadProductIntegrationVersion();
+    const p45 = yield* GCP.Integrations.UploadTemplate();
+    const p46 = yield* GCP.Integrations.UseTemplate(ProbeTemplate);
     return {
       fetch: serveProbes({
         CancelIntegrationExecution: outcome(
@@ -92,15 +99,16 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
             } as never),
           ),
         ),
+        DownloadTemplate: outcome(Retry.none(p5({} as never))),
         ExecuteIntegration: outcome(
-          Retry.none(p5({ integration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p6({ integration: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ExecuteIntegrationEvent: outcome(
-          Retry.none(p6({ integration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p7({ integration: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ExecuteProductIntegration: outcome(
           Retry.none(
-            p7({
+            p8({
               product: "alchemy-missing",
               integration: "alchemy-missing",
               location: "us-central1",
@@ -108,11 +116,11 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
           ),
         ),
         GetCertificate: outcome(
-          Retry.none(p8({ certificate: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p9({ certificate: "alchemy-missing", location: "us-central1" } as never)),
         ),
         GetIntegrationExecution: outcome(
           Retry.none(
-            p9({
+            p10({
               integration: "alchemy-missing",
               execution: "alchemy-missing",
               location: "us-central1",
@@ -121,7 +129,7 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
         ),
         GetProductIntegrationExecution: outcome(
           Retry.none(
-            p10({
+            p11({
               product: "alchemy-missing",
               integration: "alchemy-missing",
               execution: "alchemy-missing",
@@ -129,9 +137,13 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
             } as never),
           ),
         ),
+        GetTemplate: outcome(Retry.none(p12({} as never))),
+        ImportTemplate: outcome(
+          Retry.none(p13({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
         LiftIntegrationExecutionSuspension: outcome(
           Retry.none(
-            p11({
+            p14({
               integration: "alchemy-missing",
               execution: "alchemy-missing",
               suspension: "alchemy-missing",
@@ -141,7 +153,7 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
         ),
         LiftProductIntegrationExecutionSuspension: outcome(
           Retry.none(
-            p12({
+            p15({
               product: "alchemy-missing",
               integration: "alchemy-missing",
               execution: "alchemy-missing",
@@ -150,53 +162,31 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
             } as never),
           ),
         ),
-        ListAuthConfigs: outcome(Retry.none(p13({ location: "us-central1" } as never))),
-        ListCertificates: outcome(Retry.none(p14({ location: "us-central1" } as never))),
+        ListAuthConfigs: outcome(Retry.none(p16({ location: "us-central1" } as never))),
+        ListCertificates: outcome(Retry.none(p17({ location: "us-central1" } as never))),
         ListIntegrationExecutions: outcome(
-          Retry.none(p15({ integration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p18({ integration: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ListIntegrationExecutionSuspensions: outcome(
           Retry.none(
-            p16({
+            p19({
               integration: "alchemy-missing",
               execution: "alchemy-missing",
               location: "us-central1",
             } as never),
           ),
         ),
-        ListIntegrations: outcome(Retry.none(p17({ location: "us-central1" } as never))),
+        ListIntegrations: outcome(Retry.none(p20({ location: "us-central1" } as never))),
         ListIntegrationVersions: outcome(
-          Retry.none(p18({ integration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p21({ integration: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ListProductAuthConfigs: outcome(
-          Retry.none(p19({ product: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p22({ product: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ListProductCertificates: outcome(
-          Retry.none(p20({ product: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        ListProductIntegrationExecutions: outcome(
-          Retry.none(
-            p21({
-              product: "alchemy-missing",
-              integration: "alchemy-missing",
-              location: "us-central1",
-            } as never),
-          ),
-        ),
-        ListProductIntegrationExecutionSuspensions: outcome(
-          Retry.none(
-            p22({
-              product: "alchemy-missing",
-              integration: "alchemy-missing",
-              execution: "alchemy-missing",
-              location: "us-central1",
-            } as never),
-          ),
-        ),
-        ListProductIntegrations: outcome(
           Retry.none(p23({ product: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListProductIntegrationVersions: outcome(
+        ListProductIntegrationExecutions: outcome(
           Retry.none(
             p24({
               product: "alchemy-missing",
@@ -205,17 +195,39 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
             } as never),
           ),
         ),
-        ListProductSfdcInstances: outcome(
-          Retry.none(p25({ product: "alchemy-missing", location: "us-central1" } as never)),
+        ListProductIntegrationExecutionSuspensions: outcome(
+          Retry.none(
+            p25({
+              product: "alchemy-missing",
+              integration: "alchemy-missing",
+              execution: "alchemy-missing",
+              location: "us-central1",
+            } as never),
+          ),
         ),
-        ListSfdcInstances: outcome(Retry.none(p26({ location: "us-central1" } as never))),
-        ListTemplates: outcome(Retry.none(p27({ location: "us-central1" } as never))),
+        ListProductIntegrations: outcome(
+          Retry.none(p26({ product: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ListProductIntegrationVersions: outcome(
+          Retry.none(
+            p27({
+              product: "alchemy-missing",
+              integration: "alchemy-missing",
+              location: "us-central1",
+            } as never),
+          ),
+        ),
+        ListProductSfdcInstances: outcome(
+          Retry.none(p28({ product: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ListSfdcInstances: outcome(Retry.none(p29({ location: "us-central1" } as never))),
+        ListTemplates: outcome(Retry.none(p30({ location: "us-central1" } as never))),
         PatchCertificate: outcome(
-          Retry.none(p28({ certificate: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p31({ certificate: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ReplayIntegrationExecution: outcome(
           Retry.none(
-            p29({
+            p32({
               integration: "alchemy-missing",
               execution: "alchemy-missing",
               location: "us-central1",
@@ -224,7 +236,7 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
         ),
         ResolveIntegrationExecutionSuspension: outcome(
           Retry.none(
-            p30({
+            p33({
               integration: "alchemy-missing",
               execution: "alchemy-missing",
               suspension: "alchemy-missing",
@@ -234,7 +246,7 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
         ),
         ResolveProductIntegrationExecutionSuspension: outcome(
           Retry.none(
-            p31({
+            p34({
               product: "alchemy-missing",
               integration: "alchemy-missing",
               execution: "alchemy-missing",
@@ -244,44 +256,47 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
           ),
         ),
         ScheduleIntegration: outcome(
-          Retry.none(p32({ integration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p35({ integration: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ScheduleProductIntegration: outcome(
           Retry.none(
-            p33({
+            p36({
               product: "alchemy-missing",
               integration: "alchemy-missing",
               location: "us-central1",
             } as never),
           ),
         ),
-        SearchIntegration: outcome(Retry.none(p34({ location: "us-central1" } as never))),
-        SearchTemplate: outcome(Retry.none(p35({ location: "us-central1" } as never))),
+        SearchIntegration: outcome(Retry.none(p37({ location: "us-central1" } as never))),
+        SearchTemplate: outcome(Retry.none(p38({ location: "us-central1" } as never))),
+        ShareTemplate: outcome(Retry.none(p39({} as never))),
         TestIntegration: outcome(
-          Retry.none(p36({ integration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p40({ integration: "alchemy-missing", location: "us-central1" } as never)),
         ),
         TestProductIntegration: outcome(
           Retry.none(
-            p37({
+            p41({
               product: "alchemy-missing",
               integration: "alchemy-missing",
               location: "us-central1",
             } as never),
           ),
         ),
+        UnshareTemplate: outcome(Retry.none(p42({} as never))),
         UploadIntegrationVersion: outcome(
-          Retry.none(p38({ integration: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p43({ integration: "alchemy-missing", location: "us-central1" } as never)),
         ),
         UploadProductIntegrationVersion: outcome(
           Retry.none(
-            p39({
+            p44({
               product: "alchemy-missing",
               integration: "alchemy-missing",
               location: "us-central1",
             } as never),
           ),
         ),
-        UploadTemplate: outcome(Retry.none(p40({ location: "us-central1" } as never))),
+        UploadTemplate: outcome(Retry.none(p45({ location: "us-central1" } as never))),
+        UseTemplate: outcome(Retry.none(p46({} as never))),
       }),
     };
   }).pipe(
@@ -293,12 +308,15 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
           GCP.Integrations.DeleteIntegrationHttp,
           GCP.Integrations.DownloadIntegrationExecutionHttp,
           GCP.Integrations.DownloadProductIntegrationExecutionHttp,
+          GCP.Integrations.DownloadTemplateHttp,
           GCP.Integrations.ExecuteIntegrationHttp,
           GCP.Integrations.ExecuteIntegrationEventHttp,
           GCP.Integrations.ExecuteProductIntegrationHttp,
           GCP.Integrations.GetCertificateHttp,
           GCP.Integrations.GetIntegrationExecutionHttp,
           GCP.Integrations.GetProductIntegrationExecutionHttp,
+          GCP.Integrations.GetTemplateHttp,
+          GCP.Integrations.ImportTemplateHttp,
           GCP.Integrations.LiftIntegrationExecutionSuspensionHttp,
           GCP.Integrations.LiftProductIntegrationExecutionSuspensionHttp,
           GCP.Integrations.ListAuthConfigsHttp,
@@ -324,12 +342,17 @@ export default class IntegrationsGeneratedHost extends GCP.Function<Integrations
           GCP.Integrations.ScheduleProductIntegrationHttp,
           GCP.Integrations.SearchIntegrationHttp,
           GCP.Integrations.SearchTemplateHttp,
+          GCP.Integrations.ShareTemplateHttp,
+        ),
+        Layer.mergeAll(
           GCP.Integrations.TestIntegrationHttp,
           GCP.Integrations.TestProductIntegrationHttp,
+          GCP.Integrations.UnshareTemplateHttp,
           GCP.Integrations.UploadIntegrationVersionHttp,
           GCP.Integrations.UploadProductIntegrationVersionHttp,
+          GCP.Integrations.UploadTemplateHttp,
+          GCP.Integrations.UseTemplateHttp,
         ),
-        Layer.mergeAll(GCP.Integrations.UploadTemplateHttp),
       ),
     ),
   ),

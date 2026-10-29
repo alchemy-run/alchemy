@@ -48,26 +48,26 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ConnectionProfile", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetConnectionProfile (datastream.projects.locations.connectionProfiles.get): ConnectionProfile: no deployable fixture",
+      test.provider.todo(
+        "GetConnectionProfile (datastream.projects.locations.connectionProfiles.get): ConnectionProfile: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("PrivateConnection", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPrivateConnection (datastream.projects.locations.privateConnections.get): PrivateConnection: no deployable fixture",
+      test.provider.todo(
+        "GetPrivateConnection (datastream.projects.locations.privateConnections.get): PrivateConnection: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListPrivateConnectionRoutes (datastream.projects.locations.privateConnections.routes.list): PrivateConnection: no deployable fixture",
+      test.provider.todo(
+        "ListPrivateConnectionRoutes (datastream.projects.locations.privateConnections.routes.list): PrivateConnection: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("PrivateConnectionsRoute", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetRoute (datastream.projects.locations.privateConnections.routes.get): PrivateConnectionsRoute: no deployable fixture",
+      test.provider.todo(
+        "GetRoute (datastream.projects.locations.privateConnections.routes.get): PrivateConnectionsRoute: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -108,32 +108,32 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Stream", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetStream (datastream.projects.locations.streams.get): Stream: no deployable fixture",
+      test.provider.todo(
+        "GetStream (datastream.projects.locations.streams.get): Stream: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetStreamObject (datastream.projects.locations.streams.objects.get): Stream: no deployable fixture",
+      test.provider.todo(
+        "GetStreamObject (datastream.projects.locations.streams.objects.get): Stream: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListStreamObjects (datastream.projects.locations.streams.objects.list): Stream: no deployable fixture",
+      test.provider.todo(
+        "ListStreamObjects (datastream.projects.locations.streams.objects.list): Stream: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "LookupStreamObject (datastream.projects.locations.streams.objects.lookup): Stream: no deployable fixture",
+      test.provider.todo(
+        "LookupStreamObject (datastream.projects.locations.streams.objects.lookup): Stream: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RunStream (datastream.projects.locations.streams.run): Stream: no deployable fixture",
+      test.provider.todo(
+        "RunStream (datastream.projects.locations.streams.run): Stream: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StartObjectBackfillJob (datastream.projects.locations.streams.objects.startBackfillJob): Stream: no deployable fixture",
+      test.provider.todo(
+        "StartObjectBackfillJob (datastream.projects.locations.streams.objects.startBackfillJob): Stream: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StopObjectBackfillJob (datastream.projects.locations.streams.objects.stopBackfillJob): Stream: no deployable fixture",
+      test.provider.todo(
+        "StopObjectBackfillJob (datastream.projects.locations.streams.objects.stopBackfillJob): Stream: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

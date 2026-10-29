@@ -48,118 +48,126 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ContentPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetContentPolicy (dlp.projects.locations.contentPolicies.get): ContentPolicy: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetContentPolicy (dlp.projects.locations.contentPolicies.get)",
+        () => probe("GetContentPolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DeidentifyTemplate", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDeidentifyTemplate@DeidentifyTemplate (dlp.projects.deidentifyTemplates.get): DeidentifyTemplate: no deployable fixture",
+      test.provider.todo(
+        "GetDeidentifyTemplate@DeidentifyTemplate (dlp.projects.deidentifyTemplates.get): DeidentifyTemplate: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("InspectTemplate", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetInspectTemplate@InspectTemplate (dlp.projects.inspectTemplates.get): InspectTemplate: no deployable fixture",
+      test.provider.todo(
+        "GetInspectTemplate@InspectTemplate (dlp.projects.inspectTemplates.get): InspectTemplate: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("JobTrigger", { concurrent: true }, () => {
-      test.provider.skip(
-        "ActivateJobTrigger@JobTrigger (dlp.projects.jobTriggers.activate): JobTrigger: no deployable fixture",
+      test.provider.todo(
+        "ActivateJobTrigger@JobTrigger (dlp.projects.jobTriggers.activate): JobTrigger: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetJobTrigger@JobTrigger (dlp.projects.jobTriggers.get): JobTrigger: no deployable fixture",
+      test.provider.todo(
+        "GetJobTrigger@JobTrigger (dlp.projects.jobTriggers.get): JobTrigger: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("LocationsDeidentifyTemplate", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDeidentifyTemplate@LocationsDeidentifyTemplate (dlp.projects.locations.deidentifyTemplates.get): LocationsDeidentifyTemplate: no deployable fixture",
+      test.provider.todo(
+        "GetDeidentifyTemplate@LocationsDeidentifyTemplate (dlp.projects.locations.deidentifyTemplates.get): LocationsDeidentifyTemplate: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("LocationsInspectTemplate", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetInspectTemplate@LocationsInspectTemplate (dlp.projects.locations.inspectTemplates.get): LocationsInspectTemplate: no deployable fixture",
+      test.provider.todo(
+        "GetInspectTemplate@LocationsInspectTemplate (dlp.projects.locations.inspectTemplates.get): LocationsInspectTemplate: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("LocationsJobTrigger", { concurrent: true }, () => {
-      test.provider.skip(
-        "ActivateJobTrigger@LocationsJobTrigger (dlp.projects.locations.jobTriggers.activate): LocationsJobTrigger: no deployable fixture",
+      test.provider.todo(
+        "ActivateJobTrigger@LocationsJobTrigger (dlp.projects.locations.jobTriggers.activate): LocationsJobTrigger: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetJobTrigger@LocationsJobTrigger (dlp.projects.locations.jobTriggers.get): LocationsJobTrigger: no deployable fixture",
+      test.provider.todo(
+        "GetJobTrigger@LocationsJobTrigger (dlp.projects.locations.jobTriggers.get): LocationsJobTrigger: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "HybridJobTriggerInspect (dlp.projects.locations.jobTriggers.hybridInspect): LocationsJobTrigger: no deployable fixture",
+      test.provider.todo(
+        "HybridJobTriggerInspect (dlp.projects.locations.jobTriggers.hybridInspect): LocationsJobTrigger: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("LocationsStoredInfoType", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetStoredInfoType@LocationsStoredInfoType (dlp.projects.locations.storedInfoTypes.get): LocationsStoredInfoType: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetStoredInfoType@LocationsStoredInfoType (dlp.projects.locations.storedInfoTypes.get)",
+        () => probe("GetStoredInfoType@LocationsStoredInfoType", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("OrganizationsDeidentifyTemplate", { concurrent: true }, () => {
       test.provider.skip(
-        "GetDeidentifyTemplate@OrganizationsDeidentifyTemplate (dlp.organizations.deidentifyTemplates.get): OrganizationsDeidentifyTemplate: no deployable fixture",
+        "GetDeidentifyTemplate@OrganizationsDeidentifyTemplate (dlp.organizations.deidentifyTemplates.get): OrganizationsDeidentifyTemplate: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationsInspectTemplate", { concurrent: true }, () => {
       test.provider.skip(
-        "GetInspectTemplate@OrganizationsInspectTemplate (dlp.organizations.inspectTemplates.get): OrganizationsInspectTemplate: no deployable fixture",
+        "GetInspectTemplate@OrganizationsInspectTemplate (dlp.organizations.inspectTemplates.get): OrganizationsInspectTemplate: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationsLocationsDeidentifyTemplate", { concurrent: true }, () => {
       test.provider.skip(
-        "GetDeidentifyTemplate@OrganizationsLocationsDeidentifyTemplate (dlp.organizations.locations.deidentifyTemplates.get): OrganizationsLocationsDeidentifyTemplate: no deployable fixture",
+        "GetDeidentifyTemplate@OrganizationsLocationsDeidentifyTemplate (dlp.organizations.locations.deidentifyTemplates.get): OrganizationsLocationsDeidentifyTemplate: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationsLocationsInspectTemplate", { concurrent: true }, () => {
       test.provider.skip(
-        "GetInspectTemplate@OrganizationsLocationsInspectTemplate (dlp.organizations.locations.inspectTemplates.get): OrganizationsLocationsInspectTemplate: no deployable fixture",
+        "GetInspectTemplate@OrganizationsLocationsInspectTemplate (dlp.organizations.locations.inspectTemplates.get): OrganizationsLocationsInspectTemplate: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationsLocationsJobTrigger", { concurrent: true }, () => {
       test.provider.skip(
-        "GetJobTrigger@OrganizationsLocationsJobTrigger (dlp.organizations.locations.jobTriggers.get): OrganizationsLocationsJobTrigger: no deployable fixture",
+        "GetJobTrigger@OrganizationsLocationsJobTrigger (dlp.organizations.locations.jobTriggers.get): OrganizationsLocationsJobTrigger: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationsLocationsStoredInfoType", { concurrent: true }, () => {
       test.provider.skip(
-        "GetStoredInfoType@OrganizationsLocationsStoredInfoType (dlp.organizations.locations.storedInfoTypes.get): OrganizationsLocationsStoredInfoType: no deployable fixture",
+        "GetStoredInfoType@OrganizationsLocationsStoredInfoType (dlp.organizations.locations.storedInfoTypes.get): OrganizationsLocationsStoredInfoType: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
 
     describe("OrganizationStoredInfoType", { concurrent: true }, () => {
       test.provider.skip(
-        "GetStoredInfoType@OrganizationStoredInfoType (dlp.organizations.storedInfoTypes.get): OrganizationStoredInfoType: no deployable fixture",
+        "GetStoredInfoType@OrganizationStoredInfoType (dlp.organizations.storedInfoTypes.get): OrganizationStoredInfoType: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
         () => Effect.void,
       );
     });
@@ -304,9 +312,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("StoredInfoType", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetStoredInfoType@StoredInfoType (dlp.projects.storedInfoTypes.get): StoredInfoType: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetStoredInfoType@StoredInfoType (dlp.projects.storedInfoTypes.get)",
+        () => probe("GetStoredInfoType@StoredInfoType", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

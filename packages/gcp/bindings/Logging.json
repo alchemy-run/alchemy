@@ -102,6 +102,30 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "Exclusion": "ProbeExclusion",
+      "FolderBucket": "ProbeFolderBucket",
+      "FolderSavedQuery": "ProbeFolderSavedQuery",
+      "LocationsBucket": "ProbeLocationsBucket",
+      "LogBucket": "ProbeLogBucket",
+      "Metric": "ProbeMetric",
+      "SavedQuery": "ProbeSavedQuery"
+    },
+    "untestable": {
+      "BillingBucket": "needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
+      "BillingBucketsLink": "needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
+      "BillingBucketsView": "needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
+      "BillingExclusion": "needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
+      "BillingSavedQuery": "needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
+      "BillingSink": "needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
+      "FolderExclusion": "needs GOOGLE_FOLDER_ID (an external prerequisite the testing project lacks)",
+      "OrganizationBucketsLink": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationBucketsView": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationExclusion": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationLogBucket": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationLogScope": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationSavedQuery": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+      "OrganizationSink": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)"
+    }
   }
 }

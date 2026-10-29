@@ -48,22 +48,22 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Contact", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetContact@Contact (essentialcontacts.projects.contacts.get): Contact: no deployable fixture",
+      test.provider.todo(
+        "GetContact@Contact (essentialcontacts.projects.contacts.get): Contact: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("FolderContact", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetContact@FolderContact (essentialcontacts.folders.contacts.get): FolderContact: no deployable fixture",
+      test.provider.todo(
+        "GetContact@FolderContact (essentialcontacts.folders.contacts.get): FolderContact: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("OrganizationContact", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetContact@OrganizationContact (essentialcontacts.organizations.contacts.get): OrganizationContact: no deployable fixture",
+      test.provider.todo(
+        "GetContact@OrganizationContact (essentialcontacts.organizations.contacts.get): OrganizationContact: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

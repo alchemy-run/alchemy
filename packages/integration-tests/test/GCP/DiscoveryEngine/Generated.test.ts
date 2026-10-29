@@ -48,494 +48,670 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("CollectionsDataStore", { concurrent: true }, () => {
-      test.provider.skip(
-        "BatchBranchGetDocumentsMetadata@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.branches.batchGetDocumentsMetadata): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "BatchBranchGetDocumentsMetadata@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.branches.batchGetDocumentsMetadata)",
+        () => probe("BatchBranchGetDocumentsMetadata@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "CollectDataStoreUserEvent@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.userEvents.collect): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "CollectDataStoreUserEvent@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.userEvents.collect)",
+        () => probe("CollectDataStoreUserEvent@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "CompleteDataStoreQuery@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.completeQuery): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "CompleteDataStoreQuery@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.completeQuery)",
+        () => probe("CompleteDataStoreQuery@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetDataStore@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.get): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetDataStore@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.get)",
+        () => probe("GetDataStore@CollectionsDataStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetDataStoreWidgetConfig@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.widgetConfigs.get): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetDataStoreWidgetConfig@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.widgetConfigs.get)",
+        () => probe("GetDataStoreWidgetConfig@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ImportDataStoreBranchDocument@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.branches.documents.import): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ImportDataStoreBranchDocument@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.branches.documents.import)",
+        () => probe("ImportDataStoreBranchDocument@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ImportDataStoreCompletionSuggestion@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.completionSuggestions.import): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ImportDataStoreCompletionSuggestion@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.completionSuggestions.import)",
+        () => probe("ImportDataStoreCompletionSuggestion@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ImportDataStoreSuggestionDenyListEntry@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.suggestionDenyListEntries.import): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ImportDataStoreSuggestionDenyListEntry@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.suggestionDenyListEntries.import)",
+        () => probe("ImportDataStoreSuggestionDenyListEntry@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ImportDataStoreUserEvent@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.userEvents.import): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ImportDataStoreUserEvent@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.userEvents.import)",
+        () => probe("ImportDataStoreUserEvent@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataStoreBranchDocuments@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.branches.documents.list): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataStoreBranchDocuments@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.branches.documents.list)",
+        () => probe("ListDataStoreBranchDocuments@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataStoreControls@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.controls.list): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataStoreControls@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.controls.list)",
+        () => probe("ListDataStoreControls@CollectionsDataStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataStoreConversations@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.conversations.list): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataStoreConversations@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.conversations.list)",
+        () => probe("ListDataStoreConversations@CollectionsDataStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataStoreCustomModels (discoveryengine.projects.locations.collections.dataStores.customModels.list): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataStoreCustomModels (discoveryengine.projects.locations.collections.dataStores.customModels.list)",
+        () => probe("ListDataStoreCustomModels", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataStoreSchemas@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.schemas.list): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataStoreSchemas@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.schemas.list)",
+        () => probe("ListDataStoreSchemas@CollectionsDataStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataStoreServingConfigs@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.servingConfigs.list): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataStoreServingConfigs@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.servingConfigs.list)",
+        () => probe("ListDataStoreServingConfigs@CollectionsDataStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataStoreSessions@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.sessions.list): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataStoreSessions@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.sessions.list)",
+        () => probe("ListDataStoreSessions@CollectionsDataStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchDataStoreWidgetConfig@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.widgetConfigs.patch): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PatchDataStoreWidgetConfig@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.widgetConfigs.patch)",
+        () => probe("PatchDataStoreWidgetConfig@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PurgeDataStoreBranchDocument@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.branches.documents.purge): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PurgeDataStoreBranchDocument@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.branches.documents.purge)",
+        () => probe("PurgeDataStoreBranchDocument@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PurgeDataStoreCompletionSuggestion@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.completionSuggestions.purge): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PurgeDataStoreCompletionSuggestion@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.completionSuggestions.purge)",
+        () => probe("PurgeDataStoreCompletionSuggestion@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PurgeDataStoreSuggestionDenyListEntry@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.suggestionDenyListEntries.purge): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PurgeDataStoreSuggestionDenyListEntry@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.suggestionDenyListEntries.purge)",
+        () => probe("PurgeDataStoreSuggestionDenyListEntry@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PurgeDataStoreUserEvent@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.userEvents.purge): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PurgeDataStoreUserEvent@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.userEvents.purge)",
+        () => probe("PurgeDataStoreUserEvent@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "TrainDataStoreCustomModel (discoveryengine.projects.locations.collections.dataStores.trainCustomModel): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "TrainDataStoreCustomModel (discoveryengine.projects.locations.collections.dataStores.trainCustomModel)",
+        () => probe("TrainDataStoreCustomModel", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "WriteDataStoreUserEvent@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.userEvents.write): CollectionsDataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "WriteDataStoreUserEvent@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.userEvents.write)",
+        () => probe("WriteDataStoreUserEvent@CollectionsDataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("CollectionsDataStoresBranchesDocument", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDocument@CollectionsDataStoresBranchesDocument (discoveryengine.projects.locations.collections.dataStores.branches.documents.get): CollectionsDataStoresBranchesDocument: no deployable fixture",
+      test.provider.todo(
+        "GetDocument@CollectionsDataStoresBranchesDocument (discoveryengine.projects.locations.collections.dataStores.branches.documents.get): CollectionsDataStoresBranchesDocument: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("CollectionsDataStoresControl", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetControl@CollectionsDataStoresControl (discoveryengine.projects.locations.collections.dataStores.controls.get): CollectionsDataStoresControl: no deployable fixture",
+      test.provider.todo(
+        "GetControl@CollectionsDataStoresControl (discoveryengine.projects.locations.collections.dataStores.controls.get): CollectionsDataStoresControl: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("CollectionsDataStoresConversation", { concurrent: true }, () => {
       test.provider.skip(
-        "ConverseConversation@CollectionsDataStoresConversation (discoveryengine.projects.locations.collections.dataStores.conversations.converse): CollectionsDataStoresConversation: no deployable fixture",
+        'ConverseConversation@CollectionsDataStoresConversation (discoveryengine.projects.locations.collections.dataStores.conversations.converse): CollectionsDataStoresConversation: Conversations need the Large Language Model add-on (BadRequest "This feature is only available when Large Language Model add-on is enabled."). (GCP_TEST_DISCOVERYENGINE_LLM)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetConversation@CollectionsDataStoresConversation (discoveryengine.projects.locations.collections.dataStores.conversations.get): CollectionsDataStoresConversation: no deployable fixture",
+        'GetConversation@CollectionsDataStoresConversation (discoveryengine.projects.locations.collections.dataStores.conversations.get): CollectionsDataStoresConversation: Conversations need the Large Language Model add-on (BadRequest "This feature is only available when Large Language Model add-on is enabled."). (GCP_TEST_DISCOVERYENGINE_LLM)',
         () => Effect.void,
       );
     });
 
     describe("CollectionsDataStoresSchema", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSchema@CollectionsDataStoresSchema (discoveryengine.projects.locations.collections.dataStores.schemas.get): CollectionsDataStoresSchema: no deployable fixture",
+      test.provider.todo(
+        "GetSchema@CollectionsDataStoresSchema (discoveryengine.projects.locations.collections.dataStores.schemas.get): CollectionsDataStoresSchema: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("CollectionsDataStoresServingConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "AnswerServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.answer): CollectionsDataStoresServingConfig: no deployable fixture",
+      test.provider.todo(
+        "AnswerServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.answer): CollectionsDataStoresServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.get): CollectionsDataStoresServingConfig: no deployable fixture",
+      test.provider.todo(
+        "GetServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.get): CollectionsDataStoresServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RecommendServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.recommend): CollectionsDataStoresServingConfig: no deployable fixture",
+      test.provider.todo(
+        "RecommendServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.recommend): CollectionsDataStoresServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.search): CollectionsDataStoresServingConfig: no deployable fixture",
+      test.provider.todo(
+        "SearchServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.search): CollectionsDataStoresServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchServingConfigLite@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.searchLite): CollectionsDataStoresServingConfig: no deployable fixture",
+      test.provider.todo(
+        "SearchServingConfigLite@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.searchLite): CollectionsDataStoresServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StreamServingConfigAnswer@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.streamAnswer): CollectionsDataStoresServingConfig: no deployable fixture",
+      test.provider.todo(
+        "StreamServingConfigAnswer@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.streamAnswer): CollectionsDataStoresServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("CollectionsDataStoresSession", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSession@CollectionsDataStoresSession (discoveryengine.projects.locations.collections.dataStores.sessions.get): CollectionsDataStoresSession: no deployable fixture",
+      test.provider.todo(
+        "GetSession@CollectionsDataStoresSession (discoveryengine.projects.locations.collections.dataStores.sessions.get): CollectionsDataStoresSession: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetSessionAnswer@CollectionsDataStoresSession (discoveryengine.projects.locations.collections.dataStores.sessions.answers.get): CollectionsDataStoresSession: no deployable fixture",
+      test.provider.todo(
+        "GetSessionAnswer@CollectionsDataStoresSession (discoveryengine.projects.locations.collections.dataStores.sessions.answers.get): CollectionsDataStoresSession: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("CollectionsDataStoresSiteSearchEngineTargetSite", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTargetSite@CollectionsDataStoresSiteSearchEngineTargetSite (discoveryengine.projects.locations.collections.dataStores.siteSearchEngine.targetSites.get): CollectionsDataStoresSiteSearchEngineTargetSite: no deployable fixture",
+      test.provider.todo(
+        "GetTargetSite@CollectionsDataStoresSiteSearchEngineTargetSite (discoveryengine.projects.locations.collections.dataStores.siteSearchEngine.targetSites.get): CollectionsDataStoresSiteSearchEngineTargetSite: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("CollectionsEngine", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEngine (discoveryengine.projects.locations.collections.engines.get): CollectionsEngine: no deployable fixture",
+      test.provider.todo(
+        "GetEngine (discoveryengine.projects.locations.collections.engines.get): CollectionsEngine: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetEngineWidgetConfig (discoveryengine.projects.locations.collections.engines.widgetConfigs.get): CollectionsEngine: no deployable fixture",
+      test.provider.todo(
+        "GetEngineWidgetConfig (discoveryengine.projects.locations.collections.engines.widgetConfigs.get): CollectionsEngine: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListEngineAssistants (discoveryengine.projects.locations.collections.engines.assistants.list): CollectionsEngine: no deployable fixture",
+      test.provider.todo(
+        "ListEngineAssistants (discoveryengine.projects.locations.collections.engines.assistants.list): CollectionsEngine: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListEngineControls (discoveryengine.projects.locations.collections.engines.controls.list): CollectionsEngine: no deployable fixture",
+      test.provider.todo(
+        "ListEngineControls (discoveryengine.projects.locations.collections.engines.controls.list): CollectionsEngine: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListEngineConversations (discoveryengine.projects.locations.collections.engines.conversations.list): CollectionsEngine: no deployable fixture",
+      test.provider.todo(
+        "ListEngineConversations (discoveryengine.projects.locations.collections.engines.conversations.list): CollectionsEngine: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListEngineServingConfigs (discoveryengine.projects.locations.collections.engines.servingConfigs.list): CollectionsEngine: no deployable fixture",
+      test.provider.todo(
+        "ListEngineServingConfigs (discoveryengine.projects.locations.collections.engines.servingConfigs.list): CollectionsEngine: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListEngineSessions (discoveryengine.projects.locations.collections.engines.sessions.list): CollectionsEngine: no deployable fixture",
+      test.provider.todo(
+        "ListEngineSessions (discoveryengine.projects.locations.collections.engines.sessions.list): CollectionsEngine: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "PatchEngineWidgetConfig (discoveryengine.projects.locations.collections.engines.widgetConfigs.patch): CollectionsEngine: no deployable fixture",
+      test.provider.todo(
+        "PatchEngineWidgetConfig (discoveryengine.projects.locations.collections.engines.widgetConfigs.patch): CollectionsEngine: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("CollectionsEnginesAssistant", { concurrent: true }, () => {
       test.provider.skip(
-        "CancelAssistantAgentA2aV1Task (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.tasks.cancel): CollectionsEnginesAssistant: no deployable fixture",
+        'CancelAssistantAgentA2aV1Task (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.tasks.cancel): CollectionsEnginesAssistant: createAssistants is rejected on a plain search engine with BadRequest "Only default_assistant is allowed." even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)',
         () => Effect.void,
       );
       test.provider.skip(
-        "DeleteAssistantAgentA2aV1TaskPushNotificationConfig (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.tasks.pushNotificationConfigs.delete): CollectionsEnginesAssistant: no deployable fixture",
+        'DeleteAssistantAgentA2aV1TaskPushNotificationConfig (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.tasks.pushNotificationConfigs.delete): CollectionsEnginesAssistant: createAssistants is rejected on a plain search engine with BadRequest "Only default_assistant is allowed." even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetAssistant (discoveryengine.projects.locations.collections.engines.assistants.get): CollectionsEnginesAssistant: no deployable fixture",
+        'GetAssistant (discoveryengine.projects.locations.collections.engines.assistants.get): CollectionsEnginesAssistant: createAssistants is rejected on a plain search engine with BadRequest "Only default_assistant is allowed." even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetAssistantAgentA2aV1Task (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.tasks.get): CollectionsEnginesAssistant: no deployable fixture",
+        'GetAssistantAgentA2aV1Task (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.tasks.get): CollectionsEnginesAssistant: createAssistants is rejected on a plain search engine with BadRequest "Only default_assistant is allowed." even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetAssistantAgentA2aV1TaskPushNotificationConfig (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.tasks.pushNotificationConfigs.get): CollectionsEnginesAssistant: no deployable fixture",
+        'GetAssistantAgentA2aV1TaskPushNotificationConfig (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.tasks.pushNotificationConfigs.get): CollectionsEnginesAssistant: createAssistants is rejected on a plain search engine with BadRequest "Only default_assistant is allowed." even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetV1Card (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.getCard): CollectionsEnginesAssistant: no deployable fixture",
+        'GetV1Card (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.getCard): CollectionsEnginesAssistant: createAssistants is rejected on a plain search engine with BadRequest "Only default_assistant is allowed." even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ListAssistantAgentA2aV1TaskPushNotificationConfigs (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.tasks.pushNotificationConfigs.list): CollectionsEnginesAssistant: no deployable fixture",
+        'ListAssistantAgentA2aV1TaskPushNotificationConfigs (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.tasks.pushNotificationConfigs.list): CollectionsEnginesAssistant: createAssistants is rejected on a plain search engine with BadRequest "Only default_assistant is allowed." even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)',
         () => Effect.void,
       );
       test.provider.skip(
-        "SendAssistantAgentA2aV1Message (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.message.send): CollectionsEnginesAssistant: no deployable fixture",
+        'SendAssistantAgentA2aV1Message (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.message.send): CollectionsEnginesAssistant: createAssistants is rejected on a plain search engine with BadRequest "Only default_assistant is allowed." even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)',
         () => Effect.void,
       );
       test.provider.skip(
-        "StreamAssistantAgentA2aV1Message (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.message.stream): CollectionsEnginesAssistant: no deployable fixture",
+        'StreamAssistantAgentA2aV1Message (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.message.stream): CollectionsEnginesAssistant: createAssistants is rejected on a plain search engine with BadRequest "Only default_assistant is allowed." even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)',
         () => Effect.void,
       );
       test.provider.skip(
-        "StreamAssistantAssist (discoveryengine.projects.locations.collections.engines.assistants.streamAssist): CollectionsEnginesAssistant: no deployable fixture",
+        'StreamAssistantAssist (discoveryengine.projects.locations.collections.engines.assistants.streamAssist): CollectionsEnginesAssistant: createAssistants is rejected on a plain search engine with BadRequest "Only default_assistant is allowed." even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)',
         () => Effect.void,
       );
       test.provider.skip(
-        "SubscribeAssistantAgentA2aV1Task (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.tasks.subscribe): CollectionsEnginesAssistant: no deployable fixture",
+        'SubscribeAssistantAgentA2aV1Task (discoveryengine.projects.locations.collections.engines.assistants.agents.a2a.v1.tasks.subscribe): CollectionsEnginesAssistant: createAssistants is rejected on a plain search engine with BadRequest "Only default_assistant is allowed." even for assistantId default_assistant; it needs a Gemini Enterprise (Agentspace) engine. Set (GCP_TEST_DISCOVERYENGINE_ASSISTANT)',
         () => Effect.void,
       );
     });
 
     describe("CollectionsEnginesControl", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetControl@CollectionsEnginesControl (discoveryengine.projects.locations.collections.engines.controls.get): CollectionsEnginesControl: no deployable fixture",
+      test.provider.todo(
+        "GetControl@CollectionsEnginesControl (discoveryengine.projects.locations.collections.engines.controls.get): CollectionsEnginesControl: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("CollectionsEnginesConversation", { concurrent: true }, () => {
       test.provider.skip(
-        "ConverseConversation@CollectionsEnginesConversation (discoveryengine.projects.locations.collections.engines.conversations.converse): CollectionsEnginesConversation: no deployable fixture",
+        'ConverseConversation@CollectionsEnginesConversation (discoveryengine.projects.locations.collections.engines.conversations.converse): CollectionsEnginesConversation: Conversations need the Large Language Model add-on (BadRequest "This feature is only available when Large Language Model add-on is enabled."). (GCP_TEST_DISCOVERYENGINE_LLM)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetConversation@CollectionsEnginesConversation (discoveryengine.projects.locations.collections.engines.conversations.get): CollectionsEnginesConversation: no deployable fixture",
+        'GetConversation@CollectionsEnginesConversation (discoveryengine.projects.locations.collections.engines.conversations.get): CollectionsEnginesConversation: Conversations need the Large Language Model add-on (BadRequest "This feature is only available when Large Language Model add-on is enabled."). (GCP_TEST_DISCOVERYENGINE_LLM)',
         () => Effect.void,
       );
     });
 
     describe("CollectionsEnginesServingConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "AnswerServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.answer): CollectionsEnginesServingConfig: no deployable fixture",
+      test.provider.todo(
+        "AnswerServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.answer): CollectionsEnginesServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.get): CollectionsEnginesServingConfig: no deployable fixture",
+      test.provider.todo(
+        "GetServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.get): CollectionsEnginesServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RecommendServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.recommend): CollectionsEnginesServingConfig: no deployable fixture",
+      test.provider.todo(
+        "RecommendServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.recommend): CollectionsEnginesServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.search): CollectionsEnginesServingConfig: no deployable fixture",
+      test.provider.todo(
+        "SearchServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.search): CollectionsEnginesServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchServingConfigLite@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.searchLite): CollectionsEnginesServingConfig: no deployable fixture",
+      test.provider.todo(
+        "SearchServingConfigLite@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.searchLite): CollectionsEnginesServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StreamServingConfigAnswer@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.streamAnswer): CollectionsEnginesServingConfig: no deployable fixture",
+      test.provider.todo(
+        "StreamServingConfigAnswer@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.streamAnswer): CollectionsEnginesServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("CollectionsEnginesSession", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSession@CollectionsEnginesSession (discoveryengine.projects.locations.collections.engines.sessions.get): CollectionsEnginesSession: no deployable fixture",
+      test.provider.todo(
+        "GetSession@CollectionsEnginesSession (discoveryengine.projects.locations.collections.engines.sessions.get): CollectionsEnginesSession: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetSessionAnswer@CollectionsEnginesSession (discoveryengine.projects.locations.collections.engines.sessions.answers.get): CollectionsEnginesSession: no deployable fixture",
+      test.provider.todo(
+        "GetSessionAnswer@CollectionsEnginesSession (discoveryengine.projects.locations.collections.engines.sessions.answers.get): CollectionsEnginesSession: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DataStore", { concurrent: true }, () => {
-      test.provider.skip(
-        "BatchBranchGetDocumentsMetadata@DataStore (discoveryengine.projects.locations.dataStores.branches.batchGetDocumentsMetadata): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "BatchBranchGetDocumentsMetadata@DataStore (discoveryengine.projects.locations.dataStores.branches.batchGetDocumentsMetadata)",
+        () => probe("BatchBranchGetDocumentsMetadata@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "CollectDataStoreUserEvent@DataStore (discoveryengine.projects.locations.dataStores.userEvents.collect): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "CollectDataStoreUserEvent@DataStore (discoveryengine.projects.locations.dataStores.userEvents.collect)",
+        () => probe("CollectDataStoreUserEvent@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "CompleteDataStoreQuery@DataStore (discoveryengine.projects.locations.dataStores.completeQuery): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "CompleteDataStoreQuery@DataStore (discoveryengine.projects.locations.dataStores.completeQuery)",
+        () => probe("CompleteDataStoreQuery@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetDataStore@DataStore (discoveryengine.projects.locations.dataStores.get): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetDataStore@DataStore (discoveryengine.projects.locations.dataStores.get)",
+        () => probe("GetDataStore@DataStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetDataStoreWidgetConfig@DataStore (discoveryengine.projects.locations.dataStores.widgetConfigs.get): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetDataStoreWidgetConfig@DataStore (discoveryengine.projects.locations.dataStores.widgetConfigs.get)",
+        () => probe("GetDataStoreWidgetConfig@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ImportDataStoreBranchDocument@DataStore (discoveryengine.projects.locations.dataStores.branches.documents.import): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ImportDataStoreBranchDocument@DataStore (discoveryengine.projects.locations.dataStores.branches.documents.import)",
+        () => probe("ImportDataStoreBranchDocument@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ImportDataStoreCompletionSuggestion@DataStore (discoveryengine.projects.locations.dataStores.completionSuggestions.import): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ImportDataStoreCompletionSuggestion@DataStore (discoveryengine.projects.locations.dataStores.completionSuggestions.import)",
+        () => probe("ImportDataStoreCompletionSuggestion@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ImportDataStoreSuggestionDenyListEntry@DataStore (discoveryengine.projects.locations.dataStores.suggestionDenyListEntries.import): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ImportDataStoreSuggestionDenyListEntry@DataStore (discoveryengine.projects.locations.dataStores.suggestionDenyListEntries.import)",
+        () => probe("ImportDataStoreSuggestionDenyListEntry@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ImportDataStoreUserEvent@DataStore (discoveryengine.projects.locations.dataStores.userEvents.import): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ImportDataStoreUserEvent@DataStore (discoveryengine.projects.locations.dataStores.userEvents.import)",
+        () => probe("ImportDataStoreUserEvent@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataStoreBranchDocuments@DataStore (discoveryengine.projects.locations.dataStores.branches.documents.list): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataStoreBranchDocuments@DataStore (discoveryengine.projects.locations.dataStores.branches.documents.list)",
+        () => probe("ListDataStoreBranchDocuments@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataStoreControls@DataStore (discoveryengine.projects.locations.dataStores.controls.list): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataStoreControls@DataStore (discoveryengine.projects.locations.dataStores.controls.list)",
+        () => probe("ListDataStoreControls@DataStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataStoreConversations@DataStore (discoveryengine.projects.locations.dataStores.conversations.list): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataStoreConversations@DataStore (discoveryengine.projects.locations.dataStores.conversations.list)",
+        () => probe("ListDataStoreConversations@DataStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataStoreSchemas@DataStore (discoveryengine.projects.locations.dataStores.schemas.list): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataStoreSchemas@DataStore (discoveryengine.projects.locations.dataStores.schemas.list)",
+        () => probe("ListDataStoreSchemas@DataStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataStoreServingConfigs@DataStore (discoveryengine.projects.locations.dataStores.servingConfigs.list): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataStoreServingConfigs@DataStore (discoveryengine.projects.locations.dataStores.servingConfigs.list)",
+        () => probe("ListDataStoreServingConfigs@DataStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDataStoreSessions@DataStore (discoveryengine.projects.locations.dataStores.sessions.list): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDataStoreSessions@DataStore (discoveryengine.projects.locations.dataStores.sessions.list)",
+        () => probe("ListDataStoreSessions@DataStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchDataStoreWidgetConfig@DataStore (discoveryengine.projects.locations.dataStores.widgetConfigs.patch): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PatchDataStoreWidgetConfig@DataStore (discoveryengine.projects.locations.dataStores.widgetConfigs.patch)",
+        () => probe("PatchDataStoreWidgetConfig@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PurgeDataStoreBranchDocument@DataStore (discoveryengine.projects.locations.dataStores.branches.documents.purge): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PurgeDataStoreBranchDocument@DataStore (discoveryengine.projects.locations.dataStores.branches.documents.purge)",
+        () => probe("PurgeDataStoreBranchDocument@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PurgeDataStoreCompletionSuggestion@DataStore (discoveryengine.projects.locations.dataStores.completionSuggestions.purge): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PurgeDataStoreCompletionSuggestion@DataStore (discoveryengine.projects.locations.dataStores.completionSuggestions.purge)",
+        () => probe("PurgeDataStoreCompletionSuggestion@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PurgeDataStoreSuggestionDenyListEntry@DataStore (discoveryengine.projects.locations.dataStores.suggestionDenyListEntries.purge): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PurgeDataStoreSuggestionDenyListEntry@DataStore (discoveryengine.projects.locations.dataStores.suggestionDenyListEntries.purge)",
+        () => probe("PurgeDataStoreSuggestionDenyListEntry@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PurgeDataStoreUserEvent@DataStore (discoveryengine.projects.locations.dataStores.userEvents.purge): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PurgeDataStoreUserEvent@DataStore (discoveryengine.projects.locations.dataStores.userEvents.purge)",
+        () => probe("PurgeDataStoreUserEvent@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "WriteDataStoreUserEvent@DataStore (discoveryengine.projects.locations.dataStores.userEvents.write): DataStore: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "WriteDataStoreUserEvent@DataStore (discoveryengine.projects.locations.dataStores.userEvents.write)",
+        () => probe("WriteDataStoreUserEvent@DataStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DataStoresBranchesDocument", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDocument@DataStoresBranchesDocument (discoveryengine.projects.locations.dataStores.branches.documents.get): DataStoresBranchesDocument: no deployable fixture",
+      test.provider.todo(
+        "GetDocument@DataStoresBranchesDocument (discoveryengine.projects.locations.dataStores.branches.documents.get): DataStoresBranchesDocument: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DataStoresControl", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetControl@DataStoresControl (discoveryengine.projects.locations.dataStores.controls.get): DataStoresControl: no deployable fixture",
+      test.provider.todo(
+        "GetControl@DataStoresControl (discoveryengine.projects.locations.dataStores.controls.get): DataStoresControl: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DataStoresConversation", { concurrent: true }, () => {
       test.provider.skip(
-        "ConverseConversation@DataStoresConversation (discoveryengine.projects.locations.dataStores.conversations.converse): DataStoresConversation: no deployable fixture",
+        'ConverseConversation@DataStoresConversation (discoveryengine.projects.locations.dataStores.conversations.converse): DataStoresConversation: Conversations need the Large Language Model add-on (BadRequest "This feature is only available when Large Language Model add-on is enabled."). (GCP_TEST_DISCOVERYENGINE_LLM)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetConversation@DataStoresConversation (discoveryengine.projects.locations.dataStores.conversations.get): DataStoresConversation: no deployable fixture",
+        'GetConversation@DataStoresConversation (discoveryengine.projects.locations.dataStores.conversations.get): DataStoresConversation: Conversations need the Large Language Model add-on (BadRequest "This feature is only available when Large Language Model add-on is enabled."). (GCP_TEST_DISCOVERYENGINE_LLM)',
         () => Effect.void,
       );
     });
 
     describe("DataStoresSchema", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSchema@DataStoresSchema (discoveryengine.projects.locations.dataStores.schemas.get): DataStoresSchema: no deployable fixture",
+      test.provider.todo(
+        "GetSchema@DataStoresSchema (discoveryengine.projects.locations.dataStores.schemas.get): DataStoresSchema: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DataStoresServingConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "AnswerServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.answer): DataStoresServingConfig: no deployable fixture",
+      test.provider.todo(
+        "AnswerServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.answer): DataStoresServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.get): DataStoresServingConfig: no deployable fixture",
+      test.provider.todo(
+        "GetServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.get): DataStoresServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RecommendServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.recommend): DataStoresServingConfig: no deployable fixture",
+      test.provider.todo(
+        "RecommendServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.recommend): DataStoresServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.search): DataStoresServingConfig: no deployable fixture",
+      test.provider.todo(
+        "SearchServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.search): DataStoresServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchServingConfigLite@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.searchLite): DataStoresServingConfig: no deployable fixture",
+      test.provider.todo(
+        "SearchServingConfigLite@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.searchLite): DataStoresServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StreamServingConfigAnswer@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.streamAnswer): DataStoresServingConfig: no deployable fixture",
+      test.provider.todo(
+        "StreamServingConfigAnswer@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.streamAnswer): DataStoresServingConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DataStoresSession", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSession@DataStoresSession (discoveryengine.projects.locations.dataStores.sessions.get): DataStoresSession: no deployable fixture",
+      test.provider.todo(
+        "GetSession@DataStoresSession (discoveryengine.projects.locations.dataStores.sessions.get): DataStoresSession: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetSessionAnswer@DataStoresSession (discoveryengine.projects.locations.dataStores.sessions.answers.get): DataStoresSession: no deployable fixture",
+      test.provider.todo(
+        "GetSessionAnswer@DataStoresSession (discoveryengine.projects.locations.dataStores.sessions.answers.get): DataStoresSession: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DataStoresSiteSearchEngineTargetSite", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTargetSite@DataStoresSiteSearchEngineTargetSite (discoveryengine.projects.locations.dataStores.siteSearchEngine.targetSites.get): DataStoresSiteSearchEngineTargetSite: no deployable fixture",
+      test.provider.todo(
+        "GetTargetSite@DataStoresSiteSearchEngineTargetSite (discoveryengine.projects.locations.dataStores.siteSearchEngine.targetSites.get): DataStoresSiteSearchEngineTargetSite: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("IdentityMappingStore", { concurrent: true }, () => {
       test.provider.skip(
-        "GetIdentityMappingStore (discoveryengine.projects.locations.identityMappingStores.get): IdentityMappingStore: no deployable fixture",
+        'GetIdentityMappingStore (discoveryengine.projects.locations.identityMappingStores.get): IdentityMappingStore: Identity mapping stores need a workforce identity provider configured for the project (BadRequest "IdP must be configured before creating an Identity (GCP_TEST_DISCOVERYENGINE_IDP)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ImportIdentityMappingStoreIdentityMappings (discoveryengine.projects.locations.identityMappingStores.importIdentityMappings): IdentityMappingStore: no deployable fixture",
+        'ImportIdentityMappingStoreIdentityMappings (discoveryengine.projects.locations.identityMappingStores.importIdentityMappings): IdentityMappingStore: Identity mapping stores need a workforce identity provider configured for the project (BadRequest "IdP must be configured before creating an Identity (GCP_TEST_DISCOVERYENGINE_IDP)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ListIdentityMappingStoreIdentityMappings (discoveryengine.projects.locations.identityMappingStores.listIdentityMappings): IdentityMappingStore: no deployable fixture",
+        'ListIdentityMappingStoreIdentityMappings (discoveryengine.projects.locations.identityMappingStores.listIdentityMappings): IdentityMappingStore: Identity mapping stores need a workforce identity provider configured for the project (BadRequest "IdP must be configured before creating an Identity (GCP_TEST_DISCOVERYENGINE_IDP)',
         () => Effect.void,
       );
       test.provider.skip(
-        "PurgeIdentityMappingStoreIdentityMappings (discoveryengine.projects.locations.identityMappingStores.purgeIdentityMappings): IdentityMappingStore: no deployable fixture",
+        'PurgeIdentityMappingStoreIdentityMappings (discoveryengine.projects.locations.identityMappingStores.purgeIdentityMappings): IdentityMappingStore: Identity mapping stores need a workforce identity provider configured for the project (BadRequest "IdP must be configured before creating an Identity (GCP_TEST_DISCOVERYENGINE_IDP)',
         () => Effect.void,
       );
     });

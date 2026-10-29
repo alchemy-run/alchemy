@@ -27,6 +27,7 @@
     "run.projects.locations.jobs.executions.tasks.list": "a job's IAM policy doesn't cover its executions' tasks"
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
   }
 }

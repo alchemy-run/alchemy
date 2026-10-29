@@ -27,6 +27,7 @@ const probe = (name: string, expectSuccess: boolean) =>
   });
 
 // Deploys one of every bindable resource: slow, so `--fast` skips it.
+// Resource-bound bindings run live in Bindings.test.ts.
 describe.skipIf(!!process.env.FAST)(
   "CloudTasks generated bindings",
   { tags: ["provider:gcp", "provider:gcp:cloudtasks", "live"], concurrent: true },
@@ -55,53 +56,6 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:cloudtasks", "live"],
           timeout: 600_000,
         },
-      );
-    });
-
-    describe("Queue", { concurrent: true }, () => {
-      test.provider.skip(
-        "BatchCreateTasks (cloudtasks.projects.locations.queues.tasks.batchCreate): Queue: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "BatchDeleteTasks (cloudtasks.projects.locations.queues.tasks.batchDelete): Queue: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "BufferTask (cloudtasks.projects.locations.queues.tasks.buffer): Queue: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "DeleteQueueTask (cloudtasks.projects.locations.queues.tasks.delete): Queue: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetQueue (cloudtasks.projects.locations.queues.get): Queue: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetQueueTask (cloudtasks.projects.locations.queues.tasks.get): Queue: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListQueueTasks (cloudtasks.projects.locations.queues.tasks.list): Queue: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "PauseQueue (cloudtasks.projects.locations.queues.pause): Queue: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "PurgeQueue (cloudtasks.projects.locations.queues.purge): Queue: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ResumeQueue (cloudtasks.projects.locations.queues.resume): Queue: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RunQueueTask (cloudtasks.projects.locations.queues.tasks.run): Queue: no deployable fixture",
-        () => Effect.void,
       );
     });
   },

@@ -48,16 +48,16 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ProjectService", { concurrent: true }, () => {
-      test.provider.skip(
-        "DisableService (serviceusage.services.disable): ProjectService: no deployable fixture",
+      test.provider.todo(
+        "DisableService (serviceusage.services.disable): ProjectService: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "EnableService (serviceusage.services.enable): ProjectService: no deployable fixture",
+      test.provider.todo(
+        "EnableService (serviceusage.services.enable): ProjectService: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetService (serviceusage.services.get): ProjectService: no deployable fixture",
+      test.provider.todo(
+        "GetService (serviceusage.services.get): ProjectService: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

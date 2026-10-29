@@ -48,8 +48,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("MembershipsFeature", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetFeature (gkehub.projects.locations.memberships.features.get): MembershipsFeature: no deployable fixture",
+      test.provider.todo(
+        "GetFeature (gkehub.projects.locations.memberships.features.get): MembershipsFeature: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

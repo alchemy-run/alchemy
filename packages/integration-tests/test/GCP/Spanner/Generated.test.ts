@@ -27,6 +27,7 @@ const probe = (name: string, expectSuccess: boolean) =>
   });
 
 // Deploys one of every bindable resource: slow, so `--fast` skips it.
+// Resource-bound bindings run live in Bindings.test.ts.
 describe.skipIf(!!process.env.FAST)(
   "Spanner generated bindings",
   { tags: ["provider:gcp", "provider:gcp:spanner", "live"], concurrent: true },
@@ -46,131 +47,6 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
-
-    describe("Database", { concurrent: true }, () => {
-      test.provider.skip(
-        "AddDatabaseSplitPoints (spanner.projects.instances.databases.addSplitPoints): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "BatchCreateSessions (spanner.projects.instances.databases.sessions.batchCreate): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "BeginTransaction (spanner.projects.instances.databases.sessions.beginTransaction): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ChangeDatabaseQuorum (spanner.projects.instances.databases.changequorum): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "Commit (spanner.projects.instances.databases.sessions.commit): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "DeleteDatabaseSession (spanner.projects.instances.databases.sessions.delete): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ExecuteBatchDml (spanner.projects.instances.databases.sessions.executeBatchDml): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetDatabase (spanner.projects.instances.databases.get): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetDatabaseBackupSchedule (spanner.projects.instances.databases.backupSchedules.get): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetDatabaseSession (spanner.projects.instances.databases.sessions.get): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListDatabaseBackupSchedules (spanner.projects.instances.databases.backupSchedules.list): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListDatabaseRoles (spanner.projects.instances.databases.databaseRoles.list): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListDatabaseSessions (spanner.projects.instances.databases.sessions.list): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "PartitionQuery (spanner.projects.instances.databases.sessions.partitionQuery): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "PartitionRead (spanner.projects.instances.databases.sessions.partitionRead): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "Read (spanner.projects.instances.databases.sessions.read): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "Rollback (spanner.projects.instances.databases.sessions.rollback): Database: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "UpdateDatabaseDdl (spanner.projects.instances.databases.updateDdl): Database: no deployable fixture",
-        () => Effect.void,
-      );
-    });
-
-    describe("Instance", { concurrent: true }, () => {
-      test.provider.skip(
-        "CopyInstanceBackup (spanner.projects.instances.backups.copy): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetInstancePartition (spanner.projects.instances.instancePartitions.get): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListInstanceBackupOperations (spanner.projects.instances.backupOperations.list): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListInstanceBackups (spanner.projects.instances.backups.list): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListInstanceDatabaseOperations (spanner.projects.instances.databaseOperations.list): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListInstanceDatabases (spanner.projects.instances.databases.list): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListInstancePartitionOperations (spanner.projects.instances.instancePartitionOperations.list): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListInstancePartitions (spanner.projects.instances.instancePartitions.list): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "MoveInstance (spanner.projects.instances.move): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RestoreInstanceDatabase (spanner.projects.instances.databases.restore): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-    });
-
-    describe("InstancesBackup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetInstanceBackup (spanner.projects.instances.backups.get): InstancesBackup: no deployable fixture",
-        () => Effect.void,
-      );
-    });
 
     describe("project", { concurrent: true }, () => {
       test.provider(

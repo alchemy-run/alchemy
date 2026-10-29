@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeApp } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated CES binding as its own
@@ -15,19 +16,107 @@ export default class CESGeneratedHost extends GCP.Function<CESGeneratedHost>()(
   "CESGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.CES.ImportApp();
-    const p1 = yield* GCP.CES.ListApps();
+    const p0 = yield* GCP.CES.BatchConversationDelete(ProbeApp);
+    const p1 = yield* GCP.CES.CancelAssistantSessionAssistantTurn(ProbeApp);
+    const p2 = yield* GCP.CES.DeleteAppConversation(ProbeApp);
+    const p3 = yield* GCP.CES.ExecuteAppTool(ProbeApp);
+    const p4 = yield* GCP.CES.ExportApp(ProbeApp);
+    const p5 = yield* GCP.CES.GenerateAppOnboardingSuggestions(ProbeApp);
+    const p6 = yield* GCP.CES.GenerateSessionChatToken(ProbeApp);
+    const p7 = yield* GCP.CES.GetApp(ProbeApp);
+    const p8 = yield* GCP.CES.GetAppChangelog(ProbeApp);
+    const p9 = yield* GCP.CES.GetAppConversation(ProbeApp);
+    const p10 = yield* GCP.CES.GetAppExtendedAgentCard(ProbeApp);
+    const p11 = yield* GCP.CES.ImportApp();
+    const p12 = yield* GCP.CES.ListAppAgents(ProbeApp);
+    const p13 = yield* GCP.CES.ListAppChangelogs(ProbeApp);
+    const p14 = yield* GCP.CES.ListAppConversations(ProbeApp);
+    const p15 = yield* GCP.CES.ListAppDeployments(ProbeApp);
+    const p16 = yield* GCP.CES.ListAppExamples(ProbeApp);
+    const p17 = yield* GCP.CES.ListAppGuardrails(ProbeApp);
+    const p18 = yield* GCP.CES.ListApps();
+    const p19 = yield* GCP.CES.ListAppTools(ProbeApp);
+    const p20 = yield* GCP.CES.ListAppToolsets(ProbeApp);
+    const p21 = yield* GCP.CES.ListAppVersions(ProbeApp);
+    const p22 = yield* GCP.CES.RunSession(ProbeApp);
+    const p23 = yield* GCP.CES.SendAppMessage(ProbeApp);
+    const p24 = yield* GCP.CES.StreamAppMessage(ProbeApp);
+    const p25 = yield* GCP.CES.StreamAssistantSessionChatAiAssistant(ProbeApp);
+    const p26 = yield* GCP.CES.StreamRunSession(ProbeApp);
     return {
       fetch: serveProbes({
+        BatchConversationDelete: outcome(Retry.none(p0({} as never))),
+        CancelAssistantSessionAssistantTurn: outcome(
+          Retry.none(p1({ assistantSession: "alchemy-missing" } as never)),
+        ),
+        DeleteAppConversation: outcome(
+          Retry.none(p2({ conversation: "alchemy-missing" } as never)),
+        ),
+        ExecuteAppTool: outcome(Retry.none(p3({} as never))),
+        ExportApp: outcome(Retry.none(p4({} as never))),
+        GenerateAppOnboardingSuggestions: outcome(Retry.none(p5({} as never))),
+        GenerateSessionChatToken: outcome(Retry.none(p6({ session: "alchemy-missing" } as never))),
+        GetApp: outcome(Retry.none(p7({} as never))),
+        GetAppChangelog: outcome(Retry.none(p8({ changelog: "alchemy-missing" } as never))),
+        GetAppConversation: outcome(Retry.none(p9({ conversation: "alchemy-missing" } as never))),
+        GetAppExtendedAgentCard: outcome(Retry.none(p10({} as never))),
         ImportApp: outcome(
           Retry.none(
-            p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p11({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        ListApps: outcome(Retry.none(p1({ location: "us-central1" } as never))),
+        ListAppAgents: outcome(Retry.none(p12({} as never))),
+        ListAppChangelogs: outcome(Retry.none(p13({} as never))),
+        ListAppConversations: outcome(Retry.none(p14({} as never))),
+        ListAppDeployments: outcome(Retry.none(p15({} as never))),
+        ListAppExamples: outcome(Retry.none(p16({} as never))),
+        ListAppGuardrails: outcome(Retry.none(p17({} as never))),
+        ListApps: outcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListAppTools: outcome(Retry.none(p19({} as never))),
+        ListAppToolsets: outcome(Retry.none(p20({} as never))),
+        ListAppVersions: outcome(Retry.none(p21({} as never))),
+        RunSession: outcome(Retry.none(p22({ session: "alchemy-missing" } as never))),
+        SendAppMessage: outcome(Retry.none(p23({} as never))),
+        StreamAppMessage: outcome(Retry.none(p24({} as never))),
+        StreamAssistantSessionChatAiAssistant: outcome(
+          Retry.none(p25({ assistantSession: "alchemy-missing" } as never)),
+        ),
+        StreamRunSession: outcome(Retry.none(p26({ session: "alchemy-missing" } as never))),
       }),
     };
   }).pipe(
-    Effect.provide(Layer.mergeAll(Layer.mergeAll(GCP.CES.ImportAppHttp, GCP.CES.ListAppsHttp))),
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.CES.BatchConversationDeleteHttp,
+          GCP.CES.CancelAssistantSessionAssistantTurnHttp,
+          GCP.CES.DeleteAppConversationHttp,
+          GCP.CES.ExecuteAppToolHttp,
+          GCP.CES.ExportAppHttp,
+          GCP.CES.GenerateAppOnboardingSuggestionsHttp,
+          GCP.CES.GenerateSessionChatTokenHttp,
+          GCP.CES.GetAppHttp,
+          GCP.CES.GetAppChangelogHttp,
+          GCP.CES.GetAppConversationHttp,
+          GCP.CES.GetAppExtendedAgentCardHttp,
+          GCP.CES.ImportAppHttp,
+          GCP.CES.ListAppAgentsHttp,
+          GCP.CES.ListAppChangelogsHttp,
+          GCP.CES.ListAppConversationsHttp,
+          GCP.CES.ListAppDeploymentsHttp,
+          GCP.CES.ListAppExamplesHttp,
+          GCP.CES.ListAppGuardrailsHttp,
+          GCP.CES.ListAppsHttp,
+          GCP.CES.ListAppToolsHttp,
+          GCP.CES.ListAppToolsetsHttp,
+          GCP.CES.ListAppVersionsHttp,
+          GCP.CES.RunSessionHttp,
+          GCP.CES.SendAppMessageHttp,
+          GCP.CES.StreamAppMessageHttp,
+          GCP.CES.StreamAssistantSessionChatAiAssistantHttp,
+          GCP.CES.StreamRunSessionHttp,
+        ),
+      ),
+    ),
   ),
 ) {}

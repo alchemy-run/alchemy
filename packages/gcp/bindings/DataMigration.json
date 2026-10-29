@@ -19,6 +19,10 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "ConnectionProfile": "ProbeConnectionProfile",
+      "ConversionWorkspace": "ProbeConversionWorkspace"
+    },
+    "untestable": {}
   }
 }

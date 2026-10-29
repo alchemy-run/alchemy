@@ -48,51 +48,71 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("DeploymentGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeprovisionDeploymentGroup (config.projects.locations.deploymentGroups.deprovision): DeploymentGroup: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "DeprovisionDeploymentGroup (config.projects.locations.deploymentGroups.deprovision)",
+        () => probe("DeprovisionDeploymentGroup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:config", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetDeploymentGroup (config.projects.locations.deploymentGroups.get): DeploymentGroup: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetDeploymentGroup (config.projects.locations.deploymentGroups.get)",
+        () => probe("GetDeploymentGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:config", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetDeploymentGroupRevision (config.projects.locations.deploymentGroups.revisions.get): DeploymentGroup: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetDeploymentGroupRevision (config.projects.locations.deploymentGroups.revisions.get)",
+        () => probe("GetDeploymentGroupRevision", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:config", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDeploymentGroupRevisions (config.projects.locations.deploymentGroups.revisions.list): DeploymentGroup: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDeploymentGroupRevisions (config.projects.locations.deploymentGroups.revisions.list)",
+        () => probe("ListDeploymentGroupRevisions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:config", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ProvisionDeploymentGroup (config.projects.locations.deploymentGroups.provision): DeploymentGroup: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ProvisionDeploymentGroup (config.projects.locations.deploymentGroups.provision)",
+        () => probe("ProvisionDeploymentGroup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:config", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("Preview", { concurrent: true }, () => {
-      test.provider.skip(
-        "ExportPreview (config.projects.locations.previews.export): Preview: no deployable fixture",
+      test.provider.todo(
+        "ExportPreview (config.projects.locations.previews.export): Preview: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetPreview (config.projects.locations.previews.get): Preview: no deployable fixture",
+      test.provider.todo(
+        "GetPreview (config.projects.locations.previews.get): Preview: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetPreviewResourceChange (config.projects.locations.previews.resourceChanges.get): Preview: no deployable fixture",
+      test.provider.todo(
+        "GetPreviewResourceChange (config.projects.locations.previews.resourceChanges.get): Preview: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetPreviewResourceDrift (config.projects.locations.previews.resourceDrifts.get): Preview: no deployable fixture",
+      test.provider.todo(
+        "GetPreviewResourceDrift (config.projects.locations.previews.resourceDrifts.get): Preview: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListPreviewResourceChanges (config.projects.locations.previews.resourceChanges.list): Preview: no deployable fixture",
+      test.provider.todo(
+        "ListPreviewResourceChanges (config.projects.locations.previews.resourceChanges.list): Preview: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListPreviewResourceDrifts (config.projects.locations.previews.resourceDrifts.list): Preview: no deployable fixture",
+      test.provider.todo(
+        "ListPreviewResourceDrifts (config.projects.locations.previews.resourceDrifts.list): Preview: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

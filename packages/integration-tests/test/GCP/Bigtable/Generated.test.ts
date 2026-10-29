@@ -27,6 +27,7 @@ const probe = (name: string, expectSuccess: boolean) =>
   });
 
 // Deploys one of every bindable resource: slow, so `--fast` skips it.
+// Resource-bound bindings run live in Bindings.test.ts.
 describe.skipIf(!!process.env.FAST)(
   "Bigtable generated bindings",
   { tags: ["provider:gcp", "provider:gcp:bigtable", "live"], concurrent: true },
@@ -47,65 +48,6 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
-    describe("Instance", { concurrent: true }, () => {
-      test.provider.skip(
-        "CopyInstanceClusterBackup (bigtableadmin.projects.instances.clusters.backups.copy): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetInstanceAppProfile (bigtableadmin.projects.instances.appProfiles.get): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetInstanceClusterBackup (bigtableadmin.projects.instances.clusters.backups.get): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetInstanceLogicalView (bigtableadmin.projects.instances.logicalViews.get): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetInstanceMaterializedView (bigtableadmin.projects.instances.materializedViews.get): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListInstanceAppProfiles (bigtableadmin.projects.instances.appProfiles.list): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListInstanceClusterBackups (bigtableadmin.projects.instances.clusters.backups.list): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListInstanceClusterHotTablets (bigtableadmin.projects.instances.clusters.hotTablets.list): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListInstanceClusterMemoryLayers (bigtableadmin.projects.instances.clusters.memoryLayers.list): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListInstanceClusters (bigtableadmin.projects.instances.clusters.list): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListInstanceLogicalViews (bigtableadmin.projects.instances.logicalViews.list): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListInstanceMaterializedViews (bigtableadmin.projects.instances.materializedViews.list): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListInstanceTables (bigtableadmin.projects.instances.tables.list): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RestoreInstanceTable (bigtableadmin.projects.instances.tables.restore): Instance: no deployable fixture",
-        () => Effect.void,
-      );
-    });
-
     describe("project", { concurrent: true }, () => {
       test.provider(
         "ListInstances (bigtableadmin.projects.instances.list)",
@@ -114,45 +56,6 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:bigtable", "live"],
           timeout: 600_000,
         },
-      );
-    });
-
-    describe("Table", { concurrent: true }, () => {
-      test.provider.skip(
-        "CheckTableConsistency (bigtableadmin.projects.instances.tables.checkConsistency): Table: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "DropTableRowRange (bigtableadmin.projects.instances.tables.dropRowRange): Table: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GenerateTableConsistencyToken (bigtableadmin.projects.instances.tables.generateConsistencyToken): Table: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetTableAuthorizedView (bigtableadmin.projects.instances.tables.authorizedViews.get): Table: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetTableSchemaBundle (bigtableadmin.projects.instances.tables.schemaBundles.get): Table: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListTableAuthorizedViews (bigtableadmin.projects.instances.tables.authorizedViews.list): Table: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListTableSchemaBundles (bigtableadmin.projects.instances.tables.schemaBundles.list): Table: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ModifyTableColumnFamilies (bigtableadmin.projects.instances.tables.modifyColumnFamilies): Table: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "UndeleteTable (bigtableadmin.projects.instances.tables.undelete): Table: no deployable fixture",
-        () => Effect.void,
       );
     });
   },

@@ -48,46 +48,70 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AlertPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAlertPolicy (monitoring.projects.alertPolicies.get): AlertPolicy: no deployable fixture",
+      test.provider.todo(
+        "GetAlertPolicy (monitoring.projects.alertPolicies.get): AlertPolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Group", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetGroup (monitoring.projects.groups.get): Group: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListGroupMembers (monitoring.projects.groups.members.list): Group: no deployable fixture",
-        () => Effect.void,
+      test.provider("GetGroup (monitoring.projects.groups.get)", () => probe("GetGroup", true), {
+        tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "ListGroupMembers (monitoring.projects.groups.members.list)",
+        () => probe("ListGroupMembers", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("MetricDescriptor", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetMetricDescriptor (monitoring.projects.metricDescriptors.get): MetricDescriptor: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetMetricDescriptor (monitoring.projects.metricDescriptors.get)",
+        () => probe("GetMetricDescriptor", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("NotificationChannel", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetNotificationChannel (monitoring.projects.notificationChannels.get): NotificationChannel: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetNotificationChannel (monitoring.projects.notificationChannels.get)",
+        () => probe("GetNotificationChannel", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetNotificationChannelVerificationCode (monitoring.projects.notificationChannels.getVerificationCode): NotificationChannel: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetNotificationChannelVerificationCode (monitoring.projects.notificationChannels.getVerificationCode)",
+        () => probe("GetNotificationChannelVerificationCode", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SendNotificationChannelVerificationCode (monitoring.projects.notificationChannels.sendVerificationCode): NotificationChannel: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "SendNotificationChannelVerificationCode (monitoring.projects.notificationChannels.sendVerificationCode)",
+        () => probe("SendNotificationChannelVerificationCode", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "VerifyNotificationChannel (monitoring.projects.notificationChannels.verify): NotificationChannel: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "VerifyNotificationChannel (monitoring.projects.notificationChannels.verify)",
+        () => probe("VerifyNotificationChannel", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -227,27 +251,35 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Service", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetService (monitoring.services.get): Service: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListServiceLevelObjectives (monitoring.services.serviceLevelObjectives.list): Service: no deployable fixture",
-        () => Effect.void,
+      test.provider("GetService (monitoring.services.get)", () => probe("GetService", true), {
+        tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "ListServiceLevelObjectives (monitoring.services.serviceLevelObjectives.list)",
+        () => probe("ListServiceLevelObjectives", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ServicesServiceLevelObjective", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetServiceLevelObjective (monitoring.services.serviceLevelObjectives.get): ServicesServiceLevelObjective: no deployable fixture",
+      test.provider.todo(
+        "GetServiceLevelObjective (monitoring.services.serviceLevelObjectives.get): ServicesServiceLevelObjective: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("UptimeCheckConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetUptimeCheckConfig (monitoring.projects.uptimeCheckConfigs.get): UptimeCheckConfig: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetUptimeCheckConfig (monitoring.projects.uptimeCheckConfigs.get)",
+        () => probe("GetUptimeCheckConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

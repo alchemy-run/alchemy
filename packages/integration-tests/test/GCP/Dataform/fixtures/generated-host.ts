@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeFolder, ProbeRepo, ProbeTeam, ProbeWorkspace } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Dataform binding as its own
@@ -15,18 +16,152 @@ export default class DataformGeneratedHost extends GCP.Function<DataformGenerate
   "DataformGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.Dataform.ListRepositories();
-    const p1 = yield* GCP.Dataform.SearchTeamFolder();
+    const p0 = yield* GCP.Dataform.CommitRepository(ProbeRepo);
+    const p1 = yield* GCP.Dataform.CommitWorkspace(ProbeWorkspace);
+    const p2 = yield* GCP.Dataform.ComputeRepositoryAccessTokenStatus(ProbeRepo);
+    const p3 = yield* GCP.Dataform.CreateRepositoryCompilationResult(ProbeRepo);
+    const p4 = yield* GCP.Dataform.DeleteFolderTree(ProbeFolder);
+    const p5 = yield* GCP.Dataform.DeleteTeamFolderTree(ProbeTeam);
+    const p6 = yield* GCP.Dataform.FetchRepositoryHistory(ProbeRepo);
+    const p7 = yield* GCP.Dataform.FetchRepositoryRemoteBranches(ProbeRepo);
+    const p8 = yield* GCP.Dataform.FetchWorkspaceFileDiff(ProbeWorkspace);
+    const p9 = yield* GCP.Dataform.FetchWorkspaceFileGitStatuses(ProbeWorkspace);
+    const p10 = yield* GCP.Dataform.FetchWorkspaceGitAheadBehind(ProbeWorkspace);
+    const p11 = yield* GCP.Dataform.GetFolder(ProbeFolder);
+    const p12 = yield* GCP.Dataform.GetRepository(ProbeRepo);
+    const p13 = yield* GCP.Dataform.GetRepositoryCompilationResult(ProbeRepo);
+    const p14 = yield* GCP.Dataform.GetTeamFolder(ProbeTeam);
+    const p15 = yield* GCP.Dataform.GetWorkspace(ProbeWorkspace);
+    const p16 = yield* GCP.Dataform.InstallWorkspaceNpmPackages(ProbeWorkspace);
+    const p17 = yield* GCP.Dataform.ListRepositories();
+    const p18 = yield* GCP.Dataform.ListRepositoryCompilationResults(ProbeRepo);
+    const p19 = yield* GCP.Dataform.ListRepositoryReleaseConfigs(ProbeRepo);
+    const p20 = yield* GCP.Dataform.ListRepositoryWorkflowConfigs(ProbeRepo);
+    const p21 = yield* GCP.Dataform.ListRepositoryWorkflowInvocations(ProbeRepo);
+    const p22 = yield* GCP.Dataform.ListRepositoryWorkspaces(ProbeRepo);
+    const p23 = yield* GCP.Dataform.MakeWorkspaceDirectory(ProbeWorkspace);
+    const p24 = yield* GCP.Dataform.MoveFolder(ProbeFolder);
+    const p25 = yield* GCP.Dataform.MoveRepository(ProbeRepo);
+    const p26 = yield* GCP.Dataform.MoveWorkspaceDirectory(ProbeWorkspace);
+    const p27 = yield* GCP.Dataform.MoveWorkspaceFile(ProbeWorkspace);
+    const p28 = yield* GCP.Dataform.PullWorkspace(ProbeWorkspace);
+    const p29 = yield* GCP.Dataform.PushWorkspace(ProbeWorkspace);
+    const p30 = yield* GCP.Dataform.QueryFolderContents(ProbeFolder);
+    const p31 = yield* GCP.Dataform.QueryRepositoryCompilationResult(ProbeRepo);
+    const p32 = yield* GCP.Dataform.QueryRepositoryDirectoryContents(ProbeRepo);
+    const p33 = yield* GCP.Dataform.QueryTeamFolderContents(ProbeTeam);
+    const p34 = yield* GCP.Dataform.QueryWorkspaceDirectoryContents(ProbeWorkspace);
+    const p35 = yield* GCP.Dataform.ReadRepositoryFile(ProbeRepo);
+    const p36 = yield* GCP.Dataform.ReadWorkspaceFile(ProbeWorkspace);
+    const p37 = yield* GCP.Dataform.RemoveWorkspaceDirectory(ProbeWorkspace);
+    const p38 = yield* GCP.Dataform.RemoveWorkspaceFile(ProbeWorkspace);
+    const p39 = yield* GCP.Dataform.ResetWorkspace(ProbeWorkspace);
+    const p40 = yield* GCP.Dataform.SearchTeamFolder();
+    const p41 = yield* GCP.Dataform.SearchWorkspaceFiles(ProbeWorkspace);
+    const p42 = yield* GCP.Dataform.WriteWorkspaceFile(ProbeWorkspace);
     return {
       fetch: serveProbes({
-        ListRepositories: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        SearchTeamFolder: outcome(Retry.none(p1({ location: "us-central1" } as never))),
+        CommitRepository: outcome(Retry.none(p0({} as never))),
+        CommitWorkspace: outcome(Retry.none(p1({} as never))),
+        ComputeRepositoryAccessTokenStatus: outcome(Retry.none(p2({} as never))),
+        CreateRepositoryCompilationResult: outcome(
+          Retry.none(p3({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DeleteFolderTree: outcome(Retry.none(p4({} as never))),
+        DeleteTeamFolderTree: outcome(Retry.none(p5({} as never))),
+        FetchRepositoryHistory: outcome(Retry.none(p6({} as never))),
+        FetchRepositoryRemoteBranches: outcome(Retry.none(p7({} as never))),
+        FetchWorkspaceFileDiff: outcome(Retry.none(p8({} as never))),
+        FetchWorkspaceFileGitStatuses: outcome(Retry.none(p9({} as never))),
+        FetchWorkspaceGitAheadBehind: outcome(Retry.none(p10({} as never))),
+        GetFolder: outcome(Retry.none(p11({} as never))),
+        GetRepository: outcome(Retry.none(p12({} as never))),
+        GetRepositoryCompilationResult: outcome(
+          Retry.none(p13({ compilationResult: "alchemy-missing" } as never)),
+        ),
+        GetTeamFolder: outcome(Retry.none(p14({} as never))),
+        GetWorkspace: outcome(Retry.none(p15({} as never))),
+        InstallWorkspaceNpmPackages: outcome(Retry.none(p16({} as never))),
+        ListRepositories: outcome(Retry.none(p17({ location: "us-central1" } as never))),
+        ListRepositoryCompilationResults: outcome(Retry.none(p18({} as never))),
+        ListRepositoryReleaseConfigs: outcome(Retry.none(p19({} as never))),
+        ListRepositoryWorkflowConfigs: outcome(Retry.none(p20({} as never))),
+        ListRepositoryWorkflowInvocations: outcome(Retry.none(p21({} as never))),
+        ListRepositoryWorkspaces: outcome(Retry.none(p22({} as never))),
+        MakeWorkspaceDirectory: outcome(Retry.none(p23({} as never))),
+        MoveFolder: outcome(Retry.none(p24({} as never))),
+        MoveRepository: outcome(Retry.none(p25({} as never))),
+        MoveWorkspaceDirectory: outcome(Retry.none(p26({} as never))),
+        MoveWorkspaceFile: outcome(Retry.none(p27({} as never))),
+        PullWorkspace: outcome(Retry.none(p28({} as never))),
+        PushWorkspace: outcome(Retry.none(p29({} as never))),
+        QueryFolderContents: outcome(Retry.none(p30({} as never))),
+        QueryRepositoryCompilationResult: outcome(
+          Retry.none(p31({ compilationResult: "alchemy-missing" } as never)),
+        ),
+        QueryRepositoryDirectoryContents: outcome(Retry.none(p32({} as never))),
+        QueryTeamFolderContents: outcome(Retry.none(p33({} as never))),
+        QueryWorkspaceDirectoryContents: outcome(Retry.none(p34({} as never))),
+        ReadRepositoryFile: outcome(Retry.none(p35({} as never))),
+        ReadWorkspaceFile: outcome(Retry.none(p36({} as never))),
+        RemoveWorkspaceDirectory: outcome(Retry.none(p37({} as never))),
+        RemoveWorkspaceFile: outcome(Retry.none(p38({} as never))),
+        ResetWorkspace: outcome(Retry.none(p39({} as never))),
+        SearchTeamFolder: outcome(Retry.none(p40({ location: "us-central1" } as never))),
+        SearchWorkspaceFiles: outcome(Retry.none(p41({} as never))),
+        WriteWorkspaceFile: outcome(Retry.none(p42({} as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Layer.mergeAll(GCP.Dataform.ListRepositoriesHttp, GCP.Dataform.SearchTeamFolderHttp),
+        Layer.mergeAll(
+          GCP.Dataform.CommitRepositoryHttp,
+          GCP.Dataform.CommitWorkspaceHttp,
+          GCP.Dataform.ComputeRepositoryAccessTokenStatusHttp,
+          GCP.Dataform.CreateRepositoryCompilationResultHttp,
+          GCP.Dataform.DeleteFolderTreeHttp,
+          GCP.Dataform.DeleteTeamFolderTreeHttp,
+          GCP.Dataform.FetchRepositoryHistoryHttp,
+          GCP.Dataform.FetchRepositoryRemoteBranchesHttp,
+          GCP.Dataform.FetchWorkspaceFileDiffHttp,
+          GCP.Dataform.FetchWorkspaceFileGitStatusesHttp,
+          GCP.Dataform.FetchWorkspaceGitAheadBehindHttp,
+          GCP.Dataform.GetFolderHttp,
+          GCP.Dataform.GetRepositoryHttp,
+          GCP.Dataform.GetRepositoryCompilationResultHttp,
+          GCP.Dataform.GetTeamFolderHttp,
+          GCP.Dataform.GetWorkspaceHttp,
+          GCP.Dataform.InstallWorkspaceNpmPackagesHttp,
+          GCP.Dataform.ListRepositoriesHttp,
+          GCP.Dataform.ListRepositoryCompilationResultsHttp,
+          GCP.Dataform.ListRepositoryReleaseConfigsHttp,
+          GCP.Dataform.ListRepositoryWorkflowConfigsHttp,
+          GCP.Dataform.ListRepositoryWorkflowInvocationsHttp,
+          GCP.Dataform.ListRepositoryWorkspacesHttp,
+          GCP.Dataform.MakeWorkspaceDirectoryHttp,
+          GCP.Dataform.MoveFolderHttp,
+          GCP.Dataform.MoveRepositoryHttp,
+          GCP.Dataform.MoveWorkspaceDirectoryHttp,
+          GCP.Dataform.MoveWorkspaceFileHttp,
+          GCP.Dataform.PullWorkspaceHttp,
+          GCP.Dataform.PushWorkspaceHttp,
+          GCP.Dataform.QueryFolderContentsHttp,
+          GCP.Dataform.QueryRepositoryCompilationResultHttp,
+          GCP.Dataform.QueryRepositoryDirectoryContentsHttp,
+          GCP.Dataform.QueryTeamFolderContentsHttp,
+          GCP.Dataform.QueryWorkspaceDirectoryContentsHttp,
+          GCP.Dataform.ReadRepositoryFileHttp,
+          GCP.Dataform.ReadWorkspaceFileHttp,
+          GCP.Dataform.RemoveWorkspaceDirectoryHttp,
+          GCP.Dataform.RemoveWorkspaceFileHttp,
+          GCP.Dataform.ResetWorkspaceHttp,
+        ),
+        Layer.mergeAll(
+          GCP.Dataform.SearchTeamFolderHttp,
+          GCP.Dataform.SearchWorkspaceFilesHttp,
+          GCP.Dataform.WriteWorkspaceFileHttp,
+        ),
       ),
     ),
   ),

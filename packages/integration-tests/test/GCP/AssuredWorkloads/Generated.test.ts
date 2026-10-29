@@ -91,24 +91,24 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Workload", { concurrent: true }, () => {
-      test.provider.skip(
-        "AcknowledgeWorkloadViolation (assuredworkloads.organizations.locations.workloads.violations.acknowledge): Workload: no deployable fixture",
+      test.provider.todo(
+        "AcknowledgeWorkloadViolation (assuredworkloads.organizations.locations.workloads.violations.acknowledge): Workload: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ApplyWorkloadUpdate (assuredworkloads.organizations.locations.workloads.updates.apply): Workload: no deployable fixture",
+      test.provider.todo(
+        "ApplyWorkloadUpdate (assuredworkloads.organizations.locations.workloads.updates.apply): Workload: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetWorkloadViolation (assuredworkloads.organizations.locations.workloads.violations.get): Workload: no deployable fixture",
+      test.provider.todo(
+        "GetWorkloadViolation (assuredworkloads.organizations.locations.workloads.violations.get): Workload: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListWorkloadUpdates (assuredworkloads.organizations.locations.workloads.updates.list): Workload: no deployable fixture",
+      test.provider.todo(
+        "ListWorkloadUpdates (assuredworkloads.organizations.locations.workloads.updates.list): Workload: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListWorkloadViolations (assuredworkloads.organizations.locations.workloads.violations.list): Workload: no deployable fixture",
+      test.provider.todo(
+        "ListWorkloadViolations (assuredworkloads.organizations.locations.workloads.violations.list): Workload: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

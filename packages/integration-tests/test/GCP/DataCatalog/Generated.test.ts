@@ -272,50 +272,62 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("TagTemplate", { concurrent: true }, () => {
       test.provider.skip(
-        "CreateTagTemplateField (datacatalog.projects.locations.tagTemplates.fields.create): TagTemplate: no deployable fixture",
+        'CreateTagTemplateField (datacatalog.projects.locations.tagTemplates.fields.create): TagTemplate: Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated ("Project … is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)',
         () => Effect.void,
       );
       test.provider.skip(
-        "DeleteTagTemplateField (datacatalog.projects.locations.tagTemplates.fields.delete): TagTemplate: no deployable fixture",
+        'DeleteTagTemplateField (datacatalog.projects.locations.tagTemplates.fields.delete): TagTemplate: Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated ("Project … is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetTagTemplate (datacatalog.projects.locations.tagTemplates.get): TagTemplate: no deployable fixture",
+        'GetTagTemplate (datacatalog.projects.locations.tagTemplates.get): TagTemplate: Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated ("Project … is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)',
         () => Effect.void,
       );
       test.provider.skip(
-        "PatchTagTemplateField (datacatalog.projects.locations.tagTemplates.fields.patch): TagTemplate: no deployable fixture",
+        'PatchTagTemplateField (datacatalog.projects.locations.tagTemplates.fields.patch): TagTemplate: Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated ("Project … is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)',
         () => Effect.void,
       );
       test.provider.skip(
-        "RenameTagTemplateField (datacatalog.projects.locations.tagTemplates.fields.rename): TagTemplate: no deployable fixture",
+        'RenameTagTemplateField (datacatalog.projects.locations.tagTemplates.fields.rename): TagTemplate: Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated ("Project … is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)',
         () => Effect.void,
       );
       test.provider.skip(
-        "RenameTagTemplateFieldEnumValue (datacatalog.projects.locations.tagTemplates.fields.enumValues.rename): TagTemplate: no deployable fixture",
+        'RenameTagTemplateFieldEnumValue (datacatalog.projects.locations.tagTemplates.fields.enumValues.rename): TagTemplate: Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated ("Project … is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)',
         () => Effect.void,
       );
     });
 
     describe("TaxonomiesPolicyTag", { concurrent: true }, () => {
       test.provider.skip(
-        "GetPolicyTag (datacatalog.projects.locations.taxonomies.policyTags.get): TaxonomiesPolicyTag: no deployable fixture",
+        'GetPolicyTag (datacatalog.projects.locations.taxonomies.policyTags.get): TaxonomiesPolicyTag: Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated ("Project … is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)',
         () => Effect.void,
       );
     });
 
     describe("Taxonomy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTaxonomy (datacatalog.projects.locations.taxonomies.get): Taxonomy: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetTaxonomy (datacatalog.projects.locations.taxonomies.get)",
+        () => probe("GetTaxonomy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListTaxonomyPolicyTags (datacatalog.projects.locations.taxonomies.policyTags.list): Taxonomy: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListTaxonomyPolicyTags (datacatalog.projects.locations.taxonomies.policyTags.list)",
+        () => probe("ListTaxonomyPolicyTags", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ReplaceTaxonomy (datacatalog.projects.locations.taxonomies.replace): Taxonomy: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ReplaceTaxonomy (datacatalog.projects.locations.taxonomies.replace)",
+        () => probe("ReplaceTaxonomy", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

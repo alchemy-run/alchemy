@@ -48,56 +48,56 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AccessPoliciesAccessLevel", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAccessLevel (accesscontextmanager.accessPolicies.accessLevels.get): AccessPoliciesAccessLevel: no deployable fixture",
+      test.provider.todo(
+        "GetAccessLevel (accesscontextmanager.accessPolicies.accessLevels.get): AccessPoliciesAccessLevel: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AccessPoliciesAuthorizedOrgsDesc", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAuthorizedOrgsDesc (accesscontextmanager.accessPolicies.authorizedOrgsDescs.get): AccessPoliciesAuthorizedOrgsDesc: no deployable fixture",
+      test.provider.todo(
+        "GetAuthorizedOrgsDesc (accesscontextmanager.accessPolicies.authorizedOrgsDescs.get): AccessPoliciesAuthorizedOrgsDesc: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AccessPoliciesServicePerimeter", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetServicePerimeter (accesscontextmanager.accessPolicies.servicePerimeters.get): AccessPoliciesServicePerimeter: no deployable fixture",
+      test.provider.todo(
+        "GetServicePerimeter (accesscontextmanager.accessPolicies.servicePerimeters.get): AccessPoliciesServicePerimeter: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AccessPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "CommitAccessPolicyServicePerimeter (accesscontextmanager.accessPolicies.servicePerimeters.commit): AccessPolicy: no deployable fixture",
+      test.provider.todo(
+        "CommitAccessPolicyServicePerimeter (accesscontextmanager.accessPolicies.servicePerimeters.commit): AccessPolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListAccessPolicyAccessLevels (accesscontextmanager.accessPolicies.accessLevels.list): AccessPolicy: no deployable fixture",
+      test.provider.todo(
+        "ListAccessPolicyAccessLevels (accesscontextmanager.accessPolicies.accessLevels.list): AccessPolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListAccessPolicyAuthorizedOrgsDescs (accesscontextmanager.accessPolicies.authorizedOrgsDescs.list): AccessPolicy: no deployable fixture",
+      test.provider.todo(
+        "ListAccessPolicyAuthorizedOrgsDescs (accesscontextmanager.accessPolicies.authorizedOrgsDescs.list): AccessPolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListAccessPolicyServicePerimeters (accesscontextmanager.accessPolicies.servicePerimeters.list): AccessPolicy: no deployable fixture",
+      test.provider.todo(
+        "ListAccessPolicyServicePerimeters (accesscontextmanager.accessPolicies.servicePerimeters.list): AccessPolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ReplaceAccessLevelAll (accesscontextmanager.accessPolicies.accessLevels.replaceAll): AccessPolicy: no deployable fixture",
+      test.provider.todo(
+        "ReplaceAccessLevelAll (accesscontextmanager.accessPolicies.accessLevels.replaceAll): AccessPolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ReplaceServicePerimeterAll (accesscontextmanager.accessPolicies.servicePerimeters.replaceAll): AccessPolicy: no deployable fixture",
+      test.provider.todo(
+        "ReplaceServicePerimeterAll (accesscontextmanager.accessPolicies.servicePerimeters.replaceAll): AccessPolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("GcpUserAccessBinding", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetGcpUserAccessBinding (accesscontextmanager.organizations.gcpUserAccessBindings.get): GcpUserAccessBinding: no deployable fixture",
+      test.provider.todo(
+        "GetGcpUserAccessBinding (accesscontextmanager.organizations.gcpUserAccessBindings.get): GcpUserAccessBinding: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

@@ -16,6 +16,9 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "BackupVault": "ProbeBackupVault"
+    },
+    "untestable": {}
   }
 }

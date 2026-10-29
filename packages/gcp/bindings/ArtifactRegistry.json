@@ -35,6 +35,7 @@
     "BatchVersionDelete": "BatchDeleteRepositoryPackageVersions"
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
   }
 }

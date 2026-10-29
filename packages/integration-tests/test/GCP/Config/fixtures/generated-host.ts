@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeDeploymentGroup } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Config binding as its own
@@ -18,23 +19,28 @@ export default class ConfigGeneratedHost extends GCP.Function<ConfigGeneratedHos
     const p0 = yield* GCP.Config.CreateDeployment();
     const p1 = yield* GCP.Config.DeleteDeployment();
     const p2 = yield* GCP.Config.DeleteDeploymentState();
-    const p3 = yield* GCP.Config.ExportDeploymentLock();
-    const p4 = yield* GCP.Config.ExportDeploymentState();
-    const p5 = yield* GCP.Config.ExportRevisionState();
-    const p6 = yield* GCP.Config.GetDeployment();
-    const p7 = yield* GCP.Config.GetDeploymentRevision();
-    const p8 = yield* GCP.Config.GetDeploymentRevisionResource();
-    const p9 = yield* GCP.Config.GetTerraformVersion();
-    const p10 = yield* GCP.Config.ImportDeploymentState();
-    const p11 = yield* GCP.Config.ListDeploymentGroups();
-    const p12 = yield* GCP.Config.ListDeploymentRevisionResources();
-    const p13 = yield* GCP.Config.ListDeploymentRevisions();
-    const p14 = yield* GCP.Config.ListDeployments();
-    const p15 = yield* GCP.Config.ListPreviews();
-    const p16 = yield* GCP.Config.ListTerraformVersions();
-    const p17 = yield* GCP.Config.LockDeployment();
-    const p18 = yield* GCP.Config.PatchDeployment();
-    const p19 = yield* GCP.Config.UnlockDeployment();
+    const p3 = yield* GCP.Config.DeprovisionDeploymentGroup(ProbeDeploymentGroup);
+    const p4 = yield* GCP.Config.ExportDeploymentLock();
+    const p5 = yield* GCP.Config.ExportDeploymentState();
+    const p6 = yield* GCP.Config.ExportRevisionState();
+    const p7 = yield* GCP.Config.GetDeployment();
+    const p8 = yield* GCP.Config.GetDeploymentGroup(ProbeDeploymentGroup);
+    const p9 = yield* GCP.Config.GetDeploymentGroupRevision(ProbeDeploymentGroup);
+    const p10 = yield* GCP.Config.GetDeploymentRevision();
+    const p11 = yield* GCP.Config.GetDeploymentRevisionResource();
+    const p12 = yield* GCP.Config.GetTerraformVersion();
+    const p13 = yield* GCP.Config.ImportDeploymentState();
+    const p14 = yield* GCP.Config.ListDeploymentGroupRevisions(ProbeDeploymentGroup);
+    const p15 = yield* GCP.Config.ListDeploymentGroups();
+    const p16 = yield* GCP.Config.ListDeploymentRevisionResources();
+    const p17 = yield* GCP.Config.ListDeploymentRevisions();
+    const p18 = yield* GCP.Config.ListDeployments();
+    const p19 = yield* GCP.Config.ListPreviews();
+    const p20 = yield* GCP.Config.ListTerraformVersions();
+    const p21 = yield* GCP.Config.LockDeployment();
+    const p22 = yield* GCP.Config.PatchDeployment();
+    const p23 = yield* GCP.Config.ProvisionDeploymentGroup(ProbeDeploymentGroup);
+    const p24 = yield* GCP.Config.UnlockDeployment();
     return {
       fetch: serveProbes({
         CreateDeployment: outcome(
@@ -48,15 +54,16 @@ export default class ConfigGeneratedHost extends GCP.Function<ConfigGeneratedHos
         DeleteDeploymentState: outcome(
           Retry.none(p2({ deployment: "alchemy-missing", location: "us-central1" } as never)),
         ),
+        DeprovisionDeploymentGroup: outcome(Retry.none(p3({} as never))),
         ExportDeploymentLock: outcome(
-          Retry.none(p3({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p4({ deployment: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ExportDeploymentState: outcome(
-          Retry.none(p4({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p5({ deployment: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ExportRevisionState: outcome(
           Retry.none(
-            p5({
+            p6({
               deployment: "alchemy-missing",
               revision: "alchemy-missing",
               location: "us-central1",
@@ -64,11 +71,15 @@ export default class ConfigGeneratedHost extends GCP.Function<ConfigGeneratedHos
           ),
         ),
         GetDeployment: outcome(
-          Retry.none(p6({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p7({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetDeploymentGroup: outcome(Retry.none(p8({} as never))),
+        GetDeploymentGroupRevision: outcome(
+          Retry.none(p9({ revision: "alchemy-missing" } as never)),
         ),
         GetDeploymentRevision: outcome(
           Retry.none(
-            p7({
+            p10({
               deployment: "alchemy-missing",
               revision: "alchemy-missing",
               location: "us-central1",
@@ -77,7 +88,7 @@ export default class ConfigGeneratedHost extends GCP.Function<ConfigGeneratedHos
         ),
         GetDeploymentRevisionResource: outcome(
           Retry.none(
-            p8({
+            p11({
               deployment: "alchemy-missing",
               revision: "alchemy-missing",
               resource: "alchemy-missing",
@@ -86,21 +97,24 @@ export default class ConfigGeneratedHost extends GCP.Function<ConfigGeneratedHos
           ),
         ),
         GetTerraformVersion: outcome(
-          Retry.none(p9({ terraformVersion: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p12({ terraformVersion: "alchemy-missing", location: "us-central1" } as never),
+          ),
         ),
         ImportDeploymentState: outcome(
           Retry.none(
-            p10({
+            p13({
               deployment: "alchemy-missing",
               location: "us-central1",
               body: { alchemyProbe: "alchemy-missing" },
             } as never),
           ),
         ),
-        ListDeploymentGroups: outcome(Retry.none(p11({ location: "us-central1" } as never))),
+        ListDeploymentGroupRevisions: outcome(Retry.none(p14({} as never))),
+        ListDeploymentGroups: outcome(Retry.none(p15({ location: "us-central1" } as never))),
         ListDeploymentRevisionResources: outcome(
           Retry.none(
-            p12({
+            p16({
               deployment: "alchemy-missing",
               revision: "alchemy-missing",
               location: "us-central1",
@@ -108,19 +122,20 @@ export default class ConfigGeneratedHost extends GCP.Function<ConfigGeneratedHos
           ),
         ),
         ListDeploymentRevisions: outcome(
-          Retry.none(p13({ deployment: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        ListDeployments: outcome(Retry.none(p14({ location: "us-central1" } as never))),
-        ListPreviews: outcome(Retry.none(p15({ location: "us-central1" } as never))),
-        ListTerraformVersions: outcome(Retry.none(p16({ location: "us-central1" } as never))),
-        LockDeployment: outcome(
           Retry.none(p17({ deployment: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        PatchDeployment: outcome(
-          Retry.none(p18({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+        ListDeployments: outcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListPreviews: outcome(Retry.none(p19({ location: "us-central1" } as never))),
+        ListTerraformVersions: outcome(Retry.none(p20({ location: "us-central1" } as never))),
+        LockDeployment: outcome(
+          Retry.none(p21({ deployment: "alchemy-missing", location: "us-central1" } as never)),
         ),
+        PatchDeployment: outcome(
+          Retry.none(p22({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ProvisionDeploymentGroup: outcome(Retry.none(p23({} as never))),
         UnlockDeployment: outcome(
-          Retry.none(p19({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p24({ deployment: "alchemy-missing", location: "us-central1" } as never)),
         ),
       }),
     };
@@ -131,14 +146,18 @@ export default class ConfigGeneratedHost extends GCP.Function<ConfigGeneratedHos
           GCP.Config.CreateDeploymentHttp,
           GCP.Config.DeleteDeploymentHttp,
           GCP.Config.DeleteDeploymentStateHttp,
+          GCP.Config.DeprovisionDeploymentGroupHttp,
           GCP.Config.ExportDeploymentLockHttp,
           GCP.Config.ExportDeploymentStateHttp,
           GCP.Config.ExportRevisionStateHttp,
           GCP.Config.GetDeploymentHttp,
+          GCP.Config.GetDeploymentGroupHttp,
+          GCP.Config.GetDeploymentGroupRevisionHttp,
           GCP.Config.GetDeploymentRevisionHttp,
           GCP.Config.GetDeploymentRevisionResourceHttp,
           GCP.Config.GetTerraformVersionHttp,
           GCP.Config.ImportDeploymentStateHttp,
+          GCP.Config.ListDeploymentGroupRevisionsHttp,
           GCP.Config.ListDeploymentGroupsHttp,
           GCP.Config.ListDeploymentRevisionResourcesHttp,
           GCP.Config.ListDeploymentRevisionsHttp,
@@ -147,6 +166,7 @@ export default class ConfigGeneratedHost extends GCP.Function<ConfigGeneratedHos
           GCP.Config.ListTerraformVersionsHttp,
           GCP.Config.LockDeploymentHttp,
           GCP.Config.PatchDeploymentHttp,
+          GCP.Config.ProvisionDeploymentGroupHttp,
           GCP.Config.UnlockDeploymentHttp,
         ),
       ),

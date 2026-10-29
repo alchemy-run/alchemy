@@ -48,92 +48,156 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Hub", { concurrent: true }, () => {
-      test.provider.skip(
-        "AcceptHubSpoke (networkconnectivity.projects.locations.global.hubs.acceptSpoke): Hub: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "AcceptHubSpoke (networkconnectivity.projects.locations.global.hubs.acceptSpoke)",
+        () => probe("AcceptHubSpoke", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "AcceptHubSpokeUpdate (networkconnectivity.projects.locations.global.hubs.acceptSpokeUpdate): Hub: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "AcceptHubSpokeUpdate (networkconnectivity.projects.locations.global.hubs.acceptSpokeUpdate)",
+        () => probe("AcceptHubSpokeUpdate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetHub (networkconnectivity.projects.locations.global.hubs.get): Hub: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetHub (networkconnectivity.projects.locations.global.hubs.get)",
+        () => probe("GetHub", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetHubGroup (networkconnectivity.projects.locations.global.hubs.groups.get): Hub: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetHubGroup (networkconnectivity.projects.locations.global.hubs.groups.get)",
+        () => probe("GetHubGroup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetHubRouteTable (networkconnectivity.projects.locations.global.hubs.routeTables.get): Hub: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetHubRouteTable (networkconnectivity.projects.locations.global.hubs.routeTables.get)",
+        () => probe("GetHubRouteTable", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetHubRouteTableRoute (networkconnectivity.projects.locations.global.hubs.routeTables.routes.get): Hub: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetHubRouteTableRoute (networkconnectivity.projects.locations.global.hubs.routeTables.routes.get)",
+        () => probe("GetHubRouteTableRoute", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListHubGroups (networkconnectivity.projects.locations.global.hubs.groups.list): Hub: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListHubGroups (networkconnectivity.projects.locations.global.hubs.groups.list)",
+        () => probe("ListHubGroups", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListHubRouteTableRoutes (networkconnectivity.projects.locations.global.hubs.routeTables.routes.list): Hub: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListHubRouteTableRoutes (networkconnectivity.projects.locations.global.hubs.routeTables.routes.list)",
+        () => probe("ListHubRouteTableRoutes", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListHubRouteTables (networkconnectivity.projects.locations.global.hubs.routeTables.list): Hub: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListHubRouteTables (networkconnectivity.projects.locations.global.hubs.routeTables.list)",
+        () => probe("ListHubRouteTables", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListHubSpokes (networkconnectivity.projects.locations.global.hubs.listSpokes): Hub: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListHubSpokes (networkconnectivity.projects.locations.global.hubs.listSpokes)",
+        () => probe("ListHubSpokes", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchHubGroup (networkconnectivity.projects.locations.global.hubs.groups.patch): Hub: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "PatchHubGroup (networkconnectivity.projects.locations.global.hubs.groups.patch)",
+        () => probe("PatchHubGroup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "QueryHubStatus (networkconnectivity.projects.locations.global.hubs.queryStatus): Hub: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "QueryHubStatus (networkconnectivity.projects.locations.global.hubs.queryStatus)",
+        () => probe("QueryHubStatus", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RejectHubSpoke (networkconnectivity.projects.locations.global.hubs.rejectSpoke): Hub: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "RejectHubSpoke (networkconnectivity.projects.locations.global.hubs.rejectSpoke)",
+        () => probe("RejectHubSpoke", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RejectHubSpokeUpdate (networkconnectivity.projects.locations.global.hubs.rejectSpokeUpdate): Hub: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "RejectHubSpokeUpdate (networkconnectivity.projects.locations.global.hubs.rejectSpokeUpdate)",
+        () => probe("RejectHubSpokeUpdate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("InternalRange", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetInternalRange (networkconnectivity.projects.locations.internalRanges.get): InternalRange: no deployable fixture",
+      test.provider.todo(
+        "GetInternalRange (networkconnectivity.projects.locations.internalRanges.get): InternalRange: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("MulticloudDataTransferConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetMulticloudDataTransferConfig (networkconnectivity.projects.locations.multicloudDataTransferConfigs.get): MulticloudDataTransferConfig: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetMulticloudDataTransferConfig (networkconnectivity.projects.locations.multicloudDataTransferConfigs.get)",
+        () => probe("GetMulticloudDataTransferConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListMulticloudDataTransferConfigDestinations (networkconnectivity.projects.locations.multicloudDataTransferConfigs.destinations.list): MulticloudDataTransferConfig: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListMulticloudDataTransferConfigDestinations (networkconnectivity.projects.locations.multicloudDataTransferConfigs.destinations.list)",
+        () => probe("ListMulticloudDataTransferConfigDestinations", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("MulticloudDataTransferConfigsDestination", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDestination (networkconnectivity.projects.locations.multicloudDataTransferConfigs.destinations.get): MulticloudDataTransferConfigsDestination: no deployable fixture",
+      test.provider.todo(
+        "GetDestination (networkconnectivity.projects.locations.multicloudDataTransferConfigs.destinations.get): MulticloudDataTransferConfigsDestination: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("PolicyBasedRoute", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPolicyBasedRoute (networkconnectivity.projects.locations.global.policyBasedRoutes.get): PolicyBasedRoute: no deployable fixture",
+      test.provider.todo(
+        "GetPolicyBasedRoute (networkconnectivity.projects.locations.global.policyBasedRoutes.get): PolicyBasedRoute: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -295,46 +359,46 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("RegionalEndpoint", { concurrent: true }, () => {
       test.provider.skip(
-        "GetRegionalEndpoint (networkconnectivity.projects.locations.regionalEndpoints.get): RegionalEndpoint: no deployable fixture",
+        'GetRegionalEndpoint (networkconnectivity.projects.locations.regionalEndpoints.get): RegionalEndpoint: Creating a regional endpoint fails on the testing project with an LRO error `{ code: 13, message: "an internal error has occurred" }` for every target (storage.us-central1.p.rep / storage.us-central1.rep) and access… (GCP_TEST_REGIONAL_ENDPOINTS)',
         () => Effect.void,
       );
     });
 
     describe("ServiceConnectionMap", { concurrent: true }, () => {
       test.provider.skip(
-        "GetServiceConnectionMap (networkconnectivity.projects.locations.serviceConnectionMaps.get): ServiceConnectionMap: no deployable fixture",
+        'GetServiceConnectionMap (networkconnectivity.projects.locations.serviceConnectionMaps.get): ServiceConnectionMap: A service connection map publishes a producer service class, which must be registered for the project first (BadRequest "serviceClass gcp-cloud-sql (GCP_TEST_SERVICE_CONNECTION_MAP)',
         () => Effect.void,
       );
     });
 
     describe("ServiceConnectionPolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetServiceConnectionPolicy (networkconnectivity.projects.locations.serviceConnectionPolicies.get): ServiceConnectionPolicy: no deployable fixture",
+      test.provider.todo(
+        "GetServiceConnectionPolicy (networkconnectivity.projects.locations.serviceConnectionPolicies.get): ServiceConnectionPolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Spoke", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSpoke (networkconnectivity.projects.locations.spokes.get): Spoke: no deployable fixture",
+      test.provider.todo(
+        "GetSpoke (networkconnectivity.projects.locations.spokes.get): Spoke: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListSpokeGatewayAdvertisedRoutes (networkconnectivity.projects.locations.spokes.gatewayAdvertisedRoutes.list): Spoke: no deployable fixture",
+      test.provider.todo(
+        "ListSpokeGatewayAdvertisedRoutes (networkconnectivity.projects.locations.spokes.gatewayAdvertisedRoutes.list): Spoke: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("SpokesGatewayAdvertisedRoute", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetGatewayAdvertisedRoute (networkconnectivity.projects.locations.spokes.gatewayAdvertisedRoutes.get): SpokesGatewayAdvertisedRoute: no deployable fixture",
+      test.provider.todo(
+        "GetGatewayAdvertisedRoute (networkconnectivity.projects.locations.spokes.gatewayAdvertisedRoutes.get): SpokesGatewayAdvertisedRoute: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Transport", { concurrent: true }, () => {
       test.provider.skip(
-        "GetTransport (networkconnectivity.projects.locations.transports.get): Transport: no deployable fixture",
+        "GetTransport (networkconnectivity.projects.locations.transports.get): Transport: Transports are Cross-Cloud Interconnect to a partner cloud: they need an allowlisted remote profile and a real peer account (the probe asserts the (GCP_TEST_TRANSPORT)",
         () => Effect.void,
       );
     });

@@ -48,8 +48,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("BucketsDatasetsLink", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetLink (observability.projects.locations.buckets.datasets.links.get): BucketsDatasetsLink: no deployable fixture",
+      test.provider.todo(
+        "GetLink (observability.projects.locations.buckets.datasets.links.get): BucketsDatasetsLink: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -154,8 +154,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("TraceScope", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTraceScope (observability.projects.locations.traceScopes.get): TraceScope: no deployable fixture",
+      test.provider.todo(
+        "GetTraceScope (observability.projects.locations.traceScopes.get): TraceScope: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

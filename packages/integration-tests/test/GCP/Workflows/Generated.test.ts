@@ -27,6 +27,7 @@ const probe = (name: string, expectSuccess: boolean) =>
   });
 
 // Deploys one of every bindable resource: slow, so `--fast` skips it.
+// Resource-bound bindings run live in Bindings.test.ts.
 describe.skipIf(!!process.env.FAST)(
   "Workflows generated bindings",
   { tags: ["provider:gcp", "provider:gcp:workflows", "live"], concurrent: true },
@@ -55,41 +56,6 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:workflows", "live"],
           timeout: 600_000,
         },
-      );
-    });
-
-    describe("Workflow", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelWorkflowExecution (workflowexecutions.projects.locations.workflows.executions.cancel): Workflow: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetWorkflow (workflows.projects.locations.workflows.get): Workflow: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetWorkflowExecution (workflowexecutions.projects.locations.workflows.executions.get): Workflow: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetWorkflowExecutionStepEntry (workflowexecutions.projects.locations.workflows.executions.stepEntries.get): Workflow: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListWorkflowExecutions (workflowexecutions.projects.locations.workflows.executions.list): Workflow: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListWorkflowExecutionStepEntries (workflowexecutions.projects.locations.workflows.executions.stepEntries.list): Workflow: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListWorkflowRevisions (workflows.projects.locations.workflows.listRevisions): Workflow: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "TriggerWorkflowPubsubExecution (workflowexecutions.projects.locations.workflows.triggerPubsubExecution): Workflow: no deployable fixture",
-        () => Effect.void,
       );
     });
   },

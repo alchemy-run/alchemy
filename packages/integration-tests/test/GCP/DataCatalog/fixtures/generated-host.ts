@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeTaxonomy } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated DataCatalog binding as its own
@@ -26,23 +27,26 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
     const p8 = yield* GCP.DataCatalog.ExportTaxonomy();
     const p9 = yield* GCP.DataCatalog.GetEntryGroup();
     const p10 = yield* GCP.DataCatalog.GetEntryGroupEntry();
-    const p11 = yield* GCP.DataCatalog.ImportEntryGroupEntry();
-    const p12 = yield* GCP.DataCatalog.ImportTaxonomy();
-    const p13 = yield* GCP.DataCatalog.ListEntryGroupEntries();
-    const p14 = yield* GCP.DataCatalog.ListEntryGroupEntryTags();
-    const p15 = yield* GCP.DataCatalog.ListEntryGroups();
-    const p16 = yield* GCP.DataCatalog.ListEntryGroupTags();
-    const p17 = yield* GCP.DataCatalog.ListTaxonomies();
-    const p18 = yield* GCP.DataCatalog.LookupEntry();
-    const p19 = yield* GCP.DataCatalog.ModifyEntryContacts();
-    const p20 = yield* GCP.DataCatalog.ModifyEntryOverview();
-    const p21 = yield* GCP.DataCatalog.PatchEntryGroup();
-    const p22 = yield* GCP.DataCatalog.PatchEntryGroupEntry();
-    const p23 = yield* GCP.DataCatalog.PatchEntryGroupEntryTag();
-    const p24 = yield* GCP.DataCatalog.PatchEntryGroupTag();
-    const p25 = yield* GCP.DataCatalog.ReconcileEntryGroupEntryTag();
-    const p26 = yield* GCP.DataCatalog.StarEntryGroupEntry();
-    const p27 = yield* GCP.DataCatalog.UnstarEntryGroupEntry();
+    const p11 = yield* GCP.DataCatalog.GetTaxonomy(ProbeTaxonomy);
+    const p12 = yield* GCP.DataCatalog.ImportEntryGroupEntry();
+    const p13 = yield* GCP.DataCatalog.ImportTaxonomy();
+    const p14 = yield* GCP.DataCatalog.ListEntryGroupEntries();
+    const p15 = yield* GCP.DataCatalog.ListEntryGroupEntryTags();
+    const p16 = yield* GCP.DataCatalog.ListEntryGroups();
+    const p17 = yield* GCP.DataCatalog.ListEntryGroupTags();
+    const p18 = yield* GCP.DataCatalog.ListTaxonomies();
+    const p19 = yield* GCP.DataCatalog.ListTaxonomyPolicyTags(ProbeTaxonomy);
+    const p20 = yield* GCP.DataCatalog.LookupEntry();
+    const p21 = yield* GCP.DataCatalog.ModifyEntryContacts();
+    const p22 = yield* GCP.DataCatalog.ModifyEntryOverview();
+    const p23 = yield* GCP.DataCatalog.PatchEntryGroup();
+    const p24 = yield* GCP.DataCatalog.PatchEntryGroupEntry();
+    const p25 = yield* GCP.DataCatalog.PatchEntryGroupEntryTag();
+    const p26 = yield* GCP.DataCatalog.PatchEntryGroupTag();
+    const p27 = yield* GCP.DataCatalog.ReconcileEntryGroupEntryTag();
+    const p28 = yield* GCP.DataCatalog.ReplaceTaxonomy(ProbeTaxonomy);
+    const p29 = yield* GCP.DataCatalog.StarEntryGroupEntry();
+    const p30 = yield* GCP.DataCatalog.UnstarEntryGroupEntry();
     return {
       fetch: serveProbes({
         CreateEntryGroup: outcome(
@@ -122,9 +126,10 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
             } as never),
           ),
         ),
+        GetTaxonomy: outcome(Retry.none(p11({} as never))),
         ImportEntryGroupEntry: outcome(
           Retry.none(
-            p11({
+            p12({
               entryGroup: "alchemy-missing",
               location: "us-central1",
               body: { alchemyProbe: "alchemy-missing" },
@@ -133,30 +138,31 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
         ),
         ImportTaxonomy: outcome(
           Retry.none(
-            p12({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p13({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
         ListEntryGroupEntries: outcome(
-          Retry.none(p13({ entryGroup: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p14({ entryGroup: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ListEntryGroupEntryTags: outcome(
           Retry.none(
-            p14({
+            p15({
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
             } as never),
           ),
         ),
-        ListEntryGroups: outcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListEntryGroups: outcome(Retry.none(p16({ location: "us-central1" } as never))),
         ListEntryGroupTags: outcome(
-          Retry.none(p16({ entryGroup: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p17({ entryGroup: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListTaxonomies: outcome(Retry.none(p17({ location: "us-central1" } as never))),
-        LookupEntry: outcome(Retry.none(p18({} as never))),
+        ListTaxonomies: outcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListTaxonomyPolicyTags: outcome(Retry.none(p19({} as never))),
+        LookupEntry: outcome(Retry.none(p20({} as never))),
         ModifyEntryContacts: outcome(
           Retry.none(
-            p19({
+            p21({
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
@@ -165,7 +171,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
         ),
         ModifyEntryOverview: outcome(
           Retry.none(
-            p20({
+            p22({
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
@@ -173,11 +179,11 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
           ),
         ),
         PatchEntryGroup: outcome(
-          Retry.none(p21({ entryGroup: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p23({ entryGroup: "alchemy-missing", location: "us-central1" } as never)),
         ),
         PatchEntryGroupEntry: outcome(
           Retry.none(
-            p22({
+            p24({
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
@@ -186,7 +192,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
         ),
         PatchEntryGroupEntryTag: outcome(
           Retry.none(
-            p23({
+            p25({
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               tag: "alchemy-missing",
@@ -196,7 +202,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
         ),
         PatchEntryGroupTag: outcome(
           Retry.none(
-            p24({
+            p26({
               entryGroup: "alchemy-missing",
               tag: "alchemy-missing",
               location: "us-central1",
@@ -205,16 +211,17 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
         ),
         ReconcileEntryGroupEntryTag: outcome(
           Retry.none(
-            p25({
+            p27({
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
             } as never),
           ),
         ),
+        ReplaceTaxonomy: outcome(Retry.none(p28({} as never))),
         StarEntryGroupEntry: outcome(
           Retry.none(
-            p26({
+            p29({
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
@@ -223,7 +230,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
         ),
         UnstarEntryGroupEntry: outcome(
           Retry.none(
-            p27({
+            p30({
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
@@ -247,6 +254,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
           GCP.DataCatalog.ExportTaxonomyHttp,
           GCP.DataCatalog.GetEntryGroupHttp,
           GCP.DataCatalog.GetEntryGroupEntryHttp,
+          GCP.DataCatalog.GetTaxonomyHttp,
           GCP.DataCatalog.ImportEntryGroupEntryHttp,
           GCP.DataCatalog.ImportTaxonomyHttp,
           GCP.DataCatalog.ListEntryGroupEntriesHttp,
@@ -254,6 +262,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
           GCP.DataCatalog.ListEntryGroupsHttp,
           GCP.DataCatalog.ListEntryGroupTagsHttp,
           GCP.DataCatalog.ListTaxonomiesHttp,
+          GCP.DataCatalog.ListTaxonomyPolicyTagsHttp,
           GCP.DataCatalog.LookupEntryHttp,
           GCP.DataCatalog.ModifyEntryContactsHttp,
           GCP.DataCatalog.ModifyEntryOverviewHttp,
@@ -262,6 +271,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
           GCP.DataCatalog.PatchEntryGroupEntryTagHttp,
           GCP.DataCatalog.PatchEntryGroupTagHttp,
           GCP.DataCatalog.ReconcileEntryGroupEntryTagHttp,
+          GCP.DataCatalog.ReplaceTaxonomyHttp,
           GCP.DataCatalog.StarEntryGroupEntryHttp,
           GCP.DataCatalog.UnstarEntryGroupEntryHttp,
         ),

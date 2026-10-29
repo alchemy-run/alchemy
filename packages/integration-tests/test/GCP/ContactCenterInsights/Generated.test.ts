@@ -48,69 +48,73 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AnalysisRule", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAnalysisRule (contactcenterinsights.projects.locations.analysisRules.get): AnalysisRule: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetAnalysisRule (contactcenterinsights.projects.locations.analysisRules.get)",
+        () => probe("GetAnalysisRule", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("AssessmentRule", { concurrent: true }, () => {
       test.provider.skip(
-        "GetAssessmentRule (contactcenterinsights.projects.locations.assessmentRules.get): AssessmentRule: no deployable fixture",
+        'GetAssessmentRule (contactcenterinsights.projects.locations.assessmentRules.get): AssessmentRule: Needs Contact Center AI Insights features the testing project does not have enabled: create returns 404 NOT_FOUND "Requested entity was not found." and list returns 400 INVALID_ARGUMENT. (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
     });
 
     describe("AuthorizedViewSet", { concurrent: true }, () => {
       test.provider.skip(
-        "GetAuthorizedViewSet (contactcenterinsights.projects.locations.authorizedViewSets.get): AuthorizedViewSet: no deployable fixture",
+        'GetAuthorizedViewSet (contactcenterinsights.projects.locations.authorizedViewSets.get): AuthorizedViewSet: Needs Contact Center AI Insights features the testing project does not have enabled: create returns 404 NOT_FOUND "Requested entity was not found." and list returns 400 INVALID_ARGUMENT. (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ListAuthorizedViewSetAuthorizedViews (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.list): AuthorizedViewSet: no deployable fixture",
+        'ListAuthorizedViewSetAuthorizedViews (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.list): AuthorizedViewSet: Needs Contact Center AI Insights features the testing project does not have enabled: create returns 404 NOT_FOUND "Requested entity was not found." and list returns 400 INVALID_ARGUMENT. (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchAuthorizedViewSetAuthorizedView (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.search): AuthorizedViewSet: no deployable fixture",
+        'SearchAuthorizedViewSetAuthorizedView (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.search): AuthorizedViewSet: Needs Contact Center AI Insights features the testing project does not have enabled: create returns 404 NOT_FOUND "Requested entity was not found." and list returns 400 INVALID_ARGUMENT. (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
     });
 
     describe("AuthorizedViewSetsAuthorizedView", { concurrent: true }, () => {
       test.provider.skip(
-        "DeleteAuthorizedViewConversation (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.delete): AuthorizedViewSetsAuthorizedView: no deployable fixture",
+        'DeleteAuthorizedViewConversation (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.delete): AuthorizedViewSetsAuthorizedView: Needs Contact Center AI Insights features the testing project does not have enabled: creating the parent authorized view set returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GenerativeAuthorizedViewInsights (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.generativeInsights): AuthorizedViewSetsAuthorizedView: no deployable fixture",
+        'GenerativeAuthorizedViewInsights (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.generativeInsights): AuthorizedViewSetsAuthorizedView: Needs Contact Center AI Insights features the testing project does not have enabled: creating the parent authorized view set returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetAuthorizedView (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.get): AuthorizedViewSetsAuthorizedView: no deployable fixture",
+        'GetAuthorizedView (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.get): AuthorizedViewSetsAuthorizedView: Needs Contact Center AI Insights features the testing project does not have enabled: creating the parent authorized view set returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetAuthorizedViewConversation (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.get): AuthorizedViewSetsAuthorizedView: no deployable fixture",
+        'GetAuthorizedViewConversation (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.get): AuthorizedViewSetsAuthorizedView: Needs Contact Center AI Insights features the testing project does not have enabled: creating the parent authorized view set returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ListAuthorizedViewConversationAssessments (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.list): AuthorizedViewSetsAuthorizedView: no deployable fixture",
+        'ListAuthorizedViewConversationAssessments (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.list): AuthorizedViewSetsAuthorizedView: Needs Contact Center AI Insights features the testing project does not have enabled: creating the parent authorized view set returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ListAuthorizedViewConversationFeedbackLabels (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.feedbackLabels.list): AuthorizedViewSetsAuthorizedView: no deployable fixture",
+        'ListAuthorizedViewConversationFeedbackLabels (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.feedbackLabels.list): AuthorizedViewSetsAuthorizedView: Needs Contact Center AI Insights features the testing project does not have enabled: creating the parent authorized view set returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ListAuthorizedViewConversations (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.list): AuthorizedViewSetsAuthorizedView: no deployable fixture",
+        'ListAuthorizedViewConversations (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.list): AuthorizedViewSetsAuthorizedView: Needs Contact Center AI Insights features the testing project does not have enabled: creating the parent authorized view set returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "QueryAuthorizedViewMetrics (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.queryMetrics): AuthorizedViewSetsAuthorizedView: no deployable fixture",
+        'QueryAuthorizedViewMetrics (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.queryMetrics): AuthorizedViewSetsAuthorizedView: Needs Contact Center AI Insights features the testing project does not have enabled: creating the parent authorized view set returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "QueryAuthorizedViewPerformanceOverview (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.queryPerformanceOverview): AuthorizedViewSetsAuthorizedView: no deployable fixture",
+        'QueryAuthorizedViewPerformanceOverview (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.queryPerformanceOverview): AuthorizedViewSetsAuthorizedView: Needs Contact Center AI Insights features the testing project does not have enabled: creating the parent authorized view set returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
     });
@@ -120,35 +124,35 @@ describe.skipIf(!!process.env.FAST)(
       { concurrent: true },
       () => {
         test.provider.skip(
-          "AppealAssessment@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.appeal): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: no deployable fixture",
+          'AppealAssessment@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.appeal): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: Creating through an authorized view fails with BadRequest "subject length must be at most 127" on the testing project (cause not yet isolated). (GCP_TEST_CCI_AUTHORIZED_VIEW_WRITES)',
           () => Effect.void,
         );
         test.provider.skip(
-          "CreateAssessmentNote@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.notes.create): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: no deployable fixture",
+          'CreateAssessmentNote@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.notes.create): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: Creating through an authorized view fails with BadRequest "subject length must be at most 127" on the testing project (cause not yet isolated). (GCP_TEST_CCI_AUTHORIZED_VIEW_WRITES)',
           () => Effect.void,
         );
         test.provider.skip(
-          "DeleteAssessmentNote@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.notes.delete): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: no deployable fixture",
+          'DeleteAssessmentNote@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.notes.delete): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: Creating through an authorized view fails with BadRequest "subject length must be at most 127" on the testing project (cause not yet isolated). (GCP_TEST_CCI_AUTHORIZED_VIEW_WRITES)',
           () => Effect.void,
         );
         test.provider.skip(
-          "FinalizeAssessment@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.finalize): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: no deployable fixture",
+          'FinalizeAssessment@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.finalize): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: Creating through an authorized view fails with BadRequest "subject length must be at most 127" on the testing project (cause not yet isolated). (GCP_TEST_CCI_AUTHORIZED_VIEW_WRITES)',
           () => Effect.void,
         );
         test.provider.skip(
-          "GetAssessment@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.get): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: no deployable fixture",
+          'GetAssessment@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.get): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: Creating through an authorized view fails with BadRequest "subject length must be at most 127" on the testing project (cause not yet isolated). (GCP_TEST_CCI_AUTHORIZED_VIEW_WRITES)',
           () => Effect.void,
         );
         test.provider.skip(
-          "ListAssessmentNotes@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.notes.list): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: no deployable fixture",
+          'ListAssessmentNotes@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.notes.list): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: Creating through an authorized view fails with BadRequest "subject length must be at most 127" on the testing project (cause not yet isolated). (GCP_TEST_CCI_AUTHORIZED_VIEW_WRITES)',
           () => Effect.void,
         );
         test.provider.skip(
-          "PatchAssessmentNote@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.notes.patch): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: no deployable fixture",
+          'PatchAssessmentNote@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.notes.patch): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: Creating through an authorized view fails with BadRequest "subject length must be at most 127" on the testing project (cause not yet isolated). (GCP_TEST_CCI_AUTHORIZED_VIEW_WRITES)',
           () => Effect.void,
         );
         test.provider.skip(
-          "PublishAssessment@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.publish): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: no deployable fixture",
+          'PublishAssessment@AuthorizedViewSetsAuthorizedViewsConversationsAssessment (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.assessments.publish): AuthorizedViewSetsAuthorizedViewsConversationsAssessment: Creating through an authorized view fails with BadRequest "subject length must be at most 127" on the testing project (cause not yet isolated). (GCP_TEST_CCI_AUTHORIZED_VIEW_WRITES)',
           () => Effect.void,
         );
       },
@@ -159,128 +163,128 @@ describe.skipIf(!!process.env.FAST)(
       { concurrent: true },
       () => {
         test.provider.skip(
-          "GetFeedbackLabel@AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.feedbackLabels.get): AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel: no deployable fixture",
+          'GetFeedbackLabel@AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel (contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.feedbackLabels.get): AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel: Creating through an authorized view fails with BadRequest "subject length must be at most 127" on the testing project (cause not yet isolated). (GCP_TEST_CCI_AUTHORIZED_VIEW_WRITES)',
           () => Effect.void,
         );
       },
     );
 
     describe("Conversation", { concurrent: true }, () => {
-      test.provider.skip(
-        "BulkSegmentAnalyze (contactcenterinsights.projects.locations.conversations.segments.bulkAnalyze): Conversation: no deployable fixture",
+      test.provider.todo(
+        "BulkSegmentAnalyze (contactcenterinsights.projects.locations.conversations.segments.bulkAnalyze): Conversation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetConversation (contactcenterinsights.projects.locations.conversations.get): Conversation: no deployable fixture",
+      test.provider.todo(
+        "GetConversation (contactcenterinsights.projects.locations.conversations.get): Conversation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListConversationAnalyses (contactcenterinsights.projects.locations.conversations.analyses.list): Conversation: no deployable fixture",
+      test.provider.todo(
+        "ListConversationAnalyses (contactcenterinsights.projects.locations.conversations.analyses.list): Conversation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListConversationAssessments (contactcenterinsights.projects.locations.conversations.assessments.list): Conversation: no deployable fixture",
+      test.provider.todo(
+        "ListConversationAssessments (contactcenterinsights.projects.locations.conversations.assessments.list): Conversation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListConversationFeedbackLabels (contactcenterinsights.projects.locations.conversations.feedbackLabels.list): Conversation: no deployable fixture",
+      test.provider.todo(
+        "ListConversationFeedbackLabels (contactcenterinsights.projects.locations.conversations.feedbackLabels.list): Conversation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ConversationsAnalyses", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAnalyse (contactcenterinsights.projects.locations.conversations.analyses.get): ConversationsAnalyses: no deployable fixture",
+      test.provider.todo(
+        "GetAnalyse (contactcenterinsights.projects.locations.conversations.analyses.get): ConversationsAnalyses: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ConversationsAssessment", { concurrent: true }, () => {
-      test.provider.skip(
-        "AppealAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.appeal): ConversationsAssessment: no deployable fixture",
+      test.provider.todo(
+        "AppealAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.appeal): ConversationsAssessment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CreateAssessmentNote@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.create): ConversationsAssessment: no deployable fixture",
+      test.provider.todo(
+        "CreateAssessmentNote@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.create): ConversationsAssessment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "DeleteAssessmentNote@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.delete): ConversationsAssessment: no deployable fixture",
+      test.provider.todo(
+        "DeleteAssessmentNote@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.delete): ConversationsAssessment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "FinalizeAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.finalize): ConversationsAssessment: no deployable fixture",
+      test.provider.todo(
+        "FinalizeAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.finalize): ConversationsAssessment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.get): ConversationsAssessment: no deployable fixture",
+      test.provider.todo(
+        "GetAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.get): ConversationsAssessment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListAssessmentNotes@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.list): ConversationsAssessment: no deployable fixture",
+      test.provider.todo(
+        "ListAssessmentNotes@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.list): ConversationsAssessment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "PatchAssessmentNote@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.patch): ConversationsAssessment: no deployable fixture",
+      test.provider.todo(
+        "PatchAssessmentNote@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.patch): ConversationsAssessment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "PublishAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.publish): ConversationsAssessment: no deployable fixture",
+      test.provider.todo(
+        "PublishAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.publish): ConversationsAssessment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ConversationsFeedbackLabel", { concurrent: true }, () => {
       test.provider.skip(
-        "GetFeedbackLabel@ConversationsFeedbackLabel (contactcenterinsights.projects.locations.conversations.feedbackLabels.get): ConversationsFeedbackLabel: no deployable fixture",
+        'GetFeedbackLabel@ConversationsFeedbackLabel (contactcenterinsights.projects.locations.conversations.feedbackLabels.get): ConversationsFeedbackLabel: Feedback label create fails with BadRequest "Request contains an invalid argument." on the testing project (cause not yet isolated). (GCP_TEST_CCI_FEEDBACK_LABELS)',
         () => Effect.void,
       );
     });
 
     describe("DatasetsConversationsFeedbackLabel", { concurrent: true }, () => {
       test.provider.skip(
-        "GetFeedbackLabel@DatasetsConversationsFeedbackLabel (contactcenterinsights.projects.locations.datasets.conversations.feedbackLabels.get): DatasetsConversationsFeedbackLabel: no deployable fixture",
+        'GetFeedbackLabel@DatasetsConversationsFeedbackLabel (contactcenterinsights.projects.locations.datasets.conversations.feedbackLabels.get): DatasetsConversationsFeedbackLabel: The fixture creates its dataset conversation with createProjectsLocationsConversations under a dataset parent, which the testing project answers with NotFound "404"; dataset conversations have (GCP_TEST_CCI_DATASETS)',
         () => Effect.void,
       );
     });
 
     describe("IssueModel", { concurrent: true }, () => {
       test.provider.skip(
-        "CalculateIssueModelStats (contactcenterinsights.projects.locations.issueModels.calculateIssueModelStats): IssueModel: no deployable fixture",
+        'CalculateIssueModelStats (contactcenterinsights.projects.locations.issueModels.calculateIssueModelStats): IssueModel: Needs a project with at least 100 analyzed conversations; otherwise create fails with BadRequest "Project: `...` has too few conversations with the given filters. Current number: 0. Minimum requirement is: 100." (GCP_TEST_CCI_ISSUE_MODELS)',
         () => Effect.void,
       );
       test.provider.skip(
-        "DeployIssueModel (contactcenterinsights.projects.locations.issueModels.deploy): IssueModel: no deployable fixture",
+        'DeployIssueModel (contactcenterinsights.projects.locations.issueModels.deploy): IssueModel: Needs a project with at least 100 analyzed conversations; otherwise create fails with BadRequest "Project: `...` has too few conversations with the given filters. Current number: 0. Minimum requirement is: 100." (GCP_TEST_CCI_ISSUE_MODELS)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ExportIssueModel (contactcenterinsights.projects.locations.issueModels.export): IssueModel: no deployable fixture",
+        'ExportIssueModel (contactcenterinsights.projects.locations.issueModels.export): IssueModel: Needs a project with at least 100 analyzed conversations; otherwise create fails with BadRequest "Project: `...` has too few conversations with the given filters. Current number: 0. Minimum requirement is: 100." (GCP_TEST_CCI_ISSUE_MODELS)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetIssueModel (contactcenterinsights.projects.locations.issueModels.get): IssueModel: no deployable fixture",
+        'GetIssueModel (contactcenterinsights.projects.locations.issueModels.get): IssueModel: Needs a project with at least 100 analyzed conversations; otherwise create fails with BadRequest "Project: `...` has too few conversations with the given filters. Current number: 0. Minimum requirement is: 100." (GCP_TEST_CCI_ISSUE_MODELS)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ListIssueModelIssues (contactcenterinsights.projects.locations.issueModels.issues.list): IssueModel: no deployable fixture",
+        'ListIssueModelIssues (contactcenterinsights.projects.locations.issueModels.issues.list): IssueModel: Needs a project with at least 100 analyzed conversations; otherwise create fails with BadRequest "Project: `...` has too few conversations with the given filters. Current number: 0. Minimum requirement is: 100." (GCP_TEST_CCI_ISSUE_MODELS)',
         () => Effect.void,
       );
       test.provider.skip(
-        "UndeployIssueModel (contactcenterinsights.projects.locations.issueModels.undeploy): IssueModel: no deployable fixture",
+        'UndeployIssueModel (contactcenterinsights.projects.locations.issueModels.undeploy): IssueModel: Needs a project with at least 100 analyzed conversations; otherwise create fails with BadRequest "Project: `...` has too few conversations with the given filters. Current number: 0. Minimum requirement is: 100." (GCP_TEST_CCI_ISSUE_MODELS)',
         () => Effect.void,
       );
     });
 
     describe("IssueModelsIssue", { concurrent: true }, () => {
       test.provider.skip(
-        "GetIssue (contactcenterinsights.projects.locations.issueModels.issues.get): IssueModelsIssue: no deployable fixture",
+        'GetIssue (contactcenterinsights.projects.locations.issueModels.issues.get): IssueModelsIssue: Needs a project with at least 100 analyzed conversations; otherwise create fails with BadRequest "Project: `...` has too few conversations with the given filters. Current number: 0. Minimum requirement is: 100." (GCP_TEST_CCI_ISSUE_MODELS)',
         () => Effect.void,
       );
     });
 
     describe("PhraseMatcher", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPhraseMatcher (contactcenterinsights.projects.locations.phraseMatchers.get): PhraseMatcher: no deployable fixture",
+      test.provider.todo(
+        "GetPhraseMatcher (contactcenterinsights.projects.locations.phraseMatchers.get): PhraseMatcher: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -553,57 +557,65 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("QaQuestionTag", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetQaQuestionTag (contactcenterinsights.projects.locations.qaQuestionTags.get): QaQuestionTag: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetQaQuestionTag (contactcenterinsights.projects.locations.qaQuestionTags.get)",
+        () => probe("GetQaQuestionTag", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("QaScorecard", { concurrent: true }, () => {
       test.provider.skip(
-        "GetQaScorecard (contactcenterinsights.projects.locations.qaScorecards.get): QaScorecard: no deployable fixture",
+        'GetQaScorecard (contactcenterinsights.projects.locations.qaScorecards.get): QaScorecard: Needs Contact Center AI Insights features the testing project does not have enabled: create succeeds but every PATCH returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ListQaScorecardRevisions (contactcenterinsights.projects.locations.qaScorecards.revisions.list): QaScorecard: no deployable fixture",
+        'ListQaScorecardRevisions (contactcenterinsights.projects.locations.qaScorecards.revisions.list): QaScorecard: Needs Contact Center AI Insights features the testing project does not have enabled: create succeeds but every PATCH returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
     });
 
     describe("QaScorecardsRevision", { concurrent: true }, () => {
       test.provider.skip(
-        "DeployRevision (contactcenterinsights.projects.locations.qaScorecards.revisions.deploy): QaScorecardsRevision: no deployable fixture",
+        'DeployRevision (contactcenterinsights.projects.locations.qaScorecards.revisions.deploy): QaScorecardsRevision: Needs Contact Center AI Insights features the testing project does not have enabled: the parent scorecard\'s PATCH returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "GetRevision (contactcenterinsights.projects.locations.qaScorecards.revisions.get): QaScorecardsRevision: no deployable fixture",
+        'GetRevision (contactcenterinsights.projects.locations.qaScorecards.revisions.get): QaScorecardsRevision: Needs Contact Center AI Insights features the testing project does not have enabled: the parent scorecard\'s PATCH returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "ListRevisionQaQuestions (contactcenterinsights.projects.locations.qaScorecards.revisions.qaQuestions.list): QaScorecardsRevision: no deployable fixture",
+        'ListRevisionQaQuestions (contactcenterinsights.projects.locations.qaScorecards.revisions.qaQuestions.list): QaScorecardsRevision: Needs Contact Center AI Insights features the testing project does not have enabled: the parent scorecard\'s PATCH returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "TuneQaScorecardRevision (contactcenterinsights.projects.locations.qaScorecards.revisions.tuneQaScorecardRevision): QaScorecardsRevision: no deployable fixture",
+        'TuneQaScorecardRevision (contactcenterinsights.projects.locations.qaScorecards.revisions.tuneQaScorecardRevision): QaScorecardsRevision: Needs Contact Center AI Insights features the testing project does not have enabled: the parent scorecard\'s PATCH returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
       test.provider.skip(
-        "UndeployRevision (contactcenterinsights.projects.locations.qaScorecards.revisions.undeploy): QaScorecardsRevision: no deployable fixture",
+        'UndeployRevision (contactcenterinsights.projects.locations.qaScorecards.revisions.undeploy): QaScorecardsRevision: Needs Contact Center AI Insights features the testing project does not have enabled: the parent scorecard\'s PATCH returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
     });
 
     describe("QaScorecardsRevisionsQaQuestion", { concurrent: true }, () => {
       test.provider.skip(
-        "GetQaQuestion (contactcenterinsights.projects.locations.qaScorecards.revisions.qaQuestions.get): QaScorecardsRevisionsQaQuestion: no deployable fixture",
+        'GetQaQuestion (contactcenterinsights.projects.locations.qaScorecards.revisions.qaQuestions.get): QaScorecardsRevisionsQaQuestion: Needs Contact Center AI Insights features the testing project does not have enabled: the parent scorecard\'s PATCH returns 404 NOT_FOUND "Requested entity was not found." (GCP_TEST_CCAI_QUALITY)',
         () => Effect.void,
       );
     });
 
     describe("View", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetView (contactcenterinsights.projects.locations.views.get): View: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetView (contactcenterinsights.projects.locations.views.get)",
+        () => probe("GetView", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

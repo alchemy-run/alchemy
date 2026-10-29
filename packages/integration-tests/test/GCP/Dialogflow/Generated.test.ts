@@ -48,239 +48,239 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AgentsEntityType", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEntityType@AgentsEntityType (dialogflow.projects.locations.agents.entityTypes.get): AgentsEntityType: no deployable fixture",
+      test.provider.todo(
+        "GetEntityType@AgentsEntityType (dialogflow.projects.locations.agents.entityTypes.get): AgentsEntityType: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsEnvironment", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeployEnvironmentFlow (dialogflow.projects.locations.agents.environments.deployFlow): AgentsEnvironment: no deployable fixture",
+      test.provider.todo(
+        "DeployEnvironmentFlow (dialogflow.projects.locations.agents.environments.deployFlow): AgentsEnvironment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "DetectSessionIntent (dialogflow.projects.locations.agents.environments.sessions.detectIntent): AgentsEnvironment: no deployable fixture",
+      test.provider.todo(
+        "DetectSessionIntent (dialogflow.projects.locations.agents.environments.sessions.detectIntent): AgentsEnvironment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "FulfillSessionIntent (dialogflow.projects.locations.agents.environments.sessions.fulfillIntent): AgentsEnvironment: no deployable fixture",
+      test.provider.todo(
+        "FulfillSessionIntent (dialogflow.projects.locations.agents.environments.sessions.fulfillIntent): AgentsEnvironment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetEnvironment (dialogflow.projects.locations.agents.environments.get): AgentsEnvironment: no deployable fixture",
+      test.provider.todo(
+        "GetEnvironment (dialogflow.projects.locations.agents.environments.get): AgentsEnvironment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetEnvironmentDeployment (dialogflow.projects.locations.agents.environments.deployments.get): AgentsEnvironment: no deployable fixture",
+      test.provider.todo(
+        "GetEnvironmentDeployment (dialogflow.projects.locations.agents.environments.deployments.get): AgentsEnvironment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListEnvironmentContinuousTestResults (dialogflow.projects.locations.agents.environments.continuousTestResults.list): AgentsEnvironment: no deployable fixture",
+      test.provider.todo(
+        "ListEnvironmentContinuousTestResults (dialogflow.projects.locations.agents.environments.continuousTestResults.list): AgentsEnvironment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListEnvironmentDeployments (dialogflow.projects.locations.agents.environments.deployments.list): AgentsEnvironment: no deployable fixture",
+      test.provider.todo(
+        "ListEnvironmentDeployments (dialogflow.projects.locations.agents.environments.deployments.list): AgentsEnvironment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListEnvironmentExperiments (dialogflow.projects.locations.agents.environments.experiments.list): AgentsEnvironment: no deployable fixture",
+      test.provider.todo(
+        "ListEnvironmentExperiments (dialogflow.projects.locations.agents.environments.experiments.list): AgentsEnvironment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListEnvironmentSessionEntityTypes (dialogflow.projects.locations.agents.environments.sessions.entityTypes.list): AgentsEnvironment: no deployable fixture",
+      test.provider.todo(
+        "ListEnvironmentSessionEntityTypes (dialogflow.projects.locations.agents.environments.sessions.entityTypes.list): AgentsEnvironment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "LookupEnvironmentHistory (dialogflow.projects.locations.agents.environments.lookupEnvironmentHistory): AgentsEnvironment: no deployable fixture",
+      test.provider.todo(
+        "LookupEnvironmentHistory (dialogflow.projects.locations.agents.environments.lookupEnvironmentHistory): AgentsEnvironment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "MatchSessionIntent (dialogflow.projects.locations.agents.environments.sessions.matchIntent): AgentsEnvironment: no deployable fixture",
+      test.provider.todo(
+        "MatchSessionIntent (dialogflow.projects.locations.agents.environments.sessions.matchIntent): AgentsEnvironment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RunEnvironmentContinuousTest (dialogflow.projects.locations.agents.environments.runContinuousTest): AgentsEnvironment: no deployable fixture",
+      test.provider.todo(
+        "RunEnvironmentContinuousTest (dialogflow.projects.locations.agents.environments.runContinuousTest): AgentsEnvironment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ServerSessionStreamingDetectIntent (dialogflow.projects.locations.agents.environments.sessions.serverStreamingDetectIntent): AgentsEnvironment: no deployable fixture",
+      test.provider.todo(
+        "ServerSessionStreamingDetectIntent (dialogflow.projects.locations.agents.environments.sessions.serverStreamingDetectIntent): AgentsEnvironment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsEnvironmentsExperiment", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetExperiment (dialogflow.projects.locations.agents.environments.experiments.get): AgentsEnvironmentsExperiment: no deployable fixture",
+      test.provider.todo(
+        "GetExperiment (dialogflow.projects.locations.agents.environments.experiments.get): AgentsEnvironmentsExperiment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StartExperiment (dialogflow.projects.locations.agents.environments.experiments.start): AgentsEnvironmentsExperiment: no deployable fixture",
+      test.provider.todo(
+        "StartExperiment (dialogflow.projects.locations.agents.environments.experiments.start): AgentsEnvironmentsExperiment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StopExperiment (dialogflow.projects.locations.agents.environments.experiments.stop): AgentsEnvironmentsExperiment: no deployable fixture",
+      test.provider.todo(
+        "StopExperiment (dialogflow.projects.locations.agents.environments.experiments.stop): AgentsEnvironmentsExperiment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsEnvironmentsSessionsEntityType", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEntityType@AgentsEnvironmentsSessionsEntityType (dialogflow.projects.locations.agents.environments.sessions.entityTypes.get): AgentsEnvironmentsSessionsEntityType: no deployable fixture",
+      test.provider.todo(
+        "GetEntityType@AgentsEnvironmentsSessionsEntityType (dialogflow.projects.locations.agents.environments.sessions.entityTypes.get): AgentsEnvironmentsSessionsEntityType: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsFlow", { concurrent: true }, () => {
-      test.provider.skip(
-        "ExportFlow (dialogflow.projects.locations.agents.flows.export): AgentsFlow: no deployable fixture",
+      test.provider.todo(
+        "ExportFlow (dialogflow.projects.locations.agents.flows.export): AgentsFlow: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetFlow (dialogflow.projects.locations.agents.flows.get): AgentsFlow: no deployable fixture",
+      test.provider.todo(
+        "GetFlow (dialogflow.projects.locations.agents.flows.get): AgentsFlow: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListFlowPages (dialogflow.projects.locations.agents.flows.pages.list): AgentsFlow: no deployable fixture",
+      test.provider.todo(
+        "ListFlowPages (dialogflow.projects.locations.agents.flows.pages.list): AgentsFlow: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListFlowTransitionRouteGroups (dialogflow.projects.locations.agents.flows.transitionRouteGroups.list): AgentsFlow: no deployable fixture",
+      test.provider.todo(
+        "ListFlowTransitionRouteGroups (dialogflow.projects.locations.agents.flows.transitionRouteGroups.list): AgentsFlow: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListFlowVersions (dialogflow.projects.locations.agents.flows.versions.list): AgentsFlow: no deployable fixture",
+      test.provider.todo(
+        "ListFlowVersions (dialogflow.projects.locations.agents.flows.versions.list): AgentsFlow: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "TrainFlow (dialogflow.projects.locations.agents.flows.train): AgentsFlow: no deployable fixture",
+      test.provider.todo(
+        "TrainFlow (dialogflow.projects.locations.agents.flows.train): AgentsFlow: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ValidateFlow (dialogflow.projects.locations.agents.flows.validate): AgentsFlow: no deployable fixture",
+      test.provider.todo(
+        "ValidateFlow (dialogflow.projects.locations.agents.flows.validate): AgentsFlow: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsFlowsPage", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPage (dialogflow.projects.locations.agents.flows.pages.get): AgentsFlowsPage: no deployable fixture",
+      test.provider.todo(
+        "GetPage (dialogflow.projects.locations.agents.flows.pages.get): AgentsFlowsPage: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsFlowsTransitionRouteGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTransitionRouteGroup@AgentsFlowsTransitionRouteGroup (dialogflow.projects.locations.agents.flows.transitionRouteGroups.get): AgentsFlowsTransitionRouteGroup: no deployable fixture",
+      test.provider.todo(
+        "GetTransitionRouteGroup@AgentsFlowsTransitionRouteGroup (dialogflow.projects.locations.agents.flows.transitionRouteGroups.get): AgentsFlowsTransitionRouteGroup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsFlowsVersion", { concurrent: true }, () => {
-      test.provider.skip(
-        "CompareVersions (dialogflow.projects.locations.agents.flows.versions.compareVersions): AgentsFlowsVersion: no deployable fixture",
+      test.provider.todo(
+        "CompareVersions (dialogflow.projects.locations.agents.flows.versions.compareVersions): AgentsFlowsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetVersion@AgentsFlowsVersion (dialogflow.projects.locations.agents.flows.versions.get): AgentsFlowsVersion: no deployable fixture",
+      test.provider.todo(
+        "GetVersion@AgentsFlowsVersion (dialogflow.projects.locations.agents.flows.versions.get): AgentsFlowsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "LoadVersion (dialogflow.projects.locations.agents.flows.versions.load): AgentsFlowsVersion: no deployable fixture",
+      test.provider.todo(
+        "LoadVersion (dialogflow.projects.locations.agents.flows.versions.load): AgentsFlowsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsGenerator", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetGenerator (dialogflow.projects.locations.agents.generators.get): AgentsGenerator: no deployable fixture",
+      test.provider.todo(
+        "GetGenerator (dialogflow.projects.locations.agents.generators.get): AgentsGenerator: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsIntent", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetIntent (dialogflow.projects.locations.agents.intents.get): AgentsIntent: no deployable fixture",
+      test.provider.todo(
+        "GetIntent (dialogflow.projects.locations.agents.intents.get): AgentsIntent: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsPlaybook", { concurrent: true }, () => {
-      test.provider.skip(
-        "ExportPlaybook (dialogflow.projects.locations.agents.playbooks.export): AgentsPlaybook: no deployable fixture",
+      test.provider.todo(
+        "ExportPlaybook (dialogflow.projects.locations.agents.playbooks.export): AgentsPlaybook: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetPlaybook (dialogflow.projects.locations.agents.playbooks.get): AgentsPlaybook: no deployable fixture",
+      test.provider.todo(
+        "GetPlaybook (dialogflow.projects.locations.agents.playbooks.get): AgentsPlaybook: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListPlaybookExamples (dialogflow.projects.locations.agents.playbooks.examples.list): AgentsPlaybook: no deployable fixture",
+      test.provider.todo(
+        "ListPlaybookExamples (dialogflow.projects.locations.agents.playbooks.examples.list): AgentsPlaybook: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListPlaybookVersions (dialogflow.projects.locations.agents.playbooks.versions.list): AgentsPlaybook: no deployable fixture",
+      test.provider.todo(
+        "ListPlaybookVersions (dialogflow.projects.locations.agents.playbooks.versions.list): AgentsPlaybook: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsPlaybooksExample", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetExample (dialogflow.projects.locations.agents.playbooks.examples.get): AgentsPlaybooksExample: no deployable fixture",
+      test.provider.todo(
+        "GetExample (dialogflow.projects.locations.agents.playbooks.examples.get): AgentsPlaybooksExample: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsPlaybooksVersion", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetVersion@AgentsPlaybooksVersion (dialogflow.projects.locations.agents.playbooks.versions.get): AgentsPlaybooksVersion: no deployable fixture",
+      test.provider.todo(
+        "GetVersion@AgentsPlaybooksVersion (dialogflow.projects.locations.agents.playbooks.versions.get): AgentsPlaybooksVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RestoreVersion@AgentsPlaybooksVersion (dialogflow.projects.locations.agents.playbooks.versions.restore): AgentsPlaybooksVersion: no deployable fixture",
+      test.provider.todo(
+        "RestoreVersion@AgentsPlaybooksVersion (dialogflow.projects.locations.agents.playbooks.versions.restore): AgentsPlaybooksVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsSessionsEntityType", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEntityType@AgentsSessionsEntityType (dialogflow.projects.locations.agents.sessions.entityTypes.get): AgentsSessionsEntityType: no deployable fixture",
+      test.provider.todo(
+        "GetEntityType@AgentsSessionsEntityType (dialogflow.projects.locations.agents.sessions.entityTypes.get): AgentsSessionsEntityType: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsTool", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTool (dialogflow.projects.locations.agents.tools.get): AgentsTool: no deployable fixture",
+      test.provider.todo(
+        "GetTool (dialogflow.projects.locations.agents.tools.get): AgentsTool: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListToolVersions (dialogflow.projects.locations.agents.tools.versions.list): AgentsTool: no deployable fixture",
+      test.provider.todo(
+        "ListToolVersions (dialogflow.projects.locations.agents.tools.versions.list): AgentsTool: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsToolsVersion", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetVersion@AgentsToolsVersion (dialogflow.projects.locations.agents.tools.versions.get): AgentsToolsVersion: no deployable fixture",
+      test.provider.todo(
+        "GetVersion@AgentsToolsVersion (dialogflow.projects.locations.agents.tools.versions.get): AgentsToolsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RestoreVersion@AgentsToolsVersion (dialogflow.projects.locations.agents.tools.versions.restore): AgentsToolsVersion: no deployable fixture",
+      test.provider.todo(
+        "RestoreVersion@AgentsToolsVersion (dialogflow.projects.locations.agents.tools.versions.restore): AgentsToolsVersion: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsTransitionRouteGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTransitionRouteGroup@AgentsTransitionRouteGroup (dialogflow.projects.locations.agents.transitionRouteGroups.get): AgentsTransitionRouteGroup: no deployable fixture",
+      test.provider.todo(
+        "GetTransitionRouteGroup@AgentsTransitionRouteGroup (dialogflow.projects.locations.agents.transitionRouteGroups.get): AgentsTransitionRouteGroup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("AgentsWebhook", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetWebhook (dialogflow.projects.locations.agents.webhooks.get): AgentsWebhook: no deployable fixture",
+      test.provider.todo(
+        "GetWebhook (dialogflow.projects.locations.agents.webhooks.get): AgentsWebhook: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -641,9 +641,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("SecuritySetting", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSecuritySetting (dialogflow.projects.locations.securitySettings.get): SecuritySetting: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetSecuritySetting (dialogflow.projects.locations.securitySettings.get)",
+        () => probe("GetSecuritySetting", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

@@ -27,6 +27,7 @@ const probe = (name: string, expectSuccess: boolean) =>
   });
 
 // Deploys one of every bindable resource: slow, so `--fast` skips it.
+// Resource-bound bindings run live in Bindings.test.ts.
 describe.skipIf(!!process.env.FAST)(
   "KMS generated bindings",
   { tags: ["provider:gcp", "provider:gcp:kms", "live"], concurrent: true },
@@ -46,99 +47,6 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
-
-    describe("CryptoKey", { concurrent: true }, () => {
-      test.provider.skip(
-        "AsymmetricDecrypt (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.asymmetricDecrypt): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "AsymmetricSign (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.asymmetricSign): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "CreateCryptoKeyVersion (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.create): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "Decapsulate (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.decapsulate): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "DeleteCryptoKeyVersion (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.delete): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "DestroyCryptoKeyVersion (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.destroy): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetCryptoKey (cloudkms.projects.locations.keyRings.cryptoKeys.get): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetCryptoKeyVersion (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.get): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetPublicKey (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.getPublicKey): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListCryptoKeyVersions (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.list): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "MacSign (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.macSign): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "MacVerify (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.macVerify): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "PatchCryptoKeyVersion (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.patch): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RawDecrypt (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.rawDecrypt): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RawEncrypt (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.rawEncrypt): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RestoreCryptoKeyVersion (cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.restore): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "UpdateCryptoKeyPrimaryVersion (cloudkms.projects.locations.keyRings.cryptoKeys.updatePrimaryVersion): CryptoKey: no deployable fixture",
-        () => Effect.void,
-      );
-    });
-
-    describe("ImportJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetImportJob (cloudkms.projects.locations.keyRings.importJobs.get): ImportJob: no deployable fixture",
-        () => Effect.void,
-      );
-    });
-
-    describe("KeyRing", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetKeyRing (cloudkms.projects.locations.keyRings.get): KeyRing: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListKeyRingCryptoKeys (cloudkms.projects.locations.keyRings.cryptoKeys.list): KeyRing: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListKeyRingImportJobs (cloudkms.projects.locations.keyRings.importJobs.list): KeyRing: no deployable fixture",
-        () => Effect.void,
-      );
-    });
 
     describe("project", { concurrent: true }, () => {
       test.provider(

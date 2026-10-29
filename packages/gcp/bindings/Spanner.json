@@ -59,6 +59,7 @@
     "spanner.projects.instanceConfigs.create": "creates long-lived infrastructure that belongs in a resource, not a runtime call"
   },
   "probes": {
-    "resources": {}
+    "resources": {},
+    "coveredBy": "Bindings.test.ts"
   }
 }

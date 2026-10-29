@@ -27,6 +27,7 @@ const probe = (name: string, expectSuccess: boolean) =>
   });
 
 // Deploys one of every bindable resource: slow, so `--fast` skips it.
+// Resource-bound bindings run live in Bindings.test.ts.
 describe.skipIf(!!process.env.FAST)(
   "BigQuery generated bindings",
   { tags: ["provider:gcp", "provider:gcp:bigquery", "live"], concurrent: true },
@@ -47,56 +48,6 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
-    describe("Dataset", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeleteModel (bigquery.models.delete): Dataset: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetDataset (bigquery.datasets.get): Dataset: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetModel (bigquery.models.get): Dataset: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetRoutine (bigquery.routines.get): Dataset: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListModels (bigquery.models.list): Dataset: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListRoutines (bigquery.routines.list): Dataset: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListTables (bigquery.tables.list): Dataset: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "PatchModel (bigquery.models.patch): Dataset: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "UndeleteDataset (bigquery.datasets.undelete): Dataset: no deployable fixture",
-        () => Effect.void,
-      );
-    });
-
-    describe("Job", { concurrent: true }, () => {
-      test.provider.skip(
-        "CancelJob (bigquery.jobs.cancel): Job: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetJob (bigquery.jobs.get): Job: no deployable fixture",
-        () => Effect.void,
-      );
-    });
-
     describe("project", { concurrent: true }, () => {
       test.provider("InsertJob (bigquery.jobs.insert)", () => probe("InsertJob", false), {
         tags: ["provider:gcp", "provider:gcp:bigquery", "live"],
@@ -110,21 +61,6 @@ describe.skipIf(!!process.env.FAST)(
         tags: ["provider:gcp", "provider:gcp:bigquery", "live"],
         timeout: 600_000,
       });
-    });
-
-    describe("Table", { concurrent: true }, () => {
-      test.provider.skip(
-        "BatchDeleteRowAccessPolicies (bigquery.rowAccessPolicies.batchDelete): Table: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetRowAccessPolicy (bigquery.rowAccessPolicies.get): Table: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListRowAccessPolicies (bigquery.rowAccessPolicies.list): Table: no deployable fixture",
-        () => Effect.void,
-      );
     });
   },
 );

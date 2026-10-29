@@ -27,6 +27,7 @@ const probe = (name: string, expectSuccess: boolean) =>
   });
 
 // Deploys one of every bindable resource: slow, so `--fast` skips it.
+// Resource-bound bindings run live in Bindings.test.ts.
 describe.skipIf(!!process.env.FAST)(
   "PubSub generated bindings",
   { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], concurrent: true },
@@ -83,66 +84,6 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:pubsub", "live"],
           timeout: 600_000,
         },
-      );
-    });
-
-    describe("Schema", { concurrent: true }, () => {
-      test.provider.skip(
-        "CommitSchema (pubsub.projects.schemas.commit): Schema: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "DeleteSchemaRevision (pubsub.projects.schemas.deleteRevision): Schema: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListSchemaRevisions (pubsub.projects.schemas.listRevisions): Schema: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RollbackSchema (pubsub.projects.schemas.rollback): Schema: no deployable fixture",
-        () => Effect.void,
-      );
-    });
-
-    describe("Snapshot", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSnapshot (pubsub.projects.snapshots.get): Snapshot: no deployable fixture",
-        () => Effect.void,
-      );
-    });
-
-    describe("Subscription", { concurrent: true }, () => {
-      test.provider.skip(
-        "DetachSubscription (pubsub.projects.subscriptions.detach): Subscription: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetSubscription (pubsub.projects.subscriptions.get): Subscription: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ModifySubscriptionPushConfig (pubsub.projects.subscriptions.modifyPushConfig): Subscription: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "SeekSubscription (pubsub.projects.subscriptions.seek): Subscription: no deployable fixture",
-        () => Effect.void,
-      );
-    });
-
-    describe("Topic", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTopic (pubsub.projects.topics.get): Topic: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListTopicSnapshots (pubsub.projects.topics.snapshots.list): Topic: no deployable fixture",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListTopicSubscriptions (pubsub.projects.topics.subscriptions.list): Topic: no deployable fixture",
-        () => Effect.void,
       );
     });
   },

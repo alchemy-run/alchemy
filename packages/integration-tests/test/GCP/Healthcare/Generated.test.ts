@@ -48,295 +48,319 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Dataset", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeidentifyDataset (healthcare.projects.locations.datasets.deidentify): Dataset: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "DeidentifyDataset (healthcare.projects.locations.datasets.deidentify)",
+        () => probe("DeidentifyDataset", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetDataset (healthcare.projects.locations.datasets.get): Dataset: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "GetDataset (healthcare.projects.locations.datasets.get)",
+        () => probe("GetDataset", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDatasetConsentStores (healthcare.projects.locations.datasets.consentStores.list): Dataset: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDatasetConsentStores (healthcare.projects.locations.datasets.consentStores.list)",
+        () => probe("ListDatasetConsentStores", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDatasetDicomStores (healthcare.projects.locations.datasets.dicomStores.list): Dataset: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDatasetDicomStores (healthcare.projects.locations.datasets.dicomStores.list)",
+        () => probe("ListDatasetDicomStores", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDatasetFhirStores (healthcare.projects.locations.datasets.fhirStores.list): Dataset: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDatasetFhirStores (healthcare.projects.locations.datasets.fhirStores.list)",
+        () => probe("ListDatasetFhirStores", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDatasetHl7V2Stores (healthcare.projects.locations.datasets.hl7V2Stores.list): Dataset: no deployable fixture",
-        () => Effect.void,
+      test.provider(
+        "ListDatasetHl7V2Stores (healthcare.projects.locations.datasets.hl7V2Stores.list)",
+        () => probe("ListDatasetHl7V2Stores", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DatasetsConsentStore", { concurrent: true }, () => {
-      test.provider.skip(
-        "CheckConsentStoreDataAccess (healthcare.projects.locations.datasets.consentStores.checkDataAccess): DatasetsConsentStore: no deployable fixture",
+      test.provider.todo(
+        "CheckConsentStoreDataAccess (healthcare.projects.locations.datasets.consentStores.checkDataAccess): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "EvaluateConsentStoreUserConsents (healthcare.projects.locations.datasets.consentStores.evaluateUserConsents): DatasetsConsentStore: no deployable fixture",
+      test.provider.todo(
+        "EvaluateConsentStoreUserConsents (healthcare.projects.locations.datasets.consentStores.evaluateUserConsents): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetConsentStore (healthcare.projects.locations.datasets.consentStores.get): DatasetsConsentStore: no deployable fixture",
+      test.provider.todo(
+        "GetConsentStore (healthcare.projects.locations.datasets.consentStores.get): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListConsentStoreAttributeDefinitions (healthcare.projects.locations.datasets.consentStores.attributeDefinitions.list): DatasetsConsentStore: no deployable fixture",
+      test.provider.todo(
+        "ListConsentStoreAttributeDefinitions (healthcare.projects.locations.datasets.consentStores.attributeDefinitions.list): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListConsentStoreConsentArtifacts (healthcare.projects.locations.datasets.consentStores.consentArtifacts.list): DatasetsConsentStore: no deployable fixture",
+      test.provider.todo(
+        "ListConsentStoreConsentArtifacts (healthcare.projects.locations.datasets.consentStores.consentArtifacts.list): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListConsentStoreConsents (healthcare.projects.locations.datasets.consentStores.consents.list): DatasetsConsentStore: no deployable fixture",
+      test.provider.todo(
+        "ListConsentStoreConsents (healthcare.projects.locations.datasets.consentStores.consents.list): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListConsentStoreUserDataMappings (healthcare.projects.locations.datasets.consentStores.userDataMappings.list): DatasetsConsentStore: no deployable fixture",
+      test.provider.todo(
+        "ListConsentStoreUserDataMappings (healthcare.projects.locations.datasets.consentStores.userDataMappings.list): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "QueryConsentStoreAccessibleData (healthcare.projects.locations.datasets.consentStores.queryAccessibleData): DatasetsConsentStore: no deployable fixture",
+      test.provider.todo(
+        "QueryConsentStoreAccessibleData (healthcare.projects.locations.datasets.consentStores.queryAccessibleData): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DatasetsConsentStoresAttributeDefinition", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAttributeDefinition (healthcare.projects.locations.datasets.consentStores.attributeDefinitions.get): DatasetsConsentStoresAttributeDefinition: no deployable fixture",
+      test.provider.todo(
+        "GetAttributeDefinition (healthcare.projects.locations.datasets.consentStores.attributeDefinitions.get): DatasetsConsentStoresAttributeDefinition: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DatasetsConsentStoresConsent", { concurrent: true }, () => {
-      test.provider.skip(
-        "ActivateConsent (healthcare.projects.locations.datasets.consentStores.consents.activate): DatasetsConsentStoresConsent: no deployable fixture",
+      test.provider.todo(
+        "ActivateConsent (healthcare.projects.locations.datasets.consentStores.consents.activate): DatasetsConsentStoresConsent: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "DeleteConsentRevision (healthcare.projects.locations.datasets.consentStores.consents.deleteRevision): DatasetsConsentStoresConsent: no deployable fixture",
+      test.provider.todo(
+        "DeleteConsentRevision (healthcare.projects.locations.datasets.consentStores.consents.deleteRevision): DatasetsConsentStoresConsent: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetConsent (healthcare.projects.locations.datasets.consentStores.consents.get): DatasetsConsentStoresConsent: no deployable fixture",
+      test.provider.todo(
+        "GetConsent (healthcare.projects.locations.datasets.consentStores.consents.get): DatasetsConsentStoresConsent: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListConsentRevisions (healthcare.projects.locations.datasets.consentStores.consents.listRevisions): DatasetsConsentStoresConsent: no deployable fixture",
+      test.provider.todo(
+        "ListConsentRevisions (healthcare.projects.locations.datasets.consentStores.consents.listRevisions): DatasetsConsentStoresConsent: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RejectConsent (healthcare.projects.locations.datasets.consentStores.consents.reject): DatasetsConsentStoresConsent: no deployable fixture",
+      test.provider.todo(
+        "RejectConsent (healthcare.projects.locations.datasets.consentStores.consents.reject): DatasetsConsentStoresConsent: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RevokeConsent (healthcare.projects.locations.datasets.consentStores.consents.revoke): DatasetsConsentStoresConsent: no deployable fixture",
+      test.provider.todo(
+        "RevokeConsent (healthcare.projects.locations.datasets.consentStores.consents.revoke): DatasetsConsentStoresConsent: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DatasetsConsentStoresConsentArtifact", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetConsentArtifact (healthcare.projects.locations.datasets.consentStores.consentArtifacts.get): DatasetsConsentStoresConsentArtifact: no deployable fixture",
+      test.provider.todo(
+        "GetConsentArtifact (healthcare.projects.locations.datasets.consentStores.consentArtifacts.get): DatasetsConsentStoresConsentArtifact: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DatasetsConsentStoresUserDataMapping", { concurrent: true }, () => {
-      test.provider.skip(
-        "ArchiveUserDataMapping (healthcare.projects.locations.datasets.consentStores.userDataMappings.archive): DatasetsConsentStoresUserDataMapping: no deployable fixture",
+      test.provider.todo(
+        "ArchiveUserDataMapping (healthcare.projects.locations.datasets.consentStores.userDataMappings.archive): DatasetsConsentStoresUserDataMapping: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetUserDataMapping (healthcare.projects.locations.datasets.consentStores.userDataMappings.get): DatasetsConsentStoresUserDataMapping: no deployable fixture",
+      test.provider.todo(
+        "GetUserDataMapping (healthcare.projects.locations.datasets.consentStores.userDataMappings.get): DatasetsConsentStoresUserDataMapping: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DatasetsDicomStore", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeidentifyDicomStore (healthcare.projects.locations.datasets.dicomStores.deidentify): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "DeidentifyDicomStore (healthcare.projects.locations.datasets.dicomStores.deidentify): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "DeleteDicomStoreStudy (healthcare.projects.locations.datasets.dicomStores.studies.delete): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "DeleteDicomStoreStudy (healthcare.projects.locations.datasets.dicomStores.studies.delete): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "DeleteDicomStoreStudySery (healthcare.projects.locations.datasets.dicomStores.studies.series.delete): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "DeleteDicomStoreStudySery (healthcare.projects.locations.datasets.dicomStores.studies.series.delete): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "DeleteDicomStoreStudySeryInstance (healthcare.projects.locations.datasets.dicomStores.studies.series.instances.delete): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "DeleteDicomStoreStudySeryInstance (healthcare.projects.locations.datasets.dicomStores.studies.series.instances.delete): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ExportDicomStore (healthcare.projects.locations.datasets.dicomStores.export): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "ExportDicomStore (healthcare.projects.locations.datasets.dicomStores.export): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetDicomStore (healthcare.projects.locations.datasets.dicomStores.get): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "GetDicomStore (healthcare.projects.locations.datasets.dicomStores.get): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetDICOMStoreMetrics (healthcare.projects.locations.datasets.dicomStores.getDICOMStoreMetrics): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "GetDICOMStoreMetrics (healthcare.projects.locations.datasets.dicomStores.getDICOMStoreMetrics): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ImportDicomStore (healthcare.projects.locations.datasets.dicomStores.import): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "ImportDicomStore (healthcare.projects.locations.datasets.dicomStores.import): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchDicomStoreForInstances (healthcare.projects.locations.datasets.dicomStores.searchForInstances): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "SearchDicomStoreForInstances (healthcare.projects.locations.datasets.dicomStores.searchForInstances): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchDicomStoreForSeries (healthcare.projects.locations.datasets.dicomStores.searchForSeries): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "SearchDicomStoreForSeries (healthcare.projects.locations.datasets.dicomStores.searchForSeries): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchDicomStoreForStudies (healthcare.projects.locations.datasets.dicomStores.searchForStudies): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "SearchDicomStoreForStudies (healthcare.projects.locations.datasets.dicomStores.searchForStudies): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchSeryForInstances (healthcare.projects.locations.datasets.dicomStores.studies.series.searchForInstances): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "SearchSeryForInstances (healthcare.projects.locations.datasets.dicomStores.studies.series.searchForInstances): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchStudyForInstances (healthcare.projects.locations.datasets.dicomStores.studies.searchForInstances): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "SearchStudyForInstances (healthcare.projects.locations.datasets.dicomStores.studies.searchForInstances): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchStudyForSeries (healthcare.projects.locations.datasets.dicomStores.studies.searchForSeries): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "SearchStudyForSeries (healthcare.projects.locations.datasets.dicomStores.studies.searchForSeries): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SetDicomStoreBlobStorageSettings (healthcare.projects.locations.datasets.dicomStores.setBlobStorageSettings): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "SetDicomStoreBlobStorageSettings (healthcare.projects.locations.datasets.dicomStores.setBlobStorageSettings): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StoreDicomStoreInstances (healthcare.projects.locations.datasets.dicomStores.storeInstances): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "StoreDicomStoreInstances (healthcare.projects.locations.datasets.dicomStores.storeInstances): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StoreStudyInstances (healthcare.projects.locations.datasets.dicomStores.studies.storeInstances): DatasetsDicomStore: no deployable fixture",
+      test.provider.todo(
+        "StoreStudyInstances (healthcare.projects.locations.datasets.dicomStores.studies.storeInstances): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DatasetsFhirStore", { concurrent: true }, () => {
-      test.provider.skip(
-        "ApplyFhirStoreAdminConsents (healthcare.projects.locations.datasets.fhirStores.applyAdminConsents): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "ApplyFhirStoreAdminConsents (healthcare.projects.locations.datasets.fhirStores.applyAdminConsents): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ApplyFhirStoreConsents (healthcare.projects.locations.datasets.fhirStores.applyConsents): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "ApplyFhirStoreConsents (healthcare.projects.locations.datasets.fhirStores.applyConsents): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "BulkFhirStoreDelete (healthcare.projects.locations.datasets.fhirStores.bulkDelete): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "BulkFhirStoreDelete (healthcare.projects.locations.datasets.fhirStores.bulkDelete): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CapabilitiesFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.capabilities): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "CapabilitiesFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.capabilities): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ConditionalFhirDelete (healthcare.projects.locations.datasets.fhirStores.fhir.conditionalDelete): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "ConditionalFhirDelete (healthcare.projects.locations.datasets.fhirStores.fhir.conditionalDelete): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ConditionalFhirPatch (healthcare.projects.locations.datasets.fhirStores.fhir.conditionalPatch): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "ConditionalFhirPatch (healthcare.projects.locations.datasets.fhirStores.fhir.conditionalPatch): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ConditionalFhirUpdate (healthcare.projects.locations.datasets.fhirStores.fhir.conditionalUpdate): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "ConditionalFhirUpdate (healthcare.projects.locations.datasets.fhirStores.fhir.conditionalUpdate): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CreateFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.create): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "CreateFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.create): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "DeidentifyFhirStore (healthcare.projects.locations.datasets.fhirStores.deidentify): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "DeidentifyFhirStore (healthcare.projects.locations.datasets.fhirStores.deidentify): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ExecuteFhirBundle (healthcare.projects.locations.datasets.fhirStores.fhir.executeBundle): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "ExecuteFhirBundle (healthcare.projects.locations.datasets.fhirStores.fhir.executeBundle): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ExplainFhirStoreDataAccess (healthcare.projects.locations.datasets.fhirStores.explainDataAccess): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "ExplainFhirStoreDataAccess (healthcare.projects.locations.datasets.fhirStores.explainDataAccess): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ExportFhirStore (healthcare.projects.locations.datasets.fhirStores.export): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "ExportFhirStore (healthcare.projects.locations.datasets.fhirStores.export): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetFhirStore (healthcare.projects.locations.datasets.fhirStores.get): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "GetFhirStore (healthcare.projects.locations.datasets.fhirStores.get): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetFHIRStoreMetrics (healthcare.projects.locations.datasets.fhirStores.getFHIRStoreMetrics): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "GetFHIRStoreMetrics (healthcare.projects.locations.datasets.fhirStores.getFHIRStoreMetrics): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ImportFhirStore (healthcare.projects.locations.datasets.fhirStores.import): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "ImportFhirStore (healthcare.projects.locations.datasets.fhirStores.import): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RollbackFhirStore (healthcare.projects.locations.datasets.fhirStores.rollback): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "RollbackFhirStore (healthcare.projects.locations.datasets.fhirStores.rollback): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.search): DatasetsFhirStore: no deployable fixture",
+      test.provider.todo(
+        "SearchFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.search): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DatasetsHl7V2Store", { concurrent: true }, () => {
-      test.provider.skip(
-        "ExportHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.export): DatasetsHl7V2Store: no deployable fixture",
+      test.provider.todo(
+        "ExportHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.export): DatasetsHl7V2Store: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.get): DatasetsHl7V2Store: no deployable fixture",
+      test.provider.todo(
+        "GetHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.get): DatasetsHl7V2Store: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetHL7v2StoreMetrics (healthcare.projects.locations.datasets.hl7V2Stores.getHL7v2StoreMetrics): DatasetsHl7V2Store: no deployable fixture",
+      test.provider.todo(
+        "GetHL7v2StoreMetrics (healthcare.projects.locations.datasets.hl7V2Stores.getHL7v2StoreMetrics): DatasetsHl7V2Store: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ImportHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.import): DatasetsHl7V2Store: no deployable fixture",
+      test.provider.todo(
+        "ImportHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.import): DatasetsHl7V2Store: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "IngestHl7V2StoreMessage (healthcare.projects.locations.datasets.hl7V2Stores.messages.ingest): DatasetsHl7V2Store: no deployable fixture",
+      test.provider.todo(
+        "IngestHl7V2StoreMessage (healthcare.projects.locations.datasets.hl7V2Stores.messages.ingest): DatasetsHl7V2Store: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListHl7V2StoreMessages (healthcare.projects.locations.datasets.hl7V2Stores.messages.list): DatasetsHl7V2Store: no deployable fixture",
+      test.provider.todo(
+        "ListHl7V2StoreMessages (healthcare.projects.locations.datasets.hl7V2Stores.messages.list): DatasetsHl7V2Store: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RollbackHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.rollback): DatasetsHl7V2Store: no deployable fixture",
+      test.provider.todo(
+        "RollbackHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.rollback): DatasetsHl7V2Store: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("DatasetsHl7V2StoresMessage", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetMessage (healthcare.projects.locations.datasets.hl7V2Stores.messages.get): DatasetsHl7V2StoresMessage: no deployable fixture",
+      test.provider.todo(
+        "GetMessage (healthcare.projects.locations.datasets.hl7V2Stores.messages.get): DatasetsHl7V2StoresMessage: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

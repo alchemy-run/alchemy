@@ -48,54 +48,54 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("BackupChannel", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBackupChannel (gkebackup.projects.locations.backupChannels.get): BackupChannel: no deployable fixture",
+      test.provider.todo(
+        "GetBackupChannel (gkebackup.projects.locations.backupChannels.get): BackupChannel: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetBackupChannelBackupPlanBinding (gkebackup.projects.locations.backupChannels.backupPlanBindings.get): BackupChannel: no deployable fixture",
+      test.provider.todo(
+        "GetBackupChannelBackupPlanBinding (gkebackup.projects.locations.backupChannels.backupPlanBindings.get): BackupChannel: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListBackupChannelBackupPlanBindings (gkebackup.projects.locations.backupChannels.backupPlanBindings.list): BackupChannel: no deployable fixture",
+      test.provider.todo(
+        "ListBackupChannelBackupPlanBindings (gkebackup.projects.locations.backupChannels.backupPlanBindings.list): BackupChannel: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("BackupPlan", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBackupPlan (gkebackup.projects.locations.backupPlans.get): BackupPlan: no deployable fixture",
+      test.provider.todo(
+        "GetBackupPlan (gkebackup.projects.locations.backupPlans.get): BackupPlan: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetBackupPlanTags (gkebackup.projects.locations.backupPlans.getTags): BackupPlan: no deployable fixture",
+      test.provider.todo(
+        "GetBackupPlanTags (gkebackup.projects.locations.backupPlans.getTags): BackupPlan: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListBackupPlanBackups (gkebackup.projects.locations.backupPlans.backups.list): BackupPlan: no deployable fixture",
+      test.provider.todo(
+        "ListBackupPlanBackups (gkebackup.projects.locations.backupPlans.backups.list): BackupPlan: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SetBackupPlanTags (gkebackup.projects.locations.backupPlans.setTags): BackupPlan: no deployable fixture",
+      test.provider.todo(
+        "SetBackupPlanTags (gkebackup.projects.locations.backupPlans.setTags): BackupPlan: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("BackupPlansBackup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBackup (gkebackup.projects.locations.backupPlans.backups.get): BackupPlansBackup: no deployable fixture",
+      test.provider.todo(
+        "GetBackup (gkebackup.projects.locations.backupPlans.backups.get): BackupPlansBackup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetBackupIndexDownloadUrl (gkebackup.projects.locations.backupPlans.backups.getBackupIndexDownloadUrl): BackupPlansBackup: no deployable fixture",
+      test.provider.todo(
+        "GetBackupIndexDownloadUrl (gkebackup.projects.locations.backupPlans.backups.getBackupIndexDownloadUrl): BackupPlansBackup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetBackupVolumeBackup (gkebackup.projects.locations.backupPlans.backups.volumeBackups.get): BackupPlansBackup: no deployable fixture",
+      test.provider.todo(
+        "GetBackupVolumeBackup (gkebackup.projects.locations.backupPlans.backups.volumeBackups.get): BackupPlansBackup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListBackupVolumeBackups (gkebackup.projects.locations.backupPlans.backups.volumeBackups.list): BackupPlansBackup: no deployable fixture",
+      test.provider.todo(
+        "ListBackupVolumeBackups (gkebackup.projects.locations.backupPlans.backups.volumeBackups.list): BackupPlansBackup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
@@ -136,50 +136,50 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("RestoreChannel", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetRestoreChannel (gkebackup.projects.locations.restoreChannels.get): RestoreChannel: no deployable fixture",
+      test.provider.todo(
+        "GetRestoreChannel (gkebackup.projects.locations.restoreChannels.get): RestoreChannel: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetRestoreChannelRestorePlanBinding (gkebackup.projects.locations.restoreChannels.restorePlanBindings.get): RestoreChannel: no deployable fixture",
+      test.provider.todo(
+        "GetRestoreChannelRestorePlanBinding (gkebackup.projects.locations.restoreChannels.restorePlanBindings.get): RestoreChannel: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListRestoreChannelRestorePlanBindings (gkebackup.projects.locations.restoreChannels.restorePlanBindings.list): RestoreChannel: no deployable fixture",
+      test.provider.todo(
+        "ListRestoreChannelRestorePlanBindings (gkebackup.projects.locations.restoreChannels.restorePlanBindings.list): RestoreChannel: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("RestorePlan", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetRestorePlan (gkebackup.projects.locations.restorePlans.get): RestorePlan: no deployable fixture",
+      test.provider.todo(
+        "GetRestorePlan (gkebackup.projects.locations.restorePlans.get): RestorePlan: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetRestorePlanTags (gkebackup.projects.locations.restorePlans.getTags): RestorePlan: no deployable fixture",
+      test.provider.todo(
+        "GetRestorePlanTags (gkebackup.projects.locations.restorePlans.getTags): RestorePlan: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListRestorePlanRestores (gkebackup.projects.locations.restorePlans.restores.list): RestorePlan: no deployable fixture",
+      test.provider.todo(
+        "ListRestorePlanRestores (gkebackup.projects.locations.restorePlans.restores.list): RestorePlan: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SetRestorePlanTags (gkebackup.projects.locations.restorePlans.setTags): RestorePlan: no deployable fixture",
+      test.provider.todo(
+        "SetRestorePlanTags (gkebackup.projects.locations.restorePlans.setTags): RestorePlan: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("RestorePlansRestore", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetRestore (gkebackup.projects.locations.restorePlans.restores.get): RestorePlansRestore: no deployable fixture",
+      test.provider.todo(
+        "GetRestore (gkebackup.projects.locations.restorePlans.restores.get): RestorePlansRestore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetRestoreVolumeRestore (gkebackup.projects.locations.restorePlans.restores.volumeRestores.get): RestorePlansRestore: no deployable fixture",
+      test.provider.todo(
+        "GetRestoreVolumeRestore (gkebackup.projects.locations.restorePlans.restores.volumeRestores.get): RestorePlansRestore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListRestoreVolumeRestores (gkebackup.projects.locations.restorePlans.restores.volumeRestores.list): RestorePlansRestore: no deployable fixture",
+      test.provider.todo(
+        "ListRestoreVolumeRestores (gkebackup.projects.locations.restorePlans.restores.volumeRestores.list): RestorePlansRestore: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

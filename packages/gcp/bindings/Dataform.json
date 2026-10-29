@@ -25,6 +25,11 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "Repository": "ProbeRepo",
+      "RepositoriesWorkspace": "ProbeWorkspace",
+      "ProjectsLocationsFolder": "ProbeFolder",
+      "Team": "ProbeTeam"
+    }
   }
 }

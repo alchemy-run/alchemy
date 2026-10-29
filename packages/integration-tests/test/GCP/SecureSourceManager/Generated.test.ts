@@ -267,48 +267,48 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("RepositoriesBranchRule", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBranchRule (securesourcemanager.projects.locations.repositories.branchRules.get): RepositoriesBranchRule: no deployable fixture",
+      test.provider.todo(
+        "GetBranchRule (securesourcemanager.projects.locations.repositories.branchRules.get): RepositoriesBranchRule: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("RepositoriesHook", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetHook (securesourcemanager.projects.locations.repositories.hooks.get): RepositoriesHook: no deployable fixture",
+      test.provider.todo(
+        "GetHook (securesourcemanager.projects.locations.repositories.hooks.get): RepositoriesHook: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("RepositoriesIssue", { concurrent: true }, () => {
-      test.provider.skip(
-        "CloseIssue (securesourcemanager.projects.locations.repositories.issues.close): RepositoriesIssue: no deployable fixture",
+      test.provider.todo(
+        "CloseIssue (securesourcemanager.projects.locations.repositories.issues.close): RepositoriesIssue: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetIssue (securesourcemanager.projects.locations.repositories.issues.get): RepositoriesIssue: no deployable fixture",
+      test.provider.todo(
+        "GetIssue (securesourcemanager.projects.locations.repositories.issues.get): RepositoriesIssue: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListIssueComments (securesourcemanager.projects.locations.repositories.issues.issueComments.list): RepositoriesIssue: no deployable fixture",
+      test.provider.todo(
+        "ListIssueComments (securesourcemanager.projects.locations.repositories.issues.issueComments.list): RepositoriesIssue: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "OpenIssue (securesourcemanager.projects.locations.repositories.issues.open): RepositoriesIssue: no deployable fixture",
+      test.provider.todo(
+        "OpenIssue (securesourcemanager.projects.locations.repositories.issues.open): RepositoriesIssue: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("RepositoriesIssuesIssueComment", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetIssueComment (securesourcemanager.projects.locations.repositories.issues.issueComments.get): RepositoriesIssuesIssueComment: no deployable fixture",
+      test.provider.todo(
+        "GetIssueComment (securesourcemanager.projects.locations.repositories.issues.issueComments.get): RepositoriesIssuesIssueComment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("RepositoriesPullRequestsPullRequestComment", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPullRequestComment (securesourcemanager.projects.locations.repositories.pullRequests.pullRequestComments.get): RepositoriesPullRequestsPullRequestComment: no deployable fixture",
+      test.provider.todo(
+        "GetPullRequestComment (securesourcemanager.projects.locations.repositories.pullRequests.pullRequestComments.get): RepositoriesPullRequestsPullRequestComment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

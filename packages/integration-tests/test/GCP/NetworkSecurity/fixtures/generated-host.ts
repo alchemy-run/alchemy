@@ -4,6 +4,18 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import {
+  ProbeAddressGroup,
+  ProbeAuthorizationPolicy,
+  ProbeBackendAuthenticationConfig,
+  ProbeClientTlsPolicy,
+  ProbeDnsThreatDetector,
+  ProbeGatewaySecurityPolicy,
+  ProbeSacRealm,
+  ProbeSecurityProfile,
+  ProbeServerTlsPolicy,
+  ProbeUrlList,
+} from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated NetworkSecurity binding as its own
@@ -15,74 +27,125 @@ export default class NetworkSecurityGeneratedHost extends GCP.Function<NetworkSe
   "NetworkSecurityGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.NetworkSecurity.ListAddressGroups();
-    const p1 = yield* GCP.NetworkSecurity.ListAuthorizationPolicies();
-    const p2 = yield* GCP.NetworkSecurity.ListAuthzPolicies();
-    const p3 = yield* GCP.NetworkSecurity.ListBackendAuthenticationConfigs();
-    const p4 = yield* GCP.NetworkSecurity.ListClientTlsPolicies();
-    const p5 = yield* GCP.NetworkSecurity.ListDnsThreatDetectors();
-    const p6 = yield* GCP.NetworkSecurity.ListFirewallEndpointAssociations();
-    const p7 = yield* GCP.NetworkSecurity.ListFirewallEndpoints();
-    const p8 = yield* GCP.NetworkSecurity.ListGatewaySecurityPolicies();
-    const p9 = yield* GCP.NetworkSecurity.ListInterceptDeploymentGroups();
-    const p10 = yield* GCP.NetworkSecurity.ListInterceptDeployments();
-    const p11 = yield* GCP.NetworkSecurity.ListInterceptEndpointGroupAssociations();
-    const p12 = yield* GCP.NetworkSecurity.ListInterceptEndpointGroups();
-    const p13 = yield* GCP.NetworkSecurity.ListMirroringDeploymentGroups();
-    const p14 = yield* GCP.NetworkSecurity.ListMirroringDeployments();
-    const p15 = yield* GCP.NetworkSecurity.ListMirroringEndpointGroupAssociations();
-    const p16 = yield* GCP.NetworkSecurity.ListMirroringEndpointGroups();
-    const p17 = yield* GCP.NetworkSecurity.ListSacAttachments();
-    const p18 = yield* GCP.NetworkSecurity.ListSacRealms();
-    const p19 = yield* GCP.NetworkSecurity.ListSecurityProfileGroups();
-    const p20 = yield* GCP.NetworkSecurity.ListSecurityProfiles();
-    const p21 = yield* GCP.NetworkSecurity.ListServerTlsPolicies();
-    const p22 = yield* GCP.NetworkSecurity.ListTlsInspectionPolicies();
-    const p23 = yield* GCP.NetworkSecurity.ListUrlLists();
+    const p0 = yield* GCP.NetworkSecurity.AddAddressGroupItems(ProbeAddressGroup);
+    const p1 = yield* GCP.NetworkSecurity.CloneAddressGroupItems(ProbeAddressGroup);
+    const p2 = yield* GCP.NetworkSecurity.GetAddressGroup(ProbeAddressGroup);
+    const p3 = yield* GCP.NetworkSecurity.GetAuthorizationPolicy(ProbeAuthorizationPolicy);
+    const p4 = yield* GCP.NetworkSecurity.GetBackendAuthenticationConfig(
+      ProbeBackendAuthenticationConfig,
+    );
+    const p5 = yield* GCP.NetworkSecurity.GetClientTlsPolicy(ProbeClientTlsPolicy);
+    const p6 = yield* GCP.NetworkSecurity.GetDnsThreatDetector(ProbeDnsThreatDetector);
+    const p7 = yield* GCP.NetworkSecurity.GetGatewaySecurityPolicy(ProbeGatewaySecurityPolicy);
+    const p8 = yield* GCP.NetworkSecurity.GetSacRealm(ProbeSacRealm);
+    const p9 = yield* GCP.NetworkSecurity.GetSecurityProfile(ProbeSecurityProfile);
+    const p10 = yield* GCP.NetworkSecurity.GetServerTlsPolicy(ProbeServerTlsPolicy);
+    const p11 = yield* GCP.NetworkSecurity.GetUrlList(ProbeUrlList);
+    const p12 = yield* GCP.NetworkSecurity.ListAddressGroupReferences(ProbeAddressGroup);
+    const p13 = yield* GCP.NetworkSecurity.ListAddressGroups();
+    const p14 = yield* GCP.NetworkSecurity.ListAuthorizationPolicies();
+    const p15 = yield* GCP.NetworkSecurity.ListAuthzPolicies();
+    const p16 = yield* GCP.NetworkSecurity.ListBackendAuthenticationConfigs();
+    const p17 = yield* GCP.NetworkSecurity.ListClientTlsPolicies();
+    const p18 = yield* GCP.NetworkSecurity.ListDnsThreatDetectors();
+    const p19 = yield* GCP.NetworkSecurity.ListFirewallEndpointAssociations();
+    const p20 = yield* GCP.NetworkSecurity.ListFirewallEndpoints();
+    const p21 = yield* GCP.NetworkSecurity.ListGatewaySecurityPolicies();
+    const p22 = yield* GCP.NetworkSecurity.ListGatewaySecurityPolicyRules(
+      ProbeGatewaySecurityPolicy,
+    );
+    const p23 = yield* GCP.NetworkSecurity.ListInterceptDeploymentGroups();
+    const p24 = yield* GCP.NetworkSecurity.ListInterceptDeployments();
+    const p25 = yield* GCP.NetworkSecurity.ListInterceptEndpointGroupAssociations();
+    const p26 = yield* GCP.NetworkSecurity.ListInterceptEndpointGroups();
+    const p27 = yield* GCP.NetworkSecurity.ListMirroringDeploymentGroups();
+    const p28 = yield* GCP.NetworkSecurity.ListMirroringDeployments();
+    const p29 = yield* GCP.NetworkSecurity.ListMirroringEndpointGroupAssociations();
+    const p30 = yield* GCP.NetworkSecurity.ListMirroringEndpointGroups();
+    const p31 = yield* GCP.NetworkSecurity.ListSacAttachments();
+    const p32 = yield* GCP.NetworkSecurity.ListSacRealms();
+    const p33 = yield* GCP.NetworkSecurity.ListSecurityProfileGroups();
+    const p34 = yield* GCP.NetworkSecurity.ListSecurityProfiles();
+    const p35 = yield* GCP.NetworkSecurity.ListServerTlsPolicies();
+    const p36 = yield* GCP.NetworkSecurity.ListTlsInspectionPolicies();
+    const p37 = yield* GCP.NetworkSecurity.ListUrlLists();
+    const p38 = yield* GCP.NetworkSecurity.RemoveAddressGroupItems(ProbeAddressGroup);
     return {
       fetch: serveProbes({
-        ListAddressGroups: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListAuthorizationPolicies: outcome(Retry.none(p1({ location: "us-central1" } as never))),
-        ListAuthzPolicies: outcome(Retry.none(p2({ location: "us-central1" } as never))),
+        "AddAddressGroupItems@AddressGroup": outcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "CloneAddressGroupItems@AddressGroup": outcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "GetAddressGroup@AddressGroup": outcome(Retry.none(p2({} as never))),
+        GetAuthorizationPolicy: outcome(Retry.none(p3({} as never))),
+        GetBackendAuthenticationConfig: outcome(Retry.none(p4({} as never))),
+        GetClientTlsPolicy: outcome(Retry.none(p5({} as never))),
+        GetDnsThreatDetector: outcome(Retry.none(p6({} as never))),
+        GetGatewaySecurityPolicy: outcome(Retry.none(p7({} as never))),
+        GetSacRealm: outcome(Retry.none(p8({} as never))),
+        "GetSecurityProfile@SecurityProfile": outcome(Retry.none(p9({} as never))),
+        GetServerTlsPolicy: outcome(Retry.none(p10({} as never))),
+        GetUrlList: outcome(Retry.none(p11({} as never))),
+        "ListAddressGroupReferences@AddressGroup": outcome(Retry.none(p12({} as never))),
+        ListAddressGroups: outcome(Retry.none(p13({ location: "us-central1" } as never))),
+        ListAuthorizationPolicies: outcome(Retry.none(p14({ location: "us-central1" } as never))),
+        ListAuthzPolicies: outcome(Retry.none(p15({ location: "us-central1" } as never))),
         ListBackendAuthenticationConfigs: outcome(
-          Retry.none(p3({ location: "us-central1" } as never)),
+          Retry.none(p16({ location: "us-central1" } as never)),
         ),
-        ListClientTlsPolicies: outcome(Retry.none(p4({ location: "us-central1" } as never))),
-        ListDnsThreatDetectors: outcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListClientTlsPolicies: outcome(Retry.none(p17({ location: "us-central1" } as never))),
+        ListDnsThreatDetectors: outcome(Retry.none(p18({ location: "us-central1" } as never))),
         ListFirewallEndpointAssociations: outcome(
-          Retry.none(p6({ location: "us-central1" } as never)),
+          Retry.none(p19({ location: "us-central1" } as never)),
         ),
-        ListFirewallEndpoints: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListGatewaySecurityPolicies: outcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListFirewallEndpoints: outcome(Retry.none(p20({ location: "us-central1" } as never))),
+        ListGatewaySecurityPolicies: outcome(Retry.none(p21({ location: "us-central1" } as never))),
+        ListGatewaySecurityPolicyRules: outcome(Retry.none(p22({} as never))),
         ListInterceptDeploymentGroups: outcome(
-          Retry.none(p9({ location: "us-central1" } as never)),
+          Retry.none(p23({ location: "us-central1" } as never)),
         ),
-        ListInterceptDeployments: outcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListInterceptDeployments: outcome(Retry.none(p24({ location: "us-central1" } as never))),
         ListInterceptEndpointGroupAssociations: outcome(
-          Retry.none(p11({ location: "us-central1" } as never)),
+          Retry.none(p25({ location: "us-central1" } as never)),
         ),
-        ListInterceptEndpointGroups: outcome(Retry.none(p12({ location: "us-central1" } as never))),
+        ListInterceptEndpointGroups: outcome(Retry.none(p26({ location: "us-central1" } as never))),
         ListMirroringDeploymentGroups: outcome(
-          Retry.none(p13({ location: "us-central1" } as never)),
+          Retry.none(p27({ location: "us-central1" } as never)),
         ),
-        ListMirroringDeployments: outcome(Retry.none(p14({ location: "us-central1" } as never))),
+        ListMirroringDeployments: outcome(Retry.none(p28({ location: "us-central1" } as never))),
         ListMirroringEndpointGroupAssociations: outcome(
-          Retry.none(p15({ location: "us-central1" } as never)),
+          Retry.none(p29({ location: "us-central1" } as never)),
         ),
-        ListMirroringEndpointGroups: outcome(Retry.none(p16({ location: "us-central1" } as never))),
-        ListSacAttachments: outcome(Retry.none(p17({ location: "us-central1" } as never))),
-        ListSacRealms: outcome(Retry.none(p18({ location: "us-central1" } as never))),
-        ListSecurityProfileGroups: outcome(Retry.none(p19({ location: "us-central1" } as never))),
-        ListSecurityProfiles: outcome(Retry.none(p20({ location: "us-central1" } as never))),
-        ListServerTlsPolicies: outcome(Retry.none(p21({ location: "us-central1" } as never))),
-        ListTlsInspectionPolicies: outcome(Retry.none(p22({ location: "us-central1" } as never))),
-        ListUrlLists: outcome(Retry.none(p23({ location: "us-central1" } as never))),
+        ListMirroringEndpointGroups: outcome(Retry.none(p30({ location: "us-central1" } as never))),
+        ListSacAttachments: outcome(Retry.none(p31({ location: "us-central1" } as never))),
+        ListSacRealms: outcome(Retry.none(p32({ location: "us-central1" } as never))),
+        ListSecurityProfileGroups: outcome(Retry.none(p33({ location: "us-central1" } as never))),
+        ListSecurityProfiles: outcome(Retry.none(p34({ location: "us-central1" } as never))),
+        ListServerTlsPolicies: outcome(Retry.none(p35({ location: "us-central1" } as never))),
+        ListTlsInspectionPolicies: outcome(Retry.none(p36({ location: "us-central1" } as never))),
+        ListUrlLists: outcome(Retry.none(p37({ location: "us-central1" } as never))),
+        "RemoveAddressGroupItems@AddressGroup": outcome(Retry.none(p38({} as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.NetworkSecurity.AddAddressGroupItemsHttp,
+          GCP.NetworkSecurity.CloneAddressGroupItemsHttp,
+          GCP.NetworkSecurity.GetAddressGroupHttp,
+          GCP.NetworkSecurity.GetAuthorizationPolicyHttp,
+          GCP.NetworkSecurity.GetBackendAuthenticationConfigHttp,
+          GCP.NetworkSecurity.GetClientTlsPolicyHttp,
+          GCP.NetworkSecurity.GetDnsThreatDetectorHttp,
+          GCP.NetworkSecurity.GetGatewaySecurityPolicyHttp,
+          GCP.NetworkSecurity.GetSacRealmHttp,
+          GCP.NetworkSecurity.GetSecurityProfileHttp,
+          GCP.NetworkSecurity.GetServerTlsPolicyHttp,
+          GCP.NetworkSecurity.GetUrlListHttp,
+          GCP.NetworkSecurity.ListAddressGroupReferencesHttp,
           GCP.NetworkSecurity.ListAddressGroupsHttp,
           GCP.NetworkSecurity.ListAuthorizationPoliciesHttp,
           GCP.NetworkSecurity.ListAuthzPoliciesHttp,
@@ -92,6 +155,7 @@ export default class NetworkSecurityGeneratedHost extends GCP.Function<NetworkSe
           GCP.NetworkSecurity.ListFirewallEndpointAssociationsHttp,
           GCP.NetworkSecurity.ListFirewallEndpointsHttp,
           GCP.NetworkSecurity.ListGatewaySecurityPoliciesHttp,
+          GCP.NetworkSecurity.ListGatewaySecurityPolicyRulesHttp,
           GCP.NetworkSecurity.ListInterceptDeploymentGroupsHttp,
           GCP.NetworkSecurity.ListInterceptDeploymentsHttp,
           GCP.NetworkSecurity.ListInterceptEndpointGroupAssociationsHttp,
@@ -107,6 +171,7 @@ export default class NetworkSecurityGeneratedHost extends GCP.Function<NetworkSe
           GCP.NetworkSecurity.ListServerTlsPoliciesHttp,
           GCP.NetworkSecurity.ListTlsInspectionPoliciesHttp,
           GCP.NetworkSecurity.ListUrlListsHttp,
+          GCP.NetworkSecurity.RemoveAddressGroupItemsHttp,
         ),
       ),
     ),

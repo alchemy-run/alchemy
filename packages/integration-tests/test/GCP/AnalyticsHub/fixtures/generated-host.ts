@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeDataExchange } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated AnalyticsHub binding as its own
@@ -16,27 +17,37 @@ export default class AnalyticsHubGeneratedHost extends GCP.Function<AnalyticsHub
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.AnalyticsHub.DeleteSubscription();
-    const p1 = yield* GCP.AnalyticsHub.GetSubscription();
-    const p2 = yield* GCP.AnalyticsHub.ListDataExchanges();
-    const p3 = yield* GCP.AnalyticsHub.ListSubscriptions();
-    const p4 = yield* GCP.AnalyticsHub.RefreshSubscription();
-    const p5 = yield* GCP.AnalyticsHub.RevokeSubscription();
+    const p1 = yield* GCP.AnalyticsHub.GetDataExchange(ProbeDataExchange);
+    const p2 = yield* GCP.AnalyticsHub.GetSubscription();
+    const p3 = yield* GCP.AnalyticsHub.ListDataExchangeListings(ProbeDataExchange);
+    const p4 = yield* GCP.AnalyticsHub.ListDataExchangeQueryTemplates(ProbeDataExchange);
+    const p5 = yield* GCP.AnalyticsHub.ListDataExchanges();
+    const p6 = yield* GCP.AnalyticsHub.ListDataExchangeSubscriptions(ProbeDataExchange);
+    const p7 = yield* GCP.AnalyticsHub.ListSubscriptions();
+    const p8 = yield* GCP.AnalyticsHub.RefreshSubscription();
+    const p9 = yield* GCP.AnalyticsHub.RevokeSubscription();
+    const p10 = yield* GCP.AnalyticsHub.SubscribeDataExchange(ProbeDataExchange);
     return {
       fetch: serveProbes({
         DeleteSubscription: outcome(
           Retry.none(p0({ subscription: "alchemy-missing", location: "us-central1" } as never)),
         ),
+        GetDataExchange: outcome(Retry.none(p1({} as never))),
         GetSubscription: outcome(
-          Retry.none(p1({ subscription: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p2({ subscription: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListDataExchanges: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListSubscriptions: outcome(Retry.none(p3({ location: "us-central1" } as never))),
+        ListDataExchangeListings: outcome(Retry.none(p3({} as never))),
+        ListDataExchangeQueryTemplates: outcome(Retry.none(p4({} as never))),
+        ListDataExchanges: outcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListDataExchangeSubscriptions: outcome(Retry.none(p6({} as never))),
+        ListSubscriptions: outcome(Retry.none(p7({ location: "us-central1" } as never))),
         RefreshSubscription: outcome(
-          Retry.none(p4({ subscription: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p8({ subscription: "alchemy-missing", location: "us-central1" } as never)),
         ),
         RevokeSubscription: outcome(
-          Retry.none(p5({ subscription: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p9({ subscription: "alchemy-missing", location: "us-central1" } as never)),
         ),
+        SubscribeDataExchange: outcome(Retry.none(p10({} as never))),
       }),
     };
   }).pipe(
@@ -44,11 +55,16 @@ export default class AnalyticsHubGeneratedHost extends GCP.Function<AnalyticsHub
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.AnalyticsHub.DeleteSubscriptionHttp,
+          GCP.AnalyticsHub.GetDataExchangeHttp,
           GCP.AnalyticsHub.GetSubscriptionHttp,
+          GCP.AnalyticsHub.ListDataExchangeListingsHttp,
+          GCP.AnalyticsHub.ListDataExchangeQueryTemplatesHttp,
           GCP.AnalyticsHub.ListDataExchangesHttp,
+          GCP.AnalyticsHub.ListDataExchangeSubscriptionsHttp,
           GCP.AnalyticsHub.ListSubscriptionsHttp,
           GCP.AnalyticsHub.RefreshSubscriptionHttp,
           GCP.AnalyticsHub.RevokeSubscriptionHttp,
+          GCP.AnalyticsHub.SubscribeDataExchangeHttp,
         ),
       ),
     ),
