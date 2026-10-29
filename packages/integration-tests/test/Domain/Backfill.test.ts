@@ -265,8 +265,8 @@ describe("Domain backfill (simulated)", () => {
     Effect.gen(function* () {
       for (const commit of history(sim, 5, 20, 3)) yield* commit();
       yield* sim.deploy();
-      yield* sim.retry(sim.net.node.news("3f", [TARGET]));
-      yield* sim.retry(sim.net.node.news("", [TARGET]));
+      yield* sim.retry(sim.net.node.news("3f", [TARGET], sim.plans([TARGET])));
+      yield* sim.retry(sim.net.node.news("", [TARGET], sim.plans([TARGET])));
       yield* sim.run();
     }),
   );

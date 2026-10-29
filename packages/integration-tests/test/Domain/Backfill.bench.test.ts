@@ -32,6 +32,8 @@ const bench = (
   instances: number,
   events: number,
   limits: Backfill.Limits = Backfill.defaultLimits,
+  /** Every instance is busy at the deploy, so it keeps its older code for a while. */
+  running = false,
 ) =>
   Effect.gen(function* () {
     const sim = new Sim(1, "view:V#1", undefined, limits);
@@ -48,7 +50,7 @@ const bench = (
     yield* sim.run();
     sim.resetMeasures();
     const started = performance.now();
-    yield* sim.deploy();
+    yield* sim.deploy({ running });
     yield* sim.run([], { maxSteps: 50_000_000 });
     const totals = sim.totals();
     expect((yield* sim.status()).complete).toContain("view:V#1");
@@ -71,6 +73,8 @@ const bench = (
       directoryNodes: totals.directory.nodes,
       directoryDepth: totals.directory.depth,
       wallSeconds: +(sim.makespan / 1000).toFixed(1),
+      /** When the history was complete: the deploy waits for this, not for the rest. */
+      completeSeconds: +((sim.completedAt ?? sim.makespan) / 1000).toFixed(1),
       simulatedIn: `${Math.round(performance.now() - started)}ms`,
     };
     yield* Effect.sync(() => console.log(`BENCH ${JSON.stringify(result)}`));
@@ -88,6 +92,20 @@ describe("Domain backfill benchmarks (simulated)", () => {
         const [small, , large] = runs;
         expect(large!.requestsPerEvent).toBeLessThan(small!.requestsPerEvent * 1.5);
         expect(large!.wallSeconds).toBeLessThan(small!.wallSeconds * 2);
+      }),
+    { timeout: 600_000 },
+  );
+
+  it.effect.skipIf(!!process.env.FAST)(
+    "keyed by its aggregate, every instance still on older code: the backfill doesn't wait for them",
+    () =>
+      Effect.gen(function* () {
+        const runs = [];
+        for (const instances of [100, 1_000, 10_000])
+          runs.push(yield* bench("keyed", instances, 10, Backfill.defaultLimits, true));
+        // Instances keep their older code for 20s or more: the history is in long before.
+        for (const run of runs) expect(run.completeSeconds).toBeLessThan(15);
+        expect(runs[2]!.completeSeconds).toBeLessThan(runs[0]!.completeSeconds * 2);
       }),
     { timeout: 600_000 },
   );

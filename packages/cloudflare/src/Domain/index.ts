@@ -506,30 +506,41 @@ const backfillRuntime = (
   });
 
 /** A directory node: one Durable Object per path in the tree. */
-/** The sources (aggregates and views, by name) a consumer reads, in the deployed model. */
-type SourcesOf = (target: string) => ReadonlyArray<string> | undefined;
+/** What a backfill needs to know of a consumer, in the deployed model. */
+type PlanOf = (target: string) => Backfill.Plan | undefined;
 
-const directoryObject = (net: Backfill.Network, sourcesOf: SourcesOf) =>
+/** Every plan the model has for these targets, as an announcement carries them. */
+const plansOf = (targets: ReadonlyArray<string>, planOf: PlanOf) => {
+  const plans: Record<string, Backfill.Plan> = {};
+  for (const target of targets) {
+    const plan = planOf(target);
+    if (plan !== undefined) plans[target] = plan;
+  }
+  return plans;
+};
+
+const directoryObject = (net: Backfill.Network, planOf: PlanOf) =>
   Effect.gen(function* () {
     return Effect.gen(function* () {
       let node: Backfill.Node | undefined;
       const runtime = yield* backfillRuntime((id) => node!.run(id));
-      node = Backfill.makeNode(
-        runtime.storage,
-        runtime.jobs,
-        net,
-        Backfill.defaultLimits,
-        sourcesOf,
-      );
+      node = Backfill.makeNode(runtime.storage, runtime.jobs, net, Backfill.defaultLimits, planOf);
       const role = node;
       return {
         register: (path: string, ref: Backfill.SourceRef) =>
           reportDefects(role.register(path, ref)),
         child: (path: string, child: string) => reportDefects(role.child(path, child)),
-        news: (path: string, targets: ReadonlyArray<string>) =>
-          reportDefects(role.news(path, targets)),
-        sweep: (path: string, target: string, phase: "discover" | "ready" | "complete") =>
-          reportDefects(role.sweep(path, target, phase)),
+        news: (
+          path: string,
+          targets: ReadonlyArray<string>,
+          plans: Readonly<Record<string, Backfill.Plan>>,
+        ) => reportDefects(role.news(path, targets, plans)),
+        sweep: (
+          path: string,
+          target: string,
+          phase: "discover" | "ready" | "complete",
+          plan: Backfill.Plan | undefined,
+        ) => reportDefects(role.sweep(path, target, phase, plan)),
         report: (path: string, target: string, phase: "discover" | "ready", child: string) =>
           reportDefects(role.report(path, target, phase, child)),
         settled: (path: string, target: string, ref: Backfill.SourceRef) =>
@@ -588,8 +599,13 @@ const aggregateObject = (
         (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
           ref: { source: kit.name, id },
           targets: () => kit.targets,
-          singleSource: kit.consumerSingleSource,
           model,
+          log: (after, limit) =>
+            runtime.provide(
+              state.storage
+                .list<StoredEvent>({ prefix: "event:", start: `event:${pad(after + 1)}`, limit })
+                .pipe(Effect.map((rows) => [...rows.values()])),
+            ),
           version: runtime.provide(Effect.map(currentMeta, (meta) => meta.version)),
           routed: runtime.provide(state.storage.get<Routed>("routed")),
           markLive: (target) =>
@@ -782,6 +798,11 @@ const aggregateObject = (
           reportDefects(sourceFor(id).ready(target, reportTo)),
         bfPull: (id: string, target: string, key: string, after: number) =>
           reportDefects(sourceFor(id).pull(target, key, after)),
+        // Any code answers these: a key keyed by this instance reads its log itself.
+        bfLog: (id: string, after: number, limit: number) =>
+          reportDefects(sourceFor(id).log(after, limit)),
+        bfHandoff: (id: string, target: string, key: string, through: number) =>
+          reportDefects(sourceFor(id).handoff(target, key, through)),
         // A live read of this instance: accept its WebSocket, then push on every commit.
         fetch: accept((id, subscription) =>
           Effect.gen(function* () {
@@ -800,7 +821,7 @@ const viewObject = (
   kit: ViewKit,
   net: Backfill.Network,
   model: () => ReadonlyArray<string>,
-  sourcesOf: SourcesOf,
+  planOf: PlanOf,
 ) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
@@ -912,7 +933,8 @@ const viewObject = (
           key,
           target: () => target,
           singleSource: () => kit.singleSource,
-          sources: () => sourcesOf(target) ?? [],
+          sources: () => planOf(target)?.sources ?? [],
+          history: (ref, rows) => kit.history(target, ref.source, ref.id, rows),
           apply: (deliveries) => runtime.provide(Effect.orDie(apply(key, deliveries))),
           after: runtime.provide(flushAfter),
         }));
@@ -920,8 +942,13 @@ const viewObject = (
         (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
           ref: { source: kit.name, id: key },
           targets: () => kit.targets,
-          singleSource: kit.consumerSingleSource,
           model,
+          log: (after, limit) =>
+            runtime.provide(
+              state.storage
+                .list<ViewEntry>({ prefix: "entry:", start: `entry:${pad(after + 1)}`, limit })
+                .pipe(Effect.map((rows) => [...rows.values()])),
+            ),
           version: runtime.provide(Effect.map(read, (snapshot) => snapshot.seq)),
           routed: runtime.provide(state.storage.get<Routed>("routed")),
           markLive: (target) =>
@@ -987,6 +1014,17 @@ const viewObject = (
           reportDefects(sourceFor(key).ready(target, reportTo)),
         bfPull: (key: string, target: string, consumerKey: string, after: number) =>
           reportDefects(sourceFor(key).pull(target, consumerKey, after)),
+        bfLog: (key: string, after: number, limit: number) =>
+          reportDefects(sourceFor(key).log(after, limit)),
+        bfHandoff: (key: string, target: string, consumerKey: string, through: number) =>
+          reportDefects(sourceFor(key).handoff(target, consumerKey, through)),
+        bfStart: (key: string, target: string, ref: Backfill.SourceRef) =>
+          reportDefects(
+            Effect.gen(function* () {
+              yield* state.storage.put(ID_KEY, key);
+              return yield* consumerFor(key).start(target, ref);
+            }),
+          ),
         // The key lists itself in its merge job, before its first entry.
         bfFeed: (key: string, target: string, stream: string, ref: Backfill.SourceRef) =>
           reportDefects(
@@ -1069,7 +1107,7 @@ const emptyProjectionMeta: ProjectionMeta = {
 /** How long a failed or interrupted run waits before it is retried. */
 const PROJECTION_RETRY_MS = 10_000;
 
-const projectionObject = (kit: ProjectionKit, net: Backfill.Network, sourcesOf: SourcesOf) =>
+const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: PlanOf) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
@@ -1208,7 +1246,8 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, sourcesOf: 
           key,
           target: () => target,
           singleSource: () => kit.singleSource,
-          sources: () => sourcesOf(target) ?? [],
+          sources: () => planOf(target)?.sources ?? [],
+          history: (ref, rows) => kit.history(target, ref.source, ref.id, rows),
           apply: (deliveries) =>
             runtime.provide(
               Effect.orDie(Effect.forEach(deliveries, (d) => intake(key, d), { discard: true })),
@@ -1234,6 +1273,8 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, sourcesOf: 
           ),
         bfConsumerReady: (key: string, target: string) =>
           reportDefects(keep(key).pipe(Effect.andThen(consumerFor(key).ready(target)))),
+        bfStart: (key: string, target: string, ref: Backfill.SourceRef) =>
+          reportDefects(keep(key).pipe(Effect.andThen(consumerFor(key).start(target, ref)))),
       };
     });
   });
@@ -1361,8 +1402,8 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
 
     // Every consumer in the model this isolate runs, set once the model is built.
     let model: ReadonlyArray<string> = [];
-    let sourcesOf: SourcesOf = () => undefined;
-    const consumerSources: SourcesOf = (target) => sourcesOf(target);
+    let planOf: PlanOf = () => undefined;
+    const consumerPlans: PlanOf = (target) => planOf(target);
     const current = () => model;
     // The objects the backfill protocol reaches: directory nodes, sources by name,
     // consumers by kind and name.
@@ -1378,8 +1419,9 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       node: {
         register: (path, ref) => unwrapDefects(nodeStub(path).register(path, ref)),
         child: (path, child) => unwrapDefects(nodeStub(path).child(path, child)),
-        news: (path, targets) => unwrapDefects(nodeStub(path).news(path, targets)),
-        sweep: (path, target, phase) => unwrapDefects(nodeStub(path).sweep(path, target, phase)),
+        news: (path, targets, plans) => unwrapDefects(nodeStub(path).news(path, targets, plans)),
+        sweep: (path, target, phase, plan) =>
+          unwrapDefects(nodeStub(path).sweep(path, target, phase, plan)),
         report: (path, target, phase, child) =>
           unwrapDefects(nodeStub(path).report(path, target, phase, child)),
         settled: (path, target, ref) => unwrapDefects(nodeStub(path).settled(path, target, ref)),
@@ -1406,6 +1448,18 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
             ? unwrapDefects(namespace.getByName(ref.id).bfPull(ref.id, target, key, after))
             : Effect.succeed({ deliveries: [], live: true });
         },
+        log: (ref, after, limit) => {
+          const namespace = sources.get(ref.source);
+          return namespace
+            ? unwrapDefects(namespace.getByName(ref.id).bfLog(ref.id, after, limit))
+            : Effect.succeed([]);
+        },
+        handoff: (ref, target, key, through) => {
+          const namespace = sources.get(ref.source);
+          return namespace
+            ? unwrapDefects(namespace.getByName(ref.id).bfHandoff(ref.id, target, key, through))
+            : Effect.succeed("live" as const);
+        },
       },
       consumer: {
         source: (target, key, stream, ref) => {
@@ -1416,9 +1470,15 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           const stub = consumerStub(target, key);
           return stub ? unwrapDefects(stub.bfConsumerReady(key, target)) : Effect.void;
         },
+        start: (target, key, ref) => {
+          const stub = consumerStub(target, key);
+          return stub
+            ? unwrapDefects(stub.bfStart(key, target, ref))
+            : Effect.succeed("settled" as const);
+        },
       },
     };
-    directory = yield* inInit(declare("DomainDirectory", directoryObject(net, consumerSources)));
+    directory = yield* inInit(declare("DomainDirectory", directoryObject(net, consumerPlans)));
 
     // A run of the backfill: announce the model's consumers to the directory, then
     // check the root until every one is complete. Reconciliation starts it and waits.
@@ -1427,7 +1487,10 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
         "DomainBackfill",
         Effect.succeed((params: { readonly targets: ReadonlyArray<string> }) =>
           Effect.gen(function* () {
-            yield* task("announce", net.node.news("", params.targets));
+            yield* task(
+              "announce",
+              net.node.news("", params.targets, plansOf(params.targets, planOf)),
+            );
             for (let check = 0; ; check++) {
               const { complete } = yield* task(`check-${check}`, net.node.status(""));
               if (params.targets.every((target) => complete.includes(target)))
@@ -1543,7 +1606,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           Effect.gen(function* () {
             const namespace = yield* declare(
               `${view.viewName}View`,
-              viewObject(kit, net, current, consumerSources),
+              viewObject(kit, net, current, consumerPlans),
             );
             sources.set(view.viewName, namespace);
             consumers.set(`view:${view.viewName}`, namespace);
@@ -1589,7 +1652,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           Effect.gen(function* () {
             const namespace = yield* declare(
               `${projection.projectionName}Projection`,
-              projectionObject(kit, net, consumerSources),
+              projectionObject(kit, net, consumerPlans),
             );
             consumers.set(`projection:${projection.projectionName}`, namespace);
             return {
@@ -1638,7 +1701,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
             through: undefined,
           })),
         ),
-      start: (targets, sourcesOfTarget) =>
+      start: (targets, plansOfTarget) =>
         Effect.gen(function* () {
           // At deploy time: reconciliation runs the backfill of new consumers and waits.
           if (!globalThis.__ALCHEMY_RUNTIME__ && targets.length > 0) {
@@ -1657,14 +1720,14 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           Effect.andThen(
             Effect.sync(() => {
               model = targets;
-              sourcesOf = sourcesOfTarget;
+              planOf = plansOfTarget;
               if (targets.length === 0) return;
               news = Effect.suspend(() => {
                 // A random node two levels down: the burst after a deploy spreads over 256 of them.
                 const path = Math.floor(Math.random() * 256)
                   .toString(16)
                   .padStart(2, "0");
-                return net.node.news(path, targets);
+                return net.node.news(path, targets, plansOf(targets, planOf));
               });
             }),
           ),

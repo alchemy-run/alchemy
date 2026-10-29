@@ -5,6 +5,7 @@ import * as Schema from "effect/Schema";
 import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
+import type { Plan } from "./Backfill.ts";
 import type { ReplayInput, ReplayResult } from "./CatchUp.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
@@ -366,6 +367,17 @@ export interface ViewKit {
   readonly generation: number;
   /** Whether each key hears only from the source instance with its own id (see `Kernel.singleSource`). */
   readonly singleSource: boolean;
+  /**
+   * Route a source instance's stored rows (as its backfill `log` returns them)
+   * to one consumer (by `CatchUp.targetId`), as history: each row's seq and its
+   * deliveries. What a key keyed by its source runs on the rows it reads.
+   */
+  readonly history: (
+    target: string,
+    source: string,
+    id: string,
+    rows: ReadonlyArray<unknown>,
+  ) => ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>;
   /** Route emitted entries to the consumers lagging behind them (see `CatchUp`). */
   readonly replay: (input: ReplayInput<ViewEntry>) => ReplayResult;
   /** Trace an `apply` of these deliveries to `key` (wrap the work that applies and persists them). */
@@ -455,6 +467,17 @@ export interface ProjectionKit {
   readonly generation: number;
   /** Whether each key hears only from the source instance with its own id (see `Kernel.singleSource`). */
   readonly singleSource: boolean;
+  /**
+   * Route a source instance's stored rows (as its backfill `log` returns them)
+   * to one consumer (by `CatchUp.targetId`), as history: each row's seq and its
+   * deliveries. What a key keyed by its source runs on the rows it reads.
+   */
+  readonly history: (
+    target: string,
+    source: string,
+    id: string,
+    rows: ReadonlyArray<unknown>,
+  ) => ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>;
   /**
    * Run the handler for a run of one key's input log, in order. Succeeds only
    * when every write the handler made succeeded; the platform then records
@@ -586,8 +609,8 @@ export class Platform extends Context.Service<
      */
     readonly start?: (
       targets: ReadonlyArray<string>,
-      /** The sources each consumer reads: a backfill walks only theirs. */
-      sourcesOf: (target: string) => ReadonlyArray<string> | undefined,
+      /** What a backfill needs to know of each consumer: the sources it reads, and its keys' shape. */
+      planOf: (target: string) => Plan | undefined,
     ) => Effect.Effect<void>;
     /**
      * How much of the history recorded before a consumer (by

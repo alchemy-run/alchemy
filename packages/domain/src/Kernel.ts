@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
+import type { Plan } from "./Backfill.ts";
 import * as CatchUp from "./CatchUp.ts";
 import * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
@@ -160,6 +161,18 @@ export interface Kernel {
    * `CatchUp.targetId`; `undefined` for one this model doesn't have.
    */
   readonly sourcesOf: (target: string) => ReadonlyArray<string> | undefined;
+  /** What a backfill needs to know of a consumer; `undefined` for one this model doesn't have. */
+  readonly planOf: (target: string) => Plan | undefined;
+  /**
+   * Route a source instance's stored rows (as its `log` returns them) to one
+   * consumer only, as history: each row's seq and its deliveries.
+   */
+  readonly history: (
+    target: string,
+    source: string,
+    id: string,
+    rows: ReadonlyArray<unknown>,
+  ) => ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>;
   /**
    * Set a view's or projection's version (`view:Name` or `projection:Name`).
    * Bumping it rebuilds the consumer, and every view or projection that reads
@@ -699,6 +712,61 @@ const build = (
     return [...sources].sort();
   };
 
+  const planOf = (target: string): Plan | undefined => {
+    const sources = sourcesOf(target);
+    return sources === undefined ? undefined : { sources, singleSource: singleSource(target) };
+  };
+
+  /** Each source's replay, built once: what routes its stored rows as history. */
+  const replayers = new Map<
+    string,
+    {
+      readonly replay: (input: CatchUp.ReplayInput<any>) => CatchUp.ReplayResult;
+      readonly seqOf: (row: any) => number;
+    }
+  >();
+  const replayerOf = (source: string) => {
+    let found = replayers.get(source);
+    if (found) return found;
+    const aggregate = definitions.aggregates.find((a) => a.aggregateName === source);
+    const view = definitions.views.find((v) => v.viewName === source);
+    if (aggregate)
+      found = {
+        replay: aggregateKit(aggregate, () => Effect.void).replay,
+        seqOf: (row: StoredEvent) => row.envelope.seq,
+      };
+    else if (view)
+      found = {
+        replay: viewKit(view, () => Effect.void).replay,
+        seqOf: (row: ViewEntry) => row.seq,
+      };
+    if (found) replayers.set(source, found);
+    return found;
+  };
+  const history = (
+    target: string,
+    source: string,
+    id: string,
+    rows: ReadonlyArray<unknown>,
+  ): ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }> => {
+    const replayer = replayerOf(source);
+    if (!replayer) return [];
+    const targets = targetsOf(source);
+    return rows.map((row) => {
+      const seq = replayer.seqOf(row);
+      return {
+        seq,
+        deliveries: replayer.replay({
+          id,
+          routed: Object.fromEntries(
+            targets.map((t) => [t, t === target ? seq - 1 : Number.MAX_SAFE_INTEGER]),
+          ),
+          rows: [row],
+        }).deliveries,
+      };
+    });
+  };
+
   /** Replay stored rows to the consumers lagging behind them, in order. */
   const replay = <Row>(
     targets: ReadonlyArray<string>,
@@ -1028,6 +1096,7 @@ const build = (
       get singleSource() {
         return singleSource(`view:${view.viewName}`);
       },
+      history: (target, source, id, rows) => history(target, source, id, rows),
       replay: (input) => {
         const targets = targetsOf(view.viewName);
         const keyRef = Key.refOf(def.key, input.id);
@@ -1337,6 +1406,8 @@ const build = (
     },
     singleSource,
     sourcesOf,
+    planOf,
+    history,
     setVersion: (consumer, version) => {
       versions.set(consumer, version);
       generations.clear();

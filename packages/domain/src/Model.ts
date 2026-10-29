@@ -442,6 +442,7 @@ const build = <A, E, R>(
           options: { batch: Projection.batchMillis(implementation.options) },
           generation: kernel.generationOf("projection", projection.projectionName),
           singleSource: kernel.singleSource(`projection:${projection.projectionName}`),
+          history: kernel.history,
           run: (key, batch) =>
             Effect.gen(function* () {
               // Platforms run handlers inside their runtime (a Durable Object, or this process).
@@ -476,7 +477,7 @@ const build = <A, E, R>(
       );
     }
     // Every store is built: catch up the consumers that are new to the platform.
-    if (platform.start) yield* platform.start(kernel.targets, kernel.sourcesOf);
+    if (platform.start) yield* platform.start(kernel.targets, kernel.planOf);
 
     return Context.add(hosts, Internals, {
       kernel,

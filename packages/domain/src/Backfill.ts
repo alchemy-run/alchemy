@@ -24,6 +24,12 @@ import type { Delivery } from "./Platform.ts";
  *   which consumer key, and tell each key it has them as a source. Keys pull
  *   from them, and when a key has pulled everything, the source switches it to
  *   live delivery in the same step.
+ * - A consumer keyed by its source (a view per account) skips all of that: its
+ *   leaf tells each key to start, and the key reads its source's raw log,
+ *   routes it with its own code and applies it. A source serves its log on any
+ *   code, so the backfill never waits for an existing instance to run the
+ *   deployed code; only the switch to live delivery does, and the key's
+ *   history is complete before it.
  * - **Consumer keys** (view keys, projection keys) buffer what they receive
  *   ordered by `(at, stream, seq)` and apply the earliest event whenever every
  *   source still being pulled has an event buffered. That is a k-way merge of
@@ -73,14 +79,31 @@ export interface SourceRef {
 /** How far a sweep for a target has got, as a node knows it. */
 export type Phase = "unknown" | "discover" | "ready" | "complete";
 
+/**
+ * What a node needs to know of a consumer to sweep for it. The deploy that adds
+ * the consumer sends it with the announcement and every sweep carries it, so a
+ * node still on the code before that deploy sweeps the same way.
+ */
+export interface Plan {
+  /** The sources (aggregates and views, by name) the consumer reads: the subtrees to sweep (all if absent). */
+  readonly sources?: ReadonlyArray<string>;
+  /** Each key reads one instance, the one with its own id: the leaf starts the keys itself. */
+  readonly singleSource: boolean;
+}
+
 export interface NodeRpc {
   readonly register: (path: string, ref: SourceRef) => Effect.Effect<void>;
   readonly child: (path: string, child: string) => Effect.Effect<void>;
-  readonly news: (path: string, targets: ReadonlyArray<string>) => Effect.Effect<void>;
+  readonly news: (
+    path: string,
+    targets: ReadonlyArray<string>,
+    plans: Readonly<Record<string, Plan>>,
+  ) => Effect.Effect<void>;
   readonly sweep: (
     path: string,
     target: string,
     phase: "discover" | "ready" | "complete",
+    plan: Plan | undefined,
   ) => Effect.Effect<void>;
   readonly report: (
     path: string,
@@ -113,7 +136,30 @@ export interface SourceRpc {
     key: string,
     after: number,
   ) => Effect.Effect<Pulled>;
+  /**
+   * Its stored rows (events, or a view key's entries) after `after`, as stored.
+   * Any code answers it: nothing in it depends on the consumer asking.
+   */
+  readonly log: (
+    ref: SourceRef,
+    after: number,
+    limit: number,
+  ) => Effect.Effect<ReadonlyArray<unknown>>;
+  /**
+   * Route `target` live from now on, if the key has read every row up to its
+   * version (`through`): `"more"` if rows were added since, `"stale"` on code
+   * without the target.
+   */
+  readonly handoff: (
+    ref: SourceRef,
+    target: string,
+    key: string,
+    through: number,
+  ) => Effect.Effect<Handoff>;
 }
+
+/** What a source answers to `handoff`. */
+export type Handoff = "live" | "more" | "stale";
 
 /** A page a key pulled from a source. */
 export interface Pulled {
@@ -140,6 +186,15 @@ export interface ConsumerRpc {
     ref: SourceRef,
   ) => Effect.Effect<void>;
   readonly ready: (target: string, key: string) => Effect.Effect<void>;
+  /**
+   * Start a key of a consumer keyed by its source: it reads `ref`'s log itself.
+   * `"settled"` when it has its history already.
+   */
+  readonly start: (
+    target: string,
+    key: string,
+    ref: SourceRef,
+  ) => Effect.Effect<"pending" | "settled">;
 }
 
 /** How the roles reach each other. */
@@ -432,12 +487,8 @@ export interface SourceHost {
     seqs: ReadonlyArray<number>,
     target: string,
   ) => Effect.Effect<ReadonlyArray<Delivery>>;
-  /**
-   * Whether each key of `target` hears only from the instance with its own id:
-   * then its keys can start once this instance has indexed its history, with no
-   * need to wait for discovery to finish everywhere.
-   */
-  readonly singleSource?: (target: string) => boolean;
+  /** Its stored rows after `after`, as stored: what a key keyed by this instance reads. */
+  readonly log: (after: number, limit: number) => Effect.Effect<ReadonlyArray<unknown>>;
 }
 
 /** What a source answers to `ready`. */
@@ -543,18 +594,15 @@ export const makeSource = (
       const send: Array<Delivery> = [];
       const messages: Array<Message> = [];
       let added = 0;
-      // A key fed by this instance alone reads its log directly: no index to write.
-      const indexed = !host.singleSource?.(target);
       for (const delivery of deliveries) {
         const status = yield* storage.get<"pending" | "live">(keyKey(target, delivery.key));
         if (status === "live") send.push(delivery);
-        else if (status === "pending") {
-          if (indexed) yield* storage.put(indexRow(target, delivery));
-        } else if (discovering) {
+        else if (status === "pending") yield* storage.put(indexRow(target, delivery));
+        else if (discovering) {
           // Found in history: the key pulls it, once it knows every source it has.
           yield* storage.put({
             [keyKey(target, delivery.key)]: "pending",
-            ...(indexed ? indexRow(target, delivery) : {}),
+            ...indexRow(target, delivery),
           });
           messages.push({
             kind: "source",
@@ -630,12 +678,6 @@ export const makeSource = (
         // complete when discovery is complete everywhere.
         // Not all could be told yet (one is still on older code, say): back off and ask again.
         if (!(yield* queue.flush)) return "stale" as ScanResult;
-        // Its keys hear from no one else: they can start now, not after discovery
-        // has finished everywhere.
-        if (host.singleSource?.(target)) {
-          yield* markReady(target, undefined);
-          yield* queue.flush;
-        }
         return "discovered" as ScanResult;
       }),
 
@@ -662,28 +704,15 @@ export const makeSource = (
             const status = yield* storage.get<"pending" | "live">(keyKey(target, key));
             // Settled, or already live: everything was handed over.
             if (state === undefined || status !== "pending") return { deliveries: [], live: true };
-            if (host.singleSource?.(target)) {
-              // Every row of this instance goes to its own key: the log is the index.
-              const rows = yield* host.rows(after, limits.page, target);
-              if (rows.length > 0)
-                return {
-                  deliveries: rows.flatMap((row) => row.deliveries).filter((d) => d.key === key),
-                  live: false,
-                  through: rows[rows.length - 1]!.seq,
-                  end: rows.length < limits.page,
-                };
-            } else {
-              const prefix = indexPrefix(target, key);
-              const rows = yield* storage.list({
-                prefix,
-                startAfter: `${prefix}${pad(after, 12)}`,
-                limit: limits.page,
-              });
-              const seqs = rows.map(([row]) => Number(row.slice(prefix.length)));
-              const deliveries = (yield* host.rowsAt(seqs, target)).filter((d) => d.key === key);
-              if (rows.length > 0)
-                return { deliveries, live: false, end: rows.length < limits.page };
-            }
+            const prefix = indexPrefix(target, key);
+            const rows = yield* storage.list({
+              prefix,
+              startAfter: `${prefix}${pad(after, 12)}`,
+              limit: limits.page,
+            });
+            const seqs = rows.map(([row]) => Number(row.slice(prefix.length)));
+            const deliveries = (yield* host.rowsAt(seqs, target)).filter((d) => d.key === key);
+            if (rows.length > 0) return { deliveries, live: false, end: rows.length < limits.page };
             // Nothing after the key's cursor, so it holds everything: live from now,
             // atomically with this answer. A lost answer is safe to ask again: a live
             // key's pull answers live, and the key had everything up to its cursor.
@@ -706,6 +735,25 @@ export const makeSource = (
         });
         if (result.live) yield* queue.flush;
         return result;
+      }),
+
+    log: (after: number, limit: number) => host.log(after, limit),
+
+    handoff: (target: string, key: string, through: number) =>
+      Effect.gen(function* () {
+        if (!host.model().includes(target)) return "stale" as Handoff;
+        const result = yield* storage.exclusive(
+          Effect.gen(function* () {
+            // Rows were added after the key read up to `through`: it reads them first.
+            if ((yield* host.version) > through) return "more" as const;
+            const routed = yield* host.routed;
+            if (routed !== undefined && (routed[target] ?? 0) < through)
+              yield* host.markLive(target);
+            return "live" as const;
+          }),
+        );
+        yield* trace("handoff", { source: host.ref, target, key, through, result });
+        return result as Handoff;
       }),
 
     /** The backstop job: send what is staged. */
@@ -735,10 +783,18 @@ export interface ConsumerHost {
   readonly target: () => string;
   /**
    * Whether each key hears only from the source instance with its own id: then
-   * it starts as soon as that source has indexed its history (no barrier), and
-   * applies what it pulls directly (nothing to merge).
+   * it reads that instance's log itself, as soon as its leaf starts it (no
+   * barrier), and applies what it reads directly (nothing to merge).
    */
   readonly singleSource?: () => boolean;
+  /**
+   * Route a source's stored rows (from its `log`) to this consumer: each row's
+   * seq and its deliveries. Runs this key's code, whatever code the source runs.
+   */
+  readonly history?: (
+    ref: SourceRef,
+    rows: ReadonlyArray<unknown>,
+  ) => ReadonlyArray<{ readonly seq: number; readonly deliveries: ReadonlyArray<Delivery> }>;
   /** The sources this consumer reads (`Account`, `Deposits`): where it asks about discovery. */
   readonly sources?: () => ReadonlyArray<string>;
   /**
@@ -774,6 +830,9 @@ export const makeConsumer = (
   const pullingPrefix = (target: string) => `bf:p:${T(target)}:`;
   const bufferPrefix = (target: string) => `bf:b:${T(target)}:`;
   const jobId = (target: string) => `bf-merge:${target}`;
+  /** The source to tell its leaf about once this key has its history (keyed by its source). */
+  const reportKey = (target: string) => `bf:report:${T(target)}`;
+  const caughtKey = (target: string) => `bf:caught:${T(target)}`;
   const retry = makeRetry(storage, jobs, limits);
   /**
    * A message for another generation of this consumer. A newer one means this
@@ -864,6 +923,46 @@ export const makeConsumer = (
       };
     });
 
+  /**
+   * Read a page of the source's log and route it with this key's code. At the
+   * end of the log, ask the source to deliver live from there: `caughtUp` either
+   * way, since the key has every row the source had.
+   */
+  const readLog = (target: string, ref: SourceRef, cursor: number) =>
+    Effect.gen(function* () {
+      const rows = yield* net.source.log(ref, cursor, limits.page);
+      const routed = host.history!(ref, rows);
+      const through = routed.length > 0 ? routed[routed.length - 1]!.seq : cursor;
+      const deliveries = routed
+        .flatMap((row) => row.deliveries)
+        .filter((delivery) => delivery.key === host.key);
+      if (rows.length >= limits.page)
+        return { deliveries, live: false, through, caughtUp: false } satisfies Pulled & {
+          readonly caughtUp: boolean;
+        };
+      const handoff = yield* net.source
+        .handoff(ref, target, host.key, through)
+        .pipe(Effect.catchCause(() => Effect.succeed("stale" as Handoff)));
+      return {
+        deliveries,
+        live: handoff === "live",
+        through,
+        // Rows were added meanwhile: read them at once.
+        end: handoff === "more",
+        caughtUp: handoff !== "more",
+      } satisfies Pulled & { readonly caughtUp: boolean };
+    });
+
+  /** Tell the leaf that this key has its history, once. */
+  const report = (target: string) =>
+    Effect.gen(function* () {
+      const ref = yield* storage.get<SourceRef>(reportKey(target));
+      if (ref === undefined) return;
+      yield* net.node.settled(leafOf(ref, limits.depth), target, ref);
+      yield* storage.delete([reportKey(target)]);
+      yield* trace("caught-up", { key: host.key, target });
+    });
+
   /** Pull a page for each feed that starves the merge. */
   const pullStarved = (target: string) =>
     Effect.gen(function* () {
@@ -880,15 +979,28 @@ export const makeConsumer = (
         Effect.gen(function* () {
           const feed = yield* storage.get<Feed>(feedKey(target, stream));
           if (!feed || feed.live || feed.ref === null) return false;
-          const pulled = yield* net.source
-            .pull(feed.ref, target, host.key, feed.cursor)
+          // Keyed by its source: the key reads the source's log and routes it itself.
+          const pulled = yield* (
+            host.singleSource?.() === true && host.history !== undefined
+              ? readLog(target, feed.ref, feed.cursor)
+              : net.source.pull(feed.ref, target, host.key, feed.cursor)
+          ).pipe(
             // Refused (still on older code) or lost in transit: pull it again later.
-            .pipe(Effect.catchCause(() => Effect.succeed(undefined)));
+            Effect.catchCause(() => Effect.succeed(undefined)),
+          );
           if (pulled === undefined) return true;
           yield* storage.exclusive(
             Effect.gen(function* () {
               const current = yield* storage.get<Feed>(feedKey(target, stream));
               if (!current || current.cursor !== feed.cursor) return;
+              // Read up to the end of its source's log: its history is here, whether
+              // or not the source could switch it to live delivery yet.
+              if (
+                "caughtUp" in pulled &&
+                pulled.caughtUp &&
+                !(yield* storage.get(caughtKey(target)))
+              )
+                yield* storage.put({ [caughtKey(target)]: true, [reportKey(target)]: feed.ref });
               // Its only source, and nothing buffered ahead: the page is already in
               // order, so apply it rather than buffer it.
               const direct =
@@ -910,7 +1022,8 @@ export const makeConsumer = (
             }),
           );
           if (pulled.end === true && !pulled.live) return yield* pullFeed(stream);
-          return false;
+          // A source on code without the target can't deliver live yet: read again later.
+          return "caughtUp" in pulled && pulled.caughtUp === true && !pulled.live;
         });
       const failed = yield* Effect.forEach(streams, pullFeed, {
         concurrency: limits.concurrency,
@@ -970,7 +1083,7 @@ export const makeConsumer = (
             yield* storage.delete(rows.map(([key]) => key));
           }
         }
-        yield* storage.delete([backfillKey(target), `bf:asked:${T(target)}`]);
+        yield* storage.delete([backfillKey(target), `bf:asked:${T(target)}`, caughtKey(target)]);
         yield* storage.put({ [doneKey(target)]: true });
         return "done" as const;
       }),
@@ -1038,6 +1151,37 @@ export const makeConsumer = (
         }),
       ),
 
+    start: (target: string, ref: SourceRef) =>
+      storage.exclusive(
+        Effect.gen(function* () {
+          yield* trace("start", { key: host.key, target });
+          if (target !== host.target()) {
+            yield* stale(target);
+            // An older generation's sweep: superseded, nothing to wait for.
+            return "settled" as const;
+          }
+          if (yield* storage.get(doneKey(target))) return "settled" as const;
+          if ((yield* storage.get(caughtKey(target))) !== undefined) {
+            // Caught up already; its report may still be on its way.
+            if ((yield* storage.get(reportKey(target))) === undefined) return "settled" as const;
+          }
+          const backfill = yield* begin(target);
+          if (!backfill.ready)
+            yield* storage.put({ [backfillKey(target)]: { ...backfill, ready: true } });
+          const stream = `${ref.source}/${ref.id}`;
+          const feed = yield* storage.get<Feed>(feedKey(target, stream));
+          if (feed === undefined || feed.ref === null)
+            yield* putFeed(target, stream, {
+              ref,
+              cursor: 0,
+              live: false,
+              buffered: feed?.buffered ?? 0,
+            });
+          yield* jobs.schedule(jobId(target), 0);
+          return "pending" as const;
+        }),
+      ),
+
     ready: (target: string) =>
       storage.exclusive(
         Effect.gen(function* () {
@@ -1054,6 +1198,12 @@ export const makeConsumer = (
     /** The merge job for one target. */
     merge: (target: string) =>
       Effect.gen(function* () {
+        // Has its history: tell its leaf (again, after a failed attempt), even once done.
+        const reported = yield* report(target).pipe(
+          Effect.as(true),
+          Effect.catchCause(() => Effect.succeed(false)),
+        );
+        if (!reported) return yield* retry.later(jobId(target), RETRY_MS);
         const backfill = yield* storage.get<Backfill>(backfillKey(target));
         if (!backfill) return;
         if (!backfill.ready) {
@@ -1092,10 +1242,17 @@ export const makeConsumer = (
         const outcome = yield* applyBuffered(target);
         yield* trace("merge", { key: host.key, target, outcome });
         if (host.after) yield* host.after;
-        if (outcome === "done" || outcome === "waiting") return yield* retry.clear(jobId(target));
+        if (outcome === "done" || outcome === "waiting") {
+          // The key's history is complete: it tells its leaf on the next run.
+          if ((yield* storage.get(reportKey(target))) !== undefined)
+            return yield* jobs.schedule(jobId(target), 0);
+          return yield* retry.clear(jobId(target));
+        }
         // A remote failure never fails the job (which a durable callback would retry
         // with a growing delay, then park): it asks again after a fixed wait.
         const failed = outcome === "starved" ? yield* pullStarved(target) : false;
+        if ((yield* storage.get(reportKey(target))) !== undefined)
+          yield* report(target).pipe(Effect.catchCause(() => Effect.void));
         if (failed) return yield* retry.later(jobId(target), RETRY_MS);
         yield* retry.clear(jobId(target));
         yield* jobs.schedule(jobId(target), 0);
@@ -1144,13 +1301,22 @@ export const makeNode = (
   net: Network,
   limits: Limits = defaultLimits,
   /**
-   * The sources a consumer reads (`Account`, `Deposits`), in the code this node
-   * runs: the root sweeps only their subtrees. `undefined` for a consumer it
-   * doesn't know (older code): it sweeps them all.
+   * A consumer's plan in the code this node runs, for one the announcement
+   * didn't carry a plan for. `undefined` for a consumer it doesn't know (older
+   * code): it sweeps every subtree and calls every source.
    */
-  sourcesOf: (target: string) => ReadonlyArray<string> | undefined = () => undefined,
+  planOf: (target: string) => Plan | undefined = () => undefined,
 ) => {
   const sweepKey = (target: string) => `sw:${enc(target)}`;
+  const planKey = (target: string) => `plan:${enc(target)}`;
+  /** The plan the announcement carried, else this code's. */
+  const planFor = (target: string) =>
+    Effect.map(storage.get<Plan>(planKey(target)), (stored) => stored ?? planOf(target));
+  const keepPlan = (target: string, plan: Plan | undefined) =>
+    Effect.gen(function* () {
+      if (plan !== undefined && (yield* storage.get(planKey(target))) === undefined)
+        yield* storage.put({ [planKey(target)]: plan });
+    });
   const retry = makeRetry(storage, jobs, limits);
   const getSweep = (target: string) => storage.get<Sweep>(sweepKey(target));
   const reportPrefix = (target: string, phase: string) => `rp:${enc(target)}:${phase}:`;
@@ -1280,7 +1446,34 @@ export const makeNode = (
         limit: limits.nodePage,
       });
       let stale = false;
+      const plan = yield* planFor(target);
       for (const [row, ref] of rows) {
+        if (plan?.singleSource === true) {
+          // Its key reads its log itself: start it, and wait for it to report.
+          const started = yield* net.consumer
+            .start(target, ref.id, ref)
+            .pipe(Effect.catchCause(() => Effect.succeed("stale" as const)));
+          if (started === "stale") {
+            stale = true;
+            continue;
+          }
+          yield* storage.exclusive(
+            Effect.gen(function* () {
+              yield* storage.delete([row]);
+              const current = yield* getSweep(target);
+              if (started === "settled")
+                yield* storage.delete([`${unsettledPrefix(target)}${refKey(ref)}`]);
+              else if (
+                current?.phase !== "complete" &&
+                !current?.reported &&
+                !(yield* storage.get(settledKey(target, ref)))
+              )
+                yield* storage.put({ [`${unsettledPrefix(target)}${refKey(ref)}`]: ref });
+              yield* settle(path, target);
+            }),
+          );
+          continue;
+        }
         const scanned = yield* net.source
           .scan(ref, target)
           .pipe(Effect.catchCause(() => Effect.succeed("stale" as const)));
@@ -1318,12 +1511,25 @@ export const makeNode = (
       if (rows.length > 0) yield* jobs.schedule(`late:${target}`, 0);
     });
 
+  /**
+   * A consumer keyed by its source: start the instance's own key, which reads the
+   * instance's log itself (whatever code the instance runs), and wait for it to
+   * report that it has its history. Starting is idempotent: a key that has its
+   * history already (live deliveries alone can complete one) answers `settled`.
+   */
+  const startKey = (target: string, ref: SourceRef) =>
+    Effect.gen(function* () {
+      if ((yield* storage.get(settledKey(target, ref))) !== undefined) return "done" as const;
+      const started = yield* net.consumer.start(target, ref.id, ref);
+      return started === "settled" ? ("done" as const) : ("pending" as const);
+    });
+
   const begin = (path: string, target: string, phase: Sweep["phase"]) =>
     Effect.gen(function* () {
       yield* trace("phase", { path, target, phase });
       const linked = (yield* storage.list({ prefix: "c:" })).map(([key]) => key.slice(2));
       // The root sweeps only the subtrees of the sources the consumer reads.
-      const sources = path === "" ? sourcesOf(target) : undefined;
+      const sources = path === "" ? (yield* planFor(target))?.sources : undefined;
       const children =
         sources === undefined
           ? linked
@@ -1393,11 +1599,12 @@ export const makeNode = (
       if (!sweep) return;
       // Children are told even after this node reported: a child that linked late
       // takes part in the phase (its report is no longer waited for).
+      const plan = yield* planFor(target);
       if (!sweep.told) {
         const told = yield* Effect.forEach(
           sweep.children,
           (child) =>
-            net.node.sweep(child, target, sweep.phase).pipe(
+            net.node.sweep(child, target, sweep.phase, plan).pipe(
               Effect.as(true),
               Effect.catchCause(() => Effect.succeed(false)),
             ),
@@ -1451,13 +1658,15 @@ export const makeNode = (
         }),
       );
       const call = (ref: SourceRef): Effect.Effect<"done" | "more" | "stale" | "pending"> =>
-        sweep.phase === "discover"
-          ? Effect.map(net.source.scan(ref, target), (result) =>
-              result === "discovered" ? "done" : result,
-            )
-          : Effect.map(net.source.ready(ref, target, path), (result) =>
-              result === "settled" ? "done" : result,
-            );
+        plan?.singleSource === true
+          ? startKey(target, ref)
+          : sweep.phase === "discover"
+            ? Effect.map(net.source.scan(ref, target), (result) =>
+                result === "discovered" ? "done" : result,
+              )
+            : Effect.map(net.source.ready(ref, target, path), (result) =>
+                result === "settled" ? "done" : result,
+              );
       const results = yield* Effect.forEach(
         batch,
         (ref) =>
@@ -1543,7 +1752,7 @@ export const makeNode = (
             // Linked while sweeps run: it takes part in each one's current phase.
             for (const { target, sweep } of yield* sweeps) {
               // The root sweeps only the subtrees of the sources the consumer reads.
-              const sources = path === "" ? sourcesOf(target) : undefined;
+              const sources = path === "" ? (yield* planFor(target))?.sources : undefined;
               if (sources !== undefined && !sources.includes(sourceOfPath(child) ?? "")) continue;
               // After this node reported, the child is still told, but not waited for.
               const children = sweep.children.includes(child)
@@ -1556,11 +1765,12 @@ export const makeNode = (
         );
         yield* ensureLinked(path);
       }),
-    news: (path: string, targets: ReadonlyArray<string>) =>
+    news: (path: string, targets: ReadonlyArray<string>, plans: Readonly<Record<string, Plan>>) =>
       storage.exclusive(
         Effect.gen(function* () {
           const known = (yield* storage.get<Array<string>>("known")) ?? [];
           const fresh = targets.filter((target) => !known.includes(target));
+          for (const target of targets) yield* keepPlan(target, plans[target]);
           if (fresh.length === 0) return;
           yield* keepPath(path);
           yield* storage.put({ known: [...known, ...fresh] });
@@ -1568,9 +1778,10 @@ export const makeNode = (
           for (const target of fresh) yield* begin(path, target, "discover");
         }),
       ),
-    sweep: (path: string, target: string, phase: Sweep["phase"]) =>
+    sweep: (path: string, target: string, phase: Sweep["phase"], plan: Plan | undefined) =>
       storage.exclusive(
         Effect.gen(function* () {
+          yield* keepPlan(target, plan);
           const current = yield* getSweep(target);
           if (current && PHASES.indexOf(current.phase) >= PHASES.indexOf(phase)) return;
           yield* begin(path, target, phase);
@@ -1620,7 +1831,13 @@ export const makeNode = (
         const path = (yield* storage.get<string>("path")) ?? "";
         const parent = parentOf(path);
         if (id === "news") {
-          yield* net.node.news(parent, (yield* storage.get<Array<string>>("known")) ?? []);
+          const known = (yield* storage.get<Array<string>>("known")) ?? [];
+          const plans: Record<string, Plan> = {};
+          for (const target of known) {
+            const plan = yield* planFor(target);
+            if (plan !== undefined) plans[target] = plan;
+          }
+          yield* net.node.news(parent, known, plans);
           return yield* retry.clear(id);
         }
         const [kind, ...rest] = id.split(":");

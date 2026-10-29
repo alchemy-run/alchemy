@@ -181,7 +181,7 @@ export const make = (
         memoryJobs(address, (id) => node(path).run(id)),
         net,
         limits,
-        (target) => sourcesOf(target),
+        (target) => planOf(target),
       );
       nodes.set(path, found);
     }
@@ -190,7 +190,7 @@ export const make = (
   // Every consumer in the model of the latest build, and the tuning: keys waiting on
   // discovery ask again on the work queue, as soon as other work has run.
   let model: ReadonlyArray<string> = [];
-  let sourcesOf: (target: string) => ReadonlyArray<string> | undefined = () => undefined;
+  let planOf: (target: string) => Backfill.Plan | undefined = () => undefined;
   const limits: Backfill.Limits = { ...Backfill.defaultLimits, pollMillis: 0 };
   // The source and consumer parts of each hosted entity, as of the latest build.
   const sourceRoles = new Map<string, (id: string) => Backfill.Source>();
@@ -203,8 +203,8 @@ export const make = (
     node: {
       register: (path, ref) => node(path).register(path, ref),
       child: (path, child) => node(path).child(path, child),
-      news: (path, targets) => node(path).news(path, targets),
-      sweep: (path, target, phase) => node(path).sweep(path, target, phase),
+      news: (path, targets, plans) => node(path).news(path, targets, plans),
+      sweep: (path, target, phase, plan) => node(path).sweep(path, target, phase, plan),
       report: (path, target, phase, child) => node(path).report(path, target, phase, child),
       settled: (path, target, ref) => node(path).settled(path, target, ref),
       phase: (path, target) => node(path).phase(path, target),
@@ -230,12 +230,26 @@ export const make = (
             sourceRoles.get(ref.source)?.(ref.id).pull(target, key, after) ??
             Effect.succeed({ deliveries: [], live: true }),
         ),
+      log: (ref, after, limit) =>
+        Effect.suspend(
+          () => sourceRoles.get(ref.source)?.(ref.id).log(after, limit) ?? Effect.succeed([]),
+        ),
+      handoff: (ref, target, key, through) =>
+        Effect.suspend(
+          () =>
+            sourceRoles.get(ref.source)?.(ref.id).handoff(target, key, through) ??
+            Effect.succeed("live" as const),
+        ),
     },
     consumer: {
       source: (target, key, stream, ref) =>
         Effect.suspend(() => consumerRole(target, key)?.source(target, stream, ref) ?? Effect.void),
       ready: (target, key) =>
         Effect.suspend(() => consumerRole(target, key)?.ready(target) ?? Effect.void),
+      start: (target, key, ref) =>
+        Effect.suspend(
+          () => consumerRole(target, key)?.start(target, ref) ?? Effect.succeed("settled" as const),
+        ),
     },
   };
   /** List an instance in the directory; its first commit waits for it. */
@@ -393,8 +407,13 @@ export const make = (
             {
               ref: { source: kit.name, id },
               targets: () => kit.targets,
-              singleSource: kit.consumerSingleSource,
               model: () => model,
+              log: (after, limit) =>
+                Effect.sync(() =>
+                  instance(id)
+                    .events.filter((event) => event.envelope.seq > after)
+                    .slice(0, limit),
+                ),
               version: Effect.sync(() => instance(id).version),
               routed: Effect.sync(() => instance(id).routed),
               markLive: (target) =>
@@ -664,7 +683,8 @@ export const make = (
               key,
               target: () => target,
               singleSource: () => kit.singleSource,
-              sources: () => sourcesOf(target) ?? [],
+              sources: () => planOf(target)?.sources ?? [],
+              history: (ref, rows) => kit.history(target, ref.source, ref.id, rows),
               apply: (deliveries) => apply(key, deliveries),
             },
             limits,
@@ -685,8 +705,11 @@ export const make = (
             {
               ref: { source: kit.name, id: key },
               targets: () => kit.targets,
-              singleSource: kit.consumerSingleSource,
               model: () => model,
+              log: (after, limit) =>
+                Effect.map(entries, (all) =>
+                  all.filter((entry) => entry.seq > after).slice(0, limit),
+                ),
               version: Effect.flatMap(get(key), (current) =>
                 Effect.map(SubscriptionRef.get(current.snapshot), (snapshot) => snapshot.seq),
               ),
@@ -882,7 +905,8 @@ export const make = (
               key,
               target: () => target,
               singleSource: () => kit.singleSource,
-              sources: () => sourcesOf(target) ?? [],
+              sources: () => planOf(target)?.sources ?? [],
+              history: (ref, rows) => kit.history(target, ref.source, ref.id, rows),
               apply: (deliveries) => Effect.forEach(deliveries, intake, { discard: true }),
             },
             limits,
@@ -1017,11 +1041,17 @@ export const make = (
       }),
 
     // A deploy that adds consumers tells the directory; it starts their backfill.
-    start: (targets, sources) =>
+    start: (targets, plans) =>
       Effect.suspend(() => {
         model = targets;
-        sourcesOf = sources;
-        return targets.length === 0 ? Effect.void : net.node.news("00", targets);
+        planOf = plans;
+        if (targets.length === 0) return Effect.void;
+        const announced: Record<string, Backfill.Plan> = {};
+        for (const target of targets) {
+          const plan = plans(target);
+          if (plan !== undefined) announced[target] = plan;
+        }
+        return net.node.news("00", targets, announced);
       }),
     history: (target) =>
       Effect.map(net.node.status(""), (status) => ({
