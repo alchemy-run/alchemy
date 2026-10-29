@@ -95,6 +95,9 @@
       "QaScorecard": "Needs Contact Center AI Insights features the testing project does not have enabled: create succeeds but every PATCH returns 404 NOT_FOUND \"Requested entity was not found.\" (GCP_TEST_CCAI_QUALITY)",
       "QaScorecardsRevision": "Needs Contact Center AI Insights features the testing project does not have enabled: the parent scorecard's PATCH returns 404 NOT_FOUND \"Requested entity was not found.\" (GCP_TEST_CCAI_QUALITY)",
       "QaScorecardsRevisionsQaQuestion": "Needs Contact Center AI Insights features the testing project does not have enabled: the parent scorecard's PATCH returns 404 NOT_FOUND \"Requested entity was not found.\" (GCP_TEST_CCAI_QUALITY)"
+    },
+    "skip": {
+      "ListDatasets": "the testing project has no CCI datasets feature: list answers 404 NOT_FOUND (GCP_TEST_CCI_DATASETS)"
     }
   }
 }

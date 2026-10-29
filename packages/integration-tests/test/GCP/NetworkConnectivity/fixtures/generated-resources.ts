@@ -58,3 +58,14 @@ export const ProbeConnectionPolicy = Effect.gen(function* () {
     pscConfig: { subnetworks: [subnet.selfLink.as<string>()] },
   });
 });
+export const ProbeTransferDestination = Effect.gen(function* () {
+  const config = yield* ProbeMulticloudDataTransferConfig;
+  return yield* GCP.NetworkConnectivity.MulticloudDataTransferConfigsDestination(
+    "ProbeTransferDestination",
+    {
+      parent: config.name,
+      ipPrefix: "203.0.113.0/24",
+      endpoints: [{ asn: "16509", csp: "AWS" }],
+    },
+  );
+});

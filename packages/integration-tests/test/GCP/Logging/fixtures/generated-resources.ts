@@ -72,3 +72,13 @@ export const ProbeLink = Effect.gen(function* () {
   const bucket = yield* AnalyticsBucket;
   return yield* GCP.Logging.BucketsLink("ProbeLink", { bucket: bucket.name });
 });
+export const ProbeLocationsLink = Effect.gen(function* () {
+  const bucket = yield* GCP.Logging.LogBucket("ProbeLocationsLinkBucket", {
+    analyticsEnabled: true,
+  });
+  return yield* GCP.Logging.LocationsBucketsLink("ProbeLocationsLink", { bucketName: bucket.name });
+});
+export const ProbeFolderLink = Effect.gen(function* () {
+  const bucket = yield* GCP.Logging.LogBucket("ProbeFolderLinkBucket", { analyticsEnabled: true });
+  return yield* GCP.Logging.FolderBucketsLink("ProbeFolderLink", { bucketName: bucket.name });
+});

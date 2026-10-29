@@ -7,10 +7,12 @@ import { outcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeExclusion,
   ProbeFolderBucket,
+  ProbeFolderLink,
   ProbeFolderLogScope,
   ProbeFolderView,
   ProbeLink,
   ProbeLocationsBucket,
+  ProbeLocationsLink,
   ProbeLocationsView,
   ProbeLogBucket,
   ProbeLogScope,
@@ -40,45 +42,47 @@ export default class LoggingGeneratedHost extends GCP.Function<LoggingGeneratedH
     const p9 = yield* GCP.Logging.GetBucket(ProbeLocationsBucket);
     const p10 = yield* GCP.Logging.GetExclusion(ProbeExclusion);
     const p11 = yield* GCP.Logging.GetLink(ProbeLink);
-    const p12 = yield* GCP.Logging.GetLogScope(ProbeLogScope);
-    const p13 = yield* GCP.Logging.GetLogScope(ProbeFolderLogScope);
-    const p14 = yield* GCP.Logging.GetMetric();
-    const p15 = yield* GCP.Logging.GetProjectCmekSettings();
-    const p16 = yield* GCP.Logging.GetProjectSettings();
-    const p17 = yield* GCP.Logging.GetSavedQuery(ProbeSavedQuery);
-    const p18 = yield* GCP.Logging.GetSink();
-    const p19 = yield* GCP.Logging.GetView(ProbeView);
-    const p20 = yield* GCP.Logging.GetView(ProbeFolderView);
-    const p21 = yield* GCP.Logging.GetView(ProbeLocationsView);
-    const p22 = yield* GCP.Logging.ListBucketLinks(ProbeLogBucket);
-    const p23 = yield* GCP.Logging.ListBucketLinks(ProbeFolderBucket);
-    const p24 = yield* GCP.Logging.ListBucketLinks(ProbeLocationsBucket);
-    const p25 = yield* GCP.Logging.ListBuckets();
-    const p26 = yield* GCP.Logging.ListBucketViews(ProbeLogBucket);
-    const p27 = yield* GCP.Logging.ListBucketViews(ProbeFolderBucket);
-    const p28 = yield* GCP.Logging.ListBucketViews(ProbeLocationsBucket);
-    const p29 = yield* GCP.Logging.ListEntries();
-    const p30 = yield* GCP.Logging.ListExclusions();
-    const p31 = yield* GCP.Logging.ListLogs();
-    const p32 = yield* GCP.Logging.ListLogScopes();
-    const p33 = yield* GCP.Logging.ListMetrics();
-    const p34 = yield* GCP.Logging.ListMonitoredResourceDescriptors();
-    const p35 = yield* GCP.Logging.ListRecentQueries();
-    const p36 = yield* GCP.Logging.ListSavedQueries();
-    const p37 = yield* GCP.Logging.ListSinks();
-    const p38 = yield* GCP.Logging.ListViewLogs(ProbeView);
-    const p39 = yield* GCP.Logging.ListViewLogs(ProbeFolderView);
-    const p40 = yield* GCP.Logging.PatchSink();
-    const p41 = yield* GCP.Logging.TailEntry();
-    const p42 = yield* GCP.Logging.UndeleteBucket(ProbeLogBucket);
-    const p43 = yield* GCP.Logging.UndeleteBucket(ProbeFolderBucket);
-    const p44 = yield* GCP.Logging.UndeleteBucket(ProbeLocationsBucket);
-    const p45 = yield* GCP.Logging.UpdateBucketAsync(ProbeLogBucket);
-    const p46 = yield* GCP.Logging.UpdateBucketAsync(ProbeFolderBucket);
-    const p47 = yield* GCP.Logging.UpdateBucketAsync(ProbeLocationsBucket);
-    const p48 = yield* GCP.Logging.UpdateMetric();
-    const p49 = yield* GCP.Logging.UpdateSink();
-    const p50 = yield* GCP.Logging.WriteEntry();
+    const p12 = yield* GCP.Logging.GetLink(ProbeFolderLink);
+    const p13 = yield* GCP.Logging.GetLink(ProbeLocationsLink);
+    const p14 = yield* GCP.Logging.GetLogScope(ProbeLogScope);
+    const p15 = yield* GCP.Logging.GetLogScope(ProbeFolderLogScope);
+    const p16 = yield* GCP.Logging.GetMetric();
+    const p17 = yield* GCP.Logging.GetProjectCmekSettings();
+    const p18 = yield* GCP.Logging.GetProjectSettings();
+    const p19 = yield* GCP.Logging.GetSavedQuery(ProbeSavedQuery);
+    const p20 = yield* GCP.Logging.GetSink();
+    const p21 = yield* GCP.Logging.GetView(ProbeView);
+    const p22 = yield* GCP.Logging.GetView(ProbeFolderView);
+    const p23 = yield* GCP.Logging.GetView(ProbeLocationsView);
+    const p24 = yield* GCP.Logging.ListBucketLinks(ProbeLogBucket);
+    const p25 = yield* GCP.Logging.ListBucketLinks(ProbeFolderBucket);
+    const p26 = yield* GCP.Logging.ListBucketLinks(ProbeLocationsBucket);
+    const p27 = yield* GCP.Logging.ListBuckets();
+    const p28 = yield* GCP.Logging.ListBucketViews(ProbeLogBucket);
+    const p29 = yield* GCP.Logging.ListBucketViews(ProbeFolderBucket);
+    const p30 = yield* GCP.Logging.ListBucketViews(ProbeLocationsBucket);
+    const p31 = yield* GCP.Logging.ListEntries();
+    const p32 = yield* GCP.Logging.ListExclusions();
+    const p33 = yield* GCP.Logging.ListLogs();
+    const p34 = yield* GCP.Logging.ListLogScopes();
+    const p35 = yield* GCP.Logging.ListMetrics();
+    const p36 = yield* GCP.Logging.ListMonitoredResourceDescriptors();
+    const p37 = yield* GCP.Logging.ListRecentQueries();
+    const p38 = yield* GCP.Logging.ListSavedQueries();
+    const p39 = yield* GCP.Logging.ListSinks();
+    const p40 = yield* GCP.Logging.ListViewLogs(ProbeView);
+    const p41 = yield* GCP.Logging.ListViewLogs(ProbeFolderView);
+    const p42 = yield* GCP.Logging.PatchSink();
+    const p43 = yield* GCP.Logging.TailEntry();
+    const p44 = yield* GCP.Logging.UndeleteBucket(ProbeLogBucket);
+    const p45 = yield* GCP.Logging.UndeleteBucket(ProbeFolderBucket);
+    const p46 = yield* GCP.Logging.UndeleteBucket(ProbeLocationsBucket);
+    const p47 = yield* GCP.Logging.UpdateBucketAsync(ProbeLogBucket);
+    const p48 = yield* GCP.Logging.UpdateBucketAsync(ProbeFolderBucket);
+    const p49 = yield* GCP.Logging.UpdateBucketAsync(ProbeLocationsBucket);
+    const p50 = yield* GCP.Logging.UpdateMetric();
+    const p51 = yield* GCP.Logging.UpdateSink();
+    const p52 = yield* GCP.Logging.WriteEntry();
     return {
       fetch: serveProbes({
         CopyEntry: outcome(Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never))),
@@ -99,45 +103,47 @@ export default class LoggingGeneratedHost extends GCP.Function<LoggingGeneratedH
         "GetBucket@LocationsBucket": outcome(Retry.none(p9({} as never))),
         "GetExclusion@Exclusion": outcome(Retry.none(p10({} as never))),
         "GetLink@BucketsLink": outcome(Retry.none(p11({} as never))),
-        "GetLogScope@LogScope": outcome(Retry.none(p12({} as never))),
-        "GetLogScope@FolderLogScope": outcome(Retry.none(p13({} as never))),
-        GetMetric: outcome(Retry.none(p14({ metric: "alchemy-missing" } as never))),
-        GetProjectCmekSettings: outcome(Retry.none(p15({} as never))),
-        GetProjectSettings: outcome(Retry.none(p16({} as never))),
-        GetSavedQuery: outcome(Retry.none(p17({} as never))),
-        GetSink: outcome(Retry.none(p18({ sink: "alchemy-missing" } as never))),
-        "GetView@BucketsView": outcome(Retry.none(p19({} as never))),
-        "GetView@FolderBucketsView": outcome(Retry.none(p20({} as never))),
-        "GetView@LocationsBucketsView": outcome(Retry.none(p21({} as never))),
-        "ListBucketLinks@LogBucket": outcome(Retry.none(p22({} as never))),
-        "ListBucketLinks@FolderBucket": outcome(Retry.none(p23({} as never))),
-        "ListBucketLinks@LocationsBucket": outcome(Retry.none(p24({} as never))),
-        ListBuckets: outcome(Retry.none(p25({ location: "us-central1" } as never))),
-        "ListBucketViews@LogBucket": outcome(Retry.none(p26({} as never))),
-        "ListBucketViews@FolderBucket": outcome(Retry.none(p27({} as never))),
-        "ListBucketViews@LocationsBucket": outcome(Retry.none(p28({} as never))),
-        ListEntries: outcome(Retry.none(p29({} as never))),
-        ListExclusions: outcome(Retry.none(p30({} as never))),
-        ListLogs: outcome(Retry.none(p31({} as never))),
-        ListLogScopes: outcome(Retry.none(p32({ location: "us-central1" } as never))),
-        ListMetrics: outcome(Retry.none(p33({} as never))),
-        ListMonitoredResourceDescriptors: outcome(Retry.none(p34({} as never))),
-        ListRecentQueries: outcome(Retry.none(p35({ location: "us-central1" } as never))),
-        ListSavedQueries: outcome(Retry.none(p36({ location: "us-central1" } as never))),
-        ListSinks: outcome(Retry.none(p37({} as never))),
-        "ListViewLogs@BucketsView": outcome(Retry.none(p38({} as never))),
-        "ListViewLogs@FolderBucketsView": outcome(Retry.none(p39({} as never))),
-        PatchSink: outcome(Retry.none(p40({ sink: "alchemy-missing" } as never))),
-        TailEntry: outcome(Retry.none(p41({} as never))),
-        "UndeleteBucket@LogBucket": outcome(Retry.none(p42({} as never))),
-        "UndeleteBucket@FolderBucket": outcome(Retry.none(p43({} as never))),
-        "UndeleteBucket@LocationsBucket": outcome(Retry.none(p44({} as never))),
-        "UpdateBucketAsync@LogBucket": outcome(Retry.none(p45({} as never))),
-        "UpdateBucketAsync@FolderBucket": outcome(Retry.none(p46({} as never))),
-        "UpdateBucketAsync@LocationsBucket": outcome(Retry.none(p47({} as never))),
-        UpdateMetric: outcome(Retry.none(p48({ metric: "alchemy-missing" } as never))),
-        UpdateSink: outcome(Retry.none(p49({ sink: "alchemy-missing" } as never))),
-        WriteEntry: outcome(Retry.none(p50({} as never))),
+        "GetLink@FolderBucketsLink": outcome(Retry.none(p12({} as never))),
+        "GetLink@LocationsBucketsLink": outcome(Retry.none(p13({} as never))),
+        "GetLogScope@LogScope": outcome(Retry.none(p14({} as never))),
+        "GetLogScope@FolderLogScope": outcome(Retry.none(p15({} as never))),
+        GetMetric: outcome(Retry.none(p16({ metric: "alchemy-missing" } as never))),
+        GetProjectCmekSettings: outcome(Retry.none(p17({} as never))),
+        GetProjectSettings: outcome(Retry.none(p18({} as never))),
+        GetSavedQuery: outcome(Retry.none(p19({} as never))),
+        GetSink: outcome(Retry.none(p20({ sink: "alchemy-missing" } as never))),
+        "GetView@BucketsView": outcome(Retry.none(p21({} as never))),
+        "GetView@FolderBucketsView": outcome(Retry.none(p22({} as never))),
+        "GetView@LocationsBucketsView": outcome(Retry.none(p23({} as never))),
+        "ListBucketLinks@LogBucket": outcome(Retry.none(p24({} as never))),
+        "ListBucketLinks@FolderBucket": outcome(Retry.none(p25({} as never))),
+        "ListBucketLinks@LocationsBucket": outcome(Retry.none(p26({} as never))),
+        ListBuckets: outcome(Retry.none(p27({ location: "us-central1" } as never))),
+        "ListBucketViews@LogBucket": outcome(Retry.none(p28({} as never))),
+        "ListBucketViews@FolderBucket": outcome(Retry.none(p29({} as never))),
+        "ListBucketViews@LocationsBucket": outcome(Retry.none(p30({} as never))),
+        ListEntries: outcome(Retry.none(p31({} as never))),
+        ListExclusions: outcome(Retry.none(p32({} as never))),
+        ListLogs: outcome(Retry.none(p33({} as never))),
+        ListLogScopes: outcome(Retry.none(p34({ location: "us-central1" } as never))),
+        ListMetrics: outcome(Retry.none(p35({} as never))),
+        ListMonitoredResourceDescriptors: outcome(Retry.none(p36({} as never))),
+        ListRecentQueries: outcome(Retry.none(p37({ location: "us-central1" } as never))),
+        ListSavedQueries: outcome(Retry.none(p38({ location: "us-central1" } as never))),
+        ListSinks: outcome(Retry.none(p39({} as never))),
+        "ListViewLogs@BucketsView": outcome(Retry.none(p40({} as never))),
+        "ListViewLogs@FolderBucketsView": outcome(Retry.none(p41({} as never))),
+        PatchSink: outcome(Retry.none(p42({ sink: "alchemy-missing" } as never))),
+        TailEntry: outcome(Retry.none(p43({} as never))),
+        "UndeleteBucket@LogBucket": outcome(Retry.none(p44({} as never))),
+        "UndeleteBucket@FolderBucket": outcome(Retry.none(p45({} as never))),
+        "UndeleteBucket@LocationsBucket": outcome(Retry.none(p46({} as never))),
+        "UpdateBucketAsync@LogBucket": outcome(Retry.none(p47({} as never))),
+        "UpdateBucketAsync@FolderBucket": outcome(Retry.none(p48({} as never))),
+        "UpdateBucketAsync@LocationsBucket": outcome(Retry.none(p49({} as never))),
+        UpdateMetric: outcome(Retry.none(p50({ metric: "alchemy-missing" } as never))),
+        UpdateSink: outcome(Retry.none(p51({ sink: "alchemy-missing" } as never))),
+        WriteEntry: outcome(Retry.none(p52({} as never))),
       }),
     };
   }).pipe(

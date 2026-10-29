@@ -27,6 +27,7 @@ import {
   InstanceGroupManager,
   InstanceTemplate,
   InstantSnapshot,
+  InstantSnapshotGroup,
   License,
   MachineImage,
   Network,
@@ -38,6 +39,7 @@ import {
   RegionAutoscaler,
   RegionBackendBucket,
   RegionBackendService,
+  RegionCompositeHealthCheck,
   RegionDisk,
   RegionHealthAggregationPolicy,
   RegionHealthCheck,
@@ -45,6 +47,7 @@ import {
   RegionInstanceGroupManager,
   RegionInstanceTemplate,
   RegionInstantSnapshot,
+  RegionInstantSnapshotGroup,
   RegionNetworkEndpointGroup,
   RegionNetworkFirewallPolicy,
   RegionSecurityPolicy,
@@ -265,433 +268,437 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
     const p144 = yield* GCP.Compute.GetInstanceSetting();
     const p145 = yield* GCP.Compute.GetInstanceTemplate(InstanceTemplate);
     const p146 = yield* GCP.Compute.GetInstantSnapshot(InstantSnapshot);
-    const p147 = yield* GCP.Compute.GetInterconnectLocation();
-    const p148 = yield* GCP.Compute.GetInterconnectRemoteLocation();
-    const p149 = yield* GCP.Compute.GetLicense(License);
-    const p150 = yield* GCP.Compute.GetLicenseCode();
-    const p151 = yield* GCP.Compute.GetMachineImage(MachineImage);
-    const p152 = yield* GCP.Compute.GetMachineType();
-    const p153 = yield* GCP.Compute.GetManagedRuleset();
-    const p154 = yield* GCP.Compute.GetNetwork(Network);
-    const p155 = yield* GCP.Compute.GetNetworkAttachment(NetworkAttachment);
-    const p156 = yield* GCP.Compute.GetNetworkEffectiveFirewalls(Network);
-    const p157 = yield* GCP.Compute.GetNetworkEndpointGroup(NetworkEndpointGroup);
-    const p158 = yield* GCP.Compute.GetNetworkFirewallPolicy(NetworkFirewallPolicy);
-    const p159 = yield* GCP.Compute.GetNetworkFirewallPolicyAssociation(NetworkFirewallPolicy);
-    const p160 =
+    const p147 = yield* GCP.Compute.GetInstantSnapshotGroup(InstantSnapshotGroup);
+    const p148 = yield* GCP.Compute.GetInterconnectLocation();
+    const p149 = yield* GCP.Compute.GetInterconnectRemoteLocation();
+    const p150 = yield* GCP.Compute.GetLicense(License);
+    const p151 = yield* GCP.Compute.GetLicenseCode();
+    const p152 = yield* GCP.Compute.GetMachineImage(MachineImage);
+    const p153 = yield* GCP.Compute.GetMachineType();
+    const p154 = yield* GCP.Compute.GetManagedRuleset();
+    const p155 = yield* GCP.Compute.GetNetwork(Network);
+    const p156 = yield* GCP.Compute.GetNetworkAttachment(NetworkAttachment);
+    const p157 = yield* GCP.Compute.GetNetworkEffectiveFirewalls(Network);
+    const p158 = yield* GCP.Compute.GetNetworkEndpointGroup(NetworkEndpointGroup);
+    const p159 = yield* GCP.Compute.GetNetworkFirewallPolicy(NetworkFirewallPolicy);
+    const p160 = yield* GCP.Compute.GetNetworkFirewallPolicyAssociation(NetworkFirewallPolicy);
+    const p161 =
       yield* GCP.Compute.GetNetworkFirewallPolicyPacketMirroringRule(NetworkFirewallPolicy);
-    const p161 = yield* GCP.Compute.GetNetworkFirewallPolicyRule(NetworkFirewallPolicy);
-    const p162 = yield* GCP.Compute.GetNetworkProfile();
-    const p163 = yield* GCP.Compute.GetNodeTemplate(NodeTemplate);
-    const p164 = yield* GCP.Compute.GetNodeType();
-    const p165 = yield* GCP.Compute.GetPacketMirroring(PacketMirroring);
-    const p166 = yield* GCP.Compute.GetPreviewFeature();
-    const p167 = yield* GCP.Compute.GetProject();
-    const p168 = yield* GCP.Compute.GetRegion();
-    const p169 = yield* GCP.Compute.GetRegionAutoscaler(RegionAutoscaler);
-    const p170 = yield* GCP.Compute.GetRegionBackendBucket(RegionBackendBucket);
-    const p171 = yield* GCP.Compute.GetRegionBackendService(RegionBackendService);
-    const p172 = yield* GCP.Compute.GetRegionBackendServiceHealth(RegionBackendService);
-    const p173 = yield* GCP.Compute.GetRegionCommitment();
-    const p174 = yield* GCP.Compute.GetRegionDisk(RegionDisk);
-    const p175 = yield* GCP.Compute.GetRegionDiskType();
-    const p176 = yield* GCP.Compute.GetRegionHealthAggregationPolicy(RegionHealthAggregationPolicy);
-    const p177 = yield* GCP.Compute.GetRegionHealthCheck(RegionHealthCheck);
-    const p178 = yield* GCP.Compute.GetRegionHealthSource(RegionHealthSource);
-    const p179 = yield* GCP.Compute.GetRegionHealthSourceHealth(RegionHealthSource);
-    const p180 = yield* GCP.Compute.GetRegionInstanceGroup();
-    const p181 = yield* GCP.Compute.GetRegionInstanceGroupManager(RegionInstanceGroupManager);
-    const p182 = yield* GCP.Compute.GetRegionInstanceGroupManagerResizeRequest(
+    const p162 = yield* GCP.Compute.GetNetworkFirewallPolicyRule(NetworkFirewallPolicy);
+    const p163 = yield* GCP.Compute.GetNetworkProfile();
+    const p164 = yield* GCP.Compute.GetNodeTemplate(NodeTemplate);
+    const p165 = yield* GCP.Compute.GetNodeType();
+    const p166 = yield* GCP.Compute.GetPacketMirroring(PacketMirroring);
+    const p167 = yield* GCP.Compute.GetPreviewFeature();
+    const p168 = yield* GCP.Compute.GetProject();
+    const p169 = yield* GCP.Compute.GetRegion();
+    const p170 = yield* GCP.Compute.GetRegionAutoscaler(RegionAutoscaler);
+    const p171 = yield* GCP.Compute.GetRegionBackendBucket(RegionBackendBucket);
+    const p172 = yield* GCP.Compute.GetRegionBackendService(RegionBackendService);
+    const p173 = yield* GCP.Compute.GetRegionBackendServiceHealth(RegionBackendService);
+    const p174 = yield* GCP.Compute.GetRegionCommitment();
+    const p175 = yield* GCP.Compute.GetRegionCompositeHealthCheck(RegionCompositeHealthCheck);
+    const p176 = yield* GCP.Compute.GetRegionCompositeHealthCheckHealth(RegionCompositeHealthCheck);
+    const p177 = yield* GCP.Compute.GetRegionDisk(RegionDisk);
+    const p178 = yield* GCP.Compute.GetRegionDiskType();
+    const p179 = yield* GCP.Compute.GetRegionHealthAggregationPolicy(RegionHealthAggregationPolicy);
+    const p180 = yield* GCP.Compute.GetRegionHealthCheck(RegionHealthCheck);
+    const p181 = yield* GCP.Compute.GetRegionHealthSource(RegionHealthSource);
+    const p182 = yield* GCP.Compute.GetRegionHealthSourceHealth(RegionHealthSource);
+    const p183 = yield* GCP.Compute.GetRegionInstanceGroup();
+    const p184 = yield* GCP.Compute.GetRegionInstanceGroupManager(RegionInstanceGroupManager);
+    const p185 = yield* GCP.Compute.GetRegionInstanceGroupManagerResizeRequest(
       RegionInstanceGroupManager,
     );
-    const p183 = yield* GCP.Compute.GetRegionInstanceTemplate(RegionInstanceTemplate);
-    const p184 = yield* GCP.Compute.GetRegionInstantSnapshot(RegionInstantSnapshot);
-    const p185 = yield* GCP.Compute.GetRegionNetworkEndpointGroup(RegionNetworkEndpointGroup);
-    const p186 = yield* GCP.Compute.GetRegionNetworkFirewallPolicy(RegionNetworkFirewallPolicy);
-    const p187 = yield* GCP.Compute.GetRegionNetworkFirewallPolicyAssociation(
+    const p186 = yield* GCP.Compute.GetRegionInstanceTemplate(RegionInstanceTemplate);
+    const p187 = yield* GCP.Compute.GetRegionInstantSnapshot(RegionInstantSnapshot);
+    const p188 = yield* GCP.Compute.GetRegionInstantSnapshotGroup(RegionInstantSnapshotGroup);
+    const p189 = yield* GCP.Compute.GetRegionNetworkEndpointGroup(RegionNetworkEndpointGroup);
+    const p190 = yield* GCP.Compute.GetRegionNetworkFirewallPolicy(RegionNetworkFirewallPolicy);
+    const p191 = yield* GCP.Compute.GetRegionNetworkFirewallPolicyAssociation(
       RegionNetworkFirewallPolicy,
     );
-    const p188 = yield* GCP.Compute.GetRegionNetworkFirewallPolicyEffectiveFirewalls();
-    const p189 = yield* GCP.Compute.GetRegionNetworkFirewallPolicyRule(RegionNetworkFirewallPolicy);
-    const p190 = yield* GCP.Compute.GetRegionSecurityPolicy(RegionSecurityPolicy);
-    const p191 = yield* GCP.Compute.GetRegionSecurityPolicyRule(RegionSecurityPolicy);
-    const p192 = yield* GCP.Compute.GetRegionSnapshot(RegionSnapshot);
-    const p193 = yield* GCP.Compute.GetRegionSnapshotSetting();
-    const p194 = yield* GCP.Compute.GetRegionSslCertificate(RegionSslCertificate);
-    const p195 = yield* GCP.Compute.GetRegionSslPolicy(RegionSslPolicy);
-    const p196 = yield* GCP.Compute.GetRegionTargetHttpProxy(RegionTargetHttpProxy);
-    const p197 = yield* GCP.Compute.GetRegionTargetHttpsProxy(RegionTargetHttpsProxy);
-    const p198 = yield* GCP.Compute.GetRegionTargetTcpProxy(RegionTargetTcpProxy);
-    const p199 = yield* GCP.Compute.GetRegionUrlMap(RegionUrlMap);
-    const p200 = yield* GCP.Compute.GetReliabilityRisk();
-    const p201 = yield* GCP.Compute.GetReservation(Reservation);
-    const p202 = yield* GCP.Compute.GetReservationBlock(Reservation);
-    const p203 = yield* GCP.Compute.GetReservationSlot();
-    const p204 = yield* GCP.Compute.GetReservationSlotHealth();
-    const p205 = yield* GCP.Compute.GetReservationSlotVersion();
-    const p206 = yield* GCP.Compute.GetResourcePolicy(ResourcePolicy);
-    const p207 = yield* GCP.Compute.GetRollout();
-    const p208 = yield* GCP.Compute.GetRolloutPlan(RolloutPlan);
-    const p209 = yield* GCP.Compute.GetRoute(Route);
-    const p210 = yield* GCP.Compute.GetRouter(Router);
-    const p211 = yield* GCP.Compute.GetRouterNamedSet(Router);
-    const p212 = yield* GCP.Compute.GetRouterNatIpInfo(Router);
-    const p213 = yield* GCP.Compute.GetRouterNatMappingInfo(Router);
-    const p214 = yield* GCP.Compute.GetRouterRoutePolicy(Router);
-    const p215 = yield* GCP.Compute.GetRouterStatus(Router);
-    const p216 = yield* GCP.Compute.GetSecurityPolicy(SecurityPolicy);
-    const p217 = yield* GCP.Compute.GetSecurityPolicyRule(SecurityPolicy);
-    const p218 = yield* GCP.Compute.GetServiceAttachment(ServiceAttachment);
-    const p219 = yield* GCP.Compute.GetShieldedInstanceIdentity(Instance);
-    const p220 = yield* GCP.Compute.GetSnapshot(Snapshot);
-    const p221 = yield* GCP.Compute.GetSnapshotSetting();
-    const p222 = yield* GCP.Compute.GetSslCertificate(SslCertificate);
-    const p223 = yield* GCP.Compute.GetSslPolicy(SslPolicy);
-    const p224 = yield* GCP.Compute.GetStoragePoolType();
-    const p225 = yield* GCP.Compute.GetSubnetwork(Subnetwork);
-    const p226 = yield* GCP.Compute.GetTargetGrpcProxy(TargetGrpcProxy);
-    const p227 = yield* GCP.Compute.GetTargetHttpProxy(TargetHttpProxy);
-    const p228 = yield* GCP.Compute.GetTargetHttpsProxy(TargetHttpsProxy);
-    const p229 = yield* GCP.Compute.GetTargetInstance(TargetInstance);
-    const p230 = yield* GCP.Compute.GetTargetPool(TargetPool);
-    const p231 = yield* GCP.Compute.GetTargetPoolHealth(TargetPool);
-    const p232 = yield* GCP.Compute.GetTargetSslProxy(TargetSslProxy);
-    const p233 = yield* GCP.Compute.GetTargetTcpProxy(TargetTcpProxy);
-    const p234 = yield* GCP.Compute.GetTargetVpnGateway(TargetVpnGateway);
-    const p235 = yield* GCP.Compute.GetUrlMap(UrlMap);
-    const p236 = yield* GCP.Compute.GetVpnGateway(VpnGateway);
-    const p237 = yield* GCP.Compute.GetVpnGatewayStatus(VpnGateway);
-    const p238 = yield* GCP.Compute.GetVpnTunnel(VpnTunnel);
-    const p239 = yield* GCP.Compute.GetWireGroup(CrossSiteNetwork);
-    const p240 = yield* GCP.Compute.GetZone();
-    const p241 = yield* GCP.Compute.GetZoneVmExtensionPolicy(ZoneVmExtensionPolicy);
-    const p242 = yield* GCP.Compute.InvalidateUrlMapCache(UrlMap);
-    const p243 = yield* GCP.Compute.ListAcceleratorTypes();
-    const p244 = yield* GCP.Compute.ListAddresses();
-    const p245 = yield* GCP.Compute.ListAutoscalers();
-    const p246 = yield* GCP.Compute.ListBackendBuckets();
-    const p247 = yield* GCP.Compute.ListBackendBucketUsable();
-    const p248 = yield* GCP.Compute.ListBackendServices();
-    const p249 = yield* GCP.Compute.ListBackendServiceUsable();
-    const p250 = yield* GCP.Compute.ListCrossSiteNetworks();
-    const p251 = yield* GCP.Compute.ListDisks();
-    const p252 = yield* GCP.Compute.ListDiskTypes();
-    const p253 = yield* GCP.Compute.ListExternalVpnGateways();
-    const p254 = yield* GCP.Compute.ListFirewalls();
-    const p255 = yield* GCP.Compute.ListForwardingRules();
-    const p256 = yield* GCP.Compute.ListFutureReservations();
-    const p257 = yield* GCP.Compute.ListGlobalAddresses();
-    const p258 = yield* GCP.Compute.ListGlobalForwardingRules();
-    const p259 = yield* GCP.Compute.ListGlobalNetworkEndpointGroupNetworkEndpoints(
+    const p192 = yield* GCP.Compute.GetRegionNetworkFirewallPolicyEffectiveFirewalls();
+    const p193 = yield* GCP.Compute.GetRegionNetworkFirewallPolicyRule(RegionNetworkFirewallPolicy);
+    const p194 = yield* GCP.Compute.GetRegionSecurityPolicy(RegionSecurityPolicy);
+    const p195 = yield* GCP.Compute.GetRegionSecurityPolicyRule(RegionSecurityPolicy);
+    const p196 = yield* GCP.Compute.GetRegionSnapshot(RegionSnapshot);
+    const p197 = yield* GCP.Compute.GetRegionSnapshotSetting();
+    const p198 = yield* GCP.Compute.GetRegionSslCertificate(RegionSslCertificate);
+    const p199 = yield* GCP.Compute.GetRegionSslPolicy(RegionSslPolicy);
+    const p200 = yield* GCP.Compute.GetRegionTargetHttpProxy(RegionTargetHttpProxy);
+    const p201 = yield* GCP.Compute.GetRegionTargetHttpsProxy(RegionTargetHttpsProxy);
+    const p202 = yield* GCP.Compute.GetRegionTargetTcpProxy(RegionTargetTcpProxy);
+    const p203 = yield* GCP.Compute.GetRegionUrlMap(RegionUrlMap);
+    const p204 = yield* GCP.Compute.GetReliabilityRisk();
+    const p205 = yield* GCP.Compute.GetReservation(Reservation);
+    const p206 = yield* GCP.Compute.GetReservationBlock(Reservation);
+    const p207 = yield* GCP.Compute.GetReservationSlot();
+    const p208 = yield* GCP.Compute.GetReservationSlotHealth();
+    const p209 = yield* GCP.Compute.GetReservationSlotVersion();
+    const p210 = yield* GCP.Compute.GetResourcePolicy(ResourcePolicy);
+    const p211 = yield* GCP.Compute.GetRollout();
+    const p212 = yield* GCP.Compute.GetRolloutPlan(RolloutPlan);
+    const p213 = yield* GCP.Compute.GetRoute(Route);
+    const p214 = yield* GCP.Compute.GetRouter(Router);
+    const p215 = yield* GCP.Compute.GetRouterNamedSet(Router);
+    const p216 = yield* GCP.Compute.GetRouterNatIpInfo(Router);
+    const p217 = yield* GCP.Compute.GetRouterNatMappingInfo(Router);
+    const p218 = yield* GCP.Compute.GetRouterRoutePolicy(Router);
+    const p219 = yield* GCP.Compute.GetRouterStatus(Router);
+    const p220 = yield* GCP.Compute.GetSecurityPolicy(SecurityPolicy);
+    const p221 = yield* GCP.Compute.GetSecurityPolicyRule(SecurityPolicy);
+    const p222 = yield* GCP.Compute.GetServiceAttachment(ServiceAttachment);
+    const p223 = yield* GCP.Compute.GetShieldedInstanceIdentity(Instance);
+    const p224 = yield* GCP.Compute.GetSnapshot(Snapshot);
+    const p225 = yield* GCP.Compute.GetSnapshotSetting();
+    const p226 = yield* GCP.Compute.GetSslCertificate(SslCertificate);
+    const p227 = yield* GCP.Compute.GetSslPolicy(SslPolicy);
+    const p228 = yield* GCP.Compute.GetStoragePoolType();
+    const p229 = yield* GCP.Compute.GetSubnetwork(Subnetwork);
+    const p230 = yield* GCP.Compute.GetTargetGrpcProxy(TargetGrpcProxy);
+    const p231 = yield* GCP.Compute.GetTargetHttpProxy(TargetHttpProxy);
+    const p232 = yield* GCP.Compute.GetTargetHttpsProxy(TargetHttpsProxy);
+    const p233 = yield* GCP.Compute.GetTargetInstance(TargetInstance);
+    const p234 = yield* GCP.Compute.GetTargetPool(TargetPool);
+    const p235 = yield* GCP.Compute.GetTargetPoolHealth(TargetPool);
+    const p236 = yield* GCP.Compute.GetTargetSslProxy(TargetSslProxy);
+    const p237 = yield* GCP.Compute.GetTargetTcpProxy(TargetTcpProxy);
+    const p238 = yield* GCP.Compute.GetTargetVpnGateway(TargetVpnGateway);
+    const p239 = yield* GCP.Compute.GetUrlMap(UrlMap);
+    const p240 = yield* GCP.Compute.GetVpnGateway(VpnGateway);
+    const p241 = yield* GCP.Compute.GetVpnGatewayStatus(VpnGateway);
+    const p242 = yield* GCP.Compute.GetVpnTunnel(VpnTunnel);
+    const p243 = yield* GCP.Compute.GetWireGroup(CrossSiteNetwork);
+    const p244 = yield* GCP.Compute.GetZone();
+    const p245 = yield* GCP.Compute.GetZoneVmExtensionPolicy(ZoneVmExtensionPolicy);
+    const p246 = yield* GCP.Compute.InvalidateUrlMapCache(UrlMap);
+    const p247 = yield* GCP.Compute.ListAcceleratorTypes();
+    const p248 = yield* GCP.Compute.ListAddresses();
+    const p249 = yield* GCP.Compute.ListAutoscalers();
+    const p250 = yield* GCP.Compute.ListBackendBuckets();
+    const p251 = yield* GCP.Compute.ListBackendBucketUsable();
+    const p252 = yield* GCP.Compute.ListBackendServices();
+    const p253 = yield* GCP.Compute.ListBackendServiceUsable();
+    const p254 = yield* GCP.Compute.ListCrossSiteNetworks();
+    const p255 = yield* GCP.Compute.ListDisks();
+    const p256 = yield* GCP.Compute.ListDiskTypes();
+    const p257 = yield* GCP.Compute.ListExternalVpnGateways();
+    const p258 = yield* GCP.Compute.ListFirewalls();
+    const p259 = yield* GCP.Compute.ListForwardingRules();
+    const p260 = yield* GCP.Compute.ListFutureReservations();
+    const p261 = yield* GCP.Compute.ListGlobalAddresses();
+    const p262 = yield* GCP.Compute.ListGlobalForwardingRules();
+    const p263 = yield* GCP.Compute.ListGlobalNetworkEndpointGroupNetworkEndpoints(
       GlobalNetworkEndpointGroup,
     );
-    const p260 = yield* GCP.Compute.ListGlobalNetworkEndpointGroups();
-    const p261 = yield* GCP.Compute.ListGlobalPublicDelegatedPrefixes();
-    const p262 = yield* GCP.Compute.ListGlobalVmExtensionPolicies();
-    const p263 = yield* GCP.Compute.ListHealthChecks();
-    const p264 = yield* GCP.Compute.ListHosts();
-    const p265 = yield* GCP.Compute.ListHttpHealthChecks();
-    const p266 = yield* GCP.Compute.ListHttpsHealthChecks();
-    const p267 = yield* GCP.Compute.ListImages();
-    const p268 = yield* GCP.Compute.ListInstanceGroupInstances(InstanceGroup);
-    const p269 = yield* GCP.Compute.ListInstanceGroupManagerErrors(InstanceGroupManager);
-    const p270 = yield* GCP.Compute.ListInstanceGroupManagerManagedInstances(InstanceGroupManager);
-    const p271 =
+    const p264 = yield* GCP.Compute.ListGlobalNetworkEndpointGroups();
+    const p265 = yield* GCP.Compute.ListGlobalPublicDelegatedPrefixes();
+    const p266 = yield* GCP.Compute.ListGlobalVmExtensionPolicies();
+    const p267 = yield* GCP.Compute.ListHealthChecks();
+    const p268 = yield* GCP.Compute.ListHosts();
+    const p269 = yield* GCP.Compute.ListHttpHealthChecks();
+    const p270 = yield* GCP.Compute.ListHttpsHealthChecks();
+    const p271 = yield* GCP.Compute.ListImages();
+    const p272 = yield* GCP.Compute.ListInstanceGroupInstances(InstanceGroup);
+    const p273 = yield* GCP.Compute.ListInstanceGroupManagerErrors(InstanceGroupManager);
+    const p274 = yield* GCP.Compute.ListInstanceGroupManagerManagedInstances(InstanceGroupManager);
+    const p275 =
       yield* GCP.Compute.ListInstanceGroupManagerPerInstanceConfigs(InstanceGroupManager);
-    const p272 = yield* GCP.Compute.ListInstanceGroupManagerResizeRequests(InstanceGroupManager);
-    const p273 = yield* GCP.Compute.ListInstanceGroupManagers();
-    const p274 = yield* GCP.Compute.ListInstanceGroups();
-    const p275 = yield* GCP.Compute.ListInstanceReferrers(Instance);
-    const p276 = yield* GCP.Compute.ListInstances();
-    const p277 = yield* GCP.Compute.ListInstanceTemplates();
-    const p278 = yield* GCP.Compute.ListInstantSnapshotGroups();
-    const p279 = yield* GCP.Compute.ListInstantSnapshots();
-    const p280 = yield* GCP.Compute.ListInterconnectAttachmentGroups();
-    const p281 = yield* GCP.Compute.ListInterconnectAttachments();
-    const p282 = yield* GCP.Compute.ListInterconnectGroups();
-    const p283 = yield* GCP.Compute.ListInterconnectLocations();
-    const p284 = yield* GCP.Compute.ListInterconnectRemoteLocations();
-    const p285 = yield* GCP.Compute.ListInterconnects();
-    const p286 = yield* GCP.Compute.ListLicenses();
-    const p287 = yield* GCP.Compute.ListMachineImages();
-    const p288 = yield* GCP.Compute.ListMachineTypes();
-    const p289 = yield* GCP.Compute.ListManagedRulesets();
-    const p290 = yield* GCP.Compute.ListNetworkAttachments();
-    const p291 = yield* GCP.Compute.ListNetworkEndpointGroupNetworkEndpoints(NetworkEndpointGroup);
-    const p292 = yield* GCP.Compute.ListNetworkEndpointGroups();
-    const p293 = yield* GCP.Compute.ListNetworkFirewallPolicies();
-    const p294 = yield* GCP.Compute.ListNetworkPeeringRoutes(Network);
-    const p295 = yield* GCP.Compute.ListNetworkProfiles();
-    const p296 = yield* GCP.Compute.ListNetworks();
-    const p297 = yield* GCP.Compute.ListNodeGroups();
-    const p298 = yield* GCP.Compute.ListNodeTemplates();
-    const p299 = yield* GCP.Compute.ListNodeTypes();
-    const p300 = yield* GCP.Compute.ListPacketMirrorings();
-    const p301 = yield* GCP.Compute.ListPreviewFeatures();
-    const p302 = yield* GCP.Compute.ListPublicAdvertisedPrefixes();
-    const p303 = yield* GCP.Compute.ListPublicDelegatedPrefixes();
-    const p304 = yield* GCP.Compute.ListRegionAutoscalers();
-    const p305 = yield* GCP.Compute.ListRegionBackendBuckets();
-    const p306 = yield* GCP.Compute.ListRegionBackendBucketUsable();
-    const p307 = yield* GCP.Compute.ListRegionBackendServices();
-    const p308 = yield* GCP.Compute.ListRegionBackendServiceUsable();
-    const p309 = yield* GCP.Compute.ListRegionCommitments();
-    const p310 = yield* GCP.Compute.ListRegionCompositeHealthChecks();
-    const p311 = yield* GCP.Compute.ListRegionDisks();
-    const p312 = yield* GCP.Compute.ListRegionDiskTypes();
-    const p313 = yield* GCP.Compute.ListRegionHealthAggregationPolicies();
-    const p314 = yield* GCP.Compute.ListRegionHealthChecks();
-    const p315 = yield* GCP.Compute.ListRegionHealthCheckServices();
-    const p316 = yield* GCP.Compute.ListRegionHealthSources();
-    const p317 = yield* GCP.Compute.ListRegionInstanceGroupInstances();
-    const p318 = yield* GCP.Compute.ListRegionInstanceGroupManagerErrors(
+    const p276 = yield* GCP.Compute.ListInstanceGroupManagerResizeRequests(InstanceGroupManager);
+    const p277 = yield* GCP.Compute.ListInstanceGroupManagers();
+    const p278 = yield* GCP.Compute.ListInstanceGroups();
+    const p279 = yield* GCP.Compute.ListInstanceReferrers(Instance);
+    const p280 = yield* GCP.Compute.ListInstances();
+    const p281 = yield* GCP.Compute.ListInstanceTemplates();
+    const p282 = yield* GCP.Compute.ListInstantSnapshotGroups();
+    const p283 = yield* GCP.Compute.ListInstantSnapshots();
+    const p284 = yield* GCP.Compute.ListInterconnectAttachmentGroups();
+    const p285 = yield* GCP.Compute.ListInterconnectAttachments();
+    const p286 = yield* GCP.Compute.ListInterconnectGroups();
+    const p287 = yield* GCP.Compute.ListInterconnectLocations();
+    const p288 = yield* GCP.Compute.ListInterconnectRemoteLocations();
+    const p289 = yield* GCP.Compute.ListInterconnects();
+    const p290 = yield* GCP.Compute.ListLicenses();
+    const p291 = yield* GCP.Compute.ListMachineImages();
+    const p292 = yield* GCP.Compute.ListMachineTypes();
+    const p293 = yield* GCP.Compute.ListManagedRulesets();
+    const p294 = yield* GCP.Compute.ListNetworkAttachments();
+    const p295 = yield* GCP.Compute.ListNetworkEndpointGroupNetworkEndpoints(NetworkEndpointGroup);
+    const p296 = yield* GCP.Compute.ListNetworkEndpointGroups();
+    const p297 = yield* GCP.Compute.ListNetworkFirewallPolicies();
+    const p298 = yield* GCP.Compute.ListNetworkPeeringRoutes(Network);
+    const p299 = yield* GCP.Compute.ListNetworkProfiles();
+    const p300 = yield* GCP.Compute.ListNetworks();
+    const p301 = yield* GCP.Compute.ListNodeGroups();
+    const p302 = yield* GCP.Compute.ListNodeTemplates();
+    const p303 = yield* GCP.Compute.ListNodeTypes();
+    const p304 = yield* GCP.Compute.ListPacketMirrorings();
+    const p305 = yield* GCP.Compute.ListPreviewFeatures();
+    const p306 = yield* GCP.Compute.ListPublicAdvertisedPrefixes();
+    const p307 = yield* GCP.Compute.ListPublicDelegatedPrefixes();
+    const p308 = yield* GCP.Compute.ListRegionAutoscalers();
+    const p309 = yield* GCP.Compute.ListRegionBackendBuckets();
+    const p310 = yield* GCP.Compute.ListRegionBackendBucketUsable();
+    const p311 = yield* GCP.Compute.ListRegionBackendServices();
+    const p312 = yield* GCP.Compute.ListRegionBackendServiceUsable();
+    const p313 = yield* GCP.Compute.ListRegionCommitments();
+    const p314 = yield* GCP.Compute.ListRegionCompositeHealthChecks();
+    const p315 = yield* GCP.Compute.ListRegionDisks();
+    const p316 = yield* GCP.Compute.ListRegionDiskTypes();
+    const p317 = yield* GCP.Compute.ListRegionHealthAggregationPolicies();
+    const p318 = yield* GCP.Compute.ListRegionHealthChecks();
+    const p319 = yield* GCP.Compute.ListRegionHealthCheckServices();
+    const p320 = yield* GCP.Compute.ListRegionHealthSources();
+    const p321 = yield* GCP.Compute.ListRegionInstanceGroupInstances();
+    const p322 = yield* GCP.Compute.ListRegionInstanceGroupManagerErrors(
       RegionInstanceGroupManager,
     );
-    const p319 = yield* GCP.Compute.ListRegionInstanceGroupManagerManagedInstances(
+    const p323 = yield* GCP.Compute.ListRegionInstanceGroupManagerManagedInstances(
       RegionInstanceGroupManager,
     );
-    const p320 = yield* GCP.Compute.ListRegionInstanceGroupManagerPerInstanceConfigs(
+    const p324 = yield* GCP.Compute.ListRegionInstanceGroupManagerPerInstanceConfigs(
       RegionInstanceGroupManager,
     );
-    const p321 = yield* GCP.Compute.ListRegionInstanceGroupManagerResizeRequests(
+    const p325 = yield* GCP.Compute.ListRegionInstanceGroupManagerResizeRequests(
       RegionInstanceGroupManager,
     );
-    const p322 = yield* GCP.Compute.ListRegionInstanceGroupManagers();
-    const p323 = yield* GCP.Compute.ListRegionInstanceGroups();
-    const p324 = yield* GCP.Compute.ListRegionInstanceTemplates();
-    const p325 = yield* GCP.Compute.ListRegionInstantSnapshotGroups();
-    const p326 = yield* GCP.Compute.ListRegionInstantSnapshots();
-    const p327 = yield* GCP.Compute.ListRegionNetworkEndpointGroupNetworkEndpoints(
+    const p326 = yield* GCP.Compute.ListRegionInstanceGroupManagers();
+    const p327 = yield* GCP.Compute.ListRegionInstanceGroups();
+    const p328 = yield* GCP.Compute.ListRegionInstanceTemplates();
+    const p329 = yield* GCP.Compute.ListRegionInstantSnapshotGroups();
+    const p330 = yield* GCP.Compute.ListRegionInstantSnapshots();
+    const p331 = yield* GCP.Compute.ListRegionNetworkEndpointGroupNetworkEndpoints(
       RegionNetworkEndpointGroup,
     );
-    const p328 = yield* GCP.Compute.ListRegionNetworkEndpointGroups();
-    const p329 = yield* GCP.Compute.ListRegionNetworkFirewallPolicies();
-    const p330 = yield* GCP.Compute.ListRegionNotificationEndpoints();
-    const p331 = yield* GCP.Compute.ListRegions();
-    const p332 = yield* GCP.Compute.ListRegionSecurityPolicies();
-    const p333 = yield* GCP.Compute.ListRegionSnapshots();
-    const p334 = yield* GCP.Compute.ListRegionSslCertificates();
-    const p335 = yield* GCP.Compute.ListRegionSslPolicies();
-    const p336 = yield* GCP.Compute.ListRegionSslPolicyAvailableFeatures();
-    const p337 = yield* GCP.Compute.ListRegionTargetHttpProxies();
-    const p338 = yield* GCP.Compute.ListRegionTargetHttpsProxies();
-    const p339 = yield* GCP.Compute.ListRegionTargetTcpProxies();
-    const p340 = yield* GCP.Compute.ListRegionUrlMaps();
-    const p341 = yield* GCP.Compute.ListRegionZones();
-    const p342 = yield* GCP.Compute.ListReliabilityRisks();
-    const p343 = yield* GCP.Compute.ListReservationBlocks(Reservation);
-    const p344 = yield* GCP.Compute.ListReservations();
-    const p345 = yield* GCP.Compute.ListReservationSlots();
-    const p346 = yield* GCP.Compute.ListResourcePolicies();
-    const p347 = yield* GCP.Compute.ListRolloutPlans();
-    const p348 = yield* GCP.Compute.ListRollouts();
-    const p349 = yield* GCP.Compute.ListRouterBgpRoutes(Router);
-    const p350 = yield* GCP.Compute.ListRouterNamedSets(Router);
-    const p351 = yield* GCP.Compute.ListRouterRoutePolicies(Router);
-    const p352 = yield* GCP.Compute.ListRouters();
-    const p353 = yield* GCP.Compute.ListRoutes();
-    const p354 = yield* GCP.Compute.ListSecurityPolicies();
-    const p355 = yield* GCP.Compute.ListSecurityPolicyPreconfiguredExpressionSets();
-    const p356 = yield* GCP.Compute.ListServiceAttachments();
-    const p357 = yield* GCP.Compute.ListSnapshots();
-    const p358 = yield* GCP.Compute.ListSslCertificates();
-    const p359 = yield* GCP.Compute.ListSslPolicies();
-    const p360 = yield* GCP.Compute.ListSslPolicyAvailableFeatures();
-    const p361 = yield* GCP.Compute.ListStoragePools();
-    const p362 = yield* GCP.Compute.ListStoragePoolTypes();
-    const p363 = yield* GCP.Compute.ListSubnetworks();
-    const p364 = yield* GCP.Compute.ListSubnetworkUsable();
-    const p365 = yield* GCP.Compute.ListTargetGrpcProxies();
-    const p366 = yield* GCP.Compute.ListTargetHttpProxies();
-    const p367 = yield* GCP.Compute.ListTargetHttpsProxies();
-    const p368 = yield* GCP.Compute.ListTargetInstances();
-    const p369 = yield* GCP.Compute.ListTargetPools();
-    const p370 = yield* GCP.Compute.ListTargetSslProxies();
-    const p371 = yield* GCP.Compute.ListTargetTcpProxies();
-    const p372 = yield* GCP.Compute.ListTargetVpnGateways();
-    const p373 = yield* GCP.Compute.ListUrlMaps();
-    const p374 = yield* GCP.Compute.ListVpnGateways();
-    const p375 = yield* GCP.Compute.ListVpnTunnels();
-    const p376 = yield* GCP.Compute.ListWireGroups(CrossSiteNetwork);
-    const p377 = yield* GCP.Compute.ListZones();
-    const p378 = yield* GCP.Compute.ListZoneVmExtensionPolicies();
-    const p379 = yield* GCP.Compute.PatchAutoscaler();
-    const p380 = yield* GCP.Compute.PatchGlobalFrontendSetting();
-    const p381 =
+    const p332 = yield* GCP.Compute.ListRegionNetworkEndpointGroups();
+    const p333 = yield* GCP.Compute.ListRegionNetworkFirewallPolicies();
+    const p334 = yield* GCP.Compute.ListRegionNotificationEndpoints();
+    const p335 = yield* GCP.Compute.ListRegions();
+    const p336 = yield* GCP.Compute.ListRegionSecurityPolicies();
+    const p337 = yield* GCP.Compute.ListRegionSnapshots();
+    const p338 = yield* GCP.Compute.ListRegionSslCertificates();
+    const p339 = yield* GCP.Compute.ListRegionSslPolicies();
+    const p340 = yield* GCP.Compute.ListRegionSslPolicyAvailableFeatures();
+    const p341 = yield* GCP.Compute.ListRegionTargetHttpProxies();
+    const p342 = yield* GCP.Compute.ListRegionTargetHttpsProxies();
+    const p343 = yield* GCP.Compute.ListRegionTargetTcpProxies();
+    const p344 = yield* GCP.Compute.ListRegionUrlMaps();
+    const p345 = yield* GCP.Compute.ListRegionZones();
+    const p346 = yield* GCP.Compute.ListReliabilityRisks();
+    const p347 = yield* GCP.Compute.ListReservationBlocks(Reservation);
+    const p348 = yield* GCP.Compute.ListReservations();
+    const p349 = yield* GCP.Compute.ListReservationSlots();
+    const p350 = yield* GCP.Compute.ListResourcePolicies();
+    const p351 = yield* GCP.Compute.ListRolloutPlans();
+    const p352 = yield* GCP.Compute.ListRollouts();
+    const p353 = yield* GCP.Compute.ListRouterBgpRoutes(Router);
+    const p354 = yield* GCP.Compute.ListRouterNamedSets(Router);
+    const p355 = yield* GCP.Compute.ListRouterRoutePolicies(Router);
+    const p356 = yield* GCP.Compute.ListRouters();
+    const p357 = yield* GCP.Compute.ListRoutes();
+    const p358 = yield* GCP.Compute.ListSecurityPolicies();
+    const p359 = yield* GCP.Compute.ListSecurityPolicyPreconfiguredExpressionSets();
+    const p360 = yield* GCP.Compute.ListServiceAttachments();
+    const p361 = yield* GCP.Compute.ListSnapshots();
+    const p362 = yield* GCP.Compute.ListSslCertificates();
+    const p363 = yield* GCP.Compute.ListSslPolicies();
+    const p364 = yield* GCP.Compute.ListSslPolicyAvailableFeatures();
+    const p365 = yield* GCP.Compute.ListStoragePools();
+    const p366 = yield* GCP.Compute.ListStoragePoolTypes();
+    const p367 = yield* GCP.Compute.ListSubnetworks();
+    const p368 = yield* GCP.Compute.ListSubnetworkUsable();
+    const p369 = yield* GCP.Compute.ListTargetGrpcProxies();
+    const p370 = yield* GCP.Compute.ListTargetHttpProxies();
+    const p371 = yield* GCP.Compute.ListTargetHttpsProxies();
+    const p372 = yield* GCP.Compute.ListTargetInstances();
+    const p373 = yield* GCP.Compute.ListTargetPools();
+    const p374 = yield* GCP.Compute.ListTargetSslProxies();
+    const p375 = yield* GCP.Compute.ListTargetTcpProxies();
+    const p376 = yield* GCP.Compute.ListTargetVpnGateways();
+    const p377 = yield* GCP.Compute.ListUrlMaps();
+    const p378 = yield* GCP.Compute.ListVpnGateways();
+    const p379 = yield* GCP.Compute.ListVpnTunnels();
+    const p380 = yield* GCP.Compute.ListWireGroups(CrossSiteNetwork);
+    const p381 = yield* GCP.Compute.ListZones();
+    const p382 = yield* GCP.Compute.ListZoneVmExtensionPolicies();
+    const p383 = yield* GCP.Compute.PatchAutoscaler();
+    const p384 = yield* GCP.Compute.PatchGlobalFrontendSetting();
+    const p385 =
       yield* GCP.Compute.PatchInstanceGroupManagerPerInstanceConfigs(InstanceGroupManager);
-    const p382 = yield* GCP.Compute.PatchInstanceSetting();
-    const p383 =
+    const p386 = yield* GCP.Compute.PatchInstanceSetting();
+    const p387 =
       yield* GCP.Compute.PatchNetworkFirewallPolicyPacketMirroringRule(NetworkFirewallPolicy);
-    const p384 = yield* GCP.Compute.PatchNetworkFirewallPolicyRule(NetworkFirewallPolicy);
-    const p385 = yield* GCP.Compute.PatchRegionAutoscaler();
-    const p386 = yield* GCP.Compute.PatchRegionInstanceGroupManagerPerInstanceConfigs(
+    const p388 = yield* GCP.Compute.PatchNetworkFirewallPolicyRule(NetworkFirewallPolicy);
+    const p389 = yield* GCP.Compute.PatchRegionAutoscaler();
+    const p390 = yield* GCP.Compute.PatchRegionInstanceGroupManagerPerInstanceConfigs(
       RegionInstanceGroupManager,
     );
-    const p387 = yield* GCP.Compute.PatchRegionNetworkFirewallPolicyAssociation(
+    const p391 = yield* GCP.Compute.PatchRegionNetworkFirewallPolicyAssociation(
       RegionNetworkFirewallPolicy,
     );
-    const p388 = yield* GCP.Compute.PatchRegionNetworkFirewallPolicyRule(
+    const p392 = yield* GCP.Compute.PatchRegionNetworkFirewallPolicyRule(
       RegionNetworkFirewallPolicy,
     );
-    const p389 = yield* GCP.Compute.PatchRegionSecurityPolicyRule(RegionSecurityPolicy);
-    const p390 = yield* GCP.Compute.PatchRegionSnapshotSetting();
-    const p391 = yield* GCP.Compute.PatchRouterNamedSet(Router);
-    const p392 = yield* GCP.Compute.PatchRouterRoutePolicy(Router);
-    const p393 = yield* GCP.Compute.PatchSecurityPolicyRule(SecurityPolicy);
-    const p394 = yield* GCP.Compute.PatchSnapshotSetting();
-    const p395 = yield* GCP.Compute.PerformInstanceMaintenance(Instance);
-    const p396 = yield* GCP.Compute.PerformReservationBlockMaintenance(Reservation);
-    const p397 = yield* GCP.Compute.PerformReservationMaintenance(Reservation);
-    const p398 = yield* GCP.Compute.PreviewRouter(Router);
-    const p399 = yield* GCP.Compute.RecreateInstanceGroupManagerInstances(InstanceGroupManager);
-    const p400 = yield* GCP.Compute.RecreateRegionInstanceGroupManagerInstances(
+    const p393 = yield* GCP.Compute.PatchRegionSecurityPolicyRule(RegionSecurityPolicy);
+    const p394 = yield* GCP.Compute.PatchRegionSnapshotSetting();
+    const p395 = yield* GCP.Compute.PatchRouterNamedSet(Router);
+    const p396 = yield* GCP.Compute.PatchRouterRoutePolicy(Router);
+    const p397 = yield* GCP.Compute.PatchSecurityPolicyRule(SecurityPolicy);
+    const p398 = yield* GCP.Compute.PatchSnapshotSetting();
+    const p399 = yield* GCP.Compute.PerformInstanceMaintenance(Instance);
+    const p400 = yield* GCP.Compute.PerformReservationBlockMaintenance(Reservation);
+    const p401 = yield* GCP.Compute.PerformReservationMaintenance(Reservation);
+    const p402 = yield* GCP.Compute.PreviewRouter(Router);
+    const p403 = yield* GCP.Compute.RecreateInstanceGroupManagerInstances(InstanceGroupManager);
+    const p404 = yield* GCP.Compute.RecreateRegionInstanceGroupManagerInstances(
       RegionInstanceGroupManager,
     );
-    const p401 = yield* GCP.Compute.RemoveDiskResourcePolicies(Disk);
-    const p402 = yield* GCP.Compute.RemoveInstanceGroupInstances(InstanceGroup);
-    const p403 = yield* GCP.Compute.RemoveInstanceResourcePolicies(Instance);
-    const p404 = yield* GCP.Compute.RemoveNetworkFirewallPolicyAssociation(NetworkFirewallPolicy);
-    const p405 =
+    const p405 = yield* GCP.Compute.RemoveDiskResourcePolicies(Disk);
+    const p406 = yield* GCP.Compute.RemoveInstanceGroupInstances(InstanceGroup);
+    const p407 = yield* GCP.Compute.RemoveInstanceResourcePolicies(Instance);
+    const p408 = yield* GCP.Compute.RemoveNetworkFirewallPolicyAssociation(NetworkFirewallPolicy);
+    const p409 =
       yield* GCP.Compute.RemoveNetworkFirewallPolicyPacketMirroringRule(NetworkFirewallPolicy);
-    const p406 = yield* GCP.Compute.RemoveNetworkFirewallPolicyRule(NetworkFirewallPolicy);
-    const p407 = yield* GCP.Compute.RemoveNetworkPeering(Network);
-    const p408 = yield* GCP.Compute.RemoveRegionDiskResourcePolicies(RegionDisk);
-    const p409 = yield* GCP.Compute.RemoveRegionNetworkFirewallPolicyAssociation(
+    const p410 = yield* GCP.Compute.RemoveNetworkFirewallPolicyRule(NetworkFirewallPolicy);
+    const p411 = yield* GCP.Compute.RemoveNetworkPeering(Network);
+    const p412 = yield* GCP.Compute.RemoveRegionDiskResourcePolicies(RegionDisk);
+    const p413 = yield* GCP.Compute.RemoveRegionNetworkFirewallPolicyAssociation(
       RegionNetworkFirewallPolicy,
     );
-    const p410 = yield* GCP.Compute.RemoveRegionNetworkFirewallPolicyRule(
+    const p414 = yield* GCP.Compute.RemoveRegionNetworkFirewallPolicyRule(
       RegionNetworkFirewallPolicy,
     );
-    const p411 = yield* GCP.Compute.RemoveRegionSecurityPolicyRule(RegionSecurityPolicy);
-    const p412 = yield* GCP.Compute.RemoveSecurityPolicyRule(SecurityPolicy);
-    const p413 = yield* GCP.Compute.RemoveTargetPoolHealthCheck(TargetPool);
-    const p414 = yield* GCP.Compute.RemoveTargetPoolInstance(TargetPool);
-    const p415 = yield* GCP.Compute.RequestNetworkRemovePeering(Network);
-    const p416 = yield* GCP.Compute.ResetInstance(Instance);
-    const p417 = yield* GCP.Compute.ResizeDisk(Disk);
-    const p418 = yield* GCP.Compute.ResizeInstanceGroupManager(InstanceGroupManager);
-    const p419 = yield* GCP.Compute.ResizeRegionDisk(RegionDisk);
-    const p420 = yield* GCP.Compute.ResizeRegionInstanceGroupManager(RegionInstanceGroupManager);
-    const p421 = yield* GCP.Compute.ResizeReservation(Reservation);
-    const p422 = yield* GCP.Compute.ResumeInstance(Instance);
-    const p423 = yield* GCP.Compute.ResumeInstanceGroupManagerInstances(InstanceGroupManager);
-    const p424 = yield* GCP.Compute.ResumeRegionInstanceGroupManagerInstances(
+    const p415 = yield* GCP.Compute.RemoveRegionSecurityPolicyRule(RegionSecurityPolicy);
+    const p416 = yield* GCP.Compute.RemoveSecurityPolicyRule(SecurityPolicy);
+    const p417 = yield* GCP.Compute.RemoveTargetPoolHealthCheck(TargetPool);
+    const p418 = yield* GCP.Compute.RemoveTargetPoolInstance(TargetPool);
+    const p419 = yield* GCP.Compute.RequestNetworkRemovePeering(Network);
+    const p420 = yield* GCP.Compute.ResetInstance(Instance);
+    const p421 = yield* GCP.Compute.ResizeDisk(Disk);
+    const p422 = yield* GCP.Compute.ResizeInstanceGroupManager(InstanceGroupManager);
+    const p423 = yield* GCP.Compute.ResizeRegionDisk(RegionDisk);
+    const p424 = yield* GCP.Compute.ResizeRegionInstanceGroupManager(RegionInstanceGroupManager);
+    const p425 = yield* GCP.Compute.ResizeReservation(Reservation);
+    const p426 = yield* GCP.Compute.ResumeInstance(Instance);
+    const p427 = yield* GCP.Compute.ResumeInstanceGroupManagerInstances(InstanceGroupManager);
+    const p428 = yield* GCP.Compute.ResumeRegionInstanceGroupManagerInstances(
       RegionInstanceGroupManager,
     );
-    const p425 = yield* GCP.Compute.SendInstanceDiagnosticInterrupt(Instance);
-    const p426 = yield* GCP.Compute.SetAddressLabels(Address);
-    const p427 = yield* GCP.Compute.SetBackendBucketEdgeSecurityPolicy(BackendBucket);
-    const p428 = yield* GCP.Compute.SetBackendServiceEdgeSecurityPolicy(BackendService);
-    const p429 = yield* GCP.Compute.SetBackendServiceSecurityPolicy(BackendService);
-    const p430 = yield* GCP.Compute.SetDiskLabels(Disk);
-    const p431 = yield* GCP.Compute.SetExternalVpnGatewayLabels(ExternalVpnGateway);
-    const p432 = yield* GCP.Compute.SetForwardingRuleLabels(ForwardingRule);
-    const p433 = yield* GCP.Compute.SetForwardingRuleTarget(ForwardingRule);
-    const p434 = yield* GCP.Compute.SetGlobalAddressLabels(GlobalAddress);
-    const p435 = yield* GCP.Compute.SetGlobalForwardingRuleLabels(GlobalForwardingRule);
-    const p436 = yield* GCP.Compute.SetGlobalForwardingRuleTarget(GlobalForwardingRule);
-    const p437 = yield* GCP.Compute.SetImageLabels(Image);
-    const p438 = yield* GCP.Compute.SetInstanceDeletionProtection(Instance);
-    const p439 = yield* GCP.Compute.SetInstanceDiskAutoDelete(Instance);
-    const p440 = yield* GCP.Compute.SetInstanceGroupManagerInstanceTemplate(InstanceGroupManager);
-    const p441 = yield* GCP.Compute.SetInstanceGroupManagerTargetPools(InstanceGroupManager);
-    const p442 = yield* GCP.Compute.SetInstanceGroupNamedPorts(InstanceGroup);
-    const p443 = yield* GCP.Compute.SetInstanceLabels(Instance);
-    const p444 = yield* GCP.Compute.SetInstanceMachineResources(Instance);
-    const p445 = yield* GCP.Compute.SetInstanceMachineType(Instance);
-    const p446 = yield* GCP.Compute.SetInstanceMetadata(Instance);
-    const p447 = yield* GCP.Compute.SetInstanceMinCpuPlatform(Instance);
-    const p448 = yield* GCP.Compute.SetInstanceName(Instance);
-    const p449 = yield* GCP.Compute.SetInstanceScheduling(Instance);
-    const p450 = yield* GCP.Compute.SetInstanceSecurityPolicy(Instance);
-    const p451 = yield* GCP.Compute.SetInstanceServiceAccount(Instance);
-    const p452 = yield* GCP.Compute.SetInstanceTags(Instance);
-    const p453 = yield* GCP.Compute.SetInstantSnapshotLabels(InstantSnapshot);
-    const p454 = yield* GCP.Compute.SetMachineImageLabels(MachineImage);
-    const p455 = yield* GCP.Compute.SetProjectCloudArmorTier();
-    const p456 = yield* GCP.Compute.SetProjectDefaultNetworkTier();
-    const p457 = yield* GCP.Compute.SetRegionBackendServiceSecurityPolicy(RegionBackendService);
-    const p458 = yield* GCP.Compute.SetRegionDiskLabels(RegionDisk);
-    const p459 = yield* GCP.Compute.SetRegionInstanceGroupManagerInstanceTemplate(
+    const p429 = yield* GCP.Compute.SendInstanceDiagnosticInterrupt(Instance);
+    const p430 = yield* GCP.Compute.SetAddressLabels(Address);
+    const p431 = yield* GCP.Compute.SetBackendBucketEdgeSecurityPolicy(BackendBucket);
+    const p432 = yield* GCP.Compute.SetBackendServiceEdgeSecurityPolicy(BackendService);
+    const p433 = yield* GCP.Compute.SetBackendServiceSecurityPolicy(BackendService);
+    const p434 = yield* GCP.Compute.SetDiskLabels(Disk);
+    const p435 = yield* GCP.Compute.SetExternalVpnGatewayLabels(ExternalVpnGateway);
+    const p436 = yield* GCP.Compute.SetForwardingRuleLabels(ForwardingRule);
+    const p437 = yield* GCP.Compute.SetForwardingRuleTarget(ForwardingRule);
+    const p438 = yield* GCP.Compute.SetGlobalAddressLabels(GlobalAddress);
+    const p439 = yield* GCP.Compute.SetGlobalForwardingRuleLabels(GlobalForwardingRule);
+    const p440 = yield* GCP.Compute.SetGlobalForwardingRuleTarget(GlobalForwardingRule);
+    const p441 = yield* GCP.Compute.SetImageLabels(Image);
+    const p442 = yield* GCP.Compute.SetInstanceDeletionProtection(Instance);
+    const p443 = yield* GCP.Compute.SetInstanceDiskAutoDelete(Instance);
+    const p444 = yield* GCP.Compute.SetInstanceGroupManagerInstanceTemplate(InstanceGroupManager);
+    const p445 = yield* GCP.Compute.SetInstanceGroupManagerTargetPools(InstanceGroupManager);
+    const p446 = yield* GCP.Compute.SetInstanceGroupNamedPorts(InstanceGroup);
+    const p447 = yield* GCP.Compute.SetInstanceLabels(Instance);
+    const p448 = yield* GCP.Compute.SetInstanceMachineResources(Instance);
+    const p449 = yield* GCP.Compute.SetInstanceMachineType(Instance);
+    const p450 = yield* GCP.Compute.SetInstanceMetadata(Instance);
+    const p451 = yield* GCP.Compute.SetInstanceMinCpuPlatform(Instance);
+    const p452 = yield* GCP.Compute.SetInstanceName(Instance);
+    const p453 = yield* GCP.Compute.SetInstanceScheduling(Instance);
+    const p454 = yield* GCP.Compute.SetInstanceSecurityPolicy(Instance);
+    const p455 = yield* GCP.Compute.SetInstanceServiceAccount(Instance);
+    const p456 = yield* GCP.Compute.SetInstanceTags(Instance);
+    const p457 = yield* GCP.Compute.SetInstantSnapshotLabels(InstantSnapshot);
+    const p458 = yield* GCP.Compute.SetMachineImageLabels(MachineImage);
+    const p459 = yield* GCP.Compute.SetProjectCloudArmorTier();
+    const p460 = yield* GCP.Compute.SetProjectDefaultNetworkTier();
+    const p461 = yield* GCP.Compute.SetRegionBackendServiceSecurityPolicy(RegionBackendService);
+    const p462 = yield* GCP.Compute.SetRegionDiskLabels(RegionDisk);
+    const p463 = yield* GCP.Compute.SetRegionInstanceGroupManagerInstanceTemplate(
       RegionInstanceGroupManager,
     );
-    const p460 = yield* GCP.Compute.SetRegionInstanceGroupManagerTargetPools(
+    const p464 = yield* GCP.Compute.SetRegionInstanceGroupManagerTargetPools(
       RegionInstanceGroupManager,
     );
-    const p461 = yield* GCP.Compute.SetRegionInstanceGroupNamedPorts();
-    const p462 = yield* GCP.Compute.SetRegionInstantSnapshotLabels(RegionInstantSnapshot);
-    const p463 = yield* GCP.Compute.SetRegionSecurityPolicyLabels(RegionSecurityPolicy);
-    const p464 = yield* GCP.Compute.SetRegionSnapshotLabels(RegionSnapshot);
-    const p465 = yield* GCP.Compute.SetRegionTargetHttpProxyUrlMap(RegionTargetHttpProxy);
-    const p466 =
+    const p465 = yield* GCP.Compute.SetRegionInstanceGroupNamedPorts();
+    const p466 = yield* GCP.Compute.SetRegionInstantSnapshotLabels(RegionInstantSnapshot);
+    const p467 = yield* GCP.Compute.SetRegionSecurityPolicyLabels(RegionSecurityPolicy);
+    const p468 = yield* GCP.Compute.SetRegionSnapshotLabels(RegionSnapshot);
+    const p469 = yield* GCP.Compute.SetRegionTargetHttpProxyUrlMap(RegionTargetHttpProxy);
+    const p470 =
       yield* GCP.Compute.SetRegionTargetHttpsProxySslCertificates(RegionTargetHttpsProxy);
-    const p467 = yield* GCP.Compute.SetRegionTargetHttpsProxyUrlMap(RegionTargetHttpsProxy);
-    const p468 = yield* GCP.Compute.SetSecurityPolicyLabels(SecurityPolicy);
-    const p469 = yield* GCP.Compute.SetShieldedInstanceIntegrityPolicy(Instance);
-    const p470 = yield* GCP.Compute.SetSnapshotLabels(Snapshot);
-    const p471 = yield* GCP.Compute.SetSubnetworkPrivateIpGoogleAccess(Subnetwork);
-    const p472 = yield* GCP.Compute.SetTargetHttpProxyUrlMap();
-    const p473 = yield* GCP.Compute.SetTargetHttpsProxyCertificateMap(TargetHttpsProxy);
-    const p474 = yield* GCP.Compute.SetTargetHttpsProxyQuicOverride(TargetHttpsProxy);
-    const p475 = yield* GCP.Compute.SetTargetHttpsProxySslCertificates();
-    const p476 = yield* GCP.Compute.SetTargetHttpsProxySslPolicy(TargetHttpsProxy);
-    const p477 = yield* GCP.Compute.SetTargetHttpsProxyUrlMap();
-    const p478 = yield* GCP.Compute.SetTargetInstanceSecurityPolicy(TargetInstance);
-    const p479 = yield* GCP.Compute.SetTargetPoolBackup(TargetPool);
-    const p480 = yield* GCP.Compute.SetTargetPoolSecurityPolicy(TargetPool);
-    const p481 = yield* GCP.Compute.SetTargetSslProxyBackendService(TargetSslProxy);
-    const p482 = yield* GCP.Compute.SetTargetSslProxyCertificateMap(TargetSslProxy);
-    const p483 = yield* GCP.Compute.SetTargetSslProxyProxyHeader(TargetSslProxy);
-    const p484 = yield* GCP.Compute.SetTargetSslProxySslCertificates(TargetSslProxy);
-    const p485 = yield* GCP.Compute.SetTargetSslProxySslPolicy(TargetSslProxy);
-    const p486 = yield* GCP.Compute.SetTargetTcpProxyBackendService(TargetTcpProxy);
-    const p487 = yield* GCP.Compute.SetTargetTcpProxyProxyHeader(TargetTcpProxy);
-    const p488 = yield* GCP.Compute.SetTargetVpnGatewayLabels(TargetVpnGateway);
-    const p489 = yield* GCP.Compute.SetVpnGatewayLabels(VpnGateway);
-    const p490 = yield* GCP.Compute.SetVpnTunnelLabels(VpnTunnel);
-    const p491 = yield* GCP.Compute.SimulateInstanceMaintenanceEvent(Instance);
-    const p492 = yield* GCP.Compute.StartDiskAsyncReplication(Disk);
-    const p493 = yield* GCP.Compute.StartInstanceGroupManagerInstances(InstanceGroupManager);
-    const p494 = yield* GCP.Compute.StartInstanceWithEncryptionKey(Instance);
-    const p495 = yield* GCP.Compute.StartRegionDiskAsyncReplication(RegionDisk);
-    const p496 = yield* GCP.Compute.StartRegionInstanceGroupManagerInstances(
+    const p471 = yield* GCP.Compute.SetRegionTargetHttpsProxyUrlMap(RegionTargetHttpsProxy);
+    const p472 = yield* GCP.Compute.SetSecurityPolicyLabels(SecurityPolicy);
+    const p473 = yield* GCP.Compute.SetShieldedInstanceIntegrityPolicy(Instance);
+    const p474 = yield* GCP.Compute.SetSnapshotLabels(Snapshot);
+    const p475 = yield* GCP.Compute.SetSubnetworkPrivateIpGoogleAccess(Subnetwork);
+    const p476 = yield* GCP.Compute.SetTargetHttpProxyUrlMap();
+    const p477 = yield* GCP.Compute.SetTargetHttpsProxyCertificateMap(TargetHttpsProxy);
+    const p478 = yield* GCP.Compute.SetTargetHttpsProxyQuicOverride(TargetHttpsProxy);
+    const p479 = yield* GCP.Compute.SetTargetHttpsProxySslCertificates();
+    const p480 = yield* GCP.Compute.SetTargetHttpsProxySslPolicy(TargetHttpsProxy);
+    const p481 = yield* GCP.Compute.SetTargetHttpsProxyUrlMap();
+    const p482 = yield* GCP.Compute.SetTargetInstanceSecurityPolicy(TargetInstance);
+    const p483 = yield* GCP.Compute.SetTargetPoolBackup(TargetPool);
+    const p484 = yield* GCP.Compute.SetTargetPoolSecurityPolicy(TargetPool);
+    const p485 = yield* GCP.Compute.SetTargetSslProxyBackendService(TargetSslProxy);
+    const p486 = yield* GCP.Compute.SetTargetSslProxyCertificateMap(TargetSslProxy);
+    const p487 = yield* GCP.Compute.SetTargetSslProxyProxyHeader(TargetSslProxy);
+    const p488 = yield* GCP.Compute.SetTargetSslProxySslCertificates(TargetSslProxy);
+    const p489 = yield* GCP.Compute.SetTargetSslProxySslPolicy(TargetSslProxy);
+    const p490 = yield* GCP.Compute.SetTargetTcpProxyBackendService(TargetTcpProxy);
+    const p491 = yield* GCP.Compute.SetTargetTcpProxyProxyHeader(TargetTcpProxy);
+    const p492 = yield* GCP.Compute.SetTargetVpnGatewayLabels(TargetVpnGateway);
+    const p493 = yield* GCP.Compute.SetVpnGatewayLabels(VpnGateway);
+    const p494 = yield* GCP.Compute.SetVpnTunnelLabels(VpnTunnel);
+    const p495 = yield* GCP.Compute.SimulateInstanceMaintenanceEvent(Instance);
+    const p496 = yield* GCP.Compute.StartDiskAsyncReplication(Disk);
+    const p497 = yield* GCP.Compute.StartInstanceGroupManagerInstances(InstanceGroupManager);
+    const p498 = yield* GCP.Compute.StartInstanceWithEncryptionKey(Instance);
+    const p499 = yield* GCP.Compute.StartRegionDiskAsyncReplication(RegionDisk);
+    const p500 = yield* GCP.Compute.StartRegionInstanceGroupManagerInstances(
       RegionInstanceGroupManager,
     );
-    const p497 = yield* GCP.Compute.StopDiskAsyncReplication(Disk);
-    const p498 = yield* GCP.Compute.StopDiskGroupAsyncReplication();
-    const p499 = yield* GCP.Compute.StopInstanceGroupManagerInstances(InstanceGroupManager);
-    const p500 = yield* GCP.Compute.StopRegionDiskAsyncReplication(RegionDisk);
-    const p501 = yield* GCP.Compute.StopRegionDiskGroupAsyncReplication();
-    const p502 = yield* GCP.Compute.StopRegionInstanceGroupManagerInstances(
+    const p501 = yield* GCP.Compute.StopDiskAsyncReplication(Disk);
+    const p502 = yield* GCP.Compute.StopDiskGroupAsyncReplication();
+    const p503 = yield* GCP.Compute.StopInstanceGroupManagerInstances(InstanceGroupManager);
+    const p504 = yield* GCP.Compute.StopRegionDiskAsyncReplication(RegionDisk);
+    const p505 = yield* GCP.Compute.StopRegionDiskGroupAsyncReplication();
+    const p506 = yield* GCP.Compute.StopRegionInstanceGroupManagerInstances(
       RegionInstanceGroupManager,
     );
-    const p503 = yield* GCP.Compute.SuspendInstance(Instance);
-    const p504 = yield* GCP.Compute.SuspendInstanceGroupManagerInstances(InstanceGroupManager);
-    const p505 = yield* GCP.Compute.SuspendRegionInstanceGroupManagerInstances(
+    const p507 = yield* GCP.Compute.SuspendInstance(Instance);
+    const p508 = yield* GCP.Compute.SuspendInstanceGroupManagerInstances(InstanceGroupManager);
+    const p509 = yield* GCP.Compute.SuspendRegionInstanceGroupManagerInstances(
       RegionInstanceGroupManager,
     );
-    const p506 = yield* GCP.Compute.SwitchNetworkToCustomMode(Network);
-    const p507 = yield* GCP.Compute.UpdateAutoscaler();
-    const p508 = yield* GCP.Compute.UpdateDiskKmsKey(Disk);
-    const p509 = yield* GCP.Compute.UpdateInstanceAccessConfig(Instance);
-    const p510 = yield* GCP.Compute.UpdateInstanceDisplayDevice(Instance);
-    const p511 =
+    const p510 = yield* GCP.Compute.SwitchNetworkToCustomMode(Network);
+    const p511 = yield* GCP.Compute.UpdateAutoscaler();
+    const p512 = yield* GCP.Compute.UpdateDiskKmsKey(Disk);
+    const p513 = yield* GCP.Compute.UpdateInstanceAccessConfig(Instance);
+    const p514 = yield* GCP.Compute.UpdateInstanceDisplayDevice(Instance);
+    const p515 =
       yield* GCP.Compute.UpdateInstanceGroupManagerPerInstanceConfigs(InstanceGroupManager);
-    const p512 = yield* GCP.Compute.UpdateInstanceNetworkInterface(Instance);
-    const p513 = yield* GCP.Compute.UpdateNetworkPeering(Network);
-    const p514 = yield* GCP.Compute.UpdateRegionAutoscaler();
-    const p515 = yield* GCP.Compute.UpdateRegionCommitment();
-    const p516 = yield* GCP.Compute.UpdateRegionDiskKmsKey(RegionDisk);
-    const p517 = yield* GCP.Compute.UpdateRegionInstanceGroupManagerPerInstanceConfigs(
+    const p516 = yield* GCP.Compute.UpdateInstanceNetworkInterface(Instance);
+    const p517 = yield* GCP.Compute.UpdateNetworkPeering(Network);
+    const p518 = yield* GCP.Compute.UpdateRegionAutoscaler();
+    const p519 = yield* GCP.Compute.UpdateRegionCommitment();
+    const p520 = yield* GCP.Compute.UpdateRegionDiskKmsKey(RegionDisk);
+    const p521 = yield* GCP.Compute.UpdateRegionInstanceGroupManagerPerInstanceConfigs(
       RegionInstanceGroupManager,
     );
-    const p518 = yield* GCP.Compute.UpdateRegionSnapshotKmsKey(RegionSnapshot);
-    const p519 = yield* GCP.Compute.UpdateRouterNamedSet(Router);
-    const p520 = yield* GCP.Compute.UpdateRouterRoutePolicy(Router);
-    const p521 = yield* GCP.Compute.UpdateShieldedInstanceConfig(Instance);
-    const p522 = yield* GCP.Compute.UpdateSnapshotKmsKey(Snapshot);
-    const p523 = yield* GCP.Compute.ValidateRegionUrlMap(RegionUrlMap);
-    const p524 = yield* GCP.Compute.ValidateUrlMap(UrlMap);
+    const p522 = yield* GCP.Compute.UpdateRegionSnapshotKmsKey(RegionSnapshot);
+    const p523 = yield* GCP.Compute.UpdateRouterNamedSet(Router);
+    const p524 = yield* GCP.Compute.UpdateRouterRoutePolicy(Router);
+    const p525 = yield* GCP.Compute.UpdateShieldedInstanceConfig(Instance);
+    const p526 = yield* GCP.Compute.UpdateSnapshotKmsKey(Snapshot);
+    const p527 = yield* GCP.Compute.ValidateRegionUrlMap(RegionUrlMap);
+    const p528 = yield* GCP.Compute.ValidateUrlMap(UrlMap);
     return {
       fetch: serveProbes({
         AbandonInstanceGroupManagerInstances: outcome(Retry.none(p0({} as never))),
@@ -944,93 +951,97 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
         GetInstanceSetting: outcome(Retry.none(p144({ zone: "us-central1-a" } as never))),
         GetInstanceTemplate: outcome(Retry.none(p145({} as never))),
         GetInstantSnapshot: outcome(Retry.none(p146({} as never))),
+        GetInstantSnapshotGroup: outcome(Retry.none(p147({} as never))),
         GetInterconnectLocation: outcome(
-          Retry.none(p147({ interconnectLocation: "alchemy-missing" } as never)),
+          Retry.none(p148({ interconnectLocation: "alchemy-missing" } as never)),
         ),
         GetInterconnectRemoteLocation: outcome(
-          Retry.none(p148({ interconnectRemoteLocation: "alchemy-missing" } as never)),
+          Retry.none(p149({ interconnectRemoteLocation: "alchemy-missing" } as never)),
         ),
-        GetLicense: outcome(Retry.none(p149({} as never))),
-        GetLicenseCode: outcome(Retry.none(p150({ licenseCode: "alchemy-missing" } as never))),
-        GetMachineImage: outcome(Retry.none(p151({} as never))),
+        GetLicense: outcome(Retry.none(p150({} as never))),
+        GetLicenseCode: outcome(Retry.none(p151({ licenseCode: "alchemy-missing" } as never))),
+        GetMachineImage: outcome(Retry.none(p152({} as never))),
         GetMachineType: outcome(
-          Retry.none(p152({ machineType: "alchemy-missing", zone: "us-central1-a" } as never)),
+          Retry.none(p153({ machineType: "alchemy-missing", zone: "us-central1-a" } as never)),
         ),
         GetManagedRuleset: outcome(
-          Retry.none(p153({ managedRuleset: "alchemy-missing" } as never)),
+          Retry.none(p154({ managedRuleset: "alchemy-missing" } as never)),
         ),
-        GetNetwork: outcome(Retry.none(p154({} as never))),
-        GetNetworkAttachment: outcome(Retry.none(p155({} as never))),
-        GetNetworkEffectiveFirewalls: outcome(Retry.none(p156({} as never))),
-        GetNetworkEndpointGroup: outcome(Retry.none(p157({} as never))),
-        GetNetworkFirewallPolicy: outcome(Retry.none(p158({} as never))),
-        GetNetworkFirewallPolicyAssociation: outcome(Retry.none(p159({} as never))),
-        GetNetworkFirewallPolicyPacketMirroringRule: outcome(Retry.none(p160({} as never))),
-        GetNetworkFirewallPolicyRule: outcome(Retry.none(p161({} as never))),
+        GetNetwork: outcome(Retry.none(p155({} as never))),
+        GetNetworkAttachment: outcome(Retry.none(p156({} as never))),
+        GetNetworkEffectiveFirewalls: outcome(Retry.none(p157({} as never))),
+        GetNetworkEndpointGroup: outcome(Retry.none(p158({} as never))),
+        GetNetworkFirewallPolicy: outcome(Retry.none(p159({} as never))),
+        GetNetworkFirewallPolicyAssociation: outcome(Retry.none(p160({} as never))),
+        GetNetworkFirewallPolicyPacketMirroringRule: outcome(Retry.none(p161({} as never))),
+        GetNetworkFirewallPolicyRule: outcome(Retry.none(p162({} as never))),
         GetNetworkProfile: outcome(
-          Retry.none(p162({ networkProfile: "alchemy-missing" } as never)),
+          Retry.none(p163({ networkProfile: "alchemy-missing" } as never)),
         ),
-        GetNodeTemplate: outcome(Retry.none(p163({} as never))),
+        GetNodeTemplate: outcome(Retry.none(p164({} as never))),
         GetNodeType: outcome(
-          Retry.none(p164({ zone: "us-central1-a", nodeType: "alchemy-missing" } as never)),
+          Retry.none(p165({ zone: "us-central1-a", nodeType: "alchemy-missing" } as never)),
         ),
-        GetPacketMirroring: outcome(Retry.none(p165({} as never))),
+        GetPacketMirroring: outcome(Retry.none(p166({} as never))),
         GetPreviewFeature: outcome(
-          Retry.none(p166({ previewFeature: "alchemy-missing" } as never)),
+          Retry.none(p167({ previewFeature: "alchemy-missing" } as never)),
         ),
-        GetProject: outcome(Retry.none(p167({} as never))),
-        GetRegion: outcome(Retry.none(p168({ region: "us-central1" } as never))),
-        GetRegionAutoscaler: outcome(Retry.none(p169({} as never))),
-        GetRegionBackendBucket: outcome(Retry.none(p170({} as never))),
-        GetRegionBackendService: outcome(Retry.none(p171({} as never))),
-        GetRegionBackendServiceHealth: outcome(Retry.none(p172({} as never))),
+        GetProject: outcome(Retry.none(p168({} as never))),
+        GetRegion: outcome(Retry.none(p169({ region: "us-central1" } as never))),
+        GetRegionAutoscaler: outcome(Retry.none(p170({} as never))),
+        GetRegionBackendBucket: outcome(Retry.none(p171({} as never))),
+        GetRegionBackendService: outcome(Retry.none(p172({} as never))),
+        GetRegionBackendServiceHealth: outcome(Retry.none(p173({} as never))),
         GetRegionCommitment: outcome(
-          Retry.none(p173({ region: "us-central1", commitment: "alchemy-missing" } as never)),
+          Retry.none(p174({ region: "us-central1", commitment: "alchemy-missing" } as never)),
         ),
-        GetRegionDisk: outcome(Retry.none(p174({} as never))),
+        GetRegionCompositeHealthCheck: outcome(Retry.none(p175({} as never))),
+        GetRegionCompositeHealthCheckHealth: outcome(Retry.none(p176({} as never))),
+        GetRegionDisk: outcome(Retry.none(p177({} as never))),
         GetRegionDiskType: outcome(
-          Retry.none(p175({ diskType: "alchemy-missing", region: "us-central1" } as never)),
+          Retry.none(p178({ diskType: "alchemy-missing", region: "us-central1" } as never)),
         ),
-        GetRegionHealthAggregationPolicy: outcome(Retry.none(p176({} as never))),
-        GetRegionHealthCheck: outcome(Retry.none(p177({} as never))),
-        GetRegionHealthSource: outcome(Retry.none(p178({} as never))),
-        GetRegionHealthSourceHealth: outcome(Retry.none(p179({} as never))),
+        GetRegionHealthAggregationPolicy: outcome(Retry.none(p179({} as never))),
+        GetRegionHealthCheck: outcome(Retry.none(p180({} as never))),
+        GetRegionHealthSource: outcome(Retry.none(p181({} as never))),
+        GetRegionHealthSourceHealth: outcome(Retry.none(p182({} as never))),
         GetRegionInstanceGroup: outcome(
-          Retry.none(p180({ instanceGroup: "alchemy-missing", region: "us-central1" } as never)),
+          Retry.none(p183({ instanceGroup: "alchemy-missing", region: "us-central1" } as never)),
         ),
-        GetRegionInstanceGroupManager: outcome(Retry.none(p181({} as never))),
+        GetRegionInstanceGroupManager: outcome(Retry.none(p184({} as never))),
         GetRegionInstanceGroupManagerResizeRequest: outcome(
-          Retry.none(p182({ resizeRequest: "alchemy-missing" } as never)),
+          Retry.none(p185({ resizeRequest: "alchemy-missing" } as never)),
         ),
-        GetRegionInstanceTemplate: outcome(Retry.none(p183({} as never))),
-        GetRegionInstantSnapshot: outcome(Retry.none(p184({} as never))),
-        GetRegionNetworkEndpointGroup: outcome(Retry.none(p185({} as never))),
-        GetRegionNetworkFirewallPolicy: outcome(Retry.none(p186({} as never))),
-        GetRegionNetworkFirewallPolicyAssociation: outcome(Retry.none(p187({} as never))),
+        GetRegionInstanceTemplate: outcome(Retry.none(p186({} as never))),
+        GetRegionInstantSnapshot: outcome(Retry.none(p187({} as never))),
+        GetRegionInstantSnapshotGroup: outcome(Retry.none(p188({} as never))),
+        GetRegionNetworkEndpointGroup: outcome(Retry.none(p189({} as never))),
+        GetRegionNetworkFirewallPolicy: outcome(Retry.none(p190({} as never))),
+        GetRegionNetworkFirewallPolicyAssociation: outcome(Retry.none(p191({} as never))),
         GetRegionNetworkFirewallPolicyEffectiveFirewalls: outcome(
-          Retry.none(p188({ network: "alchemy-missing", region: "us-central1" } as never)),
+          Retry.none(p192({ network: "alchemy-missing", region: "us-central1" } as never)),
         ),
-        GetRegionNetworkFirewallPolicyRule: outcome(Retry.none(p189({} as never))),
-        GetRegionSecurityPolicy: outcome(Retry.none(p190({} as never))),
-        GetRegionSecurityPolicyRule: outcome(Retry.none(p191({} as never))),
-        GetRegionSnapshot: outcome(Retry.none(p192({} as never))),
-        GetRegionSnapshotSetting: outcome(Retry.none(p193({ region: "us-central1" } as never))),
-        GetRegionSslCertificate: outcome(Retry.none(p194({} as never))),
-        GetRegionSslPolicy: outcome(Retry.none(p195({} as never))),
-        GetRegionTargetHttpProxy: outcome(Retry.none(p196({} as never))),
-        GetRegionTargetHttpsProxy: outcome(Retry.none(p197({} as never))),
-        GetRegionTargetTcpProxy: outcome(Retry.none(p198({} as never))),
-        GetRegionUrlMap: outcome(Retry.none(p199({} as never))),
+        GetRegionNetworkFirewallPolicyRule: outcome(Retry.none(p193({} as never))),
+        GetRegionSecurityPolicy: outcome(Retry.none(p194({} as never))),
+        GetRegionSecurityPolicyRule: outcome(Retry.none(p195({} as never))),
+        GetRegionSnapshot: outcome(Retry.none(p196({} as never))),
+        GetRegionSnapshotSetting: outcome(Retry.none(p197({ region: "us-central1" } as never))),
+        GetRegionSslCertificate: outcome(Retry.none(p198({} as never))),
+        GetRegionSslPolicy: outcome(Retry.none(p199({} as never))),
+        GetRegionTargetHttpProxy: outcome(Retry.none(p200({} as never))),
+        GetRegionTargetHttpsProxy: outcome(Retry.none(p201({} as never))),
+        GetRegionTargetTcpProxy: outcome(Retry.none(p202({} as never))),
+        GetRegionUrlMap: outcome(Retry.none(p203({} as never))),
         GetReliabilityRisk: outcome(
-          Retry.none(p200({ reliabilityRisk: "alchemy-missing" } as never)),
+          Retry.none(p204({ reliabilityRisk: "alchemy-missing" } as never)),
         ),
-        GetReservation: outcome(Retry.none(p201({} as never))),
+        GetReservation: outcome(Retry.none(p205({} as never))),
         GetReservationBlock: outcome(
-          Retry.none(p202({ reservationBlock: "alchemy-missing" } as never)),
+          Retry.none(p206({ reservationBlock: "alchemy-missing" } as never)),
         ),
         GetReservationSlot: outcome(
           Retry.none(
-            p203({
+            p207({
               reservationSlot: "alchemy-missing",
               zone: "us-central1-a",
               parentName: "alchemy-missing",
@@ -1039,7 +1050,7 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
         ),
         GetReservationSlotHealth: outcome(
           Retry.none(
-            p204({
+            p208({
               zone: "us-central1-a",
               reservationSlot: "alchemy-missing",
               parentName: "alchemy-missing",
@@ -1048,394 +1059,394 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
         ),
         GetReservationSlotVersion: outcome(
           Retry.none(
-            p205({
+            p209({
               reservationSlot: "alchemy-missing",
               parentName: "alchemy-missing",
               zone: "us-central1-a",
             } as never),
           ),
         ),
-        GetResourcePolicy: outcome(Retry.none(p206({} as never))),
-        GetRollout: outcome(Retry.none(p207({ rollout: "alchemy-missing" } as never))),
-        GetRolloutPlan: outcome(Retry.none(p208({} as never))),
-        GetRoute: outcome(Retry.none(p209({} as never))),
-        GetRouter: outcome(Retry.none(p210({} as never))),
-        GetRouterNamedSet: outcome(Retry.none(p211({} as never))),
-        GetRouterNatIpInfo: outcome(Retry.none(p212({} as never))),
-        GetRouterNatMappingInfo: outcome(Retry.none(p213({} as never))),
-        GetRouterRoutePolicy: outcome(Retry.none(p214({} as never))),
-        GetRouterStatus: outcome(Retry.none(p215({} as never))),
-        GetSecurityPolicy: outcome(Retry.none(p216({} as never))),
-        GetSecurityPolicyRule: outcome(Retry.none(p217({} as never))),
-        GetServiceAttachment: outcome(Retry.none(p218({} as never))),
-        GetShieldedInstanceIdentity: outcome(Retry.none(p219({} as never))),
-        GetSnapshot: outcome(Retry.none(p220({} as never))),
-        GetSnapshotSetting: outcome(Retry.none(p221({} as never))),
-        GetSslCertificate: outcome(Retry.none(p222({} as never))),
-        GetSslPolicy: outcome(Retry.none(p223({} as never))),
+        GetResourcePolicy: outcome(Retry.none(p210({} as never))),
+        GetRollout: outcome(Retry.none(p211({ rollout: "alchemy-missing" } as never))),
+        GetRolloutPlan: outcome(Retry.none(p212({} as never))),
+        GetRoute: outcome(Retry.none(p213({} as never))),
+        GetRouter: outcome(Retry.none(p214({} as never))),
+        GetRouterNamedSet: outcome(Retry.none(p215({} as never))),
+        GetRouterNatIpInfo: outcome(Retry.none(p216({} as never))),
+        GetRouterNatMappingInfo: outcome(Retry.none(p217({} as never))),
+        GetRouterRoutePolicy: outcome(Retry.none(p218({} as never))),
+        GetRouterStatus: outcome(Retry.none(p219({} as never))),
+        GetSecurityPolicy: outcome(Retry.none(p220({} as never))),
+        GetSecurityPolicyRule: outcome(Retry.none(p221({} as never))),
+        GetServiceAttachment: outcome(Retry.none(p222({} as never))),
+        GetShieldedInstanceIdentity: outcome(Retry.none(p223({} as never))),
+        GetSnapshot: outcome(Retry.none(p224({} as never))),
+        GetSnapshotSetting: outcome(Retry.none(p225({} as never))),
+        GetSslCertificate: outcome(Retry.none(p226({} as never))),
+        GetSslPolicy: outcome(Retry.none(p227({} as never))),
         GetStoragePoolType: outcome(
-          Retry.none(p224({ zone: "us-central1-a", storagePoolType: "alchemy-missing" } as never)),
+          Retry.none(p228({ zone: "us-central1-a", storagePoolType: "alchemy-missing" } as never)),
         ),
-        GetSubnetwork: outcome(Retry.none(p225({} as never))),
-        GetTargetGrpcProxy: outcome(Retry.none(p226({} as never))),
-        GetTargetHttpProxy: outcome(Retry.none(p227({} as never))),
-        GetTargetHttpsProxy: outcome(Retry.none(p228({} as never))),
-        GetTargetInstance: outcome(Retry.none(p229({} as never))),
-        GetTargetPool: outcome(Retry.none(p230({} as never))),
-        GetTargetPoolHealth: outcome(Retry.none(p231({} as never))),
-        GetTargetSslProxy: outcome(Retry.none(p232({} as never))),
-        GetTargetTcpProxy: outcome(Retry.none(p233({} as never))),
-        GetTargetVpnGateway: outcome(Retry.none(p234({} as never))),
-        GetUrlMap: outcome(Retry.none(p235({} as never))),
-        GetVpnGateway: outcome(Retry.none(p236({} as never))),
-        GetVpnGatewayStatus: outcome(Retry.none(p237({} as never))),
-        GetVpnTunnel: outcome(Retry.none(p238({} as never))),
-        GetWireGroup: outcome(Retry.none(p239({ wireGroup: "alchemy-missing" } as never))),
-        GetZone: outcome(Retry.none(p240({ zone: "us-central1-a" } as never))),
-        GetZoneVmExtensionPolicy: outcome(Retry.none(p241({} as never))),
-        InvalidateUrlMapCache: outcome(Retry.none(p242({} as never))),
-        ListAcceleratorTypes: outcome(Retry.none(p243({ zone: "us-central1-a" } as never))),
-        ListAddresses: outcome(Retry.none(p244({ region: "us-central1" } as never))),
-        ListAutoscalers: outcome(Retry.none(p245({ zone: "us-central1-a" } as never))),
-        ListBackendBuckets: outcome(Retry.none(p246({} as never))),
-        ListBackendBucketUsable: outcome(Retry.none(p247({} as never))),
-        ListBackendServices: outcome(Retry.none(p248({} as never))),
-        ListBackendServiceUsable: outcome(Retry.none(p249({} as never))),
-        ListCrossSiteNetworks: outcome(Retry.none(p250({} as never))),
-        ListDisks: outcome(Retry.none(p251({ zone: "us-central1-a" } as never))),
-        ListDiskTypes: outcome(Retry.none(p252({ zone: "us-central1-a" } as never))),
-        ListExternalVpnGateways: outcome(Retry.none(p253({} as never))),
-        ListFirewalls: outcome(Retry.none(p254({} as never))),
-        ListForwardingRules: outcome(Retry.none(p255({ region: "us-central1" } as never))),
-        ListFutureReservations: outcome(Retry.none(p256({ zone: "us-central1-a" } as never))),
-        ListGlobalAddresses: outcome(Retry.none(p257({} as never))),
-        ListGlobalForwardingRules: outcome(Retry.none(p258({} as never))),
-        ListGlobalNetworkEndpointGroupNetworkEndpoints: outcome(Retry.none(p259({} as never))),
-        ListGlobalNetworkEndpointGroups: outcome(Retry.none(p260({} as never))),
-        ListGlobalPublicDelegatedPrefixes: outcome(Retry.none(p261({} as never))),
-        ListGlobalVmExtensionPolicies: outcome(Retry.none(p262({} as never))),
-        ListHealthChecks: outcome(Retry.none(p263({} as never))),
+        GetSubnetwork: outcome(Retry.none(p229({} as never))),
+        GetTargetGrpcProxy: outcome(Retry.none(p230({} as never))),
+        GetTargetHttpProxy: outcome(Retry.none(p231({} as never))),
+        GetTargetHttpsProxy: outcome(Retry.none(p232({} as never))),
+        GetTargetInstance: outcome(Retry.none(p233({} as never))),
+        GetTargetPool: outcome(Retry.none(p234({} as never))),
+        GetTargetPoolHealth: outcome(Retry.none(p235({} as never))),
+        GetTargetSslProxy: outcome(Retry.none(p236({} as never))),
+        GetTargetTcpProxy: outcome(Retry.none(p237({} as never))),
+        GetTargetVpnGateway: outcome(Retry.none(p238({} as never))),
+        GetUrlMap: outcome(Retry.none(p239({} as never))),
+        GetVpnGateway: outcome(Retry.none(p240({} as never))),
+        GetVpnGatewayStatus: outcome(Retry.none(p241({} as never))),
+        GetVpnTunnel: outcome(Retry.none(p242({} as never))),
+        GetWireGroup: outcome(Retry.none(p243({ wireGroup: "alchemy-missing" } as never))),
+        GetZone: outcome(Retry.none(p244({ zone: "us-central1-a" } as never))),
+        GetZoneVmExtensionPolicy: outcome(Retry.none(p245({} as never))),
+        InvalidateUrlMapCache: outcome(Retry.none(p246({} as never))),
+        ListAcceleratorTypes: outcome(Retry.none(p247({ zone: "us-central1-a" } as never))),
+        ListAddresses: outcome(Retry.none(p248({ region: "us-central1" } as never))),
+        ListAutoscalers: outcome(Retry.none(p249({ zone: "us-central1-a" } as never))),
+        ListBackendBuckets: outcome(Retry.none(p250({} as never))),
+        ListBackendBucketUsable: outcome(Retry.none(p251({} as never))),
+        ListBackendServices: outcome(Retry.none(p252({} as never))),
+        ListBackendServiceUsable: outcome(Retry.none(p253({} as never))),
+        ListCrossSiteNetworks: outcome(Retry.none(p254({} as never))),
+        ListDisks: outcome(Retry.none(p255({ zone: "us-central1-a" } as never))),
+        ListDiskTypes: outcome(Retry.none(p256({ zone: "us-central1-a" } as never))),
+        ListExternalVpnGateways: outcome(Retry.none(p257({} as never))),
+        ListFirewalls: outcome(Retry.none(p258({} as never))),
+        ListForwardingRules: outcome(Retry.none(p259({ region: "us-central1" } as never))),
+        ListFutureReservations: outcome(Retry.none(p260({ zone: "us-central1-a" } as never))),
+        ListGlobalAddresses: outcome(Retry.none(p261({} as never))),
+        ListGlobalForwardingRules: outcome(Retry.none(p262({} as never))),
+        ListGlobalNetworkEndpointGroupNetworkEndpoints: outcome(Retry.none(p263({} as never))),
+        ListGlobalNetworkEndpointGroups: outcome(Retry.none(p264({} as never))),
+        ListGlobalPublicDelegatedPrefixes: outcome(Retry.none(p265({} as never))),
+        ListGlobalVmExtensionPolicies: outcome(Retry.none(p266({} as never))),
+        ListHealthChecks: outcome(Retry.none(p267({} as never))),
         ListHosts: outcome(
-          Retry.none(p264({ association: "alchemy-missing", zone: "us-central1-a" } as never)),
+          Retry.none(p268({ association: "alchemy-missing", zone: "us-central1-a" } as never)),
         ),
-        ListHttpHealthChecks: outcome(Retry.none(p265({} as never))),
-        ListHttpsHealthChecks: outcome(Retry.none(p266({} as never))),
-        ListImages: outcome(Retry.none(p267({} as never))),
-        ListInstanceGroupInstances: outcome(Retry.none(p268({} as never))),
-        ListInstanceGroupManagerErrors: outcome(Retry.none(p269({} as never))),
-        ListInstanceGroupManagerManagedInstances: outcome(Retry.none(p270({} as never))),
-        ListInstanceGroupManagerPerInstanceConfigs: outcome(Retry.none(p271({} as never))),
-        ListInstanceGroupManagerResizeRequests: outcome(Retry.none(p272({} as never))),
-        ListInstanceGroupManagers: outcome(Retry.none(p273({ zone: "us-central1-a" } as never))),
-        ListInstanceGroups: outcome(Retry.none(p274({ zone: "us-central1-a" } as never))),
-        ListInstanceReferrers: outcome(Retry.none(p275({} as never))),
-        ListInstances: outcome(Retry.none(p276({ zone: "us-central1-a" } as never))),
-        ListInstanceTemplates: outcome(Retry.none(p277({} as never))),
-        ListInstantSnapshotGroups: outcome(Retry.none(p278({ zone: "us-central1-a" } as never))),
-        ListInstantSnapshots: outcome(Retry.none(p279({ zone: "us-central1-a" } as never))),
-        ListInterconnectAttachmentGroups: outcome(Retry.none(p280({} as never))),
-        ListInterconnectAttachments: outcome(Retry.none(p281({ region: "us-central1" } as never))),
-        ListInterconnectGroups: outcome(Retry.none(p282({} as never))),
-        ListInterconnectLocations: outcome(Retry.none(p283({} as never))),
-        ListInterconnectRemoteLocations: outcome(Retry.none(p284({} as never))),
-        ListInterconnects: outcome(Retry.none(p285({} as never))),
-        ListLicenses: outcome(Retry.none(p286({} as never))),
-        ListMachineImages: outcome(Retry.none(p287({} as never))),
-        ListMachineTypes: outcome(Retry.none(p288({ zone: "us-central1-a" } as never))),
-        ListManagedRulesets: outcome(Retry.none(p289({} as never))),
-        ListNetworkAttachments: outcome(Retry.none(p290({ region: "us-central1" } as never))),
-        ListNetworkEndpointGroupNetworkEndpoints: outcome(Retry.none(p291({} as never))),
-        ListNetworkEndpointGroups: outcome(Retry.none(p292({ zone: "us-central1-a" } as never))),
-        ListNetworkFirewallPolicies: outcome(Retry.none(p293({} as never))),
-        ListNetworkPeeringRoutes: outcome(Retry.none(p294({} as never))),
-        ListNetworkProfiles: outcome(Retry.none(p295({} as never))),
-        ListNetworks: outcome(Retry.none(p296({} as never))),
-        ListNodeGroups: outcome(Retry.none(p297({ zone: "us-central1-a" } as never))),
-        ListNodeTemplates: outcome(Retry.none(p298({ region: "us-central1" } as never))),
-        ListNodeTypes: outcome(Retry.none(p299({ zone: "us-central1-a" } as never))),
-        ListPacketMirrorings: outcome(Retry.none(p300({ region: "us-central1" } as never))),
-        ListPreviewFeatures: outcome(Retry.none(p301({} as never))),
-        ListPublicAdvertisedPrefixes: outcome(Retry.none(p302({} as never))),
-        ListPublicDelegatedPrefixes: outcome(Retry.none(p303({ region: "us-central1" } as never))),
-        ListRegionAutoscalers: outcome(Retry.none(p304({ region: "us-central1" } as never))),
-        ListRegionBackendBuckets: outcome(Retry.none(p305({ region: "us-central1" } as never))),
+        ListHttpHealthChecks: outcome(Retry.none(p269({} as never))),
+        ListHttpsHealthChecks: outcome(Retry.none(p270({} as never))),
+        ListImages: outcome(Retry.none(p271({} as never))),
+        ListInstanceGroupInstances: outcome(Retry.none(p272({} as never))),
+        ListInstanceGroupManagerErrors: outcome(Retry.none(p273({} as never))),
+        ListInstanceGroupManagerManagedInstances: outcome(Retry.none(p274({} as never))),
+        ListInstanceGroupManagerPerInstanceConfigs: outcome(Retry.none(p275({} as never))),
+        ListInstanceGroupManagerResizeRequests: outcome(Retry.none(p276({} as never))),
+        ListInstanceGroupManagers: outcome(Retry.none(p277({ zone: "us-central1-a" } as never))),
+        ListInstanceGroups: outcome(Retry.none(p278({ zone: "us-central1-a" } as never))),
+        ListInstanceReferrers: outcome(Retry.none(p279({} as never))),
+        ListInstances: outcome(Retry.none(p280({ zone: "us-central1-a" } as never))),
+        ListInstanceTemplates: outcome(Retry.none(p281({} as never))),
+        ListInstantSnapshotGroups: outcome(Retry.none(p282({ zone: "us-central1-a" } as never))),
+        ListInstantSnapshots: outcome(Retry.none(p283({ zone: "us-central1-a" } as never))),
+        ListInterconnectAttachmentGroups: outcome(Retry.none(p284({} as never))),
+        ListInterconnectAttachments: outcome(Retry.none(p285({ region: "us-central1" } as never))),
+        ListInterconnectGroups: outcome(Retry.none(p286({} as never))),
+        ListInterconnectLocations: outcome(Retry.none(p287({} as never))),
+        ListInterconnectRemoteLocations: outcome(Retry.none(p288({} as never))),
+        ListInterconnects: outcome(Retry.none(p289({} as never))),
+        ListLicenses: outcome(Retry.none(p290({} as never))),
+        ListMachineImages: outcome(Retry.none(p291({} as never))),
+        ListMachineTypes: outcome(Retry.none(p292({ zone: "us-central1-a" } as never))),
+        ListManagedRulesets: outcome(Retry.none(p293({} as never))),
+        ListNetworkAttachments: outcome(Retry.none(p294({ region: "us-central1" } as never))),
+        ListNetworkEndpointGroupNetworkEndpoints: outcome(Retry.none(p295({} as never))),
+        ListNetworkEndpointGroups: outcome(Retry.none(p296({ zone: "us-central1-a" } as never))),
+        ListNetworkFirewallPolicies: outcome(Retry.none(p297({} as never))),
+        ListNetworkPeeringRoutes: outcome(Retry.none(p298({} as never))),
+        ListNetworkProfiles: outcome(Retry.none(p299({} as never))),
+        ListNetworks: outcome(Retry.none(p300({} as never))),
+        ListNodeGroups: outcome(Retry.none(p301({ zone: "us-central1-a" } as never))),
+        ListNodeTemplates: outcome(Retry.none(p302({ region: "us-central1" } as never))),
+        ListNodeTypes: outcome(Retry.none(p303({ zone: "us-central1-a" } as never))),
+        ListPacketMirrorings: outcome(Retry.none(p304({ region: "us-central1" } as never))),
+        ListPreviewFeatures: outcome(Retry.none(p305({} as never))),
+        ListPublicAdvertisedPrefixes: outcome(Retry.none(p306({} as never))),
+        ListPublicDelegatedPrefixes: outcome(Retry.none(p307({ region: "us-central1" } as never))),
+        ListRegionAutoscalers: outcome(Retry.none(p308({ region: "us-central1" } as never))),
+        ListRegionBackendBuckets: outcome(Retry.none(p309({ region: "us-central1" } as never))),
         ListRegionBackendBucketUsable: outcome(
-          Retry.none(p306({ region: "us-central1" } as never)),
-        ),
-        ListRegionBackendServices: outcome(Retry.none(p307({ region: "us-central1" } as never))),
-        ListRegionBackendServiceUsable: outcome(
-          Retry.none(p308({ region: "us-central1" } as never)),
-        ),
-        ListRegionCommitments: outcome(Retry.none(p309({ region: "us-central1" } as never))),
-        ListRegionCompositeHealthChecks: outcome(
           Retry.none(p310({ region: "us-central1" } as never)),
         ),
-        ListRegionDisks: outcome(Retry.none(p311({ region: "us-central1" } as never))),
-        ListRegionDiskTypes: outcome(Retry.none(p312({ region: "us-central1" } as never))),
+        ListRegionBackendServices: outcome(Retry.none(p311({ region: "us-central1" } as never))),
+        ListRegionBackendServiceUsable: outcome(
+          Retry.none(p312({ region: "us-central1" } as never)),
+        ),
+        ListRegionCommitments: outcome(Retry.none(p313({ region: "us-central1" } as never))),
+        ListRegionCompositeHealthChecks: outcome(
+          Retry.none(p314({ region: "us-central1" } as never)),
+        ),
+        ListRegionDisks: outcome(Retry.none(p315({ region: "us-central1" } as never))),
+        ListRegionDiskTypes: outcome(Retry.none(p316({ region: "us-central1" } as never))),
         ListRegionHealthAggregationPolicies: outcome(
-          Retry.none(p313({ region: "us-central1" } as never)),
+          Retry.none(p317({ region: "us-central1" } as never)),
         ),
-        ListRegionHealthChecks: outcome(Retry.none(p314({ region: "us-central1" } as never))),
+        ListRegionHealthChecks: outcome(Retry.none(p318({ region: "us-central1" } as never))),
         ListRegionHealthCheckServices: outcome(
-          Retry.none(p315({ region: "us-central1" } as never)),
+          Retry.none(p319({ region: "us-central1" } as never)),
         ),
-        ListRegionHealthSources: outcome(Retry.none(p316({ region: "us-central1" } as never))),
+        ListRegionHealthSources: outcome(Retry.none(p320({ region: "us-central1" } as never))),
         ListRegionInstanceGroupInstances: outcome(
-          Retry.none(p317({ region: "us-central1", instanceGroup: "alchemy-missing" } as never)),
+          Retry.none(p321({ region: "us-central1", instanceGroup: "alchemy-missing" } as never)),
         ),
-        ListRegionInstanceGroupManagerErrors: outcome(Retry.none(p318({} as never))),
-        ListRegionInstanceGroupManagerManagedInstances: outcome(Retry.none(p319({} as never))),
-        ListRegionInstanceGroupManagerPerInstanceConfigs: outcome(Retry.none(p320({} as never))),
-        ListRegionInstanceGroupManagerResizeRequests: outcome(Retry.none(p321({} as never))),
+        ListRegionInstanceGroupManagerErrors: outcome(Retry.none(p322({} as never))),
+        ListRegionInstanceGroupManagerManagedInstances: outcome(Retry.none(p323({} as never))),
+        ListRegionInstanceGroupManagerPerInstanceConfigs: outcome(Retry.none(p324({} as never))),
+        ListRegionInstanceGroupManagerResizeRequests: outcome(Retry.none(p325({} as never))),
         ListRegionInstanceGroupManagers: outcome(
-          Retry.none(p322({ region: "us-central1" } as never)),
+          Retry.none(p326({ region: "us-central1" } as never)),
         ),
-        ListRegionInstanceGroups: outcome(Retry.none(p323({ region: "us-central1" } as never))),
-        ListRegionInstanceTemplates: outcome(Retry.none(p324({ region: "us-central1" } as never))),
+        ListRegionInstanceGroups: outcome(Retry.none(p327({ region: "us-central1" } as never))),
+        ListRegionInstanceTemplates: outcome(Retry.none(p328({ region: "us-central1" } as never))),
         ListRegionInstantSnapshotGroups: outcome(
-          Retry.none(p325({ region: "us-central1" } as never)),
-        ),
-        ListRegionInstantSnapshots: outcome(Retry.none(p326({ region: "us-central1" } as never))),
-        ListRegionNetworkEndpointGroupNetworkEndpoints: outcome(Retry.none(p327({} as never))),
-        ListRegionNetworkEndpointGroups: outcome(
-          Retry.none(p328({ region: "us-central1" } as never)),
-        ),
-        ListRegionNetworkFirewallPolicies: outcome(
           Retry.none(p329({ region: "us-central1" } as never)),
         ),
+        ListRegionInstantSnapshots: outcome(Retry.none(p330({ region: "us-central1" } as never))),
+        ListRegionNetworkEndpointGroupNetworkEndpoints: outcome(Retry.none(p331({} as never))),
+        ListRegionNetworkEndpointGroups: outcome(
+          Retry.none(p332({ region: "us-central1" } as never)),
+        ),
+        ListRegionNetworkFirewallPolicies: outcome(
+          Retry.none(p333({ region: "us-central1" } as never)),
+        ),
         ListRegionNotificationEndpoints: outcome(
-          Retry.none(p330({ region: "us-central1" } as never)),
+          Retry.none(p334({ region: "us-central1" } as never)),
         ),
-        ListRegions: outcome(Retry.none(p331({} as never))),
-        ListRegionSecurityPolicies: outcome(Retry.none(p332({ region: "us-central1" } as never))),
-        ListRegionSnapshots: outcome(Retry.none(p333({ region: "us-central1" } as never))),
-        ListRegionSslCertificates: outcome(Retry.none(p334({ region: "us-central1" } as never))),
-        ListRegionSslPolicies: outcome(Retry.none(p335({ region: "us-central1" } as never))),
+        ListRegions: outcome(Retry.none(p335({} as never))),
+        ListRegionSecurityPolicies: outcome(Retry.none(p336({ region: "us-central1" } as never))),
+        ListRegionSnapshots: outcome(Retry.none(p337({ region: "us-central1" } as never))),
+        ListRegionSslCertificates: outcome(Retry.none(p338({ region: "us-central1" } as never))),
+        ListRegionSslPolicies: outcome(Retry.none(p339({ region: "us-central1" } as never))),
         ListRegionSslPolicyAvailableFeatures: outcome(
-          Retry.none(p336({ region: "us-central1" } as never)),
+          Retry.none(p340({ region: "us-central1" } as never)),
         ),
-        ListRegionTargetHttpProxies: outcome(Retry.none(p337({ region: "us-central1" } as never))),
-        ListRegionTargetHttpsProxies: outcome(Retry.none(p338({ region: "us-central1" } as never))),
-        ListRegionTargetTcpProxies: outcome(Retry.none(p339({ region: "us-central1" } as never))),
-        ListRegionUrlMaps: outcome(Retry.none(p340({ region: "us-central1" } as never))),
-        ListRegionZones: outcome(Retry.none(p341({ region: "us-central1" } as never))),
-        ListReliabilityRisks: outcome(Retry.none(p342({} as never))),
-        ListReservationBlocks: outcome(Retry.none(p343({} as never))),
-        ListReservations: outcome(Retry.none(p344({ zone: "us-central1-a" } as never))),
+        ListRegionTargetHttpProxies: outcome(Retry.none(p341({ region: "us-central1" } as never))),
+        ListRegionTargetHttpsProxies: outcome(Retry.none(p342({ region: "us-central1" } as never))),
+        ListRegionTargetTcpProxies: outcome(Retry.none(p343({ region: "us-central1" } as never))),
+        ListRegionUrlMaps: outcome(Retry.none(p344({ region: "us-central1" } as never))),
+        ListRegionZones: outcome(Retry.none(p345({ region: "us-central1" } as never))),
+        ListReliabilityRisks: outcome(Retry.none(p346({} as never))),
+        ListReservationBlocks: outcome(Retry.none(p347({} as never))),
+        ListReservations: outcome(Retry.none(p348({ zone: "us-central1-a" } as never))),
         ListReservationSlots: outcome(
-          Retry.none(p345({ parentName: "alchemy-missing", zone: "us-central1-a" } as never)),
+          Retry.none(p349({ parentName: "alchemy-missing", zone: "us-central1-a" } as never)),
         ),
-        ListResourcePolicies: outcome(Retry.none(p346({ region: "us-central1" } as never))),
-        ListRolloutPlans: outcome(Retry.none(p347({} as never))),
-        ListRollouts: outcome(Retry.none(p348({} as never))),
-        ListRouterBgpRoutes: outcome(Retry.none(p349({} as never))),
-        ListRouterNamedSets: outcome(Retry.none(p350({} as never))),
-        ListRouterRoutePolicies: outcome(Retry.none(p351({} as never))),
-        ListRouters: outcome(Retry.none(p352({ region: "us-central1" } as never))),
-        ListRoutes: outcome(Retry.none(p353({} as never))),
-        ListSecurityPolicies: outcome(Retry.none(p354({} as never))),
-        ListSecurityPolicyPreconfiguredExpressionSets: outcome(Retry.none(p355({} as never))),
-        ListServiceAttachments: outcome(Retry.none(p356({ region: "us-central1" } as never))),
-        ListSnapshots: outcome(Retry.none(p357({} as never))),
-        ListSslCertificates: outcome(Retry.none(p358({} as never))),
-        ListSslPolicies: outcome(Retry.none(p359({} as never))),
-        ListSslPolicyAvailableFeatures: outcome(Retry.none(p360({} as never))),
-        ListStoragePools: outcome(Retry.none(p361({ zone: "us-central1-a" } as never))),
-        ListStoragePoolTypes: outcome(Retry.none(p362({ zone: "us-central1-a" } as never))),
-        ListSubnetworks: outcome(Retry.none(p363({ region: "us-central1" } as never))),
-        ListSubnetworkUsable: outcome(Retry.none(p364({} as never))),
-        ListTargetGrpcProxies: outcome(Retry.none(p365({} as never))),
-        ListTargetHttpProxies: outcome(Retry.none(p366({} as never))),
-        ListTargetHttpsProxies: outcome(Retry.none(p367({} as never))),
-        ListTargetInstances: outcome(Retry.none(p368({ zone: "us-central1-a" } as never))),
-        ListTargetPools: outcome(Retry.none(p369({ region: "us-central1" } as never))),
-        ListTargetSslProxies: outcome(Retry.none(p370({} as never))),
-        ListTargetTcpProxies: outcome(Retry.none(p371({} as never))),
-        ListTargetVpnGateways: outcome(Retry.none(p372({ region: "us-central1" } as never))),
-        ListUrlMaps: outcome(Retry.none(p373({} as never))),
-        ListVpnGateways: outcome(Retry.none(p374({ region: "us-central1" } as never))),
-        ListVpnTunnels: outcome(Retry.none(p375({ region: "us-central1" } as never))),
-        ListWireGroups: outcome(Retry.none(p376({} as never))),
-        ListZones: outcome(Retry.none(p377({} as never))),
-        ListZoneVmExtensionPolicies: outcome(Retry.none(p378({ zone: "us-central1-a" } as never))),
-        PatchAutoscaler: outcome(Retry.none(p379({ zone: "us-central1-a" } as never))),
-        PatchGlobalFrontendSetting: outcome(Retry.none(p380({} as never))),
-        PatchInstanceGroupManagerPerInstanceConfigs: outcome(Retry.none(p381({} as never))),
+        ListResourcePolicies: outcome(Retry.none(p350({ region: "us-central1" } as never))),
+        ListRolloutPlans: outcome(Retry.none(p351({} as never))),
+        ListRollouts: outcome(Retry.none(p352({} as never))),
+        ListRouterBgpRoutes: outcome(Retry.none(p353({} as never))),
+        ListRouterNamedSets: outcome(Retry.none(p354({} as never))),
+        ListRouterRoutePolicies: outcome(Retry.none(p355({} as never))),
+        ListRouters: outcome(Retry.none(p356({ region: "us-central1" } as never))),
+        ListRoutes: outcome(Retry.none(p357({} as never))),
+        ListSecurityPolicies: outcome(Retry.none(p358({} as never))),
+        ListSecurityPolicyPreconfiguredExpressionSets: outcome(Retry.none(p359({} as never))),
+        ListServiceAttachments: outcome(Retry.none(p360({ region: "us-central1" } as never))),
+        ListSnapshots: outcome(Retry.none(p361({} as never))),
+        ListSslCertificates: outcome(Retry.none(p362({} as never))),
+        ListSslPolicies: outcome(Retry.none(p363({} as never))),
+        ListSslPolicyAvailableFeatures: outcome(Retry.none(p364({} as never))),
+        ListStoragePools: outcome(Retry.none(p365({ zone: "us-central1-a" } as never))),
+        ListStoragePoolTypes: outcome(Retry.none(p366({ zone: "us-central1-a" } as never))),
+        ListSubnetworks: outcome(Retry.none(p367({ region: "us-central1" } as never))),
+        ListSubnetworkUsable: outcome(Retry.none(p368({} as never))),
+        ListTargetGrpcProxies: outcome(Retry.none(p369({} as never))),
+        ListTargetHttpProxies: outcome(Retry.none(p370({} as never))),
+        ListTargetHttpsProxies: outcome(Retry.none(p371({} as never))),
+        ListTargetInstances: outcome(Retry.none(p372({ zone: "us-central1-a" } as never))),
+        ListTargetPools: outcome(Retry.none(p373({ region: "us-central1" } as never))),
+        ListTargetSslProxies: outcome(Retry.none(p374({} as never))),
+        ListTargetTcpProxies: outcome(Retry.none(p375({} as never))),
+        ListTargetVpnGateways: outcome(Retry.none(p376({ region: "us-central1" } as never))),
+        ListUrlMaps: outcome(Retry.none(p377({} as never))),
+        ListVpnGateways: outcome(Retry.none(p378({ region: "us-central1" } as never))),
+        ListVpnTunnels: outcome(Retry.none(p379({ region: "us-central1" } as never))),
+        ListWireGroups: outcome(Retry.none(p380({} as never))),
+        ListZones: outcome(Retry.none(p381({} as never))),
+        ListZoneVmExtensionPolicies: outcome(Retry.none(p382({ zone: "us-central1-a" } as never))),
+        PatchAutoscaler: outcome(Retry.none(p383({ zone: "us-central1-a" } as never))),
+        PatchGlobalFrontendSetting: outcome(Retry.none(p384({} as never))),
+        PatchInstanceGroupManagerPerInstanceConfigs: outcome(Retry.none(p385({} as never))),
         PatchInstanceSetting: outcome(
           Retry.none(
-            p382({ zone: "us-central1-a", body: { fingerprint: "AAAAAAAAAAA=" } } as never),
+            p386({ zone: "us-central1-a", body: { fingerprint: "AAAAAAAAAAA=" } } as never),
           ),
         ),
-        PatchNetworkFirewallPolicyPacketMirroringRule: outcome(Retry.none(p383({} as never))),
-        PatchNetworkFirewallPolicyRule: outcome(Retry.none(p384({} as never))),
-        PatchRegionAutoscaler: outcome(Retry.none(p385({ region: "us-central1" } as never))),
-        PatchRegionInstanceGroupManagerPerInstanceConfigs: outcome(Retry.none(p386({} as never))),
-        PatchRegionNetworkFirewallPolicyAssociation: outcome(Retry.none(p387({} as never))),
-        PatchRegionNetworkFirewallPolicyRule: outcome(Retry.none(p388({} as never))),
-        PatchRegionSecurityPolicyRule: outcome(Retry.none(p389({} as never))),
-        PatchRegionSnapshotSetting: outcome(Retry.none(p390({ region: "us-central1" } as never))),
-        PatchRouterNamedSet: outcome(Retry.none(p391({} as never))),
-        PatchRouterRoutePolicy: outcome(Retry.none(p392({} as never))),
-        PatchSecurityPolicyRule: outcome(Retry.none(p393({} as never))),
-        PatchSnapshotSetting: outcome(Retry.none(p394({} as never))),
-        PerformInstanceMaintenance: outcome(Retry.none(p395({} as never))),
+        PatchNetworkFirewallPolicyPacketMirroringRule: outcome(Retry.none(p387({} as never))),
+        PatchNetworkFirewallPolicyRule: outcome(Retry.none(p388({} as never))),
+        PatchRegionAutoscaler: outcome(Retry.none(p389({ region: "us-central1" } as never))),
+        PatchRegionInstanceGroupManagerPerInstanceConfigs: outcome(Retry.none(p390({} as never))),
+        PatchRegionNetworkFirewallPolicyAssociation: outcome(Retry.none(p391({} as never))),
+        PatchRegionNetworkFirewallPolicyRule: outcome(Retry.none(p392({} as never))),
+        PatchRegionSecurityPolicyRule: outcome(Retry.none(p393({} as never))),
+        PatchRegionSnapshotSetting: outcome(Retry.none(p394({ region: "us-central1" } as never))),
+        PatchRouterNamedSet: outcome(Retry.none(p395({} as never))),
+        PatchRouterRoutePolicy: outcome(Retry.none(p396({} as never))),
+        PatchSecurityPolicyRule: outcome(Retry.none(p397({} as never))),
+        PatchSnapshotSetting: outcome(Retry.none(p398({} as never))),
+        PerformInstanceMaintenance: outcome(Retry.none(p399({} as never))),
         PerformReservationBlockMaintenance: outcome(
-          Retry.none(p396({ reservationBlock: "alchemy-missing" } as never)),
+          Retry.none(p400({ reservationBlock: "alchemy-missing" } as never)),
         ),
-        PerformReservationMaintenance: outcome(Retry.none(p397({} as never))),
-        PreviewRouter: outcome(Retry.none(p398({} as never))),
-        RecreateInstanceGroupManagerInstances: outcome(Retry.none(p399({} as never))),
-        RecreateRegionInstanceGroupManagerInstances: outcome(Retry.none(p400({} as never))),
-        RemoveDiskResourcePolicies: outcome(Retry.none(p401({} as never))),
-        RemoveInstanceGroupInstances: outcome(Retry.none(p402({} as never))),
-        RemoveInstanceResourcePolicies: outcome(Retry.none(p403({} as never))),
-        RemoveNetworkFirewallPolicyAssociation: outcome(Retry.none(p404({} as never))),
-        RemoveNetworkFirewallPolicyPacketMirroringRule: outcome(Retry.none(p405({} as never))),
-        RemoveNetworkFirewallPolicyRule: outcome(Retry.none(p406({} as never))),
-        RemoveNetworkPeering: outcome(Retry.none(p407({} as never))),
-        RemoveRegionDiskResourcePolicies: outcome(Retry.none(p408({} as never))),
-        RemoveRegionNetworkFirewallPolicyAssociation: outcome(Retry.none(p409({} as never))),
-        RemoveRegionNetworkFirewallPolicyRule: outcome(Retry.none(p410({} as never))),
-        RemoveRegionSecurityPolicyRule: outcome(Retry.none(p411({} as never))),
-        RemoveSecurityPolicyRule: outcome(Retry.none(p412({} as never))),
-        RemoveTargetPoolHealthCheck: outcome(Retry.none(p413({} as never))),
-        RemoveTargetPoolInstance: outcome(Retry.none(p414({} as never))),
-        RequestNetworkRemovePeering: outcome(Retry.none(p415({} as never))),
-        ResetInstance: outcome(Retry.none(p416({} as never))),
-        ResizeDisk: outcome(Retry.none(p417({} as never))),
-        ResizeInstanceGroupManager: outcome(Retry.none(p418({ size: 0 } as never))),
-        ResizeRegionDisk: outcome(Retry.none(p419({} as never))),
-        ResizeRegionInstanceGroupManager: outcome(Retry.none(p420({ size: 0 } as never))),
-        ResizeReservation: outcome(Retry.none(p421({} as never))),
-        ResumeInstance: outcome(Retry.none(p422({} as never))),
-        ResumeInstanceGroupManagerInstances: outcome(Retry.none(p423({} as never))),
-        ResumeRegionInstanceGroupManagerInstances: outcome(Retry.none(p424({} as never))),
-        SendInstanceDiagnosticInterrupt: outcome(Retry.none(p425({} as never))),
-        SetAddressLabels: outcome(Retry.none(p426({} as never))),
-        SetBackendBucketEdgeSecurityPolicy: outcome(Retry.none(p427({} as never))),
-        SetBackendServiceEdgeSecurityPolicy: outcome(Retry.none(p428({} as never))),
-        SetBackendServiceSecurityPolicy: outcome(Retry.none(p429({} as never))),
-        SetDiskLabels: outcome(Retry.none(p430({} as never))),
-        SetExternalVpnGatewayLabels: outcome(Retry.none(p431({} as never))),
-        SetForwardingRuleLabels: outcome(Retry.none(p432({} as never))),
-        SetForwardingRuleTarget: outcome(Retry.none(p433({} as never))),
-        SetGlobalAddressLabels: outcome(Retry.none(p434({} as never))),
-        SetGlobalForwardingRuleLabels: outcome(Retry.none(p435({} as never))),
-        SetGlobalForwardingRuleTarget: outcome(Retry.none(p436({} as never))),
-        SetImageLabels: outcome(Retry.none(p437({} as never))),
+        PerformReservationMaintenance: outcome(Retry.none(p401({} as never))),
+        PreviewRouter: outcome(Retry.none(p402({} as never))),
+        RecreateInstanceGroupManagerInstances: outcome(Retry.none(p403({} as never))),
+        RecreateRegionInstanceGroupManagerInstances: outcome(Retry.none(p404({} as never))),
+        RemoveDiskResourcePolicies: outcome(Retry.none(p405({} as never))),
+        RemoveInstanceGroupInstances: outcome(Retry.none(p406({} as never))),
+        RemoveInstanceResourcePolicies: outcome(Retry.none(p407({} as never))),
+        RemoveNetworkFirewallPolicyAssociation: outcome(Retry.none(p408({} as never))),
+        RemoveNetworkFirewallPolicyPacketMirroringRule: outcome(Retry.none(p409({} as never))),
+        RemoveNetworkFirewallPolicyRule: outcome(Retry.none(p410({} as never))),
+        RemoveNetworkPeering: outcome(Retry.none(p411({} as never))),
+        RemoveRegionDiskResourcePolicies: outcome(Retry.none(p412({} as never))),
+        RemoveRegionNetworkFirewallPolicyAssociation: outcome(Retry.none(p413({} as never))),
+        RemoveRegionNetworkFirewallPolicyRule: outcome(Retry.none(p414({} as never))),
+        RemoveRegionSecurityPolicyRule: outcome(Retry.none(p415({} as never))),
+        RemoveSecurityPolicyRule: outcome(Retry.none(p416({} as never))),
+        RemoveTargetPoolHealthCheck: outcome(Retry.none(p417({} as never))),
+        RemoveTargetPoolInstance: outcome(Retry.none(p418({} as never))),
+        RequestNetworkRemovePeering: outcome(Retry.none(p419({} as never))),
+        ResetInstance: outcome(Retry.none(p420({} as never))),
+        ResizeDisk: outcome(Retry.none(p421({} as never))),
+        ResizeInstanceGroupManager: outcome(Retry.none(p422({ size: 0 } as never))),
+        ResizeRegionDisk: outcome(Retry.none(p423({} as never))),
+        ResizeRegionInstanceGroupManager: outcome(Retry.none(p424({ size: 0 } as never))),
+        ResizeReservation: outcome(Retry.none(p425({} as never))),
+        ResumeInstance: outcome(Retry.none(p426({} as never))),
+        ResumeInstanceGroupManagerInstances: outcome(Retry.none(p427({} as never))),
+        ResumeRegionInstanceGroupManagerInstances: outcome(Retry.none(p428({} as never))),
+        SendInstanceDiagnosticInterrupt: outcome(Retry.none(p429({} as never))),
+        SetAddressLabels: outcome(Retry.none(p430({} as never))),
+        SetBackendBucketEdgeSecurityPolicy: outcome(Retry.none(p431({} as never))),
+        SetBackendServiceEdgeSecurityPolicy: outcome(Retry.none(p432({} as never))),
+        SetBackendServiceSecurityPolicy: outcome(Retry.none(p433({} as never))),
+        SetDiskLabels: outcome(Retry.none(p434({} as never))),
+        SetExternalVpnGatewayLabels: outcome(Retry.none(p435({} as never))),
+        SetForwardingRuleLabels: outcome(Retry.none(p436({} as never))),
+        SetForwardingRuleTarget: outcome(Retry.none(p437({} as never))),
+        SetGlobalAddressLabels: outcome(Retry.none(p438({} as never))),
+        SetGlobalForwardingRuleLabels: outcome(Retry.none(p439({} as never))),
+        SetGlobalForwardingRuleTarget: outcome(Retry.none(p440({} as never))),
+        SetImageLabels: outcome(Retry.none(p441({} as never))),
         SetInstanceDeletionProtection: outcome(
-          Retry.none(p438({ deletionProtection: false } as never)),
+          Retry.none(p442({ deletionProtection: false } as never)),
         ),
         SetInstanceDiskAutoDelete: outcome(
-          Retry.none(p439({ autoDelete: false, deviceName: "alchemy-missing" } as never)),
+          Retry.none(p443({ autoDelete: false, deviceName: "alchemy-missing" } as never)),
         ),
-        SetInstanceGroupManagerInstanceTemplate: outcome(Retry.none(p440({} as never))),
-        SetInstanceGroupManagerTargetPools: outcome(Retry.none(p441({} as never))),
-        SetInstanceGroupNamedPorts: outcome(Retry.none(p442({} as never))),
-        SetInstanceLabels: outcome(Retry.none(p443({} as never))),
-        SetInstanceMachineResources: outcome(Retry.none(p444({} as never))),
-        SetInstanceMachineType: outcome(Retry.none(p445({} as never))),
-        SetInstanceMetadata: outcome(Retry.none(p446({} as never))),
-        SetInstanceMinCpuPlatform: outcome(Retry.none(p447({} as never))),
-        SetInstanceName: outcome(Retry.none(p448({} as never))),
-        SetInstanceScheduling: outcome(Retry.none(p449({} as never))),
-        SetInstanceSecurityPolicy: outcome(Retry.none(p450({} as never))),
-        SetInstanceServiceAccount: outcome(Retry.none(p451({} as never))),
-        SetInstanceTags: outcome(Retry.none(p452({} as never))),
-        SetInstantSnapshotLabels: outcome(Retry.none(p453({} as never))),
-        SetMachineImageLabels: outcome(Retry.none(p454({} as never))),
+        SetInstanceGroupManagerInstanceTemplate: outcome(Retry.none(p444({} as never))),
+        SetInstanceGroupManagerTargetPools: outcome(Retry.none(p445({} as never))),
+        SetInstanceGroupNamedPorts: outcome(Retry.none(p446({} as never))),
+        SetInstanceLabels: outcome(Retry.none(p447({} as never))),
+        SetInstanceMachineResources: outcome(Retry.none(p448({} as never))),
+        SetInstanceMachineType: outcome(Retry.none(p449({} as never))),
+        SetInstanceMetadata: outcome(Retry.none(p450({} as never))),
+        SetInstanceMinCpuPlatform: outcome(Retry.none(p451({} as never))),
+        SetInstanceName: outcome(Retry.none(p452({} as never))),
+        SetInstanceScheduling: outcome(Retry.none(p453({} as never))),
+        SetInstanceSecurityPolicy: outcome(Retry.none(p454({} as never))),
+        SetInstanceServiceAccount: outcome(Retry.none(p455({} as never))),
+        SetInstanceTags: outcome(Retry.none(p456({} as never))),
+        SetInstantSnapshotLabels: outcome(Retry.none(p457({} as never))),
+        SetMachineImageLabels: outcome(Retry.none(p458({} as never))),
         SetProjectCloudArmorTier: outcome(
-          Retry.none(p455({ body: { cloudArmorTier: "NOT_A_TIER" } } as never)),
+          Retry.none(p459({ body: { cloudArmorTier: "NOT_A_TIER" } } as never)),
         ),
         SetProjectDefaultNetworkTier: outcome(
-          Retry.none(p456({ body: { networkTier: "NOT_A_TIER" } } as never)),
+          Retry.none(p460({ body: { networkTier: "NOT_A_TIER" } } as never)),
         ),
-        SetRegionBackendServiceSecurityPolicy: outcome(Retry.none(p457({} as never))),
-        SetRegionDiskLabels: outcome(Retry.none(p458({} as never))),
-        SetRegionInstanceGroupManagerInstanceTemplate: outcome(Retry.none(p459({} as never))),
-        SetRegionInstanceGroupManagerTargetPools: outcome(Retry.none(p460({} as never))),
+        SetRegionBackendServiceSecurityPolicy: outcome(Retry.none(p461({} as never))),
+        SetRegionDiskLabels: outcome(Retry.none(p462({} as never))),
+        SetRegionInstanceGroupManagerInstanceTemplate: outcome(Retry.none(p463({} as never))),
+        SetRegionInstanceGroupManagerTargetPools: outcome(Retry.none(p464({} as never))),
         SetRegionInstanceGroupNamedPorts: outcome(
-          Retry.none(p461({ instanceGroup: "alchemy-missing", region: "us-central1" } as never)),
+          Retry.none(p465({ instanceGroup: "alchemy-missing", region: "us-central1" } as never)),
         ),
-        SetRegionInstantSnapshotLabels: outcome(Retry.none(p462({} as never))),
-        SetRegionSecurityPolicyLabels: outcome(Retry.none(p463({} as never))),
-        SetRegionSnapshotLabels: outcome(Retry.none(p464({} as never))),
-        SetRegionTargetHttpProxyUrlMap: outcome(Retry.none(p465({} as never))),
-        SetRegionTargetHttpsProxySslCertificates: outcome(Retry.none(p466({} as never))),
-        SetRegionTargetHttpsProxyUrlMap: outcome(Retry.none(p467({} as never))),
-        SetSecurityPolicyLabels: outcome(Retry.none(p468({} as never))),
-        SetShieldedInstanceIntegrityPolicy: outcome(Retry.none(p469({} as never))),
-        SetSnapshotLabels: outcome(Retry.none(p470({} as never))),
-        SetSubnetworkPrivateIpGoogleAccess: outcome(Retry.none(p471({} as never))),
+        SetRegionInstantSnapshotLabels: outcome(Retry.none(p466({} as never))),
+        SetRegionSecurityPolicyLabels: outcome(Retry.none(p467({} as never))),
+        SetRegionSnapshotLabels: outcome(Retry.none(p468({} as never))),
+        SetRegionTargetHttpProxyUrlMap: outcome(Retry.none(p469({} as never))),
+        SetRegionTargetHttpsProxySslCertificates: outcome(Retry.none(p470({} as never))),
+        SetRegionTargetHttpsProxyUrlMap: outcome(Retry.none(p471({} as never))),
+        SetSecurityPolicyLabels: outcome(Retry.none(p472({} as never))),
+        SetShieldedInstanceIntegrityPolicy: outcome(Retry.none(p473({} as never))),
+        SetSnapshotLabels: outcome(Retry.none(p474({} as never))),
+        SetSubnetworkPrivateIpGoogleAccess: outcome(Retry.none(p475({} as never))),
         SetTargetHttpProxyUrlMap: outcome(
-          Retry.none(p472({ targetHttpProxy: "alchemy-missing" } as never)),
+          Retry.none(p476({ targetHttpProxy: "alchemy-missing" } as never)),
         ),
-        SetTargetHttpsProxyCertificateMap: outcome(Retry.none(p473({} as never))),
-        SetTargetHttpsProxyQuicOverride: outcome(Retry.none(p474({} as never))),
+        SetTargetHttpsProxyCertificateMap: outcome(Retry.none(p477({} as never))),
+        SetTargetHttpsProxyQuicOverride: outcome(Retry.none(p478({} as never))),
         SetTargetHttpsProxySslCertificates: outcome(
-          Retry.none(p475({ targetHttpsProxy: "alchemy-missing" } as never)),
+          Retry.none(p479({ targetHttpsProxy: "alchemy-missing" } as never)),
         ),
-        SetTargetHttpsProxySslPolicy: outcome(Retry.none(p476({} as never))),
+        SetTargetHttpsProxySslPolicy: outcome(Retry.none(p480({} as never))),
         SetTargetHttpsProxyUrlMap: outcome(
-          Retry.none(p477({ targetHttpsProxy: "alchemy-missing" } as never)),
+          Retry.none(p481({ targetHttpsProxy: "alchemy-missing" } as never)),
         ),
-        SetTargetInstanceSecurityPolicy: outcome(Retry.none(p478({} as never))),
-        SetTargetPoolBackup: outcome(Retry.none(p479({} as never))),
-        SetTargetPoolSecurityPolicy: outcome(Retry.none(p480({} as never))),
-        SetTargetSslProxyBackendService: outcome(Retry.none(p481({} as never))),
-        SetTargetSslProxyCertificateMap: outcome(Retry.none(p482({} as never))),
-        SetTargetSslProxyProxyHeader: outcome(Retry.none(p483({} as never))),
-        SetTargetSslProxySslCertificates: outcome(Retry.none(p484({} as never))),
-        SetTargetSslProxySslPolicy: outcome(Retry.none(p485({} as never))),
-        SetTargetTcpProxyBackendService: outcome(Retry.none(p486({} as never))),
-        SetTargetTcpProxyProxyHeader: outcome(Retry.none(p487({} as never))),
-        SetTargetVpnGatewayLabels: outcome(Retry.none(p488({} as never))),
-        SetVpnGatewayLabels: outcome(Retry.none(p489({} as never))),
-        SetVpnTunnelLabels: outcome(Retry.none(p490({} as never))),
-        SimulateInstanceMaintenanceEvent: outcome(Retry.none(p491({} as never))),
-        StartDiskAsyncReplication: outcome(Retry.none(p492({} as never))),
-        StartInstanceGroupManagerInstances: outcome(Retry.none(p493({} as never))),
-        StartInstanceWithEncryptionKey: outcome(Retry.none(p494({} as never))),
-        StartRegionDiskAsyncReplication: outcome(Retry.none(p495({} as never))),
-        StartRegionInstanceGroupManagerInstances: outcome(Retry.none(p496({} as never))),
-        StopDiskAsyncReplication: outcome(Retry.none(p497({} as never))),
+        SetTargetInstanceSecurityPolicy: outcome(Retry.none(p482({} as never))),
+        SetTargetPoolBackup: outcome(Retry.none(p483({} as never))),
+        SetTargetPoolSecurityPolicy: outcome(Retry.none(p484({} as never))),
+        SetTargetSslProxyBackendService: outcome(Retry.none(p485({} as never))),
+        SetTargetSslProxyCertificateMap: outcome(Retry.none(p486({} as never))),
+        SetTargetSslProxyProxyHeader: outcome(Retry.none(p487({} as never))),
+        SetTargetSslProxySslCertificates: outcome(Retry.none(p488({} as never))),
+        SetTargetSslProxySslPolicy: outcome(Retry.none(p489({} as never))),
+        SetTargetTcpProxyBackendService: outcome(Retry.none(p490({} as never))),
+        SetTargetTcpProxyProxyHeader: outcome(Retry.none(p491({} as never))),
+        SetTargetVpnGatewayLabels: outcome(Retry.none(p492({} as never))),
+        SetVpnGatewayLabels: outcome(Retry.none(p493({} as never))),
+        SetVpnTunnelLabels: outcome(Retry.none(p494({} as never))),
+        SimulateInstanceMaintenanceEvent: outcome(Retry.none(p495({} as never))),
+        StartDiskAsyncReplication: outcome(Retry.none(p496({} as never))),
+        StartInstanceGroupManagerInstances: outcome(Retry.none(p497({} as never))),
+        StartInstanceWithEncryptionKey: outcome(Retry.none(p498({} as never))),
+        StartRegionDiskAsyncReplication: outcome(Retry.none(p499({} as never))),
+        StartRegionInstanceGroupManagerInstances: outcome(Retry.none(p500({} as never))),
+        StopDiskAsyncReplication: outcome(Retry.none(p501({} as never))),
         StopDiskGroupAsyncReplication: outcome(
-          Retry.none(p498({ zone: "us-central1-a" } as never)),
+          Retry.none(p502({ zone: "us-central1-a" } as never)),
         ),
-        StopInstanceGroupManagerInstances: outcome(Retry.none(p499({} as never))),
-        StopRegionDiskAsyncReplication: outcome(Retry.none(p500({} as never))),
+        StopInstanceGroupManagerInstances: outcome(Retry.none(p503({} as never))),
+        StopRegionDiskAsyncReplication: outcome(Retry.none(p504({} as never))),
         StopRegionDiskGroupAsyncReplication: outcome(
-          Retry.none(p501({ region: "us-central1" } as never)),
+          Retry.none(p505({ region: "us-central1" } as never)),
         ),
-        StopRegionInstanceGroupManagerInstances: outcome(Retry.none(p502({} as never))),
-        SuspendInstance: outcome(Retry.none(p503({} as never))),
-        SuspendInstanceGroupManagerInstances: outcome(Retry.none(p504({} as never))),
-        SuspendRegionInstanceGroupManagerInstances: outcome(Retry.none(p505({} as never))),
-        SwitchNetworkToCustomMode: outcome(Retry.none(p506({} as never))),
-        UpdateAutoscaler: outcome(Retry.none(p507({ zone: "us-central1-a" } as never))),
-        UpdateDiskKmsKey: outcome(Retry.none(p508({} as never))),
+        StopRegionInstanceGroupManagerInstances: outcome(Retry.none(p506({} as never))),
+        SuspendInstance: outcome(Retry.none(p507({} as never))),
+        SuspendInstanceGroupManagerInstances: outcome(Retry.none(p508({} as never))),
+        SuspendRegionInstanceGroupManagerInstances: outcome(Retry.none(p509({} as never))),
+        SwitchNetworkToCustomMode: outcome(Retry.none(p510({} as never))),
+        UpdateAutoscaler: outcome(Retry.none(p511({ zone: "us-central1-a" } as never))),
+        UpdateDiskKmsKey: outcome(Retry.none(p512({} as never))),
         UpdateInstanceAccessConfig: outcome(
-          Retry.none(p509({ networkInterface: "alchemy-missing" } as never)),
+          Retry.none(p513({ networkInterface: "alchemy-missing" } as never)),
         ),
-        UpdateInstanceDisplayDevice: outcome(Retry.none(p510({} as never))),
-        UpdateInstanceGroupManagerPerInstanceConfigs: outcome(Retry.none(p511({} as never))),
+        UpdateInstanceDisplayDevice: outcome(Retry.none(p514({} as never))),
+        UpdateInstanceGroupManagerPerInstanceConfigs: outcome(Retry.none(p515({} as never))),
         UpdateInstanceNetworkInterface: outcome(
-          Retry.none(p512({ networkInterface: "alchemy-missing" } as never)),
+          Retry.none(p516({ networkInterface: "alchemy-missing" } as never)),
         ),
-        UpdateNetworkPeering: outcome(Retry.none(p513({} as never))),
-        UpdateRegionAutoscaler: outcome(Retry.none(p514({ region: "us-central1" } as never))),
+        UpdateNetworkPeering: outcome(Retry.none(p517({} as never))),
+        UpdateRegionAutoscaler: outcome(Retry.none(p518({ region: "us-central1" } as never))),
         UpdateRegionCommitment: outcome(
-          Retry.none(p515({ commitment: "alchemy-missing", region: "us-central1" } as never)),
+          Retry.none(p519({ commitment: "alchemy-missing", region: "us-central1" } as never)),
         ),
-        UpdateRegionDiskKmsKey: outcome(Retry.none(p516({} as never))),
-        UpdateRegionInstanceGroupManagerPerInstanceConfigs: outcome(Retry.none(p517({} as never))),
-        UpdateRegionSnapshotKmsKey: outcome(Retry.none(p518({} as never))),
-        UpdateRouterNamedSet: outcome(Retry.none(p519({} as never))),
-        UpdateRouterRoutePolicy: outcome(Retry.none(p520({} as never))),
-        UpdateShieldedInstanceConfig: outcome(Retry.none(p521({} as never))),
-        UpdateSnapshotKmsKey: outcome(Retry.none(p522({} as never))),
-        ValidateRegionUrlMap: outcome(Retry.none(p523({} as never))),
-        ValidateUrlMap: outcome(Retry.none(p524({} as never))),
+        UpdateRegionDiskKmsKey: outcome(Retry.none(p520({} as never))),
+        UpdateRegionInstanceGroupManagerPerInstanceConfigs: outcome(Retry.none(p521({} as never))),
+        UpdateRegionSnapshotKmsKey: outcome(Retry.none(p522({} as never))),
+        UpdateRouterNamedSet: outcome(Retry.none(p523({} as never))),
+        UpdateRouterRoutePolicy: outcome(Retry.none(p524({} as never))),
+        UpdateShieldedInstanceConfig: outcome(Retry.none(p525({} as never))),
+        UpdateSnapshotKmsKey: outcome(Retry.none(p526({} as never))),
+        ValidateRegionUrlMap: outcome(Retry.none(p527({} as never))),
+        ValidateUrlMap: outcome(Retry.none(p528({} as never))),
       }),
     };
   }).pipe(
@@ -1595,6 +1606,7 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
           GCP.Compute.GetInstanceSettingHttp,
           GCP.Compute.GetInstanceTemplateHttp,
           GCP.Compute.GetInstantSnapshotHttp,
+          GCP.Compute.GetInstantSnapshotGroupHttp,
           GCP.Compute.GetInterconnectLocationHttp,
           GCP.Compute.GetInterconnectRemoteLocationHttp,
           GCP.Compute.GetLicenseHttp,
@@ -1607,9 +1619,9 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
           GCP.Compute.GetNetworkEffectiveFirewallsHttp,
           GCP.Compute.GetNetworkEndpointGroupHttp,
           GCP.Compute.GetNetworkFirewallPolicyHttp,
-          GCP.Compute.GetNetworkFirewallPolicyAssociationHttp,
         ),
         Layer.mergeAll(
+          GCP.Compute.GetNetworkFirewallPolicyAssociationHttp,
           GCP.Compute.GetNetworkFirewallPolicyPacketMirroringRuleHttp,
           GCP.Compute.GetNetworkFirewallPolicyRuleHttp,
           GCP.Compute.GetNetworkProfileHttp,
@@ -1624,6 +1636,8 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
           GCP.Compute.GetRegionBackendServiceHttp,
           GCP.Compute.GetRegionBackendServiceHealthHttp,
           GCP.Compute.GetRegionCommitmentHttp,
+          GCP.Compute.GetRegionCompositeHealthCheckHttp,
+          GCP.Compute.GetRegionCompositeHealthCheckHealthHttp,
           GCP.Compute.GetRegionDiskHttp,
           GCP.Compute.GetRegionDiskTypeHttp,
           GCP.Compute.GetRegionHealthAggregationPolicyHttp,
@@ -1635,6 +1649,7 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
           GCP.Compute.GetRegionInstanceGroupManagerResizeRequestHttp,
           GCP.Compute.GetRegionInstanceTemplateHttp,
           GCP.Compute.GetRegionInstantSnapshotHttp,
+          GCP.Compute.GetRegionInstantSnapshotGroupHttp,
           GCP.Compute.GetRegionNetworkEndpointGroupHttp,
           GCP.Compute.GetRegionNetworkFirewallPolicyHttp,
           GCP.Compute.GetRegionNetworkFirewallPolicyAssociationHttp,
@@ -1646,12 +1661,12 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
           GCP.Compute.GetRegionSnapshotSettingHttp,
           GCP.Compute.GetRegionSslCertificateHttp,
           GCP.Compute.GetRegionSslPolicyHttp,
+        ),
+        Layer.mergeAll(
           GCP.Compute.GetRegionTargetHttpProxyHttp,
           GCP.Compute.GetRegionTargetHttpsProxyHttp,
           GCP.Compute.GetRegionTargetTcpProxyHttp,
           GCP.Compute.GetRegionUrlMapHttp,
-        ),
-        Layer.mergeAll(
           GCP.Compute.GetReliabilityRiskHttp,
           GCP.Compute.GetReservationHttp,
           GCP.Compute.GetReservationBlockHttp,
@@ -1688,12 +1703,12 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
           GCP.Compute.GetTargetTcpProxyHttp,
           GCP.Compute.GetTargetVpnGatewayHttp,
           GCP.Compute.GetUrlMapHttp,
+        ),
+        Layer.mergeAll(
           GCP.Compute.GetVpnGatewayHttp,
           GCP.Compute.GetVpnGatewayStatusHttp,
           GCP.Compute.GetVpnTunnelHttp,
           GCP.Compute.GetWireGroupHttp,
-        ),
-        Layer.mergeAll(
           GCP.Compute.GetZoneHttp,
           GCP.Compute.GetZoneVmExtensionPolicyHttp,
           GCP.Compute.InvalidateUrlMapCacheHttp,
@@ -1730,12 +1745,12 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
           GCP.Compute.ListInstanceGroupManagersHttp,
           GCP.Compute.ListInstanceGroupsHttp,
           GCP.Compute.ListInstanceReferrersHttp,
+        ),
+        Layer.mergeAll(
           GCP.Compute.ListInstancesHttp,
           GCP.Compute.ListInstanceTemplatesHttp,
           GCP.Compute.ListInstantSnapshotGroupsHttp,
           GCP.Compute.ListInstantSnapshotsHttp,
-        ),
-        Layer.mergeAll(
           GCP.Compute.ListInterconnectAttachmentGroupsHttp,
           GCP.Compute.ListInterconnectAttachmentsHttp,
           GCP.Compute.ListInterconnectGroupsHttp,
@@ -1772,12 +1787,12 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
           GCP.Compute.ListRegionHealthAggregationPoliciesHttp,
           GCP.Compute.ListRegionHealthChecksHttp,
           GCP.Compute.ListRegionHealthCheckServicesHttp,
+        ),
+        Layer.mergeAll(
           GCP.Compute.ListRegionHealthSourcesHttp,
           GCP.Compute.ListRegionInstanceGroupInstancesHttp,
           GCP.Compute.ListRegionInstanceGroupManagerErrorsHttp,
           GCP.Compute.ListRegionInstanceGroupManagerManagedInstancesHttp,
-        ),
-        Layer.mergeAll(
           GCP.Compute.ListRegionInstanceGroupManagerPerInstanceConfigsHttp,
           GCP.Compute.ListRegionInstanceGroupManagerResizeRequestsHttp,
           GCP.Compute.ListRegionInstanceGroupManagersHttp,
@@ -1814,12 +1829,12 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
           GCP.Compute.ListRoutesHttp,
           GCP.Compute.ListSecurityPoliciesHttp,
           GCP.Compute.ListSecurityPolicyPreconfiguredExpressionSetsHttp,
+        ),
+        Layer.mergeAll(
           GCP.Compute.ListServiceAttachmentsHttp,
           GCP.Compute.ListSnapshotsHttp,
           GCP.Compute.ListSslCertificatesHttp,
           GCP.Compute.ListSslPoliciesHttp,
-        ),
-        Layer.mergeAll(
           GCP.Compute.ListSslPolicyAvailableFeaturesHttp,
           GCP.Compute.ListStoragePoolsHttp,
           GCP.Compute.ListStoragePoolTypesHttp,
@@ -1856,12 +1871,12 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
           GCP.Compute.PatchSecurityPolicyRuleHttp,
           GCP.Compute.PatchSnapshotSettingHttp,
           GCP.Compute.PerformInstanceMaintenanceHttp,
+        ),
+        Layer.mergeAll(
           GCP.Compute.PerformReservationBlockMaintenanceHttp,
           GCP.Compute.PerformReservationMaintenanceHttp,
           GCP.Compute.PreviewRouterHttp,
           GCP.Compute.RecreateInstanceGroupManagerInstancesHttp,
-        ),
-        Layer.mergeAll(
           GCP.Compute.RecreateRegionInstanceGroupManagerInstancesHttp,
           GCP.Compute.RemoveDiskResourcePoliciesHttp,
           GCP.Compute.RemoveInstanceGroupInstancesHttp,
@@ -1898,12 +1913,12 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
           GCP.Compute.SetForwardingRuleTargetHttp,
           GCP.Compute.SetGlobalAddressLabelsHttp,
           GCP.Compute.SetGlobalForwardingRuleLabelsHttp,
+        ),
+        Layer.mergeAll(
           GCP.Compute.SetGlobalForwardingRuleTargetHttp,
           GCP.Compute.SetImageLabelsHttp,
           GCP.Compute.SetInstanceDeletionProtectionHttp,
           GCP.Compute.SetInstanceDiskAutoDeleteHttp,
-        ),
-        Layer.mergeAll(
           GCP.Compute.SetInstanceGroupManagerInstanceTemplateHttp,
           GCP.Compute.SetInstanceGroupManagerTargetPoolsHttp,
           GCP.Compute.SetInstanceGroupNamedPortsHttp,
@@ -1940,12 +1955,12 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
           GCP.Compute.SetTargetHttpsProxyCertificateMapHttp,
           GCP.Compute.SetTargetHttpsProxyQuicOverrideHttp,
           GCP.Compute.SetTargetHttpsProxySslCertificatesHttp,
+        ),
+        Layer.mergeAll(
           GCP.Compute.SetTargetHttpsProxySslPolicyHttp,
           GCP.Compute.SetTargetHttpsProxyUrlMapHttp,
           GCP.Compute.SetTargetInstanceSecurityPolicyHttp,
           GCP.Compute.SetTargetPoolBackupHttp,
-        ),
-        Layer.mergeAll(
           GCP.Compute.SetTargetPoolSecurityPolicyHttp,
           GCP.Compute.SetTargetSslProxyBackendServiceHttp,
           GCP.Compute.SetTargetSslProxyCertificateMapHttp,
@@ -1982,12 +1997,12 @@ export default class ComputeGeneratedHost extends GCP.Function<ComputeGeneratedH
           GCP.Compute.UpdateNetworkPeeringHttp,
           GCP.Compute.UpdateRegionAutoscalerHttp,
           GCP.Compute.UpdateRegionCommitmentHttp,
+        ),
+        Layer.mergeAll(
           GCP.Compute.UpdateRegionDiskKmsKeyHttp,
           GCP.Compute.UpdateRegionInstanceGroupManagerPerInstanceConfigsHttp,
           GCP.Compute.UpdateRegionSnapshotKmsKeyHttp,
           GCP.Compute.UpdateRouterNamedSetHttp,
-        ),
-        Layer.mergeAll(
           GCP.Compute.UpdateRouterRoutePolicyHttp,
           GCP.Compute.UpdateShieldedInstanceConfigHttp,
           GCP.Compute.UpdateSnapshotKmsKeyHttp,

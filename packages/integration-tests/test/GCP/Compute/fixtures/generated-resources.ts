@@ -1,4 +1,5 @@
 import * as GCP from "@alchemy.run/gcp";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { CERT_A_PEM, KEY_A_PEM } from "./https-proxy-cert.ts";
 
@@ -491,5 +492,62 @@ export const PacketMirroring = Effect.gen(function* () {
     network: DEFAULT_NETWORK,
     collectorIlb: collector.selfLink.as<string>(),
     mirroredResources: { tags: ["alchemy-probe-pm"] },
+  });
+});
+const IlbSource = Effect.gen(function* () {
+  const policy = yield* RegionHealthAggregationPolicy;
+  const backend = yield* IlbBackend;
+  return yield* GCP.Compute.RegionHealthSource("ProbeIlbSource", {
+    region,
+    sources: [backend.selfLink.as<string>()],
+    healthAggregationPolicy: policy.selfLink.as<string>(),
+  });
+});
+export const RegionCompositeHealthCheck = Effect.gen(function* () {
+  const rule = yield* ProducerRule;
+  const source = yield* IlbSource;
+  return yield* GCP.Compute.RegionCompositeHealthCheck("ProbeComposite", {
+    region,
+    healthDestination: rule.selfLink.as<string>(),
+    healthSources: [source.selfLink.as<string>()],
+  });
+});
+
+/** Hyperdisks in a disk consistency group, so a group snapshot has members. */
+const ConsistencyGroup = GCP.Compute.ResourcePolicy("ProbeConsistencyGroup", {
+  region,
+  diskConsistencyGroupPolicy: {},
+});
+export const InstantSnapshotGroup = Effect.gen(function* () {
+  const group = yield* ConsistencyGroup;
+  const member = yield* GCP.Compute.Disk("ProbeGroupMember", {
+    zone,
+    type: "hyperdisk-balanced",
+    sizeGb: 4,
+    resourcePolicies: [group.selfLink.as<string>()],
+  });
+  return yield* GCP.Compute.InstantSnapshotGroup("ProbeSnapshotGroup", {
+    zone,
+    // through the member, so the group is snapshotted once the disk joined it
+    sourceConsistencyGroup: Output.all(group.selfLink, member.diskName).pipe(
+      Output.map(([selfLink]) => selfLink as string),
+    ),
+  });
+});
+export const RegionInstantSnapshotGroup = Effect.gen(function* () {
+  const group = yield* ConsistencyGroup;
+  const member = yield* GCP.Compute.RegionDisk("ProbeRegionGroupMember", {
+    region,
+    replicaZones: ["us-central1-a", "us-central1-b"],
+    type: "hyperdisk-balanced-high-availability",
+    sizeGb: 4,
+    resourcePolicies: [group.selfLink.as<string>()],
+  });
+  return yield* GCP.Compute.RegionInstantSnapshotGroup("ProbeRegionSnapshotGroup", {
+    region,
+    // through the member, so the group is snapshotted once the disk joined it
+    sourceConsistencyGroup: Output.all(group.selfLink, member.diskName).pipe(
+      Output.map(([selfLink]) => selfLink as string),
+    ),
   });
 });

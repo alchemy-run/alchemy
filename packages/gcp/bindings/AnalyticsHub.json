@@ -15,7 +15,8 @@
   "probes": {
     "resources": {
       "DataExchange": "ProbeDataExchange",
-      "DataExchangesListing": "ProbeListing"
+      "DataExchangesListing": "ProbeListing",
+      "DataExchangesQueryTemplate": "ProbeQueryTemplate"
     },
     "untestable": {}
   },

@@ -39,7 +39,8 @@
       "ImportJob": "ProbeImportJob",
       "ReportConfig": "ProbeReportConfig",
       "ImportJobsImportDataFile": "ProbeImportFile",
-      "ReportConfigsReport": "ProbeReport"
+      "ReportConfigsReport": "ProbeReport",
+      "DiscoveryClient": "ProbeDiscoveryClient"
     },
     "untestable": {}
   }

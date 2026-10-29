@@ -1,4 +1,5 @@
 import * as GCP from "@alchemy.run/gcp";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 
 /** NetworkSecurity resources the generated bindings bind, mirroring each resource suite's smallest shape. */
@@ -109,5 +110,100 @@ export const ProbeProfileGroup = Effect.gen(function* () {
   return yield* GCP.NetworkSecurity.SecurityProfileGroup("ProbeProfileGroup", {
     location: "global",
     threatPreventionProfile: profile.name,
+  });
+});
+
+const ProbeCollectorSubnet = Effect.gen(function* () {
+  const vpc = yield* ProbeVpc;
+  return yield* GCP.Compute.Subnetwork("ProbeCollectorSubnet", {
+    region: "us-central1",
+    network: vpc.selfLink.as<string>(),
+    ipCidrRange: "10.91.0.0/24",
+  });
+});
+/** An internal UDP load balancer in the probe VPC: the collectors' front end. */
+const collectorRule = (
+  id: string,
+  rule: { ports?: string[]; allPorts?: boolean; isMirroringCollector?: boolean },
+) =>
+  Effect.gen(function* () {
+    const vpc = yield* ProbeVpc;
+    const subnet = yield* ProbeCollectorSubnet;
+    const health = yield* GCP.Compute.RegionHealthCheck(`${id}Hc`, {
+      region: "us-central1",
+      type: "TCP",
+      tcpHealthCheck: { port: 80 },
+    });
+    const backend = yield* GCP.Compute.RegionBackendService(`${id}Backend`, {
+      region: "us-central1",
+      protocol: "UDP",
+      loadBalancingScheme: "INTERNAL",
+      network: vpc.selfLink,
+      healthChecks: [health.selfLink.as<string>()],
+    });
+    return yield* GCP.Compute.ForwardingRule(`${id}Rule`, {
+      region: "us-central1",
+      loadBalancingScheme: "INTERNAL",
+      ipProtocol: "UDP",
+      network: vpc.selfLink,
+      subnetwork: subnet.selfLink,
+      backendService: backend.selfLink,
+      ...rule,
+    });
+  });
+export const ProbeInterceptDeployment = Effect.gen(function* () {
+  const group = yield* ProbeInterceptGroup;
+  const rule = yield* collectorRule("ProbeIntercept", { ports: ["6081"] });
+  return yield* GCP.NetworkSecurity.InterceptDeployment("ProbeInterceptDeployment", {
+    location: "us-central1-a",
+    interceptDeploymentGroup: group.name,
+    forwardingRule: rule.selfLink.as<string>(),
+  });
+});
+export const ProbeMirroringDeployment = Effect.gen(function* () {
+  const group = yield* ProbeMirroringGroup;
+  const rule = yield* collectorRule("ProbeMirroring", {
+    allPorts: true,
+    isMirroringCollector: true,
+  });
+  return yield* GCP.NetworkSecurity.MirroringDeployment("ProbeMirroringDeployment", {
+    location: "us-central1-a",
+    mirroringDeploymentGroup: group.name,
+    forwardingRule: rule.selfLink.as<string>(),
+  });
+});
+const ProbeConsumerVpc = GCP.Compute.Network("ProbeConsumerVpc", { autoCreateSubnetworks: false });
+export const ProbeInterceptAssociation = Effect.gen(function* () {
+  const consumer = yield* ProbeConsumerVpc;
+  const endpoints = yield* ProbeInterceptEndpoints;
+  return yield* GCP.NetworkSecurity.InterceptEndpointGroupAssociation("ProbeInterceptAssociation", {
+    interceptEndpointGroup: endpoints.name,
+    network: consumer.selfLink.as<string>(),
+  });
+});
+export const ProbeMirroringAssociation = Effect.gen(function* () {
+  const consumer = yield* ProbeConsumerVpc;
+  const endpoints = yield* ProbeMirroringEndpoints;
+  return yield* GCP.NetworkSecurity.MirroringEndpointGroupAssociation("ProbeMirroringAssociation", {
+    mirroringEndpointGroup: endpoints.name,
+    network: consumer.selfLink.as<string>(),
+  });
+});
+export const ProbeTlsInspectionPolicy = Effect.gen(function* () {
+  const pool = yield* GCP.PrivateCA.CaPool("ProbeInspectPool", {
+    location: "us-central1",
+    tier: "DEVOPS",
+  });
+  const ca = yield* GCP.PrivateCA.CertificateAuthority("ProbeInspectRoot", {
+    caPool: pool.name,
+    location: "us-central1",
+    type: "SELF_SIGNED",
+    desiredState: "ENABLED",
+  });
+  return yield* GCP.NetworkSecurity.TlsInspectionPolicy("ProbeTlsInspectionPolicy", {
+    location: "us-central1",
+    caPool: pool.name,
+    description: Output.interpolate`probe ${ca.certificateAuthorityId}`,
+    excludePublicCaSet: true,
   });
 });

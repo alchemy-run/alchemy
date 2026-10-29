@@ -1,5 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
+import { deployProject } from "../../deployProject.ts";
 
 /** MigrationCenter resources the generated bindings bind, mirroring each resource suite's smallest shape. */
 
@@ -60,5 +61,19 @@ export const ProbeReport = Effect.gen(function* () {
     reportConfig: config.name,
     location: "us-central1",
     type: "TOTAL_COST_OF_OWNERSHIP",
+  });
+});
+export const ProbeDiscoveryClient = Effect.gen(function* () {
+  const project = yield* deployProject;
+  const source = yield* GCP.MigrationCenter.Source("ProbeScannerSource", {
+    location: "us-central1",
+    type: "SOURCE_TYPE_DISCOVERY_CLIENT",
+    displayName: "scanner-source",
+  });
+  return yield* GCP.MigrationCenter.DiscoveryClient("ProbeDiscoveryClient", {
+    location: "us-central1",
+    source: source.name,
+    serviceAccount: `alchemy-testing@${project}.iam.gserviceaccount.com`,
+    displayName: "probe-agent",
   });
 });

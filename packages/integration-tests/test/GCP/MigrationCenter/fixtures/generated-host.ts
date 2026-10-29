@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeAssetsExportJob,
+  ProbeDiscoveryClient,
   ProbeGroup,
   ProbeImportFile,
   ProbeImportJob,
@@ -32,33 +33,35 @@ export default class MigrationCenterGeneratedHost extends GCP.Function<Migration
     const p4 = yield* GCP.MigrationCenter.DeleteAsset();
     const p5 = yield* GCP.MigrationCenter.GetAsset();
     const p6 = yield* GCP.MigrationCenter.GetAssetsExportJob(ProbeAssetsExportJob);
-    const p7 = yield* GCP.MigrationCenter.GetGroup(ProbeGroup);
-    const p8 = yield* GCP.MigrationCenter.GetImportDataFile(ProbeImportFile);
-    const p9 = yield* GCP.MigrationCenter.GetImportJob(ProbeImportJob);
-    const p10 = yield* GCP.MigrationCenter.GetPreferenceSet(ProbePreferenceSet);
-    const p11 = yield* GCP.MigrationCenter.GetRelation();
-    const p12 = yield* GCP.MigrationCenter.GetReport(ProbeReport);
-    const p13 = yield* GCP.MigrationCenter.GetReportConfig(ProbeReportConfig);
-    const p14 = yield* GCP.MigrationCenter.GetSource(ProbeSource);
-    const p15 = yield* GCP.MigrationCenter.GetSourceErrorFrame(ProbeSource);
-    const p16 = yield* GCP.MigrationCenter.ListAssets();
-    const p17 = yield* GCP.MigrationCenter.ListAssetsExportJobs();
-    const p18 = yield* GCP.MigrationCenter.ListDiscoveryClients();
-    const p19 = yield* GCP.MigrationCenter.ListGroups();
-    const p20 = yield* GCP.MigrationCenter.ListImportJobImportDataFiles(ProbeImportJob);
-    const p21 = yield* GCP.MigrationCenter.ListImportJobs();
-    const p22 = yield* GCP.MigrationCenter.ListPreferenceSets();
-    const p23 = yield* GCP.MigrationCenter.ListRelations();
-    const p24 = yield* GCP.MigrationCenter.ListReportConfigReports(ProbeReportConfig);
-    const p25 = yield* GCP.MigrationCenter.ListReportConfigs();
-    const p26 = yield* GCP.MigrationCenter.ListSourceErrorFrames(ProbeSource);
-    const p27 = yield* GCP.MigrationCenter.ListSources();
-    const p28 = yield* GCP.MigrationCenter.PatchAsset();
-    const p29 = yield* GCP.MigrationCenter.RemoveGroupAssets(ProbeGroup);
-    const p30 = yield* GCP.MigrationCenter.ReportAssetFrames();
-    const p31 = yield* GCP.MigrationCenter.RunAssetsExportJob(ProbeAssetsExportJob);
-    const p32 = yield* GCP.MigrationCenter.RunImportJob(ProbeImportJob);
-    const p33 = yield* GCP.MigrationCenter.ValidateImportJob(ProbeImportJob);
+    const p7 = yield* GCP.MigrationCenter.GetDiscoveryClient(ProbeDiscoveryClient);
+    const p8 = yield* GCP.MigrationCenter.GetGroup(ProbeGroup);
+    const p9 = yield* GCP.MigrationCenter.GetImportDataFile(ProbeImportFile);
+    const p10 = yield* GCP.MigrationCenter.GetImportJob(ProbeImportJob);
+    const p11 = yield* GCP.MigrationCenter.GetPreferenceSet(ProbePreferenceSet);
+    const p12 = yield* GCP.MigrationCenter.GetRelation();
+    const p13 = yield* GCP.MigrationCenter.GetReport(ProbeReport);
+    const p14 = yield* GCP.MigrationCenter.GetReportConfig(ProbeReportConfig);
+    const p15 = yield* GCP.MigrationCenter.GetSource(ProbeSource);
+    const p16 = yield* GCP.MigrationCenter.GetSourceErrorFrame(ProbeSource);
+    const p17 = yield* GCP.MigrationCenter.ListAssets();
+    const p18 = yield* GCP.MigrationCenter.ListAssetsExportJobs();
+    const p19 = yield* GCP.MigrationCenter.ListDiscoveryClients();
+    const p20 = yield* GCP.MigrationCenter.ListGroups();
+    const p21 = yield* GCP.MigrationCenter.ListImportJobImportDataFiles(ProbeImportJob);
+    const p22 = yield* GCP.MigrationCenter.ListImportJobs();
+    const p23 = yield* GCP.MigrationCenter.ListPreferenceSets();
+    const p24 = yield* GCP.MigrationCenter.ListRelations();
+    const p25 = yield* GCP.MigrationCenter.ListReportConfigReports(ProbeReportConfig);
+    const p26 = yield* GCP.MigrationCenter.ListReportConfigs();
+    const p27 = yield* GCP.MigrationCenter.ListSourceErrorFrames(ProbeSource);
+    const p28 = yield* GCP.MigrationCenter.ListSources();
+    const p29 = yield* GCP.MigrationCenter.PatchAsset();
+    const p30 = yield* GCP.MigrationCenter.RemoveGroupAssets(ProbeGroup);
+    const p31 = yield* GCP.MigrationCenter.ReportAssetFrames();
+    const p32 = yield* GCP.MigrationCenter.RunAssetsExportJob(ProbeAssetsExportJob);
+    const p33 = yield* GCP.MigrationCenter.RunImportJob(ProbeImportJob);
+    const p34 = yield* GCP.MigrationCenter.SendDiscoveryClientHeartbeat(ProbeDiscoveryClient);
+    const p35 = yield* GCP.MigrationCenter.ValidateImportJob(ProbeImportJob);
     return {
       fetch: serveProbes({
         AddGroupAssets: outcome(
@@ -74,37 +77,39 @@ export default class MigrationCenterGeneratedHost extends GCP.Function<Migration
           Retry.none(p5({ asset: "alchemy-missing", location: "us-central1" } as never)),
         ),
         GetAssetsExportJob: outcome(Retry.none(p6({} as never))),
-        GetGroup: outcome(Retry.none(p7({} as never))),
-        GetImportDataFile: outcome(Retry.none(p8({} as never))),
-        GetImportJob: outcome(Retry.none(p9({} as never))),
-        GetPreferenceSet: outcome(Retry.none(p10({} as never))),
+        GetDiscoveryClient: outcome(Retry.none(p7({} as never))),
+        GetGroup: outcome(Retry.none(p8({} as never))),
+        GetImportDataFile: outcome(Retry.none(p9({} as never))),
+        GetImportJob: outcome(Retry.none(p10({} as never))),
+        GetPreferenceSet: outcome(Retry.none(p11({} as never))),
         GetRelation: outcome(
-          Retry.none(p11({ relation: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p12({ relation: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetReport: outcome(Retry.none(p12({} as never))),
-        GetReportConfig: outcome(Retry.none(p13({} as never))),
-        GetSource: outcome(Retry.none(p14({} as never))),
-        GetSourceErrorFrame: outcome(Retry.none(p15({ errorFrame: "alchemy-missing" } as never))),
-        ListAssets: outcome(Retry.none(p16({ location: "us-central1" } as never))),
-        ListAssetsExportJobs: outcome(Retry.none(p17({ location: "us-central1" } as never))),
-        ListDiscoveryClients: outcome(Retry.none(p18({ location: "us-central1" } as never))),
-        ListGroups: outcome(Retry.none(p19({ location: "us-central1" } as never))),
-        ListImportJobImportDataFiles: outcome(Retry.none(p20({} as never))),
-        ListImportJobs: outcome(Retry.none(p21({ location: "us-central1" } as never))),
-        ListPreferenceSets: outcome(Retry.none(p22({ location: "us-central1" } as never))),
-        ListRelations: outcome(Retry.none(p23({ location: "us-central1" } as never))),
-        ListReportConfigReports: outcome(Retry.none(p24({} as never))),
-        ListReportConfigs: outcome(Retry.none(p25({ location: "us-central1" } as never))),
-        ListSourceErrorFrames: outcome(Retry.none(p26({} as never))),
-        ListSources: outcome(Retry.none(p27({ location: "us-central1" } as never))),
+        GetReport: outcome(Retry.none(p13({} as never))),
+        GetReportConfig: outcome(Retry.none(p14({} as never))),
+        GetSource: outcome(Retry.none(p15({} as never))),
+        GetSourceErrorFrame: outcome(Retry.none(p16({ errorFrame: "alchemy-missing" } as never))),
+        ListAssets: outcome(Retry.none(p17({ location: "us-central1" } as never))),
+        ListAssetsExportJobs: outcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListDiscoveryClients: outcome(Retry.none(p19({ location: "us-central1" } as never))),
+        ListGroups: outcome(Retry.none(p20({ location: "us-central1" } as never))),
+        ListImportJobImportDataFiles: outcome(Retry.none(p21({} as never))),
+        ListImportJobs: outcome(Retry.none(p22({ location: "us-central1" } as never))),
+        ListPreferenceSets: outcome(Retry.none(p23({ location: "us-central1" } as never))),
+        ListRelations: outcome(Retry.none(p24({ location: "us-central1" } as never))),
+        ListReportConfigReports: outcome(Retry.none(p25({} as never))),
+        ListReportConfigs: outcome(Retry.none(p26({ location: "us-central1" } as never))),
+        ListSourceErrorFrames: outcome(Retry.none(p27({} as never))),
+        ListSources: outcome(Retry.none(p28({ location: "us-central1" } as never))),
         PatchAsset: outcome(
-          Retry.none(p28({ asset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p29({ asset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        RemoveGroupAssets: outcome(Retry.none(p29({} as never))),
-        ReportAssetFrames: outcome(Retry.none(p30({ location: "us-central1" } as never))),
-        RunAssetsExportJob: outcome(Retry.none(p31({} as never))),
-        RunImportJob: outcome(Retry.none(p32({} as never))),
-        ValidateImportJob: outcome(Retry.none(p33({} as never))),
+        RemoveGroupAssets: outcome(Retry.none(p30({} as never))),
+        ReportAssetFrames: outcome(Retry.none(p31({ location: "us-central1" } as never))),
+        RunAssetsExportJob: outcome(Retry.none(p32({} as never))),
+        RunImportJob: outcome(Retry.none(p33({} as never))),
+        SendDiscoveryClientHeartbeat: outcome(Retry.none(p34({} as never))),
+        ValidateImportJob: outcome(Retry.none(p35({} as never))),
       }),
     };
   }).pipe(
@@ -118,6 +123,7 @@ export default class MigrationCenterGeneratedHost extends GCP.Function<Migration
           GCP.MigrationCenter.DeleteAssetHttp,
           GCP.MigrationCenter.GetAssetHttp,
           GCP.MigrationCenter.GetAssetsExportJobHttp,
+          GCP.MigrationCenter.GetDiscoveryClientHttp,
           GCP.MigrationCenter.GetGroupHttp,
           GCP.MigrationCenter.GetImportDataFileHttp,
           GCP.MigrationCenter.GetImportJobHttp,
@@ -144,6 +150,7 @@ export default class MigrationCenterGeneratedHost extends GCP.Function<Migration
           GCP.MigrationCenter.ReportAssetFramesHttp,
           GCP.MigrationCenter.RunAssetsExportJobHttp,
           GCP.MigrationCenter.RunImportJobHttp,
+          GCP.MigrationCenter.SendDiscoveryClientHeartbeatHttp,
           GCP.MigrationCenter.ValidateImportJobHttp,
         ),
       ),

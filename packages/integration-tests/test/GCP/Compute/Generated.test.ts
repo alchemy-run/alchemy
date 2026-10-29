@@ -1049,9 +1049,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("InstantSnapshotGroup", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetInstantSnapshotGroup (compute.instantSnapshotGroups.get): InstantSnapshotGroup: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetInstantSnapshotGroup (compute.instantSnapshotGroups.get)",
+        () => probe("GetInstantSnapshotGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -3216,13 +3220,21 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("RegionCompositeHealthCheck", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetRegionCompositeHealthCheck (compute.regionCompositeHealthChecks.get): RegionCompositeHealthCheck: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetRegionCompositeHealthCheck (compute.regionCompositeHealthChecks.get)",
+        () => probe("GetRegionCompositeHealthCheck", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetRegionCompositeHealthCheckHealth (compute.regionCompositeHealthChecks.getHealth): RegionCompositeHealthCheck: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetRegionCompositeHealthCheckHealth (compute.regionCompositeHealthChecks.getHealth)",
+        () => probe("GetRegionCompositeHealthCheckHealth", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -3555,9 +3567,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("RegionInstantSnapshotGroup", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetRegionInstantSnapshotGroup (compute.regionInstantSnapshotGroups.get): RegionInstantSnapshotGroup: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetRegionInstantSnapshotGroup (compute.regionInstantSnapshotGroups.get)",
+        () => probe("GetRegionInstantSnapshotGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

@@ -215,9 +215,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("InterceptDeployment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetInterceptDeployment (networksecurity.projects.locations.interceptDeployments.get): InterceptDeployment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetInterceptDeployment (networksecurity.projects.locations.interceptDeployments.get)",
+        () => probe("GetInterceptDeployment", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -244,16 +248,24 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("InterceptEndpointGroupAssociation", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetInterceptEndpointGroupAssociation (networksecurity.projects.locations.interceptEndpointGroupAssociations.get): InterceptEndpointGroupAssociation: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetInterceptEndpointGroupAssociation (networksecurity.projects.locations.interceptEndpointGroupAssociations.get)",
+        () => probe("GetInterceptEndpointGroupAssociation", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("MirroringDeployment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetMirroringDeployment (networksecurity.projects.locations.mirroringDeployments.get): MirroringDeployment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetMirroringDeployment (networksecurity.projects.locations.mirroringDeployments.get)",
+        () => probe("GetMirroringDeployment", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -280,9 +292,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("MirroringEndpointGroupAssociation", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetMirroringEndpointGroupAssociation (networksecurity.projects.locations.mirroringEndpointGroupAssociations.get): MirroringEndpointGroupAssociation: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetMirroringEndpointGroupAssociation (networksecurity.projects.locations.mirroringEndpointGroupAssociations.get)",
+        () => probe("GetMirroringEndpointGroupAssociation", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -589,9 +605,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("TlsInspectionPolicy", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTlsInspectionPolicy (networksecurity.projects.locations.tlsInspectionPolicies.get): TlsInspectionPolicy: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTlsInspectionPolicy (networksecurity.projects.locations.tlsInspectionPolicies.get)",
+        () => probe("GetTlsInspectionPolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

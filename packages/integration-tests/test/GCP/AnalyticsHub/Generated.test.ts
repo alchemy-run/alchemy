@@ -135,17 +135,29 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("DataExchangesQueryTemplate", { concurrent: true }, () => {
-      test.provider.todo(
-        "ApproveQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.approve): DataExchangesQueryTemplate: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ApproveQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.approve)",
+        () => probe("ApproveQueryTemplate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:analyticshub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.get): DataExchangesQueryTemplate: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.get)",
+        () => probe("GetQueryTemplate", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:analyticshub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SubmitQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.submit): DataExchangesQueryTemplate: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SubmitQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.submit)",
+        () => probe("SubmitQueryTemplate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:analyticshub", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

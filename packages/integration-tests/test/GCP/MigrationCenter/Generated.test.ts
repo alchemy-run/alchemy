@@ -84,13 +84,21 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("DiscoveryClient", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDiscoveryClient (migrationcenter.projects.locations.discoveryClients.get): DiscoveryClient: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDiscoveryClient (migrationcenter.projects.locations.discoveryClients.get)",
+        () => probe("GetDiscoveryClient", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SendDiscoveryClientHeartbeat (migrationcenter.projects.locations.discoveryClients.sendHeartbeat): DiscoveryClient: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SendDiscoveryClientHeartbeat (migrationcenter.projects.locations.discoveryClients.sendHeartbeat)",
+        () => probe("SendDiscoveryClientHeartbeat", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

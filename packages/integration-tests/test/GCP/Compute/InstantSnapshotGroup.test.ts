@@ -68,22 +68,20 @@ test.provider(
             zone,
             type: "hyperdisk-balanced",
             sizeGb: 4,
+            resourcePolicies: [policy.selfLink.as<string>()],
           });
           return { policy, disk };
         }),
       );
 
-      yield* compute.addResourcePoliciesDisks({
+      const member = yield* compute.getDisks({
         project: created.disk.project,
         zone,
         disk: created.disk.diskName,
-        body: {
-          resourcePolicies: [
-            created.policy.selfLink ??
-              `projects/${created.disk.project}/regions/us-central1/resourcePolicies/${created.policy.resourcePolicyName}`,
-          ],
-        },
       });
+      expect(member.resourcePolicies?.map((p) => p.split("/").pop())).toEqual([
+        created.policy.resourcePolicyName,
+      ]);
 
       const withGroup = yield* stack.deploy(
         Effect.gen(function* () {
@@ -97,6 +95,7 @@ test.provider(
             zone,
             type: "hyperdisk-balanced",
             sizeGb: 4,
+            resourcePolicies: [policy.selfLink.as<string>()],
           });
           const group = yield* GCP.Compute.InstantSnapshotGroup("Checkpoint", {
             zone,
@@ -118,6 +117,31 @@ test.provider(
       });
       expect(fetched.name).toEqual(withGroup.group.instantSnapshotGroupName);
       expect(fetched.description).toContain("[alchemy ");
+
+      const detached = yield* stack.deploy(
+        Effect.gen(function* () {
+          const policy = yield* GCP.Compute.ResourcePolicy("Consistent", {
+            resourcePolicyName: created.policy.resourcePolicyName,
+            region: "us-central1",
+            diskConsistencyGroupPolicy: {},
+          });
+          const disk = yield* GCP.Compute.Disk("Member", {
+            diskName: created.disk.diskName,
+            zone,
+            type: "hyperdisk-balanced",
+            sizeGb: 4,
+            resourcePolicies: [],
+          });
+          return { policy, disk };
+        }),
+      );
+      expect(detached.disk.resourcePolicies).toEqual([]);
+      const left = yield* compute.getDisks({
+        project: created.disk.project,
+        zone,
+        disk: created.disk.diskName,
+      });
+      expect(left.resourcePolicies ?? []).toEqual([]);
 
       yield* stack.destroy();
       const gone = yield* waitUntilGone(

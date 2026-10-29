@@ -100,6 +100,13 @@ export type RegionDiskProps = {
    * replaces the disk.
    */
   enableConfidentialCompute?: boolean;
+  /**
+   * Resource policies attached to the disk (snapshot schedules, a disk
+   * consistency group), as self-links or `projects/…/regions/…/resourcePolicies/…`
+   * paths. Applied in place with `addResourcePolicies` / `removeResourcePolicies`.
+   * Omit to leave the disk's policies untouched.
+   */
+  resourcePolicies?: string[];
 };
 
 export type RegionDisk = Resource<
@@ -138,6 +145,8 @@ export type RegionDisk = Resource<
     sourceDisk: string | undefined;
     /** Attached instance URLs. */
     users: ReadonlyArray<string>;
+    /** Attached resource policy URLs. */
+    resourcePolicies: ReadonlyArray<string>;
   },
   never,
   Providers
@@ -182,6 +191,22 @@ export type RegionDisk = Resource<
  * });
  * ```
  *
+ * ### Attaching Resource Policies
+ * **Example:** Join a disk consistency group
+ * ```typescript
+ * const group = yield* GCP.Compute.ResourcePolicy("consistent", {
+ *   region: "us-central1",
+ *   diskConsistencyGroupPolicy: {},
+ * });
+ * const disk = yield* GCP.Compute.RegionDisk("data", {
+ *   region: "us-central1",
+ *   replicaZones: ["us-central1-a", "us-central1-b"],
+ *   type: "hyperdisk-balanced-high-availability",
+ *   sizeGb: 4,
+ *   resourcePolicies: [group.selfLink.as<string>()],
+ * });
+ * ```
+ *
  * @resource
  * @category Compute
  */
@@ -222,6 +247,10 @@ const normalizeRegion = (region: string | undefined, defaultRegion: string) =>
 const userLabels = (
   labels: Record<string, string | undefined> | null | undefined,
 ): Record<string, string> => stripInternalLabels(tagRecord(labels));
+
+/** A policy URL's `regions/<region>/resourcePolicies/<name>` tail, so self-links and paths compare equal. */
+const policyKey = (policy: string): string =>
+  policy.match(/regions\/[^/]+\/resourcePolicies\/[^/]+$/)?.[0] ?? policy;
 
 const parseSizeGb = (value: string | undefined): number => {
   const parsed = Number(value);
@@ -275,6 +304,7 @@ const toAttrs = (disk: compute.Disk, project: string) => {
     sourceSnapshot: disk.sourceSnapshot,
     sourceDisk: disk.sourceDisk,
     users: disk.users ?? [],
+    resourcePolicies: disk.resourcePolicies ?? [],
   };
 };
 
@@ -462,6 +492,7 @@ export const RegionDiskProvider = () =>
                   ? String(news.provisionedThroughput)
                   : undefined,
               enableConfidentialCompute: news.enableConfidentialCompute,
+              resourcePolicies: news.resourcePolicies,
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
@@ -545,6 +576,41 @@ export const RegionDiskProvider = () =>
         });
         yield* waitRegionOperation(env.project, region, updated);
         current = yield* getByName(env.project, region, diskName);
+      }
+
+      if (current === undefined) {
+        return yield* new RegionDiskNotResolved({ diskName, region });
+      }
+
+      if (news.resourcePolicies !== undefined) {
+        const observed = current.resourcePolicies ?? [];
+        const observedKeys = new Set(observed.map(policyKey));
+        const desiredKeys = new Set(news.resourcePolicies.map(policyKey));
+        const added = news.resourcePolicies.filter(
+          (policy) => !observedKeys.has(policyKey(policy)),
+        );
+        const removed = observed.filter((policy) => !desiredKeys.has(policyKey(policy)));
+        if (removed.length > 0) {
+          const detached = yield* compute.removeResourcePoliciesRegionDisks({
+            project: env.project,
+            region,
+            disk: diskName,
+            body: { resourcePolicies: removed },
+          });
+          yield* waitRegionOperation(env.project, region, detached);
+        }
+        if (added.length > 0) {
+          const attached = yield* compute.addResourcePoliciesRegionDisks({
+            project: env.project,
+            region,
+            disk: diskName,
+            body: { resourcePolicies: added },
+          });
+          yield* waitRegionOperation(env.project, region, attached);
+        }
+        if (removed.length > 0 || added.length > 0) {
+          current = yield* getByName(env.project, region, diskName);
+        }
       }
 
       if (current === undefined) {

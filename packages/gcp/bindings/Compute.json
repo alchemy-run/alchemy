@@ -612,7 +612,10 @@
       "ForwardingRule": "ForwardingRule",
       "GlobalForwardingRule": "GlobalForwardingRule",
       "ServiceAttachment": "ServiceAttachment",
-      "PacketMirroring": "PacketMirroring"
+      "PacketMirroring": "PacketMirroring",
+      "RegionCompositeHealthCheck": "RegionCompositeHealthCheck",
+      "InstantSnapshotGroup": "InstantSnapshotGroup",
+      "RegionInstantSnapshotGroup": "RegionInstantSnapshotGroup"
     },
     "untestable": {
       "FutureReservation": "the testing project is not eligible (412 FutureReservationsNotEligible)",

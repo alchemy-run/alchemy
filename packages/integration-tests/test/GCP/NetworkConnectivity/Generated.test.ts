@@ -210,9 +210,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("MulticloudDataTransferConfigsDestination", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDestination (networkconnectivity.projects.locations.multicloudDataTransferConfigs.destinations.get): MulticloudDataTransferConfigsDestination: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDestination (networkconnectivity.projects.locations.multicloudDataTransferConfigs.destinations.get)",
+        () => probe("GetDestination", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -427,8 +431,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("SpokesGatewayAdvertisedRoute", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetGatewayAdvertisedRoute (networkconnectivity.projects.locations.spokes.gatewayAdvertisedRoutes.get): SpokesGatewayAdvertisedRoute: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetGatewayAdvertisedRoute (networkconnectivity.projects.locations.spokes.gatewayAdvertisedRoutes.get): SpokesGatewayAdvertisedRoute: a gateway spoke provisions managed routers and takes well over 5 minutes (slow-gated in SpokesGatewayAdvertisedRoute.test.ts)",
         () => Effect.void,
       );
     });

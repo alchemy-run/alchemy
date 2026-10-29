@@ -20,7 +20,9 @@
       "BackupVault": "ProbeBackupVault",
       "BackupPlan": "ProbeBackupPlan"
     },
-    "untestable": {}
+    "untestable": {
+      "ManagementServer": "a management server takes well over 5 minutes to provision (slow-gated in ManagementServer.test.ts)"
+    }
   },
   "permissions": {
     "backupdr.projects.locations.dataSourceReferences.get": "backupdr.dataSourceReferences.list",

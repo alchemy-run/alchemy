@@ -197,9 +197,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("FolderBucketsLink", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetLink@FolderBucketsLink (logging.folders.locations.buckets.links.get): FolderBucketsLink: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetLink@FolderBucketsLink (logging.folders.locations.buckets.links.get)",
+        () => probe("GetLink@FolderBucketsLink", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -284,9 +288,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("LocationsBucketsLink", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetLink@LocationsBucketsLink (logging.locations.buckets.links.get): LocationsBucketsLink: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetLink@LocationsBucketsLink (logging.locations.buckets.links.get)",
+        () => probe("GetLink@LocationsBucketsLink", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

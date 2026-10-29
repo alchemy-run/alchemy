@@ -115,7 +115,9 @@
       "LogScope": "ProbeLogScope",
       "FolderLogScope": "ProbeFolderLogScope",
       "FolderBucketsView": "ProbeFolderView",
-      "BucketsLink": "ProbeLink"
+      "BucketsLink": "ProbeLink",
+      "LocationsBucketsLink": "ProbeLocationsLink",
+      "FolderBucketsLink": "ProbeFolderLink"
     },
     "untestable": {
       "BillingBucket": "needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",
