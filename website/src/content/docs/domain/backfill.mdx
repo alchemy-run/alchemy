@@ -3,6 +3,8 @@ title: History at scale
 description: How a deploy backfills new views and projections on Cloudflare, how long it takes, what it costs, and how to run a large Domain within Cloudflare's limits.
 ---
 
+import BackfillChart from "../../../components/charts/BackfillChart.astro";
+
 When a deploy adds a view or a projection, or bumps a version, the new consumer [receives the history](/domain/model#consumers-added-later-receive-the-history) recorded before it. On Cloudflare the deploy does that work and waits for it. This page explains how long that takes and what it costs, measured on Cloudflare, and what to keep in mind as a Domain grows.
 
 ## The deploy waits for the history
@@ -51,6 +53,8 @@ A backfill's time is the depth of the directory, plus the longest history behind
 
 The simulator in the test suite runs the same protocol code with a model of Cloudflare's timing (a 10 ms round trip, 50 ms for an alarm to fire, 1 ms per event, one event at a time per object). It shows how each shape of consumer scales with width, 10 events per instance:
 
+<BackfillChart chart="timeByWidth" />
+
 | Consumer | Instances | Keys | Time |
 | --- | --- | --- | --- |
 | Keyed by its aggregate | 100 | 100 | 5.6 s |
@@ -63,6 +67,10 @@ The simulator in the test suite runs the same protocol code with a model of Clou
 
 The first two shapes take the same time whatever the width. The last grows with the one key's history: 10,000 events applied in order.
 
+Depth is what takes time: one key applies its history in order, a page of 100 events per round trip. Up to a few thousand events a key finishes within the directory's own few seconds; past that, its time grows with its history:
+
+<BackfillChart chart="timeByDepth" />
+
 Cost grows in proportion to the instances and the events, never faster:
 
 | | Grows with |
@@ -72,7 +80,15 @@ Cost grows in proportion to the instances and the events, never faster:
 | Rows written and read | a fixed number per instance, plus a fixed number per event |
 | Load on one object | at most 256 instances per directory node; a key serves only its own sources and history |
 
-In the simulator, a thousand instances with 1, 10 and 100 events each wrote 49, 8.5 and 4.5 rows per event: the per-instance part is spread over more events as histories grow. The live figure below, 12 rows per event, is for 10 events per instance.
+Width doesn't change what an event costs. These are the protocol's own rows, not counting the view writing its state:
+
+<BackfillChart chart="costByWidth" />
+
+Depth spreads the per-instance part over more events, so an event in a long history costs less to backfill than one in a short history:
+
+<BackfillChart chart="costByDepth" />
+
+The live figure below, 12 rows per event with the view's own writes included, is for 10 events per instance.
 
 ## What it costs
 

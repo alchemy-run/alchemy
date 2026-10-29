@@ -110,7 +110,8 @@ describe("Domain backfill benchmarks (simulated)", () => {
     "cost per instance and per event: longer histories at the same width",
     () =>
       Effect.gen(function* () {
-        for (const events of [1, 10, 100]) yield* bench("own", 1_000, events);
+        for (const shape of ["keyed", "own"] as const)
+          for (const events of [1, 10, 100]) yield* bench(shape, 1_000, events);
       }),
     { timeout: 600_000 },
   );
@@ -129,6 +130,18 @@ describe("Domain backfill benchmarks (simulated)", () => {
     () =>
       Effect.gen(function* () {
         for (const instances of [100, 1_000]) yield* bench("hot", instances, 10);
+      }),
+    { timeout: 600_000 },
+  );
+
+  it.effect.skipIf(!!process.env.FAST)(
+    "one key's history grows: wall time grows with its depth, not before a few thousand events",
+    () =>
+      Effect.gen(function* () {
+        const one = [];
+        for (const events of [10, 100, 1_000, 10_000]) one.push(yield* bench("keyed", 1, events));
+        expect(one[2]!.wallSeconds).toBeLessThan(one[0]!.wallSeconds * 1.5);
+        for (const events of [10, 100, 1_000]) yield* bench("hot", 100, events);
       }),
     { timeout: 600_000 },
   );

@@ -1,0 +1,31 @@
+<svg viewBox="0 0 480 320" role="img" aria-label="Time as instances grow (10 events each)" xmlns="http://www.w3.org/2000/svg" class="lc"><style>
+.lc{display:block;width:100%;height:auto;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+.lc-surface{fill:#fbf6ea}
+.lc-text{fill:#2a2620}
+.lc-muted{fill:#52442e}
+.lc-title{font-size:14px;font-weight:600}
+.lc-small{font-size:11px}
+.lc-grid{stroke:rgba(42,38,32,0.14);stroke-width:1}
+.lc-s1,.lc-s2,.lc-s3{stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.lc-s1{stroke:#2a78d6;fill:#2a78d6}
+.lc-s2{stroke:#eb6834;fill:#eb6834}
+.lc-s3{stroke:#1baf7a;fill:#1baf7a}
+.lc-s1 path[fill=none],.lc-s2 path[fill=none],.lc-s3 path[fill=none]{fill:none}
+.lc-pt>*{stroke:#fbf6ea;stroke-width:2}
+.lc-label{stroke:#fbf6ea;stroke-width:3;paint-order:stroke;stroke-linejoin:round}
+@media (prefers-color-scheme: dark){
+.lc{display:block;width:100%;height:auto;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+.lc-surface{fill:#221e18}
+.lc-text{fill:#faf6ec}
+.lc-muted{fill:#c0af89}
+.lc-title{font-size:14px;font-weight:600}
+.lc-small{font-size:11px}
+.lc-grid{stroke:rgba(250,246,236,0.14);stroke-width:1}
+.lc-s1,.lc-s2,.lc-s3{stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.lc-s1{stroke:#3987e5;fill:#3987e5}
+.lc-s2{stroke:#d95926;fill:#d95926}
+.lc-s3{stroke:#199e70;fill:#199e70}
+.lc-s1 path[fill=none],.lc-s2 path[fill=none],.lc-s3 path[fill=none]{fill:none}
+.lc-pt>*{stroke:#221e18;stroke-width:2}
+.lc-label{stroke:#221e18;stroke-width:3;paint-order:stroke;stroke-linejoin:round}
+}</style><rect class="lc-surface" width="480" height="320" rx="8"/><text class="lc-text lc-title" x="16" y="24">Time as instances grow (10 events each)</text><g class="lc-s1"><line x1="16" x2="32" y1="46" y2="46"/><circle cx="24" cy="46" r="4.5"/></g><text class="lc-muted lc-small" x="38" y="50">Keyed by its aggregate</text><g class="lc-s2"><line x1="190" x2="206" y1="46" y2="46"/><rect x="194" y="42" width="8" height="8" rx="1"/></g><text class="lc-muted lc-small" x="212" y="50">100 instances per key</text><g class="lc-s3"><line x1="358" x2="374" y1="46" y2="46"/><path d="M366 40.5L371.5 46L366 51.5L360.5 46Z"/></g><text class="lc-muted lc-small" x="380" y="50">One key for all</text><line class="lc-grid" x1="52" x2="452" y1="272" y2="272"/><text class="lc-muted lc-small" x="44" y="276" text-anchor="end">0</text><line class="lc-grid" x1="52" x2="452" y1="234.4" y2="234.4"/><text class="lc-muted lc-small" x="44" y="238.4" text-anchor="end">10</text><line class="lc-grid" x1="52" x2="452" y1="196.8" y2="196.8"/><text class="lc-muted lc-small" x="44" y="200.8" text-anchor="end">20</text><line class="lc-grid" x1="52" x2="452" y1="159.2" y2="159.2"/><text class="lc-muted lc-small" x="44" y="163.2" text-anchor="end">30</text><line class="lc-grid" x1="52" x2="452" y1="121.6" y2="121.6"/><text class="lc-muted lc-small" x="44" y="125.6" text-anchor="end">40</text><line class="lc-grid" x1="52" x2="452" y1="84" y2="84"/><text class="lc-muted lc-small" x="44" y="88" text-anchor="end">50</text><text class="lc-muted lc-small" x="52" y="290" text-anchor="middle">100</text><text class="lc-muted lc-small" x="252" y="290" text-anchor="middle">1k</text><text class="lc-muted lc-small" x="452" y="290" text-anchor="middle">10k</text><text class="lc-muted lc-small" x="252" y="310" text-anchor="middle">Instances</text><text class="lc-muted lc-small" x="16" y="68">Seconds</text><g class="lc-s1"><path fill="none" d="M52 250.94400000000002L252 249.816L452 243.8"/><g class="lc-pt"><circle cx="52" cy="250.94400000000002" r="4.5"/><title>Keyed by its aggregate: 100 instances → 5.6 s</title></g><g class="lc-pt"><circle cx="252" cy="249.816" r="4.5"/><title>Keyed by its aggregate: 1k instances → 5.9 s</title></g><g class="lc-pt"><circle cx="452" cy="243.8" r="4.5"/><title>Keyed by its aggregate: 10k instances → 7.5 s</title></g></g><g class="lc-s2"><path fill="none" d="M252 250.192L452 245.304"/><g class="lc-pt"><rect x="248" y="246.192" width="8" height="8" rx="1"/><title>100 instances per key: 1k instances → 5.8 s</title></g><g class="lc-pt"><rect x="448" y="241.304" width="8" height="8" rx="1"/><title>100 instances per key: 10k instances → 7.1 s</title></g></g><g class="lc-s3"><path fill="none" d="M52 250.94400000000002L252 120.47200000000001"/><g class="lc-pt"><path d="M52 245.44400000000002L57.5 250.94400000000002L52 256.444L46.5 250.94400000000002Z"/><title>One key for all: 100 instances → 5.6 s</title></g><g class="lc-pt"><path d="M252 114.97200000000001L257.5 120.47200000000001L252 125.97200000000001L246.5 120.47200000000001Z"/><title>One key for all: 1k instances → 40.3 s</title></g></g><text class="lc-text lc-small lc-label" x="260" y="110.47200000000001" text-anchor="start">40.3 s</text></svg>
