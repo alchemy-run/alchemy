@@ -411,8 +411,8 @@ const backfillRuntime = (
     const jobKey = (id: string) => `bf:job:${id}`;
     let ticking = false;
     let dirty = false;
-    /** The job running now: its own row doesn't count as already scheduled. */
-    let current: string | undefined;
+    /** The job running now, and the token of its row: that row doesn't count as already scheduled. */
+    let current: { readonly id: string; readonly token: string } | undefined;
     const now = Clock.currentTimeMillis;
     // One at a time: the callback is one row, so a later schedule would replace a sooner one.
     const tickLock = yield* Semaphore.make(1);
@@ -453,8 +453,8 @@ const backfillRuntime = (
           }
           for (const [key, job] of due) {
             runs += 1;
-            current = key.slice("bf:job:".length);
-            yield* run(current);
+            current = { id: key.slice("bf:job:".length), token: job.token };
+            yield* run(current.id);
             current = undefined;
             const after = yield* state.storage.get<{ due: number; token: string }>(key);
             if (after?.token === job.token) yield* state.storage.delete(key);
@@ -475,12 +475,15 @@ const backfillRuntime = (
         provide(
           Effect.gen(function* () {
             const due = (yield* now) + afterMillis;
+            const stored = yield* state.storage.get<{ due: number; token: string }>(jobKey(id));
+            // The running job's own row is done once it returns; one scheduled while it
+            // ran (by a message that arrived meanwhile) still stands.
             const existing =
-              id === current
+              stored !== undefined && current?.id === id && stored.token === current.token
                 ? undefined
-                : yield* state.storage.get<{ due: number; token: string }>(jobKey(id));
-            // Already due sooner: that run sees this one's cause too.
-            if (existing !== undefined && existing.due <= due && afterMillis > 0) return;
+                : stored;
+            // The earliest request wins: already due sooner, that run sees this cause too.
+            if (existing !== undefined && existing.due <= due) return;
             const token = yield* Effect.sync(() => crypto.randomUUID());
             yield* state.storage.put(jobKey(id), {
               due: existing !== undefined ? Math.min(existing.due, due) : due,
@@ -1435,7 +1438,11 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
               const { complete } = yield* task(`check-${check}`, net.node.status(""));
               if (params.targets.every((target) => complete.includes(target)))
                 return { complete: true };
-              yield* sleep(`wait-${check}`, "5 seconds");
+              yield* sleep(
+                `wait-${check}`,
+                // Soon at first, then less often: each check is a step (an instance has 10,000).
+                `${Math.min(30_000, Math.round(1_000 * 1.5 ** check))} millis`,
+              );
             }
           }),
         ) as unknown as Effect.Effect<WorkflowImpl<any, any, unknown>>,

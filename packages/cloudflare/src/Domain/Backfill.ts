@@ -79,7 +79,7 @@ const runIdOf = (targets: ReadonlyArray<string>, resource: string) => {
   return `backfill-${resource.slice(0, 12)}-${hash.toString(16).padStart(8, "0")}-${targets.length}`;
 };
 
-const POLL = "3 seconds";
+const POLL = "1 second";
 
 const BackfillLive = () =>
   Provider.succeed(Backfill, {

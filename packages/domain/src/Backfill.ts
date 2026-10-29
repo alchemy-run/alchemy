@@ -55,6 +55,11 @@ export interface Storage {
 
 /** Durable, at-least-once jobs on one object: a job with the same id replaces a pending one. */
 export interface Jobs {
+  /**
+   * Run job `id` after `afterMillis`. The earliest request wins: a job already due
+   * sooner isn't postponed (every job is idempotent, so running early is safe),
+   * including one asked for while that job runs.
+   */
   readonly schedule: (id: string, afterMillis: number) => Effect.Effect<void>;
 }
 

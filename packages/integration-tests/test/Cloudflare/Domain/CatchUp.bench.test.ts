@@ -21,7 +21,8 @@ import BenchV2 from "./fixtures/bench/v2.ts";
  */
 
 const EVENTS = 10;
-const SEED_BATCH = 50;
+// A Worker request runs at most 6 outgoing calls at once: seed in small batches, many at a time.
+const SEED_BATCH = 10;
 const sizes = (process.env.DOMAIN_BENCH_INSTANCES ?? "1000").split(",").map(Number);
 
 class NotYet extends Data.TaggedError("NotYet")<{
@@ -173,7 +174,7 @@ for (const instances of sizes) {
               "POST",
               `/seed/${from}/${Math.min(SEED_BATCH, instances - from)}/${EVENTS}`,
             ).pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 })),
-          { concurrency: 16, discard: true },
+          { concurrency: 64, discard: true },
         );
         const seedEnd = yield* now;
         // Keep the seed out of the backfill's analytics window.

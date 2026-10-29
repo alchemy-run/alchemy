@@ -382,6 +382,9 @@ export class Sim {
 
   /** Schedule a job on an object; a job with the same id replaces a pending one. */
   schedule(object: SimObject, id: string, afterMillis: number) {
+    // The earliest request wins: a job already due sooner isn't postponed.
+    const pending = object.jobs.get(id);
+    if (pending !== undefined && pending.due <= this.now + afterMillis) return;
     const version = ++this.versions;
     object.jobs.set(id, { due: this.now + afterMillis, version });
     const vt = this.vt + afterMillis + this.latency.alarm;
