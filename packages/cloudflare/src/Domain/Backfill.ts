@@ -84,6 +84,16 @@ const POLL = "1 second";
 const MAX_RESTARTS = 10;
 const RESTART_DELAY = "2 seconds";
 
+/**
+ * Workflows answers instance calls for a Workflow uploaded moments before with
+ * an internal error (code 10001) for a while: call again.
+ */
+const retryInternal = {
+  while: (error: { readonly _tag: string }) => error._tag === "WorkflowInternalError",
+  schedule: Schedule.spaced("2 seconds"),
+  times: 30,
+};
+
 const BackfillLive = () =>
   Provider.succeed(Backfill, {
     stables: ["accountId", "workflowName"],
@@ -132,7 +142,8 @@ const BackfillLive = () =>
           Effect.catchTag("InstanceAlreadyExists", () => Effect.void),
           // The Workflow was just uploaded with the Worker: it can take a moment to appear.
           Effect.retry({
-            while: (error) => error._tag === "WorkflowNotFound",
+            while: (error) =>
+              error._tag === "WorkflowNotFound" || error._tag === "WorkflowInternalError",
             schedule: Schedule.spaced("2 seconds"),
             times: 30,
           }),
@@ -141,19 +152,23 @@ const BackfillLive = () =>
       let restarts = 0;
       const timeout = (news.timeoutSeconds ?? 1800) * 1000;
       while (true) {
-        const instance = yield* workflows.getInstance({
-          accountId,
-          workflowName: news.workflowName,
-          instanceId,
-          simple: true,
-        });
-        if (instance.status === "complete") return { ...attrs, status: "complete" };
-        if (instance.status === "errored" || instance.status === "terminated") {
-          const { error } = yield* workflows.getInstance({
+        const instance = yield* workflows
+          .getInstance({
             accountId,
             workflowName: news.workflowName,
             instanceId,
-          });
+            simple: true,
+          })
+          .pipe(Effect.retry(retryInternal));
+        if (instance.status === "complete") return { ...attrs, status: "complete" };
+        if (instance.status === "errored" || instance.status === "terminated") {
+          const { error } = yield* workflows
+            .getInstance({
+              accountId,
+              workflowName: news.workflowName,
+              instanceId,
+            })
+            .pipe(Effect.retry(retryInternal));
           // Started on an edge that doesn't have the uploaded Worker (or its entrypoint) yet: run it again
           // once the new version has arrived.
           if (
@@ -163,12 +178,14 @@ const BackfillLive = () =>
           ) {
             restarts += 1;
             yield* Effect.sleep(RESTART_DELAY);
-            yield* workflows.patchInstanceStatus({
-              accountId,
-              workflowName: news.workflowName,
-              instanceId,
-              status: "restart",
-            });
+            yield* workflows
+              .patchInstanceStatus({
+                accountId,
+                workflowName: news.workflowName,
+                instanceId,
+                status: "restart",
+              })
+              .pipe(Effect.retry(retryInternal));
             continue;
           }
           return yield* new BackfillFailed({
