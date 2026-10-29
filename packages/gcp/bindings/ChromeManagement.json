@@ -1,0 +1,15 @@
+{
+  "discovery": "chromemanagement-v1",
+  "module": "chromemanagement_v1",
+  "resources": {
+    "CustomersConnectorConfig": {
+      "pattern": "customers/*/connectorConfigs/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "chromemanagement.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

@@ -49,109 +49,109 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("AppsDebugToken", { concurrent: true }, () => {
       test.provider.skip(
-        "GetDebugToken (firebaseappcheck.projects.apps.debugTokens.get): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "GetDebugToken (firebaseappcheck.projects.apps.debugTokens.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
       test.provider.skip(
-        "BatchAppAttestConfigGet (firebaseappcheck.projects.apps.appAttestConfig.batchGet): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "BatchAppAttestConfigGet (firebaseappcheck.projects.apps.appAttestConfig.batchGet): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "BatchDeviceCheckConfigGet (firebaseappcheck.projects.apps.deviceCheckConfig.batchGet): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "BatchDeviceCheckConfigGet (firebaseappcheck.projects.apps.deviceCheckConfig.batchGet): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "BatchPlayIntegrityConfigGet (firebaseappcheck.projects.apps.playIntegrityConfig.batchGet): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "BatchPlayIntegrityConfigGet (firebaseappcheck.projects.apps.playIntegrityConfig.batchGet): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "BatchRecaptchaEnterpriseConfigGet (firebaseappcheck.projects.apps.recaptchaEnterpriseConfig.batchGet): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "BatchRecaptchaEnterpriseConfigGet (firebaseappcheck.projects.apps.recaptchaEnterpriseConfig.batchGet): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "BatchRecaptchaV3ConfigGet (firebaseappcheck.projects.apps.recaptchaV3Config.batchGet): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "BatchRecaptchaV3ConfigGet (firebaseappcheck.projects.apps.recaptchaV3Config.batchGet): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "BatchResourcePolicyUpdate (firebaseappcheck.projects.services.resourcePolicies.batchUpdate): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "BatchResourcePolicyUpdate (firebaseappcheck.projects.services.resourcePolicies.batchUpdate): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "BatchServiceUpdate (firebaseappcheck.projects.services.batchUpdate): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "BatchServiceUpdate (firebaseappcheck.projects.services.batchUpdate): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetAppAttestConfig (firebaseappcheck.projects.apps.appAttestConfig.get): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "GetAppAttestConfig (firebaseappcheck.projects.apps.appAttestConfig.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetAppDeviceCheckConfig (firebaseappcheck.projects.apps.deviceCheckConfig.get): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "GetAppDeviceCheckConfig (firebaseappcheck.projects.apps.deviceCheckConfig.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetAppPlayIntegrityConfig (firebaseappcheck.projects.apps.playIntegrityConfig.get): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "GetAppPlayIntegrityConfig (firebaseappcheck.projects.apps.playIntegrityConfig.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetAppRecaptchaEnterpriseConfig (firebaseappcheck.projects.apps.recaptchaEnterpriseConfig.get): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "GetAppRecaptchaEnterpriseConfig (firebaseappcheck.projects.apps.recaptchaEnterpriseConfig.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetAppRecaptchaV3Config (firebaseappcheck.projects.apps.recaptchaV3Config.get): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "GetAppRecaptchaV3Config (firebaseappcheck.projects.apps.recaptchaV3Config.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetService (firebaseappcheck.projects.services.get): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "GetService (firebaseappcheck.projects.services.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListAppDebugTokens (firebaseappcheck.projects.apps.debugTokens.list): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "ListAppDebugTokens (firebaseappcheck.projects.apps.debugTokens.list): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListServiceResourcePolicies (firebaseappcheck.projects.services.resourcePolicies.list): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "ListServiceResourcePolicies (firebaseappcheck.projects.services.resourcePolicies.list): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListServices (firebaseappcheck.projects.services.list): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "ListServices (firebaseappcheck.projects.services.list): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "MintAppCheckToken (firebaseappcheck.projects.apps.mintAppCheckToken): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "MintAppCheckToken (firebaseappcheck.projects.apps.mintAppCheckToken): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "PatchAppAttestConfig (firebaseappcheck.projects.apps.appAttestConfig.patch): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "PatchAppAttestConfig (firebaseappcheck.projects.apps.appAttestConfig.patch): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "PatchAppDeviceCheckConfig (firebaseappcheck.projects.apps.deviceCheckConfig.patch): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "PatchAppDeviceCheckConfig (firebaseappcheck.projects.apps.deviceCheckConfig.patch): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "PatchAppPlayIntegrityConfig (firebaseappcheck.projects.apps.playIntegrityConfig.patch): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "PatchAppPlayIntegrityConfig (firebaseappcheck.projects.apps.playIntegrityConfig.patch): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "PatchAppRecaptchaEnterpriseConfig (firebaseappcheck.projects.apps.recaptchaEnterpriseConfig.patch): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "PatchAppRecaptchaEnterpriseConfig (firebaseappcheck.projects.apps.recaptchaEnterpriseConfig.patch): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "PatchAppRecaptchaV3Config (firebaseappcheck.projects.apps.recaptchaV3Config.patch): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "PatchAppRecaptchaV3Config (firebaseappcheck.projects.apps.recaptchaV3Config.patch): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "PatchService (firebaseappcheck.projects.services.patch): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "PatchService (firebaseappcheck.projects.services.patch): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
     });
 
     describe("ServicesResourcePolicy", { concurrent: true }, () => {
       test.provider.skip(
-        "GetResourcePolicy (firebaseappcheck.projects.services.resourcePolicies.get): the testing project has no Firebase app, so App Check answers ServiceDisabled",
+        "GetResourcePolicy (firebaseappcheck.projects.services.resourcePolicies.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
     });

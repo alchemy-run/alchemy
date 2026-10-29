@@ -1,0 +1,15 @@
+{
+  "discovery": "agentregistry-v1",
+  "module": "agentregistry_v1",
+  "resources": {
+    "Binding": {
+      "pattern": "projects/*/locations/*/bindings/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "agentregistry.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

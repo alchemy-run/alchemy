@@ -1,0 +1,42 @@
+{
+  "discovery": "vmwareengine-v1",
+  "module": "vmwareengine_v1",
+  "resources": {
+    "Datastore": {
+      "pattern": "projects/*/locations/*/datastores/*"
+    },
+    "NetworkPeering": {
+      "pattern": "projects/*/locations/*/networkPeerings/*"
+    },
+    "NetworkPoliciesExternalAccessRule": {
+      "pattern": "projects/*/locations/*/networkPolicies/*/externalAccessRules/*"
+    },
+    "NetworkPolicy": {
+      "pattern": "projects/*/locations/*/networkPolicies/*"
+    },
+    "PrivateCloud": {
+      "pattern": "projects/*/locations/*/privateClouds/*"
+    },
+    "PrivateCloudsCluster": {
+      "pattern": "projects/*/locations/*/privateClouds/*/clusters/*"
+    },
+    "PrivateCloudsExternalAddress": {
+      "pattern": "projects/*/locations/*/privateClouds/*/externalAddresses/*"
+    },
+    "PrivateCloudsLoggingServer": {
+      "pattern": "projects/*/locations/*/privateClouds/*/loggingServers/*"
+    },
+    "PrivateCloudsManagementDnsZoneBinding": {
+      "pattern": "projects/*/locations/*/privateClouds/*/managementDnsZoneBindings/*"
+    },
+    "PrivateConnection": {
+      "pattern": "projects/*/locations/*/privateConnections/*"
+    },
+    "VmwareEngineNetwork": {
+      "pattern": "projects/*/locations/*/vmwareEngineNetworks/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

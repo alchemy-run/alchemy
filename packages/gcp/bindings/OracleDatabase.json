@@ -39,7 +39,7 @@
   "probes": {
     "resources": {},
     "untestable": {
-      "*": "Oracle Database@Google Cloud is not enabled on the testing project"
+      "*": "oracledatabase.googleapis.com is not enabled on the testing project"
     }
   }
 }

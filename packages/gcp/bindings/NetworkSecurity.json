@@ -1,0 +1,96 @@
+{
+  "discovery": "networksecurity-v1",
+  "module": "networksecurity_v1",
+  "resources": {
+    "AddressGroup": {
+      "pattern": "projects/*/locations/*/addressGroups/*"
+    },
+    "AuthorizationPolicy": {
+      "pattern": "projects/*/locations/*/authorizationPolicies/*"
+    },
+    "AuthzPolicy": {
+      "pattern": "projects/*/locations/*/authzPolicies/*"
+    },
+    "BackendAuthenticationConfig": {
+      "pattern": "projects/*/locations/*/backendAuthenticationConfigs/*"
+    },
+    "ClientTlsPolicy": {
+      "pattern": "projects/*/locations/*/clientTlsPolicies/*"
+    },
+    "DnsThreatDetector": {
+      "pattern": "projects/*/locations/*/dnsThreatDetectors/*"
+    },
+    "FirewallEndpoint": {
+      "pattern": "projects/*/locations/*/firewallEndpoints/*"
+    },
+    "FirewallEndpointAssociation": {
+      "pattern": "projects/*/locations/*/firewallEndpointAssociations/*"
+    },
+    "GatewaySecurityPoliciesRule": {
+      "pattern": "projects/*/locations/*/gatewaySecurityPolicies/*/rules/*"
+    },
+    "GatewaySecurityPolicy": {
+      "pattern": "projects/*/locations/*/gatewaySecurityPolicies/*"
+    },
+    "InterceptDeployment": {
+      "pattern": "projects/*/locations/*/interceptDeployments/*"
+    },
+    "InterceptDeploymentGroup": {
+      "pattern": "projects/*/locations/*/interceptDeploymentGroups/*"
+    },
+    "InterceptEndpointGroup": {
+      "pattern": "projects/*/locations/*/interceptEndpointGroups/*"
+    },
+    "InterceptEndpointGroupAssociation": {
+      "pattern": "projects/*/locations/*/interceptEndpointGroupAssociations/*"
+    },
+    "MirroringDeployment": {
+      "pattern": "projects/*/locations/*/mirroringDeployments/*"
+    },
+    "MirroringDeploymentGroup": {
+      "pattern": "projects/*/locations/*/mirroringDeploymentGroups/*"
+    },
+    "MirroringEndpointGroup": {
+      "pattern": "projects/*/locations/*/mirroringEndpointGroups/*"
+    },
+    "MirroringEndpointGroupAssociation": {
+      "pattern": "projects/*/locations/*/mirroringEndpointGroupAssociations/*"
+    },
+    "OrganizationsAddressGroup": {
+      "pattern": "organizations/*/locations/*/addressGroups/*"
+    },
+    "OrganizationsFirewallEndpoint": {
+      "pattern": "organizations/*/locations/*/firewallEndpoints/*"
+    },
+    "OrganizationsSecurityProfile": {
+      "pattern": "organizations/*/locations/*/securityProfiles/*"
+    },
+    "OrganizationsSecurityProfileGroup": {
+      "pattern": "organizations/*/locations/*/securityProfileGroups/*"
+    },
+    "SacAttachment": {
+      "pattern": "projects/*/locations/*/sacAttachments/*"
+    },
+    "SacRealm": {
+      "pattern": "projects/*/locations/*/sacRealms/*"
+    },
+    "SecurityProfile": {
+      "pattern": "projects/*/locations/*/securityProfiles/*"
+    },
+    "SecurityProfileGroup": {
+      "pattern": "projects/*/locations/*/securityProfileGroups/*"
+    },
+    "ServerTlsPolicy": {
+      "pattern": "projects/*/locations/*/serverTlsPolicies/*"
+    },
+    "TlsInspectionPolicy": {
+      "pattern": "projects/*/locations/*/tlsInspectionPolicies/*"
+    },
+    "UrlList": {
+      "pattern": "projects/*/locations/*/urlLists/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

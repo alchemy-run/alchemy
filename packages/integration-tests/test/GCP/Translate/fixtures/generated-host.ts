@@ -2,9 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
-import { Dataset } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Translate binding as its own
@@ -16,129 +14,8 @@ export default class TranslateGeneratedHost extends GCP.Function<TranslateGenera
   "TranslateGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.Translate.CreateDataset();
-    const p1 = yield* GCP.Translate.CreateGlossary();
-    const p2 = yield* GCP.Translate.DeleteAdaptiveMtDatasetAdaptiveMtFile(Dataset);
-    const p3 = yield* GCP.Translate.DeleteDataset();
-    const p4 = yield* GCP.Translate.DeleteGlossary();
-    const p5 = yield* GCP.Translate.DetectProjectLanguage();
-    const p6 = yield* GCP.Translate.ExportDatasetData();
-    const p7 = yield* GCP.Translate.GetAdaptiveMtDatasetAdaptiveMtFile(Dataset);
-    const p8 = yield* GCP.Translate.GetDataset();
-    const p9 = yield* GCP.Translate.GetGlossary();
-    const p10 = yield* GCP.Translate.GetProjectSupportedLanguages();
-    const p11 = yield* GCP.Translate.ImportAdaptiveMtDatasetAdaptiveMtFile(Dataset);
-    const p12 = yield* GCP.Translate.ImportDatasetData();
-    const p13 =
-      yield* GCP.Translate.ListAdaptiveMtDatasetAdaptiveMtFileAdaptiveMtSentences(Dataset);
-    const p14 = yield* GCP.Translate.ListAdaptiveMtDatasetAdaptiveMtFiles(Dataset);
-    const p15 = yield* GCP.Translate.ListAdaptiveMtDatasetAdaptiveMtSentences(Dataset);
-    const p16 = yield* GCP.Translate.ListAdaptiveMtDatasets();
-    const p17 = yield* GCP.Translate.ListDatasetExamples();
-    const p18 = yield* GCP.Translate.ListDatasets();
-    const p19 = yield* GCP.Translate.ListGlossaries();
-    const p20 = yield* GCP.Translate.ListGlossaryEntries();
-    const p21 = yield* GCP.Translate.ListModels();
-    const p22 = yield* GCP.Translate.PatchGlossary();
-    const p23 = yield* GCP.Translate.RomanizeProjectText();
     return {
-      fetch: serveProbes({
-        CreateDataset: outcome(
-          Retry.none(
-            p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
-          ),
-        ),
-        CreateGlossary: outcome(
-          Retry.none(
-            p1({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
-          ),
-        ),
-        DeleteAdaptiveMtDatasetAdaptiveMtFile: outcome(
-          Retry.none(p2({ adaptiveMtFile: "alchemy-missing" } as never)),
-        ),
-        DeleteDataset: outcome(
-          Retry.none(p3({ dataset: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        DeleteGlossary: outcome(
-          Retry.none(p4({ glossary: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        DetectProjectLanguage: outcome(Retry.none(p5({} as never))),
-        ExportDatasetData: outcome(
-          Retry.none(p6({ dataset: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        GetAdaptiveMtDatasetAdaptiveMtFile: outcome(
-          Retry.none(p7({ adaptiveMtFile: "alchemy-missing" } as never)),
-        ),
-        GetDataset: outcome(
-          Retry.none(p8({ dataset: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        GetGlossary: outcome(
-          Retry.none(p9({ glossary: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        GetProjectSupportedLanguages: outcome(Retry.none(p10({} as never))),
-        ImportAdaptiveMtDatasetAdaptiveMtFile: outcome(
-          Retry.none(p11({ body: { alchemyProbe: "alchemy-missing" } } as never)),
-        ),
-        ImportDatasetData: outcome(
-          Retry.none(
-            p12({
-              dataset: "alchemy-missing",
-              location: "us-central1",
-              body: { alchemyProbe: "alchemy-missing" },
-            } as never),
-          ),
-        ),
-        ListAdaptiveMtDatasetAdaptiveMtFileAdaptiveMtSentences: outcome(
-          Retry.none(p13({ adaptiveMtFile: "alchemy-missing" } as never)),
-        ),
-        ListAdaptiveMtDatasetAdaptiveMtFiles: outcome(Retry.none(p14({} as never))),
-        ListAdaptiveMtDatasetAdaptiveMtSentences: outcome(Retry.none(p15({} as never))),
-        ListAdaptiveMtDatasets: outcome(Retry.none(p16({ location: "us-central1" } as never))),
-        ListDatasetExamples: outcome(
-          Retry.none(p17({ dataset: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        ListDatasets: outcome(Retry.none(p18({ location: "us-central1" } as never))),
-        ListGlossaries: outcome(Retry.none(p19({ location: "us-central1" } as never))),
-        ListGlossaryEntries: outcome(
-          Retry.none(p20({ glossary: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        ListModels: outcome(Retry.none(p21({ location: "us-central1" } as never))),
-        PatchGlossary: outcome(
-          Retry.none(p22({ glossary: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        RomanizeProjectText: outcome(Retry.none(p23({} as never))),
-      }),
+      fetch: serveProbes({}),
     };
-  }).pipe(
-    Effect.provide(
-      Layer.mergeAll(
-        Layer.mergeAll(
-          GCP.Translate.CreateDatasetHttp,
-          GCP.Translate.CreateGlossaryHttp,
-          GCP.Translate.DeleteAdaptiveMtDatasetAdaptiveMtFileHttp,
-          GCP.Translate.DeleteDatasetHttp,
-          GCP.Translate.DeleteGlossaryHttp,
-          GCP.Translate.DetectProjectLanguageHttp,
-          GCP.Translate.ExportDatasetDataHttp,
-          GCP.Translate.GetAdaptiveMtDatasetAdaptiveMtFileHttp,
-          GCP.Translate.GetDatasetHttp,
-          GCP.Translate.GetGlossaryHttp,
-          GCP.Translate.GetProjectSupportedLanguagesHttp,
-          GCP.Translate.ImportAdaptiveMtDatasetAdaptiveMtFileHttp,
-          GCP.Translate.ImportDatasetDataHttp,
-          GCP.Translate.ListAdaptiveMtDatasetAdaptiveMtFileAdaptiveMtSentencesHttp,
-          GCP.Translate.ListAdaptiveMtDatasetAdaptiveMtFilesHttp,
-          GCP.Translate.ListAdaptiveMtDatasetAdaptiveMtSentencesHttp,
-          GCP.Translate.ListAdaptiveMtDatasetsHttp,
-          GCP.Translate.ListDatasetExamplesHttp,
-          GCP.Translate.ListDatasetsHttp,
-          GCP.Translate.ListGlossariesHttp,
-          GCP.Translate.ListGlossaryEntriesHttp,
-          GCP.Translate.ListModelsHttp,
-          GCP.Translate.PatchGlossaryHttp,
-          GCP.Translate.RomanizeProjectTextHttp,
-        ),
-      ),
-    ),
-  ),
+  }),
 ) {}

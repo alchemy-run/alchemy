@@ -1,0 +1,24 @@
+{
+  "discovery": "cloudnumberregistry-v1alpha",
+  "module": "cloudnumberregistry_v1alpha",
+  "resources": {
+    "CustomRange": {
+      "pattern": "projects/*/locations/*/customRanges/*"
+    },
+    "IpamAdminScope": {
+      "pattern": "projects/*/locations/*/ipamAdminScopes/*"
+    },
+    "Realm": {
+      "pattern": "projects/*/locations/*/realms/*"
+    },
+    "RegistryBook": {
+      "pattern": "projects/*/locations/*/registryBooks/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "cloudnumberregistry.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

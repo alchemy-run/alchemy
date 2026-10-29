@@ -1,0 +1,15 @@
+{
+  "discovery": "securityposture-v1",
+  "module": "securityposture_v1",
+  "resources": {
+    "Posture": {
+      "pattern": "organizations/*/locations/*/postures/*"
+    },
+    "PostureDeployment": {
+      "pattern": "organizations/*/locations/*/postureDeployments/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

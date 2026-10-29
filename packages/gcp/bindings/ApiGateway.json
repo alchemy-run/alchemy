@@ -1,0 +1,12 @@
+{
+  "discovery": "apigateway-v1",
+  "module": "apigateway_v1",
+  "resources": {
+    "ApisConfig": {
+      "pattern": "projects/*/locations/*/apis/*/configs/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

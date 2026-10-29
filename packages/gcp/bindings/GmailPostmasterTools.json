@@ -1,0 +1,18 @@
+{
+  "discovery": "gmailpostmastertools-v2",
+  "module": "gmailpostmastertools_v2",
+  "resources": {
+    "Domain": {
+      "pattern": "domains/*"
+    },
+    "DomainsUser": {
+      "pattern": "domains/*/users/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "gmailpostmastertools.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "discovery": "monitoring-v3",
+  "module": "monitoring_v3",
+  "resources": {
+    "AlertPolicy": {
+      "pattern": "projects/*/alertPolicies/*"
+    },
+    "Group": {
+      "pattern": "projects/*/groups/*"
+    },
+    "MetricDescriptor": {
+      "pattern": "projects/*/metricDescriptors/*"
+    },
+    "NotificationChannel": {
+      "pattern": "projects/*/notificationChannels/*"
+    },
+    "Service": {
+      "pattern": "*/*/services/*"
+    },
+    "ServicesServiceLevelObjective": {
+      "pattern": "*/*/services/*/serviceLevelObjectives/*"
+    },
+    "UptimeCheckConfig": {
+      "pattern": "projects/*/uptimeCheckConfigs/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

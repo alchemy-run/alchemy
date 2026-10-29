@@ -1,0 +1,24 @@
+{
+  "discovery": "beyondcorp-v1",
+  "module": "beyondcorp_v1",
+  "resources": {
+    "AppConnection": {
+      "pattern": "projects/*/locations/*/appConnections/*"
+    },
+    "AppConnector": {
+      "pattern": "projects/*/locations/*/appConnectors/*"
+    },
+    "AppGateway": {
+      "pattern": "projects/*/locations/*/appGateways/*"
+    },
+    "SecurityGateway": {
+      "pattern": "projects/*/locations/*/securityGateways/*"
+    },
+    "SecurityGatewaysApplication": {
+      "pattern": "projects/*/locations/*/securityGateways/*/applications/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

@@ -1,0 +1,15 @@
+{
+  "discovery": "observability-v1",
+  "module": "observability_v1",
+  "resources": {
+    "BucketsDatasetsLink": {
+      "pattern": "projects/*/locations/*/buckets/*/datasets/*/links/*"
+    },
+    "TraceScope": {
+      "pattern": "projects/*/locations/*/traceScopes/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

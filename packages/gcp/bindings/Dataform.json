@@ -1,0 +1,30 @@
+{
+  "discovery": "dataform-v1",
+  "module": "dataform_v1",
+  "resources": {
+    "ProjectsLocationsFolder": {
+      "pattern": "projects/*/locations/*/folders/*"
+    },
+    "RepositoriesReleaseConfig": {
+      "pattern": "projects/*/locations/*/repositories/*/releaseConfigs/*"
+    },
+    "RepositoriesWorkflowConfig": {
+      "pattern": "projects/*/locations/*/repositories/*/workflowConfigs/*"
+    },
+    "RepositoriesWorkflowInvocation": {
+      "pattern": "projects/*/locations/*/repositories/*/workflowInvocations/*"
+    },
+    "RepositoriesWorkspace": {
+      "pattern": "projects/*/locations/*/repositories/*/workspaces/*"
+    },
+    "Repository": {
+      "pattern": "projects/*/locations/*/repositories/*"
+    },
+    "Team": {
+      "pattern": "projects/*/locations/*/teamFolders/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

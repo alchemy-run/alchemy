@@ -1,0 +1,27 @@
+{
+  "discovery": "certificatemanager-v1",
+  "module": "certificatemanager_v1",
+  "resources": {
+    "Certificate": {
+      "pattern": "projects/*/locations/*/certificates/*"
+    },
+    "CertificateIssuanceConfig": {
+      "pattern": "projects/*/locations/*/certificateIssuanceConfigs/*"
+    },
+    "CertificateMap": {
+      "pattern": "projects/*/locations/*/certificateMaps/*"
+    },
+    "CertificateMapEntry": {
+      "pattern": "projects/*/locations/*/certificateMaps/*/certificateMapEntries/*"
+    },
+    "DnsAuthorization": {
+      "pattern": "projects/*/locations/*/dnsAuthorizations/*"
+    },
+    "TrustConfig": {
+      "pattern": "projects/*/locations/*/trustConfigs/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

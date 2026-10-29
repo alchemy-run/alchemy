@@ -1,0 +1,42 @@
+{
+  "discovery": "integrations-v1",
+  "module": "integrations_v1",
+  "resources": {
+    "AuthConfig": {
+      "pattern": "projects/*/locations/*/authConfigs/*"
+    },
+    "IntegrationsVersion": {
+      "pattern": "projects/*/locations/*/integrations/*/versions/*"
+    },
+    "IntegrationsVersionsTestCases": {
+      "pattern": "projects/*/locations/*/integrations/*/versions/*/testCases/*"
+    },
+    "ProductsAuthConfig": {
+      "pattern": "projects/*/locations/*/products/*/authConfigs/*"
+    },
+    "ProductsCertificate": {
+      "pattern": "projects/*/locations/*/products/*/certificates/*"
+    },
+    "ProductsIntegrationsVersion": {
+      "pattern": "projects/*/locations/*/products/*/integrations/*/versions/*"
+    },
+    "ProductsSfdcInstance": {
+      "pattern": "projects/*/locations/*/products/*/sfdcInstances/*"
+    },
+    "ProductsSfdcInstancesSfdcChannel": {
+      "pattern": "projects/*/locations/*/products/*/sfdcInstances/*/sfdcChannels/*"
+    },
+    "SfdcInstance": {
+      "pattern": "projects/*/locations/*/sfdcInstances/*"
+    },
+    "SfdcInstancesSfdcChannel": {
+      "pattern": "projects/*/locations/*/sfdcInstances/*/sfdcChannels/*"
+    },
+    "Template": {
+      "pattern": "projects/*/locations/*/templates/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

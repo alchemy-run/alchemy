@@ -16,7 +16,7 @@
   "probes": {
     "resources": {},
     "untestable": {
-      "*": "Cloud TPU is disabled on the testing project and TPU VMs bill by the hour"
+      "*": "tpu.googleapis.com is not enabled on the testing project"
     }
   }
 }

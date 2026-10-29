@@ -281,11 +281,15 @@ const singular = (word: string) =>
  * Trailing literal segments and `:verb` suffixes name the action, not the target.
  */
 const flatTarget = (path: string) => {
-  // A leading API version (`v1/projects/{projectId}`) isn't part of the target.
-  const parts = path
-    .replace(/:[A-Za-z]+$/, "")
-    .split("/")
-    .filter((part, i) => i !== 0 || !/^v\d+((alpha|beta)\d*)?$/.test(part));
+  // A leading service name and version (`dns/v1/projects/{project}`) aren't
+  // part of the target.
+  const all = path.replace(/:[A-Za-z]+$/, "").split("/");
+  const projects = all.indexOf("projects");
+  const leading = projects > 0 ? all.slice(0, projects) : [];
+  const parts =
+    leading.length > 0 && leading.every((part) => /^[a-z][a-z0-9]*$/.test(part))
+      ? all.slice(projects)
+      : all.filter((part, i) => i !== 0 || !/^v\d+((alpha|beta)\d*)?$/.test(part));
   const segments: string[] = [];
   const params: string[] = [];
   for (const part of parts) {
@@ -845,6 +849,11 @@ ${variants.join("\n")}
 };
 
 const RESERVED = new Set([
+  "process",
+  "props",
+  "resource",
+  "events",
+  "options",
   "function",
   "class",
   "delete",
@@ -883,6 +892,8 @@ const emitContract = (service: string, config: ServiceConfig, binding: Binding) 
   const first = binding.variants[0]!;
   const moduleSource = first.api.moduleSource;
   const resourceTypes = [...new Set(binding.variants.map((v) => v.resource))];
+  // A resource named `Binding` (Agent Registry) shadows alchemy's module.
+  const bindingNs = resourceTypes.includes("Binding") ? "AlchemyBinding" : "Binding";
   const childFields = [
     ...childFieldsOf(first).map(([, field]) => field),
     ...(first.suffix ? [first.suffix[1]] : []),
@@ -913,7 +924,7 @@ const emitContract = (service: string, config: ServiceConfig, binding: Binding) 
   const variable = variableName(binding.name);
   const grants = [...new Set(binding.variants.map((v) => `\`${v.role}\``))].join(", ");
   return `${HEADER(service)}${apiImports(binding, true)}
-import * as Binding from "alchemy/Binding";
+import * as ${bindingNs} from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 ${resourceTypes.map((r) => `import type { ${importName(config.resources[r]!, r)} } from "./${config.resources[r]!.file ?? r}.ts";`).join("\n")}
@@ -946,9 +957,9 @@ export type ${binding.name}Shape = (
  * @category ${service}
  */
 export interface ${binding.name}
-  extends Binding.Service<${binding.name}, "GCP.${service}.${binding.name}", ${binding.name}Shape> {}
+  extends ${bindingNs}.Service<${binding.name}, "GCP.${service}.${binding.name}", ${binding.name}Shape> {}
 
-export const ${binding.name} = Binding.Service<${binding.name}>("GCP.${service}.${binding.name}");
+export const ${binding.name} = ${bindingNs}.Service<${binding.name}>("GCP.${service}.${binding.name}");
 `;
 };
 
@@ -1225,10 +1236,27 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
     ...new Set(apis.map((api) => new URL(api.doc.rootUrl).host.replace(/^[a-z0-9-]+\.mtls\./, ""))),
   ];
   const auditLogs: string[] = [];
+  // Resource modules declaring a `name: string` attribute: an audit filter
+  // needs the resource's full name.
+  const named = new Set<string>();
+  const sources = yield* Effect.forEach(
+    files.filter((f) => f.endsWith(".ts")),
+    (f) => fs.readFileString(path.join(serviceDir, f)).pipe(Effect.orElseSucceed(() => "")),
+  );
+  for (const [key, resource] of Object.entries(config.resources)) {
+    const type = resource.type ?? `GCP.${service}.${key}`;
+    const source = sources.find((text) => new RegExp(`Resource<\\s*"${type}"`).test(text));
+    if (source !== undefined && /\n\s+name: string;/.test(source)) named.add(key);
+  }
   // A child with no IAM of its own is covered by its parent's audit logs
   // (the filter matches the parent and everything below it).
   for (const [key, resource] of Object.entries(config.resources).filter(
-    ([, resource]) => !resource.lifecycleOnly && resource.noAuditLogs === undefined,
+    ([key, resource]) =>
+      !resource.lifecycleOnly &&
+      resource.noAuditLogs === undefined &&
+      // The audit filter needs the resource's full name: a `name: string`
+      // attribute, or a template over its attributes.
+      (resource.auditName !== undefined || resource.attributes !== undefined || named.has(key)),
   )) {
     const file = `${key}AuditLogs.ts`;
     if (handWritten.has(file)) {
@@ -1249,12 +1277,14 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
   }
   yield* fs.writeFileString(
     path.join(serviceDir, "generated.ts"),
-    `${HEADER(service)}${[
-      ...bindings.flatMap((b) => [`./${b.name}.ts`, `./${b.name}Http.ts`]),
-      ...auditLogs.map((file) => `./${file}`),
-    ]
-      .map((file) => `export * from "${file}";`)
-      .join("\n")}\n`,
+    `${HEADER(service)}${
+      [
+        ...bindings.flatMap((b) => [`./${b.name}.ts`, `./${b.name}Http.ts`]),
+        ...auditLogs.map((file) => `./${file}`),
+      ]
+        .map((file) => `export * from "${file}";`)
+        .join("\n") || "export {};"
+    }\n`,
   );
   const indexPath = path.join(serviceDir, "index.ts");
   const index = yield* fs.readFileString(indexPath);

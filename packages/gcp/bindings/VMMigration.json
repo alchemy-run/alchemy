@@ -1,0 +1,33 @@
+{
+  "discovery": "vmmigration-v1",
+  "module": "vmmigration_v1",
+  "resources": {
+    "Group": {
+      "pattern": "projects/*/locations/*/groups/*"
+    },
+    "ImageImport": {
+      "pattern": "projects/*/locations/*/imageImports/*"
+    },
+    "Source": {
+      "pattern": "projects/*/locations/*/sources/*"
+    },
+    "SourcesDatacenterConnector": {
+      "pattern": "projects/*/locations/*/sources/*/datacenterConnectors/*"
+    },
+    "SourcesDiskMigrationJob": {
+      "pattern": "projects/*/locations/*/sources/*/diskMigrationJobs/*"
+    },
+    "SourcesMigratingVm": {
+      "pattern": "projects/*/locations/*/sources/*/migratingVms/*"
+    },
+    "SourcesUtilizationReport": {
+      "pattern": "projects/*/locations/*/sources/*/utilizationReports/*"
+    },
+    "Target": {
+      "pattern": "projects/*/locations/*/targetProjects/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

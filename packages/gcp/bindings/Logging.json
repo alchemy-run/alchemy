@@ -1,0 +1,107 @@
+{
+  "discovery": "logging-v2",
+  "module": "logging_v2",
+  "resources": {
+    "BillingBucket": {
+      "pattern": "billingAccounts/*/locations/*/buckets/*"
+    },
+    "BillingBucketsLink": {
+      "pattern": "billingAccounts/*/locations/*/buckets/*/links/*"
+    },
+    "BillingBucketsView": {
+      "pattern": "billingAccounts/*/locations/*/buckets/*/views/*"
+    },
+    "BillingExclusion": {
+      "pattern": "billingAccounts/*/exclusions/*"
+    },
+    "BillingSavedQuery": {
+      "pattern": "billingAccounts/*/locations/*/savedQueries/*"
+    },
+    "BillingSink": {
+      "pattern": "*",
+      "_flat": true
+    },
+    "BucketsLink": {
+      "pattern": "projects/*/locations/*/buckets/*/links/*"
+    },
+    "BucketsView": {
+      "pattern": "projects/*/locations/*/buckets/*/views/*"
+    },
+    "Exclusion": {
+      "pattern": "projects/*/exclusions/*"
+    },
+    "FolderBucket": {
+      "pattern": "folders/*/locations/*/buckets/*"
+    },
+    "FolderBucketsLink": {
+      "pattern": "folders/*/locations/*/buckets/*/links/*"
+    },
+    "FolderBucketsView": {
+      "pattern": "folders/*/locations/*/buckets/*/views/*"
+    },
+    "FolderExclusion": {
+      "pattern": "folders/*/exclusions/*"
+    },
+    "FolderLogScope": {
+      "pattern": "folders/*/locations/*/logScopes/*"
+    },
+    "FolderSavedQuery": {
+      "pattern": "folders/*/locations/*/savedQueries/*"
+    },
+    "FolderSink": {
+      "pattern": "*",
+      "_flat": true
+    },
+    "LocationsBucket": {
+      "pattern": "*/*/locations/*/buckets/*"
+    },
+    "LocationsBucketsLink": {
+      "pattern": "*/*/locations/*/buckets/*/links/*"
+    },
+    "LocationsBucketsView": {
+      "pattern": "*/*/locations/*/buckets/*/views/*"
+    },
+    "LogBucket": {
+      "pattern": "projects/*/locations/*/buckets/*"
+    },
+    "LogScope": {
+      "pattern": "projects/*/locations/*/logScopes/*"
+    },
+    "Metric": {
+      "pattern": "*",
+      "_flat": true
+    },
+    "OrganizationBucketsLink": {
+      "pattern": "organizations/*/locations/*/buckets/*/links/*"
+    },
+    "OrganizationBucketsView": {
+      "pattern": "organizations/*/locations/*/buckets/*/views/*"
+    },
+    "OrganizationExclusion": {
+      "pattern": "organizations/*/exclusions/*"
+    },
+    "OrganizationLogBucket": {
+      "pattern": "organizations/*/locations/*/buckets/*"
+    },
+    "OrganizationLogScope": {
+      "pattern": "organizations/*/locations/*/logScopes/*"
+    },
+    "OrganizationSavedQuery": {
+      "pattern": "organizations/*/locations/*/savedQueries/*"
+    },
+    "OrganizationSink": {
+      "pattern": "*",
+      "_flat": true
+    },
+    "SavedQuery": {
+      "pattern": "projects/*/locations/*/savedQueries/*"
+    },
+    "Sink": {
+      "pattern": "*",
+      "_flat": true
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

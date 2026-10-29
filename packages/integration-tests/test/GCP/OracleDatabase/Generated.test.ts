@@ -49,146 +49,146 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("AutonomousDatabase", { concurrent: true }, () => {
       test.provider.skip(
-        "FailoverAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.failover): Oracle Database@Google Cloud is not enabled on the testing project",
+        "FailoverAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.failover): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetAutonomousDatabaseRefreshableClones (oracledatabase.projects.locations.autonomousDatabases.getRefreshableClones): Oracle Database@Google Cloud is not enabled on the testing project",
+        "GetAutonomousDatabaseRefreshableClones (oracledatabase.projects.locations.autonomousDatabases.getRefreshableClones): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "RefreshAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.refresh): Oracle Database@Google Cloud is not enabled on the testing project",
+        "RefreshAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.refresh): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "RestoreAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.restore): Oracle Database@Google Cloud is not enabled on the testing project",
+        "RestoreAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.restore): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "SwitchoverAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.switchover): Oracle Database@Google Cloud is not enabled on the testing project",
+        "SwitchoverAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.switchover): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
     });
 
     describe("CloudExadataInfrastructure", { concurrent: true }, () => {
       test.provider.skip(
-        "ConfigureCloudExadataInfrastructureExascale (oracledatabase.projects.locations.cloudExadataInfrastructures.configureExascale): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ConfigureCloudExadataInfrastructureExascale (oracledatabase.projects.locations.cloudExadataInfrastructures.configureExascale): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListCloudExadataInfrastructureDbServers (oracledatabase.projects.locations.cloudExadataInfrastructures.dbServers.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListCloudExadataInfrastructureDbServers (oracledatabase.projects.locations.cloudExadataInfrastructures.dbServers.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
     });
 
     describe("CloudVmCluster", { concurrent: true }, () => {
       test.provider.skip(
-        "ListCloudVmClusterDbNodes (oracledatabase.projects.locations.cloudVmClusters.dbNodes.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListCloudVmClusterDbNodes (oracledatabase.projects.locations.cloudVmClusters.dbNodes.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
     });
 
     describe("ExadbVmCluster", { concurrent: true }, () => {
       test.provider.skip(
-        "ListExadbVmClusterDbNodes (oracledatabase.projects.locations.exadbVmClusters.dbNodes.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListExadbVmClusterDbNodes (oracledatabase.projects.locations.exadbVmClusters.dbNodes.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "RemoveExadbVmClusterVirtualMachine (oracledatabase.projects.locations.exadbVmClusters.removeVirtualMachine): Oracle Database@Google Cloud is not enabled on the testing project",
+        "RemoveExadbVmClusterVirtualMachine (oracledatabase.projects.locations.exadbVmClusters.removeVirtualMachine): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
     });
 
     describe("OdbNetwork", { concurrent: true }, () => {
       test.provider.skip(
-        "ListOdbNetworkOdbSubnets (oracledatabase.projects.locations.odbNetworks.odbSubnets.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListOdbNetworkOdbSubnets (oracledatabase.projects.locations.odbNetworks.odbSubnets.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
       test.provider.skip(
-        "GetDatabase (oracledatabase.projects.locations.databases.get): Oracle Database@Google Cloud is not enabled on the testing project",
+        "GetDatabase (oracledatabase.projects.locations.databases.get): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetPluggableDatabase (oracledatabase.projects.locations.pluggableDatabases.get): Oracle Database@Google Cloud is not enabled on the testing project",
+        "GetPluggableDatabase (oracledatabase.projects.locations.pluggableDatabases.get): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListAutonomousDatabaseBackups (oracledatabase.projects.locations.autonomousDatabaseBackups.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListAutonomousDatabaseBackups (oracledatabase.projects.locations.autonomousDatabaseBackups.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListAutonomousDatabaseCharacterSets (oracledatabase.projects.locations.autonomousDatabaseCharacterSets.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListAutonomousDatabaseCharacterSets (oracledatabase.projects.locations.autonomousDatabaseCharacterSets.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListAutonomousDatabases (oracledatabase.projects.locations.autonomousDatabases.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListAutonomousDatabases (oracledatabase.projects.locations.autonomousDatabases.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListAutonomousDbVersions (oracledatabase.projects.locations.autonomousDbVersions.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListAutonomousDbVersions (oracledatabase.projects.locations.autonomousDbVersions.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListCloudExadataInfrastructures (oracledatabase.projects.locations.cloudExadataInfrastructures.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListCloudExadataInfrastructures (oracledatabase.projects.locations.cloudExadataInfrastructures.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListCloudVmClusters (oracledatabase.projects.locations.cloudVmClusters.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListCloudVmClusters (oracledatabase.projects.locations.cloudVmClusters.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListDatabaseCharacterSets (oracledatabase.projects.locations.databaseCharacterSets.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListDatabaseCharacterSets (oracledatabase.projects.locations.databaseCharacterSets.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListDatabases (oracledatabase.projects.locations.databases.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListDatabases (oracledatabase.projects.locations.databases.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListDbSystemInitialStorageSizes (oracledatabase.projects.locations.dbSystemInitialStorageSizes.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListDbSystemInitialStorageSizes (oracledatabase.projects.locations.dbSystemInitialStorageSizes.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListDbSystems (oracledatabase.projects.locations.dbSystems.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListDbSystems (oracledatabase.projects.locations.dbSystems.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListDbSystemShapes (oracledatabase.projects.locations.dbSystemShapes.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListDbSystemShapes (oracledatabase.projects.locations.dbSystemShapes.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListDbVersions (oracledatabase.projects.locations.dbVersions.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListDbVersions (oracledatabase.projects.locations.dbVersions.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListEntitlements (oracledatabase.projects.locations.entitlements.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListEntitlements (oracledatabase.projects.locations.entitlements.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListExadbVmClusters (oracledatabase.projects.locations.exadbVmClusters.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListExadbVmClusters (oracledatabase.projects.locations.exadbVmClusters.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListExascaleDbStorageVaults (oracledatabase.projects.locations.exascaleDbStorageVaults.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListExascaleDbStorageVaults (oracledatabase.projects.locations.exascaleDbStorageVaults.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListGiVersionMinorVersions (oracledatabase.projects.locations.giVersions.minorVersions.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListGiVersionMinorVersions (oracledatabase.projects.locations.giVersions.minorVersions.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListGiVersions (oracledatabase.projects.locations.giVersions.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListGiVersions (oracledatabase.projects.locations.giVersions.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListOdbNetworks (oracledatabase.projects.locations.odbNetworks.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListOdbNetworks (oracledatabase.projects.locations.odbNetworks.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListPluggableDatabases (oracledatabase.projects.locations.pluggableDatabases.list): Oracle Database@Google Cloud is not enabled on the testing project",
+        "ListPluggableDatabases (oracledatabase.projects.locations.pluggableDatabases.list): oracledatabase.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
     });

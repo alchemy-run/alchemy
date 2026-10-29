@@ -1,0 +1,21 @@
+{
+  "discovery": "backupdr-v1",
+  "module": "backupdr_v1",
+  "resources": {
+    "BackupPlan": {
+      "pattern": "projects/*/locations/*/backupPlans/*"
+    },
+    "BackupPlanAssociation": {
+      "pattern": "projects/*/locations/*/backupPlanAssociations/*"
+    },
+    "BackupVault": {
+      "pattern": "projects/*/locations/*/backupVaults/*"
+    },
+    "ManagementServer": {
+      "pattern": "projects/*/locations/*/managementServers/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

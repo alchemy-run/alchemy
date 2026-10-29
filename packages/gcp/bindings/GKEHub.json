@@ -1,0 +1,12 @@
+{
+  "discovery": "gkehub-v2",
+  "module": "gkehub_v2",
+  "resources": {
+    "MembershipsFeature": {
+      "pattern": "projects/*/locations/*/memberships/*/features/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

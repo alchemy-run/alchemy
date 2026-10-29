@@ -1,0 +1,12 @@
+{
+  "discovery": "serviceusage-v1",
+  "module": "serviceusage_v1",
+  "resources": {
+    "ProjectService": {
+      "pattern": "*/*/services/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

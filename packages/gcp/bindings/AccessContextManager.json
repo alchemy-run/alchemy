@@ -1,0 +1,24 @@
+{
+  "discovery": "accesscontextmanager-v1",
+  "module": "accesscontextmanager_v1",
+  "resources": {
+    "AccessPoliciesAccessLevel": {
+      "pattern": "accessPolicies/*/accessLevels/*"
+    },
+    "AccessPoliciesAuthorizedOrgsDesc": {
+      "pattern": "accessPolicies/*/authorizedOrgsDescs/*"
+    },
+    "AccessPoliciesServicePerimeter": {
+      "pattern": "accessPolicies/*/servicePerimeters/*"
+    },
+    "AccessPolicy": {
+      "pattern": "accessPolicies/*"
+    },
+    "GcpUserAccessBinding": {
+      "pattern": "organizations/*/gcpUserAccessBindings/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "discovery": "cloudidentity-v1",
+  "module": "cloudidentity_v1",
+  "resources": {
+    "Device": {
+      "pattern": "devices/*"
+    },
+    "Group": {
+      "pattern": "groups/*"
+    },
+    "GroupsMembership": {
+      "pattern": "groups/*/memberships/*"
+    },
+    "InboundOidcSsoProfile": {
+      "pattern": "inboundOidcSsoProfiles/*"
+    },
+    "InboundSamlSsoProfile": {
+      "pattern": "inboundSamlSsoProfiles/*"
+    },
+    "InboundSsoAssignment": {
+      "pattern": "inboundSsoAssignments/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "cloudidentity.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "discovery": "saasservicemgmt-v1",
+  "module": "saasservicemgmt_v1",
+  "resources": {
+    "Release": {
+      "pattern": "projects/*/locations/*/releases/*"
+    },
+    "Rollout": {
+      "pattern": "projects/*/locations/*/rollouts/*"
+    },
+    "RolloutKind": {
+      "pattern": "projects/*/locations/*/rolloutKinds/*"
+    },
+    "Saa": {
+      "pattern": "projects/*/locations/*/saas/*"
+    },
+    "Tenant": {
+      "pattern": "projects/*/locations/*/tenants/*"
+    },
+    "Unit": {
+      "pattern": "projects/*/locations/*/units/*"
+    },
+    "UnitKind": {
+      "pattern": "projects/*/locations/*/unitKinds/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

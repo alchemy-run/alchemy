@@ -18,7 +18,7 @@
   "probes": {
     "resources": {},
     "untestable": {
-      "*": "Document AI Warehouse is disabled on the testing project and needs per-project provisioning"
+      "*": "contentwarehouse.googleapis.com is not enabled on the testing project"
     }
   },
   "permissions": {

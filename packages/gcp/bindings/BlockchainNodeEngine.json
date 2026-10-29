@@ -1,0 +1,12 @@
+{
+  "discovery": "blockchainnodeengine-v1",
+  "module": "blockchainnodeengine_v1",
+  "resources": {
+    "BlockchainNode": {
+      "pattern": "projects/*/locations/*/blockchainNodes/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

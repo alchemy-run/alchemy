@@ -1,0 +1,15 @@
+{
+  "discovery": "orgpolicy-v2",
+  "module": "orgpolicy_v2",
+  "resources": {
+    "CustomConstraint": {
+      "pattern": "organizations/*/customConstraints/*"
+    },
+    "Policy": {
+      "pattern": "organizations/*/policies/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

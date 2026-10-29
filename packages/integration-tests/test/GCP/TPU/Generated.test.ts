@@ -49,49 +49,49 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("Node", { concurrent: true }, () => {
       test.provider.skip(
-        "GetNodeGuestAttributes (tpu.projects.locations.nodes.getGuestAttributes): Cloud TPU is disabled on the testing project and TPU VMs bill by the hour",
+        "GetNodeGuestAttributes (tpu.projects.locations.nodes.getGuestAttributes): tpu.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "StartNode (tpu.projects.locations.nodes.start): Cloud TPU is disabled on the testing project and TPU VMs bill by the hour",
+        "StartNode (tpu.projects.locations.nodes.start): tpu.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "StopNode (tpu.projects.locations.nodes.stop): Cloud TPU is disabled on the testing project and TPU VMs bill by the hour",
+        "StopNode (tpu.projects.locations.nodes.stop): tpu.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
       test.provider.skip(
-        "GetAcceleratorType (tpu.projects.locations.acceleratorTypes.get): Cloud TPU is disabled on the testing project and TPU VMs bill by the hour",
+        "GetAcceleratorType (tpu.projects.locations.acceleratorTypes.get): tpu.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetRuntimeVersion (tpu.projects.locations.runtimeVersions.get): Cloud TPU is disabled on the testing project and TPU VMs bill by the hour",
+        "GetRuntimeVersion (tpu.projects.locations.runtimeVersions.get): tpu.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListAcceleratorTypes (tpu.projects.locations.acceleratorTypes.list): Cloud TPU is disabled on the testing project and TPU VMs bill by the hour",
+        "ListAcceleratorTypes (tpu.projects.locations.acceleratorTypes.list): tpu.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListNodes (tpu.projects.locations.nodes.list): Cloud TPU is disabled on the testing project and TPU VMs bill by the hour",
+        "ListNodes (tpu.projects.locations.nodes.list): tpu.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListQueuedResources (tpu.projects.locations.queuedResources.list): Cloud TPU is disabled on the testing project and TPU VMs bill by the hour",
+        "ListQueuedResources (tpu.projects.locations.queuedResources.list): tpu.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListRuntimeVersions (tpu.projects.locations.runtimeVersions.list): Cloud TPU is disabled on the testing project and TPU VMs bill by the hour",
+        "ListRuntimeVersions (tpu.projects.locations.runtimeVersions.list): tpu.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
     });
 
     describe("QueuedResource", { concurrent: true }, () => {
       test.provider.skip(
-        "ResetQueuedResource (tpu.projects.locations.queuedResources.reset): Cloud TPU is disabled on the testing project and TPU VMs bill by the hour",
+        "ResetQueuedResource (tpu.projects.locations.queuedResources.reset): tpu.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
     });

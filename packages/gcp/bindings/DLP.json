@@ -1,0 +1,72 @@
+{
+  "discovery": "dlp-v2",
+  "module": "dlp_v2",
+  "resources": {
+    "ContentPolicy": {
+      "pattern": "projects/*/locations/*/contentPolicies/*"
+    },
+    "DeidentifyTemplate": {
+      "pattern": "projects/*/deidentifyTemplates/*"
+    },
+    "DiscoveryConfig": {
+      "pattern": "projects/*/locations/*/discoveryConfigs/*"
+    },
+    "DlpJob": {
+      "pattern": "projects/*/dlpJobs/*"
+    },
+    "InspectTemplate": {
+      "pattern": "projects/*/inspectTemplates/*"
+    },
+    "JobTrigger": {
+      "pattern": "projects/*/jobTriggers/*"
+    },
+    "LocationsDeidentifyTemplate": {
+      "pattern": "projects/*/locations/*/deidentifyTemplates/*"
+    },
+    "LocationsDlpJob": {
+      "pattern": "projects/*/locations/*/dlpJobs/*"
+    },
+    "LocationsInspectTemplate": {
+      "pattern": "projects/*/locations/*/inspectTemplates/*"
+    },
+    "LocationsJobTrigger": {
+      "pattern": "projects/*/locations/*/jobTriggers/*"
+    },
+    "LocationsStoredInfoType": {
+      "pattern": "projects/*/locations/*/storedInfoTypes/*"
+    },
+    "OrganizationStoredInfoType": {
+      "pattern": "organizations/*/storedInfoTypes/*"
+    },
+    "OrganizationsDeidentifyTemplate": {
+      "pattern": "organizations/*/deidentifyTemplates/*"
+    },
+    "OrganizationsInspectTemplate": {
+      "pattern": "organizations/*/inspectTemplates/*"
+    },
+    "OrganizationsLocationsConnection": {
+      "pattern": "organizations/*/locations/*/connections/*"
+    },
+    "OrganizationsLocationsDeidentifyTemplate": {
+      "pattern": "organizations/*/locations/*/deidentifyTemplates/*"
+    },
+    "OrganizationsLocationsDiscoveryConfig": {
+      "pattern": "organizations/*/locations/*/discoveryConfigs/*"
+    },
+    "OrganizationsLocationsInspectTemplate": {
+      "pattern": "organizations/*/locations/*/inspectTemplates/*"
+    },
+    "OrganizationsLocationsJobTrigger": {
+      "pattern": "organizations/*/locations/*/jobTriggers/*"
+    },
+    "OrganizationsLocationsStoredInfoType": {
+      "pattern": "organizations/*/locations/*/storedInfoTypes/*"
+    },
+    "StoredInfoType": {
+      "pattern": "projects/*/storedInfoTypes/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

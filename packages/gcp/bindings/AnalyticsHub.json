@@ -1,0 +1,18 @@
+{
+  "discovery": "analyticshub-v1",
+  "module": "analyticshub_v1",
+  "resources": {
+    "DataExchange": {
+      "pattern": "projects/*/locations/*/dataExchanges/*"
+    },
+    "DataExchangesListing": {
+      "pattern": "projects/*/locations/*/dataExchanges/*/listings/*"
+    },
+    "DataExchangesQueryTemplate": {
+      "pattern": "projects/*/locations/*/dataExchanges/*/queryTemplates/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

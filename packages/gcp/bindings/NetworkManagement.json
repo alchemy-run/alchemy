@@ -1,0 +1,21 @@
+{
+  "discovery": "networkmanagement-v1",
+  "module": "networkmanagement_v1",
+  "resources": {
+    "ConnectivityTest": {
+      "pattern": "projects/*/locations/global/connectivityTests/*"
+    },
+    "NetworkMonitoringProvider": {
+      "pattern": "projects/*/locations/*/networkMonitoringProviders/*"
+    },
+    "OrganizationsVpcFlowLogsConfig": {
+      "pattern": "organizations/*/locations/*/vpcFlowLogsConfigs/*"
+    },
+    "VpcFlowLogsConfig": {
+      "pattern": "projects/*/locations/*/vpcFlowLogsConfigs/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

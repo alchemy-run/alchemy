@@ -10,6 +10,9 @@
   "probes": {
     "resources": {
       "CatalogsCatalogItem": "Shirt"
+    },
+    "untestable": {
+      "*": "recommendationengine.googleapis.com is not enabled on the testing project"
     }
   }
 }

@@ -1,0 +1,13 @@
+{
+  "discovery": "licensing-v1",
+  "module": "licensing_v1",
+  "resources": {
+    "LicenseAssignment": {
+      "pattern": "apps/licensing/v1/product/*/sku/*/user/*",
+      "_flat": true
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

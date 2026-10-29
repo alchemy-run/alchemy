@@ -4,3 +4,4 @@ export * from "./Project.ts";
 export * from "./TagBinding.ts";
 export * from "./TagKey.ts";
 export * from "./TagValue.ts";
+export * from "./generated.ts";

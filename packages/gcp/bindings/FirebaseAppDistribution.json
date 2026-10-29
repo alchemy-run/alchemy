@@ -1,0 +1,15 @@
+{
+  "discovery": "firebaseappdistribution-v1",
+  "module": "firebaseappdistribution_v1",
+  "resources": {
+    "Group": {
+      "pattern": "projects/*/groups/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "firebaseappdistribution.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "discovery": "metastore-v1",
+  "module": "metastore_v1",
+  "resources": {
+    "Federation": {
+      "pattern": "projects/*/locations/*/federations/*"
+    },
+    "Service": {
+      "pattern": "projects/*/locations/*/services/*"
+    },
+    "ServicesBackup": {
+      "pattern": "projects/*/locations/*/services/*/backups/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "metastore.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

@@ -76,5 +76,8 @@
     "firestore.projects.databases.userCreds.disable": "IAM Conditions on `resource.name` don't match individual user credentials",
     "firestore.projects.databases.userCreds.resetPassword": "IAM Conditions on `resource.name` don't match individual user credentials",
     "firestore.projects.databases.userCreds.delete": "IAM Conditions on `resource.name` don't match individual user credentials"
+  },
+  "probes": {
+    "resources": {}
   }
 }

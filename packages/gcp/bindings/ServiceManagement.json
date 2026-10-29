@@ -1,0 +1,13 @@
+{
+  "discovery": "servicemanagement-v1",
+  "module": "servicemanagement_v1",
+  "resources": {
+    "Service": {
+      "pattern": "services/*",
+      "_flat": true
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

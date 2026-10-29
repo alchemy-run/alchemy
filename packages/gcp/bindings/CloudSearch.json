@@ -1,0 +1,18 @@
+{
+  "discovery": "cloudsearch-v1",
+  "module": "cloudsearch_v1",
+  "resources": {
+    "SettingsDatasource": {
+      "pattern": "datasources/*"
+    },
+    "SettingsSearchapplication": {
+      "pattern": "searchapplications/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "cloudsearch.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

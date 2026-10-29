@@ -2,9 +2,14 @@
   "discovery": "cloudscheduler-v1",
   "module": "cloudscheduler_v1",
   "resources": {
-    "Job": { "pattern": "projects/*/locations/*/jobs/*" }
+    "Job": {
+      "pattern": "projects/*/locations/*/jobs/*"
+    }
   },
   "permissions": {
     "cloudscheduler.projects.locations.jobs.resume": "cloudscheduler.jobs.enable"
+  },
+  "probes": {
+    "resources": {}
   }
 }

@@ -1,0 +1,24 @@
+{
+  "discovery": "apphub-v1",
+  "module": "apphub_v1",
+  "resources": {
+    "Application": {
+      "pattern": "projects/*/locations/*/applications/*"
+    },
+    "ApplicationsService": {
+      "pattern": "projects/*/locations/*/applications/*/services/*"
+    },
+    "ApplicationsWorkload": {
+      "pattern": "projects/*/locations/*/applications/*/workloads/*"
+    },
+    "ServiceProjectAttachment": {
+      "pattern": "projects/*/locations/*/serviceProjectAttachments/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "apphub.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

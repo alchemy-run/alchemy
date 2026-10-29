@@ -1,0 +1,39 @@
+{
+  "discovery": "healthcare-v1",
+  "module": "healthcare_v1",
+  "resources": {
+    "Dataset": {
+      "pattern": "projects/*/locations/*/datasets/*"
+    },
+    "DatasetsConsentStore": {
+      "pattern": "projects/*/locations/*/datasets/*/consentStores/*"
+    },
+    "DatasetsConsentStoresAttributeDefinition": {
+      "pattern": "projects/*/locations/*/datasets/*/consentStores/*/attributeDefinitions/*"
+    },
+    "DatasetsConsentStoresConsent": {
+      "pattern": "projects/*/locations/*/datasets/*/consentStores/*/consents/*"
+    },
+    "DatasetsConsentStoresConsentArtifact": {
+      "pattern": "projects/*/locations/*/datasets/*/consentStores/*/consentArtifacts/*"
+    },
+    "DatasetsConsentStoresUserDataMapping": {
+      "pattern": "projects/*/locations/*/datasets/*/consentStores/*/userDataMappings/*"
+    },
+    "DatasetsDicomStore": {
+      "pattern": "projects/*/locations/*/datasets/*/dicomStores/*"
+    },
+    "DatasetsFhirStore": {
+      "pattern": "projects/*/locations/*/datasets/*/fhirStores/*"
+    },
+    "DatasetsHl7V2Store": {
+      "pattern": "projects/*/locations/*/datasets/*/hl7V2Stores/*"
+    },
+    "DatasetsHl7V2StoresMessage": {
+      "pattern": "projects/*/locations/*/datasets/*/hl7V2Stores/*/messages/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

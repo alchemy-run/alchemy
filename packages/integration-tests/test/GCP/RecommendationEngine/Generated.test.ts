@@ -48,117 +48,61 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("project", { concurrent: true }, () => {
-      test.provider(
-        "CollectCatalogEventStoreUserEvent (recommendationengine.projects.locations.catalogs.eventStores.userEvents.collect)",
-        () => probe("CollectCatalogEventStoreUserEvent", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "CollectCatalogEventStoreUserEvent (recommendationengine.projects.locations.catalogs.eventStores.userEvents.collect): recommendationengine.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "CreateCatalogEventStorePredictionApiKeyRegistration (recommendationengine.projects.locations.catalogs.eventStores.predictionApiKeyRegistrations.create)",
-        () => probe("CreateCatalogEventStorePredictionApiKeyRegistration", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "CreateCatalogEventStorePredictionApiKeyRegistration (recommendationengine.projects.locations.catalogs.eventStores.predictionApiKeyRegistrations.create): recommendationengine.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "DeleteCatalogEventStorePredictionApiKeyRegistration (recommendationengine.projects.locations.catalogs.eventStores.predictionApiKeyRegistrations.delete)",
-        () => probe("DeleteCatalogEventStorePredictionApiKeyRegistration", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DeleteCatalogEventStorePredictionApiKeyRegistration (recommendationengine.projects.locations.catalogs.eventStores.predictionApiKeyRegistrations.delete): recommendationengine.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "DeleteCatalogItem (recommendationengine.projects.locations.catalogs.catalogItems.delete)",
-        () => probe("DeleteCatalogItem", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DeleteCatalogItem (recommendationengine.projects.locations.catalogs.catalogItems.delete): recommendationengine.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ImportCatalogEventStoreUserEvent (recommendationengine.projects.locations.catalogs.eventStores.userEvents.import)",
-        () => probe("ImportCatalogEventStoreUserEvent", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ImportCatalogEventStoreUserEvent (recommendationengine.projects.locations.catalogs.eventStores.userEvents.import): recommendationengine.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ImportCatalogItem (recommendationengine.projects.locations.catalogs.catalogItems.import)",
-        () => probe("ImportCatalogItem", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ImportCatalogItem (recommendationengine.projects.locations.catalogs.catalogItems.import): recommendationengine.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ListCatalogItems (recommendationengine.projects.locations.catalogs.catalogItems.list)",
-        () => probe("ListCatalogItems", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListCatalogItems (recommendationengine.projects.locations.catalogs.catalogItems.list): recommendationengine.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ListCatalogs (recommendationengine.projects.locations.catalogs.list)",
-        () => probe("ListCatalogs", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListCatalogs (recommendationengine.projects.locations.catalogs.list): recommendationengine.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "PatchCatalog (recommendationengine.projects.locations.catalogs.patch)",
-        () => probe("PatchCatalog", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "PatchCatalog (recommendationengine.projects.locations.catalogs.patch): recommendationengine.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "PatchCatalogItem (recommendationengine.projects.locations.catalogs.catalogItems.patch)",
-        () => probe("PatchCatalogItem", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "PatchCatalogItem (recommendationengine.projects.locations.catalogs.catalogItems.patch): recommendationengine.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "PredictCatalogEventStorePlacement (recommendationengine.projects.locations.catalogs.eventStores.placements.predict)",
-        () => probe("PredictCatalogEventStorePlacement", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "PredictCatalogEventStorePlacement (recommendationengine.projects.locations.catalogs.eventStores.placements.predict): recommendationengine.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "PurgeCatalogEventStoreUserEvent (recommendationengine.projects.locations.catalogs.eventStores.userEvents.purge)",
-        () => probe("PurgeCatalogEventStoreUserEvent", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "PurgeCatalogEventStoreUserEvent (recommendationengine.projects.locations.catalogs.eventStores.userEvents.purge): recommendationengine.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "RejoinCatalogEventStoreUserEvent (recommendationengine.projects.locations.catalogs.eventStores.userEvents.rejoin)",
-        () => probe("RejoinCatalogEventStoreUserEvent", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "RejoinCatalogEventStoreUserEvent (recommendationengine.projects.locations.catalogs.eventStores.userEvents.rejoin): recommendationengine.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "WriteCatalogEventStoreUserEvent (recommendationengine.projects.locations.catalogs.eventStores.userEvents.write)",
-        () => probe("WriteCatalogEventStoreUserEvent", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:recommendationengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "WriteCatalogEventStoreUserEvent (recommendationengine.projects.locations.catalogs.eventStores.userEvents.write): recommendationengine.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
     });
   },

@@ -33,7 +33,7 @@
   "probes": {
     "resources": {},
     "untestable": {
-      "*": "the testing project has no Firebase app, so App Check answers ServiceDisabled"
+      "*": "firebaseappcheck.googleapis.com is not enabled on the testing project"
     }
   }
 }

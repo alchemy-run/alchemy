@@ -1,0 +1,15 @@
+{
+  "discovery": "agentidentity-v1",
+  "module": "agentidentity_v1",
+  "resources": {
+    "AuthProvider": {
+      "pattern": "projects/*/locations/*/authProviders/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "agentidentity.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

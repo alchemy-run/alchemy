@@ -1,0 +1,12 @@
+{
+  "discovery": "oslogin-v1",
+  "module": "oslogin_v1",
+  "resources": {
+    "UsersSshPublicKey": {
+      "pattern": "users/*/sshPublicKeys/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

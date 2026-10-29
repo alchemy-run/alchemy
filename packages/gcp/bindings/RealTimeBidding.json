@@ -1,0 +1,15 @@
+{
+  "discovery": "realtimebidding-v1",
+  "module": "realtimebidding_v1",
+  "resources": {
+    "BiddersPretargetingConfig": {
+      "pattern": "bidders/*/pretargetingConfigs/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "realtimebidding.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

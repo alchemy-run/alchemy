@@ -5,3 +5,4 @@ export * from "./RepositoriesWorkflowInvocation.ts";
 export * from "./RepositoriesWorkspace.ts";
 export * from "./Repository.ts";
 export * from "./Team.ts";
+export * from "./generated.ts";

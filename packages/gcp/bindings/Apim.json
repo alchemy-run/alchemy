@@ -1,0 +1,18 @@
+{
+  "discovery": "apim-v1alpha",
+  "module": "apim_v1alpha",
+  "resources": {
+    "ObservationJob": {
+      "pattern": "projects/*/locations/*/observationJobs/*"
+    },
+    "ObservationSource": {
+      "pattern": "projects/*/locations/*/observationSources/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "apim.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

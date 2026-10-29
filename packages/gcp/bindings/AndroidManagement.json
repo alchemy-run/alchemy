@@ -1,0 +1,21 @@
+{
+  "discovery": "androidmanagement-v1",
+  "module": "androidmanagement_v1",
+  "resources": {
+    "Enterprise": {
+      "pattern": "enterprises/*"
+    },
+    "EnterprisesEnrollmentToken": {
+      "pattern": "enterprises/*/enrollmentTokens/*"
+    },
+    "EnterprisesWebApp": {
+      "pattern": "enterprises/*/webApps/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "androidmanagement.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

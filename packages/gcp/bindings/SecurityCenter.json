@@ -1,0 +1,57 @@
+{
+  "discovery": "securitycenter-v1",
+  "module": "securitycenter_v1",
+  "resources": {
+    "BigQueryExport": {
+      "pattern": "projects/*/bigQueryExports/*"
+    },
+    "EventThreatDetectionSettingsCustomModule": {
+      "pattern": "projects/*/eventThreatDetectionSettings/customModules/*"
+    },
+    "FolderBigQueryExport": {
+      "pattern": "folders/*/bigQueryExports/*"
+    },
+    "FolderEventThreatDetectionSettingsCustomModule": {
+      "pattern": "folders/*/eventThreatDetectionSettings/customModules/*"
+    },
+    "FolderMuteConfig": {
+      "pattern": "folders/*/muteConfigs/*"
+    },
+    "FolderNotificationConfig": {
+      "pattern": "folders/*/notificationConfigs/*"
+    },
+    "FolderSecurityHealthAnalyticsSettingsCustomModule": {
+      "pattern": "folders/*/securityHealthAnalyticsSettings/customModules/*"
+    },
+    "MuteConfig": {
+      "pattern": "projects/*/muteConfigs/*"
+    },
+    "NotificationConfig": {
+      "pattern": "projects/*/notificationConfigs/*"
+    },
+    "OrganizationBigQueryExport": {
+      "pattern": "organizations/*/bigQueryExports/*"
+    },
+    "OrganizationEventThreatDetectionSettingsCustomModule": {
+      "pattern": "organizations/*/eventThreatDetectionSettings/customModules/*"
+    },
+    "OrganizationMuteConfig": {
+      "pattern": "organizations/*/muteConfigs/*"
+    },
+    "OrganizationsNotificationConfig": {
+      "pattern": "organizations/*/notificationConfigs/*"
+    },
+    "OrganizationsSecurityHealthAnalyticsSettingsCustomModule": {
+      "pattern": "organizations/*/securityHealthAnalyticsSettings/customModules/*"
+    },
+    "SecurityHealthAnalyticsSettingsCustomModule": {
+      "pattern": "projects/*/securityHealthAnalyticsSettings/customModules/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "securitycenter.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

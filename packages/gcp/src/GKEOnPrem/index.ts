@@ -3,3 +3,4 @@ export * from "./BareMetalClustersBareMetalNodePool.ts";
 export * from "./VmwareCluster.ts";
 export * from "./VmwareClustersVmwareNodePool.ts";
 export * from "./types.ts";
+export * from "./generated.ts";

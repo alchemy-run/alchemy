@@ -1,0 +1,13 @@
+{
+  "discovery": "iam-v2",
+  "module": "iam_v2",
+  "resources": {
+    "Policy": {
+      "pattern": "policies/*/*/*",
+      "collection": "policies"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

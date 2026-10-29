@@ -1,0 +1,12 @@
+{
+  "discovery": "looker-v1",
+  "module": "looker_v1",
+  "resources": {
+    "InstancesBackup": {
+      "pattern": "projects/*/locations/*/instances/*/backups/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

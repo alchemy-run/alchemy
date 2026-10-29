@@ -1,0 +1,30 @@
+{
+  "discovery": "eventarc-v1",
+  "module": "eventarc_v1",
+  "resources": {
+    "Channel": {
+      "pattern": "projects/*/locations/*/channels/*"
+    },
+    "ChannelConnection": {
+      "pattern": "projects/*/locations/*/channelConnections/*"
+    },
+    "Enrollment": {
+      "pattern": "projects/*/locations/*/enrollments/*"
+    },
+    "GoogleApiSource": {
+      "pattern": "projects/*/locations/*/googleApiSources/*"
+    },
+    "MessageBus": {
+      "pattern": "projects/*/locations/*/messageBuses/*"
+    },
+    "Pipeline": {
+      "pattern": "projects/*/locations/*/pipelines/*"
+    },
+    "Trigger": {
+      "pattern": "projects/*/locations/*/triggers/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

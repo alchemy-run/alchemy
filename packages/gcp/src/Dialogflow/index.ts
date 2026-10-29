@@ -23,3 +23,4 @@ export type { AgentsTransitionRouteGroupProps } from "./AgentsTransitionRouteGro
 export * from "./AgentsWebhook.ts";
 export * from "./SecuritySetting.ts";
 export { resourceNameFromOperation, waitForOperation } from "./operations.ts";
+export * from "./generated.ts";

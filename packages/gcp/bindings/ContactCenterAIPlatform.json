@@ -1,0 +1,15 @@
+{
+  "discovery": "contactcenteraiplatform-v1alpha1",
+  "module": "contactcenteraiplatform_v1alpha1",
+  "resources": {
+    "ContactCenter": {
+      "pattern": "projects/*/locations/*/contactCenters/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "contactcenteraiplatform.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

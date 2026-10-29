@@ -1,0 +1,25 @@
+{
+  "discovery": "androidpublisher-v3",
+  "module": "androidpublisher_v3",
+  "resources": {
+    "Edit": {
+      "pattern": "androidpublisher/v3/applications/*/edits/*",
+      "_flat": true
+    },
+    "Inappproduct": {
+      "pattern": "androidpublisher/v3/applications/*/inappproducts/*",
+      "_flat": true
+    },
+    "MonetizationSubscription": {
+      "pattern": "androidpublisher/v3/applications/*/subscriptions/*",
+      "_flat": true
+    },
+    "MonetizationSubscriptionsBasePlansOffer": {
+      "pattern": "androidpublisher/v3/applications/*/subscriptions/*/basePlans/*/offers/*",
+      "_flat": true
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

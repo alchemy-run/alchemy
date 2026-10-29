@@ -1,0 +1,18 @@
+{
+  "discovery": "workloadmanager-v1",
+  "module": "workloadmanager_v1",
+  "resources": {
+    "DeploymentsActuation": {
+      "pattern": "projects/*/locations/*/deployments/*/actuations/*"
+    },
+    "Evaluation": {
+      "pattern": "projects/*/locations/*/evaluations/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "workloadmanager.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

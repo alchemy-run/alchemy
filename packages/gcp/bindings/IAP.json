@@ -1,0 +1,12 @@
+{
+  "discovery": "iap-v1",
+  "module": "iap_v1",
+  "resources": {
+    "BrandsIdentityAwareProxyClient": {
+      "pattern": "projects/*/brands/*/identityAwareProxyClients/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

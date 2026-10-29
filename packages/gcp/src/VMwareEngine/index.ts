@@ -9,3 +9,4 @@ export * from "./PrivateCloudsLoggingServer.ts";
 export * from "./PrivateCloudsManagementDnsZoneBinding.ts";
 export * from "./PrivateConnection.ts";
 export * from "./VmwareEngineNetwork.ts";
+export * from "./generated.ts";

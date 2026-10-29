@@ -1,0 +1,75 @@
+{
+  "discovery": "contactcenterinsights-v1",
+  "module": "contactcenterinsights_v1",
+  "resources": {
+    "AnalysisRule": {
+      "pattern": "projects/*/locations/*/analysisRules/*"
+    },
+    "AssessmentRule": {
+      "pattern": "projects/*/locations/*/assessmentRules/*"
+    },
+    "AuthorizedViewSet": {
+      "pattern": "projects/*/locations/*/authorizedViewSets/*"
+    },
+    "AuthorizedViewSetsAuthorizedView": {
+      "pattern": "projects/*/locations/*/authorizedViewSets/*/authorizedViews/*"
+    },
+    "AuthorizedViewSetsAuthorizedViewsConversationsAssessment": {
+      "pattern": "projects/*/locations/*/authorizedViewSets/*/authorizedViews/*/conversations/*/assessments/*"
+    },
+    "AuthorizedViewSetsAuthorizedViewsConversationsFeedbackLabel": {
+      "pattern": "projects/*/locations/*/authorizedViewSets/*/authorizedViews/*/conversations/*/feedbackLabels/*"
+    },
+    "AutoLabelingRule": {
+      "pattern": "projects/*/locations/*/autoLabelingRules/*"
+    },
+    "Conversation": {
+      "pattern": "projects/*/locations/*/conversations/*"
+    },
+    "ConversationsAnalyses": {
+      "pattern": "projects/*/locations/*/conversations/*/analyses/*"
+    },
+    "ConversationsAssessment": {
+      "pattern": "projects/*/locations/*/conversations/*/assessments/*"
+    },
+    "ConversationsFeedbackLabel": {
+      "pattern": "projects/*/locations/*/conversations/*/feedbackLabels/*"
+    },
+    "Dashboard": {
+      "pattern": "projects/*/locations/*/dashboards/*"
+    },
+    "DashboardsChart": {
+      "pattern": "projects/*/locations/*/dashboards/*/charts/*"
+    },
+    "DatasetsConversationsFeedbackLabel": {
+      "pattern": "projects/*/locations/*/datasets/*/conversations/*/feedbackLabels/*"
+    },
+    "IssueModel": {
+      "pattern": "projects/*/locations/*/issueModels/*"
+    },
+    "IssueModelsIssue": {
+      "pattern": "projects/*/locations/*/issueModels/*/issues/*"
+    },
+    "PhraseMatcher": {
+      "pattern": "projects/*/locations/*/phraseMatchers/*"
+    },
+    "QaQuestionTag": {
+      "pattern": "projects/*/locations/*/qaQuestionTags/*"
+    },
+    "QaScorecard": {
+      "pattern": "projects/*/locations/*/qaScorecards/*"
+    },
+    "QaScorecardsRevision": {
+      "pattern": "projects/*/locations/*/qaScorecards/*/revisions/*"
+    },
+    "QaScorecardsRevisionsQaQuestion": {
+      "pattern": "projects/*/locations/*/qaScorecards/*/revisions/*/qaQuestions/*"
+    },
+    "View": {
+      "pattern": "projects/*/locations/*/views/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

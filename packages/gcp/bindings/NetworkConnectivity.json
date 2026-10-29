@@ -1,0 +1,48 @@
+{
+  "discovery": "networkconnectivity-v1",
+  "module": "networkconnectivity_v1",
+  "resources": {
+    "AutomatedDnsRecord": {
+      "pattern": "projects/*/locations/*/automatedDnsRecords/*"
+    },
+    "Hub": {
+      "pattern": "projects/*/locations/global/hubs/*"
+    },
+    "InternalRange": {
+      "pattern": "projects/*/locations/*/internalRanges/*"
+    },
+    "MulticloudDataTransferConfig": {
+      "pattern": "projects/*/locations/*/multicloudDataTransferConfigs/*"
+    },
+    "MulticloudDataTransferConfigsDestination": {
+      "pattern": "projects/*/locations/*/multicloudDataTransferConfigs/*/destinations/*"
+    },
+    "PolicyBasedRoute": {
+      "pattern": "projects/*/locations/global/policyBasedRoutes/*"
+    },
+    "RegionalEndpoint": {
+      "pattern": "projects/*/locations/*/regionalEndpoints/*"
+    },
+    "ServiceConnectionMap": {
+      "pattern": "projects/*/locations/*/serviceConnectionMaps/*"
+    },
+    "ServiceConnectionPolicy": {
+      "pattern": "projects/*/locations/*/serviceConnectionPolicies/*"
+    },
+    "ServiceConnectionToken": {
+      "pattern": "projects/*/locations/*/serviceConnectionTokens/*"
+    },
+    "Spoke": {
+      "pattern": "projects/*/locations/*/spokes/*"
+    },
+    "SpokesGatewayAdvertisedRoute": {
+      "pattern": "projects/*/locations/*/spokes/*/gatewayAdvertisedRoutes/*"
+    },
+    "Transport": {
+      "pattern": "projects/*/locations/*/transports/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

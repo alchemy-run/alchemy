@@ -1,0 +1,36 @@
+{
+  "discovery": "appengine-v1",
+  "module": "appengine_v1",
+  "resources": {
+    "ApplicationsAuthorizedCertificate": {
+      "pattern": "projects/*/locations/*/applications/*/authorizedCertificates/*",
+      "_flat": true
+    },
+    "ApplicationsDomainMapping": {
+      "pattern": "projects/*/locations/*/applications/*/domainMappings/*",
+      "_flat": true
+    },
+    "AppsAuthorizedCertificate": {
+      "pattern": "apps/*/authorizedCertificates/*",
+      "_flat": true
+    },
+    "AppsDomainMapping": {
+      "pattern": "apps/*/domainMappings/*",
+      "_flat": true
+    },
+    "AppsFirewallIngressRule": {
+      "pattern": "apps/*/firewall/ingressRules/*",
+      "_flat": true
+    },
+    "AppsServicesVersion": {
+      "pattern": "apps/*/services/*/versions/*",
+      "_flat": true
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "appengine.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

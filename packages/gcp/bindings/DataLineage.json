@@ -1,0 +1,18 @@
+{
+  "discovery": "datalineage-v1",
+  "module": "datalineage_v1",
+  "resources": {
+    "Process": {
+      "pattern": "projects/*/locations/*/processes/*"
+    },
+    "ProcessesRun": {
+      "pattern": "projects/*/locations/*/processes/*/runs/*"
+    },
+    "ProcessesRunsLineageEvent": {
+      "pattern": "projects/*/locations/*/processes/*/runs/*/lineageEvents/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

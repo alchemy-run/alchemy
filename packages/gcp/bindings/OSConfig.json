@@ -1,0 +1,21 @@
+{
+  "discovery": "osconfig-v2",
+  "module": "osconfig_v2",
+  "resources": {
+    "FoldersLocationsGlobalPolicyOrchestrator": {
+      "pattern": "folders/*/locations/global/policyOrchestrators/*"
+    },
+    "OrganizationsLocationsGlobalPolicyOrchestrator": {
+      "pattern": "organizations/*/locations/global/policyOrchestrators/*"
+    },
+    "ProjectsLocationsGlobalPolicyOrchestrator": {
+      "pattern": "projects/*/locations/global/policyOrchestrators/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "osconfig.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

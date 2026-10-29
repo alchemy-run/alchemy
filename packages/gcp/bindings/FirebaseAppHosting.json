@@ -1,0 +1,18 @@
+{
+  "discovery": "firebaseapphosting-v1",
+  "module": "firebaseapphosting_v1",
+  "resources": {
+    "Backend": {
+      "pattern": "projects/*/locations/*/backends/*"
+    },
+    "BackendsBuild": {
+      "pattern": "projects/*/locations/*/backends/*/builds/*"
+    },
+    "BackendsDomain": {
+      "pattern": "projects/*/locations/*/backends/*/domains/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

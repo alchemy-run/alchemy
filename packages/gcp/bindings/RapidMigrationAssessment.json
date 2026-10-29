@@ -5,5 +5,11 @@
     "Collector": {
       "pattern": "projects/*/locations/*/collectors/*"
     }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "rapidmigrationassessment.googleapis.com is not enabled on the testing project"
+    }
   }
 }

@@ -13,3 +13,4 @@ export * from "./OrganizationMuteConfig.ts";
 export * from "./OrganizationsNotificationConfig.ts";
 export * from "./OrganizationsSecurityHealthAnalyticsSettingsCustomModule.ts";
 export * from "./SecurityHealthAnalyticsSettingsCustomModule.ts";
+export * from "./generated.ts";

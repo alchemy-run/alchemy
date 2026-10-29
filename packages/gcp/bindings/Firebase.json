@@ -1,0 +1,12 @@
+{
+  "discovery": "firebase-v1beta1",
+  "module": "firebase_v1beta1",
+  "resources": {
+    "AndroidApp": {
+      "pattern": "projects/*/androidApps/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

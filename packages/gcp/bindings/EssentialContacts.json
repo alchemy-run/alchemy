@@ -1,0 +1,18 @@
+{
+  "discovery": "essentialcontacts-v1",
+  "module": "essentialcontacts_v1",
+  "resources": {
+    "Contact": {
+      "pattern": "projects/*/contacts/*"
+    },
+    "FolderContact": {
+      "pattern": "folders/*/contacts/*"
+    },
+    "OrganizationContact": {
+      "pattern": "organizations/*/contacts/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

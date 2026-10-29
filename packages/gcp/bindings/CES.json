@@ -1,0 +1,33 @@
+{
+  "discovery": "ces-v1",
+  "module": "ces_v1",
+  "resources": {
+    "App": {
+      "pattern": "projects/*/locations/*/apps/*"
+    },
+    "AppsAgent": {
+      "pattern": "projects/*/locations/*/apps/*/agents/*"
+    },
+    "AppsDeployment": {
+      "pattern": "projects/*/locations/*/apps/*/deployments/*"
+    },
+    "AppsExample": {
+      "pattern": "projects/*/locations/*/apps/*/examples/*"
+    },
+    "AppsGuardrail": {
+      "pattern": "projects/*/locations/*/apps/*/guardrails/*"
+    },
+    "AppsTool": {
+      "pattern": "projects/*/locations/*/apps/*/tools/*"
+    },
+    "AppsToolset": {
+      "pattern": "projects/*/locations/*/apps/*/toolsets/*"
+    },
+    "AppsVersion": {
+      "pattern": "projects/*/locations/*/apps/*/versions/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

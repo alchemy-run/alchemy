@@ -1,0 +1,42 @@
+{
+  "discovery": "netapp-v1",
+  "module": "netapp_v1",
+  "resources": {
+    "ActiveDirectory": {
+      "pattern": "projects/*/locations/*/activeDirectories/*"
+    },
+    "BackupPolicy": {
+      "pattern": "projects/*/locations/*/backupPolicies/*"
+    },
+    "BackupVault": {
+      "pattern": "projects/*/locations/*/backupVaults/*"
+    },
+    "BackupVaultsBackup": {
+      "pattern": "projects/*/locations/*/backupVaults/*/backups/*"
+    },
+    "HostGroup": {
+      "pattern": "projects/*/locations/*/hostGroups/*"
+    },
+    "KmsConfig": {
+      "pattern": "projects/*/locations/*/kmsConfigs/*"
+    },
+    "StoragePool": {
+      "pattern": "projects/*/locations/*/storagePools/*"
+    },
+    "Volume": {
+      "pattern": "projects/*/locations/*/volumes/*"
+    },
+    "VolumesQuotaRule": {
+      "pattern": "projects/*/locations/*/volumes/*/quotaRules/*"
+    },
+    "VolumesReplication": {
+      "pattern": "projects/*/locations/*/volumes/*/replications/*"
+    },
+    "VolumesSnapshot": {
+      "pattern": "projects/*/locations/*/volumes/*/snapshots/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

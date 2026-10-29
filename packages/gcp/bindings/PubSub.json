@@ -42,5 +42,8 @@
   },
   "projectGrant": {
     "pubsub.projects.schemas.deleteRevision": "a revision (`schema@revision`) is not covered by the schema's own IAM policy"
+  },
+  "probes": {
+    "resources": {}
   }
 }

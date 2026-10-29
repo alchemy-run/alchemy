@@ -1,0 +1,145 @@
+{
+  "discovery": "apigee-v1",
+  "module": "apigee_v1",
+  "resources": {
+    "AnalyticsDatastore": {
+      "pattern": "organizations/*/analytics/datastores/*"
+    },
+    "Api": {
+      "pattern": "organizations/*/apis/*"
+    },
+    "ApimServiceExtension": {
+      "pattern": "organizations/*/apimServiceExtensions/*"
+    },
+    "Apiproduct": {
+      "pattern": "organizations/*/apiproducts/*"
+    },
+    "ApiproductsRateplan": {
+      "pattern": "organizations/*/apiproducts/*/rateplans/*"
+    },
+    "ApisKeyvaluemap": {
+      "pattern": "organizations/*/apis/*/keyvaluemaps/*"
+    },
+    "ApisKeyvaluemapsEntry": {
+      "pattern": "organizations/*/apis/*/keyvaluemaps/*/entries/*"
+    },
+    "Appgroup": {
+      "pattern": "organizations/*/appgroups/*"
+    },
+    "AppgroupsApp": {
+      "pattern": "organizations/*/appgroups/*/apps/*"
+    },
+    "AppgroupsAppsKey": {
+      "pattern": "organizations/*/appgroups/*/apps/*/keys/*"
+    },
+    "Datacollector": {
+      "pattern": "organizations/*/datacollectors/*"
+    },
+    "Developer": {
+      "pattern": "organizations/*/developers/*"
+    },
+    "DevelopersApp": {
+      "pattern": "organizations/*/developers/*/apps/*"
+    },
+    "DevelopersAppsKey": {
+      "pattern": "organizations/*/developers/*/apps/*/keys/*"
+    },
+    "DnsZone": {
+      "pattern": "organizations/*/dnsZones/*"
+    },
+    "EndpointAttachment": {
+      "pattern": "organizations/*/endpointAttachments/*"
+    },
+    "Envgroup": {
+      "pattern": "organizations/*/envgroups/*"
+    },
+    "EnvgroupsAttachment": {
+      "pattern": "organizations/*/envgroups/*/attachments/*"
+    },
+    "Environment": {
+      "pattern": "organizations/*/environments/*"
+    },
+    "EnvironmentsApisRevisionsDebugsession": {
+      "pattern": "organizations/*/environments/*/apis/*/revisions/*/debugsessions/*"
+    },
+    "EnvironmentsArchiveDeployment": {
+      "pattern": "organizations/*/environments/*/archiveDeployments/*"
+    },
+    "EnvironmentsKeystore": {
+      "pattern": "organizations/*/environments/*/keystores/*"
+    },
+    "EnvironmentsKeystoresAlias": {
+      "pattern": "organizations/*/environments/*/keystores/*/aliases/*"
+    },
+    "EnvironmentsKeyvaluemap": {
+      "pattern": "organizations/*/environments/*/keyvaluemaps/*"
+    },
+    "EnvironmentsKeyvaluemapsEntry": {
+      "pattern": "organizations/*/environments/*/keyvaluemaps/*/entries/*"
+    },
+    "EnvironmentsReference": {
+      "pattern": "organizations/*/environments/*/references/*"
+    },
+    "EnvironmentsResourcefile": {
+      "pattern": "*/resourcefiles/*/*",
+      "_flat": true
+    },
+    "EnvironmentsSecurityAction": {
+      "pattern": "organizations/*/environments/*/securityActions/*"
+    },
+    "EnvironmentsTargetserver": {
+      "pattern": "organizations/*/environments/*/targetservers/*"
+    },
+    "EnvironmentsTraceConfigOverride": {
+      "pattern": "organizations/*/environments/*/traceConfig/overrides/*"
+    },
+    "Instance": {
+      "pattern": "organizations/*/instances/*"
+    },
+    "InstancesAttachment": {
+      "pattern": "organizations/*/instances/*/attachments/*"
+    },
+    "InstancesNatAddress": {
+      "pattern": "organizations/*/instances/*/natAddresses/*"
+    },
+    "Keyvaluemap": {
+      "pattern": "organizations/*/keyvaluemaps/*"
+    },
+    "KeyvaluemapsEntry": {
+      "pattern": "organizations/*/keyvaluemaps/*/entries/*"
+    },
+    "Organization": {
+      "pattern": "organizations/*"
+    },
+    "Report": {
+      "pattern": "organizations/*/reports/*"
+    },
+    "SecurityFeedback": {
+      "pattern": "organizations/*/securityFeedback/*"
+    },
+    "SecurityMonitoringCondition": {
+      "pattern": "organizations/*/securityMonitoringConditions/*"
+    },
+    "SecurityProfile": {
+      "pattern": "organizations/*/securityProfiles/*"
+    },
+    "SecurityProfilesV2": {
+      "pattern": "organizations/*/securityProfilesV2/*"
+    },
+    "Sharedflow": {
+      "pattern": "organizations/*/sharedflows/*"
+    },
+    "SitesApicategory": {
+      "pattern": "organizations/*/sites/*/apicategories/*"
+    },
+    "SitesApidoc": {
+      "pattern": "organizations/*/sites/*/apidocs/*"
+    },
+    "Space": {
+      "pattern": "organizations/*/spaces/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

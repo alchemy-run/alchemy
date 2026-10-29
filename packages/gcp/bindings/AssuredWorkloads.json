@@ -1,0 +1,12 @@
+{
+  "discovery": "assuredworkloads-v1",
+  "module": "assuredworkloads_v1",
+  "resources": {
+    "Workload": {
+      "pattern": "organizations/*/locations/*/workloads/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

@@ -49,58 +49,58 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("Document", { concurrent: true }, () => {
       test.provider.skip(
-        "CreateDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.create): Document AI Warehouse is disabled on the testing project and needs per-project provisioning",
+        "CreateDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.create): contentwarehouse.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "DeleteDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.delete): Document AI Warehouse is disabled on the testing project and needs per-project provisioning",
+        "DeleteDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.delete): contentwarehouse.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "FetchDocumentAcl (contentwarehouse.projects.locations.documents.fetchAcl): Document AI Warehouse is disabled on the testing project and needs per-project provisioning",
+        "FetchDocumentAcl (contentwarehouse.projects.locations.documents.fetchAcl): contentwarehouse.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "LinkedDocumentSources (contentwarehouse.projects.locations.documents.linkedSources): Document AI Warehouse is disabled on the testing project and needs per-project provisioning",
+        "LinkedDocumentSources (contentwarehouse.projects.locations.documents.linkedSources): contentwarehouse.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "LinkedDocumentTargets (contentwarehouse.projects.locations.documents.linkedTargets): Document AI Warehouse is disabled on the testing project and needs per-project provisioning",
+        "LinkedDocumentTargets (contentwarehouse.projects.locations.documents.linkedTargets): contentwarehouse.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "LockDocument (contentwarehouse.projects.locations.documents.lock): Document AI Warehouse is disabled on the testing project and needs per-project provisioning",
+        "LockDocument (contentwarehouse.projects.locations.documents.lock): contentwarehouse.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "SetDocumentAcl (contentwarehouse.projects.locations.documents.setAcl): Document AI Warehouse is disabled on the testing project and needs per-project provisioning",
+        "SetDocumentAcl (contentwarehouse.projects.locations.documents.setAcl): contentwarehouse.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
       test.provider.skip(
-        "FetchProjectAcl (contentwarehouse.projects.fetchAcl): Document AI Warehouse is disabled on the testing project and needs per-project provisioning",
+        "FetchProjectAcl (contentwarehouse.projects.fetchAcl): contentwarehouse.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListDocumentSchemas (contentwarehouse.projects.locations.documentSchemas.list): Document AI Warehouse is disabled on the testing project and needs per-project provisioning",
+        "ListDocumentSchemas (contentwarehouse.projects.locations.documentSchemas.list): contentwarehouse.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListRuleSets (contentwarehouse.projects.locations.ruleSets.list): Document AI Warehouse is disabled on the testing project and needs per-project provisioning",
+        "ListRuleSets (contentwarehouse.projects.locations.ruleSets.list): contentwarehouse.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "ListSynonymSets (contentwarehouse.projects.locations.synonymSets.list): Document AI Warehouse is disabled on the testing project and needs per-project provisioning",
+        "ListSynonymSets (contentwarehouse.projects.locations.synonymSets.list): contentwarehouse.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "SearchDocument (contentwarehouse.projects.locations.documents.search): Document AI Warehouse is disabled on the testing project and needs per-project provisioning",
+        "SearchDocument (contentwarehouse.projects.locations.documents.search): contentwarehouse.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
       test.provider.skip(
-        "SetProjectAcl (contentwarehouse.projects.setAcl): Document AI Warehouse is disabled on the testing project and needs per-project provisioning",
+        "SetProjectAcl (contentwarehouse.projects.setAcl): contentwarehouse.googleapis.com is not enabled on the testing project",
         () => Effect.void,
       );
     });

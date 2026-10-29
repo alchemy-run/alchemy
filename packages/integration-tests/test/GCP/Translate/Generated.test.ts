@@ -48,200 +48,104 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AdaptiveMtDataset", { concurrent: true }, () => {
-      test.provider(
-        "DeleteAdaptiveMtDatasetAdaptiveMtFile (translate.projects.locations.adaptiveMtDatasets.adaptiveMtFiles.delete)",
-        () => probe("DeleteAdaptiveMtDatasetAdaptiveMtFile", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DeleteAdaptiveMtDatasetAdaptiveMtFile (translate.projects.locations.adaptiveMtDatasets.adaptiveMtFiles.delete): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "GetAdaptiveMtDatasetAdaptiveMtFile (translate.projects.locations.adaptiveMtDatasets.adaptiveMtFiles.get)",
-        () => probe("GetAdaptiveMtDatasetAdaptiveMtFile", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "GetAdaptiveMtDatasetAdaptiveMtFile (translate.projects.locations.adaptiveMtDatasets.adaptiveMtFiles.get): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ImportAdaptiveMtDatasetAdaptiveMtFile (translate.projects.locations.adaptiveMtDatasets.importAdaptiveMtFile)",
-        () => probe("ImportAdaptiveMtDatasetAdaptiveMtFile", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ImportAdaptiveMtDatasetAdaptiveMtFile (translate.projects.locations.adaptiveMtDatasets.importAdaptiveMtFile): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ListAdaptiveMtDatasetAdaptiveMtFileAdaptiveMtSentences (translate.projects.locations.adaptiveMtDatasets.adaptiveMtFiles.adaptiveMtSentences.list)",
-        () => probe("ListAdaptiveMtDatasetAdaptiveMtFileAdaptiveMtSentences", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListAdaptiveMtDatasetAdaptiveMtFileAdaptiveMtSentences (translate.projects.locations.adaptiveMtDatasets.adaptiveMtFiles.adaptiveMtSentences.list): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ListAdaptiveMtDatasetAdaptiveMtFiles (translate.projects.locations.adaptiveMtDatasets.adaptiveMtFiles.list)",
-        () => probe("ListAdaptiveMtDatasetAdaptiveMtFiles", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListAdaptiveMtDatasetAdaptiveMtFiles (translate.projects.locations.adaptiveMtDatasets.adaptiveMtFiles.list): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ListAdaptiveMtDatasetAdaptiveMtSentences (translate.projects.locations.adaptiveMtDatasets.adaptiveMtSentences.list)",
-        () => probe("ListAdaptiveMtDatasetAdaptiveMtSentences", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListAdaptiveMtDatasetAdaptiveMtSentences (translate.projects.locations.adaptiveMtDatasets.adaptiveMtSentences.list): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider(
-        "CreateDataset (translate.projects.locations.datasets.create)",
-        () => probe("CreateDataset", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "CreateDataset (translate.projects.locations.datasets.create): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "CreateGlossary (translate.projects.locations.glossaries.create)",
-        () => probe("CreateGlossary", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "CreateGlossary (translate.projects.locations.glossaries.create): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "DeleteDataset (translate.projects.locations.datasets.delete)",
-        () => probe("DeleteDataset", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DeleteDataset (translate.projects.locations.datasets.delete): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "DeleteGlossary (translate.projects.locations.glossaries.delete)",
-        () => probe("DeleteGlossary", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DeleteGlossary (translate.projects.locations.glossaries.delete): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "DetectProjectLanguage (translate.projects.detectLanguage)",
-        () => probe("DetectProjectLanguage", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DetectProjectLanguage (translate.projects.detectLanguage): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ExportDatasetData (translate.projects.locations.datasets.exportData)",
-        () => probe("ExportDatasetData", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ExportDatasetData (translate.projects.locations.datasets.exportData): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "GetDataset (translate.projects.locations.datasets.get)",
-        () => probe("GetDataset", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "GetDataset (translate.projects.locations.datasets.get): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "GetGlossary (translate.projects.locations.glossaries.get)",
-        () => probe("GetGlossary", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "GetGlossary (translate.projects.locations.glossaries.get): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "GetProjectSupportedLanguages (translate.projects.getSupportedLanguages)",
-        () => probe("GetProjectSupportedLanguages", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "GetProjectSupportedLanguages (translate.projects.getSupportedLanguages): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ImportDatasetData (translate.projects.locations.datasets.importData)",
-        () => probe("ImportDatasetData", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ImportDatasetData (translate.projects.locations.datasets.importData): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ListAdaptiveMtDatasets (translate.projects.locations.adaptiveMtDatasets.list)",
-        () => probe("ListAdaptiveMtDatasets", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListAdaptiveMtDatasets (translate.projects.locations.adaptiveMtDatasets.list): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ListDatasetExamples (translate.projects.locations.datasets.examples.list)",
-        () => probe("ListDatasetExamples", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListDatasetExamples (translate.projects.locations.datasets.examples.list): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ListDatasets (translate.projects.locations.datasets.list)",
-        () => probe("ListDatasets", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListDatasets (translate.projects.locations.datasets.list): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ListGlossaries (translate.projects.locations.glossaries.list)",
-        () => probe("ListGlossaries", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListGlossaries (translate.projects.locations.glossaries.list): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ListGlossaryEntries (translate.projects.locations.glossaries.glossaryEntries.list)",
-        () => probe("ListGlossaryEntries", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListGlossaryEntries (translate.projects.locations.glossaries.glossaryEntries.list): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "ListModels (translate.projects.locations.models.list)",
-        () => probe("ListModels", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListModels (translate.projects.locations.models.list): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "PatchGlossary (translate.projects.locations.glossaries.patch)",
-        () => probe("PatchGlossary", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "PatchGlossary (translate.projects.locations.glossaries.patch): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
-      test.provider(
-        "RomanizeProjectText (translate.projects.romanizeText)",
-        () => probe("RomanizeProjectText", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "RomanizeProjectText (translate.projects.romanizeText): translation.googleapis.com is not enabled on the testing project",
+        () => Effect.void,
       );
     });
   },

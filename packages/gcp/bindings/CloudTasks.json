@@ -16,5 +16,8 @@
     "BatchTaskCreate": "BatchCreateTasks",
     "BatchTaskDelete": "BatchDeleteTasks",
     "BufferQueueTask": "BufferTask"
+  },
+  "probes": {
+    "resources": {}
   }
 }

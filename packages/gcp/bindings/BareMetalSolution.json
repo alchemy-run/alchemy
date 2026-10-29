@@ -1,0 +1,18 @@
+{
+  "discovery": "baremetalsolution-v2",
+  "module": "baremetalsolution_v2",
+  "resources": {
+    "NfsShare": {
+      "pattern": "projects/*/locations/*/nfsShares/*"
+    },
+    "VolumesSnapshot": {
+      "pattern": "projects/*/locations/*/volumes/*/snapshots/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "baremetalsolution.googleapis.com is not enabled on the testing project"
+    }
+  }
+}

@@ -16,3 +16,4 @@ export * from "./TcpRoute.ts";
 export * from "./TlsRoute.ts";
 export * from "./WasmPlugin.ts";
 export * from "./WasmPluginsVersion.ts";
+export * from "./generated.ts";

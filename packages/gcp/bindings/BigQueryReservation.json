@@ -1,0 +1,18 @@
+{
+  "discovery": "bigqueryreservation-v1",
+  "module": "bigqueryreservation_v1",
+  "resources": {
+    "CapacityCommitment": {
+      "pattern": "projects/*/locations/*/capacityCommitments/*"
+    },
+    "Reservation": {
+      "pattern": "projects/*/locations/*/reservations/*"
+    },
+    "ReservationGroup": {
+      "pattern": "projects/*/locations/*/reservationGroups/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

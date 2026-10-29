@@ -1,0 +1,25 @@
+{
+  "discovery": "vault-v1",
+  "module": "vault_v1",
+  "resources": {
+    "Matter": {
+      "pattern": "matters/*",
+      "_flat": true
+    },
+    "MattersExport": {
+      "pattern": "matters/*/exports/*",
+      "_flat": true
+    },
+    "MattersHold": {
+      "pattern": "matters/*/holds/*",
+      "_flat": true
+    },
+    "MattersSavedQuery": {
+      "pattern": "matters/*/savedQueries/*",
+      "_flat": true
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "discovery": "gamesConfiguration-v1configuration",
+  "module": "gamesConfiguration_v1configuration",
+  "resources": {
+    "AchievementConfiguration": {
+      "pattern": "games/v1configuration/achievements/*",
+      "_flat": true,
+      "noAuditLogs": "Play Games configuration is not logged to the project's Cloud Audit Logs"
+    },
+    "LeaderboardConfiguration": {
+      "pattern": "games/v1configuration/leaderboards/*",
+      "_flat": true,
+      "noAuditLogs": "Play Games configuration is not logged to the project's Cloud Audit Logs"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

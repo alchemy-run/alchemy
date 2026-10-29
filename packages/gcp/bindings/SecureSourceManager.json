@@ -1,0 +1,24 @@
+{
+  "discovery": "securesourcemanager-v1",
+  "module": "securesourcemanager_v1",
+  "resources": {
+    "RepositoriesBranchRule": {
+      "pattern": "projects/*/locations/*/repositories/*/branchRules/*"
+    },
+    "RepositoriesHook": {
+      "pattern": "projects/*/locations/*/repositories/*/hooks/*"
+    },
+    "RepositoriesIssue": {
+      "pattern": "projects/*/locations/*/repositories/*/issues/*"
+    },
+    "RepositoriesIssuesIssueComment": {
+      "pattern": "projects/*/locations/*/repositories/*/issues/*/issueComments/*"
+    },
+    "RepositoriesPullRequestsPullRequestComment": {
+      "pattern": "projects/*/locations/*/repositories/*/pullRequests/*/pullRequestComments/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

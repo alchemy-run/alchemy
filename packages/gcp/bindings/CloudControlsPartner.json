@@ -1,0 +1,12 @@
+{
+  "discovery": "cloudcontrolspartner-v1",
+  "module": "cloudcontrolspartner_v1",
+  "resources": {
+    "Customer": {
+      "pattern": "organizations/*/locations/*/customers/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "discovery": "datacatalog-v1",
+  "module": "datacatalog_v1",
+  "resources": {
+    "TagTemplate": {
+      "pattern": "projects/*/locations/*/tagTemplates/*"
+    },
+    "TaxonomiesPolicyTag": {
+      "pattern": "projects/*/locations/*/taxonomies/*/policyTags/*"
+    },
+    "Taxonomy": {
+      "pattern": "projects/*/locations/*/taxonomies/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

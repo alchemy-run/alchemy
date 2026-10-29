@@ -46,5 +46,8 @@
   },
   "projectGrant": {
     "bigquery.datasets.undelete": "a deleted dataset has no IAM policy: undelete is authorized on the project"
+  },
+  "probes": {
+    "resources": {}
   }
 }

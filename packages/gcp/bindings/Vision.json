@@ -1,0 +1,18 @@
+{
+  "discovery": "vision-v1",
+  "module": "vision_v1",
+  "resources": {
+    "Product": {
+      "pattern": "projects/*/locations/*/products/*"
+    },
+    "ProductSet": {
+      "pattern": "projects/*/locations/*/productSets/*"
+    },
+    "ProductsReferenceImage": {
+      "pattern": "projects/*/locations/*/products/*/referenceImages/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

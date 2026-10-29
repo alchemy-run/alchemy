@@ -1,0 +1,63 @@
+{
+  "discovery": "networkservices-v1",
+  "module": "networkservices_v1",
+  "resources": {
+    "AgentGateway": {
+      "pattern": "projects/*/locations/*/agentGateways/*"
+    },
+    "AuthzExtension": {
+      "pattern": "projects/*/locations/*/authzExtensions/*"
+    },
+    "EndpointPolicy": {
+      "pattern": "projects/*/locations/*/endpointPolicies/*"
+    },
+    "Gateway": {
+      "pattern": "projects/*/locations/*/gateways/*"
+    },
+    "GrpcRoute": {
+      "pattern": "projects/*/locations/*/grpcRoutes/*"
+    },
+    "HttpRoute": {
+      "pattern": "projects/*/locations/*/httpRoutes/*"
+    },
+    "LbEdgeExtension": {
+      "pattern": "projects/*/locations/*/lbEdgeExtensions/*"
+    },
+    "LbRouteExtension": {
+      "pattern": "projects/*/locations/*/lbRouteExtensions/*"
+    },
+    "LbTrafficExtension": {
+      "pattern": "projects/*/locations/*/lbTrafficExtensions/*"
+    },
+    "Mesh": {
+      "pattern": "projects/*/locations/*/meshes/*"
+    },
+    "MulticastConsumerAssociation": {
+      "pattern": "projects/*/locations/*/multicastConsumerAssociations/*"
+    },
+    "MulticastGroupConsumerActivation": {
+      "pattern": "projects/*/locations/*/multicastGroupConsumerActivations/*"
+    },
+    "ServiceBinding": {
+      "pattern": "projects/*/locations/*/serviceBindings/*"
+    },
+    "ServiceLbPolicy": {
+      "pattern": "projects/*/locations/*/serviceLbPolicies/*"
+    },
+    "TcpRoute": {
+      "pattern": "projects/*/locations/*/tcpRoutes/*"
+    },
+    "TlsRoute": {
+      "pattern": "projects/*/locations/*/tlsRoutes/*"
+    },
+    "WasmPlugin": {
+      "pattern": "projects/*/locations/*/wasmPlugins/*"
+    },
+    "WasmPluginsVersion": {
+      "pattern": "projects/*/locations/*/wasmPlugins/*/versions/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

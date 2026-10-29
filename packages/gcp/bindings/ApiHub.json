@@ -1,0 +1,45 @@
+{
+  "discovery": "apihub-v1",
+  "module": "apihub_v1",
+  "resources": {
+    "Api": {
+      "pattern": "projects/*/locations/*/apis/*"
+    },
+    "ApiHubInstance": {
+      "pattern": "projects/*/locations/*/apiHubInstances/*"
+    },
+    "ApisVersion": {
+      "pattern": "projects/*/locations/*/apis/*/versions/*"
+    },
+    "ApisVersionsSpec": {
+      "pattern": "projects/*/locations/*/apis/*/versions/*/specs/*"
+    },
+    "Attribute": {
+      "pattern": "projects/*/locations/*/attributes/*"
+    },
+    "Curation": {
+      "pattern": "projects/*/locations/*/curations/*"
+    },
+    "Dependency": {
+      "pattern": "projects/*/locations/*/dependencies/*"
+    },
+    "Deployment": {
+      "pattern": "projects/*/locations/*/deployments/*"
+    },
+    "ExternalApi": {
+      "pattern": "projects/*/locations/*/externalApis/*"
+    },
+    "Plugin": {
+      "pattern": "projects/*/locations/*/plugins/*"
+    },
+    "PluginsInstance": {
+      "pattern": "projects/*/locations/*/plugins/*/instances/*"
+    },
+    "RuntimeProjectAttachment": {
+      "pattern": "projects/*/locations/*/runtimeProjectAttachments/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "discovery": "websecurityscanner-v1",
+  "module": "websecurityscanner_v1",
+  "resources": {
+    "ScanConfig": {
+      "pattern": "projects/*/scanConfigs/*"
+    }
+  },
+  "probes": {
+    "resources": {}
+  }
+}

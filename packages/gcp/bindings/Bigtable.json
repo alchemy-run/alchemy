@@ -52,5 +52,8 @@
     "bigtableadmin.projects.instances.clusters.getMemoryLayer": "the cluster's memory layer (preview); no Alchemy resource models it yet",
     "bigtableadmin.projects.instances.clusters.updateMemoryLayer": "the cluster's memory layer (preview); no Alchemy resource models it yet"
   },
-  "auditServices": ["bigtableadmin.googleapis.com", "bigtable.googleapis.com"]
+  "auditServices": ["bigtableadmin.googleapis.com", "bigtable.googleapis.com"],
+  "probes": {
+    "resources": {}
+  }
 }
