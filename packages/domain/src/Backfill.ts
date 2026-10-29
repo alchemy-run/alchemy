@@ -166,8 +166,12 @@ export interface Limits {
   readonly depth: number;
 }
 
-/** The depth instances list themselves at: 16^4 leaves, each splitting once it fills. */
-export const DEPTH = 4;
+/**
+ * The depth instances list themselves at: 256 leaves, each splitting once it
+ * fills. Wide enough that first commits spread over many objects, few enough
+ * that a small Domain's directory stays small (every node costs a sweep).
+ */
+export const DEPTH = 2;
 
 export const defaultLimits: Limits = {
   page: 100,
