@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 import * as Predicate from "effect/Predicate";
 import * as Namespace from "@/Namespace";
 import * as Plan from "@/Plan";
+import { renamedFrom } from "@/Rename";
 import { DuplicateLogicalIdError } from "@/Resource";
 import * as Stack from "@/Stack";
 import { Stage } from "@/Stage";
@@ -62,8 +63,51 @@ describe("logical ids", { tags: ["unit", "local"] }, () => {
         );
         expect(invalid[0]?.fqn).toEqual("My__Resource");
         expect(invalid[0]?.message).toContain("reads back as 'My/Resource'");
+        expect(invalid[0]?.message).toContain('renamedFrom({ fqn: "My/Resource" })');
       }
     }),
+  );
+
+  test.provider(
+    "a resource deployed under a refused id keeps its state when renamed with renamedFrom",
+    (stack) =>
+      Effect.gen(function* () {
+        yield* stack.destroy();
+        const deployed = yield* stack.deploy(
+          Effect.gen(function* () {
+            return { bucket: yield* Bucket("Seed", { name: "flat" }) };
+          }),
+        );
+        // Store the row the way an earlier release did for `My__Bucket`:
+        // under the file `My__Bucket.json`, which lists as `My/Bucket`.
+        const state = yield* yield* State;
+        const row = yield* state.get({ stack: stack.name, stage: stack.stage, fqn: "Seed" });
+        yield* state.set({
+          stack: stack.name,
+          stage: stack.stage,
+          fqn: "My__Bucket",
+          value: { ...row!, fqn: "My__Bucket", logicalId: "My__Bucket" },
+        });
+        yield* state.delete({ stack: stack.name, stage: stack.stage, fqn: "Seed" });
+        expect(yield* state.list({ stack: stack.name, stage: stack.stage })).toEqual(["My/Bucket"]);
+
+        const renamed = Effect.gen(function* () {
+          return {
+            bucket: yield* Bucket("MyBucket", { name: "flat" }).pipe(
+              renamedFrom({ fqn: "My/Bucket" }),
+            ),
+          };
+        });
+        const plan = yield* stack.plan(renamed);
+        expect(Object.keys(plan.deletions)).toEqual([]);
+        expect(plan.resources.MyBucket?.action).not.toEqual("create");
+
+        const output = yield* stack.deploy(renamed);
+        expect(output.bucket.bucketArn).toEqual(deployed.bucket.bucketArn);
+        expect(yield* state.list({ stack: stack.name, stage: stack.stage })).toEqual(["MyBucket"]);
+
+        yield* stack.destroy();
+      }),
   );
 
   test.provider("an id with '_' at a segment edge deploys on local state", (stack) =>

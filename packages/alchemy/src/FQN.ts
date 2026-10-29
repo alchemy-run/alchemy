@@ -33,10 +33,15 @@ export const decodeFqn = (filename: string): string => filename.replaceAll("__",
  * `My/Bucket`, so the store would list a resource that isn't declared and
  * plan to delete it.
  */
-export const encodedFqnReason = (fqn: string): string | undefined =>
-  decodeFqn(encodeFqn(fqn)) === fqn
+export const encodedFqnReason = (fqn: string): string | undefined => {
+  const readBack = decodeFqn(encodeFqn(fqn));
+  return readBack === fqn
     ? undefined
-    : `its state file name reads back as '${decodeFqn(encodeFqn(fqn))}'`;
+    : `its state file name reads back as '${readBack}' (file names write '/' as '__', ` +
+        `so an id may not contain '__' and a namespace may not end in '_'). Rename it ` +
+        `(e.g. 'My__Bucket' -> 'MyBucket'). If it is already deployed, keep the deployed ` +
+        `resource by renaming with \`.pipe(renamedFrom({ fqn: "${readBack}" }))\``;
+};
 
 /**
  * A logical id (or a namespace above it) can't be stored in the configured
@@ -54,10 +59,7 @@ export const refuseFqn = (fqn: string, kind: string, reason: string | undefined)
     ? Effect.void
     : Effect.die(
         new InvalidLogicalIdError({
-          message:
-            `${kind} '${fqn}' can't be stored in this state store: ${reason}. ` +
-            `The store writes '/' as '__' in file names, so ids may not contain ` +
-            `'__', and a namespace may not end in '_'. Rename it (e.g. 'My__Bucket' -> 'MyBucket').`,
+          message: `${kind} '${fqn}' can't be stored in this state store: ${reason}.`,
           fqn,
         }),
       );
