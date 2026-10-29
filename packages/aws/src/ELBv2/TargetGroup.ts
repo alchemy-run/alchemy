@@ -266,7 +266,7 @@ export const TargetGroupProvider = () =>
             return undefined;
           }
           const tags = yield* readElbTags(output.targetGroupArn).pipe(
-            Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("TargetGroupNotFoundException", () => Effect.undefined),
           );
           if (tags === undefined) {
             return undefined;

@@ -302,7 +302,7 @@ export const SecretProvider = () =>
       ) {
         const policy = yield* secretsmanager.getResourcePolicy({ SecretId: described.ARN }).pipe(
           Effect.map((response) => response.ResourcePolicy),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         return {
           secretArn: described.ARN,

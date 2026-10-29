@@ -697,7 +697,7 @@ export const EventSourceMappingProvider = () =>
           if (output?.uuid) {
             config = yield* lambda
               .getEventSourceMapping({ UUID: output.uuid })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           } else if (olds?.functionName && olds.eventSourceArn) {
             // No persisted UUID (interrupted create): find this stack's
             // mapping for the function and source by its ownership tags.
@@ -714,7 +714,7 @@ export const EventSourceMappingProvider = () =>
                 ),
                 Stream.runHead,
                 Effect.map(Option.getOrUndefined),
-                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
               );
           }
           if (!config?.UUID || config.State === "Deleting") return undefined;

@@ -275,7 +275,7 @@ export const AssetDeploymentProvider = () =>
           if (output === undefined) return undefined;
           const prefix = output.prefix ? `${output.prefix}/` : output.prefix;
           const observed = yield* listObjects(output.bucketName, prefix).pipe(
-            Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchBucket", () => Effect.undefined),
           );
           if (observed === undefined) return undefined;
           const keyOf = (file: string) => (output.prefix ? `${output.prefix}/${file}` : file);

@@ -251,7 +251,7 @@ export const KvEntriesProvider = () =>
             // so drift sees edits, deletions and (with purge) extra keys.
             const entries = yield* retryForKvsReadiness(
               observeEntries(output.store, output.namespace, output.entries, olds?.purge ?? false),
-            ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            ).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
             if (entries === undefined) return undefined;
             return { ...output, entries };
           }),

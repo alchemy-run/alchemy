@@ -1033,7 +1033,7 @@ export const WebFunctionProvider = () =>
         const readInlinePolicy = (PolicyName: string) =>
           iam.getRolePolicy({ RoleName: roleName, PolicyName }).pipe(
             Effect.map((policy): unknown => JSON.parse(decodeURIComponent(policy.PolicyDocument))),
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           );
         const [tags, bindingPolicy, guardPolicy] = yield* Effect.all(
           [

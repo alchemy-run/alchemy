@@ -3151,7 +3151,7 @@ export const FunctionProvider = () =>
             session,
           });
 
-          const configuration = yield* createOrUpdateFunction({
+          yield* createOrUpdateFunction({
             id,
             news,
             roleArn,

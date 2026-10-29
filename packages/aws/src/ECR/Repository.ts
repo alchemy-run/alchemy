@@ -149,12 +149,12 @@ export const RepositoryProvider = () =>
       // observed then (canonical JSON — ECR may reformat the document).
       const readLifecyclePolicy = (repositoryName: string, declared: string | undefined) =>
         declared === undefined
-          ? Effect.succeed(undefined)
+          ? Effect.undefined
           : ecr.getLifecyclePolicy({ repositoryName }).pipe(
               Effect.map((res) => canonicalJson(res.lifecyclePolicyText)),
               Effect.catchTag(
                 ["LifecyclePolicyNotFoundException", "RepositoryNotFoundException"],
-                () => Effect.succeed(undefined),
+                () => Effect.undefined,
               ),
             );
 

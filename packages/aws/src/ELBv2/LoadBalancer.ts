@@ -237,7 +237,7 @@ export const LoadBalancerProvider = () =>
             return undefined;
           }
           const tags = yield* readElbTags(output.loadBalancerArn).pipe(
-            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined),
           );
           if (tags === undefined) {
             return undefined;

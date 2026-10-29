@@ -569,7 +569,7 @@ export const QueueProvider = () =>
             .getQueueAttributes({ QueueUrl: url, AttributeNames: ["All"] })
             .pipe(
               Effect.map((r) => r.Attributes ?? {}),
-              Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(undefined)),
+              Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
             );
           if (observed === undefined) return undefined;
           const attrs = {

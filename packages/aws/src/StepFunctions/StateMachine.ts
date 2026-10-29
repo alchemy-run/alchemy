@@ -694,7 +694,7 @@ export const StateMachineProvider = () =>
           [
             fetchObservedTags(machine.stateMachineArn),
             roleName === undefined
-              ? Effect.succeed(undefined)
+              ? Effect.undefined
               : iam
                   .getRolePolicy({
                     RoleName: roleName,
@@ -704,7 +704,7 @@ export const StateMachineProvider = () =>
                     Effect.map((policy): unknown =>
                       JSON.parse(decodeURIComponent(policy.PolicyDocument)),
                     ),
-                    Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+                    Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
                   ),
           ],
           { concurrency: "unbounded" },
