@@ -37,14 +37,29 @@ export interface Faults {
 
 export const noFaults: Faults = { callBefore: 0, callAfter: 0, crash: 0 };
 
+/** What one object did: Durable Object requests (calls in, and alarms), and rows read and written. */
+export interface Stats {
+  requests: number;
+  rowsRead: number;
+  rowsWritten: number;
+}
+
 /** One durable object: sorted storage, an exclusive lock, and its scheduled jobs. */
 class SimObject {
   readonly data = new Map<string, unknown>();
   overlay: Map<string, unknown> | undefined;
-  readonly jobs = new Map<string, number>();
+  /** Pending jobs by id: when due, and a version so a replaced job's queue entry is skipped. */
+  readonly jobs = new Map<string, { readonly due: number; readonly version: number }>();
+  readonly stats: Stats = { requests: 0, rowsRead: 0, rowsWritten: 0 };
+  /** In the wall-time model: when this object is next free (it runs one event at a time). */
+  busyUntil = 0;
+  private sorted: Array<string> = [];
+  private dirty = false;
   constructor(
     readonly address: string,
     readonly sim: Sim,
+    /** Runs a job of this object by id. */
+    readonly run: (id: string) => Effect.Effect<void>,
   ) {}
 
   private read(key: string) {
@@ -52,31 +67,84 @@ class SimObject {
     return this.data.get(key);
   }
 
+  private write(key: string, value: unknown) {
+    if (value === undefined) {
+      if (this.data.delete(key)) this.dirty = true;
+    } else {
+      if (!this.data.has(key)) this.dirty = true;
+      this.data.set(key, value);
+    }
+  }
+
+  /** The first index in the sorted keys at or after `key`. */
+  private seek(key: string) {
+    if (this.dirty) {
+      this.sorted = [...this.data.keys()].sort();
+      this.dirty = false;
+    }
+    let lo = 0;
+    let hi = this.sorted.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (this.sorted[mid]! < key) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+
   readonly storage: Backfill.Storage = {
-    get: <A>(key: string) => Effect.sync(() => this.read(key) as A | undefined),
+    get: <A>(key: string) =>
+      Effect.sync(() => {
+        this.stats.rowsRead += 1;
+        return this.read(key) as A | undefined;
+      }),
     put: (entries) =>
       Effect.sync(() => {
         for (const [key, value] of Object.entries(entries)) {
-          (this.overlay ?? this.data).set(key, value);
+          this.stats.rowsWritten += 1;
+          if (this.overlay) this.overlay.set(key, value);
+          else this.write(key, value);
         }
       }),
     delete: (keys) =>
       Effect.sync(() => {
-        for (const key of keys) (this.overlay ?? this.data).set(key, undefined);
-        if (!this.overlay) for (const key of keys) this.data.delete(key);
+        for (const key of keys) {
+          this.stats.rowsWritten += 1;
+          if (this.overlay) this.overlay.set(key, undefined);
+          else this.write(key, undefined);
+        }
       }),
     list: <A>(options: { prefix: string; startAfter?: string; limit?: number }) =>
       Effect.sync(() => {
-        const keys = new Set([...this.data.keys(), ...(this.overlay?.keys() ?? [])]);
+        const after = options.startAfter;
+        const inRange = (key: string) =>
+          key.startsWith(options.prefix) && (after === undefined || key > after);
+        // Stored keys from the first in range, merged with the open section's new keys.
+        const stored: Array<string> = [];
+        const limit = options.limit ?? Number.POSITIVE_INFINITY;
+        for (
+          let i = this.seek(after !== undefined && after > options.prefix ? after : options.prefix);
+          i < this.sorted.length;
+          i++
+        ) {
+          const key = this.sorted[i]!;
+          if (!key.startsWith(options.prefix)) break;
+          if (!inRange(key)) continue;
+          stored.push(key);
+          if (stored.length >= limit + (this.overlay?.size ?? 0)) break;
+        }
+        const added = [...(this.overlay?.keys() ?? [])].filter(
+          (key) => inRange(key) && !this.data.has(key),
+        );
+        const keys = added.length > 0 ? [...stored, ...added].sort() : stored;
         const out: Array<readonly [string, A]> = [];
-        for (const key of [...keys].sort()) {
-          if (!key.startsWith(options.prefix)) continue;
-          if (options.startAfter !== undefined && key <= options.startAfter) continue;
+        for (const key of keys) {
           const value = this.read(key);
           if (value === undefined) continue;
           out.push([key, value as A]);
-          if (options.limit !== undefined && out.length >= options.limit) break;
+          if (out.length >= limit) break;
         }
+        this.stats.rowsRead += Math.max(1, out.length);
         return out;
       }),
     exclusive: <A, E>(effect: Effect.Effect<A, E>) => this.section(effect, true),
@@ -100,10 +168,7 @@ class SimObject {
           ),
           Effect.tap(() =>
             Effect.sync(() => {
-              for (const [key, value] of this.overlay!) {
-                if (value === undefined) this.data.delete(key);
-                else this.data.set(key, value);
-              }
+              for (const [key, value] of this.overlay!) this.write(key, value);
             }),
           ),
           Effect.ensuring(
@@ -117,10 +182,7 @@ class SimObject {
   }
 
   readonly jobsApi: Backfill.Jobs = {
-    schedule: (id, afterMillis) =>
-      Effect.sync(() => {
-        this.jobs.set(id, this.sim.now + afterMillis);
-      }),
+    schedule: (id, afterMillis) => Effect.sync(() => this.sim.schedule(this, id, afterMillis)),
   };
 }
 
@@ -211,15 +273,38 @@ export class Sim {
     return object;
   }
 
-  /** Every call crosses the network: it may fail before it runs, or after. */
-  private call<A>(effect: () => Effect.Effect<A>): Effect.Effect<A> {
+  /**
+   * Latencies of the wall-time model, in milliseconds: a call's round trip, the
+   * time an object spends on one event, and how long an alarm takes to fire.
+   */
+  latency = { rpc: 10, service: 1, alarm: 50 };
+  /** In the wall-time model: the time of the work running now, and the latest time anything ended. */
+  vt = 0;
+  makespan = 0;
+
+  /**
+   * Every call crosses the network: it may fail before it runs, or after. In the
+   * wall-time model it waits for its object to be free, which is how a hot
+   * object's queue shows up.
+   */
+  private call<A>(target: SimObject, effect: () => Effect.Effect<A>): Effect.Effect<A> {
     return Effect.suspend(() => {
       this.calls += 1;
+      target.stats.requests += 1;
       if (this.chance(this.faults.callBefore)) {
         this.failures += 1;
         return Effect.die(new Crash("call failed in transit"));
       }
+      const caller = this.vt;
+      this.vt = Math.max(caller + this.latency.rpc / 2, target.busyUntil) + this.latency.service;
       return effect().pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            target.busyUntil = this.vt;
+            this.vt += this.latency.rpc / 2;
+            this.makespan = Math.max(this.makespan, this.vt);
+          }),
+        ),
         Effect.tap(() => {
           if (!this.chance(this.faults.callAfter)) return Effect.void;
           this.failures += 1;
@@ -229,37 +314,159 @@ export class Sim {
     });
   }
 
+  // ------------------------------------------------------------ scheduler
+
+  /** Due jobs and sends, as a binary heap by time (ties in random order). */
+  private readonly queue: Array<{
+    readonly due: number;
+    readonly tie: number;
+    readonly vt: number;
+    readonly run: () => Effect.Effect<void>;
+  }> = [];
+  private versions = 0;
+
+  private push(entry: (typeof this.queue)[number]) {
+    const q = this.queue;
+    q.push(entry);
+    let i = q.length - 1;
+    while (i > 0) {
+      const parent = (i - 1) >> 1;
+      if (this.before(q[parent]!, q[i]!)) break;
+      [q[parent], q[i]] = [q[i]!, q[parent]!];
+      i = parent;
+    }
+  }
+  private before(a: (typeof this.queue)[number], b: (typeof this.queue)[number]) {
+    return a.due < b.due || (a.due === b.due && a.tie <= b.tie);
+  }
+  private pop() {
+    const q = this.queue;
+    const top = q[0];
+    const last = q.pop()!;
+    if (q.length > 0) {
+      q[0] = last;
+      let i = 0;
+      while (true) {
+        const l = 2 * i + 1;
+        const r = l + 1;
+        let m = i;
+        if (l < q.length && !this.before(q[m]!, q[l]!)) m = l;
+        if (r < q.length && !this.before(q[m]!, q[r]!)) m = r;
+        if (m === i) break;
+        [q[m], q[i]] = [q[i]!, q[m]!];
+        i = m;
+      }
+    }
+    return top;
+  }
+
+  /** Schedule a job on an object; a job with the same id replaces a pending one. */
+  schedule(object: SimObject, id: string, afterMillis: number) {
+    const version = ++this.versions;
+    object.jobs.set(id, { due: this.now + afterMillis, version });
+    const vt = this.vt + afterMillis + this.latency.alarm;
+    this.push({
+      due: this.now + afterMillis,
+      tie: this.random(),
+      vt,
+      run: () =>
+        Effect.suspend(() => {
+          if (object.jobs.get(id)?.version !== version) return Effect.void;
+          object.jobs.delete(id);
+          object.stats.requests += 1;
+          this.vt = Math.max(vt, object.busyUntil) + this.latency.service;
+          return object.run(id).pipe(
+            // A failed job is retried, like a durable callback.
+            Effect.catchCause(() =>
+              Effect.sync(() => {
+                if (!object.jobs.has(id)) this.schedule(object, id, 1_000);
+              }),
+            ),
+            Effect.ensuring(
+              Effect.sync(() => {
+                object.busyUntil = this.vt;
+                this.makespan = Math.max(this.makespan, this.vt);
+              }),
+            ),
+          );
+        }),
+    });
+  }
+
+  /** Queue the next send of a source's outbox, unless one is queued already. */
+  private sending = new Set<string>();
+  private queueSend(stream: string) {
+    if (this.sending.has(stream)) return;
+    this.sending.add(stream);
+    const vt = this.vt;
+    this.push({
+      due: this.now,
+      tie: this.random(),
+      vt,
+      run: () =>
+        Effect.suspend(() => {
+          this.sending.delete(stream);
+          const queue = this.outbox.get(stream) ?? [];
+          if (queue.length === 0) return Effect.void;
+          this.vt = vt;
+          return this.sendOne(queue[0]!).pipe(
+            Effect.tap(() => Effect.sync(() => queue.shift())),
+            // A failed send stays at the head.
+            Effect.catchCause(() => Effect.void),
+            Effect.ensuring(
+              Effect.sync(() => {
+                if (queue.length > 0) this.queueSend(stream);
+              }),
+            ),
+          );
+        }),
+    });
+  }
+
   readonly net: Backfill.Network = {
     node: {
-      register: (path, ref) => this.call(() => this.node(path).role.register(path, ref)),
-      child: (path, child) => this.call(() => this.node(path).role.child(path, child)),
-      news: (path, targets) => this.call(() => this.node(path).role.news(path, targets)),
+      register: (path, ref) =>
+        this.call(this.node(path).object, () => this.node(path).role.register(path, ref)),
+      child: (path, child) =>
+        this.call(this.node(path).object, () => this.node(path).role.child(path, child)),
+      news: (path, targets) =>
+        this.call(this.node(path).object, () => this.node(path).role.news(path, targets)),
       sweep: (path, target, phase) =>
-        this.call(() => this.node(path).role.sweep(path, target, phase)),
+        this.call(this.node(path).object, () => this.node(path).role.sweep(path, target, phase)),
       report: (path, target, phase, child) =>
-        this.call(() => this.node(path).role.report(path, target, phase, child)),
+        this.call(this.node(path).object, () =>
+          this.node(path).role.report(path, target, phase, child),
+        ),
       settled: (path, target, ref) =>
-        this.call(() => this.node(path).role.settled(path, target, ref)),
-      phase: (path, target) => this.call(() => this.node(path).role.phase(path, target)),
-      status: (path) => this.call(() => this.node(path).role.status(path)),
+        this.call(this.node(path).object, () => this.node(path).role.settled(path, target, ref)),
+      phase: (path, target) =>
+        this.call(this.node(path).object, () => this.node(path).role.phase(path, target)),
+      status: (path) => this.call(this.node(path).object, () => this.node(path).role.status(path)),
     },
     source: {
-      scan: (ref, target) => this.call(() => this.busy(this.source(ref)).role.scan(target)),
-      ready: (ref, target) => this.call(() => this.busy(this.source(ref)).role.ready(target)),
+      scan: (ref, target) =>
+        this.call(this.source(ref).object, () => this.busy(this.source(ref)).role.scan(target)),
+      ready: (ref, target) =>
+        this.call(this.source(ref).object, () => this.busy(this.source(ref)).role.ready(target)),
       pull: (ref, target, key, after) =>
-        this.call(() => this.busy(this.source(ref)).role.pull(target, key, after)),
+        this.call(this.source(ref).object, () =>
+          this.busy(this.source(ref)).role.pull(target, key, after),
+        ),
     },
     consumer: {
       source: (target, key, stream, ref) =>
-        this.call(() => this.busy(this.key(key)).role.source(target, stream, ref)),
-      ready: (target, key) => this.call(() => this.busy(this.key(key)).role.ready(target)),
+        this.call(this.key(key).object, () =>
+          this.busy(this.key(key)).role.source(target, stream, ref),
+        ),
+      ready: (target, key) =>
+        this.call(this.key(key).object, () => this.busy(this.key(key)).role.ready(target)),
     },
   };
 
   node(path: string) {
     let node = this.nodes.get(path);
     if (!node) {
-      const object = new SimObject(`node:${path}`, this);
+      const object = new SimObject(`node:${path}`, this, (id) => this.node(path).role.run(id));
       node = {
         object,
         role: Backfill.makeNode(object.storage, object.jobsApi, this.net, this.limits),
@@ -308,7 +515,7 @@ export class Sim {
     const id = this.streamOf(ref);
     let source = this.sources.get(id);
     if (!source) {
-      const object = new SimObject(`source:${id}`, this);
+      const object = new SimObject(`source:${id}`, this, () => this.sources.get(id)!.role.flush);
       const data: SourceData = {
         ref,
         object,
@@ -358,7 +565,9 @@ export class Sim {
   key(key: string): KeyData {
     let data = this.keys.get(key);
     if (!data) {
-      const object = new SimObject(`key:${key}`, this);
+      const object = new SimObject(`key:${key}`, this, (id) =>
+        this.keys.get(key)!.role.merge(id.slice("bf-merge:".length)),
+      );
       const keyData: KeyData = {
         key,
         object,
@@ -456,6 +665,7 @@ export class Sim {
                   const queue = this.outbox.get(delivery.source) ?? [];
                   queue.push(delivery);
                   this.outbox.set(delivery.source, queue);
+                  this.queueSend(delivery.source);
                 }
               }),
             ),
@@ -480,72 +690,85 @@ export class Sim {
   /** Deliver one queued live delivery. */
   private sendOne(delivery: Delivery) {
     const key = this.key(delivery.key);
+    key.object.stats.requests += 1;
+    this.vt = Math.max(this.vt + this.latency.rpc / 2, key.object.busyUntil) + this.latency.service;
     // Older code refuses a newer generation's delivery (its apply dies); the sender retries.
     if (this.now < this.busy(key).staleUntil)
       return Effect.die(new Crash("key still on older code"));
-    return key.role
-      .admit(this.targetOfKey(delivery.key), [delivery])
-      .pipe(
-        Effect.flatMap((apply) =>
-          apply
-            ? key.object.storage.exclusive(Effect.sync(() => this.apply(key, [delivery], false)))
-            : Effect.void,
-        ),
-      );
+    return key.role.admit(this.targetOfKey(delivery.key), [delivery]).pipe(
+      Effect.flatMap((apply) =>
+        apply
+          ? key.object.storage.exclusive(Effect.sync(() => this.apply(key, [delivery], false)))
+          : Effect.void,
+      ),
+      Effect.ensuring(
+        Effect.sync(() => {
+          key.object.busyUntil = this.vt;
+          this.makespan = Math.max(this.makespan, this.vt);
+        }),
+      ),
+    );
   }
 
-  /** Every job and queued delivery due now, or the time the next one is. */
-  private due() {
-    const due: Array<() => Effect.Effect<void>> = [];
-    let next = Number.POSITIVE_INFINITY;
-    const collect = (object: SimObject, run: (id: string) => Effect.Effect<void>) => {
-      for (const [id, at] of object.jobs) {
-        if (at <= this.now)
-          due.push(() =>
-            Effect.suspend(() => {
-              object.jobs.delete(id);
-              return run(id).pipe(
-                // A failed job is retried, like a durable callback.
-                Effect.catchCause(() =>
-                  Effect.sync(() => {
-                    if (!object.jobs.has(id)) object.jobs.set(id, this.now + 1_000);
-                  }),
-                ),
-              );
-            }),
-          );
-        else next = Math.min(next, at);
-      }
-    };
-    for (const { object, role } of this.nodes.values()) collect(object, role.run);
-    for (const source of this.sources.values()) collect(source.object, () => source.role.flush);
-    for (const key of this.keys.values())
-      collect(key.object, (id) => key.role.merge(id.slice("bf-merge:".length)));
-    for (const queue of this.outbox.values()) {
-      if (queue.length === 0) continue;
-      // The head of one source's outbox: a failed send stays at the head.
-      due.push(() =>
-        this.sendOne(queue[0]!).pipe(
-          Effect.tap(() => Effect.sync(() => queue.shift())),
-          Effect.catchCause(() => Effect.void),
-        ),
-      );
-    }
-    return { due, next };
-  }
-
-  /** Run one due job (picked at random), or move the clock to the next. `false` when idle. */
+  /** Run the next due job or send (ties in random order), or move the clock to it. `false` when idle. */
   step(): Effect.Effect<boolean> {
     return Effect.suspend(() => {
-      const { due, next } = this.due();
-      if (due.length > 0) {
-        const pick = due[Math.floor(this.random() * due.length)]!;
-        return pick().pipe(Effect.as(true));
+      const head = this.queue[0];
+      if (head === undefined) return Effect.succeed(false);
+      if (head.due > this.now) {
+        this.now = head.due;
+        return Effect.succeed(true);
       }
-      if (next === Number.POSITIVE_INFINITY) return Effect.succeed(false);
-      this.now = next;
-      return Effect.succeed(true);
+      return this.pop()!.run().pipe(Effect.as(true));
     });
+  }
+
+  /** Requests, rows read and rows written, by kind of object and in total. */
+  totals() {
+    const sum = (objects: Iterable<SimObject>) => {
+      const total: Stats = { requests: 0, rowsRead: 0, rowsWritten: 0 };
+      let hottest = 0;
+      for (const object of objects) {
+        total.requests += object.stats.requests;
+        total.rowsRead += object.stats.rowsRead;
+        total.rowsWritten += object.stats.rowsWritten;
+        hottest = Math.max(hottest, object.stats.requests);
+      }
+      return { ...total, hottest };
+    };
+    const nodes = sum([...this.nodes.values()].map((n) => n.object));
+    const sources = sum([...this.sources.values()].map((n) => n.object));
+    const keys = sum([...this.keys.values()].map((n) => n.object));
+    return {
+      nodes,
+      sources,
+      keys,
+      total: {
+        requests: nodes.requests + sources.requests + keys.requests,
+        rowsRead: nodes.rowsRead + sources.rowsRead + keys.rowsRead,
+        rowsWritten: nodes.rowsWritten + sources.rowsWritten + keys.rowsWritten,
+      },
+      directory: {
+        nodes: this.nodes.size,
+        depth: Math.max(0, ...[...this.nodes.keys()].map((path) => path.length)),
+      },
+    };
+  }
+
+  /** Reset every counter and the wall-time model (after seeding, before the deploy). */
+  resetMeasures() {
+    for (const object of [
+      ...[...this.nodes.values()].map((n) => n.object),
+      ...[...this.sources.values()].map((n) => n.object),
+      ...[...this.keys.values()].map((n) => n.object),
+    ]) {
+      object.stats.requests = 0;
+      object.stats.rowsRead = 0;
+      object.stats.rowsWritten = 0;
+      object.busyUntil = 0;
+    }
+    this.vt = 0;
+    this.makespan = 0;
   }
 
   /**

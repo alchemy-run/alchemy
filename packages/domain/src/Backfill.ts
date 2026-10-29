@@ -980,6 +980,11 @@ export const makeNode = (
    */
   const split = (path: string) =>
     Effect.gen(function* () {
+      // Moving instances while a sweep runs could take one past this node's listing
+      // and into a child that has finished: wait until no sweep is under way here.
+      // Meanwhile new instances already go to the children, so this node stays bounded.
+      const running = (yield* sweeps).some(({ sweep }) => sweep.phase !== "complete");
+      if (running) return yield* jobs.schedule("split", RETRY_MS);
       const rows = yield* storage.list<SourceRef>({ prefix: "i:", limit: limits.nodePage });
       if (rows.length === 0) return;
       yield* Effect.forEach(rows, ([, ref]) => net.node.register(childFor(path, ref), ref), {
@@ -1021,8 +1026,15 @@ export const makeNode = (
         );
         return yield* jobs.schedule(`late:${target}`, 0);
       }
+      // During discovery a late instance is only scanned: telling its keys discovery
+      // is complete must wait until it is, everywhere (this node's ready phase). Those
+      // rows stay, so a page is listed after the last one scanned, kept in `late-at:`.
+      const discovering = (yield* getSweep(target))?.phase === "discover";
+      const cursorKey = `late-at:${enc(target)}`;
+      const cursor = discovering ? yield* storage.get<string>(cursorKey) : undefined;
       const rows = yield* storage.list<SourceRef>({
         prefix: latePrefix(target),
+        ...(cursor === undefined ? {} : { startAfter: cursor }),
         limit: limits.nodePage,
       });
       let stale = false;
@@ -1032,6 +1044,7 @@ export const makeNode = (
           .pipe(Effect.catchCause(() => Effect.succeed("stale" as const)));
         if (scanned === "stale") stale = true;
         if (scanned !== "discovered") continue;
+        if (discovering) continue;
         const ready = yield* net.source
           .ready(ref, target)
           .pipe(Effect.catchCause(() => Effect.succeed("stale" as const)));
@@ -1047,6 +1060,15 @@ export const makeNode = (
             yield* settle(path, target);
           }),
         );
+      }
+      if (discovering) {
+        // Scanned up to here; at the end of the list, `begin` runs this job again in the
+        // ready phase (a stale instance is scanned again from the start).
+        if (stale) yield* storage.delete([cursorKey]);
+        else if (rows.length > 0) yield* storage.put({ [cursorKey]: rows[rows.length - 1]![0] });
+        if (stale || rows.length === limits.nodePage)
+          yield* jobs.schedule(`late:${target}`, stale ? limits.staleRetryMillis : 0);
+        return;
       }
       if (rows.length > 0)
         yield* jobs.schedule(`late:${target}`, stale ? limits.staleRetryMillis : 0);
@@ -1072,7 +1094,12 @@ export const makeNode = (
           ...(adopting === undefined ? {} : { adopting }),
         } satisfies Sweep,
       });
-      if (adopting !== undefined) yield* jobs.schedule(`late:${target}`, 0);
+      if (
+        adopting !== undefined ||
+        (phase !== "discover" &&
+          (yield* storage.list({ prefix: latePrefix(target), limit: 1 })).length > 0)
+      )
+        yield* jobs.schedule(`late:${target}`, 0);
       if (phase === "complete") {
         yield* storage.put({ [`done:${enc(target)}`]: true });
         if (path === "") {
