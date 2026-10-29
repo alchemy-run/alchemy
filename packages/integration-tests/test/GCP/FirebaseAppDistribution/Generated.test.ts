@@ -171,21 +171,13 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "ListGroups (firebaseappdistribution.projects.groups.list)",
-        () => probe("ListGroups", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListGroups (firebaseappdistribution.projects.groups.list): App Distribution testers and groups belong to a Firebase project; on the testing project (no Firebase) the list answers 400 INVALID_ARGUMENT",
+        () => Effect.void,
       );
-      test.provider(
-        "ListTesters (firebaseappdistribution.projects.testers.list)",
-        () => probe("ListTesters", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListTesters (firebaseappdistribution.projects.testers.list): App Distribution testers and groups belong to a Firebase project; on the testing project (no Firebase) the list answers 400 INVALID_ARGUMENT",
+        () => Effect.void,
       );
       test.provider(
         "PatchAppRelease (firebaseappdistribution.projects.apps.releases.patch)",

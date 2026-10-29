@@ -25,10 +25,8 @@ export default class FirebaseAppDistributionGeneratedHost extends GCP.Function<F
     const p7 = yield* GCP.FirebaseAppDistribution.GetAppReleaseFeedbackReport();
     const p8 = yield* GCP.FirebaseAppDistribution.ListAppReleaseFeedbackReports();
     const p9 = yield* GCP.FirebaseAppDistribution.ListAppReleases();
-    const p10 = yield* GCP.FirebaseAppDistribution.ListGroups();
-    const p11 = yield* GCP.FirebaseAppDistribution.ListTesters();
-    const p12 = yield* GCP.FirebaseAppDistribution.PatchAppRelease();
-    const p13 = yield* GCP.FirebaseAppDistribution.PatchTester();
+    const p10 = yield* GCP.FirebaseAppDistribution.PatchAppRelease();
+    const p11 = yield* GCP.FirebaseAppDistribution.PatchTester();
     return {
       fetch: serveProbes({
         BatchReleaseDelete: probeOutcome(Retry.none(p0({ app: "alchemy-missing" } as never))),
@@ -63,12 +61,10 @@ export default class FirebaseAppDistributionGeneratedHost extends GCP.Function<F
           Retry.none(p8({ app: "alchemy-missing", release: "alchemy-missing" } as never)),
         ),
         ListAppReleases: probeOutcome(Retry.none(p9({ app: "alchemy-missing" } as never))),
-        ListGroups: probeOutcome(Retry.none(p10({} as never))),
-        ListTesters: probeOutcome(Retry.none(p11({} as never))),
         PatchAppRelease: probeOutcome(
-          Retry.none(p12({ app: "alchemy-missing", release: "alchemy-missing" } as never)),
+          Retry.none(p10({ app: "alchemy-missing", release: "alchemy-missing" } as never)),
         ),
-        PatchTester: probeOutcome(Retry.none(p13({ tester: "alchemy-missing" } as never))),
+        PatchTester: probeOutcome(Retry.none(p11({ tester: "alchemy-missing" } as never))),
       }),
     };
   }).pipe(
@@ -85,8 +81,6 @@ export default class FirebaseAppDistributionGeneratedHost extends GCP.Function<F
           GCP.FirebaseAppDistribution.GetAppReleaseFeedbackReportHttp,
           GCP.FirebaseAppDistribution.ListAppReleaseFeedbackReportsHttp,
           GCP.FirebaseAppDistribution.ListAppReleasesHttp,
-          GCP.FirebaseAppDistribution.ListGroupsHttp,
-          GCP.FirebaseAppDistribution.ListTestersHttp,
           GCP.FirebaseAppDistribution.PatchAppReleaseHttp,
           GCP.FirebaseAppDistribution.PatchTesterHttp,
         ),

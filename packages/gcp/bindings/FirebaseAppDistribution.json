@@ -13,7 +13,11 @@
     },
     "enable": [
       "firebaseappdistribution.googleapis.com"
-    ]
+    ],
+    "skip": {
+      "ListTesters": "App Distribution testers and groups belong to a Firebase project; on the testing project (no Firebase) the list answers 400 INVALID_ARGUMENT",
+      "ListGroups": "App Distribution testers and groups belong to a Firebase project; on the testing project (no Firebase) the list answers 400 INVALID_ARGUMENT"
+    }
   },
   "permissionService": "firebaseappdistro",
   "permissionCollections": {
