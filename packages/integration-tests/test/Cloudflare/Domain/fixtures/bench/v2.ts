@@ -12,5 +12,7 @@ export default class DomainBenchWorker extends Cloudflare.Worker<DomainBenchWork
     // Protocol traces (`backfill …`) in the Worker logs.
     ...(process.env.DOMAIN_BENCH_DEBUG ? { env: { DEBUG: "1" } } : {}),
   },
-  benchWorker("v2", Deposits).pipe(Effect.provide(hosted(After.layer(Layer.empty)))),
+  benchWorker("v2", { kind: "deposits", view: Deposits }).pipe(
+    Effect.provide(hosted(After.layer(Layer.empty))),
+  ),
 ) {}
