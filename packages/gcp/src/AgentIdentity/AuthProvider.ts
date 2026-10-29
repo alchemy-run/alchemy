@@ -355,7 +355,9 @@ export const AuthProviderProvider = () =>
             allowedScopes,
             blockedScopes,
             workloadIds,
-            authProviderTypeParams: typeParams,
+            // Secrets in the body must be named in the mask: send them only
+            // when the type params are being updated.
+            ...(typeParamsChanged ? { authProviderTypeParams: typeParams } : {}),
           },
         });
       }
