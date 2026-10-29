@@ -635,13 +635,13 @@ Celld embeds V8 on your own infrastructure: overview and fleet setup on the ECS 
 
 Hosting, management, scaling, upgrades, storage and private networking for a Celld fleet.
 
-- [Fleets & Applications](https://alchemy.run/celld/fleet/fleets-and-applications) — How a Celld Fleet, its host, Workers and an Application fit together in a Stack.
-- [Hosting on ECS](https://alchemy.run/celld/fleet/ecs) — Run a Celld fleet on ECS Fargate or dedicated EC2 hosts, size its nodes, and bring your own VPC.
-- [Management runners](https://alchemy.run/celld/fleet/management) — Choose how a Celld fleet's management runner is hosted — an on-demand Fargate task, an always-on service, or a VPC Lambda — and what each costs.
-- [Private fleets](https://alchemy.run/celld/fleet/private-fleets) — Keep a Celld fleet off the internet and reach its Application only from inside its network.
-- [Scaling](https://alchemy.run/celld/fleet/scaling) — Run a fixed number of Celld nodes or let the host scale them on CPU, and how requests reach the node that owns a Durable Object.
-- [Storage & retention](https://alchemy.run/celld/fleet/storage) — Where a Celld fleet keeps its data, and what destroying a fleet or removing an Application deletes.
-- [Upgrades](https://alchemy.run/celld/fleet/upgrades) — Roll a Celld fleet to another release in the 0.6 series, use a mirrored image, and resize nodes without downtime.
+- [Fleets & Applications](https://alchemy.run/celld/fleet/fleets-and-applications) — What a Celld fleet is, why its nodes are disposable, and how an Application puts your Workers on it.
+- [Hosting on ECS](https://alchemy.run/celld/fleet/ecs) — How a host Layer decides where a Celld fleet runs, and how to choose between Fargate and dedicated EC2 hosts on Amazon ECS.
+- [Management runners](https://alchemy.run/celld/fleet/management) — Why a Celld deploy needs a runner inside the fleet's network, and how to choose between an on-demand task, an always-on service and a VPC Lambda.
+- [Private fleets](https://alchemy.run/celld/fleet/private-fleets) — Keep a Celld fleet off the internet and call its Workers only from services in the same network.
+- [Scaling](https://alchemy.run/celld/fleet/scaling) — How a Celld fleet spreads Workers and Durable Objects across its nodes, and how to run a fixed count or scale on CPU.
+- [Storage & retention](https://alchemy.run/celld/fleet/storage) — What a Celld fleet's bucket holds, and what destroying a fleet or removing a resource deletes.
+- [Upgrades](https://alchemy.run/celld/fleet/upgrades) — How a Celld fleet rolls to a new release or node size one node at a time, and which changes it refuses.
 
 ## Celld — Compute
 
