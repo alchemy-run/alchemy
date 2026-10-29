@@ -328,7 +328,7 @@ export type CelldWorkerClass = Platform<
  *     providers: Layer.mergeAll(
  *       AWS.providers(),
  *       Celld.providers(),
- *       Celld.EcsFleet(),
+ *       CelldAWS.EcsFleet(),
  *     ),
  *     state: AWS.state(),
  *   },

@@ -31,7 +31,8 @@ bun init -y
 <PackageManagers add={pkgs} />
 
 `@alchemy.run/celld` provides the fleet, Workers and bindings.
-`@alchemy.run/aws` provides the ECS host the fleet runs on.
+`@alchemy.run/aws` is the optional peer that `@alchemy.run/celld/AWS`, the ECS
+host the fleet runs on, needs.
 
 ## Declare the fleet
 
@@ -83,16 +84,20 @@ to the providers:
 
 ```diff lang="typescript"
 // alchemy.run.ts
+import * as Celld from "@alchemy.run/celld";
++import * as CelldAWS from "@alchemy.run/celld/AWS";
+
 -    providers: Layer.mergeAll(AWS.providers(), Celld.providers()),
 +    providers: Layer.mergeAll(
 +      AWS.providers(),
 +      Celld.providers(),
-+      Celld.EcsFleet(),
++      CelldAWS.EcsFleet(),
 +    ),
 ```
 
-`Celld.EcsFleet()` runs the nodes as Fargate tasks behind an ECS service and
-stores fleet data in an S3 bucket.
+`@alchemy.run/celld/AWS` holds everything Celld needs from AWS, so the core
+package never loads AWS code. `CelldAWS.EcsFleet()` runs the nodes as Fargate
+tasks behind an ECS service and stores fleet data in an S3 bucket.
 
 ## Choose where management runs
 
@@ -102,8 +107,8 @@ and this Layer decides how it's hosted:
 
 ```diff lang="typescript"
 // alchemy.run.ts
--      Celld.EcsFleet(),
-+      Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
+-      CelldAWS.EcsFleet(),
++      CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
 ```
 
 `EcsTaskManagement` starts the runner as a Fargate task when a deploy needs
@@ -133,7 +138,7 @@ That's Part 2.
 ## Recap
 
 - A `Celld.Fleet` declares compute and storage, not code.
-- `Celld.EcsFleet()` hosts it on ECS, and a management Layer hosts the runner
+- `CelldAWS.EcsFleet()` hosts it on ECS, and a management Layer hosts the runner
   deploys use.
 - `ingress: true` exposes the fleet on a public load balancer.
 

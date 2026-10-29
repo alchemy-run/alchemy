@@ -422,6 +422,9 @@
       "path": "./examples/kubernetes-tutorial/tsconfig.json"
     },
     {
+      "path": "./examples/celld-tutorial/tsconfig.json"
+    },
+    {
       "path": "./examples/prisma-website-vite/tsconfig.json"
     },
     {

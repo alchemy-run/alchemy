@@ -1,4 +1,3 @@
-import { DEFAULT_CELLD_IMAGE, DEFAULT_CELLD_VERSION } from "@alchemy.run/celld/CelldCli";
 import {
   EcsHostConfigurationError,
   makeEcsDockerfile,
@@ -6,7 +5,8 @@ import {
   resolveEcsHostConfiguration,
   resolveManagementRouteTables,
   validateEcsHostTransition,
-} from "@alchemy.run/celld/EcsHostConfig";
+} from "@alchemy.run/celld/AWS/EcsHostConfig";
+import { DEFAULT_CELLD_IMAGE, DEFAULT_CELLD_VERSION } from "@alchemy.run/celld/CelldCli";
 import { describe, expect, test } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";

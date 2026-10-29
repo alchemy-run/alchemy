@@ -1,6 +1,7 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Celld from "@alchemy.run/celld";
 import { Application } from "@alchemy.run/celld/Application";
+import * as CelldAWS from "@alchemy.run/celld/AWS";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -19,7 +20,7 @@ const testOptions = {
   providers: Layer.mergeAll(
     AWS.providers(),
     Celld.providers(),
-    Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
+    CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
     Cloudflare.providers(),
   ),
 };

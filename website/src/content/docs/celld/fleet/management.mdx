@@ -7,23 +7,23 @@ A deploy calls the fleet's nodes to activate a revision, reload Workers and run
 D1 migrations. The nodes accept those calls only on a private operator listener,
 so the deploy sends them through a management runner inside the fleet's network.
 
-`Celld.EcsFleet()` requires a Layer that decides how that runner is hosted.
+`CelldAWS.EcsFleet()` requires a Layer that decides how that runner is hosted.
 Leaving it out is a type error, and only the Layer you provide, with its runner
 code, ends up in your program:
 
 ```ts
-Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement()));
+CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement()));
 ```
 
 ## Start a task on demand
 
-`Celld.EcsTaskManagement()` runs the runner as a small Fargate task that reads
+`CelldAWS.EcsTaskManagement()` runs the runner as a small Fargate task that reads
 requests from an SQS queue. The deploy's first management call starts the task
 and waits for it, typically about a minute. Later calls reuse it, and it stops
 after `idleSeconds` without work (five minutes by default):
 
 ```ts
-Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement({ idleSeconds: 900 })));
+CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement({ idleSeconds: 900 })));
 ```
 
 Nothing runs between deploys, and a running task costs under two cents an hour.
@@ -32,11 +32,11 @@ fleet takes a few minutes. This is the right default for most stacks.
 
 ## Keep a task running
 
-`Celld.EcsServiceManagement()` keeps one runner task up with an ECS service, so
+`CelldAWS.EcsServiceManagement()` keeps one runner task up with an ECS service, so
 management calls never wait for it to start:
 
 ```ts
-Celld.EcsFleet().pipe(Layer.provide(Celld.EcsServiceManagement()));
+CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsServiceManagement()));
 ```
 
 The task (0.25 vCPU, 0.5 GB, ARM) and its public IPv4 address cost about $11 a
@@ -45,11 +45,11 @@ that a minute per deploy matters more than the bill.
 
 ## Invoke a VPC Lambda
 
-`Celld.EcsLambdaManagement()` runs the runner as a Lambda inside the fleet's
+`CelldAWS.EcsLambdaManagement()` runs the runner as a Lambda inside the fleet's
 subnets, invoked directly over IAM:
 
 ```ts
-Celld.EcsFleet().pipe(Layer.provide(Celld.EcsLambdaManagement()));
+CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsLambdaManagement()));
 ```
 
 It costs nothing between deploys, and calls wait only for a Lambda cold start.

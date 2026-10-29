@@ -162,7 +162,7 @@ export const requireHost = (id: string): Effect.Effect<Host["Service"], HostNotP
               message:
                 `Celld.Fleet '${id}' has no host — provide one alongside the ` +
                 "providers, e.g. " +
-                "`Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.EcsFleet())`.",
+                "`Layer.mergeAll(AWS.providers(), Celld.providers(), CelldAWS.EcsFleet())`.",
             }),
           ),
       }),
@@ -231,7 +231,7 @@ export type FleetClass = {
  *
  * The fleet is platform-agnostic: WHERE the nodes run (and which bucket
  * backs them) is owned by the `Celld.Host` Layer composed alongside the
- * providers. `Celld.EcsFleet()` uses ECS Fargate by default; the EC2 capacity
+ * providers. `CelldAWS.EcsFleet()` uses ECS Fargate by default; the EC2 capacity
  * option provides dedicated Docker hosts for experimental Containers and Sandbox.
  * The fleet carries no code. Workers stage immutable artifacts through object
  * storage APIs; {@link Celld.Application} publishes and activates the selected graph.
@@ -279,7 +279,7 @@ export type FleetClass = {
  * }) {}
  *
  * const stack = Alchemy.Stack("app", {
- *   providers: Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.EcsFleet()),
+ *   providers: Layer.mergeAll(AWS.providers(), Celld.providers(), CelldAWS.EcsFleet()),
  *   state: AWS.state(),
  * });
  * ```

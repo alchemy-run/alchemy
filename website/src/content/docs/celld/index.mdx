@@ -17,7 +17,7 @@ export default Alchemy.Stack(
     providers: Layer.mergeAll(
       AWS.providers(),
       Celld.providers(),
-      Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
+      CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
     ),
     state: AWS.state(),
   },
@@ -51,7 +51,8 @@ Write [Workers](/celld/compute/workers) and connect them with
 [Durable Objects](/celld/compute/durable-objects), [KV](/celld/data/kv),
 [D1](/celld/data/d1) and [R2](/celld/data/r2). Run background work with
 [Queues](/celld/messaging/queues), [cron triggers](/celld/messaging/cron) and
-[Workflows](/celld/compute/workflows), and sandboxed code with the
+[Workflows](/celld/compute/workflows) or
+[Effect workflows](/celld/compute/effect-workflows), and sandboxed code with the
 [Worker Loader](/celld/compute/worker-loader) and
 [Containers](/celld/compute/containers).
 

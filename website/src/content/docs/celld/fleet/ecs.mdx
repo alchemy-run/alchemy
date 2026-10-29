@@ -3,7 +3,7 @@ title: Hosting on ECS
 description: Run a Celld fleet on ECS Fargate or dedicated EC2 hosts, size its nodes, and bring your own VPC.
 ---
 
-`Celld.EcsFleet()` hosts a fleet on Amazon ECS. It runs the nodes as an ECS
+`CelldAWS.EcsFleet()` hosts a fleet on Amazon ECS. It runs the nodes as an ECS
 service, stores fleet data in an S3 bucket, and composes the network,
 discovery and load balancing around them.
 
@@ -14,7 +14,7 @@ discovery and load balancing around them.
 const providers = Layer.mergeAll(
   AWS.providers(),
   Celld.providers(),
-  Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
+  CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
 );
 ```
 
@@ -43,9 +43,9 @@ at a time.
 
 ```typescript
 // alchemy.run.ts
-Celld.EcsFleet({
+CelldAWS.EcsFleet({
   capacity: { type: "ec2", instanceType: "m7i.large" },
-}).pipe(Layer.provide(Celld.EcsTaskManagement()));
+}).pipe(Layer.provide(CelldAWS.EcsTaskManagement()));
 ```
 
 EC2 capacity runs one node per host in an Auto Scaling group, plus one spare
@@ -58,10 +58,10 @@ the ECS agent; the rest goes to the node.
 
 ```typescript
 // alchemy.run.ts
-Celld.EcsFleet({
+CelldAWS.EcsFleet({
   capacity: { type: "ec2", instanceType: "m7i.large" },
   containerRuntime: "runsc",
-}).pipe(Layer.provide(Celld.EcsTaskManagement()));
+}).pipe(Layer.provide(CelldAWS.EcsTaskManagement()));
 ```
 
 `containerRuntime: "runsc"` installs gVisor on each host, and containers run

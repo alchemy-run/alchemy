@@ -6,7 +6,7 @@ import { Application, ApplicationProvider } from "./Application.ts";
 import { Bootstrap, BootstrapProvider } from "./Bootstrap.ts";
 import { Database, DatabaseProvider } from "./D1/Database.ts";
 import { Fleet, FleetProvider } from "./Fleet.ts";
-import { FleetStorageS3 } from "./FleetStorageS3.ts";
+import { FleetStorageFromHost } from "./FleetStorage.ts";
 import { Namespace, NamespaceProvider } from "./KV/Namespace.ts";
 import { ManagementBindings } from "./ManagementBindings.ts";
 import { Queue, QueueProvider } from "./Queues/Queue.ts";
@@ -19,13 +19,13 @@ export class Providers extends Provider.ProviderCollection<Providers>()("Celld")
 /**
  * The Celld provider layer: the {@link Fleet} and `Celld.Worker`
  * providers. The fleet *host* is a separate Layer composed alongside —
- * targeting AWS ECS is `Celld.EcsFleet()`, which also needs `AWS.providers()`
+ * targeting AWS ECS is `CelldAWS.EcsFleet()`, which also needs `AWS.providers()`
  * in the same stack (it contributes the `Random` provider the per-worker
  * gateway secret is minted with):
  *
  * ```ts
  * const stack = Alchemy.Stack("app", {
- *   providers: Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.EcsFleet()),
+ *   providers: Layer.mergeAll(AWS.providers(), Celld.providers(), CelldAWS.EcsFleet()),
  *   state: AWS.state(),
  * });
  * ```
@@ -56,7 +56,7 @@ export const providers = () =>
         DatabaseProvider(),
       ),
     ),
-    Layer.provideMerge(Layer.mergeAll(FleetStorageS3, ManagementBindings)),
+    Layer.provideMerge(Layer.mergeAll(FleetStorageFromHost, ManagementBindings)),
     Layer.provide(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
     Layer.orDie,
   );

@@ -23,6 +23,7 @@ file:
 // test/integ.test.ts
 import * as AWS from "@alchemy.run/aws";
 import * as Celld from "@alchemy.run/celld";
+import * as CelldAWS from "@alchemy.run/celld/AWS";
 import * as Test from "@alchemy.run/test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
@@ -33,7 +34,7 @@ const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
   providers: Layer.mergeAll(
     AWS.providers(),
     Celld.providers(),
-    Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
+    CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
   ),
   state: AWS.state(),
 });

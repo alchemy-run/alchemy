@@ -1,19 +1,20 @@
 import * as AWS from "@alchemy.run/aws";
 import { Providers as AwsProviders } from "@alchemy.run/aws/Providers";
 import * as Celld from "@alchemy.run/celld";
-import { DEFAULT_CELLD_IMAGE } from "@alchemy.run/celld/CelldCli";
+import * as CelldAWS from "@alchemy.run/celld/AWS";
 import {
   ec2NodeTaskConfiguration,
   makeEc2UserData,
   resolveEc2NodeSizing,
-} from "@alchemy.run/celld/EcsEc2";
-import { composeEcsFleet } from "@alchemy.run/celld/EcsFleet";
-import { makeEcsDockerfile } from "@alchemy.run/celld/EcsHostConfig";
-import { makeEcsLambdaManagement } from "@alchemy.run/celld/EcsLambdaManagement";
+} from "@alchemy.run/celld/AWS/EcsEc2";
+import { composeEcsFleet } from "@alchemy.run/celld/AWS/EcsFleet";
+import { makeEcsDockerfile } from "@alchemy.run/celld/AWS/EcsHostConfig";
+import { makeEcsLambdaManagement } from "@alchemy.run/celld/AWS/EcsLambdaManagement";
 import {
   makeEcsServiceManagement,
   makeEcsTaskManagement,
-} from "@alchemy.run/celld/EcsTaskManagement";
+} from "@alchemy.run/celld/AWS/EcsTaskManagement";
+import { DEFAULT_CELLD_IMAGE } from "@alchemy.run/celld/CelldCli";
 import { Host } from "@alchemy.run/celld/Host";
 import { FleetManagement } from "@alchemy.run/celld/Management";
 import { Providers as CelldProviders } from "@alchemy.run/celld/Providers";
@@ -38,7 +39,7 @@ import * as Result from "effect/Result";
 const providers = Layer.mergeAll(
   AWS.providers(),
   Celld.providers(),
-  Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
+  CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
 );
 // Composition never reaches the runner, so its transport is never called.
 const unreachable = () => Effect.die("composition must not call the management runner");

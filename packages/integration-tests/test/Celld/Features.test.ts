@@ -1,5 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Celld from "@alchemy.run/celld";
+import * as CelldAWS from "@alchemy.run/celld/AWS";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
@@ -20,7 +21,7 @@ const testOptions = {
   providers: Layer.mergeAll(
     AWS.providers(),
     Celld.providers(),
-    Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
+    CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
   ),
 };
 const { test, beforeAll, afterAll } = Test.make(testOptions);

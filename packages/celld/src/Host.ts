@@ -2,6 +2,7 @@ import type { Input } from "alchemy/Input";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import type { FleetProps } from "./Fleet.ts";
+import type { FleetStorageError, Store } from "./FleetStorage.ts";
 
 /**
  * The S3-compatible bucket backing a fleet, as `celld` consumes it.
@@ -81,31 +82,17 @@ export interface HostService {
     readonly props: FleetProps;
   }) => Effect.Effect<HostComposeResult, any, any>;
   /**
-   * Resolve private object-store credentials for the storage API adapter.
-   * The legacy name is retained for compatibility; no child process is run.
-   * Returned credentials must not be persisted in fleet attributes.
+   * Open the fleet's backing object store for deployment-time reads and
+   * writes. Credentials stay inside the returned client and are never
+   * persisted in fleet attributes.
    */
-  readonly deployEnv: (options: {
-    readonly news: FleetConnection;
-  }) => Effect.Effect<Record<string, string>, any>;
-  /** Credential-only alias for hosts migrating away from the legacy name. */
-  readonly storageCredentials?: (options: {
-    readonly news: FleetConnection;
-  }) => Effect.Effect<Record<string, string>, any>;
-  /**
-   * Legacy deployment hook. v0.5.0 adopts the deployment pointer in place;
-   * hosts should return `Effect.void`, and Workers must not restart nodes
-   * after publishing code. Runtime binary upgrades are a separate operation.
-   */
-  readonly restartNodes: (options: {
-    readonly news: FleetConnection;
-  }) => Effect.Effect<void, any, any>;
+  readonly storage: (connection: FleetConnection) => Effect.Effect<Store, FleetStorageError>;
 }
 
 /**
  * The platform a fleet's nodes run on — the celld analog of
  * `Kubernetes.ClusterAdapter`. `Celld.Fleet` yields this service to
  * compose its infrastructure; provide an implementation Layer alongside
- * the providers (`Celld.EcsFleet()` for AWS ECS Fargate).
+ * the providers (`CelldAWS.EcsFleet()` for AWS ECS Fargate).
  */
 export class Host extends Context.Service<Host, HostService>()("Celld.Host") {}

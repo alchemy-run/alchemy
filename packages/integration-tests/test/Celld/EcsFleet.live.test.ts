@@ -1,5 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Celld from "@alchemy.run/celld";
+import * as CelldAWS from "@alchemy.run/celld/AWS";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
@@ -16,10 +17,10 @@ const options = {
   providers: Layer.mergeAll(
     AWS.providers(),
     Celld.providers(),
-    Celld.EcsFleet({
+    CelldAWS.EcsFleet({
       capacity: { type: "ec2", instanceType: "m7i.large" },
       containerRuntime: "runsc",
-    }).pipe(Layer.provide(Celld.EcsServiceManagement())),
+    }).pipe(Layer.provide(CelldAWS.EcsServiceManagement())),
   ),
 };
 const { test } = Test.make(options);

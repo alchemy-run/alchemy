@@ -1,4 +1,4 @@
-import { makeEc2UserData, type Ec2NodeSizing } from "@alchemy.run/celld/EcsEc2";
+import { makeEc2UserData, type Ec2NodeSizing } from "@alchemy.run/celld/AWS/EcsEc2";
 import { expect, test } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import * as Effect from "effect/Effect";

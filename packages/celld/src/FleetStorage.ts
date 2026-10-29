@@ -1,6 +1,8 @@
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { requireHost } from "./Fleet.ts";
 import type { FleetConnection } from "./Host.ts";
 
 /** A conditional object-store operation failed. */
@@ -36,3 +38,13 @@ export class FleetStorage extends Context.Service<
   FleetStorage,
   (connection: FleetConnection) => Effect.Effect<Store, FleetStorageError>
 >()("Celld.FleetStorage") {}
+
+/** Open a fleet's store through the provided {@link Host}. */
+export const FleetStorageFromHost = Layer.succeed(FleetStorage, (connection) =>
+  requireHost("storage").pipe(
+    Effect.mapError(
+      (cause) => new FleetStorageError({ reason: "configuration", message: cause.message, cause }),
+    ),
+    Effect.flatMap((host) => host.storage(connection)),
+  ),
+);

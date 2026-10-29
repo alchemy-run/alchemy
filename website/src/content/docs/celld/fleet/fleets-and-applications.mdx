@@ -31,11 +31,11 @@ Queue and Workflow record lives in its bucket.
 const providers = Layer.mergeAll(
   AWS.providers(),
   Celld.providers(),
-  Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
+  CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
 );
 ```
 
-The host Layer composes the fleet's cloud resources. `Celld.EcsFleet()` is the
+The host Layer composes the fleet's cloud resources. `CelldAWS.EcsFleet()` is the
 ECS host; [Hosting on ECS](/celld/fleet/ecs) covers its options. It needs a
 [management runner](/celld/fleet/management) Layer, which deploys use to reach
 the nodes.

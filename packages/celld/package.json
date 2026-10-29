@@ -29,6 +29,7 @@
   "sideEffects": false,
   "exports": {
     ".": "./src/index.ts",
+    "./AWS": "./src/AWS/index.ts",
     "./Containers": "./src/Containers/index.ts",
     "./D1": "./src/D1/index.ts",
     "./KV": "./src/KV/index.ts",
@@ -45,6 +46,12 @@
         "bun": "./src/index.ts",
         "worker": "./src/index.ts",
         "default": "./lib/index.js"
+      },
+      "./AWS": {
+        "types": "./lib/AWS/index.d.ts",
+        "bun": "./src/AWS/index.ts",
+        "worker": "./src/AWS/index.ts",
+        "default": "./lib/AWS/index.js"
       },
       "./Containers": {
         "types": "./lib/Containers/index.d.ts",
@@ -100,13 +107,13 @@
     "@alchemy.run/cloudflare-runtime": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
     "@alchemy.run/sql": "workspace:*",
-    "@distilled.cloud/aws": "workspace:*",
     "@distilled.cloud/celld": "workspace:*",
     "@distilled.cloud/core": "workspace:*"
   },
   "devDependencies": {
     "@alchemy.run/aws": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
+    "@distilled.cloud/aws": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "@types/bun": "catalog:",
@@ -117,6 +124,7 @@
   },
   "peerDependencies": {
     "@alchemy.run/aws": "workspace:*",
+    "@distilled.cloud/aws": "workspace:*",
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
@@ -124,6 +132,9 @@
   },
   "peerDependenciesMeta": {
     "@alchemy.run/aws": {
+      "optional": true
+    },
+    "@distilled.cloud/aws": {
       "optional": true
     }
   }

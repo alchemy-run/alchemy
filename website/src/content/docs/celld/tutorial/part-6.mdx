@@ -55,8 +55,8 @@ start. If you deploy many times an hour, keep the runner running:
 
 ```diff lang="typescript"
 // alchemy.run.ts
--      Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
-+      Celld.EcsFleet().pipe(Layer.provide(Celld.EcsServiceManagement())),
+-      CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
++      CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsServiceManagement())),
 ```
 
 The always-on runner costs about $11 a month per stage in us-east-1. For

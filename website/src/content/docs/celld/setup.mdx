@@ -69,6 +69,7 @@ The fleet's listener serves only the Application's entrypoint Worker.
 import * as Alchemy from "alchemy";
 import * as AWS from "@alchemy.run/aws";
 import * as Celld from "@alchemy.run/celld";
+import * as CelldAWS from "@alchemy.run/celld/AWS";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Cells } from "./src/fleet.ts";
@@ -80,7 +81,7 @@ export default Alchemy.Stack(
     providers: Layer.mergeAll(
       AWS.providers(),
       Celld.providers(),
-      Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
+      CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
     ),
     state: AWS.state(),
   },
@@ -134,7 +135,7 @@ the declared entrypoint. Background and service Workers belong in
 ## Choose where management runs
 
 Deploys reach the nodes through a management runner inside the fleet's
-network. This guide uses `Celld.EcsTaskManagement()`, a Fargate task started
+network. This guide uses `CelldAWS.EcsTaskManagement()`, a Fargate task started
 on demand. [Management runners](/celld/fleet/management) compares it with the
 always-on and Lambda runners.
 

@@ -12,10 +12,10 @@ can't run them.
 
 ```typescript
 // alchemy.run.ts
-Celld.EcsFleet({
+CelldAWS.EcsFleet({
   capacity: { type: "ec2", instanceType: "m7i.large" },
   containerRuntime: "runsc",
-}).pipe(Layer.provide(Celld.EcsTaskManagement()));
+}).pipe(Layer.provide(CelldAWS.EcsTaskManagement()));
 ```
 
 Each host runs Docker, and `containerRuntime: "runsc"` runs containers in

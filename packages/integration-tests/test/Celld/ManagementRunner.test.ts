@@ -1,8 +1,13 @@
 import { Providers } from "@alchemy.run/aws/Providers";
 import { ApplicationActivation } from "@alchemy.run/celld/Application";
+import { makeLambdaTransport } from "@alchemy.run/celld/AWS/EcsLambdaManagement";
+import { ManagementLambda } from "@alchemy.run/celld/AWS/ManagementLambda";
+import {
+  handleManagementRequest,
+  makeManagementClient,
+} from "@alchemy.run/celld/AWS/ManagementRunner";
 import { prepareDeployment } from "@alchemy.run/celld/Deployment";
 import { bytes, digest } from "@alchemy.run/celld/Deployment/Objects";
-import { makeLambdaTransport } from "@alchemy.run/celld/EcsLambdaManagement";
 import type { Store } from "@alchemy.run/celld/FleetStorage";
 import {
   FleetManagement,
@@ -10,8 +15,6 @@ import {
   type FleetManagementService,
 } from "@alchemy.run/celld/Management";
 import { ManagementBindings } from "@alchemy.run/celld/ManagementBindings";
-import { ManagementLambda } from "@alchemy.run/celld/ManagementLambda";
-import { handleManagementRequest, makeManagementClient } from "@alchemy.run/celld/ManagementRunner";
 import { describe, expect, it } from "@alchemy.run/test";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as Output from "alchemy/Output";

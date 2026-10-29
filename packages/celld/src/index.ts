@@ -37,14 +37,6 @@ export {
   type RpcDurableObjectProps,
 } from "./RpcDurableObject.ts";
 export * as RpcWebSocketClient from "./RpcWebSocketClient.ts";
-export { EcsFleet } from "./EcsFleet.ts";
-export { EcsManagement } from "./EcsManagement.ts";
-export {
-  EcsServiceManagement,
-  EcsTaskManagement,
-  type EcsTaskManagementOptions,
-} from "./EcsTaskManagement.ts";
-export { EcsLambdaManagement } from "./EcsLambdaManagement.ts";
 export * from "./SqlMigrations.ts";
 export {
   Fleet,
