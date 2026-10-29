@@ -1,10 +1,10 @@
 import type * as Aggregate from "@alchemy.run/domain/Aggregate";
 import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "@alchemy.run/domain/Aggregate";
 import { isAfter, mergeCheckpoints } from "@alchemy.run/domain/InMemory";
-import { captureContext } from "@alchemy.run/domain/internal";
 import {
   type Accepted,
   type AggregateKit,
+  captureContext,
   type Delivery,
   emptySnapshot,
   emptyStreamMeta,

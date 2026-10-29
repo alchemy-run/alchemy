@@ -708,7 +708,13 @@ const build = (
           let decision = (def.decide as Record<string, (...args: any[]) => unknown>)[decoded._tag](
             state,
             decoded,
-            { id, now },
+            {
+              id,
+              now,
+              commandId: input.commandId,
+              stream: `${aggregate.aggregateName}/${id}`,
+              version: input.version,
+            },
           );
           // An effectful decision runs here, inside the decide span, with the
           // context the command was sent with (its only requirement, enforced
