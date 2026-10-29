@@ -45,11 +45,8 @@ import * as Stream from "effect/Stream";
 import type { WorkflowEngine } from "effect/workflow";
 import { DurableObject as CloudflareDurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
-import { VersionMetadata } from "../Workers/VersionMetadata.ts";
-import { VersionMetadataBinding } from "../Workers/VersionMetadataBinding.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
 import { Worker as CloudflareWorker, type Worker } from "../Workers/Worker.ts";
-import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
 import { DurableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
 import { sleep, task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
 import { Backfill as BackfillRun } from "./Backfill.ts";
@@ -369,44 +366,10 @@ const clearPrefixes = (prefixes: ReadonlyArray<string>) =>
 const TICK_RUNS = 64;
 const TICK_MILLIS = 5_000;
 
-/**
- * This deploy's version, so an object still running older code can tell: after a
- * deploy, Cloudflare keeps an active object on its previous code for minutes.
- */
-interface Versions {
-  /** Read this isolate's version once; an object's backfill runtime does when it starts. */
-  readonly learn: Effect.Effect<void, never, RuntimeContext>;
-  /** When this isolate's version was uploaded, in milliseconds, once read. */
-  readonly own: () => number | undefined;
-}
-
-/**
- * Before a backfill call from a newer version: restart this object, so its next
- * call runs that version. This call fails, and its caller retries in a second.
- */
-const restartIfOlder = <A, E, R>(
-  versions: Versions,
-  state: DurableObjectState["Service"],
-  caller: number | undefined,
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R | RuntimeContext> =>
-  Effect.suspend(() => {
-    const own = versions.own();
-    if (caller === undefined || own === undefined || own >= caller) return effect;
-    return Effect.andThen(
-      state.abort(
-        `running code older than its caller's (${new Date(own).toISOString()} < ${new Date(caller).toISOString()})`,
-      ),
-      effect,
-    );
-  });
-
 const backfillRuntime = (
   run: (id: string) => Effect.Effect<void, never, DurableObjectState | RuntimeContext>,
-  versions: Versions,
 ) =>
   Effect.gen(function* () {
-    yield* versions.learn;
     const state = yield* DurableObjectState;
     const context = yield* captureContext<DurableObjectState | RuntimeContext>();
     const provide = <A, E>(
@@ -545,11 +508,11 @@ const backfillRuntime = (
 /** The sources (aggregates and views, by name) a consumer reads, in the deployed model. */
 type SourcesOf = (target: string) => ReadonlyArray<string> | undefined;
 
-const directoryObject = (net: Backfill.Network, sourcesOf: SourcesOf, versions: Versions) =>
+const directoryObject = (net: Backfill.Network, sourcesOf: SourcesOf) =>
   Effect.gen(function* () {
     return Effect.gen(function* () {
       let node: Backfill.Node | undefined;
-      const runtime = yield* backfillRuntime((id) => node!.run(id), versions);
+      const runtime = yield* backfillRuntime((id) => node!.run(id));
       node = Backfill.makeNode(
         runtime.storage,
         runtime.jobs,
@@ -598,7 +561,6 @@ const aggregateObject = (
   kit: AggregateKit,
   net: Backfill.Network,
   model: () => ReadonlyArray<string>,
-  versions: Versions,
 ) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
@@ -612,19 +574,14 @@ const aggregateObject = (
           .list<StoredEvent>({ prefix: "event:", start: `event:${pad(after + 1)}` })
           .pipe(Effect.map((rows) => [...rows.values()]));
 
-      // A backfill call from a newer deploy's code: restart onto it first.
-      const fresh = <A, E, R>(caller: number | undefined, effect: Effect.Effect<A, E, R>) =>
-        restartIfOlder(versions, state, caller, effect);
       // This instance as a backfill source: consumers added later pull its events.
       let source: Backfill.Source | undefined;
-      const runtime = yield* backfillRuntime(
-        (id) =>
-          id === "bf-flush"
-            ? Effect.flatMap(state.storage.get<string>(ID_KEY), (stored) =>
-                stored === undefined ? Effect.void : sourceFor(stored).flush,
-              )
-            : Effect.void,
-        versions,
+      const runtime = yield* backfillRuntime((id) =>
+        id === "bf-flush"
+          ? Effect.flatMap(state.storage.get<string>(ID_KEY), (stored) =>
+              stored === undefined ? Effect.void : sourceFor(stored).flush,
+            )
+          : Effect.void,
       );
       const sourceFor = (id: string): Backfill.Source =>
         (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
@@ -827,12 +784,11 @@ const aggregateObject = (
         state: () => reportDefects(currentMeta),
         after: (after: number) => reportDefects(eventsAfter(after)),
         // The backfill protocol, as a source.
-        bfScan: (id: string, target: string, caller?: number) =>
-          reportDefects(fresh(caller, sourceFor(id).scan(target))),
-        bfReady: (id: string, target: string, reportTo: string, caller?: number) =>
-          reportDefects(fresh(caller, sourceFor(id).ready(target, reportTo))),
-        bfPull: (id: string, target: string, key: string, after: number, caller?: number) =>
-          reportDefects(fresh(caller, sourceFor(id).pull(target, key, after))),
+        bfScan: (id: string, target: string) => reportDefects(sourceFor(id).scan(target)),
+        bfReady: (id: string, target: string, reportTo: string) =>
+          reportDefects(sourceFor(id).ready(target, reportTo)),
+        bfPull: (id: string, target: string, key: string, after: number) =>
+          reportDefects(sourceFor(id).pull(target, key, after)),
         // A live read of this instance: accept its WebSocket, then push on every commit.
         fetch: accept((id, subscription) =>
           Effect.gen(function* () {
@@ -852,7 +808,6 @@ const viewObject = (
   net: Backfill.Network,
   model: () => ReadonlyArray<string>,
   sourcesOf: SourcesOf,
-  versions: Versions,
 ) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
@@ -941,9 +896,6 @@ const viewObject = (
         return Effect.forEach(pending, (effect) => effect, { discard: true });
       });
 
-      // A backfill call from a newer deploy's code: restart onto it first.
-      const fresh = <A, E, R>(caller: number | undefined, effect: Effect.Effect<A, E, R>) =>
-        restartIfOlder(versions, state, caller, effect);
       // This key as a backfill consumer (it buffers and merges history) and source.
       let consumer: Backfill.Consumer | undefined;
       let source: Backfill.Source | undefined;
@@ -961,7 +913,6 @@ const viewObject = (
               );
             return Effect.void;
           }),
-        versions,
       );
       const consumerFor = (key: string): Backfill.Consumer =>
         (consumer ??= Backfill.makeConsumer(runtime.storage, runtime.jobs, net, {
@@ -1038,43 +989,25 @@ const viewObject = (
         read: () => reportDefects(read),
         after: (after: number) => reportDefects(entriesAfter(after)),
         // The backfill protocol, as a source and as a consumer.
-        bfScan: (key: string, target: string, caller?: number) =>
-          reportDefects(fresh(caller, sourceFor(key).scan(target))),
-        bfReady: (key: string, target: string, reportTo: string, caller?: number) =>
-          reportDefects(fresh(caller, sourceFor(key).ready(target, reportTo))),
-        bfPull: (
-          key: string,
-          target: string,
-          consumerKey: string,
-          after: number,
-          caller?: number,
-        ) => reportDefects(fresh(caller, sourceFor(key).pull(target, consumerKey, after))),
+        bfScan: (key: string, target: string) => reportDefects(sourceFor(key).scan(target)),
+        bfReady: (key: string, target: string, reportTo: string) =>
+          reportDefects(sourceFor(key).ready(target, reportTo)),
+        bfPull: (key: string, target: string, consumerKey: string, after: number) =>
+          reportDefects(sourceFor(key).pull(target, consumerKey, after)),
         // The key lists itself in its merge job, before its first entry.
-        bfFeed: (
-          key: string,
-          target: string,
-          stream: string,
-          ref: Backfill.SourceRef,
-          caller?: number,
-        ) =>
+        bfFeed: (key: string, target: string, stream: string, ref: Backfill.SourceRef) =>
           reportDefects(
-            fresh(
-              caller,
-              Effect.gen(function* () {
-                yield* state.storage.put(ID_KEY, key);
-                yield* consumerFor(key).source(target, stream, ref);
-              }),
-            ),
+            Effect.gen(function* () {
+              yield* state.storage.put(ID_KEY, key);
+              yield* consumerFor(key).source(target, stream, ref);
+            }),
           ),
-        bfConsumerReady: (key: string, target: string, caller?: number) =>
+        bfConsumerReady: (key: string, target: string) =>
           reportDefects(
-            fresh(
-              caller,
-              Effect.gen(function* () {
-                yield* state.storage.put(ID_KEY, key);
-                yield* consumerFor(key).ready(target);
-              }),
-            ),
+            Effect.gen(function* () {
+              yield* state.storage.put(ID_KEY, key);
+              yield* consumerFor(key).ready(target);
+            }),
           ),
         // A live read of this key: accept its WebSocket, then push on every commit.
         fetch: accept((key, subscription) =>
@@ -1143,12 +1076,7 @@ const emptyProjectionMeta: ProjectionMeta = {
 /** How long a failed or interrupted run waits before it is retried. */
 const PROJECTION_RETRY_MS = 10_000;
 
-const projectionObject = (
-  kit: ProjectionKit,
-  net: Backfill.Network,
-  sourcesOf: SourcesOf,
-  versions: Versions,
-) =>
+const projectionObject = (kit: ProjectionKit, net: Backfill.Network, sourcesOf: SourcesOf) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
@@ -1271,19 +1199,14 @@ const projectionObject = (
         name: kit.name,
         ...(kit.generation > 0 ? { generation: kit.generation } : {}),
       });
-      // A backfill call from a newer deploy's code: restart onto it first.
-      const fresh = <A, E, R>(caller: number | undefined, effect: Effect.Effect<A, E, R>) =>
-        restartIfOlder(versions, state, caller, effect);
       // This key as a backfill consumer: it buffers and merges history in order.
       let consumer: Backfill.Consumer | undefined;
-      const runtime = yield* backfillRuntime(
-        (id) =>
-          Effect.flatMap(state.storage.get<string>(ID_KEY), (key) =>
-            key !== undefined && id.startsWith("bf-merge:")
-              ? consumerFor(key).merge(id.slice("bf-merge:".length))
-              : Effect.void,
-          ),
-        versions,
+      const runtime = yield* backfillRuntime((id) =>
+        Effect.flatMap(state.storage.get<string>(ID_KEY), (key) =>
+          key !== undefined && id.startsWith("bf-merge:")
+            ? consumerFor(key).merge(id.slice("bf-merge:".length))
+            : Effect.void,
+        ),
       );
       const consumerFor = (key: string): Backfill.Consumer =>
         (consumer ??= Backfill.makeConsumer(runtime.storage, runtime.jobs, net, {
@@ -1310,23 +1233,12 @@ const projectionObject = (
           ),
         checkpoints: () => reportDefects(readMeta.pipe(Effect.map((meta) => meta.checkpoints))),
         // The backfill protocol, as a consumer.
-        bfFeed: (
-          key: string,
-          target: string,
-          stream: string,
-          ref: Backfill.SourceRef,
-          caller?: number,
-        ) =>
+        bfFeed: (key: string, target: string, stream: string, ref: Backfill.SourceRef) =>
           reportDefects(
-            fresh(
-              caller,
-              keep(key).pipe(Effect.andThen(consumerFor(key).source(target, stream, ref))),
-            ),
+            keep(key).pipe(Effect.andThen(consumerFor(key).source(target, stream, ref))),
           ),
-        bfConsumerReady: (key: string, target: string, caller?: number) =>
-          reportDefects(
-            fresh(caller, keep(key).pipe(Effect.andThen(consumerFor(key).ready(target)))),
-          ),
+        bfConsumerReady: (key: string, target: string) =>
+          reportDefects(keep(key).pipe(Effect.andThen(consumerFor(key).ready(target)))),
       };
     });
   });
@@ -1457,374 +1369,340 @@ const pollAfter = <A>(
   });
 
 /** The aggregates, views, policies, projections and streams, each on its own Durable Object class. */
-const DurableObjectPlatform: Layer.Layer<Platform, never, Worker | WorkerEnvironment> =
-  Layer.effect(
-    Platform,
-    Effect.gen(function* () {
-      // Factories run while the Domain's Layer is built, inside the Worker's
-      // init phase; declaring a Durable Object needs that context.
-      const init = yield* captureContext<Worker | WorkerEnvironment>();
-      const inInit = <A, E>(
-        effect: Effect.Effect<A, E, Worker | WorkerEnvironment>,
-      ): Effect.Effect<A, E> => Effect.provide(effect, init);
+const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect(
+  Platform,
+  Effect.gen(function* () {
+    // Factories run while the Domain's Layer is built, inside the Worker's
+    // init phase; declaring a Durable Object needs that context.
+    const init = yield* captureContext<Worker>();
+    const inInit = <A, E>(effect: Effect.Effect<A, E, Worker>): Effect.Effect<A, E> =>
+      Effect.provide(effect, init);
 
-      // The deployed version, so an object still on older code restarts onto newer.
-      const versionOf = yield* inInit(
-        VersionMetadata("DOMAIN_VERSION").pipe(Effect.provide(VersionMetadataBinding)),
-      );
-      let ownVersion: number | undefined;
-      const versions: Versions = {
-        learn: Effect.suspend(() =>
-          ownVersion !== undefined
-            ? Effect.void
-            : versionOf.pipe(
-                Effect.map(({ timestamp }) => {
-                  const at = Date.parse(timestamp);
-                  if (Number.isFinite(at)) ownVersion = at;
-                }),
-                // No version (local dev, say): objects never restart for one.
-                Effect.catchCause(() => Effect.void),
-              ),
-        ),
-        own: () => ownVersion,
-      };
-
-      // Every consumer in the model this isolate runs, set once the model is built.
-      let model: ReadonlyArray<string> = [];
-      let sourcesOf: SourcesOf = () => undefined;
-      const consumerSources: SourcesOf = (target) => sourcesOf(target);
-      const current = () => model;
-      // The objects the backfill protocol reaches: directory nodes, sources by name,
-      // consumers by kind and name.
-      let directory: Namespace | undefined;
-      const sources = new Map<string, Namespace>();
-      const consumers = new Map<string, Namespace>();
-      const nodeStub = (path: string) => directory!.getByName(`node:${path}`);
-      const consumerStub = (target: string, key: string) => {
-        const { kind, name } = Backfill.consumerOf(target);
-        return consumers.get(`${kind}:${name}`)?.getByName(key);
-      };
-      const net: Backfill.Network = {
-        node: {
-          register: (path, ref) => unwrapDefects(nodeStub(path).register(path, ref)),
-          child: (path, child) => unwrapDefects(nodeStub(path).child(path, child)),
-          news: (path, targets) => unwrapDefects(nodeStub(path).news(path, targets)),
-          sweep: (path, target, phase) => unwrapDefects(nodeStub(path).sweep(path, target, phase)),
-          report: (path, target, phase, child) =>
-            unwrapDefects(nodeStub(path).report(path, target, phase, child)),
-          settled: (path, target, ref) => unwrapDefects(nodeStub(path).settled(path, target, ref)),
-          phase: (path, target) => unwrapDefects(nodeStub(path).phase(path, target)),
-          status: (path) => unwrapDefects(nodeStub(path).status(path)),
+    // Every consumer in the model this isolate runs, set once the model is built.
+    let model: ReadonlyArray<string> = [];
+    let sourcesOf: SourcesOf = () => undefined;
+    const consumerSources: SourcesOf = (target) => sourcesOf(target);
+    const current = () => model;
+    // The objects the backfill protocol reaches: directory nodes, sources by name,
+    // consumers by kind and name.
+    let directory: Namespace | undefined;
+    const sources = new Map<string, Namespace>();
+    const consumers = new Map<string, Namespace>();
+    const nodeStub = (path: string) => directory!.getByName(`node:${path}`);
+    const consumerStub = (target: string, key: string) => {
+      const { kind, name } = Backfill.consumerOf(target);
+      return consumers.get(`${kind}:${name}`)?.getByName(key);
+    };
+    const net: Backfill.Network = {
+      node: {
+        register: (path, ref) => unwrapDefects(nodeStub(path).register(path, ref)),
+        child: (path, child) => unwrapDefects(nodeStub(path).child(path, child)),
+        news: (path, targets) => unwrapDefects(nodeStub(path).news(path, targets)),
+        sweep: (path, target, phase) => unwrapDefects(nodeStub(path).sweep(path, target, phase)),
+        report: (path, target, phase, child) =>
+          unwrapDefects(nodeStub(path).report(path, target, phase, child)),
+        settled: (path, target, ref) => unwrapDefects(nodeStub(path).settled(path, target, ref)),
+        phase: (path, target) => unwrapDefects(nodeStub(path).phase(path, target)),
+        status: (path) => unwrapDefects(nodeStub(path).status(path)),
+      },
+      source: {
+        // A source no longer in the model has nothing to give.
+        scan: (ref, target) => {
+          const namespace = sources.get(ref.source);
+          return namespace
+            ? unwrapDefects(namespace.getByName(ref.id).bfScan(ref.id, target))
+            : Effect.succeed("discovered" as const);
         },
-        source: {
-          // A source no longer in the model has nothing to give.
-          scan: (ref, target) => {
-            const namespace = sources.get(ref.source);
-            return namespace
-              ? unwrapDefects(namespace.getByName(ref.id).bfScan(ref.id, target, versions.own()))
-              : Effect.succeed("discovered" as const);
-          },
-          ready: (ref, target, reportTo) => {
-            const namespace = sources.get(ref.source);
-            return namespace
-              ? unwrapDefects(
-                  namespace.getByName(ref.id).bfReady(ref.id, target, reportTo, versions.own()),
-                )
-              : Effect.succeed("settled" as const);
-          },
-          pull: (ref, target, key, after) => {
-            const namespace = sources.get(ref.source);
-            return namespace
-              ? unwrapDefects(
-                  namespace.getByName(ref.id).bfPull(ref.id, target, key, after, versions.own()),
-                )
-              : Effect.succeed({ deliveries: [], live: true });
-          },
+        ready: (ref, target, reportTo) => {
+          const namespace = sources.get(ref.source);
+          return namespace
+            ? unwrapDefects(namespace.getByName(ref.id).bfReady(ref.id, target, reportTo))
+            : Effect.succeed("settled" as const);
         },
-        consumer: {
-          source: (target, key, stream, ref) => {
-            const stub = consumerStub(target, key);
-            return stub
-              ? unwrapDefects(stub.bfFeed(key, target, stream, ref, versions.own()))
-              : Effect.void;
-          },
-          ready: (target, key) => {
-            const stub = consumerStub(target, key);
-            return stub
-              ? unwrapDefects(stub.bfConsumerReady(key, target, versions.own()))
-              : Effect.void;
-          },
+        pull: (ref, target, key, after) => {
+          const namespace = sources.get(ref.source);
+          return namespace
+            ? unwrapDefects(namespace.getByName(ref.id).bfPull(ref.id, target, key, after))
+            : Effect.succeed({ deliveries: [], live: true });
         },
-      };
-      directory = yield* inInit(
-        declare("DomainDirectory", directoryObject(net, consumerSources, versions)),
-      );
+      },
+      consumer: {
+        source: (target, key, stream, ref) => {
+          const stub = consumerStub(target, key);
+          return stub ? unwrapDefects(stub.bfFeed(key, target, stream, ref)) : Effect.void;
+        },
+        ready: (target, key) => {
+          const stub = consumerStub(target, key);
+          return stub ? unwrapDefects(stub.bfConsumerReady(key, target)) : Effect.void;
+        },
+      },
+    };
+    directory = yield* inInit(declare("DomainDirectory", directoryObject(net, consumerSources)));
 
-      // A run of the backfill: announce the model's consumers to the directory, then
-      // check the root until every one is complete. Reconciliation starts it and waits.
-      const backfill = yield* inInit(
-        Workflow(
-          "DomainBackfill",
-          Effect.succeed((params: { readonly targets: ReadonlyArray<string> }) =>
-            Effect.gen(function* () {
-              yield* task("announce", net.node.news("", params.targets));
-              for (let check = 0; ; check++) {
-                const { complete } = yield* task(`check-${check}`, net.node.status(""));
-                if (params.targets.every((target) => complete.includes(target)))
-                  return { complete: true };
-                yield* sleep(
-                  `wait-${check}`,
-                  // Soon at first, then less often: each check is a step (an instance has 10,000).
-                  `${Math.min(30_000, Math.round(1_000 * 1.5 ** check))} millis`,
-                );
-              }
-            }),
-          ) as unknown as Effect.Effect<WorkflowImpl<any, any, unknown>>,
-        ),
-      );
-
-      // The first Domain call in each isolate tells one random directory node of
-      // the model's consumers: a deploy that adds one starts its catch-up.
-      let news: Effect.Effect<void> | undefined;
-      const announce = Effect.suspend(() => {
-        const pending = news;
-        if (pending === undefined) return Effect.void;
-        news = undefined;
-        return pending.pipe(
-          Effect.timeout("5 seconds"),
-          Effect.catchCause(() =>
-            Effect.sync(() => {
-              news = pending;
-            }),
-          ),
-        );
-      });
-
-      return Platform.of({
-        aggregate: (aggregate, kit) =>
-          inInit(
-            Effect.gen(function* () {
-              const namespace = yield* declare(
-                `${aggregate.aggregateName}Aggregate`,
-                aggregateObject(kit, net, current, versions),
+    // A run of the backfill: announce the model's consumers to the directory, then
+    // check the root until every one is complete. Reconciliation starts it and waits.
+    const backfill = yield* inInit(
+      Workflow(
+        "DomainBackfill",
+        Effect.succeed((params: { readonly targets: ReadonlyArray<string> }) =>
+          Effect.gen(function* () {
+            yield* task("announce", net.node.news("", params.targets));
+            for (let check = 0; ; check++) {
+              const { complete } = yield* task(`check-${check}`, net.node.status(""));
+              if (params.targets.every((target) => complete.includes(target)))
+                return { complete: true };
+              yield* sleep(
+                `wait-${check}`,
+                // Soon at first, then less often: each check is a step (an instance has 10,000).
+                `${Math.min(30_000, Math.round(1_000 * 1.5 ** check))} millis`,
               );
-              sources.set(aggregate.aggregateName, namespace);
-              return {
-                send: (id, command, meta) =>
-                  announce.pipe(
-                    Effect.andThen(
-                      unwrapDefects<SendResult>(namespace.getByName(id).send(id, command, meta)),
-                    ),
+            }
+          }),
+        ) as unknown as Effect.Effect<WorkflowImpl<any, any, unknown>>,
+      ),
+    );
+
+    // The first Domain call in each isolate tells one random directory node of
+    // the model's consumers: a deploy that adds one starts its catch-up.
+    let news: Effect.Effect<void> | undefined;
+    const announce = Effect.suspend(() => {
+      const pending = news;
+      if (pending === undefined) return Effect.void;
+      news = undefined;
+      return pending.pipe(
+        Effect.timeout("5 seconds"),
+        Effect.catchCause(() =>
+          Effect.sync(() => {
+            news = pending;
+          }),
+        ),
+      );
+    });
+
+    return Platform.of({
+      aggregate: (aggregate, kit) =>
+        inInit(
+          Effect.gen(function* () {
+            const namespace = yield* declare(
+              `${aggregate.aggregateName}Aggregate`,
+              aggregateObject(kit, net, current),
+            );
+            sources.set(aggregate.aggregateName, namespace);
+            return {
+              send: (id, command, meta) =>
+                announce.pipe(
+                  Effect.andThen(
+                    unwrapDefects<SendResult>(namespace.getByName(id).send(id, command, meta)),
                   ),
-                // The object answers with a tag (RPC loses typed failures); fail with it here.
-                schedule: (id, command, meta, due) =>
-                  unwrapDefects<{ readonly at: number } | "AlreadyExecuted">(
-                    namespace.getByName(id).schedule(id, command, meta, due),
-                  ).pipe(
-                    Effect.flatMap((outcome) =>
-                      outcome === "AlreadyExecuted"
-                        ? Effect.fail(
-                            new AlreadyExecuted({
-                              aggregate: aggregate.aggregateName,
-                              id,
-                              commandId: meta.commandId,
-                            }),
-                          )
-                        : Effect.succeed(outcome.at),
-                    ),
+                ),
+              // The object answers with a tag (RPC loses typed failures); fail with it here.
+              schedule: (id, command, meta, due) =>
+                unwrapDefects<{ readonly at: number } | "AlreadyExecuted">(
+                  namespace.getByName(id).schedule(id, command, meta, due),
+                ).pipe(
+                  Effect.flatMap((outcome) =>
+                    outcome === "AlreadyExecuted"
+                      ? Effect.fail(
+                          new AlreadyExecuted({
+                            aggregate: aggregate.aggregateName,
+                            id,
+                            commandId: meta.commandId,
+                          }),
+                        )
+                      : Effect.succeed(outcome.at),
                   ),
-                unschedule: (id, commandId) =>
-                  unwrapDefects<
-                    "Cancelled" | "AlreadyCancelled" | "AlreadyExecuted" | "NotScheduled"
-                  >(namespace.getByName(id).unschedule(commandId)).pipe(
-                    Effect.flatMap(
-                      (
-                        outcome,
-                      ): Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled> => {
-                        const fields = { aggregate: aggregate.aggregateName, id, commandId };
-                        if (outcome === "AlreadyExecuted")
-                          return Effect.fail(new AlreadyExecuted(fields));
-                        if (outcome === "AlreadyCancelled")
-                          return Effect.fail(new AlreadyCancelled(fields));
-                        if (outcome === "NotScheduled")
-                          return Effect.fail(new NotScheduled(fields));
-                        return Effect.void;
-                      },
-                    ),
+                ),
+              unschedule: (id, commandId) =>
+                unwrapDefects<
+                  "Cancelled" | "AlreadyCancelled" | "AlreadyExecuted" | "NotScheduled"
+                >(namespace.getByName(id).unschedule(commandId)).pipe(
+                  Effect.flatMap(
+                    (
+                      outcome,
+                    ): Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled> => {
+                      const fields = { aggregate: aggregate.aggregateName, id, commandId };
+                      if (outcome === "AlreadyExecuted")
+                        return Effect.fail(new AlreadyExecuted(fields));
+                      if (outcome === "AlreadyCancelled")
+                        return Effect.fail(new AlreadyCancelled(fields));
+                      if (outcome === "NotScheduled") return Effect.fail(new NotScheduled(fields));
+                      return Effect.void;
+                    },
                   ),
-                state: (id) =>
-                  announce.pipe(
-                    Effect.andThen(
-                      unwrapDefects<{ state: Json | null; version: number }>(
-                        namespace.getByName(id).state(),
-                      ),
-                    ),
-                  ),
-                // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
-                changes: (id) =>
-                  Stream.fromEffectSchedule(
+                ),
+              state: (id) =>
+                announce.pipe(
+                  Effect.andThen(
                     unwrapDefects<{ state: Json | null; version: number }>(
                       namespace.getByName(id).state(),
                     ),
-                    POLL,
-                  ).pipe(Stream.changesWith((a, b) => a.version === b.version)),
-                tail: (id, from) =>
-                  pollAfter(
-                    from,
-                    (cursor) =>
-                      unwrapDefects<ReadonlyArray<StoredEvent>>(
-                        namespace.getByName(id).after(cursor),
-                      ),
-                    (event) => event.envelope.seq,
                   ),
-                connect: connectTo(namespace),
-              };
-            }),
-          ),
-        view: (view, kit) =>
-          inInit(
-            Effect.gen(function* () {
-              const namespace = yield* declare(
-                `${view.viewName}View`,
-                viewObject(kit, net, current, consumerSources, versions),
-              );
-              sources.set(view.viewName, namespace);
-              consumers.set(`view:${view.viewName}`, namespace);
-              const read = (key: string) =>
-                announce.pipe(
-                  Effect.andThen(unwrapDefects<ViewSnapshot>(namespace.getByName(key).read())),
-                );
-              const after = (key: string, cursor: number) =>
-                unwrapDefects<ReadonlyArray<ViewEntry>>(namespace.getByName(key).after(cursor));
-              return {
-                receive: (key, deliveries) =>
-                  unwrapDefects(namespace.getByName(key).receive(key, deliveries)),
-                read,
-                // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
-                changes: (key) =>
-                  Stream.fromEffectSchedule(read(key), POLL).pipe(
-                    Stream.changesWith((a, b) => a.version === b.version),
+                ),
+              // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
+              changes: (id) =>
+                Stream.fromEffectSchedule(
+                  unwrapDefects<{ state: Json | null; version: number }>(
+                    namespace.getByName(id).state(),
                   ),
-                list: (key) => after(key, 0),
-                connect: connectTo(namespace),
-                tail: (key, from) =>
-                  Stream.suspend(() => {
-                    let first = true;
-                    return Stream.paginate(from, (cursor: number) => {
-                      const poll = after(key, cursor);
-                      const next = first ? poll : Effect.delay(poll, "300 millis");
-                      first = false;
-                      return Effect.map(
-                        next,
-                        (fresh) =>
-                          [
-                            fresh,
-                            Option.some(fresh.length > 0 ? fresh[fresh.length - 1]!.seq : cursor),
-                          ] as const,
-                      );
-                    });
-                  }),
-              };
-            }),
-          ),
-        projection: (projection, kit) =>
-          inInit(
-            Effect.gen(function* () {
-              const namespace = yield* declare(
-                `${projection.projectionName}Projection`,
-                projectionObject(kit, net, consumerSources, versions),
-              );
-              consumers.set(`projection:${projection.projectionName}`, namespace);
-              return {
-                receive: (delivery) =>
-                  unwrapDefects(namespace.getByName(delivery.key).receive(delivery.key, delivery)),
-                checkpoints: (key) =>
-                  unwrapDefects<Readonly<Record<string, number>>>(
-                    namespace.getByName(key).checkpoints(),
-                  ),
-              };
-            }),
-          ),
-        stream: (stream, kit) =>
-          inInit(
-            Effect.gen(function* () {
-              const namespace = yield* declare(`${stream.streamName}Stream`, streamObject(kit));
-              const read = (key: string) =>
-                unwrapDefects<StreamMeta>(namespace.getByName(key).read());
-              const after = (key: string, cursor: number) =>
-                unwrapDefects<ReadonlyArray<StreamEntry>>(namespace.getByName(key).after(cursor));
-              return {
-                append: (key, write) => unwrapDefects(namespace.getByName(key).append(key, write)),
-                advance: (key, checkpoints) =>
-                  unwrapDefects(namespace.getByName(key).advance(checkpoints)),
-                read,
-                // Streamed responses poll; WebSocket reads (`connect`) are pushed on append.
-                changes: (key) =>
-                  Stream.fromEffectSchedule(read(key), POLL).pipe(
-                    Stream.changesWith((a, b) => a.seq === b.seq),
-                  ),
-                list: (key) => after(key, 0),
-                tail: (key, from) =>
-                  pollAfter(
-                    from,
-                    (cursor) => after(key, cursor),
-                    (e) => e.seq,
-                  ),
-                connect: connectTo(namespace),
-              };
-            }),
-          ),
-        history: (target) =>
-          net.node.status("").pipe(
-            Effect.map(({ complete }) => ({
-              complete: complete.includes(target),
-              through: undefined,
-            })),
-          ),
-        start: (targets, sourcesOfTarget) =>
+                  POLL,
+                ).pipe(Stream.changesWith((a, b) => a.version === b.version)),
+              tail: (id, from) =>
+                pollAfter(
+                  from,
+                  (cursor) =>
+                    unwrapDefects<ReadonlyArray<StoredEvent>>(
+                      namespace.getByName(id).after(cursor),
+                    ),
+                  (event) => event.envelope.seq,
+                ),
+              connect: connectTo(namespace),
+            };
+          }),
+        ),
+      view: (view, kit) =>
+        inInit(
           Effect.gen(function* () {
-            // At deploy time: reconciliation runs the backfill of new consumers and waits.
-            if (!globalThis.__ALCHEMY_RUNTIME__ && targets.length > 0) {
-              yield* inInit(
-                Effect.gen(function* () {
-                  const worker = yield* CloudflareWorker;
-                  yield* BackfillRun("DomainBackfillRun", {
-                    scriptName: worker.workerName as unknown as string,
-                    workflowName: backfill.workflowName as string,
-                    targets: [...targets],
-                  }) as unknown as Effect.Effect<unknown>;
-                }),
+            const namespace = yield* declare(
+              `${view.viewName}View`,
+              viewObject(kit, net, current, consumerSources),
+            );
+            sources.set(view.viewName, namespace);
+            consumers.set(`view:${view.viewName}`, namespace);
+            const read = (key: string) =>
+              announce.pipe(
+                Effect.andThen(unwrapDefects<ViewSnapshot>(namespace.getByName(key).read())),
               );
-            }
-          }).pipe(
-            Effect.andThen(
-              Effect.sync(() => {
-                model = targets;
-                sourcesOf = sourcesOfTarget;
-                if (targets.length === 0) return;
-                news = Effect.suspend(() => {
-                  // A random node two levels down: the burst after a deploy spreads over 256 of them.
-                  const path = Math.floor(Math.random() * 256)
-                    .toString(16)
-                    .padStart(2, "0");
-                  return net.node.news(path, targets);
-                });
+            const after = (key: string, cursor: number) =>
+              unwrapDefects<ReadonlyArray<ViewEntry>>(namespace.getByName(key).after(cursor));
+            return {
+              receive: (key, deliveries) =>
+                unwrapDefects(namespace.getByName(key).receive(key, deliveries)),
+              read,
+              // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
+              changes: (key) =>
+                Stream.fromEffectSchedule(read(key), POLL).pipe(
+                  Stream.changesWith((a, b) => a.version === b.version),
+                ),
+              list: (key) => after(key, 0),
+              connect: connectTo(namespace),
+              tail: (key, from) =>
+                Stream.suspend(() => {
+                  let first = true;
+                  return Stream.paginate(from, (cursor: number) => {
+                    const poll = after(key, cursor);
+                    const next = first ? poll : Effect.delay(poll, "300 millis");
+                    first = false;
+                    return Effect.map(
+                      next,
+                      (fresh) =>
+                        [
+                          fresh,
+                          Option.some(fresh.length > 0 ? fresh[fresh.length - 1]!.seq : cursor),
+                        ] as const,
+                    );
+                  });
+                }),
+            };
+          }),
+        ),
+      projection: (projection, kit) =>
+        inInit(
+          Effect.gen(function* () {
+            const namespace = yield* declare(
+              `${projection.projectionName}Projection`,
+              projectionObject(kit, net, consumerSources),
+            );
+            consumers.set(`projection:${projection.projectionName}`, namespace);
+            return {
+              receive: (delivery) =>
+                unwrapDefects(namespace.getByName(delivery.key).receive(delivery.key, delivery)),
+              checkpoints: (key) =>
+                unwrapDefects<Readonly<Record<string, number>>>(
+                  namespace.getByName(key).checkpoints(),
+                ),
+            };
+          }),
+        ),
+      stream: (stream, kit) =>
+        inInit(
+          Effect.gen(function* () {
+            const namespace = yield* declare(`${stream.streamName}Stream`, streamObject(kit));
+            const read = (key: string) =>
+              unwrapDefects<StreamMeta>(namespace.getByName(key).read());
+            const after = (key: string, cursor: number) =>
+              unwrapDefects<ReadonlyArray<StreamEntry>>(namespace.getByName(key).after(cursor));
+            return {
+              append: (key, write) => unwrapDefects(namespace.getByName(key).append(key, write)),
+              advance: (key, checkpoints) =>
+                unwrapDefects(namespace.getByName(key).advance(checkpoints)),
+              read,
+              // Streamed responses poll; WebSocket reads (`connect`) are pushed on append.
+              changes: (key) =>
+                Stream.fromEffectSchedule(read(key), POLL).pipe(
+                  Stream.changesWith((a, b) => a.seq === b.seq),
+                ),
+              list: (key) => after(key, 0),
+              tail: (key, from) =>
+                pollAfter(
+                  from,
+                  (cursor) => after(key, cursor),
+                  (e) => e.seq,
+                ),
+              connect: connectTo(namespace),
+            };
+          }),
+        ),
+      history: (target) =>
+        net.node.status("").pipe(
+          Effect.map(({ complete }) => ({
+            complete: complete.includes(target),
+            through: undefined,
+          })),
+        ),
+      start: (targets, sourcesOfTarget) =>
+        Effect.gen(function* () {
+          // At deploy time: reconciliation runs the backfill of new consumers and waits.
+          if (!globalThis.__ALCHEMY_RUNTIME__ && targets.length > 0) {
+            yield* inInit(
+              Effect.gen(function* () {
+                const worker = yield* CloudflareWorker;
+                yield* BackfillRun("DomainBackfillRun", {
+                  scriptName: worker.workerName as unknown as string,
+                  workflowName: backfill.workflowName as string,
+                  targets: [...targets],
+                }) as unknown as Effect.Effect<unknown>;
               }),
-            ),
-          ),
-        policy: (policy, kit) =>
-          inInit(
-            Effect.gen(function* () {
-              const namespace = yield* declare(`${policy.policyName}Policy`, policyObject(kit));
-              return {
-                receive: (delivery) =>
-                  unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
-              };
+            );
+          }
+        }).pipe(
+          Effect.andThen(
+            Effect.sync(() => {
+              model = targets;
+              sourcesOf = sourcesOfTarget;
+              if (targets.length === 0) return;
+              news = Effect.suspend(() => {
+                // A random node two levels down: the burst after a deploy spreads over 256 of them.
+                const path = Math.floor(Math.random() * 256)
+                  .toString(16)
+                  .padStart(2, "0");
+                return net.node.news(path, targets);
+              });
             }),
           ),
-      });
-    }),
-  );
+        ),
+      policy: (policy, kit) =>
+        inInit(
+          Effect.gen(function* () {
+            const namespace = yield* declare(`${policy.policyName}Policy`, policyObject(kit));
+            return {
+              receive: (delivery) =>
+                unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
+            };
+          }),
+        ),
+    });
+  }),
+);
 
 /**
  * Host a domain model on Cloudflare Durable Objects. Every aggregate, view
@@ -1874,8 +1752,5 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker | WorkerEnviron
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export const DurableObjects: Layer.Layer<
-  Platform | WorkflowEngine.WorkflowEngine,
-  never,
-  Worker | WorkerEnvironment
-> = Layer.merge(DurableObjectPlatform, DurableObjectEngine);
+export const DurableObjects: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker> =
+  Layer.merge(DurableObjectPlatform, DurableObjectEngine);
