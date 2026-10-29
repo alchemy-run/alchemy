@@ -1,4 +1,3 @@
-import type { BucketEncryption } from "../S3/Bucket.ts";
 import { dynamoDBState, type DynamoDBStateOptions } from "./DynamoDBState.ts";
 import { s3State, type S3StateOptions } from "./State.ts";
 
@@ -13,11 +12,11 @@ export interface StateOptions extends DynamoDBStateOptions {
    */
   backend?: "dynamodb" | "s3";
   /** With the S3 store: see {@link S3StateOptions.bucketName}. */
-  bucketName?: string;
+  bucketName?: S3StateOptions["bucketName"];
   /** With the S3 store: see {@link S3StateOptions.prefix}. */
-  prefix?: string;
+  prefix?: S3StateOptions["prefix"];
   /** With the S3 store: see {@link S3StateOptions.encryption}. */
-  encryption?: BucketEncryption;
+  encryption?: S3StateOptions["encryption"];
 }
 
 /** Options only the S3 store takes. A config that sets one keeps using it. */

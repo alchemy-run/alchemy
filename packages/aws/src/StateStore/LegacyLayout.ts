@@ -70,12 +70,14 @@ const readText = (bucket: string, key: string) =>
   s3.getObject({ Bucket: bucket, Key: key }).pipe(
     Effect.flatMap((result) =>
       result.Body === undefined
-        ? Effect.succeed(undefined)
-        : Stream.mkString(Stream.decodeText(result.Body)).pipe(
+        ? Effect.undefined
+        : result.Body.pipe(
+            Stream.decodeText,
+            Stream.mkString,
             Effect.map((text) => ({ text, etag: result.ETag })),
           ),
     ),
-    Effect.catchTag(["NoSuchKey", "NoSuchBucket"], () => Effect.succeed(undefined)),
+    Effect.catchTag(["NoSuchKey", "NoSuchBucket"], () => Effect.undefined),
   );
 
 /** Every key under `prefix`, across pagination. A missing bucket has none. */
@@ -133,9 +135,7 @@ const parse = (text: string, key: string) =>
 export const readLegacyOutput = (location: LegacyLocation, stack: string, stage: string) => {
   const key = `${stagePrefix(location, stack, stage)}${OUTPUT_FILE}`;
   return readText(location.bucket, key).pipe(
-    Effect.flatMap((object) =>
-      object === undefined ? Effect.succeed(undefined) : parse(object.text, key),
-    ),
+    Effect.flatMap((object) => (object === undefined ? Effect.undefined : parse(object.text, key))),
   );
 };
 
@@ -168,7 +168,9 @@ export const readLegacyStage = Effect.fn(function* (
       Effect.gen(function* () {
         const result = yield* s3.getObject({ Bucket: location.bucket, Key: key });
         if (result.Body === undefined) return yield* new EmptyBody();
-        return yield* Stream.mkString(Stream.decodeText(result.Body)).pipe(
+        return yield* result.Body.pipe(
+          Stream.decodeText,
+          Stream.mkString,
           Effect.mapError(
             (cause) =>
               new LegacyStateError({
@@ -186,18 +188,18 @@ export const readLegacyStage = Effect.fn(function* (
           schedule: Schedule.spaced("1 second"),
           times: 4,
         }),
-        Effect.catchTag("EmptyBody", () =>
-          Effect.fail(new LegacyStateError({ message: `S3 state object '${key}' has no body` })),
-        ),
-        Effect.catchTag("NoSuchKey", (error) =>
-          Effect.fail(
-            // Listed but gone: something is writing the stage. Copying the
-            // rest would leave a resource untracked.
-            new LegacyStateError({
-              message: `S3 state object '${key}' was deleted while '${stack}/${stage}' was being read; another deploy is writing it (${error.message ?? "NoSuchKey"})`,
-            }),
-          ),
-        ),
+        Effect.catchTags({
+          EmptyBody: () =>
+            Effect.fail(new LegacyStateError({ message: `S3 state object '${key}' has no body` })),
+          // Listed but gone: something is writing the stage. Copying the
+          // rest would leave a resource untracked.
+          NoSuchKey: (error) =>
+            Effect.fail(
+              new LegacyStateError({
+                message: `S3 state object '${key}' was deleted while '${stack}/${stage}' was being read; another deploy is writing it (${error.message ?? "NoSuchKey"})`,
+              }),
+            ),
+        }),
         Effect.flatMap((text) =>
           canonical(text, key).pipe(
             Effect.map((canonicalText) => [
@@ -212,7 +214,7 @@ export const readLegacyStage = Effect.fn(function* (
   const output = keys.includes(outputKey)
     ? yield* readText(location.bucket, outputKey).pipe(
         Effect.flatMap((object) =>
-          object === undefined ? Effect.succeed(undefined) : canonical(object.text, outputKey),
+          object === undefined ? Effect.undefined : canonical(object.text, outputKey),
         ),
       )
     : undefined;
@@ -323,8 +325,9 @@ export const fenceLegacyStage = (
       })
       .pipe(
         Effect.as<FenceResult | undefined>({ fenced: true }),
-        Effect.catchTag(["PreconditionFailed", "ConditionalRequestConflict"], () =>
-          Effect.succeed(undefined),
+        Effect.catchTag(
+          ["PreconditionFailed", "ConditionalRequestConflict"],
+          () => Effect.undefined,
         ),
         // No S3 store has ever written here: there is nothing to fence.
         Effect.catchTag("NoSuchBucket", () => Effect.succeed<FenceResult>({ fenced: true })),
@@ -392,7 +395,7 @@ const asArray = <T>(value: T | ReadonlyArray<T> | undefined): ReadonlyArray<T> =
 const readPolicy = (bucket: string) =>
   s3.getBucketPolicy({ Bucket: bucket }).pipe(
     Effect.map((result) => result.Policy),
-    Effect.catchTag(["NoSuchBucketPolicy", "NoSuchBucket"], () => Effect.succeed(undefined)),
+    Effect.catchTag(["NoSuchBucketPolicy", "NoSuchBucket"], () => Effect.undefined),
     Effect.flatMap((text) =>
       Effect.try({
         try: () =>

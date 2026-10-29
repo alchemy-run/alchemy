@@ -1303,11 +1303,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
     migration: {
       names,
       provision: names.pipe(
-        Effect.flatMap((resolved) =>
-          run(provision(resolved.table, resolved.bucket, resolved.region)).pipe(
-            Effect.as(resolved),
-          ),
-        ),
+        Effect.tap((resolved) => run(provision(resolved.table, resolved.bucket, resolved.region))),
       ),
       catalog: () => catalog(),
       status: catalogStatus,
