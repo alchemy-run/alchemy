@@ -457,7 +457,7 @@ export const PresetProvider = () =>
         // leaking / failing.
         const created = yield* realtimeKit
           .createPreset({ accountId, appId, ...desired })
-          .pipe(Effect.catchTag("RealtimeKitPresetExists", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("RealtimeKitPresetExists", () => Effect.undefined));
         if (created) {
           return toAttributes(created.data, accountId, appId);
         }
@@ -536,7 +536,7 @@ export const PresetProvider = () =>
                         observed ? toAttributes(observed, accountId, appId) : undefined,
                       ),
                     )
-                  : Effect.succeed(undefined),
+                  : Effect.undefined,
               { concurrency: 10 },
             );
             return hydrated.filter((row): row is PresetAttributes => row !== undefined);
@@ -616,7 +616,7 @@ type ObservedPreset = realtimeKit.GetPresetByIdPresetResponse["data"];
 const getPreset = (accountId: string, appId: string, presetId: string) =>
   realtimeKit.getPresetByIdPreset({ accountId, appId, presetId }).pipe(
     Effect.map((res) => res.data),
-    Effect.catchTag("RealtimeKitPresetNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RealtimeKitPresetNotFound", () => Effect.undefined),
   );
 
 /**

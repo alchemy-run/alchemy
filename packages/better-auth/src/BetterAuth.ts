@@ -190,7 +190,7 @@ export const BetterAuth = <const O extends BetterAuthProps>(
 
         const context = yield* Effect.context<RuntimeContext>();
         const runPromise = <A, E>(effect: Effect.Effect<A, E, RuntimeContext>): Promise<A> =>
-          Effect.runPromise(effect.pipe(Effect.provideContext(context)) as Effect.Effect<A, E>);
+          Effect.runPromiseWith(context)(effect);
 
         return betterAuth({
           ...authOptions,

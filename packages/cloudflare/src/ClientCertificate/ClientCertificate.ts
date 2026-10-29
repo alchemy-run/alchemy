@@ -345,7 +345,7 @@ type ObservedCertificate = clientCertificates.GetClientCertificateResponse;
 const getCertificate = (zoneId: string, clientCertificateId: string) =>
   clientCertificates.getClientCertificate({ zoneId, clientCertificateId }).pipe(
     Effect.map((cert): ObservedCertificate | undefined => cert),
-    Effect.catchTag("ClientCertificateNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("ClientCertificateNotFound", () => Effect.undefined),
   );
 
 /**

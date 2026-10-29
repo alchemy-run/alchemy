@@ -133,7 +133,7 @@ export const HoldProvider = () =>
             }),
             Effect.map((observed) => toAttributes(zoneId, observed)),
             // Zone deleted out-of-band mid-enumeration — drop it.
-            Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -157,7 +157,7 @@ export const HoldProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* zones.getHold({ zoneId }).pipe(
         // Zone deleted out-of-band — the hold is gone with it.
-        Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined),
       );
       if (observed === undefined || observed.hold !== true) return undefined;
       const attrs = toAttributes(zoneId, observed);

@@ -180,7 +180,14 @@ export const ClusterProvider = () =>
           if (!cluster?.clusterArn || cluster.status === "INACTIVE") {
             return undefined;
           }
-          return toAttrs(cluster, output?.tags ?? {});
+          return toAttrs(
+            cluster,
+            Object.fromEntries(
+              (cluster.tags ?? []).flatMap((t) =>
+                typeof t.key === "string" && typeof t.value === "string" ? [[t.key, t.value]] : [],
+              ),
+            ),
+          );
         }),
         list: () =>
           Effect.gen(function* () {
@@ -365,8 +372,9 @@ export const ClusterProvider = () =>
             serviceArns,
             (service) =>
               ecs.deleteService({ cluster, service, force: true }).pipe(
-                Effect.catchTag(["ServiceNotFoundException", "ClusterNotFoundException"], () =>
-                  Effect.succeed(undefined),
+                Effect.catchTag(
+                  ["ServiceNotFoundException", "ClusterNotFoundException"],
+                  () => Effect.undefined,
                 ),
                 Effect.asVoid,
               ),
@@ -383,7 +391,7 @@ export const ClusterProvider = () =>
             taskArns,
             (task) =>
               ecs.stopTask({ cluster, task, reason: "alchemy delete" }).pipe(
-                Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ClusterNotFoundException", () => Effect.undefined),
                 Effect.asVoid,
               ),
             { discard: true },
@@ -407,7 +415,7 @@ export const ClusterProvider = () =>
                   force: true,
                 })
                 .pipe(
-                  Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ClusterNotFoundException", () => Effect.undefined),
                   Effect.asVoid,
                 ),
             { discard: true },

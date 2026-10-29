@@ -122,9 +122,7 @@ export class ViewUnobservable extends Data.TaggedError("ResourceExplorerViewUnob
 const getViewSafe = Effect.fn(function* (viewArn: string) {
   return yield* re2.getView({ ViewArn: viewArn }).pipe(
     Effect.map((r): re2.GetViewOutput | undefined => r),
-    Effect.catchTag(["UnauthorizedException", "ResourceNotFoundException"], () =>
-      Effect.succeed(undefined),
-    ),
+    Effect.catchTag(["UnauthorizedException", "ResourceNotFoundException"], () => Effect.undefined),
   );
 });
 
@@ -337,8 +335,9 @@ export const ViewProvider = () =>
           // UnauthorizedException (Resource Explorer's "not found" for
           // views) or ResourceNotFoundException.
           yield* re2.deleteView({ ViewArn: output.viewArn }).pipe(
-            Effect.catchTag(["UnauthorizedException", "ResourceNotFoundException"], () =>
-              Effect.succeed(undefined),
+            Effect.catchTag(
+              ["UnauthorizedException", "ResourceNotFoundException"],
+              () => Effect.undefined,
             ),
             Effect.asVoid,
           );

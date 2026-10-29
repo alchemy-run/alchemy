@@ -299,7 +299,7 @@ const narrowSilence = (raw: {
 const observeSilence = (accountId: string, silenceId: string) =>
   alerting.getSilence({ accountId, silenceId }).pipe(
     Effect.map((s) => narrowSilence({ ...s, id: s.id ?? silenceId })),
-    Effect.catchTag("SilenceNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("SilenceNotFound", () => Effect.undefined),
   );
 
 /**

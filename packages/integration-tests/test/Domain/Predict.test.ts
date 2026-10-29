@@ -22,6 +22,11 @@ class Opened extends Domain.Event("Opened", { owner: Schema.String, at: Schema.N
 class Deposited extends Domain.Event("Deposited", { amount: Schema.Number }) {}
 class Withdrawn extends Domain.Event("Withdrawn", { amount: Schema.Number }) {}
 class Frozen extends Domain.Event("Frozen", { by: Schema.String }) {}
+class Stamped extends Domain.Event("Stamped", {
+  commandId: Schema.String,
+  stream: Schema.String,
+  version: Schema.Number,
+}) {}
 
 class InsufficientFunds extends Domain.Rejection("InsufficientFunds", {
   balance: Schema.Number,
@@ -52,6 +57,8 @@ class Freeze extends Domain.Command("Freeze", {
   rejects: [NotAnOperator],
   middleware: [OperatorSession],
 }) {}
+// Records what decide is told about the command and the stream.
+class Stamp extends Domain.Command("Stamp", { target: Schema.String, events: [Stamped] }) {}
 
 const AccountState = Schema.Struct({
   owner: Schema.String,
@@ -63,7 +70,7 @@ class Account extends Domain.Aggregate("Account", {
   id: Schema.String,
   state: AccountState,
   initial: { owner: "", balance: 0, frozen: false },
-  commands: [Open, Deposit, Withdraw, Freeze],
+  commands: [Open, Deposit, Withdraw, Freeze, Stamp],
   decide: {
     Open: (_, { owner }, { now }) => [new Opened({ owner, at: DateTime.toEpochMillis(now) })],
     Deposit: (_, { amount }) => [new Deposited({ amount })],
@@ -76,12 +83,14 @@ class Account extends Domain.Aggregate("Account", {
       if (operator === "guest") return yield* new NotAnOperator();
       return [new Frozen({ by: operator })];
     }),
+    Stamp: (_, __, { commandId, stream, version }) => [new Stamped({ commandId, stream, version })],
   },
   evolve: {
     Opened: (s, e) => ({ ...s, owner: e.owner }),
     Deposited: (s, e) => ({ ...s, balance: s.balance + e.amount }),
     Withdrawn: (s, e) => ({ ...s, balance: s.balance - e.amount }),
     Frozen: (s) => ({ ...s, frozen: true }),
+    Stamped: (s) => s,
   },
 }) {}
 
@@ -233,6 +242,45 @@ describe("Domain Aggregate.predict", () => {
         _tag: "Accepted",
         events: [new Opened({ owner: "sam", at: NOW })],
         envelopes: [{ id: "a-1", seq: 1, commandId: "c-1", correlationId: "c-1" }],
+      });
+    }),
+  );
+
+  it.live("the server's decide sees the command id, stream and version before it", () =>
+    Effect.gen(function* () {
+      const accounts = yield* Account;
+      yield* accounts.send(a1, new Open({ owner: "sam" }));
+      const remote = yield* serve(new Stamp());
+
+      expect(remote.result._tag).toBe("Success");
+      if (remote.result._tag !== "Success") return;
+      expect(remote.result.success.events).toEqual([
+        new Stamped({ commandId: "c-Stamp", stream: "Account/a-1", version: 1 }),
+      ]);
+    }).pipe(Effect.provide(Hosted)),
+  );
+
+  it.effect("decide sees the command id and version the caller gives", () =>
+    Effect.sync(() => {
+      const local = Account.predict(Account.definition.initial, new Stamp(), {
+        id: "a-1",
+        now,
+        version: 1,
+        commandId: "c-Stamp",
+      });
+      expect(local).toMatchObject({
+        _tag: "Accepted",
+        events: [new Stamped({ commandId: "c-Stamp", stream: "Account/a-1", version: 1 })],
+      });
+    }),
+  );
+
+  it.effect("decide sees version 0 and an empty command id when the caller gives none", () =>
+    Effect.sync(() => {
+      const local = Account.predict(Account.definition.initial, new Stamp(), { id: "a-1", now });
+      expect(local).toMatchObject({
+        _tag: "Accepted",
+        events: [new Stamped({ commandId: "", stream: "Account/a-1", version: 0 })],
       });
     }),
   );

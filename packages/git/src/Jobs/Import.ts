@@ -198,7 +198,9 @@ export const fetchAdvertisement = Effect.fn(function* (url: string) {
   const response = yield* client
     .get(`${normalizeBase(url)}/info/refs?service=git-upload-pack`)
     .pipe(
-      Effect.mapError((error) => ImportClientError.make({ reason: `info/refs failed: ${error}` })),
+      Effect.mapError((error) =>
+        ImportClientError.make({ reason: `info/refs failed: ${error.message}` }),
+      ),
     );
   if (response.status !== 200) {
     return yield* ImportClientError.make({
@@ -206,7 +208,9 @@ export const fetchAdvertisement = Effect.fn(function* (url: string) {
     });
   }
   const body = yield* response.arrayBuffer.pipe(
-    Effect.mapError((error) => ImportClientError.make({ reason: `info/refs body read: ${error}` })),
+    Effect.mapError((error) =>
+      ImportClientError.make({ reason: `info/refs body read: ${error.message}` }),
+    ),
   );
   return yield* parseAdvertisement(new Uint8Array(body));
 });
@@ -313,7 +317,7 @@ export const fetchPack = Effect.fn(function* (
     .execute(request)
     .pipe(
       Effect.mapError((error) =>
-        ImportClientError.make({ reason: `git-upload-pack failed: ${error}` }),
+        ImportClientError.make({ reason: `git-upload-pack failed: ${error.message}` }),
       ),
     );
   if (response.status !== 200) {
@@ -324,7 +328,7 @@ export const fetchPack = Effect.fn(function* (
   const body = yield* response.arrayBuffer.pipe(
     Effect.mapError((error) =>
       ImportClientError.make({
-        reason: `git-upload-pack body read: ${error}`,
+        reason: `git-upload-pack body read: ${error.message}`,
       }),
     ),
   );

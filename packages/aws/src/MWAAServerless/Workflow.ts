@@ -227,7 +227,7 @@ export const WorkflowProvider = () =>
       const observeByArn = (arn: string) =>
         mwaa
           .getWorkflow({ WorkflowArn: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const findArnByName = (name: string) =>
         mwaa.listWorkflows.items({}).pipe(

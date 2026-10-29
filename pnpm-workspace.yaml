@@ -62,16 +62,16 @@ catalog:
   "@cloudflare/unenv-preset": "^2.16.2"
   "@cloudflare/vitest-plugin": "^1.4.0"
   "@cloudflare/workers-types": "5.20261026.1"
-  "@effect/atom-react": "^4.0.5"
-  "@effect/platform-bun": "^4.0.5"
-  "@effect/platform-node": "^4.0.5"
-  "@effect/sql-d1": "^4.0.5"
-  "@effect/sql-libsql": "^4.0.5"
-  "@effect/sql-mysql2": "^4.0.5"
-  "@effect/sql-pg": "^4.0.5"
-  "@effect/sql-sqlite-do": "^4.0.5"
+  "@effect/atom-react": "^4.1.0"
+  "@effect/platform-bun": "^4.1.0"
+  "@effect/platform-node": "^4.1.0"
+  "@effect/sql-d1": "^4.1.0"
+  "@effect/sql-libsql": "^4.1.0"
+  "@effect/sql-mysql2": "^4.1.0"
+  "@effect/sql-pg": "^4.1.0"
+  "@effect/sql-sqlite-do": "^4.1.0"
   "@effect/tsgo": "^0.57.0"
-  "@effect/vitest": "^4.0.5"
+  "@effect/vitest": "^4.1.0"
   "@foldkit/ui": "^0.169.0"
   "@foldkit/vite-plugin": "^0.28.0"
   "@fontsource-variable/caveat": "^5.3.0"
@@ -122,7 +122,7 @@ catalog:
   "@prisma/client": "7.10.1"
   "@prisma/adapter-d1": "7.10.1"
   arktype: "2.2.8"
-  "@prisma/dev": "^0.20.0"
+  "@prisma/dev": "^0.25.2"
   "@puppeteer/browsers": "^3.2.4"
   "@react-router/dev": "^8.5.0"
   "@react-router/node": "^8.5.0"
@@ -176,7 +176,7 @@ catalog:
   dotenv: "^17.4.2"
   drizzle-kit: "1.0.0-rc.5"
   drizzle-orm: "1.0.0-rc.5"
-  effect: "^4.0.5"
+  effect: "^4.1.0"
   esbuild: "^0.28.1"
   fflate: "^0.8.3"
   fast-xml-parser: "^5.11.2"
@@ -287,10 +287,10 @@ catalogs:
 overrides:
   "@cloudflare/workers-types": 5.20261026.1
   workerd: 1.20261026.1
-  effect: 4.0.5
-  "@effect/platform-browser": 4.0.5
-  "@effect/sql-d1": 4.0.5
-  "@effect/sql-sqlite-do": 4.0.5
+  effect: 4.1.0
+  "@effect/platform-browser": 4.1.0
+  "@effect/sql-d1": 4.1.0
+  "@effect/sql-sqlite-do": 4.1.0
   drizzle-kit: 1.0.0-rc.5
   drizzle-orm: 1.0.0-rc.5
   # Keep drizzle-orm's optional peer graph identical across workspace
@@ -347,6 +347,18 @@ minimumReleaseAgeExclude:
   - drizzle-orm@1.0.0-rc.5
   - svelte@5.57.3
   - vocs@2.11.1
+  - "@effect/atom-react@4.1.0"
+  - "@effect/platform-browser@4.1.0"
+  - "@effect/platform-bun@4.1.0"
+  - "@effect/platform-node-shared@4.1.0"
+  - "@effect/platform-node@4.1.0"
+  - "@effect/sql-d1@4.1.0"
+  - "@effect/sql-libsql@4.1.0"
+  - "@effect/sql-mysql2@4.1.0"
+  - "@effect/sql-pg@4.1.0"
+  - "@effect/sql-sqlite-do@4.1.0"
+  - "@effect/vitest@4.1.0"
+  - effect@4.1.0
 
 catalogPrune: true
 

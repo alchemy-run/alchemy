@@ -213,7 +213,7 @@ export const VaultProvider = () =>
       const describeVault = (vaultName: string) =>
         glacier
           .describeVault({ accountId: ACCOUNT, vaultName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const readVaultTags = (vaultName: string) =>
         glacier.listTagsForVault({ accountId: ACCOUNT, vaultName }).pipe(
@@ -301,7 +301,7 @@ export const VaultProvider = () =>
             .getVaultNotifications({ accountId: ACCOUNT, vaultName })
             .pipe(
               Effect.map((r) => r.vaultNotificationConfig),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           const desiredNotifications = props.notificationConfig;
           if (desiredNotifications !== undefined) {
@@ -330,7 +330,7 @@ export const VaultProvider = () =>
             .getVaultAccessPolicy({ accountId: ACCOUNT, vaultName })
             .pipe(
               Effect.map((r) => r.policy?.Policy),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
           const desiredPolicy = toPolicyString(props.accessPolicy);
           if (desiredPolicy !== undefined) {
@@ -353,7 +353,7 @@ export const VaultProvider = () =>
           //     typed failure rather than silently ignored.
           const observedLock = yield* glacier
             .getVaultLock({ accountId: ACCOUNT, vaultName })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           const desiredLock = toPolicyString(props.lockPolicy);
           if (desiredLock !== undefined) {
             if (observedLock === undefined) {
@@ -433,7 +433,7 @@ export const VaultProvider = () =>
               accountId: ACCOUNT,
               vaultName: output.vaultName,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (lock !== undefined && lock.State !== "Locked") {
             yield* glacier
               .abortVaultLock({

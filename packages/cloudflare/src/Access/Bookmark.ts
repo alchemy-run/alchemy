@@ -4,12 +4,18 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class BookmarkUnexpectedResponse extends Data.TaggedError("BookmarkUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type BookmarkProps = {
   /**
@@ -166,7 +172,9 @@ export const BookmarkProvider = () =>
             ),
           );
         if (!created.id) {
-          return yield* Effect.fail(new Error("Bookmark: created bookmark missing id"));
+          return yield* new BookmarkUnexpectedResponse({
+            message: "Bookmark: created bookmark missing id",
+          });
         }
         return toAttrs(created, acct);
       }
@@ -229,7 +237,7 @@ const createBookmarkName = (id: string, name: string | undefined) =>
 const getBookmark = (acct: string, bookmarkId: string) =>
   zeroTrust
     .getAccessBookmark({ accountId: acct, bookmarkId })
-    .pipe(Effect.catchTag("AccessBookmarkNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("AccessBookmarkNotFound", () => Effect.undefined));
 
 const findBookmarkByName = (acct: string, name: string) =>
   zeroTrust.listAccessBookmarks.items({ accountId: acct }).pipe(

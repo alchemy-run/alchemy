@@ -61,7 +61,9 @@ const toHranaValue = (value: unknown): HranaValue => {
   if (value instanceof Uint8Array) {
     return { type: "blob", base64: Buffer.from(value).toString("base64") };
   }
-  return { type: "text", value: String(value) };
+  if (typeof value === "string") return { type: "text", value };
+  if (value instanceof Date) return { type: "text", value: value.toISOString() };
+  return { type: "text", value: JSON.stringify(value) };
 };
 
 const fromHranaValue = (value: HranaValue): unknown => {

@@ -181,7 +181,7 @@ export type BillingSink = Resource<
 export const BillingSink = Resource<BillingSink>("GCP.Logging.BillingSink");
 
 export class BillingSinkNotResolved extends Data.TaggedError("GCP.Logging.BillingSinkNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (billingAccountId: string, sinkId: string) =>
@@ -253,7 +253,7 @@ const toAttrs = (sink: logging.LogSink, billingAccountId: string) => {
 const getByName = (name: string) =>
   logging
     .getBillingAccountsSinks({ sinkName: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toCreateBody = (
   sinkId: string,
@@ -346,7 +346,7 @@ export const BillingSinkProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BillingSinkNotResolved({ name });
+        return yield* new BillingSinkNotResolved({ resourceName: name });
       }
 
       const desiredDisabled = news.disabled === true;

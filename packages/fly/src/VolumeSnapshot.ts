@@ -214,7 +214,7 @@ const waitForNewSnapshot = (appName: string, volumeId: string, knownIds: Readonl
       times: 8,
       schedule: backoff,
     }),
-    Effect.catchTag("Fly.VolumeSnapshotPending", () => Effect.succeed(undefined)),
+    Effect.catchTag("Fly.VolumeSnapshotPending", () => Effect.undefined),
   );
 
 export const VolumeSnapshotProvider = () =>

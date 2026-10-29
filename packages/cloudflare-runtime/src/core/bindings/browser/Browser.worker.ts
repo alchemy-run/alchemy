@@ -177,7 +177,7 @@ export class BrowserSession implements DurableObject {
       }
       if (req.method === "PUT" && /^\/v1\/devtools\/browser\/[^/]+\/json\/new$/.test(path)) {
         return await this.#proxyJsonRequest(
-          `/json/new?${new URLSearchParams({ url: url.searchParams.get("url") ?? "" })}`,
+          `/json/new?${new URLSearchParams({ url: url.searchParams.get("url") ?? "" }).toString()}`,
           "PUT",
         );
       }

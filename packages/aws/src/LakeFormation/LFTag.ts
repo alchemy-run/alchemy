@@ -70,7 +70,7 @@ export const LFTagProvider = () =>
       const observe = Effect.fn(function* (tagKey: string, catalogId: string | undefined) {
         return yield* lf
           .getLFTag({ TagKey: tagKey, CatalogId: catalogId })
-          .pipe(Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("EntityNotFoundException", () => Effect.undefined));
       });
 
       return LFTag.Provider.of({

@@ -222,7 +222,7 @@ export const StageProvider = () =>
       const getStageSafe = (apiId: string, stageName: string) =>
         agw2
           .getStage({ ApiId: apiId, StageName: stageName })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
       const getApiInfo = (apiId: string) =>
         agw2.getApi({ ApiId: apiId }).pipe(

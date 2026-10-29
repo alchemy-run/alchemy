@@ -127,7 +127,7 @@ export const ContentScanningProvider = () =>
           contentScanning.getContentScanning({ zoneId }).pipe(
             Effect.map((observed) => toAttributes(zoneId, observed, statusOf(observed))),
             // Plan-gated or partial zones reject the route; skip them.
-            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidRoute", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -150,7 +150,7 @@ export const ContentScanningProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* contentScanning.getContentScanning({ zoneId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // The setting is a singleton that always exists with a Cloudflare
@@ -191,7 +191,7 @@ export const ContentScanningProvider = () =>
       // Observe — if the zone itself is gone, so is the setting.
       const observed = yield* contentScanning
         .getContentScanning({ zoneId })
-        .pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));
       if (observed === undefined) return;
       // Restore the pre-management status; skip the call when it already
       // matches (idempotent re-delete after a crashed run).

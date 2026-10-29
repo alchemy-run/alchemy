@@ -346,7 +346,7 @@ const toAttrs = (
 const getByName = (project: string, firewallPolicy: string) =>
   compute
     .getNetworkFirewallPolicies({ project, firewallPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, networkFirewallPolicyName: string) =>
   getByName(project, networkFirewallPolicyName).pipe(

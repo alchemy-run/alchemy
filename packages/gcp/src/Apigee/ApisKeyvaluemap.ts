@@ -83,7 +83,7 @@ export const ApisKeyvaluemap = Resource<ApisKeyvaluemap>("GCP.Apigee.ApisKeyvalu
 export class ApisKeyvaluemapNotResolved extends Data.TaggedError(
   "GCP.Apigee.ApisKeyvaluemapNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, apiId: string, mapId: string) =>
@@ -108,14 +108,14 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsApisKeyvaluemaps({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const getOwnershipEntry = (mapName: string) =>
   apigee
     .getOrganizationsApisKeyvaluemapsEntries({
       name: `${mapName}/entries/${OWNERSHIP_KEY}`,
     })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const ownershipValue = (labels: Record<string, string>) => JSON.stringify(labels);
 
@@ -250,7 +250,7 @@ export const ApisKeyvaluemapProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ApisKeyvaluemapNotResolved({ name });
+        return yield* new ApisKeyvaluemapNotResolved({ resourceName: name });
       }
 
       if ((current.maskedValues === true) !== (news.maskedValues === true)) {

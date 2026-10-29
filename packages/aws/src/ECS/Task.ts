@@ -17,6 +17,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -33,6 +34,11 @@ import { AWSEnvironment } from "../Environment.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
 import type { Providers } from "../Providers.ts";
+
+export class TaskConflict extends Data.TaggedError("TaskConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export const isTask = (value: any): value is Task =>
   typeof value === "object" && value !== null && "Type" in value && value.Type === "AWS.ECS.Task";
@@ -334,6 +340,23 @@ export { createContainerRuntimeContext } from "alchemy/Runtime/Process";
  * });
  * ```
  *
+ * **Example:** Build args and secrets
+ * ```typescript
+ * // Dockerfile:
+ * //   ARG NODE_ENV
+ * //   RUN --mount=type=secret,id=NPM_TOKEN,env=NPM_TOKEN npm ci
+ * const api = yield* Task("Api", {
+ *   context: "./api",
+ *   build: {
+ *     args: { NODE_ENV: "production" },
+ *     // Mounted only into the RUN step that asks for it; never in the image.
+ *     secrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
+ *   },
+ *   cpu: 256,
+ *   memory: 512,
+ * });
+ * ```
+ *
  * **Example:** Inline Effect Program
  * ```typescript
  * const drainer = yield* Task(
@@ -489,7 +512,10 @@ export const createTaskRoleIfNotExists = Effect.fn(function* ({
         iam.getRole({ RoleName: roleName }).pipe(
           Effect.filterOrFail(
             (existing) => hasTags(tags, existing.Role?.Tags),
-            () => new Error(`Role '${roleName}' already exists and is not managed by alchemy`),
+            () =>
+              new TaskConflict({
+                message: `Role '${roleName}' already exists and is not managed by alchemy`,
+              }),
           ),
         ),
       ),
@@ -1097,7 +1123,7 @@ export const TaskProvider = () =>
             .describeTaskDefinition({
               taskDefinition: output?.taskDefinitionArn ?? family,
             })
-            .pipe(Effect.catchTag("ClientException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ClientException", () => Effect.undefined));
           const taskDefinition = described?.taskDefinition;
           if (!taskDefinition?.taskDefinitionArn) {
             return undefined;
@@ -1277,7 +1303,7 @@ export const TaskProvider = () =>
                       ? toListAttributes(described.taskDefinition, region, accountId)
                       : undefined,
                   ),
-                  Effect.catchTag("ClientException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ClientException", () => Effect.undefined),
                 ),
               { concurrency: 10 },
             );

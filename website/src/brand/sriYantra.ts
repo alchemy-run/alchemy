@@ -133,7 +133,7 @@ function solve(start: number[]): number[] {
     const r = residuals(p);
     if (Math.max(...r.map(Math.abs)) < 1e-14) break;
     const eps = 1e-7;
-    const J = r.map(() => new Array<number>(p.length).fill(0));
+    const J = r.map(() => Array.from({ length: p.length }, () => 0));
     for (let c = 0; c < p.length; c++) {
       const q = [...p];
       q[c] += eps;

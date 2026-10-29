@@ -186,7 +186,7 @@ const toAttrs = (
 const getByName = (project: string, region: string, name: string) =>
   compute
     .getRegionHealthSources({ project, region, healthSource: name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, sourceName: string) =>
   getByName(project, region, sourceName).pipe(
@@ -301,7 +301,7 @@ export const RegionHealthSourceProvider = () =>
             },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, region, sourceName);
       }
 
@@ -357,6 +357,6 @@ export const RegionHealthSourceProvider = () =>
           healthSource: output.sourceName,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }),
   });

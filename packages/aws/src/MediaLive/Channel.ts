@@ -213,7 +213,7 @@ export const ChannelProvider = () =>
       const getChannel = Effect.fn(function* (channelId: string) {
         const channel = yield* medialive
           .describeChannel({ ChannelId: channelId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         if (channel === undefined || isGone(channel.State)) return undefined;
         return yield* ensureIdentified(channel, "DescribeChannel Id/Arn");
       });

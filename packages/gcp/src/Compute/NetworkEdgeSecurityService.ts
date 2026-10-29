@@ -214,7 +214,7 @@ const getByName = (project: string, region: string, networkEdgeSecurityService: 
       region,
       networkEdgeSecurityService,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, networkEdgeSecurityServiceName: string) =>
   getByName(project, region, networkEdgeSecurityServiceName).pipe(

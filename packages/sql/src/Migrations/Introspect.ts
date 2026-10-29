@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import type { MigrationError, SqlExecutor } from "./Format.ts";
-import { quoteIdentifier, sqlLiteral } from "./Utils.ts";
+import { quoteIdentifier, scalarText, sqlLiteral } from "./Utils.ts";
 
 export interface TableColumn {
   name: string;
@@ -23,7 +23,7 @@ export const tableColumns = (
         Effect.map((rows) =>
           rows.map((row) => ({
             name: String(row.name),
-            type: String(row.type ?? "").toUpperCase(),
+            type: scalarText(row.type ?? "").toUpperCase(),
           })),
         ),
         // A missing table yields an empty PRAGMA result, not an error, but
@@ -47,7 +47,7 @@ export const tableColumns = (
           Effect.map((rows) =>
             rows.map((row) => ({
               name: String(row.name),
-              type: String(row.type ?? "").toUpperCase(),
+              type: scalarText(row.type ?? "").toUpperCase(),
             })),
           ),
         );
@@ -64,7 +64,7 @@ export const tableColumns = (
           Effect.map((rows) =>
             rows.map((row) => ({
               name: String(row.name),
-              type: String(row.type ?? "").toUpperCase(),
+              type: scalarText(row.type ?? "").toUpperCase(),
             })),
           ),
           Effect.orElseSucceed(() => []),
@@ -82,8 +82,8 @@ export const tableColumns = (
         .pipe(
           Effect.map((rows) =>
             rows.map((row) => ({
-              name: String(row.name),
-              type: String(row.type ?? "").toUpperCase(),
+              name: scalarText(row.name),
+              type: scalarText(row.type ?? "").toUpperCase(),
             })),
           ),
         );

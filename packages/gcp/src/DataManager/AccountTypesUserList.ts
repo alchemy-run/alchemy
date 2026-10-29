@@ -194,7 +194,7 @@ export class AccountTypesUserListNotResolved extends Data.TaggedError(
   "GCP.DataManager.AccountTypesUserListNotResolved",
 )<{
   parent: string;
-  name: string;
+  resourceName: string;
 }> {}
 
 export class AccountTypesUserListParentRequired extends Data.TaggedError(
@@ -349,7 +349,7 @@ export const AccountTypesUserListProvider = () =>
                     ? Effect.succeed(row)
                     : new AccountTypesUserListNotResolved({
                         parent,
-                        name: displayName,
+                        resourceName: displayName,
                       }),
                 ),
               ),
@@ -360,7 +360,7 @@ export const AccountTypesUserListProvider = () =>
       if (current === undefined) {
         return yield* new AccountTypesUserListNotResolved({
           parent,
-          name: name || displayName,
+          resourceName: name || displayName,
         });
       }
 

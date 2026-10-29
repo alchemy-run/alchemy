@@ -197,7 +197,7 @@ export const MerchantReview = Resource<MerchantReview>("GCP.MerchantApiReviews.M
 export class MerchantReviewNotResolved extends Data.TaggedError(
   "GCP.MerchantApiReviews.MerchantReviewNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const attributesOf = (
@@ -392,7 +392,7 @@ export const MerchantReviewProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MerchantReviewNotResolved({ name });
+        return yield* new MerchantReviewNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, account, dataSource);

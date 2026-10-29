@@ -30,11 +30,11 @@ export const LIST_LOCATIONS = [
 ] as const;
 
 export class DataprocNotResolved extends Data.TaggedError("GCP.Dataproc.ResourceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DataprocStillExists extends Data.TaggedError("GCP.Dataproc.ResourceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -199,7 +199,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value ? Effect.succeed(value) : Effect.fail(new DataprocNotResolved({ name })),
+      value ? Effect.succeed(value) : Effect.fail(new DataprocNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataproc.ResourceNotResolved",
@@ -214,7 +214,9 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
 ) =>
   get.pipe(
     Effect.flatMap((value) =>
-      value === undefined ? Effect.void : Effect.fail(new DataprocStillExists({ name })),
+      value === undefined
+        ? Effect.void
+        : Effect.fail(new DataprocStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataproc.ResourceStillExists",

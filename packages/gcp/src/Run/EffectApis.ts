@@ -139,13 +139,12 @@ export const ServeHttpApi = <Id extends string, Groups extends HttpApiGroup.Cons
   api: HttpApi.HttpApi<Id, Groups>,
   groups: Layer.Layer<HttpApiGroup.ToService<Id, Groups>, never, R>,
 ) =>
-  servedOnce(
-    HttpRouter.toHttpEffect(
-      HttpApiBuilder.layer(api).pipe(
-        Layer.provide(groups),
-        Layer.provide(Layer.mergeAll(HttpPlatform.layer, Etag.layer)),
-      ),
-    ),
+  api.pipe(
+    HttpApiBuilder.layer,
+    Layer.provide(groups),
+    Layer.provide(Layer.mergeAll(HttpPlatform.layer, Etag.layer)),
+    HttpRouter.toHttpEffect,
+    servedOnce,
   );
 
 /**

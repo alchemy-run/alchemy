@@ -1,10 +1,10 @@
 import type * as Aggregate from "@alchemy.run/domain/Aggregate";
 import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "@alchemy.run/domain/Aggregate";
 import { isAfter, mergeCheckpoints } from "@alchemy.run/domain/InMemory";
-import { captureContext } from "@alchemy.run/domain/internal";
 import {
   type Accepted,
   type AggregateKit,
+  captureContext,
   type Delivery,
   emptySnapshot,
   emptyStreamMeta,
@@ -82,7 +82,7 @@ const unwrapDefects = <A>(call: Effect.Effect<unknown, unknown>): Effect.Effect<
   call.pipe(
     Effect.catchDefect((defect) => Effect.fail(defect)),
     Effect.retry(TRANSIT_RETRY),
-    Effect.catch((error) => Effect.die(error)),
+    Effect.orDie,
     Effect.flatMap((value) =>
       value !== null && typeof value === "object" && DefectTag in value
         ? Effect.die(new Error(String((value as Record<string, unknown>)[DefectTag])))
@@ -162,6 +162,7 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
         return true;
       }),
     );
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
     const drain: Effect.Effect<void> = Effect.gen(function* () {
       if (!(yield* acquire)) return;
       yield* Effect.gen(function* () {
@@ -338,7 +339,7 @@ const aggregateObject = (kit: AggregateKit) =>
     return Effect.gen(function* () {
       const outbox = yield* queue<Delivery>("outbox", kit.deliver);
       const currentMeta = state.storage
-        .get<{ state: Json | null; version: number }>("meta")
+        .get<{ state: Json; version: number }>("meta")
         .pipe(Effect.map((meta) => meta ?? { state: null, version: 0 }));
       const eventsAfter = (after: number) =>
         state.storage
@@ -350,7 +351,7 @@ const aggregateObject = (kit: AggregateKit) =>
           const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
           if (duplicate) return { sent: duplicate, kick: false };
           const current = (yield* state.storage.get<{
-            state: Json | null;
+            state: Json;
             version: number;
           }>("meta")) ?? {
             state: null,
@@ -450,39 +451,31 @@ const aggregateObject = (kit: AggregateKit) =>
         send: (id: string, command: Json, meta: Aggregate.SendMeta) =>
           reportDefects(send(id, command, meta)),
         schedule: (id: string, command: Json, meta: Aggregate.SendMeta, due: Aggregate.Due) =>
-          reportDefects(
-            exclusively(
-              Effect.gen(function* () {
-                if (yield* executed(meta.commandId)) return "AlreadyExecuted" as const;
-                const token = yield* Effect.sync(() => crypto.randomUUID());
-                const at =
-                  "at" in due ? due.at : (yield* Effect.sync(() => Date.now())) + due.afterMillis;
-                yield* state.storage.put(`scheduled:${meta.commandId}`, token);
-                yield* timers.schedule(meta.commandId, {
-                  at,
-                  payload: { id, command, meta, token },
-                });
-                return { at };
-              }),
-            ),
-          ),
+          Effect.gen(function* () {
+            if (yield* executed(meta.commandId)) return "AlreadyExecuted" as const;
+            const token = yield* Effect.sync(() => crypto.randomUUID());
+            const at =
+              "at" in due ? due.at : (yield* Effect.sync(() => Date.now())) + due.afterMillis;
+            yield* state.storage.put(`scheduled:${meta.commandId}`, token);
+            yield* timers.schedule(meta.commandId, {
+              at,
+              payload: { id, command, meta, token },
+            });
+            return { at };
+          }).pipe(exclusively, reportDefects),
         unschedule: (commandId: string) =>
-          reportDefects(
-            exclusively(
-              Effect.gen(function* () {
-                if (yield* executed(commandId)) return "AlreadyExecuted" as const;
-                const key = `scheduled:${commandId}`;
-                const token = yield* state.storage.get<string>(key);
-                if (token === CANCELLED) return "AlreadyCancelled" as const;
-                // A job scheduled before tokens existed has a job but no token.
-                if (token === undefined && (yield* timers.getStatus(commandId)) === undefined)
-                  return "NotScheduled" as const;
-                yield* state.storage.put(key, CANCELLED);
-                yield* timers.cancel(commandId);
-                return "Cancelled" as const;
-              }),
-            ),
-          ),
+          Effect.gen(function* () {
+            if (yield* executed(commandId)) return "AlreadyExecuted" as const;
+            const key = `scheduled:${commandId}`;
+            const token = yield* state.storage.get<string>(key);
+            if (token === CANCELLED) return "AlreadyCancelled" as const;
+            // A job scheduled before tokens existed has a job but no token.
+            if (token === undefined && (yield* timers.getStatus(commandId)) === undefined)
+              return "NotScheduled" as const;
+            yield* state.storage.put(key, CANCELLED);
+            yield* timers.cancel(commandId);
+            return "Cancelled" as const;
+          }).pipe(exclusively, reportDefects),
         state: () => reportDefects(currentMeta),
         after: (after: number) => reportDefects(eventsAfter(after)),
         // A live read of this instance: accept its WebSocket, then push on every commit.
@@ -644,6 +637,7 @@ const projectionObject = (kit: ProjectionKit) =>
       );
       // Re-run the drain later: when a short batch has waited long enough, or after a failure.
       let wake: (at: number) => Effect.Effect<void> = () => Effect.void;
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
       const drain: Effect.Effect<void> = Effect.gen(function* () {
         if (!(yield* acquire)) return;
         const exit = yield* Effect.exit(
@@ -690,6 +684,7 @@ const projectionObject = (kit: ProjectionKit) =>
       }) as Effect.Effect<void>;
       const callback = yield* makeCallback("domain:projection", () => drain);
       wake = (at) =>
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides RuntimeContext on every event
         callback.schedule("drain", { at, payload: {} }).pipe(Effect.ignore) as Effect.Effect<void>;
       return {
         receive: (key: string, delivery: Delivery) =>
@@ -742,76 +737,62 @@ const streamObject = (kit: StreamKit) =>
           .pipe(Effect.map((rows) => [...rows.values()]));
       const latest = (meta: StreamMeta) =>
         meta.seq === 0
-          ? Effect.succeed(undefined)
+          ? Effect.undefined
           : state.storage.get<StreamEntry>(`entry:${pad(meta.seq)}`);
       return {
         append: (key: string, write: StreamWrite) =>
-          reportDefects(
-            exclusively(
-              Effect.gen(function* () {
-                const meta = yield* readMeta;
-                if (!isAfter(write.origin, meta.origin)) return;
-                const added: Array<StreamEntry> = write.events.map((event, index) => {
-                  const seq = meta.seq + index + 1;
-                  return {
-                    seq,
-                    event,
-                    envelope: {
-                      id: key,
-                      stream: `${kit.name}/${key}`,
-                      seq,
-                      at: write.at,
-                      commandId: write.commandId,
-                    },
-                  };
-                });
-                const next: StreamMeta = {
-                  seq: meta.seq + added.length,
-                  origin: write.origin,
-                  checkpoints: mergeCheckpoints(meta.checkpoints, {
-                    [write.source]: write.sourceSeq,
-                  }),
-                };
-                yield* state.storage.transaction(
-                  Effect.gen(function* () {
-                    const rows: Record<string, StreamEntry> = {};
-                    for (const entry of added) rows[`entry:${pad(entry.seq)}`] = entry;
-                    if (added.length > 0) yield* state.storage.put(rows);
-                    yield* state.storage.put("meta", next);
-                  }),
-                );
-                if (added.length === 0) return;
-                yield* broadcast(({ key, subscription }) =>
-                  Effect.gen(function* () {
-                    // A subscriber behind this append's first entry reads the gap from storage.
-                    const entries =
-                      subscription.mode === "events" && subscription.cursor < added[0]!.seq - 1
-                        ? yield* entriesAfter(subscription.cursor)
-                        : added;
-                    return yield* kit.push(
-                      key,
-                      subscription,
-                      next,
-                      entries,
-                      added[added.length - 1],
-                    );
-                  }),
-                );
+          Effect.gen(function* () {
+            const meta = yield* readMeta;
+            if (!isAfter(write.origin, meta.origin)) return;
+            const added: Array<StreamEntry> = write.events.map((event, index) => {
+              const seq = meta.seq + index + 1;
+              return {
+                seq,
+                event,
+                envelope: {
+                  id: key,
+                  stream: `${kit.name}/${key}`,
+                  seq,
+                  at: write.at,
+                  commandId: write.commandId,
+                },
+              };
+            });
+            const next: StreamMeta = {
+              seq: meta.seq + added.length,
+              origin: write.origin,
+              checkpoints: mergeCheckpoints(meta.checkpoints, {
+                [write.source]: write.sourceSeq,
               }),
-            ),
-          ),
+            };
+            yield* state.storage.transaction(
+              Effect.gen(function* () {
+                const rows: Record<string, StreamEntry> = {};
+                for (const entry of added) rows[`entry:${pad(entry.seq)}`] = entry;
+                if (added.length > 0) yield* state.storage.put(rows);
+                yield* state.storage.put("meta", next);
+              }),
+            );
+            if (added.length === 0) return;
+            yield* broadcast(({ key, subscription }) =>
+              Effect.gen(function* () {
+                // A subscriber behind this append's first entry reads the gap from storage.
+                const entries =
+                  subscription.mode === "events" && subscription.cursor < added[0]!.seq - 1
+                    ? yield* entriesAfter(subscription.cursor)
+                    : added;
+                return yield* kit.push(key, subscription, next, entries, added[added.length - 1]);
+              }),
+            );
+          }).pipe(exclusively, reportDefects),
         advance: (checkpoints: Readonly<Record<string, number>>) =>
-          reportDefects(
-            exclusively(
-              Effect.gen(function* () {
-                const meta = yield* readMeta;
-                yield* state.storage.put("meta", {
-                  ...meta,
-                  checkpoints: mergeCheckpoints(meta.checkpoints, checkpoints),
-                } satisfies StreamMeta);
-              }),
-            ),
-          ),
+          Effect.gen(function* () {
+            const meta = yield* readMeta;
+            yield* state.storage.put("meta", {
+              ...meta,
+              checkpoints: mergeCheckpoints(meta.checkpoints, checkpoints),
+            } satisfies StreamMeta);
+          }).pipe(exclusively, reportDefects),
         read: () => reportDefects(readMeta),
         after: (after: number) => reportDefects(entriesAfter(after)),
         // A live read of this key: accept its WebSocket, then push on every append.
@@ -914,9 +895,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
               // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
               changes: (id) =>
                 Stream.fromEffectSchedule(
-                  unwrapDefects<{ state: Json | null; version: number }>(
-                    namespace.getByName(id).state(),
-                  ),
+                  unwrapDefects<{ state: Json; version: number }>(namespace.getByName(id).state()),
                   POLL,
                 ).pipe(Stream.changesWith((a, b) => a.version === b.version)),
               tail: (id, from) =>

@@ -128,7 +128,7 @@ const describeSnapshot = Effect.fn(function* ({
       ApplicationName: applicationName,
       SnapshotName: snapshotName,
     })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return response?.SnapshotDetails;
 });
 
