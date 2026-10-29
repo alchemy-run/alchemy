@@ -197,7 +197,10 @@ export type BucketProps = {
    */
   storageClass?: Bucket.StorageClass;
   /**
-   * Jurisdiction where objects in this bucket are guaranteed to be stored.
+   * Jurisdiction where objects in this bucket are guaranteed to be stored:
+   * `"eu"` (the European Union), `"us"` (the United States), or `"fedramp"`
+   * (FedRAMP-compliant data centers). `"default"` places no restriction.
+   * Changing it replaces the bucket.
    * @default "default"
    */
   jurisdiction?: Bucket.Jurisdiction;
