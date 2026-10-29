@@ -10,11 +10,17 @@ import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Command, Flag } from "effect/cli";
 import * as Console from "effect/Console";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import { ChildProcess } from "effect/process";
 import { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
+
+class InvalidManifest extends Data.TaggedError("InvalidManifest")<{
+  readonly path: string;
+  readonly cause: unknown;
+}> {}
 
 const run = Effect.fn(function* (command: string, args: Array<string>, cwd: string) {
   const spawner = yield* ChildProcessSpawner;
@@ -64,7 +70,7 @@ const command = Command.make(
             name: string;
             publishConfig?: { exports?: Record<string, unknown> };
           },
-        catch: (cause) => new Error(`packages/${name}/package.json is not valid JSON`, { cause }),
+        catch: (cause) => new InvalidManifest({ path: `packages/${name}/package.json`, cause }),
       });
       if (Object.values(manifest.publishConfig?.exports ?? {}).includes(null)) {
         blocking.push(manifest.name.replaceAll(".", String.raw`\.`));
