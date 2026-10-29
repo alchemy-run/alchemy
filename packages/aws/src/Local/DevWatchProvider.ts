@@ -47,10 +47,9 @@ import * as Layer from "effect/Layer";
 import * as Schedule from "effect/Schedule";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import { DEV_BRIDGE_ENV } from "./DevBridgeEnv.ts";
-import { relayDevBridge } from "./DevBridgeRelay.ts";
-import { DEV_CREDENTIALS_ENV } from "./DevCredentials.ts";
-import { writeDevCredentials } from "./DevCredentialsRelay.ts";
+import { DEV_CREDENTIALS_ENV } from "../AWSBindings.ts";
+import { DEV_BRIDGE_ENV } from "../Lambda/DevBridge.ts";
+import { relayDevBridge, writeDevCredentials } from "./DevBridgeRelay.ts";
 import { flociServices } from "./FlociServices.ts";
 import { withProviderContext } from "./ProviderContext.ts";
 

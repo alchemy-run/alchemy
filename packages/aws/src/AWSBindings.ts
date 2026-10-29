@@ -34,7 +34,6 @@ import { AccessKey } from "./IAM/AccessKey.ts";
 import type { PolicyStatement } from "./IAM/Policy.ts";
 import { Role } from "./IAM/Role.ts";
 import { User } from "./IAM/User.ts";
-import { DEV_CREDENTIALS_ENV, DevCredentialsValue } from "./Local/DevCredentials.ts";
 import { CurrentRegion } from "./Region.ts";
 
 /**
@@ -52,7 +51,7 @@ import { CurrentRegion } from "./Region.ts";
  * - a host emulated by `alchemy dev` that binds a resource in the real cloud
  *   (`Alchemy.remote()`): its role exists only on the emulator, so that
  *   binding's calls sign with the developer's own credentials, which the dev
- *   sidecar relays into the emulator (see `Local/DevCredentials.ts`);
+ *   sidecar relays into the emulator (see {@link DEV_CREDENTIALS_ENV});
  * - no host (a script or deploy-time Action): nothing is bound and calls use
  *   the deployer's credentials.
  *
@@ -118,6 +117,27 @@ const KEY_ENV = {
   roleArn: "ALCHEMY_AWS_ROLE_ARN",
   region: "ALCHEMY_AWS_REGION",
 } as const;
+
+/**
+ * Env var naming the emulator SSM parameter that holds the developer's AWS
+ * credentials during `alchemy dev`. `AWSBindings.Bind` sets it on an emulated
+ * host bound to a resource in the real cloud (`Alchemy.remote()`); the dev
+ * sidecar sees it in the host's props and keeps the parameter fresh (see
+ * `Local/DevBridgeRelay.ts`); the host's binding clients read the parameter
+ * and sign their real-cloud calls with it.
+ */
+export const DEV_CREDENTIALS_ENV = "ALCHEMY_AWS_DEV_CREDENTIALS";
+
+/** The JSON the relay writes to the parameter. */
+export const DevCredentialsValue = Schema.fromJsonString(
+  Schema.Struct({
+    accessKeyId: Schema.String,
+    secretAccessKey: Schema.String,
+    sessionToken: Schema.optional(Schema.String),
+    region: Schema.String,
+    expiration: Schema.optional(Schema.Number),
+  }),
+);
 
 /**
  * Env var marking a bound resource as living in the real cloud while its

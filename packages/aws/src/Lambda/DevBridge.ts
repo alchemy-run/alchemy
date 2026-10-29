@@ -5,10 +5,20 @@ import { isEmulated } from "alchemy/Provider";
 import { remote, UnbridgedDevEdge } from "alchemy/ProviderMode";
 import type { ResourceLike } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { DEV_BRIDGE_ENV } from "../Local/DevBridgeEnv.ts";
 import { Bucket } from "../S3/Bucket.ts";
 import { Queue } from "../SQS/Queue.ts";
 import { Function } from "./Function.ts";
+
+/**
+ * Env vars naming the bridge an emulated Function's real-cloud event
+ * sources reach it through: set on the stub (where it sends invocations)
+ * and on the emulated Function (so the dev sidecar knows what to consume).
+ * See `Local/DevBridgeRelay.ts`.
+ */
+export const DEV_BRIDGE_ENV = {
+  queueUrl: "ALCHEMY_DEV_BRIDGE_QUEUE_URL",
+  bucket: "ALCHEMY_DEV_BRIDGE_BUCKET",
+} as const;
 
 /**
  * Where an event source's events come from: a resource, the AWS platform

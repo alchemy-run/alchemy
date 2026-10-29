@@ -1,17 +1,21 @@
 import * as lambda from "@distilled.cloud/aws/lambda";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as sqs from "@distilled.cloud/aws/sqs";
+import * as ssm from "@distilled.cloud/aws/ssm";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
 import { AwsAuth } from "../AuthProvider.ts";
+import { DevCredentialsValue } from "../AWSBindings.ts";
 import * as Credentials from "../Credentials.ts";
 import * as Endpoint from "../Endpoint.ts";
-import { Default as DefaultEnvironment } from "../Environment.ts";
+import { AWSEnvironment, Default as DefaultEnvironment } from "../Environment.ts";
 import * as Region from "../Region.ts";
+import { flociServices } from "./FlociServices.ts";
 
 /** What the stub sends for each invocation (see `Lambda/dev-stub/index.mjs`). */
 const BridgeRequest = Schema.fromJsonString(
@@ -36,6 +40,26 @@ const developerCloud = Layer.mergeAll(
   Layer.provideMerge(AwsAuth),
   Layer.provideMerge(CredentialsStoreLive),
 );
+
+/**
+ * Write the developer's credentials, read from their profile, to the
+ * emulator parameter `parameterName`, where emulated hosts bound to
+ * real-cloud resources read them (see `AWSBindings.withCredentials`).
+ */
+export const writeDevCredentials = Effect.fn(function* (parameterName: string) {
+  const environment = yield* yield* AWSEnvironment;
+  const credentials = yield* environment.credentials;
+  const value = yield* Schema.encodeEffect(DevCredentialsValue)({
+    accessKeyId: Redacted.value(credentials.accessKeyId),
+    secretAccessKey: Redacted.value(credentials.secretAccessKey),
+    sessionToken: credentials.sessionToken && Redacted.value(credentials.sessionToken),
+    region: environment.region,
+    expiration: credentials.expiration,
+  });
+  yield* ssm
+    .putParameter({ Name: parameterName, Type: "SecureString", Value: value, Overwrite: true })
+    .pipe(Effect.provide(flociServices()));
+}, Effect.provide(developerCloud));
 
 /**
  * Carry invocations from a stub Lambda in the real cloud to the emulated
