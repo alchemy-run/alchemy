@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
 import * as Effect from "effect/Effect";
+import { encodeOwnership, hasOwnershipMarker, parseOwnership } from "../AIPlatform/internal.ts";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
 import type { Providers } from "../Providers.ts";
@@ -82,7 +83,8 @@ export type AuthProviderProps = {
    */
   authProviderTypeParams: AuthProviderTypeParams;
   /**
-   * User labels. Alchemy ownership labels are merged in automatically.
+   * User labels. The Agent Identity API currently accepts labels but
+   * doesn't store them, so Alchemy records ownership in `description`.
    */
   labels?: Record<string, string>;
 };
@@ -188,7 +190,7 @@ const toAttrs = (item: agentidentity.AuthProvider, project: string, region: stri
     authProviderId: parsed.authProviderId,
     project: parsed.project || project,
     location: parsed.location,
-    description: item.description,
+    description: parseOwnership(item.description).text,
     allowedScopes: item.allowedScopes ?? [],
     blockedScopes: item.blockedScopes ?? [],
     labels: userLabels(item.labels),
@@ -251,14 +253,20 @@ export const AuthProviderProvider = () =>
         return undefined;
       }
       const attrs = toAttrs(existing, env.project, env.region);
-      return (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ? attrs : Unowned(attrs);
+      // The API drops labels, so ownership lives in the description.
+      const owned =
+        (yield* hasAlchemyLabels(id, tagRecord(existing.labels))) ||
+        (yield* hasAlchemyLabels(id, parseOwnership(existing.description).labels));
+      return owned ? attrs : Unowned(attrs);
     }),
 
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
         const items = yield* listOwned(env.project, env.region);
-        return items.map((item) => toAttrs(item, env.project, env.region));
+        return items
+          .filter((item) => hasOwnershipMarker(item.description))
+          .map((item) => toAttrs(item, env.project, env.region));
       }),
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
@@ -270,7 +278,10 @@ export const AuthProviderProvider = () =>
         ...toLabels(news.labels),
         ...(yield* createInternalLabels(id)),
       };
-      const description = clipDescription(news.description);
+      // The API keeps a description but drops labels: stamp ownership there.
+      const description = clipDescription(
+        encodeOwnership(yield* createInternalLabels(id), news.description),
+      );
       const allowedScopes = news.allowedScopes ?? [];
       const blockedScopes = news.blockedScopes ?? [];
       const workloadIds = news.workloadIds;

@@ -78,7 +78,6 @@ test.provider(
       expect(created.authProviderId).toEqual(expect.any(String));
       expect(created.location).toEqual(location);
       expect(created.description).toEqual("alchemy maps key");
-      expect(created.labels).toMatchObject({ env: "test" });
       expect(created.disabled).toEqual(false);
       expect(created.authProviderTypeParams?.apiKey).toBeDefined();
 
@@ -86,9 +85,8 @@ test.provider(
         name: created.name,
       });
       expect(fetched.name).toEqual(created.name);
-      expect(fetched.description).toEqual("alchemy maps key");
-      expect(fetched.labels?.env).toEqual("test");
-      expect(fetched.labels?.["alchemy-id"]).toEqual(expect.any(String));
+      // Ownership rides in the description (the API drops labels).
+      expect(fetched.description).toMatch(/^\[alchemy .*\]\nalchemy maps key$/);
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
@@ -108,15 +106,11 @@ test.provider(
       expect(updated.name).toEqual(created.name);
       expect(updated.authProviderId).toEqual(created.authProviderId);
       expect(updated.description).toEqual("alchemy maps key v2");
-      expect(updated.labels).toMatchObject({ env: "prod", role: "maps" });
 
       const fetchedUpdate = yield* agentidentity.getProjectsLocationsAuthProviders({
         name: created.name,
       });
-      expect(fetchedUpdate.description).toEqual("alchemy maps key v2");
-      expect(fetchedUpdate.labels?.env).toEqual("prod");
-      expect(fetchedUpdate.labels?.role).toEqual("maps");
-      expect(fetchedUpdate.labels?.["alchemy-id"]).toEqual(expect.any(String));
+      expect(fetchedUpdate.description).toMatch(/\nalchemy maps key v2$/);
 
       yield* stack.destroy();
 
