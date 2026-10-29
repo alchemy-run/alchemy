@@ -1,0 +1,102 @@
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
+import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as dns from "@distilled.cloud/cloudflare/dns";
+import * as emailRouting from "@distilled.cloud/cloudflare/email-routing";
+import * as Effect from "effect/Effect";
+import { MinimumLogLevel } from "effect/References";
+import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
+import { emailRoutingScoped } from "./scope.ts";
+
+const { test } = Test.make({ providers: Cloudflare.providers() });
+
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
+
+const zoneName = process.env.CLOUDFLARE_TEST_DNS_ZONE_NAME ?? "alchemy-test-2.us";
+
+// Deterministic per-test subdomain, reused on every run.
+const NAME_DEFAULT = `alchemy-routesub-default.${zoneName}`;
+
+const resolveZoneId = Effect.gen(function* () {
+  const { accountId } = yield* yield* CloudflareEnvironment;
+  const zone = yield* findZoneByName({ accountId, name: zoneName });
+  if (!zone) {
+    return yield* Effect.die(new Error(`zone "${zoneName}" not found in account`));
+  }
+  return zone.id;
+});
+
+const forbiddenRetrySchedule = Schedule.exponential("500 millis");
+
+const retryForbidden = <A, E extends { readonly _tag: string }, R>(
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.retry({
+      while: (e) => e._tag === "Forbidden",
+      schedule: forbiddenRetrySchedule,
+      times: 8,
+    }),
+  );
+
+const routingMx = (zoneId: string, name: string) =>
+  retryForbidden(
+    dns.listRecords.items({ zoneId, name: { exact: name }, type: "MX" }).pipe(
+      Stream.filter((record) => /^route\d+\.mx\.cloudflare\.net\.?$/iu.test(record.content ?? "")),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+    ),
+  );
+
+test.provider.skipIf(!emailRoutingScoped)(
+  "create and destroy a routing subdomain, leaving the apex routing",
+  (stack) =>
+    Effect.gen(function* () {
+      const zoneId = yield* resolveZoneId;
+      yield* stack.destroy();
+
+      // The subdomain needs Email Routing on the zone; capture it to restore.
+      const before = yield* retryForbidden(emailRouting.getEmailRouting({ zoneId }));
+      if (!before.enabled) yield* retryForbidden(emailRouting.enableEmailRouting({ zoneId }));
+
+      const subdomain = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Email.RoutingSubdomain("Inbound", {
+            zoneId,
+            name: NAME_DEFAULT,
+          });
+        }),
+      );
+
+      expect(subdomain.zoneId).toEqual(zoneId);
+      expect(subdomain.name).toEqual(NAME_DEFAULT);
+      expect(subdomain.mx.length).toBeGreaterThan(0);
+
+      // Out-of-band: the subdomain has Email Routing MX records.
+      expect((yield* routingMx(zoneId, NAME_DEFAULT)).length).toBeGreaterThan(0);
+
+      // A second deploy with the same props is a no-op.
+      const again = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.Email.RoutingSubdomain("Inbound", {
+            zoneId,
+            name: NAME_DEFAULT,
+          });
+        }),
+      );
+      expect(again.mx).toEqual(subdomain.mx);
+
+      yield* stack.destroy();
+
+      // The subdomain's records are gone, and the apex still routes mail.
+      expect(yield* routingMx(zoneId, NAME_DEFAULT)).toEqual([]);
+      const after = yield* retryForbidden(emailRouting.getEmailRouting({ zoneId }));
+      expect(after.enabled).toEqual(true);
+
+      if (!before.enabled) yield* retryForbidden(emailRouting.disableEmailRouting({ zoneId }));
+    }).pipe(logLevel),
+  { timeout: 120_000 },
+);

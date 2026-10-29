@@ -86,5 +86,43 @@ describe.sequential.skipIf(!emailRoutingScoped)(
         yield* stack.destroy();
       }).pipe(logLevel),
     );
+
+    // Subaddressing is a zone setting beside `enabled`: deploy it on, then
+    // off, checking the live setting each time. Destroying the stack
+    // disables routing on the zone, so capture-and-restore both settings.
+    test.provider("subaddressing converges in place", (stack) =>
+      Effect.gen(function* () {
+        const zoneId = yield* resolveZoneId;
+        yield* stack.destroy();
+        const before = yield* getEmailRouting(zoneId);
+
+        const deploy = (subaddressing: boolean) =>
+          stack.deploy(
+            Effect.gen(function* () {
+              return yield* Cloudflare.Email.Routing("Routing", { zone: zoneId, subaddressing });
+            }),
+          );
+
+        const on = yield* deploy(true);
+        expect(on.subaddressing).toEqual(true);
+        expect((yield* getEmailRouting(zoneId)).supportSubaddress).toEqual(true);
+
+        const off = yield* deploy(false);
+        expect(off.subaddressing).toEqual(false);
+        expect((yield* getEmailRouting(zoneId)).supportSubaddress).toEqual(false);
+
+        yield* stack.destroy();
+        yield* setEnabled(zoneId, before.enabled);
+        yield* emailRouting
+          .edit({ zoneId, supportSubaddress: before.supportSubaddress ?? false })
+          .pipe(
+            Effect.retry({
+              while: (e) => e._tag === "Forbidden",
+              schedule: forbiddenRetrySchedule,
+              times: 8,
+            }),
+          );
+      }).pipe(logLevel),
+    );
   },
 );
