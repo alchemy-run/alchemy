@@ -49,7 +49,7 @@ export default defineConfig({
 
 ```typescript
 // alchemy.run.ts
-import * as Prisma from "alchemy/Prisma";
+import * as Prisma from "@alchemy.run/prisma";
 
 export const Website = Prisma.Website.Vite("Website");
 ```
@@ -143,7 +143,7 @@ export const Website = Prisma.Website.Vite("Website", {
 ```
 
 This creates `Prisma.CustomDomain` and makes `site.url` the HTTPS hostname.
-The app must be on the project's current default branch. Configure the
+Configure the
 returned DNS records yourself and verify provisioning status before
 cutover; see [Custom domains](/prisma/frontend/websites#custom-domains).
 

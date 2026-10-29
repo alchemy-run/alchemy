@@ -205,6 +205,37 @@ const postBytes = (worker: TestWorker, path: string, bytes: Uint8Array | string)
 
 const metadataOf = (buffer: ArrayBuffer) => Effect.promise(() => sharp(buffer).metadata());
 
+/**
+ * A 200x100 white-top/red-bottom JPEG tagged with EXIF orientation 6 ("rotate
+ * 90 degrees clockwise to display"), the layout phone cameras use for
+ * portrait photos. A production-matching transform bakes that rotation in,
+ * producing an upright 100x200 image with red on the left and white on the
+ * right.
+ */
+const exifRotatedJpeg = Effect.promise(async () => {
+  const red = await sharp({
+    create: { width: 200, height: 50, channels: 3, background: { r: 255, g: 0, b: 0 } },
+  })
+    .png()
+    .toBuffer();
+  const source = await sharp({
+    create: { width: 200, height: 100, channels: 3, background: { r: 255, g: 255, b: 255 } },
+  })
+    .composite([{ input: red, top: 50, left: 0 }])
+    .jpeg({ quality: 95 })
+    .withMetadata({ orientation: 6 })
+    .toBuffer();
+  expect((await sharp(source).metadata()).orientation).toBe(6);
+  return new Uint8Array(source);
+});
+
+const pixelAt = (body: Buffer, x: number, y: number) =>
+  Effect.promise(async () => {
+    const { data, info } = await sharp(body).raw().toBuffer({ resolveWithObject: true });
+    const offset = (y * info.width + x) * info.channels;
+    return { r: data[offset], g: data[offset + 1], b: data[offset + 2] };
+  });
+
 interface ImageMetadata {
   id: string;
   filename: string;
@@ -256,6 +287,62 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Images binding", (it) =
       const metadata = yield* metadataOf(yield* Effect.promise(() => res.arrayBuffer()));
       expect(metadata.width).toBe(4);
       expect(metadata.height).toBe(8);
+    }),
+  );
+
+  // Adapted from upstream `transform.spec.ts` (#16106): production applies
+  // EXIF orientation before any transforms.
+  it.effect("EXIF orientation is applied before transforms (matches production)", () =>
+    Effect.gen(function* () {
+      const worker = yield* startImagesTestWorker("images-exif-orientation");
+      const res = yield* postBytes(worker, "/transform?format=image/png", yield* exifRotatedJpeg);
+      expect(res.status).toBe(200);
+      const body = Buffer.from(yield* Effect.promise(() => res.arrayBuffer()));
+      // Without auto-orientation the 200x100 source would pass through
+      // sideways as 200x100.
+      const metadata = yield* metadataOf(body.buffer);
+      expect(metadata.width).toBe(100);
+      expect(metadata.height).toBe(200);
+
+      // After the 90 degrees clockwise rotation the source's red bottom half
+      // lands on the left and the white top half on the right. JPEG encoding
+      // is lossy, so sample deep inside each half and allow small artifacts.
+      const left = yield* pixelAt(body, 25, 100);
+      expect(left.r).toBeGreaterThan(240);
+      expect(left.g).toBeLessThan(15);
+      expect(left.b).toBeLessThan(15);
+      const right = yield* pixelAt(body, 75, 100);
+      expect(right.r).toBeGreaterThan(240);
+      expect(right.g).toBeGreaterThan(240);
+      expect(right.b).toBeGreaterThan(240);
+    }),
+  );
+
+  it.effect("EXIF orientation composes with resize", () =>
+    Effect.gen(function* () {
+      const worker = yield* startImagesTestWorker("images-exif-resize");
+      const res = yield* postBytes(
+        worker,
+        "/transform?width=50&format=image/png",
+        yield* exifRotatedJpeg,
+      );
+      expect(res.status).toBe(200);
+      // width applies to the upright (100x200) image, not the stored
+      // sideways (200x100) pixels.
+      const metadata = yield* metadataOf(yield* Effect.promise(() => res.arrayBuffer()));
+      expect(metadata.width).toBe(50);
+      expect(metadata.height).toBe(100);
+    }),
+  );
+
+  it.effect("info() reports stored dimensions for an EXIF-rotated image", () =>
+    Effect.gen(function* () {
+      const worker = yield* startImagesTestWorker("images-exif-info");
+      const body = yield* worker.fetchJson<{
+        ok: boolean;
+        info: { width: number; height: number };
+      }>("/info", { method: "POST", body: yield* exifRotatedJpeg });
+      expect(body.info).toMatchObject({ width: 200, height: 100 });
     }),
   );
 
@@ -404,7 +491,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Images binding", (it) =
   // Local delivery (upstream "Images local delivery")
   // ---------------------------------------------------------------------------
 
-  it.effect("variant URLs are absolute and use /cdn-cgi/mf/imagedelivery/ path", () =>
+  it.effect("variant URLs are absolute and use /__cf_local/imagedelivery/ path", () =>
     Effect.gen(function* () {
       const worker = yield* startImagesTestWorker("images-variant-url");
       const metadata = yield* upload(worker, TEST_IMAGE_BYTES, {
@@ -412,7 +499,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Images binding", (it) =
       });
       expect(metadata.variants).toHaveLength(1);
       expect(metadata.variants[0]).toBe(
-        `${worker.baseUrl.origin}/cdn-cgi/mf/imagedelivery/variant-test/public`,
+        `${worker.baseUrl.origin}/__cf_local/imagedelivery/variant-test/public`,
       );
     }),
   );
@@ -422,7 +509,20 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Images binding", (it) =
       const worker = yield* startImagesTestWorker("images-delivery");
       yield* upload(worker, TEST_IMAGE_BYTES, { id: "delivery-test" });
 
-      const response = yield* worker.fetch("/cdn-cgi/mf/imagedelivery/delivery-test/public");
+      const response = yield* worker.fetch("/__cf_local/imagedelivery/delivery-test/public");
+      expect(response.status).toBe(200);
+      const data = new Uint8Array(yield* Effect.promise(() => response.arrayBuffer()));
+      expect(data).toEqual(TEST_IMAGE_BYTES);
+    }),
+  );
+
+  // Miniflare's former delivery prefix keeps serving older variant URLs.
+  it.effect("image delivery still serves the /cdn-cgi/mf/imagedelivery prefix", () =>
+    Effect.gen(function* () {
+      const worker = yield* startImagesTestWorker("images-delivery-legacy");
+      yield* upload(worker, TEST_IMAGE_BYTES, { id: "delivery-legacy" });
+
+      const response = yield* worker.fetch("/cdn-cgi/mf/imagedelivery/delivery-legacy/public");
       expect(response.status).toBe(200);
       const data = new Uint8Array(yield* Effect.promise(() => response.arrayBuffer()));
       expect(data).toEqual(TEST_IMAGE_BYTES);
@@ -436,7 +536,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Images binding", (it) =
         id: "content-type-test",
       });
 
-      const response = yield* worker.fetch("/cdn-cgi/mf/imagedelivery/content-type-test/public");
+      const response = yield* worker.fetch("/__cf_local/imagedelivery/content-type-test/public");
       expect(response.status).toBe(200);
       expect(response.headers.get("content-type")).toBe("image/png");
       yield* Effect.promise(() => response.arrayBuffer());
@@ -446,7 +546,7 @@ layer(localRuntimeLayer, { excludeTestServices: true })("Images binding", (it) =
   it.effect("image delivery returns 404 for non-existent image", () =>
     Effect.gen(function* () {
       const worker = yield* startImagesTestWorker("images-delivery-404");
-      const response = yield* worker.fetch("/cdn-cgi/mf/imagedelivery/does-not-exist/public");
+      const response = yield* worker.fetch("/__cf_local/imagedelivery/does-not-exist/public");
       expect(response.status).toBe(404);
       yield* Effect.promise(() => response.arrayBuffer());
     }),

@@ -15,14 +15,17 @@ import * as Redacted from "effect/Redacted";
 import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import type { Dependencies } from "./Dependencies.ts";
+import { toFqn } from "./FQN.ts";
 import type { HttpEffect } from "./Http.ts";
 import type { InputProps } from "./Input.ts";
 import type { Named, Tag } from "./Named.ts";
+import { CurrentNamespace } from "./Namespace.ts";
 import * as Output from "./Output.ts";
 import { ALCHEMY_PHASE } from "./Phase.ts";
 import type { Provider, ProviderCollectionLike } from "./Provider.ts";
 import { Resource, type ResourceLike } from "./Resource.ts";
 import type { Rpc } from "./Rpc.ts";
+import { ServerHost, type ProcessContext } from "./Runtime/Process.ts";
 import {
   CurrentRuntimeContext,
   RuntimeContext,
@@ -30,8 +33,8 @@ import {
   type BaseRuntimeContext,
 } from "./RuntimeContext.ts";
 import { Self } from "./Self.ts";
-import { ServerHost, type ProcessContext } from "./Server/Process.ts";
 import type { Stack, StackServices } from "./Stack.ts";
+import { StackContext } from "./StackContext.ts";
 import type { Stage } from "./Stage.ts";
 import { effectClass } from "./Util/effect.ts";
 
@@ -126,7 +129,10 @@ export type PlatformServices =
   | ProviderCollectionLike
   | Stack
   | StackServices
-  | Stage;
+  | Stage
+  // Every platform provides its instance as the generic `Self` (see `make`),
+  // which host-agnostic bindings (e.g. Cloudflare `*Http`) name tokens after.
+  | Self;
 
 /** A platform declaration's logical identity, readable without yielding it. */
 export interface PlatformIdentity<Id extends string = string> {
@@ -333,8 +339,8 @@ export const Platform = <
               isExternal: true,
             };
       };
-      const evaluate = () =>
-        (!isTag
+      const register = () =>
+        !isTag
           ? // this is a non-tagged resource yielded without providing an implementation
             // e.g.
             // yield* Cloudflare.Worker("id", { main: "./src/worker.ts" })
@@ -373,20 +379,39 @@ export const Platform = <
                   ),
                 onSome: Effect.succeed,
               }),
-            )
-        ).pipe(
-          Effect.tap((resource) =>
-            hooks.onCreate
-              ? Effect.flatMap(
-                  // `props` may itself be an Effect (e.g. when wrapped by
-                  // `Cloudflare.Website.Vite` via `Effect.map`); resolve it before
-                  // handing it to the hook so `onCreate` always sees the
-                  // plain props object — the second call site (in
-                  // `cls.make`) already does this.
-                  Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
-                  (resolved) => hooks.onCreate!(resource as R, resolved),
-                )
-              : Effect.void,
+            );
+      // Whether this `yield*` registers the resource. The stack holds one
+      // resource per FQN and every later `yield*` returns it. Outside a
+      // stack (at runtime) nothing registers, so the hook runs as before.
+      const isFirstRegistration = Effect.flatMap(
+        Effect.serviceOption(StackContext),
+        Option.match({
+          onNone: () => Effect.succeed(true),
+          onSome: (stack) =>
+            Effect.map(CurrentNamespace, (namespace) => !(toFqn(namespace, id) in stack.resources)),
+        }),
+      );
+      const evaluate = () =>
+        Effect.flatMap(isFirstRegistration, (firstRegistration) =>
+          register().pipe(
+            Effect.tap((resource) =>
+              // Run the hook only for the `yield*` that registered the
+              // resource. The hook yields the resource's `env`, so re-running
+              // it on every `yield*` lets two Workers whose `env` entries
+              // yield each other recurse forever (#2672). The resource is
+              // registered before the hook runs, so a cycle back to it stops.
+              hooks.onCreate && firstRegistration
+                ? Effect.flatMap(
+                    // `props` may itself be an Effect (e.g. when wrapped by
+                    // `Cloudflare.Website.Vite` via `Effect.map`); resolve it
+                    // before handing it to the hook so `onCreate` always sees
+                    // the plain props object — the second call site (in
+                    // `cls.make`) already does this.
+                    Effect.isEffect(props) ? props : Effect.succeed(props ?? {}),
+                    (resolved) => hooks.onCreate!(resource as R, resolved),
+                  )
+                : Effect.void,
+            ),
           ),
         );
       return Object.assign(
@@ -521,10 +546,17 @@ export const Platform = <
                             return node;
                           } else if (phase === "runtime" && ctx) {
                             // retrieve from the RuntimeContext if running in runtime phase
-                            const value = yield* ctx.get<Redacted.Redacted<string>>(key);
+                            const value = yield* ctx.get<unknown>(key);
                             if (value) {
+                              // `get` JSON-decodes unbound env values (`"true"` →
+                              // `true`), but a `Value` node holds the raw string the
+                              // `Config` schema parses.
                               return ConfigProvider.makeValue(
-                                Redacted.isRedacted(value) ? Redacted.value(value) : value,
+                                Redacted.isRedacted(value)
+                                  ? String(Redacted.value(value))
+                                  : typeof value === "string"
+                                    ? value
+                                    : JSON.stringify(value),
                               );
                             }
                           }
@@ -535,45 +567,51 @@ export const Platform = <
                     }),
                   ).pipe(
                     Layer.provideMerge(
-                      Layer.mergeAll(
-                        // Pin init's ambient `Scope` to this layer's build
-                        // scope. `Effect.provide` (`scopedWith`) would
-                        // otherwise shadow it with a transient scope that
-                        // closes the moment init returns; the build scope
-                        // lives for the instance under the runtime bridges,
-                        // so init-level finalizers run at instance shutdown
-                        // (Lambda's SIGTERM window) or never (workerd) —
-                        // request-coupled cleanup belongs in handlers, where
-                        // the bridge provides a per-event scope. It also
-                        // wins over any `Scope` captured in `outerServices`
-                        // below.
-                        Layer.succeed(Scope, buildScope),
-                        Layer.succeed(Platform.Platform, runtimeContext),
-                        Layer.succeed(PlatformContext, runtimeContext),
-                        Layer.succeed(RuntimeContext, runtimeContext),
-                        // Host contexts (EC2 instances, ECS tasks, processes)
-                        // carry a `run` for registering long-running loops.
-                        // Expose it as `ServerHost` so an inline program can
-                        // `yield* ServerHost` during plan/deploy without the
-                        // caller providing the layer itself.
-                        "run" in runtimeContext &&
-                          typeof (runtimeContext as { run?: unknown }).run === "function"
-                          ? Layer.succeed(ServerHost, {
-                              run: (runtimeContext as ProcessContext).run,
-                            })
-                          : Layer.empty,
-                        Layer.succeed(resource.Self, instance),
-                        Layer.succeed(Platform.Self, instance),
-                        Layer.succeed(Self, instance),
-                        runtimeContext.planServices
-                          ? Layer.unwrap(
-                              ALCHEMY_PHASE.pipe(
-                                Effect.map((phase) =>
-                                  phase === "plan" ? runtimeContext.planServices! : Layer.empty,
-                                ),
-                              ),
-                            )
-                          : Layer.empty,
+                      // Services the host provides its init (e.g. a Worker's `WebhookHost`),
+                      // built over the instance so they can `yield*` it.
+                      (runtimeContext.hostServices ?? Layer.empty).pipe(
+                        Layer.provideMerge(
+                          Layer.mergeAll(
+                            // Pin init's ambient `Scope` to this layer's build
+                            // scope. `Effect.provide` (`scopedWith`) would
+                            // otherwise shadow it with a transient scope that
+                            // closes the moment init returns; the build scope
+                            // lives for the instance under the runtime bridges,
+                            // so init-level finalizers run at instance shutdown
+                            // (Lambda's SIGTERM window) or never (workerd) —
+                            // request-coupled cleanup belongs in handlers, where
+                            // the bridge provides a per-event scope. It also
+                            // wins over any `Scope` captured in `outerServices`
+                            // below.
+                            Layer.succeed(Scope, buildScope),
+                            Layer.succeed(Platform.Platform, runtimeContext),
+                            Layer.succeed(PlatformContext, runtimeContext),
+                            Layer.succeed(RuntimeContext, runtimeContext),
+                            // Host contexts (EC2 instances, ECS tasks, processes)
+                            // carry a `run` for registering long-running loops.
+                            // Expose it as `ServerHost` so an inline program can
+                            // `yield* ServerHost` during plan/deploy without the
+                            // caller providing the layer itself.
+                            "run" in runtimeContext &&
+                              typeof (runtimeContext as { run?: unknown }).run === "function"
+                              ? Layer.succeed(ServerHost, {
+                                  run: (runtimeContext as ProcessContext).run,
+                                })
+                              : Layer.empty,
+                            Layer.succeed(resource.Self, instance),
+                            Layer.succeed(Platform.Self, instance),
+                            Layer.succeed(Self, instance),
+                            runtimeContext.planServices
+                              ? Layer.unwrap(
+                                  ALCHEMY_PHASE.pipe(
+                                    Effect.map((phase) =>
+                                      phase === "plan" ? runtimeContext.planServices! : Layer.empty,
+                                    ),
+                                  ),
+                                )
+                              : Layer.empty,
+                          ),
+                        ),
                       ),
                     ),
                     Layer.provideMerge(Layer.succeedContext(outerServices)),

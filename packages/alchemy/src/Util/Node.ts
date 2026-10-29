@@ -1,5 +1,14 @@
 import * as NodeNet from "node:net";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
+import * as SemVer from "effect/SemVer";
+import * as SemVerRange from "effect/SemVerRange";
+
+export class NodeOperationFailed extends Data.TaggedError("NodeOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The process's working directory, captured ONCE at module load.
@@ -91,13 +100,15 @@ export const nodeLoaderArgs = (entry: string): string[] => [
  * before any `.ts` can load. Keep the two in sync.
  */
 export const isRegisterHooksSupported = (version = process.versions.node): boolean => {
-  const [major = 0, minor = 0, patch = 0] = version.split(".").map(Number);
+  const parsed = Result.getOrUndefined(SemVer.parse(version));
   return (
-    (major === 24 && (minor > 11 || (minor === 11 && patch >= 1))) ||
-    (major === 25 && minor >= 1) ||
-    major >= 26
+    parsed !== undefined && SemVerRange.matches(REGISTER_HOOKS, parsed, { includePrerelease: true })
   );
 };
+
+const REGISTER_HOOKS = SemVerRange.parseUnsafe(
+  ">=22.22.3 <23.0.0-0 || >=24.11.1 <25.0.0-0 || >=25.1.0",
+);
 
 /**
  * Ask the OS for an unused TCP port, release it, and return its number.
@@ -120,7 +131,11 @@ export const findAvailablePort = (host = "127.0.0.1") =>
         } else if (port !== undefined) {
           resume(Effect.succeed(port));
         } else {
-          resume(Effect.fail(new Error("Failed to allocate an available port")));
+          resume(
+            Effect.fail(
+              new NodeOperationFailed({ message: "Failed to allocate an available port" }),
+            ),
+          );
         }
       });
     });

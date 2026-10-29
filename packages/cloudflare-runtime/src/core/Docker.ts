@@ -38,6 +38,8 @@ export class Docker extends Context.Service<
       WorkerdConfig.Worker_ContainerEngine,
       SystemError
     >;
+    /** Docker privileges for every local container (see {@link FUSE_CONTAINER_PRIVILEGES}). */
+    readonly getContainerPrivileges: Effect.Effect<WorkerdConfig.Worker_DurableObjectNamespace_ContainerOptions_ContainerPrivileges>;
     readonly generateImageTag: (className: string, suffix?: string) => string;
     readonly registerImageEnv: (
       className: string,
@@ -62,6 +64,8 @@ export declare namespace ContainerImage {
     readonly dockerfile: string;
     readonly context?: string;
     readonly buildArgs?: Record<string, string>;
+    /** BuildKit secrets by id, handed to `docker build` through its environment. */
+    readonly buildSecrets?: Record<string, string>;
   }
   export interface Pull extends Base {
     readonly imageUri: string;
@@ -84,6 +88,17 @@ const ContainerEgressInterceptorImage = Config.String("CONTAINER_EGRESS_INTERCEP
     ),
   ),
 );
+
+/**
+ * The Docker privileges FUSE filesystems (s3fs, tigrisfs, …) need to mount
+ * inside a container. Deployed Containers can always mount FUSE, so every
+ * local container gets them too.
+ */
+export const FUSE_CONTAINER_PRIVILEGES = {
+  capabilities: ["SYS_ADMIN"],
+  devices: [{ pathOnHost: "/dev/fuse", pathInContainer: "/dev/fuse", cgroupPermissions: "rwm" }],
+  securityOpt: ["apparmor:unconfined"],
+} satisfies WorkerdConfig.Worker_DurableObjectNamespace_ContainerOptions_ContainerPrivileges;
 
 /**
  * Docker's containerd image store rejects combined `repo:tag@digest` pull
@@ -206,7 +221,7 @@ export const DockerLive = Layer.effect(
         stderr: "pipe",
         detached: false,
       }).pipe(
-        spawner.spawn,
+        (command) => spawner.spawn(command),
         Effect.flatMap((child) =>
           child.stdout.pipe(
             Stream.decodeText,
@@ -347,14 +362,19 @@ export const DockerLive = Layer.effect(
       });
     };
 
-    const run = (args: Array<string>, stdin: ChildProcess.CommandInput = "ignore") =>
+    const run = (
+      args: Array<string>,
+      stdin: ChildProcess.CommandInput = "ignore",
+      env?: Record<string, string>,
+    ) =>
       ChildProcess.make(bin, args, {
         stdin,
         stdout: "pipe",
         stderr: "pipe",
         detached: false,
+        ...(env === undefined ? {} : { env, extendEnv: true }),
       }).pipe(
-        spawner.spawn,
+        (command) => spawner.spawn(command),
         Effect.flatMap((child) =>
           Effect.all(
             {
@@ -535,8 +555,22 @@ export const DockerLive = Layer.effect(
       { concurrent: true },
     ).pipe(Effect.forkScoped({ startImmediately: false }));
 
+    // Docker refuses to create a container whose device is missing on the
+    // host, so a Linux host without /dev/fuse gets the capability alone.
+    // VM-based engines (macOS, Windows) always have /dev/fuse in the VM.
+    const getContainerPrivileges = yield* Effect.cached(
+      Effect.gen(function* () {
+        const platform = yield* Effect.sync(() => process.platform);
+        const hasFuse =
+          platform !== "linux" ||
+          (yield* fs.exists("/dev/fuse").pipe(Effect.orElseSucceed(() => false)));
+        return hasFuse ? FUSE_CONTAINER_PRIVILEGES : { ...FUSE_CONTAINER_PRIVILEGES, devices: [] };
+      }),
+    );
+
     return Docker.of({
       getWorkerdDockerConfiguration: Fiber.join(docker),
+      getContainerPrivileges,
       registerImageEnv: (className, tag, env) => {
         const alias = generateImageTag(className);
         return Effect.acquireRelease(
@@ -550,6 +584,13 @@ export const DockerLive = Layer.effect(
       generateImageTag,
       build: (tag, image) =>
         Effect.suspend(() => {
+          // Values ride in generated variables: a secret id is the
+          // Dockerfile's choice and may shadow one Docker reads itself.
+          const secrets = Object.entries(image.buildSecrets ?? {}).map(([id, value], index) => ({
+            id,
+            variable: `ALCHEMY_BUILD_SECRET_${index}`,
+            value,
+          }));
           const args = [
             "build",
             "--load",
@@ -558,9 +599,11 @@ export const DockerLive = Layer.effect(
             "--platform",
             "linux/amd64",
             "--provenance=false",
-            ...Object.entries(image.buildArgs ?? {}).map(
-              ([name, value]) => `--build-arg ${name}=${value}`,
-            ),
+            ...Object.entries(image.buildArgs ?? {}).flatMap(([name, value]) => [
+              "--build-arg",
+              `${name}=${value}`,
+            ]),
+            ...secrets.flatMap(({ id, variable }) => ["--secret", `id=${id},env=${variable}`]),
             "-f",
             "-",
             path.resolve(image.context ?? path.dirname(image.dockerfile)),
@@ -572,6 +615,9 @@ export const DockerLive = Layer.effect(
                 ? path.resolve(image.context, image.dockerfile)
                 : path.resolve(image.dockerfile),
             ),
+            secrets.length === 0
+              ? undefined
+              : Object.fromEntries(secrets.map(({ variable, value }) => [variable, value])),
           ).pipe(
             Effect.withLogSpan(`docker: build ${tag}`),
             Effect.mapError((cause) =>

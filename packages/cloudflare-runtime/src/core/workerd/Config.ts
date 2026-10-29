@@ -1,5 +1,6 @@
 import type {
   HttpOptions_Style,
+  Socket_TcpTlsMode,
   TlsOptions_Version,
   Worker_Binding_CryptoKey_Usage,
 } from "./internal/config.capnp.ts";
@@ -8,6 +9,7 @@ import type {
 
 export {
   HttpOptions_Style,
+  Socket_TcpTlsMode,
   TlsOptions_Version,
   Worker_Binding_CryptoKey_Usage,
 } from "./internal/config.capnp.ts";
@@ -44,6 +46,7 @@ export interface Socket_Https {
 
 export interface Socket_Tcp {
   tlsOptions?: TlsOptions;
+  tlsMode?: Socket_TcpTlsMode;
 }
 
 export type Service = {
@@ -172,12 +175,6 @@ export type Worker_Binding_Type =
 export type Worker_Binding_DurableObjectNamespaceDesignator = {
   className?: string;
   serviceName?: string;
-  retryPolicy?: {
-    /** Retries after the initial attempt. Defaults to 4; zero disables retries. */
-    maxAttempts?: number;
-    /** Retry deadline in milliseconds (500–60,000). Defaults to 10,000. */
-    timeoutMs?: number;
-  };
 };
 
 export type Worker_Binding_CryptoKey = (
@@ -234,15 +231,24 @@ export interface Worker_DurableObjectNamespace_ContainerOptions {
    */
   imageName?: string;
   images?: Array<{ name: string; image: string }>;
-  privileges?: {
-    capabilities?: Array<string>;
-    devices?: Array<{
-      pathOnHost: string;
-      pathInContainer: string;
-      cgroupPermissions: string;
-    }>;
-    securityOpt?: Array<string>;
-  };
+  privileges?: Worker_DurableObjectNamespace_ContainerOptions_ContainerPrivileges;
+}
+
+/**
+ * Extra Docker `HostConfig` privileges workerd applies when it creates the
+ * container. workerd passes them to Docker as-is, without validation.
+ */
+export interface Worker_DurableObjectNamespace_ContainerOptions_ContainerPrivileges {
+  /** Docker `HostConfig.CapAdd` values. */
+  capabilities?: Array<string>;
+  /** Docker `HostConfig.Devices` values. */
+  devices?: Array<{
+    pathOnHost: string;
+    pathInContainer: string;
+    cgroupPermissions: string;
+  }>;
+  /** Docker `HostConfig.SecurityOpt` values. */
+  securityOpt?: Array<string>;
 }
 
 export type Worker_DurableObjectNamespace = {

@@ -1,8 +1,8 @@
-import { describe, expect } from "alchemy-test";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import { State } from "@/State";
-import * as Test from "@/Test/Alchemy";
-import * as Core from "@/Test/Core";
 import { TestLayers, TestResource } from "./test.resources.ts";
 
 const { test } = Test.make({ providers: TestLayers() });

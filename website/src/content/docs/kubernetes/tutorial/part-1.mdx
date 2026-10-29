@@ -8,7 +8,7 @@ sidebar:
 import Terminal from "../../../../components/Terminal.astro";
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const pkgs = `alchemy@latest effect @effect/platform-bun @effect/platform-node`;
+export const pkgs = `alchemy@latest @alchemy.run/kubernetes@latest effect @effect/platform-bun @effect/platform-node`;
 
 In this first part you'll create a Stack, start a Kubernetes cluster
 on your machine, and deploy a replicated HTTP service. You won't
@@ -36,7 +36,7 @@ Start with an empty directory and initialize a `package.json`:
 
 ## Install dependencies
 
-Install `alchemy@latest` and `effect`:
+Install `alchemy@latest`, `@alchemy.run/kubernetes`, and `effect`:
 
 <PackageManagers add={pkgs} />
 
@@ -49,7 +49,7 @@ remembers what was deployed. Create `alchemy.run.ts`:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Kubernetes from "alchemy/Kubernetes";
+import * as Kubernetes from "@alchemy.run/kubernetes";
 import * as Effect from "effect/Effect";
 
 export default Alchemy.Stack(

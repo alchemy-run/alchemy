@@ -26,11 +26,13 @@ alchemy
 │                      # manage credentials and accounts (bare `profile` opens the dashboard)
 │
 ├─ state list|read|delete        # inspect and manage the state store (bare `state` opens the explorer)
+├─ state bootstrap|teardown|logs # provision, delete, or debug a provider's state store (--backend)
 │
 └─ provider
    ├─ check-env           # CI preflight: verify required provider env vars are set
-   ├─ aws bootstrap|teardown
-   └─ cloudflare bootstrap|teardown|token|state logs
+   ├─ aws bootstrap|teardown         # the deploy assets bucket
+   ├─ cloudflare token
+   └─ prisma generate
 ```
 
 Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destroy](/cli/destroy), [drift](/cli/drift), [unsafe nuke](/cli/nuke), [dev](/cli/dev), [logs](/cli/logs), [profile](/cli/profile), [state](/cli/state), [AWS provider commands](/cli/aws), and [Cloudflare provider commands](/cli/cloudflare). The workflow guides cover [adopting resources](/cli/adopting-resources) and [inspecting state](/cli/inspecting-state).
@@ -45,6 +47,7 @@ Each command has its own page: [deploy](/cli/deploy), [plan](/cli/plan), [destro
 | `--yes`             | Yes to all prompts.                                                                                                                       |
 | `--no-input`        | Disable prompts and the interactive TUI. Commands that would need input fail instead of hanging.                                          |
 | `--config, -c <file>` | Stack entrypoint. Defaults to `alchemy.run.ts`; must exist.                                                                            |
+| `--fast-distilled`  | Under Node, load each distilled SDK operation on first use. This lowers the CLI's memory and startup time for stacks that import whole providers. Same as `ALCHEMY_FAST_DISTILLED=1`. |
 
 Use `--profile` with `deploy`, `plan`, `destroy`, `dev`, `logs`, `drift`, or `state`.
 

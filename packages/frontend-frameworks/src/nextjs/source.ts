@@ -5,7 +5,7 @@ import { createRequire } from "node:module";
  * (`@alchemy.run/frontend-frameworks/nextjs/source`).
  *
  * The default export implements alchemy's `WorkerSourceModule` contract
- * (`packages/alchemy/src/Cloudflare/Workers/Source.ts`) **structurally** —
+ * (`packages/cloudflare/src/Workers/Source.ts`) **structurally** —
  * this package deliberately does not import alchemy types. The shapes
  * mirrored here are:
  *
@@ -33,7 +33,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import type * as Scope from "effect/Scope";
-import { runBuildChild } from "../core/BuildChild.ts";
+import { resolveBuildEnv, runBuildChild } from "../core/BuildChild.ts";
 import * as FrameworkCore from "../core/index.ts";
 import * as Nextjs from "./Nextjs.ts";
 import * as Runner from "./Runner.ts";
@@ -99,6 +99,7 @@ export interface SourceContext {
     readonly date: string;
     readonly flags: Array<string>;
   };
+  readonly env?: Record<string, unknown> | undefined;
   readonly assets?: string | Record<string, unknown> | undefined;
 }
 
@@ -115,6 +116,15 @@ export interface DevContext extends SourceContext {
     readonly hyperdrives: NonNullable<WorkerWiring["hyperdrives"]>;
     readonly queueConsumers: Effect.Effect<NonNullable<WorkerWiring["queueConsumers"]>>;
     readonly assets: WorkerWiring["assets"] | undefined;
+    /**
+     * The Worker's other runtime settings (crons, Workflows, tail consumers,
+     * Cache API, `request.cf`, zone, Access), spread whole into the runtime
+     * Worker.
+     */
+    readonly options: Pick<
+      RuntimeWorker,
+      "workflows" | "crons" | "tails" | "streamingTails" | "cache" | "cf" | "zone" | "access"
+    >;
   };
   /**
    * The host's runtime stack (a `Context.Context<RuntimeServices>`) — the
@@ -617,6 +627,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
         module: import.meta.url,
         rootDir: root,
         framework: "nextjs",
+        env: resolveBuildEnv(ctx.env),
         config: {
           rootDir: root,
           compatibilityDate: ctx.compatibility.date,
@@ -646,7 +657,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
       const [assets, input] = yield* Effect.all([
         output.clientDirectory !== undefined
           ? readClientAssets(output.clientDirectory, assetsConfigOf(ctx))
-          : Effect.succeed(undefined),
+          : Effect.undefined,
         hashInputTree(root, options, ctx.dotAlchemy),
       ]);
       return {
@@ -689,6 +700,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
           compatibilityDate: ctx.compatibility.date,
           compatibilityFlags: ctx.compatibility.flags,
           worker: {
+            ...ctx.worker.options,
             name: ctx.workerName,
             bindings: ctx.worker.bindings,
             durableObjectNamespaces: ctx.worker.durableObjectNamespaces,

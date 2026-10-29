@@ -5,8 +5,8 @@ description: Use Drizzle with a libSQL database, such as Turso.
 
 import PackageManagers from "../../../../components/PackageManagers.astro";
 
-export const deps = `drizzle-orm@1.0.0-rc.5-ab785fc @effect/sql-libsql`;
-export const devDeps = `drizzle-kit@1.0.0-rc.5-ab785fc`;
+export const deps = `@alchemy.run/drizzle drizzle-orm@1.0.0-rc.5 @effect/sql-libsql`;
+export const devDeps = `drizzle-kit@1.0.0-rc.5`;
 
 `Drizzle.LibSQL` gives you typed Drizzle queries on a libSQL database, such as [Turso](/turso).
 
@@ -63,7 +63,7 @@ git commit -m "Add database migration"
 
 ```typescript
 // src/db.ts
-import * as Turso from "alchemy/Turso";
+import * as Turso from "@alchemy.run/turso";
 import * as Effect from "effect/Effect";
 
 export const Db = Effect.gen(function* () {
@@ -81,9 +81,9 @@ Each deploy runs new migrations. See [Turso migrations](/turso/migrations).
 
 ```typescript
 // src/api.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Drizzle from "alchemy/Drizzle/LibSQL";
-import * as Turso from "alchemy/Turso";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Drizzle from "@alchemy.run/drizzle/LibSQL";
+import * as Turso from "@alchemy.run/turso";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import { Db } from "./db.ts";
