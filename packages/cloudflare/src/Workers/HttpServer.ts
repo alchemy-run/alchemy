@@ -72,15 +72,17 @@ const toHandledWebResponse = <Req>(
     // `waitUntil`: the flush neither holds back the body's EOF nor is cut off.
     // `getOrUndefined` skips the Worker reference's deferred default, so only
     // the bridge-provided context counts.
-    const waitUntil =
-      Context.getOrUndefined(context, WorkerExecutionContext)?.waitUntil ??
-      Context.getOrUndefined(context, DurableObjectState)?.waitUntil;
+    const eventContext =
+      Context.getOrUndefined(context, WorkerExecutionContext) ??
+      Context.getOrUndefined(context, DurableObjectState);
     const runtimeContext = Context.getOrUndefined(context, RuntimeContext);
     const background =
-      waitUntil === undefined || runtimeContext === undefined
+      eventContext === undefined || runtimeContext === undefined
         ? undefined
         : (effect: Effect.Effect<void>) =>
-            waitUntil(effect).pipe(Effect.provideService(RuntimeContext, runtimeContext));
+            eventContext
+              .waitUntil(effect)
+              .pipe(Effect.provideService(RuntimeContext, runtimeContext));
     let transferred = false;
     const owningEventScope = Option.isNone(eventScope)
       ? handler
