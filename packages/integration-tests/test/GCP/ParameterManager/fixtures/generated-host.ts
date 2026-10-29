@@ -27,7 +27,6 @@ export default class ParameterManagerGeneratedHost extends GCP.Function<Paramete
     const p8 = yield* GCP.ParameterManager.ListTemplateVersions();
     const p9 = yield* GCP.ParameterManager.PatchTemplate();
     const p10 = yield* GCP.ParameterManager.PatchTemplateVersion();
-    const p11 = yield* GCP.ParameterManager.RenderTemplateVersion();
     return {
       fetch: serveProbes({
         CreateTemplate: probeOutcome(
@@ -77,15 +76,6 @@ export default class ParameterManagerGeneratedHost extends GCP.Function<Paramete
             } as never),
           ),
         ),
-        RenderTemplateVersion: probeOutcome(
-          Retry.none(
-            p11({
-              template: "alchemy-missing",
-              version: "alchemy-missing",
-              location: "us-central1",
-            } as never),
-          ),
-        ),
       }),
     };
   }).pipe(
@@ -103,7 +93,6 @@ export default class ParameterManagerGeneratedHost extends GCP.Function<Paramete
           GCP.ParameterManager.ListTemplateVersionsHttp,
           GCP.ParameterManager.PatchTemplateHttp,
           GCP.ParameterManager.PatchTemplateVersionHttp,
-          GCP.ParameterManager.RenderTemplateVersionHttp,
         ),
       ),
     ),
