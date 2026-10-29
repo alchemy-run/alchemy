@@ -53,6 +53,9 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "appengine.googleapis.com",
+            });
             const host = yield* AppEngineGeneratedHost;
             return { uri: host.uri };
           }),
@@ -65,33 +68,61 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("project", { concurrent: true }, () => {
-      test.provider.skip(
-        "DebugInstance (appengine.projects.locations.applications.services.versions.instances.debug): appengine.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "DebugInstance (appengine.projects.locations.applications.services.versions.instances.debug)",
+        () => probe("DebugInstance", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:appengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ExportVersionAppImage (appengine.projects.locations.applications.services.versions.exportAppImage): appengine.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ExportVersionAppImage (appengine.projects.locations.applications.services.versions.exportAppImage)",
+        () => probe("ExportVersionAppImage", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:appengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAuthorizedCertificate (appengine.projects.locations.applications.authorizedCertificates.get): appengine.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetAuthorizedCertificate (appengine.projects.locations.applications.authorizedCertificates.get)",
+        () => probe("GetAuthorizedCertificate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:appengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetDomainMapping (appengine.projects.locations.applications.domainMappings.get): appengine.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetDomainMapping (appengine.projects.locations.applications.domainMappings.get)",
+        () => probe("GetDomainMapping", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:appengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListApplicationAuthorizedCertificates (appengine.projects.locations.applications.authorizedCertificates.list): appengine.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListApplicationAuthorizedCertificates (appengine.projects.locations.applications.authorizedCertificates.list)",
+        () => probe("ListApplicationAuthorizedCertificates", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:appengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListApplicationAuthorizedDomains (appengine.projects.locations.applications.authorizedDomains.list): appengine.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListApplicationAuthorizedDomains (appengine.projects.locations.applications.authorizedDomains.list)",
+        () => probe("ListApplicationAuthorizedDomains", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:appengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListApplicationDomainMappings (appengine.projects.locations.applications.domainMappings.list): appengine.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListApplicationDomainMappings (appengine.projects.locations.applications.domainMappings.list)",
+        () => probe("ListApplicationDomainMappings", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:appengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

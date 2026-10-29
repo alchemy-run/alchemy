@@ -53,6 +53,9 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "securitycenter.googleapis.com",
+            });
             const host = yield* SecurityCenterGeneratedHost;
             return { uri: host.uri };
           }),
@@ -65,107 +68,167 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("BigQueryExport", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBigQueryExport@BigQueryExport (securitycenter.projects.bigQueryExports.get): securitycenter.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetBigQueryExport@BigQueryExport (securitycenter.projects.bigQueryExports.get): BigQueryExport: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("FolderBigQueryExport", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBigQueryExport@FolderBigQueryExport (securitycenter.folders.bigQueryExports.get): securitycenter.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetBigQueryExport@FolderBigQueryExport (securitycenter.folders.bigQueryExports.get): FolderBigQueryExport: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("FolderMuteConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetMuteConfig@FolderMuteConfig (securitycenter.folders.muteConfigs.get): securitycenter.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetMuteConfig@FolderMuteConfig (securitycenter.folders.muteConfigs.get): FolderMuteConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("MuteConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetMuteConfig@MuteConfig (securitycenter.projects.muteConfigs.get): securitycenter.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetMuteConfig@MuteConfig (securitycenter.projects.muteConfigs.get): MuteConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("OrganizationBigQueryExport", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBigQueryExport@OrganizationBigQueryExport (securitycenter.organizations.bigQueryExports.get): securitycenter.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetBigQueryExport@OrganizationBigQueryExport (securitycenter.organizations.bigQueryExports.get): OrganizationBigQueryExport: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("OrganizationMuteConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetMuteConfig@OrganizationMuteConfig (securitycenter.organizations.muteConfigs.get): securitycenter.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetMuteConfig@OrganizationMuteConfig (securitycenter.organizations.muteConfigs.get): OrganizationMuteConfig: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider.skip(
-        "BulkFindingMute (securitycenter.projects.findings.bulkMute): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "BulkFindingMute (securitycenter.projects.findings.bulkMute)",
+        () => probe("BulkFindingMute", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteMuteConfig (securitycenter.projects.locations.muteConfigs.delete): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "DeleteMuteConfig (securitycenter.projects.locations.muteConfigs.delete)",
+        () => probe("DeleteMuteConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GroupAsset (securitycenter.projects.assets.group): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GroupAsset (securitycenter.projects.assets.group)",
+        () => probe("GroupAsset", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GroupSourceFinding (securitycenter.projects.sources.findings.group): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GroupSourceFinding (securitycenter.projects.sources.findings.group)",
+        () => probe("GroupSourceFinding", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAssets (securitycenter.projects.assets.list): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListAssets (securitycenter.projects.assets.list)",
+        () => probe("ListAssets", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListBigQueryExports (securitycenter.projects.bigQueryExports.list): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListBigQueryExports (securitycenter.projects.bigQueryExports.list)",
+        () => probe("ListBigQueryExports", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListMuteConfigs (securitycenter.projects.muteConfigs.list): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListMuteConfigs (securitycenter.projects.muteConfigs.list)",
+        () => probe("ListMuteConfigs", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSourceFindings (securitycenter.projects.sources.findings.list): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListSourceFindings (securitycenter.projects.sources.findings.list)",
+        () => probe("ListSourceFindings", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSources (securitycenter.projects.sources.list): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListSources (securitycenter.projects.sources.list)",
+        () => probe("ListSources", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchMuteConfig (securitycenter.projects.locations.muteConfigs.patch): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "PatchMuteConfig (securitycenter.projects.locations.muteConfigs.patch)",
+        () => probe("PatchMuteConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchSourceFinding (securitycenter.projects.sources.findings.patch): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "PatchSourceFinding (securitycenter.projects.sources.findings.patch)",
+        () => probe("PatchSourceFinding", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchSourceFindingExternalSystem (securitycenter.projects.sources.findings.externalSystems.patch): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "PatchSourceFindingExternalSystem (securitycenter.projects.sources.findings.externalSystems.patch)",
+        () => probe("PatchSourceFindingExternalSystem", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SetFindingMute (securitycenter.projects.sources.findings.setMute): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "SetFindingMute (securitycenter.projects.sources.findings.setMute)",
+        () => probe("SetFindingMute", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SetFindingState (securitycenter.projects.sources.findings.setState): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "SetFindingState (securitycenter.projects.sources.findings.setState)",
+        () => probe("SetFindingState", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UpdateFindingSecurityMarks (securitycenter.projects.sources.findings.updateSecurityMarks): securitycenter.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "UpdateFindingSecurityMarks (securitycenter.projects.sources.findings.updateSecurityMarks)",
+        () => probe("UpdateFindingSecurityMarks", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,84 @@ export default class AppEngineGeneratedHost extends GCP.Function<AppEngineGenera
   "AppEngineGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.AppEngine.DebugInstance();
+    const p1 = yield* GCP.AppEngine.ExportVersionAppImage();
+    const p2 = yield* GCP.AppEngine.GetAuthorizedCertificate();
+    const p3 = yield* GCP.AppEngine.GetDomainMapping();
+    const p4 = yield* GCP.AppEngine.ListApplicationAuthorizedCertificates();
+    const p5 = yield* GCP.AppEngine.ListApplicationAuthorizedDomains();
+    const p6 = yield* GCP.AppEngine.ListApplicationDomainMappings();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        DebugInstance: probeOutcome(
+          Retry.none(
+            p0({
+              locationsId: "alchemy-missing",
+              versionsId: "alchemy-missing",
+              instancesId: "alchemy-missing",
+              servicesId: "alchemy-missing",
+              applicationsId: "alchemy-missing",
+            } as never),
+          ),
+        ),
+        ExportVersionAppImage: probeOutcome(
+          Retry.none(
+            p1({
+              versionsId: "alchemy-missing",
+              servicesId: "alchemy-missing",
+              locationsId: "alchemy-missing",
+              applicationsId: "alchemy-missing",
+            } as never),
+          ),
+        ),
+        GetAuthorizedCertificate: probeOutcome(
+          Retry.none(
+            p2({
+              locationsId: "alchemy-missing",
+              applicationsId: "alchemy-missing",
+              authorizedCertificatesId: "alchemy-missing",
+            } as never),
+          ),
+        ),
+        GetDomainMapping: probeOutcome(
+          Retry.none(
+            p3({
+              locationsId: "alchemy-missing",
+              applicationsId: "alchemy-missing",
+              domainMappingsId: "alchemy-missing",
+            } as never),
+          ),
+        ),
+        ListApplicationAuthorizedCertificates: probeOutcome(
+          Retry.none(
+            p4({ applicationsId: "alchemy-missing", locationsId: "alchemy-missing" } as never),
+          ),
+        ),
+        ListApplicationAuthorizedDomains: probeOutcome(
+          Retry.none(
+            p5({ applicationsId: "alchemy-missing", locationsId: "alchemy-missing" } as never),
+          ),
+        ),
+        ListApplicationDomainMappings: probeOutcome(
+          Retry.none(
+            p6({ locationsId: "alchemy-missing", applicationsId: "alchemy-missing" } as never),
+          ),
+        ),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.AppEngine.DebugInstanceHttp,
+          GCP.AppEngine.ExportVersionAppImageHttp,
+          GCP.AppEngine.GetAuthorizedCertificateHttp,
+          GCP.AppEngine.GetDomainMappingHttp,
+          GCP.AppEngine.ListApplicationAuthorizedCertificatesHttp,
+          GCP.AppEngine.ListApplicationAuthorizedDomainsHttp,
+          GCP.AppEngine.ListApplicationDomainMappingsHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

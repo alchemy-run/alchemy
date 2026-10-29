@@ -17,8 +17,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "apphub.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "apphub.googleapis.com"
+    ]
   }
 }

@@ -53,6 +53,9 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "cloudidentity.googleapis.com",
+            });
             const host = yield* CloudIdentityGeneratedHost;
             return { uri: host.uri };
           }),

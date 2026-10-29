@@ -14,8 +14,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "metastore.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "metastore.googleapis.com"
+    ]
   }
 }

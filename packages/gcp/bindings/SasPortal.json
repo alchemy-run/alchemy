@@ -20,8 +20,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "sasportal.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "sasportal.googleapis.com"
+    ]
   }
 }

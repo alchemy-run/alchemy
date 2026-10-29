@@ -53,6 +53,9 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "contactcenteraiplatform.googleapis.com",
+            });
             const host = yield* ContactCenterAIPlatformGeneratedHost;
             return { uri: host.uri };
           }),
@@ -65,16 +68,20 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ContactCenter", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetContactCenter (contactcenteraiplatform.projects.locations.contactCenters.get): contactcenteraiplatform.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetContactCenter (contactcenteraiplatform.projects.locations.contactCenters.get): ContactCenter: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider.skip(
-        "ListContactCenters (contactcenteraiplatform.projects.locations.contactCenters.list): contactcenteraiplatform.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListContactCenters (contactcenteraiplatform.projects.locations.contactCenters.list)",
+        () => probe("ListContactCenters", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenteraiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

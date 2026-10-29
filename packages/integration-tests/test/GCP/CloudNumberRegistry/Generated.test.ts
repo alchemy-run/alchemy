@@ -53,6 +53,9 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "cloudnumberregistry.googleapis.com",
+            });
             const host = yield* CloudNumberRegistryGeneratedHost;
             return { uri: host.uri };
           }),
@@ -65,76 +68,104 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("CustomRange", { concurrent: true }, () => {
-      test.provider.skip(
-        "FindCustomRangeFreeIpRanges (cloudnumberregistry.projects.locations.customRanges.findFreeIpRanges): cloudnumberregistry.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "FindCustomRangeFreeIpRanges (cloudnumberregistry.projects.locations.customRanges.findFreeIpRanges): CustomRange: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetCustomRange (cloudnumberregistry.projects.locations.customRanges.get): cloudnumberregistry.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetCustomRange (cloudnumberregistry.projects.locations.customRanges.get): CustomRange: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("IpamAdminScope", { concurrent: true }, () => {
-      test.provider.skip(
-        "CleanupIpamAdminScope (cloudnumberregistry.projects.locations.ipamAdminScopes.cleanup): cloudnumberregistry.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "CleanupIpamAdminScope (cloudnumberregistry.projects.locations.ipamAdminScopes.cleanup): IpamAdminScope: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "DisableIpamAdminScope (cloudnumberregistry.projects.locations.ipamAdminScopes.disable): cloudnumberregistry.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "DisableIpamAdminScope (cloudnumberregistry.projects.locations.ipamAdminScopes.disable): IpamAdminScope: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetIpamAdminScope (cloudnumberregistry.projects.locations.ipamAdminScopes.get): cloudnumberregistry.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetIpamAdminScope (cloudnumberregistry.projects.locations.ipamAdminScopes.get): IpamAdminScope: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider.skip(
-        "CheckIpamAdminScopeAvailability (cloudnumberregistry.projects.locations.ipamAdminScopes.checkAvailability): cloudnumberregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "CheckIpamAdminScopeAvailability (cloudnumberregistry.projects.locations.ipamAdminScopes.checkAvailability)",
+        () => probe("CheckIpamAdminScopeAvailability", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudnumberregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetDiscoveredRange (cloudnumberregistry.projects.locations.discoveredRanges.get): cloudnumberregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetDiscoveredRange (cloudnumberregistry.projects.locations.discoveredRanges.get)",
+        () => probe("GetDiscoveredRange", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudnumberregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListCustomRanges (cloudnumberregistry.projects.locations.customRanges.list): cloudnumberregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListCustomRanges (cloudnumberregistry.projects.locations.customRanges.list)",
+        () => probe("ListCustomRanges", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudnumberregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDiscoveredRanges (cloudnumberregistry.projects.locations.discoveredRanges.list): cloudnumberregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListDiscoveredRanges (cloudnumberregistry.projects.locations.discoveredRanges.list)",
+        () => probe("ListDiscoveredRanges", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudnumberregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListIpamAdminScopes (cloudnumberregistry.projects.locations.ipamAdminScopes.list): cloudnumberregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListIpamAdminScopes (cloudnumberregistry.projects.locations.ipamAdminScopes.list)",
+        () => probe("ListIpamAdminScopes", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudnumberregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListRealms (cloudnumberregistry.projects.locations.realms.list): cloudnumberregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListRealms (cloudnumberregistry.projects.locations.realms.list)",
+        () => probe("ListRealms", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudnumberregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListRegistryBooks (cloudnumberregistry.projects.locations.registryBooks.list): cloudnumberregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListRegistryBooks (cloudnumberregistry.projects.locations.registryBooks.list)",
+        () => probe("ListRegistryBooks", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudnumberregistry", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("Realm", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetRealm (cloudnumberregistry.projects.locations.realms.get): cloudnumberregistry.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetRealm (cloudnumberregistry.projects.locations.realms.get): Realm: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("RegistryBook", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetRegistryBook (cloudnumberregistry.projects.locations.registryBooks.get): cloudnumberregistry.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetRegistryBook (cloudnumberregistry.projects.locations.registryBooks.get): RegistryBook: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SearchRegistryBookIpResources (cloudnumberregistry.projects.locations.registryBooks.searchIpResources): cloudnumberregistry.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "SearchRegistryBookIpResources (cloudnumberregistry.projects.locations.registryBooks.searchIpResources): RegistryBook: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

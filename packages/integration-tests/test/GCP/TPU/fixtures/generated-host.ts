@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,38 @@ export default class TPUGeneratedHost extends GCP.Function<TPUGeneratedHost>()(
   "TPUGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.TPU.GetAcceleratorType();
+    const p1 = yield* GCP.TPU.GetRuntimeVersion();
+    const p2 = yield* GCP.TPU.ListAcceleratorTypes();
+    const p3 = yield* GCP.TPU.ListNodes();
+    const p4 = yield* GCP.TPU.ListQueuedResources();
+    const p5 = yield* GCP.TPU.ListRuntimeVersions();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        GetAcceleratorType: probeOutcome(
+          Retry.none(p0({ acceleratorType: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetRuntimeVersion: probeOutcome(
+          Retry.none(p1({ runtimeVersion: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ListAcceleratorTypes: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
+        ListNodes: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        ListQueuedResources: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListRuntimeVersions: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.TPU.GetAcceleratorTypeHttp,
+          GCP.TPU.GetRuntimeVersionHttp,
+          GCP.TPU.ListAcceleratorTypesHttp,
+          GCP.TPU.ListNodesHttp,
+          GCP.TPU.ListQueuedResourcesHttp,
+          GCP.TPU.ListRuntimeVersionsHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

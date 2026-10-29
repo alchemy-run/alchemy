@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,77 @@ export default class AgentRegistryGeneratedHost extends GCP.Function<AgentRegist
   "AgentRegistryGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.AgentRegistry.CreateService();
+    const p1 = yield* GCP.AgentRegistry.DeleteService();
+    const p2 = yield* GCP.AgentRegistry.FetchBindingAvailable();
+    const p3 = yield* GCP.AgentRegistry.GetAgent();
+    const p4 = yield* GCP.AgentRegistry.GetEndpoint();
+    const p5 = yield* GCP.AgentRegistry.GetMcpServer();
+    const p6 = yield* GCP.AgentRegistry.GetService();
+    const p7 = yield* GCP.AgentRegistry.ListAgents();
+    const p8 = yield* GCP.AgentRegistry.ListBindings();
+    const p9 = yield* GCP.AgentRegistry.ListEndpoints();
+    const p10 = yield* GCP.AgentRegistry.ListMcpServers();
+    const p11 = yield* GCP.AgentRegistry.ListServices();
+    const p12 = yield* GCP.AgentRegistry.PatchService();
+    const p13 = yield* GCP.AgentRegistry.SearchAgent();
+    const p14 = yield* GCP.AgentRegistry.SearchMcpServer();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        CreateService: probeOutcome(
+          Retry.none(
+            p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        DeleteService: probeOutcome(
+          Retry.none(p1({ service: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        FetchBindingAvailable: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
+        GetAgent: probeOutcome(
+          Retry.none(p3({ agent: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetEndpoint: probeOutcome(
+          Retry.none(p4({ endpoint: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetMcpServer: probeOutcome(
+          Retry.none(p5({ mcpServer: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetService: probeOutcome(
+          Retry.none(p6({ service: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ListAgents: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListBindings: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListEndpoints: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListMcpServers: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListServices: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
+        PatchService: probeOutcome(
+          Retry.none(p12({ service: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        SearchAgent: probeOutcome(Retry.none(p13({ location: "us-central1" } as never))),
+        SearchMcpServer: probeOutcome(Retry.none(p14({ location: "us-central1" } as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.AgentRegistry.CreateServiceHttp,
+          GCP.AgentRegistry.DeleteServiceHttp,
+          GCP.AgentRegistry.FetchBindingAvailableHttp,
+          GCP.AgentRegistry.GetAgentHttp,
+          GCP.AgentRegistry.GetEndpointHttp,
+          GCP.AgentRegistry.GetMcpServerHttp,
+          GCP.AgentRegistry.GetServiceHttp,
+          GCP.AgentRegistry.ListAgentsHttp,
+          GCP.AgentRegistry.ListBindingsHttp,
+          GCP.AgentRegistry.ListEndpointsHttp,
+          GCP.AgentRegistry.ListMcpServersHttp,
+          GCP.AgentRegistry.ListServicesHttp,
+          GCP.AgentRegistry.PatchServiceHttp,
+          GCP.AgentRegistry.SearchAgentHttp,
+          GCP.AgentRegistry.SearchMcpServerHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

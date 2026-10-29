@@ -53,6 +53,9 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "agentregistry.googleapis.com",
+            });
             const host = yield* AgentRegistryGeneratedHost;
             return { uri: host.uri };
           }),
@@ -65,72 +68,132 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Binding", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBinding (agentregistry.projects.locations.bindings.get): agentregistry.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetBinding (agentregistry.projects.locations.bindings.get): Binding: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider.skip(
-        "CreateService (agentregistry.projects.locations.services.create): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "CreateService (agentregistry.projects.locations.services.create)",
+        () => probe("CreateService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteService (agentregistry.projects.locations.services.delete): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "DeleteService (agentregistry.projects.locations.services.delete)",
+        () => probe("DeleteService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "FetchBindingAvailable (agentregistry.projects.locations.bindings.fetchAvailable): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "FetchBindingAvailable (agentregistry.projects.locations.bindings.fetchAvailable)",
+        () => probe("FetchBindingAvailable", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAgent (agentregistry.projects.locations.agents.get): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetAgent (agentregistry.projects.locations.agents.get)",
+        () => probe("GetAgent", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetEndpoint (agentregistry.projects.locations.endpoints.get): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetEndpoint (agentregistry.projects.locations.endpoints.get)",
+        () => probe("GetEndpoint", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetMcpServer (agentregistry.projects.locations.mcpServers.get): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetMcpServer (agentregistry.projects.locations.mcpServers.get)",
+        () => probe("GetMcpServer", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetService (agentregistry.projects.locations.services.get): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetService (agentregistry.projects.locations.services.get)",
+        () => probe("GetService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAgents (agentregistry.projects.locations.agents.list): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListAgents (agentregistry.projects.locations.agents.list)",
+        () => probe("ListAgents", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListBindings (agentregistry.projects.locations.bindings.list): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListBindings (agentregistry.projects.locations.bindings.list)",
+        () => probe("ListBindings", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListEndpoints (agentregistry.projects.locations.endpoints.list): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListEndpoints (agentregistry.projects.locations.endpoints.list)",
+        () => probe("ListEndpoints", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListMcpServers (agentregistry.projects.locations.mcpServers.list): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListMcpServers (agentregistry.projects.locations.mcpServers.list)",
+        () => probe("ListMcpServers", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListServices (agentregistry.projects.locations.services.list): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListServices (agentregistry.projects.locations.services.list)",
+        () => probe("ListServices", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchService (agentregistry.projects.locations.services.patch): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "PatchService (agentregistry.projects.locations.services.patch)",
+        () => probe("PatchService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SearchAgent (agentregistry.projects.locations.agents.search): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "SearchAgent (agentregistry.projects.locations.agents.search)",
+        () => probe("SearchAgent", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SearchMcpServer (agentregistry.projects.locations.mcpServers.search): agentregistry.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "SearchMcpServer (agentregistry.projects.locations.mcpServers.search)",
+        () => probe("SearchMcpServer", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

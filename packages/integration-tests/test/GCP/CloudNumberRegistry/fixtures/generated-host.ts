@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,41 @@ export default class CloudNumberRegistryGeneratedHost extends GCP.Function<Cloud
   "CloudNumberRegistryGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.CloudNumberRegistry.CheckIpamAdminScopeAvailability();
+    const p1 = yield* GCP.CloudNumberRegistry.GetDiscoveredRange();
+    const p2 = yield* GCP.CloudNumberRegistry.ListCustomRanges();
+    const p3 = yield* GCP.CloudNumberRegistry.ListDiscoveredRanges();
+    const p4 = yield* GCP.CloudNumberRegistry.ListIpamAdminScopes();
+    const p5 = yield* GCP.CloudNumberRegistry.ListRealms();
+    const p6 = yield* GCP.CloudNumberRegistry.ListRegistryBooks();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        CheckIpamAdminScopeAvailability: probeOutcome(
+          Retry.none(p0({ location: "us-central1" } as never)),
+        ),
+        GetDiscoveredRange: probeOutcome(
+          Retry.none(p1({ discoveredRange: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ListCustomRanges: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
+        ListDiscoveredRanges: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        ListIpamAdminScopes: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListRealms: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListRegistryBooks: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.CloudNumberRegistry.CheckIpamAdminScopeAvailabilityHttp,
+          GCP.CloudNumberRegistry.GetDiscoveredRangeHttp,
+          GCP.CloudNumberRegistry.ListCustomRangesHttp,
+          GCP.CloudNumberRegistry.ListDiscoveredRangesHttp,
+          GCP.CloudNumberRegistry.ListIpamAdminScopesHttp,
+          GCP.CloudNumberRegistry.ListRealmsHttp,
+          GCP.CloudNumberRegistry.ListRegistryBooksHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

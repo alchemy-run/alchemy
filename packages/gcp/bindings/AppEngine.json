@@ -29,8 +29,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "appengine.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "appengine.googleapis.com"
+    ]
   }
 }

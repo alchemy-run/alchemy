@@ -53,6 +53,9 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "osconfig.googleapis.com",
+            });
             const host = yield* OSConfigGeneratedHost;
             return { uri: host.uri };
           }),
@@ -65,22 +68,22 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("FoldersLocationsGlobalPolicyOrchestrator", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPolicyOrchestrator@FoldersLocationsGlobalPolicyOrchestrator (osconfig.folders.locations.global.policyOrchestrators.get): osconfig.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetPolicyOrchestrator@FoldersLocationsGlobalPolicyOrchestrator (osconfig.folders.locations.global.policyOrchestrators.get): FoldersLocationsGlobalPolicyOrchestrator: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("OrganizationsLocationsGlobalPolicyOrchestrator", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPolicyOrchestrator@OrganizationsLocationsGlobalPolicyOrchestrator (osconfig.organizations.locations.global.policyOrchestrators.get): osconfig.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetPolicyOrchestrator@OrganizationsLocationsGlobalPolicyOrchestrator (osconfig.organizations.locations.global.policyOrchestrators.get): OrganizationsLocationsGlobalPolicyOrchestrator: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ProjectsLocationsGlobalPolicyOrchestrator", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPolicyOrchestrator@ProjectsLocationsGlobalPolicyOrchestrator (osconfig.projects.locations.global.policyOrchestrators.get): osconfig.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetPolicyOrchestrator@ProjectsLocationsGlobalPolicyOrchestrator (osconfig.projects.locations.global.policyOrchestrators.get): ProjectsLocationsGlobalPolicyOrchestrator: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

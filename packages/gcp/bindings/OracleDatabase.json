@@ -38,8 +38,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "oracledatabase.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "oracledatabase.googleapis.com"
+    ]
   }
 }

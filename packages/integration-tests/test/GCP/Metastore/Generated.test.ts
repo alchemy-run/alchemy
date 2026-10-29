@@ -53,6 +53,9 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "metastore.googleapis.com",
+            });
             const host = yield* MetastoreGeneratedHost;
             return { uri: host.uri };
           }),
@@ -65,101 +68,109 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Federation", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetFederation (metastore.projects.locations.federations.get): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetFederation (metastore.projects.locations.federations.get): Federation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider.skip(
-        "ListFederations (metastore.projects.locations.federations.list): metastore.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListFederations (metastore.projects.locations.federations.list)",
+        () => probe("ListFederations", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListServices (metastore.projects.locations.services.list): metastore.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListServices (metastore.projects.locations.services.list)",
+        () => probe("ListServices", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("Service", { concurrent: true }, () => {
-      test.provider.skip(
-        "AlterServiceLocation (metastore.projects.locations.services.alterLocation): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "AlterServiceLocation (metastore.projects.locations.services.alterLocation): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "AlterServiceTableProperties (metastore.projects.locations.services.alterTableProperties): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "AlterServiceTableProperties (metastore.projects.locations.services.alterTableProperties): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CancelServiceMigration (metastore.projects.locations.services.cancelMigration): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "CancelServiceMigration (metastore.projects.locations.services.cancelMigration): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CompleteServiceMigration (metastore.projects.locations.services.completeMigration): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "CompleteServiceMigration (metastore.projects.locations.services.completeMigration): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "CreateServiceMetadataImport (metastore.projects.locations.services.metadataImports.create): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "CreateServiceMetadataImport (metastore.projects.locations.services.metadataImports.create): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "DeleteServiceMigrationExecution (metastore.projects.locations.services.migrationExecutions.delete): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "DeleteServiceMigrationExecution (metastore.projects.locations.services.migrationExecutions.delete): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ExportServiceMetadata (metastore.projects.locations.services.exportMetadata): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "ExportServiceMetadata (metastore.projects.locations.services.exportMetadata): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetService (metastore.projects.locations.services.get): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetService (metastore.projects.locations.services.get): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetServiceMetadataImport (metastore.projects.locations.services.metadataImports.get): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetServiceMetadataImport (metastore.projects.locations.services.metadataImports.get): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetServiceMigrationExecution (metastore.projects.locations.services.migrationExecutions.get): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetServiceMigrationExecution (metastore.projects.locations.services.migrationExecutions.get): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListServiceBackups (metastore.projects.locations.services.backups.list): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "ListServiceBackups (metastore.projects.locations.services.backups.list): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListServiceMetadataImports (metastore.projects.locations.services.metadataImports.list): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "ListServiceMetadataImports (metastore.projects.locations.services.metadataImports.list): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListServiceMigrationExecutions (metastore.projects.locations.services.migrationExecutions.list): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "ListServiceMigrationExecutions (metastore.projects.locations.services.migrationExecutions.list): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "MoveServiceTableToDatabase (metastore.projects.locations.services.moveTableToDatabase): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "MoveServiceTableToDatabase (metastore.projects.locations.services.moveTableToDatabase): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "PatchServiceMetadataImport (metastore.projects.locations.services.metadataImports.patch): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "PatchServiceMetadataImport (metastore.projects.locations.services.metadataImports.patch): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "QueryServiceMetadata (metastore.projects.locations.services.queryMetadata): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "QueryServiceMetadata (metastore.projects.locations.services.queryMetadata): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RestoreService (metastore.projects.locations.services.restore): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "RestoreService (metastore.projects.locations.services.restore): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StartServiceMigration (metastore.projects.locations.services.startMigration): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "StartServiceMigration (metastore.projects.locations.services.startMigration): Service: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ServicesBackup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBackup (metastore.projects.locations.services.backups.get): metastore.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetBackup (metastore.projects.locations.services.backups.get): ServicesBackup: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

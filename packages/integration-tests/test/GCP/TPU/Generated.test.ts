@@ -53,6 +53,7 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", { service: "tpu.googleapis.com" });
             const host = yield* TPUGeneratedHost;
             return { uri: host.uri };
           }),
@@ -65,50 +66,74 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Node", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetNodeGuestAttributes (tpu.projects.locations.nodes.getGuestAttributes): tpu.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetNodeGuestAttributes (tpu.projects.locations.nodes.getGuestAttributes): Node: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StartNode (tpu.projects.locations.nodes.start): tpu.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "StartNode (tpu.projects.locations.nodes.start): Node: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "StopNode (tpu.projects.locations.nodes.stop): tpu.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "StopNode (tpu.projects.locations.nodes.stop): Node: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAcceleratorType (tpu.projects.locations.acceleratorTypes.get): tpu.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetAcceleratorType (tpu.projects.locations.acceleratorTypes.get)",
+        () => probe("GetAcceleratorType", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:tpu", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetRuntimeVersion (tpu.projects.locations.runtimeVersions.get): tpu.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetRuntimeVersion (tpu.projects.locations.runtimeVersions.get)",
+        () => probe("GetRuntimeVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:tpu", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAcceleratorTypes (tpu.projects.locations.acceleratorTypes.list): tpu.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListAcceleratorTypes (tpu.projects.locations.acceleratorTypes.list)",
+        () => probe("ListAcceleratorTypes", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:tpu", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListNodes (tpu.projects.locations.nodes.list): tpu.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListNodes (tpu.projects.locations.nodes.list)",
+        () => probe("ListNodes", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:tpu", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListQueuedResources (tpu.projects.locations.queuedResources.list): tpu.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListQueuedResources (tpu.projects.locations.queuedResources.list)",
+        () => probe("ListQueuedResources", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:tpu", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListRuntimeVersions (tpu.projects.locations.runtimeVersions.list): tpu.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListRuntimeVersions (tpu.projects.locations.runtimeVersions.list)",
+        () => probe("ListRuntimeVersions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:tpu", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("QueuedResource", { concurrent: true }, () => {
-      test.provider.skip(
-        "ResetQueuedResource (tpu.projects.locations.queuedResources.reset): tpu.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "ResetQueuedResource (tpu.projects.locations.queuedResources.reset): QueuedResource: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

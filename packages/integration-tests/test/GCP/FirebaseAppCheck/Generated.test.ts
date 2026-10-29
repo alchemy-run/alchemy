@@ -53,6 +53,9 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "firebaseappcheck.googleapis.com",
+            });
             const host = yield* FirebaseAppCheckGeneratedHost;
             return { uri: host.uri };
           }),
@@ -65,110 +68,202 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AppsDebugToken", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDebugToken (firebaseappcheck.projects.apps.debugTokens.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetDebugToken (firebaseappcheck.projects.apps.debugTokens.get): AppsDebugToken: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider.skip(
-        "BatchAppAttestConfigGet (firebaseappcheck.projects.apps.appAttestConfig.batchGet): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "BatchAppAttestConfigGet (firebaseappcheck.projects.apps.appAttestConfig.batchGet)",
+        () => probe("BatchAppAttestConfigGet", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "BatchDeviceCheckConfigGet (firebaseappcheck.projects.apps.deviceCheckConfig.batchGet): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "BatchDeviceCheckConfigGet (firebaseappcheck.projects.apps.deviceCheckConfig.batchGet)",
+        () => probe("BatchDeviceCheckConfigGet", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "BatchPlayIntegrityConfigGet (firebaseappcheck.projects.apps.playIntegrityConfig.batchGet): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "BatchPlayIntegrityConfigGet (firebaseappcheck.projects.apps.playIntegrityConfig.batchGet)",
+        () => probe("BatchPlayIntegrityConfigGet", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "BatchRecaptchaEnterpriseConfigGet (firebaseappcheck.projects.apps.recaptchaEnterpriseConfig.batchGet): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "BatchRecaptchaEnterpriseConfigGet (firebaseappcheck.projects.apps.recaptchaEnterpriseConfig.batchGet)",
+        () => probe("BatchRecaptchaEnterpriseConfigGet", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "BatchRecaptchaV3ConfigGet (firebaseappcheck.projects.apps.recaptchaV3Config.batchGet): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "BatchRecaptchaV3ConfigGet (firebaseappcheck.projects.apps.recaptchaV3Config.batchGet)",
+        () => probe("BatchRecaptchaV3ConfigGet", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "BatchResourcePolicyUpdate (firebaseappcheck.projects.services.resourcePolicies.batchUpdate): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "BatchResourcePolicyUpdate (firebaseappcheck.projects.services.resourcePolicies.batchUpdate)",
+        () => probe("BatchResourcePolicyUpdate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "BatchServiceUpdate (firebaseappcheck.projects.services.batchUpdate): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "BatchServiceUpdate (firebaseappcheck.projects.services.batchUpdate)",
+        () => probe("BatchServiceUpdate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAppAttestConfig (firebaseappcheck.projects.apps.appAttestConfig.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetAppAttestConfig (firebaseappcheck.projects.apps.appAttestConfig.get)",
+        () => probe("GetAppAttestConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAppDeviceCheckConfig (firebaseappcheck.projects.apps.deviceCheckConfig.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetAppDeviceCheckConfig (firebaseappcheck.projects.apps.deviceCheckConfig.get)",
+        () => probe("GetAppDeviceCheckConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAppPlayIntegrityConfig (firebaseappcheck.projects.apps.playIntegrityConfig.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetAppPlayIntegrityConfig (firebaseappcheck.projects.apps.playIntegrityConfig.get)",
+        () => probe("GetAppPlayIntegrityConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAppRecaptchaEnterpriseConfig (firebaseappcheck.projects.apps.recaptchaEnterpriseConfig.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetAppRecaptchaEnterpriseConfig (firebaseappcheck.projects.apps.recaptchaEnterpriseConfig.get)",
+        () => probe("GetAppRecaptchaEnterpriseConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAppRecaptchaV3Config (firebaseappcheck.projects.apps.recaptchaV3Config.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetAppRecaptchaV3Config (firebaseappcheck.projects.apps.recaptchaV3Config.get)",
+        () => probe("GetAppRecaptchaV3Config", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetService (firebaseappcheck.projects.services.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetService (firebaseappcheck.projects.services.get)",
+        () => probe("GetService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAppDebugTokens (firebaseappcheck.projects.apps.debugTokens.list): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListAppDebugTokens (firebaseappcheck.projects.apps.debugTokens.list)",
+        () => probe("ListAppDebugTokens", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListServiceResourcePolicies (firebaseappcheck.projects.services.resourcePolicies.list): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListServiceResourcePolicies (firebaseappcheck.projects.services.resourcePolicies.list)",
+        () => probe("ListServiceResourcePolicies", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListServices (firebaseappcheck.projects.services.list): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListServices (firebaseappcheck.projects.services.list)",
+        () => probe("ListServices", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "MintAppCheckToken (firebaseappcheck.projects.apps.mintAppCheckToken): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "MintAppCheckToken (firebaseappcheck.projects.apps.mintAppCheckToken)",
+        () => probe("MintAppCheckToken", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchAppAttestConfig (firebaseappcheck.projects.apps.appAttestConfig.patch): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "PatchAppAttestConfig (firebaseappcheck.projects.apps.appAttestConfig.patch)",
+        () => probe("PatchAppAttestConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchAppDeviceCheckConfig (firebaseappcheck.projects.apps.deviceCheckConfig.patch): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "PatchAppDeviceCheckConfig (firebaseappcheck.projects.apps.deviceCheckConfig.patch)",
+        () => probe("PatchAppDeviceCheckConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchAppPlayIntegrityConfig (firebaseappcheck.projects.apps.playIntegrityConfig.patch): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "PatchAppPlayIntegrityConfig (firebaseappcheck.projects.apps.playIntegrityConfig.patch)",
+        () => probe("PatchAppPlayIntegrityConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchAppRecaptchaEnterpriseConfig (firebaseappcheck.projects.apps.recaptchaEnterpriseConfig.patch): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "PatchAppRecaptchaEnterpriseConfig (firebaseappcheck.projects.apps.recaptchaEnterpriseConfig.patch)",
+        () => probe("PatchAppRecaptchaEnterpriseConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchAppRecaptchaV3Config (firebaseappcheck.projects.apps.recaptchaV3Config.patch): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "PatchAppRecaptchaV3Config (firebaseappcheck.projects.apps.recaptchaV3Config.patch)",
+        () => probe("PatchAppRecaptchaV3Config", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchService (firebaseappcheck.projects.services.patch): firebaseappcheck.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "PatchService (firebaseappcheck.projects.services.patch)",
+        () => probe("PatchService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappcheck", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ServicesResourcePolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetResourcePolicy (firebaseappcheck.projects.services.resourcePolicies.get): firebaseappcheck.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetResourcePolicy (firebaseappcheck.projects.services.resourcePolicies.get): ServicesResourcePolicy: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

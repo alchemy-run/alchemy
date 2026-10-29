@@ -28,8 +28,10 @@
     },
     "untestable": {
       "Model": "a custom model trains for hours from a prepared dataset (GCP_TEST_TRANSLATE_MODEL_DATASET)",
-      "GlossariesGlossaryEntry": "needs an existing glossary built from a CSV in Cloud Storage (GCP_TEST_TRANSLATE_GLOSSARY)",
-      "*": "translation.googleapis.com is not enabled on the testing project"
-    }
+      "GlossariesGlossaryEntry": "needs an existing glossary built from a CSV in Cloud Storage (GCP_TEST_TRANSLATE_GLOSSARY)"
+    },
+    "enable": [
+      "translation.googleapis.com"
+    ]
   }
 }

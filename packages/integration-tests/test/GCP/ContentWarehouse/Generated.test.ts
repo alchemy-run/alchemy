@@ -53,6 +53,9 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "contentwarehouse.googleapis.com",
+            });
             const host = yield* ContentWarehouseGeneratedHost;
             return { uri: host.uri };
           }),
@@ -65,60 +68,84 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Document", { concurrent: true }, () => {
-      test.provider.skip(
-        "CreateDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.create): contentwarehouse.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "CreateDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.create): Document: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "DeleteDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.delete): contentwarehouse.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "DeleteDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.delete): Document: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "FetchDocumentAcl (contentwarehouse.projects.locations.documents.fetchAcl): contentwarehouse.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "FetchDocumentAcl (contentwarehouse.projects.locations.documents.fetchAcl): Document: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "LinkedDocumentSources (contentwarehouse.projects.locations.documents.linkedSources): contentwarehouse.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "LinkedDocumentSources (contentwarehouse.projects.locations.documents.linkedSources): Document: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "LinkedDocumentTargets (contentwarehouse.projects.locations.documents.linkedTargets): contentwarehouse.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "LinkedDocumentTargets (contentwarehouse.projects.locations.documents.linkedTargets): Document: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "LockDocument (contentwarehouse.projects.locations.documents.lock): contentwarehouse.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "LockDocument (contentwarehouse.projects.locations.documents.lock): Document: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "SetDocumentAcl (contentwarehouse.projects.locations.documents.setAcl): contentwarehouse.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "SetDocumentAcl (contentwarehouse.projects.locations.documents.setAcl): Document: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider.skip(
-        "FetchProjectAcl (contentwarehouse.projects.fetchAcl): contentwarehouse.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "FetchProjectAcl (contentwarehouse.projects.fetchAcl)",
+        () => probe("FetchProjectAcl", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDocumentSchemas (contentwarehouse.projects.locations.documentSchemas.list): contentwarehouse.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListDocumentSchemas (contentwarehouse.projects.locations.documentSchemas.list)",
+        () => probe("ListDocumentSchemas", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListRuleSets (contentwarehouse.projects.locations.ruleSets.list): contentwarehouse.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListRuleSets (contentwarehouse.projects.locations.ruleSets.list)",
+        () => probe("ListRuleSets", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSynonymSets (contentwarehouse.projects.locations.synonymSets.list): contentwarehouse.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListSynonymSets (contentwarehouse.projects.locations.synonymSets.list)",
+        () => probe("ListSynonymSets", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SearchDocument (contentwarehouse.projects.locations.documents.search): contentwarehouse.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "SearchDocument (contentwarehouse.projects.locations.documents.search)",
+        () => probe("SearchDocument", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SetProjectAcl (contentwarehouse.projects.setAcl): contentwarehouse.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "SetProjectAcl (contentwarehouse.projects.setAcl)",
+        () => probe("SetProjectAcl", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

@@ -8,9 +8,10 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "firebaseappdistribution.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "firebaseappdistribution.googleapis.com"
+    ]
   },
   "permissionService": "firebaseappdistro",
   "permissionCollections": {

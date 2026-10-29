@@ -8,8 +8,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "rapidmigrationassessment.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "rapidmigrationassessment.googleapis.com"
+    ]
   }
 }

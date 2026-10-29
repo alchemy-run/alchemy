@@ -11,8 +11,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "gmailpostmastertools.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "gmailpostmastertools.googleapis.com"
+    ]
   }
 }

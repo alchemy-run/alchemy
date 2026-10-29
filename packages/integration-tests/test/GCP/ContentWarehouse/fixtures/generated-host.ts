@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,34 @@ export default class ContentWarehouseGeneratedHost extends GCP.Function<ContentW
   "ContentWarehouseGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.ContentWarehouse.FetchProjectAcl();
+    const p1 = yield* GCP.ContentWarehouse.ListDocumentSchemas();
+    const p2 = yield* GCP.ContentWarehouse.ListRuleSets();
+    const p3 = yield* GCP.ContentWarehouse.ListSynonymSets();
+    const p4 = yield* GCP.ContentWarehouse.SearchDocument();
+    const p5 = yield* GCP.ContentWarehouse.SetProjectAcl();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        FetchProjectAcl: probeOutcome(Retry.none(p0({} as never))),
+        ListDocumentSchemas: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        ListRuleSets: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
+        ListSynonymSets: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+        SearchDocument: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        SetProjectAcl: probeOutcome(Retry.none(p5({} as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.ContentWarehouse.FetchProjectAclHttp,
+          GCP.ContentWarehouse.ListDocumentSchemasHttp,
+          GCP.ContentWarehouse.ListRuleSetsHttp,
+          GCP.ContentWarehouse.ListSynonymSetsHttp,
+          GCP.ContentWarehouse.SearchDocumentHttp,
+          GCP.ContentWarehouse.SetProjectAclHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

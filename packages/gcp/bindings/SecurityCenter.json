@@ -50,8 +50,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "securitycenter.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "securitycenter.googleapis.com"
+    ]
   }
 }

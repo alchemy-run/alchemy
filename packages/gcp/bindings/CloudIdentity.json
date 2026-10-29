@@ -23,8 +23,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "cloudidentity.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "cloudidentity.googleapis.com"
+    ]
   }
 }

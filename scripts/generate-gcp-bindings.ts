@@ -215,6 +215,12 @@ interface ProbeConfig {
    * every binding of the service.
    */
   untestable?: Record<string, string>;
+  /**
+   * APIs the probe stack enables before its host deploys, for services the
+   * testing project doesn't enable by default (`appengine.googleapis.com`).
+   * They stay enabled on destroy: other stacks may use them.
+   */
+  enable?: string[];
   /** Binding name → the request it is called with, replacing the placeholder. */
   args?: Record<string, string>;
   /** Binding name → why it isn't called (a `test.skip`). */
@@ -1636,7 +1642,7 @@ ${config.probes!.coveredBy ? `// Resource-bound bindings run live in ${config.pr
       yield* sharedStack.destroy();
       const out = yield* sharedStack.deploy(
         Effect.gen(function* () {
-          const host = yield* ${service}GeneratedHost;
+${(config.probes!.enable ?? []).map((api, i) => `          yield* GCP.ServiceUsage.ProjectService("ProbeApi${i}", { service: "${api}" });\n`).join("")}          const host = yield* ${service}GeneratedHost;
           return { uri: host.uri };
         }),
       );

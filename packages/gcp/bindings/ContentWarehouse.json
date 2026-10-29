@@ -17,9 +17,10 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "contentwarehouse.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "contentwarehouse.googleapis.com"
+    ]
   },
   "permissions": {
     "contentwarehouse.projects.fetchAcl": "contentwarehouse.documents.getIamPolicy",

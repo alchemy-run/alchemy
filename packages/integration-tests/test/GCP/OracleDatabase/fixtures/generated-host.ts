@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,101 @@ export default class OracleDatabaseGeneratedHost extends GCP.Function<OracleData
   "OracleDatabaseGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.OracleDatabase.GetDatabase();
+    const p1 = yield* GCP.OracleDatabase.GetPluggableDatabase();
+    const p2 = yield* GCP.OracleDatabase.ListAutonomousDatabaseBackups();
+    const p3 = yield* GCP.OracleDatabase.ListAutonomousDatabaseCharacterSets();
+    const p4 = yield* GCP.OracleDatabase.ListAutonomousDatabases();
+    const p5 = yield* GCP.OracleDatabase.ListAutonomousDbVersions();
+    const p6 = yield* GCP.OracleDatabase.ListCloudExadataInfrastructures();
+    const p7 = yield* GCP.OracleDatabase.ListCloudVmClusters();
+    const p8 = yield* GCP.OracleDatabase.ListDatabaseCharacterSets();
+    const p9 = yield* GCP.OracleDatabase.ListDatabases();
+    const p10 = yield* GCP.OracleDatabase.ListDbSystemInitialStorageSizes();
+    const p11 = yield* GCP.OracleDatabase.ListDbSystems();
+    const p12 = yield* GCP.OracleDatabase.ListDbSystemShapes();
+    const p13 = yield* GCP.OracleDatabase.ListDbVersions();
+    const p14 = yield* GCP.OracleDatabase.ListEntitlements();
+    const p15 = yield* GCP.OracleDatabase.ListExadbVmClusters();
+    const p16 = yield* GCP.OracleDatabase.ListExascaleDbStorageVaults();
+    const p17 = yield* GCP.OracleDatabase.ListGiVersionMinorVersions();
+    const p18 = yield* GCP.OracleDatabase.ListGiVersions();
+    const p19 = yield* GCP.OracleDatabase.ListOdbNetworks();
+    const p20 = yield* GCP.OracleDatabase.ListPluggableDatabases();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        GetDatabase: probeOutcome(
+          Retry.none(p0({ database: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetPluggableDatabase: probeOutcome(
+          Retry.none(
+            p1({ pluggableDatabase: "alchemy-missing", location: "us-central1" } as never),
+          ),
+        ),
+        ListAutonomousDatabaseBackups: probeOutcome(
+          Retry.none(p2({ location: "us-central1" } as never)),
+        ),
+        ListAutonomousDatabaseCharacterSets: probeOutcome(
+          Retry.none(p3({ location: "us-central1" } as never)),
+        ),
+        ListAutonomousDatabases: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListAutonomousDbVersions: probeOutcome(
+          Retry.none(p5({ location: "us-central1" } as never)),
+        ),
+        ListCloudExadataInfrastructures: probeOutcome(
+          Retry.none(p6({ location: "us-central1" } as never)),
+        ),
+        ListCloudVmClusters: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListDatabaseCharacterSets: probeOutcome(
+          Retry.none(p8({ location: "us-central1" } as never)),
+        ),
+        ListDatabases: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListDbSystemInitialStorageSizes: probeOutcome(
+          Retry.none(p10({ location: "us-central1" } as never)),
+        ),
+        ListDbSystems: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
+        ListDbSystemShapes: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
+        ListDbVersions: probeOutcome(Retry.none(p13({ location: "us-central1" } as never))),
+        ListEntitlements: probeOutcome(Retry.none(p14({ location: "us-central1" } as never))),
+        ListExadbVmClusters: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListExascaleDbStorageVaults: probeOutcome(
+          Retry.none(p16({ location: "us-central1" } as never)),
+        ),
+        ListGiVersionMinorVersions: probeOutcome(
+          Retry.none(p17({ giVersion: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ListGiVersions: probeOutcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListOdbNetworks: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
+        ListPluggableDatabases: probeOutcome(Retry.none(p20({ location: "us-central1" } as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.OracleDatabase.GetDatabaseHttp,
+          GCP.OracleDatabase.GetPluggableDatabaseHttp,
+          GCP.OracleDatabase.ListAutonomousDatabaseBackupsHttp,
+          GCP.OracleDatabase.ListAutonomousDatabaseCharacterSetsHttp,
+          GCP.OracleDatabase.ListAutonomousDatabasesHttp,
+          GCP.OracleDatabase.ListAutonomousDbVersionsHttp,
+          GCP.OracleDatabase.ListCloudExadataInfrastructuresHttp,
+          GCP.OracleDatabase.ListCloudVmClustersHttp,
+          GCP.OracleDatabase.ListDatabaseCharacterSetsHttp,
+          GCP.OracleDatabase.ListDatabasesHttp,
+          GCP.OracleDatabase.ListDbSystemInitialStorageSizesHttp,
+          GCP.OracleDatabase.ListDbSystemsHttp,
+          GCP.OracleDatabase.ListDbSystemShapesHttp,
+          GCP.OracleDatabase.ListDbVersionsHttp,
+          GCP.OracleDatabase.ListEntitlementsHttp,
+          GCP.OracleDatabase.ListExadbVmClustersHttp,
+          GCP.OracleDatabase.ListExascaleDbStorageVaultsHttp,
+          GCP.OracleDatabase.ListGiVersionMinorVersionsHttp,
+          GCP.OracleDatabase.ListGiVersionsHttp,
+          GCP.OracleDatabase.ListOdbNetworksHttp,
+          GCP.OracleDatabase.ListPluggableDatabasesHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

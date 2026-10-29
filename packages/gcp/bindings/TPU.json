@@ -15,8 +15,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "tpu.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "tpu.googleapis.com"
+    ]
   }
 }

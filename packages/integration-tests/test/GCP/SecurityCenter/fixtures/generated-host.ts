@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,81 @@ export default class SecurityCenterGeneratedHost extends GCP.Function<SecurityCe
   "SecurityCenterGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.SecurityCenter.BulkFindingMute();
+    const p1 = yield* GCP.SecurityCenter.DeleteMuteConfig();
+    const p2 = yield* GCP.SecurityCenter.GroupAsset();
+    const p3 = yield* GCP.SecurityCenter.GroupSourceFinding();
+    const p4 = yield* GCP.SecurityCenter.ListAssets();
+    const p5 = yield* GCP.SecurityCenter.ListBigQueryExports();
+    const p6 = yield* GCP.SecurityCenter.ListMuteConfigs();
+    const p7 = yield* GCP.SecurityCenter.ListSourceFindings();
+    const p8 = yield* GCP.SecurityCenter.ListSources();
+    const p9 = yield* GCP.SecurityCenter.PatchMuteConfig();
+    const p10 = yield* GCP.SecurityCenter.PatchSourceFinding();
+    const p11 = yield* GCP.SecurityCenter.PatchSourceFindingExternalSystem();
+    const p12 = yield* GCP.SecurityCenter.SetFindingMute();
+    const p13 = yield* GCP.SecurityCenter.SetFindingState();
+    const p14 = yield* GCP.SecurityCenter.UpdateFindingSecurityMarks();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        BulkFindingMute: probeOutcome(Retry.none(p0({} as never))),
+        DeleteMuteConfig: probeOutcome(
+          Retry.none(p1({ muteConfig: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GroupAsset: probeOutcome(Retry.none(p2({} as never))),
+        GroupSourceFinding: probeOutcome(Retry.none(p3({ source: "alchemy-missing" } as never))),
+        ListAssets: probeOutcome(Retry.none(p4({} as never))),
+        ListBigQueryExports: probeOutcome(Retry.none(p5({} as never))),
+        ListMuteConfigs: probeOutcome(Retry.none(p6({} as never))),
+        ListSourceFindings: probeOutcome(Retry.none(p7({ source: "alchemy-missing" } as never))),
+        ListSources: probeOutcome(Retry.none(p8({} as never))),
+        PatchMuteConfig: probeOutcome(
+          Retry.none(p9({ muteConfig: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        PatchSourceFinding: probeOutcome(
+          Retry.none(p10({ source: "alchemy-missing", finding: "alchemy-missing" } as never)),
+        ),
+        PatchSourceFindingExternalSystem: probeOutcome(
+          Retry.none(
+            p11({
+              source: "alchemy-missing",
+              finding: "alchemy-missing",
+              externalSystem: "alchemy-missing",
+            } as never),
+          ),
+        ),
+        SetFindingMute: probeOutcome(
+          Retry.none(p12({ source: "alchemy-missing", finding: "alchemy-missing" } as never)),
+        ),
+        SetFindingState: probeOutcome(
+          Retry.none(p13({ source: "alchemy-missing", finding: "alchemy-missing" } as never)),
+        ),
+        UpdateFindingSecurityMarks: probeOutcome(
+          Retry.none(p14({ source: "alchemy-missing", finding: "alchemy-missing" } as never)),
+        ),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.SecurityCenter.BulkFindingMuteHttp,
+          GCP.SecurityCenter.DeleteMuteConfigHttp,
+          GCP.SecurityCenter.GroupAssetHttp,
+          GCP.SecurityCenter.GroupSourceFindingHttp,
+          GCP.SecurityCenter.ListAssetsHttp,
+          GCP.SecurityCenter.ListBigQueryExportsHttp,
+          GCP.SecurityCenter.ListMuteConfigsHttp,
+          GCP.SecurityCenter.ListSourceFindingsHttp,
+          GCP.SecurityCenter.ListSourcesHttp,
+          GCP.SecurityCenter.PatchMuteConfigHttp,
+          GCP.SecurityCenter.PatchSourceFindingHttp,
+          GCP.SecurityCenter.PatchSourceFindingExternalSystemHttp,
+          GCP.SecurityCenter.SetFindingMuteHttp,
+          GCP.SecurityCenter.SetFindingStateHttp,
+          GCP.SecurityCenter.UpdateFindingSecurityMarksHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

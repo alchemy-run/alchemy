@@ -53,6 +53,9 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "workloadmanager.googleapis.com",
+            });
             const host = yield* WorkloadManagerGeneratedHost;
             return { uri: host.uri };
           }),
@@ -65,87 +68,131 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("DeploymentsActuation", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetActuation (workloadmanager.projects.locations.deployments.actuations.get): workloadmanager.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetActuation (workloadmanager.projects.locations.deployments.actuations.get): DeploymentsActuation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("Evaluation", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeleteEvaluationExecution (workloadmanager.projects.locations.evaluations.executions.delete): workloadmanager.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "DeleteEvaluationExecution (workloadmanager.projects.locations.evaluations.executions.delete): Evaluation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetEvaluation (workloadmanager.projects.locations.evaluations.get): workloadmanager.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetEvaluation (workloadmanager.projects.locations.evaluations.get): Evaluation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetEvaluationExecution (workloadmanager.projects.locations.evaluations.executions.get): workloadmanager.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetEvaluationExecution (workloadmanager.projects.locations.evaluations.executions.get): Evaluation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListEvaluationExecutionResults (workloadmanager.projects.locations.evaluations.executions.results.list): workloadmanager.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "ListEvaluationExecutionResults (workloadmanager.projects.locations.evaluations.executions.results.list): Evaluation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListEvaluationExecutions (workloadmanager.projects.locations.evaluations.executions.list): workloadmanager.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "ListEvaluationExecutions (workloadmanager.projects.locations.evaluations.executions.list): Evaluation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListEvaluationExecutionScannedResources (workloadmanager.projects.locations.evaluations.executions.scannedResources.list): workloadmanager.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "ListEvaluationExecutionScannedResources (workloadmanager.projects.locations.evaluations.executions.scannedResources.list): Evaluation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "RunEvaluationExecution (workloadmanager.projects.locations.evaluations.executions.run): workloadmanager.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "RunEvaluationExecution (workloadmanager.projects.locations.evaluations.executions.run): Evaluation: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider.skip(
-        "CreateDeployment (workloadmanager.projects.locations.deployments.create): workloadmanager.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "CreateDeployment (workloadmanager.projects.locations.deployments.create)",
+        () => probe("CreateDeployment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:workloadmanager", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteDeployment (workloadmanager.projects.locations.deployments.delete): workloadmanager.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "DeleteDeployment (workloadmanager.projects.locations.deployments.delete)",
+        () => probe("DeleteDeployment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:workloadmanager", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteInsight (workloadmanager.projects.locations.insights.delete): workloadmanager.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "DeleteInsight (workloadmanager.projects.locations.insights.delete)",
+        () => probe("DeleteInsight", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:workloadmanager", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetDeployment (workloadmanager.projects.locations.deployments.get): workloadmanager.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetDeployment (workloadmanager.projects.locations.deployments.get)",
+        () => probe("GetDeployment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:workloadmanager", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetDiscoveredprofile (workloadmanager.projects.locations.discoveredprofiles.get): workloadmanager.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetDiscoveredprofile (workloadmanager.projects.locations.discoveredprofiles.get)",
+        () => probe("GetDiscoveredprofile", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:workloadmanager", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetDiscoveredprofileHealth (workloadmanager.projects.locations.discoveredprofiles.health.get): workloadmanager.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetDiscoveredprofileHealth (workloadmanager.projects.locations.discoveredprofiles.health.get)",
+        () => probe("GetDiscoveredprofileHealth", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:workloadmanager", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDeploymentActuations (workloadmanager.projects.locations.deployments.actuations.list): workloadmanager.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListDeploymentActuations (workloadmanager.projects.locations.deployments.actuations.list)",
+        () => probe("ListDeploymentActuations", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:workloadmanager", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDeployments (workloadmanager.projects.locations.deployments.list): workloadmanager.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListDeployments (workloadmanager.projects.locations.deployments.list)",
+        () => probe("ListDeployments", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:workloadmanager", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDiscoveredprofiles (workloadmanager.projects.locations.discoveredprofiles.list): workloadmanager.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListDiscoveredprofiles (workloadmanager.projects.locations.discoveredprofiles.list)",
+        () => probe("ListDiscoveredprofiles", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:workloadmanager", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListEvaluations (workloadmanager.projects.locations.evaluations.list): workloadmanager.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListEvaluations (workloadmanager.projects.locations.evaluations.list)",
+        () => probe("ListEvaluations", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:workloadmanager", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListRules (workloadmanager.projects.locations.rules.list): workloadmanager.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListRules (workloadmanager.projects.locations.rules.list)",
+        () => probe("ListRules", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:workloadmanager", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

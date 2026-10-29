@@ -8,8 +8,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "chromemanagement.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "chromemanagement.googleapis.com"
+    ]
   }
 }

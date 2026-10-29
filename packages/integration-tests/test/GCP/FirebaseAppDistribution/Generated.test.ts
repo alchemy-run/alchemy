@@ -53,6 +53,9 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "firebaseappdistribution.googleapis.com",
+            });
             const host = yield* FirebaseAppDistributionGeneratedHost;
             return { uri: host.uri };
           }),
@@ -65,76 +68,132 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Group", { concurrent: true }, () => {
-      test.provider.skip(
-        "BatchGroupJoin (firebaseappdistribution.projects.groups.batchJoin): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "BatchGroupJoin (firebaseappdistribution.projects.groups.batchJoin): Group: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "BatchGroupLeave (firebaseappdistribution.projects.groups.batchLeave): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "BatchGroupLeave (firebaseappdistribution.projects.groups.batchLeave): Group: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetGroup (firebaseappdistribution.projects.groups.get): firebaseappdistribution.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetGroup (firebaseappdistribution.projects.groups.get): Group: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider.skip(
-        "BatchReleaseDelete (firebaseappdistribution.projects.apps.releases.batchDelete): firebaseappdistribution.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "BatchReleaseDelete (firebaseappdistribution.projects.apps.releases.batchDelete)",
+        () => probe("BatchReleaseDelete", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "BatchTesterAdd (firebaseappdistribution.projects.testers.batchAdd): firebaseappdistribution.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "BatchTesterAdd (firebaseappdistribution.projects.testers.batchAdd)",
+        () => probe("BatchTesterAdd", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "BatchTesterRemove (firebaseappdistribution.projects.testers.batchRemove): firebaseappdistribution.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "BatchTesterRemove (firebaseappdistribution.projects.testers.batchRemove)",
+        () => probe("BatchTesterRemove", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteAppReleaseFeedbackReport (firebaseappdistribution.projects.apps.releases.feedbackReports.delete): firebaseappdistribution.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "DeleteAppReleaseFeedbackReport (firebaseappdistribution.projects.apps.releases.feedbackReports.delete)",
+        () => probe("DeleteAppReleaseFeedbackReport", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DistributeAppRelease (firebaseappdistribution.projects.apps.releases.distribute): firebaseappdistribution.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "DistributeAppRelease (firebaseappdistribution.projects.apps.releases.distribute)",
+        () => probe("DistributeAppRelease", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAppAabInfo (firebaseappdistribution.projects.apps.getAabInfo): firebaseappdistribution.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetAppAabInfo (firebaseappdistribution.projects.apps.getAabInfo)",
+        () => probe("GetAppAabInfo", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAppRelease (firebaseappdistribution.projects.apps.releases.get): firebaseappdistribution.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetAppRelease (firebaseappdistribution.projects.apps.releases.get)",
+        () => probe("GetAppRelease", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAppReleaseFeedbackReport (firebaseappdistribution.projects.apps.releases.feedbackReports.get): firebaseappdistribution.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetAppReleaseFeedbackReport (firebaseappdistribution.projects.apps.releases.feedbackReports.get)",
+        () => probe("GetAppReleaseFeedbackReport", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAppReleaseFeedbackReports (firebaseappdistribution.projects.apps.releases.feedbackReports.list): firebaseappdistribution.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListAppReleaseFeedbackReports (firebaseappdistribution.projects.apps.releases.feedbackReports.list)",
+        () => probe("ListAppReleaseFeedbackReports", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListAppReleases (firebaseappdistribution.projects.apps.releases.list): firebaseappdistribution.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListAppReleases (firebaseappdistribution.projects.apps.releases.list)",
+        () => probe("ListAppReleases", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListGroups (firebaseappdistribution.projects.groups.list): firebaseappdistribution.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListGroups (firebaseappdistribution.projects.groups.list)",
+        () => probe("ListGroups", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListTesters (firebaseappdistribution.projects.testers.list): firebaseappdistribution.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListTesters (firebaseappdistribution.projects.testers.list)",
+        () => probe("ListTesters", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchAppRelease (firebaseappdistribution.projects.apps.releases.patch): firebaseappdistribution.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "PatchAppRelease (firebaseappdistribution.projects.apps.releases.patch)",
+        () => probe("PatchAppRelease", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchTester (firebaseappdistribution.projects.testers.patch): firebaseappdistribution.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "PatchTester (firebaseappdistribution.projects.testers.patch)",
+        () => probe("PatchTester", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:firebaseappdistribution", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

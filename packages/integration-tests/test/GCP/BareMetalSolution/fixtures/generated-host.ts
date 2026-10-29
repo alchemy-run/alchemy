@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,186 @@ export default class BareMetalSolutionGeneratedHost extends GCP.Function<BareMet
   "BareMetalSolutionGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.BareMetalSolution.CreateSshKey();
+    const p1 = yield* GCP.BareMetalSolution.DeleteSshKey();
+    const p2 = yield* GCP.BareMetalSolution.DetachInstanceLun();
+    const p3 = yield* GCP.BareMetalSolution.DisableInstanceHyperthreading();
+    const p4 = yield* GCP.BareMetalSolution.DisableInstanceInteractiveSerialConsole();
+    const p5 = yield* GCP.BareMetalSolution.EnableInstanceHyperthreading();
+    const p6 = yield* GCP.BareMetalSolution.EnableInstanceInteractiveSerialConsole();
+    const p7 = yield* GCP.BareMetalSolution.EvictVolume();
+    const p8 = yield* GCP.BareMetalSolution.EvictVolumeLun();
+    const p9 = yield* GCP.BareMetalSolution.GetInstance();
+    const p10 = yield* GCP.BareMetalSolution.GetNetwork();
+    const p11 = yield* GCP.BareMetalSolution.GetVolume();
+    const p12 = yield* GCP.BareMetalSolution.GetVolumeLun();
+    const p13 = yield* GCP.BareMetalSolution.ListInstances();
+    const p14 = yield* GCP.BareMetalSolution.ListNetworks();
+    const p15 = yield* GCP.BareMetalSolution.ListNetworkUsage();
+    const p16 = yield* GCP.BareMetalSolution.ListNfsShares();
+    const p17 = yield* GCP.BareMetalSolution.ListOsImages();
+    const p18 = yield* GCP.BareMetalSolution.ListSshKeys();
+    const p19 = yield* GCP.BareMetalSolution.ListVolumeLuns();
+    const p20 = yield* GCP.BareMetalSolution.ListVolumes();
+    const p21 = yield* GCP.BareMetalSolution.ListVolumeSnapshots();
+    const p22 = yield* GCP.BareMetalSolution.LoadInstanceAuthInfo();
+    const p23 = yield* GCP.BareMetalSolution.PatchInstance();
+    const p24 = yield* GCP.BareMetalSolution.PatchNetwork();
+    const p25 = yield* GCP.BareMetalSolution.PatchVolume();
+    const p26 = yield* GCP.BareMetalSolution.ReimageInstance();
+    const p27 = yield* GCP.BareMetalSolution.RenameInstance();
+    const p28 = yield* GCP.BareMetalSolution.RenameNetwork();
+    const p29 = yield* GCP.BareMetalSolution.RenameVolume();
+    const p30 = yield* GCP.BareMetalSolution.ResetInstance();
+    const p31 = yield* GCP.BareMetalSolution.ResizeVolume();
+    const p32 = yield* GCP.BareMetalSolution.StartInstance();
+    const p33 = yield* GCP.BareMetalSolution.StopInstance();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        CreateSshKey: probeOutcome(
+          Retry.none(
+            p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        DeleteSshKey: probeOutcome(
+          Retry.none(p1({ sshKey: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        DetachInstanceLun: probeOutcome(
+          Retry.none(p2({ instance: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        DisableInstanceHyperthreading: probeOutcome(
+          Retry.none(p3({ instance: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        DisableInstanceInteractiveSerialConsole: probeOutcome(
+          Retry.none(p4({ instance: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        EnableInstanceHyperthreading: probeOutcome(
+          Retry.none(p5({ instance: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        EnableInstanceInteractiveSerialConsole: probeOutcome(
+          Retry.none(p6({ instance: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        EvictVolume: probeOutcome(
+          Retry.none(p7({ volume: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        EvictVolumeLun: probeOutcome(
+          Retry.none(
+            p8({
+              volume: "alchemy-missing",
+              lun: "alchemy-missing",
+              location: "us-central1",
+            } as never),
+          ),
+        ),
+        GetInstance: probeOutcome(
+          Retry.none(p9({ instance: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetNetwork: probeOutcome(
+          Retry.none(p10({ network: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetVolume: probeOutcome(
+          Retry.none(p11({ volume: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetVolumeLun: probeOutcome(
+          Retry.none(
+            p12({
+              volume: "alchemy-missing",
+              lun: "alchemy-missing",
+              location: "us-central1",
+            } as never),
+          ),
+        ),
+        ListInstances: probeOutcome(Retry.none(p13({ location: "us-central1" } as never))),
+        ListNetworks: probeOutcome(Retry.none(p14({ location: "us-central1" } as never))),
+        ListNetworkUsage: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListNfsShares: probeOutcome(Retry.none(p16({ location: "us-central1" } as never))),
+        ListOsImages: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
+        ListSshKeys: probeOutcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListVolumeLuns: probeOutcome(
+          Retry.none(p19({ volume: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ListVolumes: probeOutcome(Retry.none(p20({ location: "us-central1" } as never))),
+        ListVolumeSnapshots: probeOutcome(
+          Retry.none(p21({ volume: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        LoadInstanceAuthInfo: probeOutcome(
+          Retry.none(p22({ instance: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        PatchInstance: probeOutcome(
+          Retry.none(p23({ instance: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        PatchNetwork: probeOutcome(
+          Retry.none(p24({ network: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        PatchVolume: probeOutcome(
+          Retry.none(p25({ volume: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ReimageInstance: probeOutcome(
+          Retry.none(p26({ instance: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        RenameInstance: probeOutcome(
+          Retry.none(p27({ instance: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        RenameNetwork: probeOutcome(
+          Retry.none(p28({ network: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        RenameVolume: probeOutcome(
+          Retry.none(p29({ volume: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ResetInstance: probeOutcome(
+          Retry.none(p30({ instance: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ResizeVolume: probeOutcome(
+          Retry.none(p31({ volume: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        StartInstance: probeOutcome(
+          Retry.none(p32({ instance: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        StopInstance: probeOutcome(
+          Retry.none(p33({ instance: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.BareMetalSolution.CreateSshKeyHttp,
+          GCP.BareMetalSolution.DeleteSshKeyHttp,
+          GCP.BareMetalSolution.DetachInstanceLunHttp,
+          GCP.BareMetalSolution.DisableInstanceHyperthreadingHttp,
+          GCP.BareMetalSolution.DisableInstanceInteractiveSerialConsoleHttp,
+          GCP.BareMetalSolution.EnableInstanceHyperthreadingHttp,
+          GCP.BareMetalSolution.EnableInstanceInteractiveSerialConsoleHttp,
+          GCP.BareMetalSolution.EvictVolumeHttp,
+          GCP.BareMetalSolution.EvictVolumeLunHttp,
+          GCP.BareMetalSolution.GetInstanceHttp,
+          GCP.BareMetalSolution.GetNetworkHttp,
+          GCP.BareMetalSolution.GetVolumeHttp,
+          GCP.BareMetalSolution.GetVolumeLunHttp,
+          GCP.BareMetalSolution.ListInstancesHttp,
+          GCP.BareMetalSolution.ListNetworksHttp,
+          GCP.BareMetalSolution.ListNetworkUsageHttp,
+          GCP.BareMetalSolution.ListNfsSharesHttp,
+          GCP.BareMetalSolution.ListOsImagesHttp,
+          GCP.BareMetalSolution.ListSshKeysHttp,
+          GCP.BareMetalSolution.ListVolumeLunsHttp,
+          GCP.BareMetalSolution.ListVolumesHttp,
+          GCP.BareMetalSolution.ListVolumeSnapshotsHttp,
+          GCP.BareMetalSolution.LoadInstanceAuthInfoHttp,
+          GCP.BareMetalSolution.PatchInstanceHttp,
+          GCP.BareMetalSolution.PatchNetworkHttp,
+          GCP.BareMetalSolution.PatchVolumeHttp,
+          GCP.BareMetalSolution.ReimageInstanceHttp,
+          GCP.BareMetalSolution.RenameInstanceHttp,
+          GCP.BareMetalSolution.RenameNetworkHttp,
+          GCP.BareMetalSolution.RenameVolumeHttp,
+          GCP.BareMetalSolution.ResetInstanceHttp,
+          GCP.BareMetalSolution.ResizeVolumeHttp,
+          GCP.BareMetalSolution.StartInstanceHttp,
+          GCP.BareMetalSolution.StopInstanceHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

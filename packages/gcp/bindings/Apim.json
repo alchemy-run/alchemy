@@ -11,8 +11,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "apim.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "apim.googleapis.com"
+    ]
   }
 }

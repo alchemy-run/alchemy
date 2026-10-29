@@ -14,8 +14,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "androidmanagement.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "androidmanagement.googleapis.com"
+    ]
   }
 }

@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,30 @@ export default class AgentIdentityGeneratedHost extends GCP.Function<AgentIdenti
   "AgentIdentityGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.AgentIdentity.GetAccessSummary();
+    const p1 = yield* GCP.AgentIdentity.ListAccessSummaries();
+    const p2 = yield* GCP.AgentIdentity.ListAuthProviders();
+    const p3 = yield* GCP.AgentIdentity.QueryAuthProvider();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        GetAccessSummary: probeOutcome(
+          Retry.none(p0({ accessSummary: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ListAccessSummaries: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        ListAuthProviders: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
+        QueryAuthProvider: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.AgentIdentity.GetAccessSummaryHttp,
+          GCP.AgentIdentity.ListAccessSummariesHttp,
+          GCP.AgentIdentity.ListAuthProvidersHttp,
+          GCP.AgentIdentity.QueryAuthProviderHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

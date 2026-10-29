@@ -53,6 +53,7 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", { service: "apim.googleapis.com" });
             const host = yield* ApimGeneratedHost;
             return { uri: host.uri };
           }),
@@ -65,55 +66,63 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ObservationJob", { concurrent: true }, () => {
-      test.provider.skip(
-        "BatchApiObservationEditTags (apim.projects.locations.observationJobs.apiObservations.batchEditTags): apim.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "BatchApiObservationEditTags (apim.projects.locations.observationJobs.apiObservations.batchEditTags): ObservationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "DisableObservationJob (apim.projects.locations.observationJobs.disable): apim.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "DisableObservationJob (apim.projects.locations.observationJobs.disable): ObservationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "EnableObservationJob (apim.projects.locations.observationJobs.enable): apim.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "EnableObservationJob (apim.projects.locations.observationJobs.enable): ObservationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetObservationJob (apim.projects.locations.observationJobs.get): apim.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetObservationJob (apim.projects.locations.observationJobs.get): ObservationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetObservationJobApiObservation (apim.projects.locations.observationJobs.apiObservations.get): apim.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetObservationJobApiObservation (apim.projects.locations.observationJobs.apiObservations.get): ObservationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "GetObservationJobApiObservationApiOperation (apim.projects.locations.observationJobs.apiObservations.apiOperations.get): apim.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetObservationJobApiObservationApiOperation (apim.projects.locations.observationJobs.apiObservations.apiOperations.get): ObservationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListObservationJobApiObservationApiOperations (apim.projects.locations.observationJobs.apiObservations.apiOperations.list): apim.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "ListObservationJobApiObservationApiOperations (apim.projects.locations.observationJobs.apiObservations.apiOperations.list): ObservationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListObservationJobApiObservations (apim.projects.locations.observationJobs.apiObservations.list): apim.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "ListObservationJobApiObservations (apim.projects.locations.observationJobs.apiObservations.list): ObservationJob: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ObservationSource", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetObservationSource (apim.projects.locations.observationSources.get): apim.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetObservationSource (apim.projects.locations.observationSources.get): ObservationSource: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider.skip(
-        "ListObservationJobs (apim.projects.locations.observationJobs.list): apim.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListObservationJobs (apim.projects.locations.observationJobs.list)",
+        () => probe("ListObservationJobs", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apim", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListObservationSources (apim.projects.locations.observationSources.list): apim.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListObservationSources (apim.projects.locations.observationSources.list)",
+        () => probe("ListObservationSources", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apim", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

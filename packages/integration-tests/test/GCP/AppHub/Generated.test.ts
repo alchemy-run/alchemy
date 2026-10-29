@@ -53,6 +53,9 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
+              service: "apphub.googleapis.com",
+            });
             const host = yield* AppHubGeneratedHost;
             return { uri: host.uri };
           }),
@@ -65,80 +68,120 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Application", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetApplication (apphub.projects.locations.applications.get): apphub.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetApplication (apphub.projects.locations.applications.get): Application: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListApplicationServices (apphub.projects.locations.applications.services.list): apphub.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "ListApplicationServices (apphub.projects.locations.applications.services.list): Application: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
-      test.provider.skip(
-        "ListApplicationWorkloads (apphub.projects.locations.applications.workloads.list): apphub.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "ListApplicationWorkloads (apphub.projects.locations.applications.workloads.list): Application: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ApplicationsService", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetService (apphub.projects.locations.applications.services.get): apphub.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetService (apphub.projects.locations.applications.services.get): ApplicationsService: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("ApplicationsWorkload", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetWorkload (apphub.projects.locations.applications.workloads.get): apphub.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetWorkload (apphub.projects.locations.applications.workloads.get): ApplicationsWorkload: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetDiscoveredService (apphub.projects.locations.discoveredServices.get): apphub.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetDiscoveredService (apphub.projects.locations.discoveredServices.get)",
+        () => probe("GetDiscoveredService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:apphub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetDiscoveredWorkload (apphub.projects.locations.discoveredWorkloads.get): apphub.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetDiscoveredWorkload (apphub.projects.locations.discoveredWorkloads.get)",
+        () => probe("GetDiscoveredWorkload", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:apphub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetExtendedMetadataSchema (apphub.projects.locations.extendedMetadataSchemas.get): apphub.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "GetExtendedMetadataSchema (apphub.projects.locations.extendedMetadataSchemas.get)",
+        () => probe("GetExtendedMetadataSchema", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:apphub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListApplications (apphub.projects.locations.applications.list): apphub.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListApplications (apphub.projects.locations.applications.list)",
+        () => probe("ListApplications", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apphub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDiscoveredServices (apphub.projects.locations.discoveredServices.list): apphub.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListDiscoveredServices (apphub.projects.locations.discoveredServices.list)",
+        () => probe("ListDiscoveredServices", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apphub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListDiscoveredWorkloads (apphub.projects.locations.discoveredWorkloads.list): apphub.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListDiscoveredWorkloads (apphub.projects.locations.discoveredWorkloads.list)",
+        () => probe("ListDiscoveredWorkloads", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apphub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListExtendedMetadataSchemas (apphub.projects.locations.extendedMetadataSchemas.list): apphub.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListExtendedMetadataSchemas (apphub.projects.locations.extendedMetadataSchemas.list)",
+        () => probe("ListExtendedMetadataSchemas", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apphub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListServiceProjectAttachments (apphub.projects.locations.serviceProjectAttachments.list): apphub.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "ListServiceProjectAttachments (apphub.projects.locations.serviceProjectAttachments.list)",
+        () => probe("ListServiceProjectAttachments", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apphub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "LookupDiscoveredService (apphub.projects.locations.discoveredServices.lookup): apphub.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "LookupDiscoveredService (apphub.projects.locations.discoveredServices.lookup)",
+        () => probe("LookupDiscoveredService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:apphub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "LookupDiscoveredWorkload (apphub.projects.locations.discoveredWorkloads.lookup): apphub.googleapis.com is not enabled on the testing project",
-        () => Effect.void,
+      test.provider(
+        "LookupDiscoveredWorkload (apphub.projects.locations.discoveredWorkloads.lookup)",
+        () => probe("LookupDiscoveredWorkload", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:apphub", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ServiceProjectAttachment", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetServiceProjectAttachment (apphub.projects.locations.serviceProjectAttachments.get): apphub.googleapis.com is not enabled on the testing project",
+      test.provider.todo(
+        "GetServiceProjectAttachment (apphub.projects.locations.serviceProjectAttachments.get): ServiceProjectAttachment: the probe fixture doesn't deploy one yet",
         () => Effect.void,
       );
     });

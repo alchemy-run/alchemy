@@ -8,8 +8,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "agentidentity.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "agentidentity.googleapis.com"
+    ]
   }
 }

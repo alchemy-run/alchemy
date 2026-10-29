@@ -11,8 +11,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "workloadmanager.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "workloadmanager.googleapis.com"
+    ]
   }
 }

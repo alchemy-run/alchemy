@@ -9,8 +9,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "www.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "siteverification.googleapis.com"
+    ]
   }
 }

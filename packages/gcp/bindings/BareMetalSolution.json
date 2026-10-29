@@ -11,8 +11,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "baremetalsolution.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "baremetalsolution.googleapis.com"
+    ]
   }
 }

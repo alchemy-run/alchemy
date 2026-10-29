@@ -11,8 +11,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "cloudsearch.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "cloudsearch.googleapis.com"
+    ]
   }
 }

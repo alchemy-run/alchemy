@@ -32,8 +32,9 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {
-      "*": "firebaseappcheck.googleapis.com is not enabled on the testing project"
-    }
+    "untestable": {},
+    "enable": [
+      "firebaseappcheck.googleapis.com"
+    ]
   }
 }

@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,73 @@ export default class WorkloadManagerGeneratedHost extends GCP.Function<WorkloadM
   "WorkloadManagerGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.WorkloadManager.CreateDeployment();
+    const p1 = yield* GCP.WorkloadManager.DeleteDeployment();
+    const p2 = yield* GCP.WorkloadManager.DeleteInsight();
+    const p3 = yield* GCP.WorkloadManager.GetDeployment();
+    const p4 = yield* GCP.WorkloadManager.GetDiscoveredprofile();
+    const p5 = yield* GCP.WorkloadManager.GetDiscoveredprofileHealth();
+    const p6 = yield* GCP.WorkloadManager.ListDeploymentActuations();
+    const p7 = yield* GCP.WorkloadManager.ListDeployments();
+    const p8 = yield* GCP.WorkloadManager.ListDiscoveredprofiles();
+    const p9 = yield* GCP.WorkloadManager.ListEvaluations();
+    const p10 = yield* GCP.WorkloadManager.ListRules();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        CreateDeployment: probeOutcome(
+          Retry.none(
+            p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        DeleteDeployment: probeOutcome(
+          Retry.none(p1({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        DeleteInsight: probeOutcome(
+          Retry.none(p2({ insight: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetDeployment: probeOutcome(
+          Retry.none(p3({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        GetDiscoveredprofile: probeOutcome(
+          Retry.none(
+            p4({ discoveredprofile: "alchemy-missing", location: "us-central1" } as never),
+          ),
+        ),
+        GetDiscoveredprofileHealth: probeOutcome(
+          Retry.none(
+            p5({
+              discoveredprofile: "alchemy-missing",
+              health: "alchemy-missing",
+              location: "us-central1",
+            } as never),
+          ),
+        ),
+        ListDeploymentActuations: probeOutcome(
+          Retry.none(p6({ deployment: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        ListDeployments: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListDiscoveredprofiles: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListEvaluations: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListRules: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.WorkloadManager.CreateDeploymentHttp,
+          GCP.WorkloadManager.DeleteDeploymentHttp,
+          GCP.WorkloadManager.DeleteInsightHttp,
+          GCP.WorkloadManager.GetDeploymentHttp,
+          GCP.WorkloadManager.GetDiscoveredprofileHttp,
+          GCP.WorkloadManager.GetDiscoveredprofileHealthHttp,
+          GCP.WorkloadManager.ListDeploymentActuationsHttp,
+          GCP.WorkloadManager.ListDeploymentsHttp,
+          GCP.WorkloadManager.ListDiscoveredprofilesHttp,
+          GCP.WorkloadManager.ListEvaluationsHttp,
+          GCP.WorkloadManager.ListRulesHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}
