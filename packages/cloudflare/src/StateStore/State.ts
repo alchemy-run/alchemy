@@ -41,6 +41,7 @@ import {
   deployStateStoreWorker,
   encryptionKeyLost,
   findSecretSharingWorker,
+  observeDeployedVersion,
   observeStateStoreDomain,
   stateStoreSecretsExist,
   stateStoreUrl,
@@ -120,13 +121,10 @@ export const state = (options: CloudflareStateOptions = {}) =>
 
         const ensureLatest = ({ url, authToken }: { url: string; authToken: string }) =>
           Effect.gen(function* () {
-            const { matches, expected, observed } = yield* checkStateStoreVersion(
-              url,
-              scriptName,
-              accountId,
-            ).pipe(Effect.mapError(existenceUnknown(scriptName)));
+            const observed = yield* observeServedVersion(accountId, scriptName, domain);
             if (observed === undefined) return yield* deployMissing;
-            yield* refuseNewerStore(scriptName, observed);
+            const expected = STATE_STORE_VERSION;
+            const matches = observed === expected;
 
             const httpState = yield* ensureAccess({ url, authToken });
             if (matches) return httpState;
@@ -728,18 +726,16 @@ const observeServedVersion = (accountId: string, scriptName: string, domain?: st
       )) !== undefined;
     if (!attached) return undefined;
     const observed = yield* Effect.gen(function* () {
+      const deployed = yield* observeDeployedVersion({ accountId, scriptName });
+      if (deployed !== "unrecorded") return deployed;
+      // An older Alchemy deployed it without recording its version: ask the
+      // Worker, which the API says exists.
       const url = yield* stateStoreUrl({ accountId, scriptName, domain }).pipe(
         // Without a workers.dev subdomain, nothing can serve the store.
         Effect.catchTag("SubdomainNotFound", () => Effect.undefined),
       );
       if (url === undefined) return undefined;
-      const { observed } = yield* checkStateStoreVersion(url, scriptName, accountId);
-      // The edge can keep answering for a Worker that was just deleted, so
-      // only the API decides that it exists.
-      if (observed === undefined || !(yield* isStateStoreAvailable(accountId, scriptName))) {
-        return undefined;
-      }
-      return observed;
+      return (yield* checkStateStoreVersion(url, scriptName, accountId)).observed;
     }).pipe(Effect.mapError(existenceUnknown(scriptName)));
     return yield* refuseNewerStore(scriptName, observed);
   });

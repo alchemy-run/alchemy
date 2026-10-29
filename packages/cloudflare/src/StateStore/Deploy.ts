@@ -16,7 +16,7 @@ import { getCompatibility } from "../Workers/Compatibility.ts";
 import { WorkerBundle } from "../Workers/Sources/Rolldown.ts";
 import { contentTypeForModule, putWorkerScript } from "../Workers/WorkerProvider.ts";
 import { resolveZoneId } from "../Zone/lookup.ts";
-import { API_MAIN } from "./Api.ts";
+import { API_MAIN, STATE_STORE_VERSION } from "./Api.ts";
 import {
   AuthTokenBinding,
   AuthTokenSecretName,
@@ -119,6 +119,11 @@ export const deployStateStoreWorker = Effect.fn("state_store.deploy_worker")(fun
         { type: "plain_text", name: "ALCHEMY_STAGE", text: scriptName },
         { type: "plain_text", name: "ALCHEMY_CLOUDFLARE_ACCOUNT_ID", text: accountId },
         {
+          type: "plain_text",
+          name: STATE_STORE_VERSION_BINDING,
+          text: String(STATE_STORE_VERSION),
+        },
+        {
           type: "secrets_store_secret",
           name: AuthTokenBinding,
           storeId,
@@ -199,6 +204,33 @@ export const findSecretSharingWorker = Effect.fn(function* ({
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
   );
+});
+
+/** The binding each deployed store records its version in, read back through the API. */
+const STATE_STORE_VERSION_BINDING = "ALCHEMY_STATE_STORE_VERSION";
+
+/**
+ * The store's version as Cloudflare's API reports it, `undefined` when it has
+ * no Worker, or `"unrecorded"` for a Worker an older Alchemy deployed without
+ * recording it. The edge can keep serving a deleted or replaced Worker for a
+ * while, so decisions use this rather than what `/version` answers.
+ */
+export const observeDeployedVersion = Effect.fn(function* ({
+  accountId,
+  scriptName,
+}: {
+  accountId: string;
+  scriptName: string;
+}) {
+  const settings = yield* workers
+    .getScriptScriptAndVersionSetting({ accountId, scriptName })
+    .pipe(Effect.catchTag(["WorkerNotFound", "WorkerHasNoVersions"], () => Effect.undefined));
+  if (settings === undefined) return undefined;
+  const binding = (settings.bindings ?? []).find(
+    (binding) => binding.name === STATE_STORE_VERSION_BINDING,
+  );
+  const version = binding !== undefined && "text" in binding ? Number(binding.text) : Number.NaN;
+  return Number.isInteger(version) ? version : ("unrecorded" as const);
 });
 
 /** The origin a store serves on: its custom domain, or its workers.dev URL. */

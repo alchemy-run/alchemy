@@ -13,6 +13,7 @@ import {
   EncryptionKeySecretName,
   stateStoreSecretName,
 } from "@alchemy.run/cloudflare/StateStore/Token";
+import { findZoneByName } from "@alchemy.run/cloudflare/Zone/lookup";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as secretsStore from "@distilled.cloud/cloudflare/secrets-store";
@@ -26,6 +27,7 @@ import { makeLocalState } from "alchemy/State/LocalState";
 import { State } from "alchemy/State/State";
 import { exec } from "alchemy/Util/exec";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -267,18 +269,27 @@ test.provider(
       const profile = yield* currentProfileName;
       const credentials = yield* loginWithCloudflare(profile, true, workerName, accountId);
 
-      // The Worker is deleted, as after an interrupted teardown.
-      yield* workers.deleteScript({ accountId, scriptName: workerName, force: true });
-
-      const redeployed = yield* bootstrap({ workerName });
-      yield* redeployed.set({ stack: "orphaned", stage: "test", fqn: "a", value: record("a") });
-      expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
-      // The token from before still authenticates.
-      expect(yield* checkHttpStateStoreAuth(credentials)).toBe(true);
+      // The Worker is deleted, as after an interrupted teardown, and bootstrap
+      // runs at once, while the edge can still answer for the deleted Worker.
+      // Each round must redeploy rather than adopt a store that isn't there.
+      for (const round of [1, 2, 3]) {
+        yield* workers.deleteScript({ accountId, scriptName: workerName, force: true });
+        const redeployed = yield* bootstrap({ workerName });
+        expect(yield* scriptExists(accountId, workerName)).toBe(true);
+        yield* redeployed.set({
+          stack: "orphaned",
+          stage: "test",
+          fqn: `round-${round}`,
+          value: record(`round-${round}`),
+        });
+        expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
+        // The token from before still authenticates.
+        expect(yield* checkHttpStateStoreAuth(credentials)).toBe(true);
+      }
 
       yield* teardownStateStore({ workerName });
     }),
-  { tags, timeout: 300_000 },
+  { tags, timeout: 400_000 },
 );
 
 test.provider(
@@ -437,6 +448,51 @@ test.provider(
       expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
       expect(yield* moved.get({ stack: "domain", stage: "test", fqn: "a" })).toEqual(record("a"));
 
+      yield* teardownStateStore({ workerName });
+      expect(yield* attachedDomains(accountId, domain)).toEqual([]);
+    }),
+  { tags, timeout: 400_000 },
+);
+
+test.provider(
+  "a store that can't be reached after a deploy fails within 2 minutes and keeps its secrets and state",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const workerName = storeWorker("blocked");
+      const domain = `state-blocked-${stage}.${ZONE}`;
+      yield* stack.destroy();
+      yield* teardownStateStore({ workerName });
+
+      const state = yield* open({ workerName });
+      yield* state.set({ stack: "blocked", stage: "test", fqn: "a", value: record("a") });
+      const secrets = yield* observeSecrets(accountId, workerName);
+
+      // Only an address nobody uses may reach the store's hostname, so every
+      // request to it is refused once the store moves there.
+      const zone = yield* findZoneByName({ accountId, name: ZONE });
+      expect(zone).toBeDefined();
+      yield* stack.deploy(
+        Cloudflare.Firewall.Lockdown("BlockStore", {
+          zoneId: zone!.id,
+          urls: [`${domain}/*`],
+          configurations: [{ target: "ip", value: "192.0.2.1" }],
+          description: "alchemy state store test: unreachable store",
+        }),
+      );
+
+      const started = yield* Clock.currentTimeMillis;
+      expectFailure(
+        yield* Effect.exit(bootstrap({ workerName, domain })),
+        `did not serve v${STATE_STORE_VERSION} within 2 minutes`,
+      );
+      expect((yield* Clock.currentTimeMillis) - started).toBeLessThan(200_000);
+      expect(yield* observeSecrets(accountId, workerName)).toEqual(secrets);
+      // Its state is still there on workers.dev.
+      const kept = yield* bootstrap({ workerName });
+      expect(yield* kept.get({ stack: "blocked", stage: "test", fqn: "a" })).toEqual(record("a"));
+
+      yield* stack.destroy();
       yield* teardownStateStore({ workerName });
       expect(yield* attachedDomains(accountId, domain)).toEqual([]);
     }),
@@ -649,6 +705,14 @@ test.provider(
       yield* local.set({ ...leftover, stage: `${profile}_other-store`, value: record("s") });
 
       const upgraded = yield* bootstrap({ workerName });
+      const upgradedOn = yield* scriptModifiedOn(accountId, workerName);
+      // Stacks opening it right away, while edge locations may still serve
+      // the old version, neither fail as out of date nor redeploy it.
+      for (const _ of [1, 2, 3]) {
+        const reopened = yield* open({ name });
+        expect(yield* reopened.get({ stack: "old", stage: "test", fqn: "a" })).toEqual(record("a"));
+      }
+      expect(yield* scriptModifiedOn(accountId, workerName)).toEqual(upgradedOn);
       // A redeploy reaches every edge location within seconds.
       expect(yield* eventuallyServes(credentials.url, STATE_STORE_VERSION)).toBe(
         STATE_STORE_VERSION,
@@ -660,7 +724,6 @@ test.provider(
       expect(yield* upgraded.listStacks()).toEqual(["old"]);
       expect(yield* local.listStages("CloudflareStateStore")).toEqual([`${profile}_other-store`]);
       yield* local.deleteStack({ stack: "CloudflareStateStore" });
-      const upgradedOn = yield* scriptModifiedOn(accountId, workerName);
 
       const old = yield* oldBootstrap(name);
       expect(old.exitCode).not.toBe(0);
