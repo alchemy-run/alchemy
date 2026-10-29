@@ -74,7 +74,7 @@ More: [Cloudflare: Watch without polling](https://alchemy.run/domain/cloudflare#
 
 ## Plain HTTP and OpenAPI
 
-For clients that are not Effect (a partner, a script, a public API), `toHttpApi` from `@alchemy.run/domain/Http` publishes chosen request/response calls as an Effect `HttpApi` group, with its handlers Layer and an OpenAPI document from the same Api.
+For clients that are not Effect (a partner, a script, a public API), `toHttpApi` from `@alchemy.run/domain/Http` publishes chosen calls as an Effect `HttpApi` group, with its handlers Layer and an OpenAPI document from the same Api.
 
 ```ts
 import * as DomainHttp from "@alchemy.run/domain/Http";
@@ -98,9 +98,10 @@ return {
 };
 ```
 
-- Paths: a command is `POST /<Command>` with the RPC payload as its JSON body (`target`, `commandId`, input). A `get` or `peek` is `GET /<Entry>/{key}`, with `?stream=&version=` from a receipt to read your own write. A `list` is `GET /<Entry>/{key}/list?order=&take=&after=`.
+- Paths: a command is `POST /<Command>` with the RPC payload as its JSON body (`target`, `commandId`, `input`). A `get` or `peek` is `GET /<Entry>/{key}`, and a `snapshot` `GET /<Entry>/{key}/snapshot`, with `?stream=&version=` from a receipt to read your own write. A `list` is `GET /<Entry>/{key}/list?order=&take=&after=`.
 - Every call runs through the Api's own handlers in process, with the request's headers: middleware, `validate` and rejections run as for any client, and input is decoded once.
-- `include` is required: a public path has to stay once a client calls it. `watch` and `events` are streams and are not published; neither is a read's `where`.
+- `include` is required: a public path has to stay once a client calls it. A read's `where` is not published.
+- `watch` and `events` are `GET /<Entry>/{key}/watch` and `/events?after=`, answered with Server-Sent Events. A failure before the first value answers with its status; one after ends the stream with a typed failure event.
 - To serve the group with other groups, or under a prefix, add `BankHttp.group` to your own `HttpApi` and provide `BankHttp.layerFor(MyHttpApi)`.
 
 More: [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api).

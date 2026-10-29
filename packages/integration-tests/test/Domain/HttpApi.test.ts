@@ -4,6 +4,8 @@ import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
 import * as Effect from "effect/Effect";
+import * as Sse from "effect/encoding/Sse";
+import * as Fiber from "effect/Fiber";
 import * as HttpApi from "effect/http-api/HttpApi";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import type * as HttpApiGroup from "effect/http-api/HttpApiGroup";
@@ -17,6 +19,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 
 // ---------------------------------------------------------------- a wallet domain
 
@@ -100,14 +103,28 @@ class WalletApi extends Domain.Api("WalletApi", Deposit, Wallet, Balance) {}
 
 // ---------------------------------------------------------------- the HTTP surface
 
-/** Publishes the deposit and the balance; the wallet aggregate's reads and `Balance.list` stay off. */
+/** Who is over their request budget: an Api-wide middleware refuses an `x-limited` caller. */
+class RateLimited extends Domain.Rejection("RateLimited") {}
+class RateLimit extends RpcMiddleware.Service<RateLimit>()("Test/RateLimit", {
+  error: RateLimited.pipe(HttpApiSchema.status(429)),
+}) {}
+const RateLimitLive = Layer.succeed(RateLimit, (effect, { headers }) =>
+  Option.isSome(Headers.get(headers, "x-limited")) ? Effect.fail(new RateLimited()) : effect,
+);
+class LimitedApi extends Domain.Api("LimitedApi", Deposit, Wallet, Balance) {}
+const Limited = LimitedApi.middleware(RateLimit);
+
+/**
+ * Publishes the deposit, the balance's reads and the wallet's events; the
+ * wallet aggregate's `get` and `watch` and `Balance.list` stay off.
+ */
 const WalletHttp = DomainHttp.toHttpApi(WalletApi, {
-  include: ["Deposit", "Balance.get"],
+  include: ["Deposit", "Balance.get", "Balance.snapshot", "Balance.watch", "Wallet.events"],
   status: { NotOwner: 403 },
 });
 
-/** The hosted model, its session middleware, and an in-process Bun server with a client for it. */
-const Hosted = Layer.mergeAll(SessionLive, Wallets.layer(Layer.empty)).pipe(
+/** The hosted model, its middleware, and an in-process Bun server with a client for it. */
+const Hosted = Layer.mergeAll(SessionLive, RateLimitLive, Wallets.layer(Layer.empty)).pipe(
   Layer.provide(InMemory),
   Layer.provideMerge(BunHttpServer.layerTest),
 );
@@ -127,20 +144,50 @@ const Served = serve(WalletHttp.api, WalletHttp.layer);
 /** An app's own HttpApi that serves the group under `/v1`. */
 const AppApi = HttpApi.make("App").add(WalletHttp.group.prefix("/v1"));
 
-const send = (
-  method: "GET" | "POST",
-  path: string,
-  options: { readonly owner?: string; readonly body?: unknown } = {},
-) =>
+interface SendOptions {
+  readonly owner?: string;
+  readonly body?: unknown;
+  readonly headers?: Record<string, string>;
+}
+
+const execute = (method: "GET" | "POST", path: string, options: SendOptions) =>
   Effect.gen(function* () {
     const client = yield* HttpClient.HttpClient;
-    let request = HttpClientRequest.make(method)(path);
+    let request = HttpClientRequest.make(method)(path).pipe(
+      HttpClientRequest.setHeaders(options.headers ?? {}),
+    );
     if (options.owner) request = HttpClientRequest.setHeader(request, "x-owner", options.owner);
     if (options.body !== undefined)
       request = HttpClientRequest.bodyJsonUnsafe(request, options.body);
-    const response = yield* client.execute(request);
+    return yield* client.execute(request);
+  });
+
+const send = (method: "GET" | "POST", path: string, options: SendOptions = {}) =>
+  Effect.gen(function* () {
+    const response = yield* execute(method, path, options);
     const text = yield* response.text;
     return { status: response.status, body: text === "" ? undefined : JSON.parse(text) };
+  });
+
+/**
+ * Open a live read. The status arrives once the read has its first value, so
+ * the read is subscribed when this returns; `take(n)` collects the next `n`
+ * SSE events, each with its parsed `data`.
+ */
+const listen = (path: string, options: SendOptions = {}) =>
+  Effect.gen(function* () {
+    const response = yield* execute("GET", path, options);
+    const contentType = response.headers["content-type"];
+    const take = (n: number) =>
+      response.stream.pipe(
+        Stream.decodeText,
+        Stream.pipeThroughChannel(Sse.decode()),
+        Stream.take(n),
+        Stream.map((event) => ({ event: event.event, data: JSON.parse(event.data) })),
+        Stream.runCollect,
+        Effect.timeout("5 seconds"),
+      );
+    return { status: response.status, contentType, take };
   });
 
 const at = "2026-10-25T12:00:00.000Z";
@@ -152,7 +199,7 @@ describe("Domain toHttpApi", () => {
     Effect.gen(function* () {
       const { status, body } = yield* send("POST", "/Deposit", {
         owner: "sam",
-        body: { target: "w-1", amount: 40, at },
+        body: { target: "w-1", input: { amount: 40, at } },
       });
       expect(status).toBe(200);
       // The transform is decoded once on the way in and encoded once on the way out.
@@ -164,19 +211,21 @@ describe("Domain toHttpApi", () => {
     Effect.gen(function* () {
       const over = yield* send("POST", "/Deposit", {
         owner: "sam",
-        body: { target: "w-1", amount: 500, at },
+        body: { target: "w-1", input: { amount: 500, at } },
       });
       // A declared rejection with no status of its own is a 422.
       expect(over).toEqual({ status: 422, body: { _tag: "OverLimit", limit: 100 } });
 
       // The middleware runs as for any client, and its error keeps its annotated status.
-      const anonymous = yield* send("POST", "/Deposit", { body: { target: "w-1", amount: 1, at } });
+      const anonymous = yield* send("POST", "/Deposit", {
+        body: { target: "w-1", input: { amount: 1, at } },
+      });
       expect(anonymous).toEqual({ status: 401, body: { _tag: "Unauthenticated" } });
 
       // Input the command's schema refuses never reaches the model.
       const malformed = yield* send("POST", "/Deposit", {
         owner: "sam",
-        body: { target: "w-1", amount: "lots", at },
+        body: { target: "w-1", input: { amount: "lots", at } },
       });
       expect(malformed.status).toBe(400);
     }).pipe(Effect.provide(Served)),
@@ -186,7 +235,7 @@ describe("Domain toHttpApi", () => {
     Effect.gen(function* () {
       const { body: receipt } = yield* send("POST", "/Deposit", {
         owner: "kim",
-        body: { target: "w-2", amount: 25, at },
+        body: { target: "w-2", input: { amount: 25, at } },
       });
       const read = yield* send(
         "GET",
@@ -209,11 +258,167 @@ describe("Domain toHttpApi", () => {
     }).pipe(Effect.provide(Served)),
   );
 
+  it.live("a snapshot endpoint answers with the state and its cursor", () =>
+    Effect.gen(function* () {
+      yield* send("POST", "/Deposit", {
+        owner: "kim",
+        body: { target: "w-4", input: { amount: 7, at } },
+      });
+      const snapshot = yield* send("GET", "/Balance/w-4/snapshot", { owner: "kim" });
+      expect(snapshot).toEqual({
+        status: 200,
+        body: { state: { owner: "kim", balance: 7 }, cursor: expect.any(Number) },
+      });
+      // Its own path: `get` still answers with the bare state.
+      expect((yield* send("GET", "/Balance/w-4", { owner: "kim" })).body).toEqual({
+        owner: "kim",
+        balance: 7,
+      });
+    }).pipe(Effect.provide(Served)),
+  );
+
+  it.live("a watch endpoint streams the state, then every change, as Server-Sent Events", () =>
+    Effect.gen(function* () {
+      yield* send("POST", "/Deposit", {
+        owner: "kim",
+        body: { target: "w-5", input: { amount: 10, at } },
+      });
+      const watch = yield* listen("/Balance/w-5/watch", { owner: "kim" });
+      expect(watch.status).toBe(200);
+      expect(watch.contentType).toContain("text/event-stream");
+      const events = yield* Effect.forkChild(watch.take(2));
+      yield* send("POST", "/Deposit", {
+        owner: "kim",
+        body: { target: "w-5", input: { amount: 5, at } },
+      });
+      expect(yield* Fiber.join(events)).toEqual([
+        {
+          event: "message",
+          data: { state: { owner: "kim", balance: 10 }, cursor: expect.any(Number) },
+        },
+        {
+          event: "message",
+          data: { state: { owner: "kim", balance: 15 }, cursor: expect.any(Number) },
+        },
+      ]);
+    }).pipe(Effect.provide(Served)),
+  );
+
+  it.live("a live read's middleware and validate answer with their status before it streams", () =>
+    Effect.gen(function* () {
+      yield* send("POST", "/Deposit", {
+        owner: "kim",
+        body: { target: "w-6", input: { amount: 1, at } },
+      });
+      // The session middleware refuses a caller with no owner.
+      expect(yield* send("GET", "/Balance/w-6/watch")).toEqual({
+        status: 401,
+        body: { _tag: "Unauthenticated" },
+      });
+      // The view's `validate` refuses someone else's wallet.
+      expect(yield* send("GET", "/Balance/w-6/watch", { owner: "sam" })).toEqual({
+        status: 403,
+        body: { _tag: "NotOwner" },
+      });
+      // An aggregate's `read` middleware guards its events too.
+      expect((yield* send("GET", "/Wallet/w-6/events")).status).toBe(401);
+    }).pipe(Effect.provide(Served)),
+  );
+
+  it.live("a change validate refuses ends the stream with a typed failure event", () =>
+    Effect.gen(function* () {
+      yield* send("POST", "/Deposit", {
+        owner: "kim",
+        body: { target: "w-7", input: { amount: 1, at } },
+      });
+      const watch = yield* listen("/Balance/w-7/watch", { owner: "kim" });
+      const events = yield* Effect.forkChild(watch.take(3));
+      // Sam's deposit makes Sam the owner, so Kim may no longer read the wallet.
+      yield* send("POST", "/Deposit", {
+        owner: "sam",
+        body: { target: "w-7", input: { amount: 1, at } },
+      });
+      const [first, failure, ...rest] = yield* Fiber.join(events);
+      expect(first!.data.state).toEqual({ owner: "kim", balance: 1 });
+      expect(failure!.event).toBe("effect/http-api/stream/failure");
+      // A typed failure, not a defect: the Cause of the rejection `validate` returned.
+      expect(failure!.data).toEqual([{ _tag: "Fail", error: { _tag: "NotOwner" } }]);
+      // The failure ends the stream.
+      expect(rest).toEqual([]);
+    }).pipe(Effect.provide(Served)),
+  );
+
+  it.live("an events endpoint streams history, a CaughtUp frame, then live events", () =>
+    Effect.gen(function* () {
+      yield* send("POST", "/Deposit", {
+        owner: "kim",
+        body: { target: "w-8", input: { amount: 2, at } },
+      });
+      yield* send("POST", "/Deposit", {
+        owner: "kim",
+        body: { target: "w-8", input: { amount: 3, at } },
+      });
+      const all = yield* listen("/Wallet/w-8/events", { owner: "kim" });
+      const history = yield* Effect.forkChild(all.take(4));
+      yield* send("POST", "/Deposit", {
+        owner: "kim",
+        body: { target: "w-8", input: { amount: 4, at } },
+      });
+      const frames = (yield* Fiber.join(history)).map(({ data }) =>
+        data._tag === "CaughtUp" ? "caught up" : data.event.amount,
+      );
+      expect(frames).toEqual([2, 3, "caught up", 4]);
+
+      // `after` resumes from a cursor: only what came after it, then the frame.
+      const [, second] = (yield* Fiber.join(history)).map(({ data }) => data);
+      const resumed = yield* listen(`/Wallet/w-8/events?after=${second.envelope.seq}`, {
+        owner: "kim",
+      });
+      const tail = (yield* resumed.take(2)).map(({ data }) =>
+        data._tag === "CaughtUp" ? "caught up" : data.event.amount,
+      );
+      expect(tail).toEqual([4, "caught up"]);
+    }).pipe(Effect.provide(Served)),
+  );
+
+  it.live("middleware applied to the whole Api guards every endpoint, live reads included", () =>
+    Effect.gen(function* () {
+      const limited = { owner: "kim", headers: { "x-limited": "1" } };
+      expect(
+        yield* send("POST", "/Deposit", {
+          ...limited,
+          body: { target: "w-9", input: { amount: 1, at } },
+        }),
+      ).toEqual({ status: 429, body: { _tag: "RateLimited" } });
+      expect(yield* send("GET", "/Balance/w-9/watch", limited)).toEqual({
+        status: 429,
+        body: { _tag: "RateLimited" },
+      });
+      // Without the header, the same calls go through.
+      yield* send("POST", "/Deposit", {
+        owner: "kim",
+        body: { target: "w-9", input: { amount: 1, at } },
+      });
+      const watch = yield* listen("/Balance/w-9/watch", { owner: "kim" });
+      expect(watch.status).toBe(200);
+      expect((yield* watch.take(1))[0]!.data.state).toEqual({ owner: "kim", balance: 1 });
+    }).pipe(
+      Effect.provide(
+        (() => {
+          const LimitedHttp = DomainHttp.toHttpApi(Limited, {
+            include: ["Deposit", "Balance.watch"],
+          });
+          return serve(LimitedHttp.api, LimitedHttp.layer);
+        })(),
+      ),
+    ),
+  );
+
   it.live("serves the group inside your own HttpApi, under its prefix", () =>
     Effect.gen(function* () {
       const deposit = yield* send("POST", "/v1/Deposit", {
         owner: "sam",
-        body: { target: "w-3", amount: 5, at },
+        body: { target: "w-3", input: { amount: 5, at } },
       });
       expect(deposit.status).toBe(200);
       expect((yield* send("POST", "/Deposit", { owner: "sam", body: {} })).status).toBe(404);
@@ -223,14 +428,27 @@ describe("Domain toHttpApi", () => {
   it.live("an operation left out of include is not served", () =>
     Effect.gen(function* () {
       expect((yield* send("GET", "/Wallet/w-1", { owner: "sam" })).status).toBe(404);
+      expect((yield* send("GET", "/Wallet/w-1/watch", { owner: "sam" })).status).toBe(404);
       expect((yield* send("GET", "/Balance/w-1/list", { owner: "sam" })).status).toBe(404);
-      expect(Object.keys(WalletHttp.group.endpoints)).toEqual(["Deposit", "Balance.get"]);
+      expect(Object.keys(WalletHttp.group.endpoints)).toEqual([
+        "Deposit",
+        "Wallet.events",
+        "Balance.get",
+        "Balance.watch",
+        "Balance.snapshot",
+      ]);
     }).pipe(Effect.provide(Served)),
   );
 
   it("the OpenAPI document lists each endpoint with its schemas", () => {
     const spec = OpenApi.fromApi(WalletHttp.api);
-    expect(Object.keys(spec.paths).sort()).toEqual(["/Balance/{key}", "/Deposit"]);
+    expect(Object.keys(spec.paths).sort()).toEqual([
+      "/Balance/{key}",
+      "/Balance/{key}/snapshot",
+      "/Balance/{key}/watch",
+      "/Deposit",
+      "/Wallet/{key}/events",
+    ]);
 
     const deposit = spec.paths["/Deposit"]!.post!;
     expect(deposit.operationId).toBe("WalletApi.Deposit");
@@ -245,7 +463,19 @@ describe("Domain toHttpApi", () => {
       ["stream", "query"],
       ["version", "query"],
     ]);
-    expect(Object.keys(balance.responses).sort()).toEqual(["200", "401", "403"]);
+    // Waiting for a write can time out: `ConsistencyTimeout` is a 422.
+    expect(Object.keys(balance.responses).sort()).toEqual(["200", "401", "403", "422"]);
+    expect(JSON.stringify(balance.responses["422"])).toContain("ConsistencyTimeout");
+    // A live read is an event stream, with its failures before it starts.
+    const watch = spec.paths["/Balance/{key}/watch"]!.get!;
+    expect(Object.keys(watch.responses["200"]!.content ?? {})).toEqual(["text/event-stream"]);
+    expect(Object.keys(watch.responses).sort()).toEqual(["200", "401", "403"]);
+    const events = spec.paths["/Wallet/{key}/events"]!.get!;
+    expect(events.parameters.map((p) => [p.name, p.in]).sort()).toEqual([
+      ["after", "query"],
+      ["key", "path"],
+    ]);
+
     // The schemas the document refers to, as components.
     const components = JSON.stringify(spec.components.schemas);
     for (const tag of ["OverLimit", "Unauthenticated", "NotOwner"]) {
@@ -253,19 +483,23 @@ describe("Domain toHttpApi", () => {
     }
   });
 
-  it("publishes an entry's request and response calls, and refuses names it cannot serve", () => {
+  it("publishes every call of an entry, and refuses names it cannot serve", () => {
     const all = DomainHttp.toHttpApi(WalletApi, { include: ["Wallet", "Balance"] });
     expect(Object.values(all.group.endpoints).map((e) => [e.identifier, e.method, e.path])).toEqual(
       [
         ["Wallet.get", "GET", "/Wallet/:key"],
+        ["Wallet.watch", "GET", "/Wallet/:key/watch"],
+        ["Wallet.events", "GET", "/Wallet/:key/events"],
         ["Balance.get", "GET", "/Balance/:key"],
+        ["Balance.watch", "GET", "/Balance/:key/watch"],
+        ["Balance.events", "GET", "/Balance/:key/events"],
         ["Balance.list", "GET", "/Balance/:key/list"],
+        ["Balance.snapshot", "GET", "/Balance/:key/snapshot"],
       ],
     );
-    // Live reads are streams: they stay on the Api's own protocol.
-    // @ts-expect-error `watch` is not a request/response call.
-    expect(() => DomainHttp.toHttpApi(WalletApi, { include: ["Balance.watch"] })).toThrow(
-      "Balance.watch",
+    // @ts-expect-error not a call of the view.
+    expect(() => DomainHttp.toHttpApi(WalletApi, { include: ["Balance.peek"] })).toThrow(
+      "Balance.peek",
     );
     // @ts-expect-error not an entry of the Api.
     expect(() => DomainHttp.toHttpApi(WalletApi, { include: ["Withdraw"] })).toThrow("Withdraw");

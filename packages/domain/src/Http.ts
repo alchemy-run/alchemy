@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpApi from "effect/http-api/HttpApi";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
 import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
@@ -8,33 +9,35 @@ import * as OpenApi from "effect/http-api/OpenApi";
 import type { HttpServerRequest } from "effect/http/HttpServerRequest";
 import type * as Layer from "effect/Layer";
 import type * as Rpc from "effect/rpc/Rpc";
+import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
-import type * as Scope from "effect/Scope";
+import * as Scope from "effect/Scope";
+import * as Sink from "effect/Sink";
+import * as Stream from "effect/Stream";
 import { type Describable, describe, type Operation } from "./ApiCatalog.ts";
 
 /**
  * The names `include` accepts for one entry: the entry's name (all its
- * request/response calls) or one call (`<name>.<operation>`). Live reads
- * (`watch`, `events`) are streams, so they are not among them.
+ * calls) or one call (`<name>.<operation>`).
  */
 type CallsOf<E> = E extends { readonly kind: "Command"; readonly tag: infer N extends string }
   ? N
   : E extends { readonly kind: "View"; readonly viewName: infer N extends string }
-    ? N | `${N}.get` | `${N}.list`
+    ? N | `${N}.${"get" | "watch" | "events" | "list" | "snapshot"}`
     : E extends { readonly kind: "Stream"; readonly streamName: infer N extends string }
-      ? N | `${N}.peek` | `${N}.list`
+      ? N | `${N}.${"peek" | "watch" | "events" | "list"}`
       : E extends { readonly kind: "Aggregate"; readonly aggregateName: infer N extends string }
-        ? N | `${N}.get`
+        ? N | `${N}.${"get" | "watch" | "events"}`
         : never;
 
 /**
  * What {@link toHttpApi} reads from an Api class: its catalog, and its
- * in-process client (`testClient`), which runs every call through the Api's
- * own handlers and middleware.
+ * in-process client (`clientInProcess`), which runs every call through the
+ * Api's own handlers and middleware.
  */
 export interface Publishable extends Describable {
-  readonly testClient: Effect.Effect<unknown, never, any>;
+  readonly clientInProcess: Effect.Effect<unknown, never, any>;
 }
 
 /** The entries and calls of an Api that {@link toHttpApi} can publish. */
@@ -45,16 +48,16 @@ export type Includable<A extends Publishable> = CallsOf<A["entries"][number]>;
  * middleware its entries declare, as for the Api itself.
  */
 export type Requirements<A extends Publishable> = Exclude<
-  Effect.Services<A["testClient"]>,
+  Effect.Services<A["clientInProcess"]>,
   Scope.Scope
 >;
 
 /** The options of {@link toHttpApi}. */
 export interface Options<A extends Publishable> {
   /**
-   * What to publish: an entry's name publishes all its request/response
-   * calls, and `"<name>.<operation>"` (`"Balance.get"`) publishes one. Nothing
-   * else is served. A published path is public: plan to keep it.
+   * What to publish: an entry's name publishes all its calls, and
+   * `"<name>.<operation>"` (`"Balance.get"`) publishes one. Nothing else is
+   * served. A published path is public: plan to keep it.
    */
   readonly include: ReadonlyArray<Includable<A>>;
   /**
@@ -85,7 +88,7 @@ export interface HttpApiSurface<Name extends string, R> {
 /** The status of a typed failure that does not declare one. */
 const DEFAULT_STATUS = 422;
 
-/** The query of a `get` or `peek`: wait for a write, given as its receipt's `stream` and `version`. */
+/** The query of a `get`, `peek` or `snapshot`: wait for a write, given as its receipt's `stream` and `version`. */
 const AtLeastQuery = Schema.Struct({
   stream: Schema.optional(Schema.String),
   version: Schema.optional(Schema.Number),
@@ -112,12 +115,26 @@ const tagOf = (schema: Schema.Top): string | undefined => {
   return tag && SchemaAST.isLiteral(tag) ? String(tag.literal) : undefined;
 };
 
-const resolveStatus = SchemaAST.resolveAt<number>("httpApiStatus");
+/**
+ * The status `HttpApiSchema.status` gave a schema. It is an annotation on the
+ * schema, or on its key context when the schema is a field.
+ */
+const resolveStatus = (ast: SchemaAST.AST): number | undefined =>
+  SchemaAST.resolveAt<number>("httpApiStatus")(ast) ??
+  (ast.context?.annotations?.httpApiStatus as number | undefined);
 
-/** Every typed failure of a call: its declared rejections, then its middleware's errors. */
+/**
+ * Every typed failure of a call: its declared rejections (a streaming call
+ * declares them on its stream), then its middleware's errors.
+ */
 const failuresOf = (rpc: Rpc.AnyWithProps): ReadonlyArray<Schema.Top> => {
   const seen = new Set<Schema.Top>();
-  for (const schema of [rpc.errorSchema, ...[...rpc.middlewares].map((m) => m.error)]) {
+  const streamed = RpcSchema.isStreamSchema(rpc.successSchema) ? [rpc.successSchema.error] : [];
+  for (const schema of [
+    rpc.errorSchema,
+    ...streamed,
+    ...[...rpc.middlewares].map((m) => m.error),
+  ]) {
     for (const member of membersOf(schema)) seen.add(member);
   }
   return [...seen];
@@ -146,14 +163,23 @@ const call = (client: Client, operation: Operation, request: DecodedRequest) => 
   const headers = request.request.headers;
   if (operation.operation === "send") {
     const send = client[operation.entry] as (
-      payload: unknown,
+      target: unknown,
+      input: unknown,
       options: object,
     ) => Effect.Effect<unknown, unknown>;
-    return send(request.payload, { headers });
+    const { target, input, commandId } = request.payload as {
+      readonly target: unknown;
+      readonly input: unknown;
+      readonly commandId?: string;
+    };
+    return send(target, input, { headers, ...(commandId === undefined ? {} : { commandId }) });
   }
   const reads = client[operation.entry] as Record<
     string,
-    (key: string, options: object) => Effect.Effect<unknown, unknown>
+    (
+      key: string,
+      options: object,
+    ) => Effect.Effect<unknown, unknown> | Stream.Stream<unknown, unknown>
   >;
   const { stream, version, ...rest } = request.query ?? {};
   const atLeast =
@@ -161,6 +187,46 @@ const call = (client: Client, operation: Operation, request: DecodedRequest) => 
       ? {}
       : { atLeast: { stream: stream as string, version: version as number } };
   return reads[operation.operation]!(request.params!.key, { headers, ...atLeast, ...rest });
+};
+
+/**
+ * A live read as an SSE body. The first value is read before the response
+ * starts, so a failure of the read's middleware or `validate` answers with
+ * its HTTP status, like any other call. A failure after that ends the stream
+ * with a typed failure event. The in-process client lives until the stream
+ * ends.
+ */
+const live = (
+  client: Effect.Effect<Client, never, Scope.Scope>,
+  operation: Operation,
+  request: DecodedRequest,
+) =>
+  Effect.gen(function* () {
+    const scope = yield* Scope.make();
+    const peeled = yield* Effect.gen(function* () {
+      const reads = call(yield* client, operation, request) as Stream.Stream<unknown, unknown>;
+      return yield* Stream.peel(reads, Sink.take(1));
+    }).pipe(
+      Scope.provide(scope),
+      Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
+    );
+    const [first, rest] = peeled;
+    return Stream.fromIterable(first).pipe(
+      Stream.concat(rest),
+      Stream.onExit((exit) => Scope.close(scope, exit)),
+    );
+  });
+
+/**
+ * The SSE body of a live read: each value the RPC streams is one event's
+ * `data`, and a failure after the first value is the typed failure event.
+ */
+const sseOf = (rpc: Rpc.AnyWithProps, errors: ReadonlyArray<Schema.Top>) => {
+  const streamed = rpc.successSchema as RpcSchema.Stream<Schema.Top, Schema.Top>;
+  return HttpApiSchema.StreamSse({
+    data: streamed.success,
+    error: errors.length === 0 ? Schema.Never : Schema.Union(errors),
+  });
 };
 
 /** The endpoint of one call. The schemas are the RPC's own, so the HTTP wire is the RPC wire. */
@@ -178,20 +244,38 @@ const endpointOf = (
           success: rpc.successSchema,
           error,
         })
-      : operation.operation === "list"
-        ? HttpApiEndpoint.get(operation.rpc, `/${operation.entry}/:key/list`, {
+      : operation.stream
+        ? HttpApiEndpoint.get(operation.rpc, `/${operation.entry}/:key/${operation.operation}`, {
             params: { key: fields.key! },
-            query: { order: fields.order!, take: fields.take!, after: fields.after! },
-            success: rpc.successSchema,
+            // `events` resumes after a cursor; `watch` takes nothing but the key.
+            ...(fields.after ? { query: { after: fields.after } } : {}),
+            success: sseOf(rpc, errors),
             error,
           })
-        : HttpApiEndpoint.get(operation.rpc, `/${operation.entry}/:key`, {
-            params: { key: fields.key! },
-            // A view's `get` and a stream's `peek` can wait for a write; an aggregate reads its state.
-            ...(fields.atLeast ? { query: AtLeastQuery } : {}),
-            success: rpc.successSchema,
-            error,
-          });
+        : operation.operation === "list"
+          ? HttpApiEndpoint.get(operation.rpc, `/${operation.entry}/:key/list`, {
+              params: { key: fields.key! },
+              query: {
+                order: fields.order!,
+                take: fields.take!,
+                after: fields.after!,
+              },
+              success: rpc.successSchema,
+              error,
+            })
+          : HttpApiEndpoint.get(
+              operation.rpc,
+              operation.operation === "snapshot"
+                ? `/${operation.entry}/:key/snapshot`
+                : `/${operation.entry}/:key`,
+              {
+                params: { key: fields.key! },
+                // A view's reads and a stream's `peek` can wait for a write; an aggregate reads its state.
+                ...(fields.atLeast ? { query: AtLeastQuery } : {}),
+                success: rpc.successSchema,
+                error,
+              },
+            );
   const described =
     operation.description === undefined
       ? endpoint
@@ -200,25 +284,34 @@ const endpointOf = (
 };
 
 /**
- * Publish an Api's request/response calls as a plain HTTP JSON API, with an
- * OpenAPI document, from the same Api. Each published call is one endpoint:
+ * Publish an Api's calls as a plain HTTP JSON API, with an OpenAPI document,
+ * from the same Api. Each published call is one endpoint:
  *
  * | Call                    | Method and path              | Input                                   |
  * | ----------------------- | ---------------------------- | --------------------------------------- |
  * | a command               | `POST /<Command>`            | JSON body: `target`, `commandId`, input |
  * | `get`, `peek`           | `GET /<Entry>/{key}`         | `?stream=&version=` waits for a write   |
+ * | `snapshot`              | `GET /<Entry>/{key}/snapshot`| `?stream=&version=` waits for a write   |
  * | `list`                  | `GET /<Entry>/{key}/list`    | `?order=&take=&after=`                  |
+ * | `watch`                 | `GET /<Entry>/{key}/watch`   | Server-Sent Events                      |
+ * | `events`                | `GET /<Entry>/{key}/events`  | Server-Sent Events, `?after=` a cursor  |
  *
  * A command answers with its receipt; a read with what the Api's own client
  * gets (`null` for an empty key). A typed failure answers with its `_tag`
  * and data, at the status `status` gives it, else its `httpApiStatus`
  * annotation, else 422. Input its schema refuses is a 400.
  *
+ * A live read (`watch`, `events`) answers with a Server-Sent Events stream:
+ * each value is one event's JSON `data`. A failure before the first value,
+ * such as its middleware refusing the caller, answers with its status like
+ * any other call. A failure after it, such as `validate` refusing a change,
+ * ends the stream with an `effect/http-api/stream/failure` event whose
+ * `data` is the typed failure.
+ *
  * Every call goes through the Api's own handlers in process, with the HTTP
  * request's headers, so its middleware, its checks and its rejections run as
- * for any client, and its input is decoded once. Live reads (`watch`,
- * `events`) are streams and stay on the Api's own protocol. A read's `where`
- * filter is not published.
+ * for any client, and its input is decoded once. A read's `where` filter is
+ * not published.
  *
  * Only the calls in `include` are published: a public path has to stay once
  * a client calls it, so nothing is published by default.
@@ -239,6 +332,17 @@ const endpointOf = (
  * );
  * const spec = OpenApi.fromApi(BankHttp.api);
  * ```
+ *
+ * **Example:** Watch a view from a browser
+ * ```typescript
+ * const BankHttp = DomainHttp.toHttpApi(CustomerApi, {
+ *   include: ["AccountSummary.watch"],
+ * });
+ *
+ * // in the browser: one event per change, each `{ state, cursor }`
+ * const source = new EventSource(`/AccountSummary/${accountId}/watch`);
+ * source.onmessage = (event) => render(JSON.parse(event.data).state);
+ * ```
  */
 export const toHttpApi = <A extends Publishable>(
   api: A,
@@ -246,7 +350,7 @@ export const toHttpApi = <A extends Publishable>(
 ): HttpApiSurface<A["apiName"], Requirements<A>> => {
   const name = api.apiName;
   const catalog = describe(api);
-  const calls = catalog.operations.filter((operation) => !operation.stream);
+  const calls = catalog.operations;
   // Follow-up once `expose` lands (#2585): default `include` to the entries
   // whose `exposureOf(entry).http` is true.
   const included = new Set<string>();
@@ -255,12 +359,7 @@ export const toHttpApi = <A extends Publishable>(
       (operation) => operation.entry === wanted || operation.rpc === wanted,
     );
     if (matched.length === 0) {
-      const streamed = catalog.operations.some((operation) => operation.rpc === wanted);
-      throw new Error(
-        streamed
-          ? `${name} cannot publish ${wanted} over HTTP: it is a stream`
-          : `${name} has no entry or request/response call named ${wanted}`,
-      );
+      throw new Error(`${name} has no entry or call named ${wanted}`);
     }
     for (const operation of matched) included.add(operation.rpc);
   }
@@ -303,21 +402,25 @@ export const toHttpApi = <A extends Publishable>(
       throw new Error(`${httpApi.identifier} does not hold the ${name} group: add it first`);
     }
     return HttpApiBuilder.group(httpApi as never, name as never, (handlers: any) => {
+      // The Api's in-process client: its handlers and middleware, nothing
+      // serialized. One per request, as `yield* Api` builds one server per request.
+      const client = api.clientInProcess as Effect.Effect<Client, never, Scope.Scope>;
       for (const { operation, isDeclared } of published) {
+        // Only the endpoint's declared failures are public; anything else is a defect.
+        const declaredOnly = <A, R>(effect: Effect.Effect<A, unknown, R>) =>
+          Effect.catchIf(effect, (error) => !isDeclared(error), Effect.die);
         handlers = handlers.handle(operation.rpc, (request: DecodedRequest) =>
-          Effect.gen(function* () {
-            // The Api's in-process client: its handlers and middleware, nothing
-            // serialized. One per request, as `yield* Api` builds one server per request.
-            const client = (yield* api.testClient) as Client;
-            return yield* call(client, operation, request);
-          }).pipe(
-            // Only the endpoint's declared failures are public; anything else is a defect.
-            Effect.catchIf(
-              (error) => !isDeclared(error),
-              (error) => Effect.die(error),
-            ),
-            Effect.scoped,
-          ),
+          operation.stream
+            ? live(client, operation, request).pipe(
+                declaredOnly,
+                Effect.map(Stream.catchIf((error) => !isDeclared(error), Stream.die)),
+              )
+            : Effect.gen(function* () {
+                return yield* call(yield* client, operation, request) as Effect.Effect<
+                  unknown,
+                  unknown
+                >;
+              }).pipe(declaredOnly, Effect.scoped),
         );
       }
       return handlers;

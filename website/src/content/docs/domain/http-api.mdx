@@ -17,7 +17,7 @@ export const BankHttp = DomainHttp.toHttpApi(CustomerApi, {
 });
 ```
 
-`include` is required. It lists what to publish: an entry's name publishes all of its request/response calls, and `"<entry>.<operation>"` publishes one. Nothing else is served, and a name the Api cannot serve is a type error. A public path has to stay once a client calls it, so nothing is published unless you list it.
+`include` is required. It lists what to publish: an entry's name publishes all of its calls, and `"<entry>.<operation>"` publishes one. Nothing else is served, and a name the Api cannot serve is a type error. A public path has to stay once a client calls it, so nothing is published unless you list it.
 
 `BankHttp` has:
 
@@ -71,16 +71,32 @@ Each published call becomes one endpoint, by one rule:
 | ------------------------------ | --------------------------- | -------------------------------------------------------- |
 | A command                      | `POST /<Command>`           | A JSON body: `target`, an optional `commandId`, and the input |
 | A view's or aggregate's `get`, a stream's `peek` | `GET /<Entry>/{key}`        | `?stream=&version=` (from a receipt) waits for that write |
+| A view's `snapshot`            | `GET /<Entry>/{key}/snapshot` | `?stream=&version=` waits for that write               |
 | A view's or stream's `list`    | `GET /<Entry>/{key}/list`   | `?order=&take=&after=`                                   |
+| `watch`                        | `GET /<Entry>/{key}/watch`  | None. Answers with Server-Sent Events                    |
+| `events`                       | `GET /<Entry>/{key}/events` | `?after=` a cursor. Answers with Server-Sent Events      |
 
 A command's body is the same JSON as its RPC payload, and every answer is the same JSON the typed client receives: a command answers with its receipt (`reply`, `stream`, `version`), and a read with the key's state (`null` for a key with nothing in it) or a page. The key of a read is in the path, because a read takes no body. `GET /AccountSummary/c-1-main?stream=…&version=3` reads your own write after a deposit. `stream` and `version` go together.
 
 ```shellsession
 $ curl -X POST https://bank.example.com/DepositMoney \
     -H 'content-type: application/json' -H 'cookie: session=…' \
-    -d '{"target":"c-1-main","amount":500}'
+    -d '{"target":"c-1-main","input":{"amount":500}}'
 {"reply":{"balance":1500},"stream":"Account/c-1-main","version":3}
 ```
+
+## Live reads
+
+`watch` and `events` answer with Server-Sent Events. Each value the typed client would receive is one event, its JSON in `data`: `{ state, cursor }` for `watch`, then one per change, and for `events` each entry, a `CaughtUp` frame, then live entries. A browser reads them with `EventSource`:
+
+```typescript
+const summary = new EventSource(`/AccountSummary/${accountId}/watch`);
+summary.onmessage = (event) => render(JSON.parse(event.data).state);
+```
+
+The response starts once the read has its first value, so a read the middleware or `validate` refuses answers with that failure's status, like any other call. Once the stream is open, a failure ends it with an `effect/http-api/stream/failure` event whose `data` is the typed failure, such as `validate` refusing a change while a client watches.
+
+`events?after=<cursor>` resumes after a cursor from `watch`, `snapshot` or an earlier entry, so a client that reconnects misses nothing.
 
 ## Errors
 
@@ -98,6 +114,5 @@ Every call goes through the Api's own handlers, in process, with the HTTP reques
 
 ## Limits
 
-- Live reads (`watch` and `events`) are streams, not one result, so they are not published. Clients that need them use the Api's own protocol.
 - A read's `where` filter is not published: a filter does not fit in a URL.
 - An endpoint's input and answer are the call's own JSON. To shape a public API differently, write your own `HttpApi` group and call the Api from its handlers.
