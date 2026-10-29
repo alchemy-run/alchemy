@@ -187,7 +187,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListRepositories (securesourcemanager.projects.locations.repositories.list)",
-        () => probe("ListRepositories", true),
+        () => probe("ListRepositories", false),
         {
           tags: ["provider:gcp", "provider:gcp:securesourcemanager", "live"],
           timeout: 600_000,

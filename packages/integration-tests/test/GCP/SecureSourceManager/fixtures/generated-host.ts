@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { hostProject, probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
  * Cloud Run service calling every generated SecureSourceManager binding as its own
@@ -121,7 +121,14 @@ export default class SecureSourceManagerGeneratedHost extends GCP.Function<Secur
             } as never),
           ),
         ),
-        ListRepositories: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListRepositories: probeOutcome(
+          Retry.none(
+            p15({
+              location: "us-central1",
+              instance: `projects/${yield* hostProject}/locations/us-central1/instances/alchemy-missing`,
+            } as never),
+          ),
+        ),
         ListRepositoryBranchRules: probeOutcome(
           Retry.none(p16({ repository: "alchemy-missing", location: "us-central1" } as never)),
         ),

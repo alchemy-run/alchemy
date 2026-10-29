@@ -26,6 +26,9 @@
       "RepositoriesIssue": "needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
       "RepositoriesIssuesIssueComment": "needs GCP_TEST_SECURE_SOURCE_MANAGER_REPO (an external prerequisite the testing project lacks)",
       "RepositoriesPullRequestsPullRequestComment": "needs GCP_TEST_SECURE_SOURCE_MANAGER_PULL_REQUEST (an external prerequisite the testing project lacks)"
+    },
+    "args": {
+      "ListRepositories": "{ location: \"us-central1\", instance: `projects/${yield* hostProject}/locations/us-central1/instances/alchemy-missing` }"
     }
   }
 }
