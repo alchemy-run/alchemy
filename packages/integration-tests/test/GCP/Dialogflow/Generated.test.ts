@@ -48,239 +48,239 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AgentsEntityType", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetEntityType@AgentsEntityType (dialogflow.projects.locations.agents.entityTypes.get): AgentsEntityType: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetEntityType@AgentsEntityType (dialogflow.projects.locations.agents.entityTypes.get): AgentsEntityType: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsEnvironment", { concurrent: true }, () => {
-      test.provider.todo(
-        "DeployEnvironmentFlow (dialogflow.projects.locations.agents.environments.deployFlow): AgentsEnvironment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "DeployEnvironmentFlow (dialogflow.projects.locations.agents.environments.deployFlow): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "DetectSessionIntent (dialogflow.projects.locations.agents.environments.sessions.detectIntent): AgentsEnvironment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "DetectSessionIntent (dialogflow.projects.locations.agents.environments.sessions.detectIntent): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "FulfillSessionIntent (dialogflow.projects.locations.agents.environments.sessions.fulfillIntent): AgentsEnvironment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "FulfillSessionIntent (dialogflow.projects.locations.agents.environments.sessions.fulfillIntent): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetEnvironment (dialogflow.projects.locations.agents.environments.get): AgentsEnvironment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetEnvironment (dialogflow.projects.locations.agents.environments.get): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetEnvironmentDeployment (dialogflow.projects.locations.agents.environments.deployments.get): AgentsEnvironment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetEnvironmentDeployment (dialogflow.projects.locations.agents.environments.deployments.get): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentContinuousTestResults (dialogflow.projects.locations.agents.environments.continuousTestResults.list): AgentsEnvironment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListEnvironmentContinuousTestResults (dialogflow.projects.locations.agents.environments.continuousTestResults.list): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentDeployments (dialogflow.projects.locations.agents.environments.deployments.list): AgentsEnvironment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListEnvironmentDeployments (dialogflow.projects.locations.agents.environments.deployments.list): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentExperiments (dialogflow.projects.locations.agents.environments.experiments.list): AgentsEnvironment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListEnvironmentExperiments (dialogflow.projects.locations.agents.environments.experiments.list): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListEnvironmentSessionEntityTypes (dialogflow.projects.locations.agents.environments.sessions.entityTypes.list): AgentsEnvironment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListEnvironmentSessionEntityTypes (dialogflow.projects.locations.agents.environments.sessions.entityTypes.list): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "LookupEnvironmentHistory (dialogflow.projects.locations.agents.environments.lookupEnvironmentHistory): AgentsEnvironment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "LookupEnvironmentHistory (dialogflow.projects.locations.agents.environments.lookupEnvironmentHistory): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "MatchSessionIntent (dialogflow.projects.locations.agents.environments.sessions.matchIntent): AgentsEnvironment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "MatchSessionIntent (dialogflow.projects.locations.agents.environments.sessions.matchIntent): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RunEnvironmentContinuousTest (dialogflow.projects.locations.agents.environments.runContinuousTest): AgentsEnvironment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RunEnvironmentContinuousTest (dialogflow.projects.locations.agents.environments.runContinuousTest): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ServerSessionStreamingDetectIntent (dialogflow.projects.locations.agents.environments.sessions.serverStreamingDetectIntent): AgentsEnvironment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ServerSessionStreamingDetectIntent (dialogflow.projects.locations.agents.environments.sessions.serverStreamingDetectIntent): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsEnvironmentsExperiment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetExperiment (dialogflow.projects.locations.agents.environments.experiments.get): AgentsEnvironmentsExperiment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetExperiment (dialogflow.projects.locations.agents.environments.experiments.get): AgentsEnvironmentsExperiment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "StartExperiment (dialogflow.projects.locations.agents.environments.experiments.start): AgentsEnvironmentsExperiment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "StartExperiment (dialogflow.projects.locations.agents.environments.experiments.start): AgentsEnvironmentsExperiment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "StopExperiment (dialogflow.projects.locations.agents.environments.experiments.stop): AgentsEnvironmentsExperiment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "StopExperiment (dialogflow.projects.locations.agents.environments.experiments.stop): AgentsEnvironmentsExperiment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsEnvironmentsSessionsEntityType", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetEntityType@AgentsEnvironmentsSessionsEntityType (dialogflow.projects.locations.agents.environments.sessions.entityTypes.get): AgentsEnvironmentsSessionsEntityType: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetEntityType@AgentsEnvironmentsSessionsEntityType (dialogflow.projects.locations.agents.environments.sessions.entityTypes.get): AgentsEnvironmentsSessionsEntityType: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsFlow", { concurrent: true }, () => {
-      test.provider.todo(
-        "ExportFlow (dialogflow.projects.locations.agents.flows.export): AgentsFlow: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ExportFlow (dialogflow.projects.locations.agents.flows.export): AgentsFlow: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetFlow (dialogflow.projects.locations.agents.flows.get): AgentsFlow: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetFlow (dialogflow.projects.locations.agents.flows.get): AgentsFlow: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListFlowPages (dialogflow.projects.locations.agents.flows.pages.list): AgentsFlow: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListFlowPages (dialogflow.projects.locations.agents.flows.pages.list): AgentsFlow: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListFlowTransitionRouteGroups (dialogflow.projects.locations.agents.flows.transitionRouteGroups.list): AgentsFlow: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListFlowTransitionRouteGroups (dialogflow.projects.locations.agents.flows.transitionRouteGroups.list): AgentsFlow: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListFlowVersions (dialogflow.projects.locations.agents.flows.versions.list): AgentsFlow: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListFlowVersions (dialogflow.projects.locations.agents.flows.versions.list): AgentsFlow: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "TrainFlow (dialogflow.projects.locations.agents.flows.train): AgentsFlow: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "TrainFlow (dialogflow.projects.locations.agents.flows.train): AgentsFlow: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ValidateFlow (dialogflow.projects.locations.agents.flows.validate): AgentsFlow: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ValidateFlow (dialogflow.projects.locations.agents.flows.validate): AgentsFlow: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsFlowsPage", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPage (dialogflow.projects.locations.agents.flows.pages.get): AgentsFlowsPage: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPage (dialogflow.projects.locations.agents.flows.pages.get): AgentsFlowsPage: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsFlowsTransitionRouteGroup", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTransitionRouteGroup@AgentsFlowsTransitionRouteGroup (dialogflow.projects.locations.agents.flows.transitionRouteGroups.get): AgentsFlowsTransitionRouteGroup: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetTransitionRouteGroup@AgentsFlowsTransitionRouteGroup (dialogflow.projects.locations.agents.flows.transitionRouteGroups.get): AgentsFlowsTransitionRouteGroup: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsFlowsVersion", { concurrent: true }, () => {
-      test.provider.todo(
-        "CompareVersions (dialogflow.projects.locations.agents.flows.versions.compareVersions): AgentsFlowsVersion: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "CompareVersions (dialogflow.projects.locations.agents.flows.versions.compareVersions): AgentsFlowsVersion: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetVersion@AgentsFlowsVersion (dialogflow.projects.locations.agents.flows.versions.get): AgentsFlowsVersion: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetVersion@AgentsFlowsVersion (dialogflow.projects.locations.agents.flows.versions.get): AgentsFlowsVersion: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "LoadVersion (dialogflow.projects.locations.agents.flows.versions.load): AgentsFlowsVersion: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "LoadVersion (dialogflow.projects.locations.agents.flows.versions.load): AgentsFlowsVersion: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsGenerator", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetGenerator (dialogflow.projects.locations.agents.generators.get): AgentsGenerator: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetGenerator (dialogflow.projects.locations.agents.generators.get): AgentsGenerator: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsIntent", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetIntent (dialogflow.projects.locations.agents.intents.get): AgentsIntent: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetIntent (dialogflow.projects.locations.agents.intents.get): AgentsIntent: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsPlaybook", { concurrent: true }, () => {
-      test.provider.todo(
-        "ExportPlaybook (dialogflow.projects.locations.agents.playbooks.export): AgentsPlaybook: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ExportPlaybook (dialogflow.projects.locations.agents.playbooks.export): AgentsPlaybook: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetPlaybook (dialogflow.projects.locations.agents.playbooks.get): AgentsPlaybook: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPlaybook (dialogflow.projects.locations.agents.playbooks.get): AgentsPlaybook: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListPlaybookExamples (dialogflow.projects.locations.agents.playbooks.examples.list): AgentsPlaybook: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListPlaybookExamples (dialogflow.projects.locations.agents.playbooks.examples.list): AgentsPlaybook: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListPlaybookVersions (dialogflow.projects.locations.agents.playbooks.versions.list): AgentsPlaybook: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListPlaybookVersions (dialogflow.projects.locations.agents.playbooks.versions.list): AgentsPlaybook: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsPlaybooksExample", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetExample (dialogflow.projects.locations.agents.playbooks.examples.get): AgentsPlaybooksExample: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetExample (dialogflow.projects.locations.agents.playbooks.examples.get): AgentsPlaybooksExample: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsPlaybooksVersion", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetVersion@AgentsPlaybooksVersion (dialogflow.projects.locations.agents.playbooks.versions.get): AgentsPlaybooksVersion: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetVersion@AgentsPlaybooksVersion (dialogflow.projects.locations.agents.playbooks.versions.get): AgentsPlaybooksVersion: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RestoreVersion@AgentsPlaybooksVersion (dialogflow.projects.locations.agents.playbooks.versions.restore): AgentsPlaybooksVersion: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RestoreVersion@AgentsPlaybooksVersion (dialogflow.projects.locations.agents.playbooks.versions.restore): AgentsPlaybooksVersion: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsSessionsEntityType", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetEntityType@AgentsSessionsEntityType (dialogflow.projects.locations.agents.sessions.entityTypes.get): AgentsSessionsEntityType: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetEntityType@AgentsSessionsEntityType (dialogflow.projects.locations.agents.sessions.entityTypes.get): AgentsSessionsEntityType: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsTool", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTool (dialogflow.projects.locations.agents.tools.get): AgentsTool: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetTool (dialogflow.projects.locations.agents.tools.get): AgentsTool: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListToolVersions (dialogflow.projects.locations.agents.tools.versions.list): AgentsTool: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListToolVersions (dialogflow.projects.locations.agents.tools.versions.list): AgentsTool: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsToolsVersion", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetVersion@AgentsToolsVersion (dialogflow.projects.locations.agents.tools.versions.get): AgentsToolsVersion: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetVersion@AgentsToolsVersion (dialogflow.projects.locations.agents.tools.versions.get): AgentsToolsVersion: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RestoreVersion@AgentsToolsVersion (dialogflow.projects.locations.agents.tools.versions.restore): AgentsToolsVersion: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RestoreVersion@AgentsToolsVersion (dialogflow.projects.locations.agents.tools.versions.restore): AgentsToolsVersion: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsTransitionRouteGroup", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTransitionRouteGroup@AgentsTransitionRouteGroup (dialogflow.projects.locations.agents.transitionRouteGroups.get): AgentsTransitionRouteGroup: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetTransitionRouteGroup@AgentsTransitionRouteGroup (dialogflow.projects.locations.agents.transitionRouteGroups.get): AgentsTransitionRouteGroup: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });
 
     describe("AgentsWebhook", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetWebhook (dialogflow.projects.locations.agents.webhooks.get): AgentsWebhook: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetWebhook (dialogflow.projects.locations.agents.webhooks.get): AgentsWebhook: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
         () => Effect.void,
       );
     });

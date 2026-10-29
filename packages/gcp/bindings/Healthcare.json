@@ -35,8 +35,16 @@
   },
   "probes": {
     "resources": {
-      "Dataset": "ProbeDataset"
-    },
-    "untestable": {}
+      "Dataset": "ProbeDataset",
+      "DatasetsConsentStore": "ProbeConsentStore",
+      "DatasetsDicomStore": "ProbeDicomStore",
+      "DatasetsFhirStore": "ProbeFhirStore",
+      "DatasetsHl7V2Store": "ProbeHl7V2Store",
+      "DatasetsHl7V2StoresMessage": "ProbeHl7Message",
+      "DatasetsConsentStoresAttributeDefinition": "ProbeAttribute",
+      "DatasetsConsentStoresConsentArtifact": "ProbeArtifact",
+      "DatasetsConsentStoresConsent": "ProbeConsent",
+      "DatasetsConsentStoresUserDataMapping": "ProbeMapping"
+    }
   }
 }

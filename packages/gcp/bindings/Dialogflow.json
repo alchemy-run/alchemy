@@ -64,6 +64,25 @@
     "resources": {
       "SecuritySetting": "ProbeSecuritySetting"
     },
-    "untestable": {}
+    "untestable": {
+      "AgentsEntityType": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsEnvironment": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsEnvironmentsExperiment": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsEnvironmentsSessionsEntityType": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsFlow": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsFlowsPage": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsFlowsTransitionRouteGroup": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsFlowsVersion": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsGenerator": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsIntent": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsPlaybook": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsPlaybooksExample": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsPlaybooksVersion": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsSessionsEntityType": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsTool": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsToolsVersion": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsTransitionRouteGroup": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
+      "AgentsWebhook": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent"
+    }
   }
 }

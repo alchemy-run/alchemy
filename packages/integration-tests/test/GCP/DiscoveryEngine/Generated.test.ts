@@ -235,16 +235,24 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("CollectionsDataStoresBranchesDocument", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDocument@CollectionsDataStoresBranchesDocument (discoveryengine.projects.locations.collections.dataStores.branches.documents.get): CollectionsDataStoresBranchesDocument: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDocument@CollectionsDataStoresBranchesDocument (discoveryengine.projects.locations.collections.dataStores.branches.documents.get)",
+        () => probe("GetDocument@CollectionsDataStoresBranchesDocument", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("CollectionsDataStoresControl", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetControl@CollectionsDataStoresControl (discoveryengine.projects.locations.collections.dataStores.controls.get): CollectionsDataStoresControl: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetControl@CollectionsDataStoresControl (discoveryengine.projects.locations.collections.dataStores.controls.get)",
+        () => probe("GetControl@CollectionsDataStoresControl", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -260,89 +268,161 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("CollectionsDataStoresSchema", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSchema@CollectionsDataStoresSchema (discoveryengine.projects.locations.collections.dataStores.schemas.get): CollectionsDataStoresSchema: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetSchema@CollectionsDataStoresSchema (discoveryengine.projects.locations.collections.dataStores.schemas.get)",
+        () => probe("GetSchema@CollectionsDataStoresSchema", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("CollectionsDataStoresServingConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "AnswerServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.answer): CollectionsDataStoresServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "AnswerServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.answer)",
+        () => probe("AnswerServingConfig@CollectionsDataStoresServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.get): CollectionsDataStoresServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.get)",
+        () => probe("GetServingConfig@CollectionsDataStoresServingConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RecommendServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.recommend): CollectionsDataStoresServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RecommendServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.recommend)",
+        () => probe("RecommendServingConfig@CollectionsDataStoresServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SearchServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.search): CollectionsDataStoresServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SearchServingConfig@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.search)",
+        () => probe("SearchServingConfig@CollectionsDataStoresServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SearchServingConfigLite@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.searchLite): CollectionsDataStoresServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SearchServingConfigLite@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.searchLite)",
+        () => probe("SearchServingConfigLite@CollectionsDataStoresServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "StreamServingConfigAnswer@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.streamAnswer): CollectionsDataStoresServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "StreamServingConfigAnswer@CollectionsDataStoresServingConfig (discoveryengine.projects.locations.collections.dataStores.servingConfigs.streamAnswer)",
+        () => probe("StreamServingConfigAnswer@CollectionsDataStoresServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("CollectionsDataStoresSession", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSession@CollectionsDataStoresSession (discoveryengine.projects.locations.collections.dataStores.sessions.get): CollectionsDataStoresSession: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetSession@CollectionsDataStoresSession (discoveryengine.projects.locations.collections.dataStores.sessions.get)",
+        () => probe("GetSession@CollectionsDataStoresSession", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetSessionAnswer@CollectionsDataStoresSession (discoveryengine.projects.locations.collections.dataStores.sessions.answers.get): CollectionsDataStoresSession: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetSessionAnswer@CollectionsDataStoresSession (discoveryengine.projects.locations.collections.dataStores.sessions.answers.get)",
+        () => probe("GetSessionAnswer@CollectionsDataStoresSession", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("CollectionsDataStoresSiteSearchEngineTargetSite", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTargetSite@CollectionsDataStoresSiteSearchEngineTargetSite (discoveryengine.projects.locations.collections.dataStores.siteSearchEngine.targetSites.get): CollectionsDataStoresSiteSearchEngineTargetSite: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTargetSite@CollectionsDataStoresSiteSearchEngineTargetSite (discoveryengine.projects.locations.collections.dataStores.siteSearchEngine.targetSites.get)",
+        () => probe("GetTargetSite@CollectionsDataStoresSiteSearchEngineTargetSite", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("CollectionsEngine", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetEngine (discoveryengine.projects.locations.collections.engines.get): CollectionsEngine: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetEngine (discoveryengine.projects.locations.collections.engines.get)",
+        () => probe("GetEngine", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetEngineWidgetConfig (discoveryengine.projects.locations.collections.engines.widgetConfigs.get): CollectionsEngine: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetEngineWidgetConfig (discoveryengine.projects.locations.collections.engines.widgetConfigs.get)",
+        () => probe("GetEngineWidgetConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListEngineAssistants (discoveryengine.projects.locations.collections.engines.assistants.list): CollectionsEngine: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListEngineAssistants (discoveryengine.projects.locations.collections.engines.assistants.list)",
+        () => probe("ListEngineAssistants", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListEngineControls (discoveryengine.projects.locations.collections.engines.controls.list): CollectionsEngine: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListEngineControls (discoveryengine.projects.locations.collections.engines.controls.list)",
+        () => probe("ListEngineControls", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListEngineConversations (discoveryengine.projects.locations.collections.engines.conversations.list): CollectionsEngine: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListEngineConversations (discoveryengine.projects.locations.collections.engines.conversations.list)",
+        () => probe("ListEngineConversations", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListEngineServingConfigs (discoveryengine.projects.locations.collections.engines.servingConfigs.list): CollectionsEngine: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListEngineServingConfigs (discoveryengine.projects.locations.collections.engines.servingConfigs.list)",
+        () => probe("ListEngineServingConfigs", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListEngineSessions (discoveryengine.projects.locations.collections.engines.sessions.list): CollectionsEngine: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListEngineSessions (discoveryengine.projects.locations.collections.engines.sessions.list)",
+        () => probe("ListEngineSessions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "PatchEngineWidgetConfig (discoveryengine.projects.locations.collections.engines.widgetConfigs.patch): CollectionsEngine: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "PatchEngineWidgetConfig (discoveryengine.projects.locations.collections.engines.widgetConfigs.patch)",
+        () => probe("PatchEngineWidgetConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -394,9 +474,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("CollectionsEnginesControl", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetControl@CollectionsEnginesControl (discoveryengine.projects.locations.collections.engines.controls.get): CollectionsEnginesControl: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetControl@CollectionsEnginesControl (discoveryengine.projects.locations.collections.engines.controls.get)",
+        () => probe("GetControl@CollectionsEnginesControl", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -412,40 +496,72 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("CollectionsEnginesServingConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "AnswerServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.answer): CollectionsEnginesServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "AnswerServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.answer)",
+        () => probe("AnswerServingConfig@CollectionsEnginesServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.get): CollectionsEnginesServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.get)",
+        () => probe("GetServingConfig@CollectionsEnginesServingConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RecommendServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.recommend): CollectionsEnginesServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RecommendServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.recommend)",
+        () => probe("RecommendServingConfig@CollectionsEnginesServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SearchServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.search): CollectionsEnginesServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SearchServingConfig@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.search)",
+        () => probe("SearchServingConfig@CollectionsEnginesServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SearchServingConfigLite@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.searchLite): CollectionsEnginesServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SearchServingConfigLite@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.searchLite)",
+        () => probe("SearchServingConfigLite@CollectionsEnginesServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "StreamServingConfigAnswer@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.streamAnswer): CollectionsEnginesServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "StreamServingConfigAnswer@CollectionsEnginesServingConfig (discoveryengine.projects.locations.collections.engines.servingConfigs.streamAnswer)",
+        () => probe("StreamServingConfigAnswer@CollectionsEnginesServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("CollectionsEnginesSession", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSession@CollectionsEnginesSession (discoveryengine.projects.locations.collections.engines.sessions.get): CollectionsEnginesSession: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetSession@CollectionsEnginesSession (discoveryengine.projects.locations.collections.engines.sessions.get)",
+        () => probe("GetSession@CollectionsEnginesSession", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetSessionAnswer@CollectionsEnginesSession (discoveryengine.projects.locations.collections.engines.sessions.answers.get): CollectionsEnginesSession: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetSessionAnswer@CollectionsEnginesSession (discoveryengine.projects.locations.collections.engines.sessions.answers.get)",
+        () => probe("GetSessionAnswer@CollectionsEnginesSession", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -621,16 +737,24 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("DataStoresBranchesDocument", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDocument@DataStoresBranchesDocument (discoveryengine.projects.locations.dataStores.branches.documents.get): DataStoresBranchesDocument: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDocument@DataStoresBranchesDocument (discoveryengine.projects.locations.dataStores.branches.documents.get)",
+        () => probe("GetDocument@DataStoresBranchesDocument", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DataStoresControl", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetControl@DataStoresControl (discoveryengine.projects.locations.dataStores.controls.get): DataStoresControl: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetControl@DataStoresControl (discoveryengine.projects.locations.dataStores.controls.get)",
+        () => probe("GetControl@DataStoresControl", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -646,54 +770,94 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("DataStoresSchema", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSchema@DataStoresSchema (discoveryengine.projects.locations.dataStores.schemas.get): DataStoresSchema: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetSchema@DataStoresSchema (discoveryengine.projects.locations.dataStores.schemas.get)",
+        () => probe("GetSchema@DataStoresSchema", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DataStoresServingConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "AnswerServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.answer): DataStoresServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "AnswerServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.answer)",
+        () => probe("AnswerServingConfig@DataStoresServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.get): DataStoresServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.get)",
+        () => probe("GetServingConfig@DataStoresServingConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RecommendServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.recommend): DataStoresServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RecommendServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.recommend)",
+        () => probe("RecommendServingConfig@DataStoresServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SearchServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.search): DataStoresServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SearchServingConfig@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.search)",
+        () => probe("SearchServingConfig@DataStoresServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SearchServingConfigLite@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.searchLite): DataStoresServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SearchServingConfigLite@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.searchLite)",
+        () => probe("SearchServingConfigLite@DataStoresServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "StreamServingConfigAnswer@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.streamAnswer): DataStoresServingConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "StreamServingConfigAnswer@DataStoresServingConfig (discoveryengine.projects.locations.dataStores.servingConfigs.streamAnswer)",
+        () => probe("StreamServingConfigAnswer@DataStoresServingConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DataStoresSession", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSession@DataStoresSession (discoveryengine.projects.locations.dataStores.sessions.get): DataStoresSession: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetSession@DataStoresSession (discoveryengine.projects.locations.dataStores.sessions.get)",
+        () => probe("GetSession@DataStoresSession", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetSessionAnswer@DataStoresSession (discoveryengine.projects.locations.dataStores.sessions.answers.get): DataStoresSession: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetSessionAnswer@DataStoresSession (discoveryengine.projects.locations.dataStores.sessions.answers.get)",
+        () => probe("GetSessionAnswer@DataStoresSession", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DataStoresSiteSearchEngineTargetSite", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTargetSite@DataStoresSiteSearchEngineTargetSite (discoveryengine.projects.locations.dataStores.siteSearchEngine.targetSites.get): DataStoresSiteSearchEngineTargetSite: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTargetSite@DataStoresSiteSearchEngineTargetSite (discoveryengine.projects.locations.dataStores.siteSearchEngine.targetSites.get)",
+        () => probe("GetTargetSite@DataStoresSiteSearchEngineTargetSite", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

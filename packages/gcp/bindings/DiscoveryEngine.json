@@ -78,7 +78,23 @@
   "probes": {
     "resources": {
       "CollectionsDataStore": "ProbeCollectionsDataStore",
-      "DataStore": "ProbeDataStore"
+      "DataStore": "ProbeDataStore",
+      "CollectionsDataStoresSchema": "ProbeSchema",
+      "CollectionsDataStoresBranchesDocument": "ProbeDocument",
+      "CollectionsDataStoresSession": "ProbeSession",
+      "CollectionsDataStoresSiteSearchEngineTargetSite": "ProbeTargetSite",
+      "CollectionsEngine": "ProbeEngine",
+      "CollectionsDataStoresControl": "ProbeStoreControl",
+      "CollectionsDataStoresServingConfig": "ProbeStoreServing",
+      "CollectionsEnginesControl": "ProbeEngineControl",
+      "CollectionsEnginesServingConfig": "ProbeEngineServing",
+      "CollectionsEnginesSession": "ProbeEngineSession",
+      "DataStoresSchema": "ProbeLocSchema",
+      "DataStoresBranchesDocument": "ProbeLocDocument",
+      "DataStoresSession": "ProbeLocSession",
+      "DataStoresSiteSearchEngineTargetSite": "ProbeLocTargetSite",
+      "DataStoresControl": "ProbeLocControl",
+      "DataStoresServingConfig": "ProbeLocServing"
     },
     "untestable": {
       "CollectionsDataStoresConversation": "Conversations need the Large Language Model add-on (BadRequest \"This feature is only available when Large Language Model add-on is enabled.\"). (GCP_TEST_DISCOVERYENGINE_LLM)",
@@ -87,6 +103,7 @@
       "CollectionsEnginesConversation": "Conversations need the Large Language Model add-on (BadRequest \"This feature is only available when Large Language Model add-on is enabled.\"). (GCP_TEST_DISCOVERYENGINE_LLM)",
       "DataStoresConversation": "Conversations need the Large Language Model add-on (BadRequest \"This feature is only available when Large Language Model add-on is enabled.\"). (GCP_TEST_DISCOVERYENGINE_LLM)",
       "IdentityMappingStore": "Identity mapping stores need a workforce identity provider configured for the project (BadRequest \"IdP must be configured before creating an Identity (GCP_TEST_DISCOVERYENGINE_IDP)"
-    }
+    },
+    "location": "global"
   }
 }

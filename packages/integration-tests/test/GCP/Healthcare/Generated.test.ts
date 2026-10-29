@@ -99,269 +99,509 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("DatasetsConsentStore", { concurrent: true }, () => {
-      test.provider.todo(
-        "CheckConsentStoreDataAccess (healthcare.projects.locations.datasets.consentStores.checkDataAccess): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CheckConsentStoreDataAccess (healthcare.projects.locations.datasets.consentStores.checkDataAccess)",
+        () => probe("CheckConsentStoreDataAccess", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "EvaluateConsentStoreUserConsents (healthcare.projects.locations.datasets.consentStores.evaluateUserConsents): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "EvaluateConsentStoreUserConsents (healthcare.projects.locations.datasets.consentStores.evaluateUserConsents)",
+        () => probe("EvaluateConsentStoreUserConsents", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetConsentStore (healthcare.projects.locations.datasets.consentStores.get): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetConsentStore (healthcare.projects.locations.datasets.consentStores.get)",
+        () => probe("GetConsentStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListConsentStoreAttributeDefinitions (healthcare.projects.locations.datasets.consentStores.attributeDefinitions.list): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListConsentStoreAttributeDefinitions (healthcare.projects.locations.datasets.consentStores.attributeDefinitions.list)",
+        () => probe("ListConsentStoreAttributeDefinitions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListConsentStoreConsentArtifacts (healthcare.projects.locations.datasets.consentStores.consentArtifacts.list): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListConsentStoreConsentArtifacts (healthcare.projects.locations.datasets.consentStores.consentArtifacts.list)",
+        () => probe("ListConsentStoreConsentArtifacts", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListConsentStoreConsents (healthcare.projects.locations.datasets.consentStores.consents.list): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListConsentStoreConsents (healthcare.projects.locations.datasets.consentStores.consents.list)",
+        () => probe("ListConsentStoreConsents", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListConsentStoreUserDataMappings (healthcare.projects.locations.datasets.consentStores.userDataMappings.list): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListConsentStoreUserDataMappings (healthcare.projects.locations.datasets.consentStores.userDataMappings.list)",
+        () => probe("ListConsentStoreUserDataMappings", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "QueryConsentStoreAccessibleData (healthcare.projects.locations.datasets.consentStores.queryAccessibleData): DatasetsConsentStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "QueryConsentStoreAccessibleData (healthcare.projects.locations.datasets.consentStores.queryAccessibleData)",
+        () => probe("QueryConsentStoreAccessibleData", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DatasetsConsentStoresAttributeDefinition", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetAttributeDefinition (healthcare.projects.locations.datasets.consentStores.attributeDefinitions.get): DatasetsConsentStoresAttributeDefinition: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetAttributeDefinition (healthcare.projects.locations.datasets.consentStores.attributeDefinitions.get)",
+        () => probe("GetAttributeDefinition", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DatasetsConsentStoresConsent", { concurrent: true }, () => {
-      test.provider.todo(
-        "ActivateConsent (healthcare.projects.locations.datasets.consentStores.consents.activate): DatasetsConsentStoresConsent: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ActivateConsent (healthcare.projects.locations.datasets.consentStores.consents.activate)",
+        () => probe("ActivateConsent", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "DeleteConsentRevision (healthcare.projects.locations.datasets.consentStores.consents.deleteRevision): DatasetsConsentStoresConsent: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DeleteConsentRevision (healthcare.projects.locations.datasets.consentStores.consents.deleteRevision)",
+        () => probe("DeleteConsentRevision", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetConsent (healthcare.projects.locations.datasets.consentStores.consents.get): DatasetsConsentStoresConsent: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetConsent (healthcare.projects.locations.datasets.consentStores.consents.get)",
+        () => probe("GetConsent", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListConsentRevisions (healthcare.projects.locations.datasets.consentStores.consents.listRevisions): DatasetsConsentStoresConsent: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListConsentRevisions (healthcare.projects.locations.datasets.consentStores.consents.listRevisions)",
+        () => probe("ListConsentRevisions", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RejectConsent (healthcare.projects.locations.datasets.consentStores.consents.reject): DatasetsConsentStoresConsent: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RejectConsent (healthcare.projects.locations.datasets.consentStores.consents.reject)",
+        () => probe("RejectConsent", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RevokeConsent (healthcare.projects.locations.datasets.consentStores.consents.revoke): DatasetsConsentStoresConsent: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RevokeConsent (healthcare.projects.locations.datasets.consentStores.consents.revoke)",
+        () => probe("RevokeConsent", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DatasetsConsentStoresConsentArtifact", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetConsentArtifact (healthcare.projects.locations.datasets.consentStores.consentArtifacts.get): DatasetsConsentStoresConsentArtifact: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetConsentArtifact (healthcare.projects.locations.datasets.consentStores.consentArtifacts.get)",
+        () => probe("GetConsentArtifact", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DatasetsConsentStoresUserDataMapping", { concurrent: true }, () => {
-      test.provider.todo(
-        "ArchiveUserDataMapping (healthcare.projects.locations.datasets.consentStores.userDataMappings.archive): DatasetsConsentStoresUserDataMapping: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ArchiveUserDataMapping (healthcare.projects.locations.datasets.consentStores.userDataMappings.archive)",
+        () => probe("ArchiveUserDataMapping", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetUserDataMapping (healthcare.projects.locations.datasets.consentStores.userDataMappings.get): DatasetsConsentStoresUserDataMapping: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetUserDataMapping (healthcare.projects.locations.datasets.consentStores.userDataMappings.get)",
+        () => probe("GetUserDataMapping", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DatasetsDicomStore", { concurrent: true }, () => {
-      test.provider.todo(
-        "DeidentifyDicomStore (healthcare.projects.locations.datasets.dicomStores.deidentify): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DeidentifyDicomStore (healthcare.projects.locations.datasets.dicomStores.deidentify)",
+        () => probe("DeidentifyDicomStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "DeleteDicomStoreStudy (healthcare.projects.locations.datasets.dicomStores.studies.delete): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DeleteDicomStoreStudy (healthcare.projects.locations.datasets.dicomStores.studies.delete)",
+        () => probe("DeleteDicomStoreStudy", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "DeleteDicomStoreStudySery (healthcare.projects.locations.datasets.dicomStores.studies.series.delete): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DeleteDicomStoreStudySery (healthcare.projects.locations.datasets.dicomStores.studies.series.delete)",
+        () => probe("DeleteDicomStoreStudySery", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "DeleteDicomStoreStudySeryInstance (healthcare.projects.locations.datasets.dicomStores.studies.series.instances.delete): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DeleteDicomStoreStudySeryInstance (healthcare.projects.locations.datasets.dicomStores.studies.series.instances.delete)",
+        () => probe("DeleteDicomStoreStudySeryInstance", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ExportDicomStore (healthcare.projects.locations.datasets.dicomStores.export): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ExportDicomStore (healthcare.projects.locations.datasets.dicomStores.export)",
+        () => probe("ExportDicomStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetDicomStore (healthcare.projects.locations.datasets.dicomStores.get): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDicomStore (healthcare.projects.locations.datasets.dicomStores.get)",
+        () => probe("GetDicomStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetDICOMStoreMetrics (healthcare.projects.locations.datasets.dicomStores.getDICOMStoreMetrics): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDICOMStoreMetrics (healthcare.projects.locations.datasets.dicomStores.getDICOMStoreMetrics)",
+        () => probe("GetDICOMStoreMetrics", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ImportDicomStore (healthcare.projects.locations.datasets.dicomStores.import): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ImportDicomStore (healthcare.projects.locations.datasets.dicomStores.import)",
+        () => probe("ImportDicomStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SearchDicomStoreForInstances (healthcare.projects.locations.datasets.dicomStores.searchForInstances): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SearchDicomStoreForInstances (healthcare.projects.locations.datasets.dicomStores.searchForInstances)",
+        () => probe("SearchDicomStoreForInstances", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SearchDicomStoreForSeries (healthcare.projects.locations.datasets.dicomStores.searchForSeries): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SearchDicomStoreForSeries (healthcare.projects.locations.datasets.dicomStores.searchForSeries)",
+        () => probe("SearchDicomStoreForSeries", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SearchDicomStoreForStudies (healthcare.projects.locations.datasets.dicomStores.searchForStudies): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SearchDicomStoreForStudies (healthcare.projects.locations.datasets.dicomStores.searchForStudies)",
+        () => probe("SearchDicomStoreForStudies", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SearchSeryForInstances (healthcare.projects.locations.datasets.dicomStores.studies.series.searchForInstances): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SearchSeryForInstances (healthcare.projects.locations.datasets.dicomStores.studies.series.searchForInstances)",
+        () => probe("SearchSeryForInstances", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SearchStudyForInstances (healthcare.projects.locations.datasets.dicomStores.studies.searchForInstances): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SearchStudyForInstances (healthcare.projects.locations.datasets.dicomStores.studies.searchForInstances)",
+        () => probe("SearchStudyForInstances", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SearchStudyForSeries (healthcare.projects.locations.datasets.dicomStores.studies.searchForSeries): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SearchStudyForSeries (healthcare.projects.locations.datasets.dicomStores.studies.searchForSeries)",
+        () => probe("SearchStudyForSeries", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SetDicomStoreBlobStorageSettings (healthcare.projects.locations.datasets.dicomStores.setBlobStorageSettings): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SetDicomStoreBlobStorageSettings (healthcare.projects.locations.datasets.dicomStores.setBlobStorageSettings)",
+        () => probe("SetDicomStoreBlobStorageSettings", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "StoreDicomStoreInstances (healthcare.projects.locations.datasets.dicomStores.storeInstances): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "StoreDicomStoreInstances (healthcare.projects.locations.datasets.dicomStores.storeInstances)",
+        () => probe("StoreDicomStoreInstances", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "StoreStudyInstances (healthcare.projects.locations.datasets.dicomStores.studies.storeInstances): DatasetsDicomStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "StoreStudyInstances (healthcare.projects.locations.datasets.dicomStores.studies.storeInstances)",
+        () => probe("StoreStudyInstances", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DatasetsFhirStore", { concurrent: true }, () => {
-      test.provider.todo(
-        "ApplyFhirStoreAdminConsents (healthcare.projects.locations.datasets.fhirStores.applyAdminConsents): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ApplyFhirStoreAdminConsents (healthcare.projects.locations.datasets.fhirStores.applyAdminConsents)",
+        () => probe("ApplyFhirStoreAdminConsents", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ApplyFhirStoreConsents (healthcare.projects.locations.datasets.fhirStores.applyConsents): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ApplyFhirStoreConsents (healthcare.projects.locations.datasets.fhirStores.applyConsents)",
+        () => probe("ApplyFhirStoreConsents", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "BulkFhirStoreDelete (healthcare.projects.locations.datasets.fhirStores.bulkDelete): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "BulkFhirStoreDelete (healthcare.projects.locations.datasets.fhirStores.bulkDelete)",
+        () => probe("BulkFhirStoreDelete", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "CapabilitiesFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.capabilities): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CapabilitiesFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.capabilities)",
+        () => probe("CapabilitiesFhirStoreFhir", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ConditionalFhirDelete (healthcare.projects.locations.datasets.fhirStores.fhir.conditionalDelete): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ConditionalFhirDelete (healthcare.projects.locations.datasets.fhirStores.fhir.conditionalDelete)",
+        () => probe("ConditionalFhirDelete", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ConditionalFhirPatch (healthcare.projects.locations.datasets.fhirStores.fhir.conditionalPatch): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ConditionalFhirPatch (healthcare.projects.locations.datasets.fhirStores.fhir.conditionalPatch)",
+        () => probe("ConditionalFhirPatch", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ConditionalFhirUpdate (healthcare.projects.locations.datasets.fhirStores.fhir.conditionalUpdate): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ConditionalFhirUpdate (healthcare.projects.locations.datasets.fhirStores.fhir.conditionalUpdate)",
+        () => probe("ConditionalFhirUpdate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "CreateFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.create): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CreateFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.create)",
+        () => probe("CreateFhirStoreFhir", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "DeidentifyFhirStore (healthcare.projects.locations.datasets.fhirStores.deidentify): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DeidentifyFhirStore (healthcare.projects.locations.datasets.fhirStores.deidentify)",
+        () => probe("DeidentifyFhirStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ExecuteFhirBundle (healthcare.projects.locations.datasets.fhirStores.fhir.executeBundle): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ExecuteFhirBundle (healthcare.projects.locations.datasets.fhirStores.fhir.executeBundle)",
+        () => probe("ExecuteFhirBundle", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ExplainFhirStoreDataAccess (healthcare.projects.locations.datasets.fhirStores.explainDataAccess): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ExplainFhirStoreDataAccess (healthcare.projects.locations.datasets.fhirStores.explainDataAccess)",
+        () => probe("ExplainFhirStoreDataAccess", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ExportFhirStore (healthcare.projects.locations.datasets.fhirStores.export): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ExportFhirStore (healthcare.projects.locations.datasets.fhirStores.export)",
+        () => probe("ExportFhirStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetFhirStore (healthcare.projects.locations.datasets.fhirStores.get): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetFhirStore (healthcare.projects.locations.datasets.fhirStores.get)",
+        () => probe("GetFhirStore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetFHIRStoreMetrics (healthcare.projects.locations.datasets.fhirStores.getFHIRStoreMetrics): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetFHIRStoreMetrics (healthcare.projects.locations.datasets.fhirStores.getFHIRStoreMetrics)",
+        () => probe("GetFHIRStoreMetrics", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ImportFhirStore (healthcare.projects.locations.datasets.fhirStores.import): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ImportFhirStore (healthcare.projects.locations.datasets.fhirStores.import)",
+        () => probe("ImportFhirStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RollbackFhirStore (healthcare.projects.locations.datasets.fhirStores.rollback): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RollbackFhirStore (healthcare.projects.locations.datasets.fhirStores.rollback)",
+        () => probe("RollbackFhirStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SearchFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.search): DatasetsFhirStore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SearchFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.search)",
+        () => probe("SearchFhirStoreFhir", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DatasetsHl7V2Store", { concurrent: true }, () => {
-      test.provider.todo(
-        "ExportHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.export): DatasetsHl7V2Store: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ExportHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.export)",
+        () => probe("ExportHl7V2Store", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.get): DatasetsHl7V2Store: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.get)",
+        () => probe("GetHl7V2Store", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetHL7v2StoreMetrics (healthcare.projects.locations.datasets.hl7V2Stores.getHL7v2StoreMetrics): DatasetsHl7V2Store: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetHL7v2StoreMetrics (healthcare.projects.locations.datasets.hl7V2Stores.getHL7v2StoreMetrics)",
+        () => probe("GetHL7v2StoreMetrics", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ImportHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.import): DatasetsHl7V2Store: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ImportHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.import)",
+        () => probe("ImportHl7V2Store", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "IngestHl7V2StoreMessage (healthcare.projects.locations.datasets.hl7V2Stores.messages.ingest): DatasetsHl7V2Store: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "IngestHl7V2StoreMessage (healthcare.projects.locations.datasets.hl7V2Stores.messages.ingest)",
+        () => probe("IngestHl7V2StoreMessage", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListHl7V2StoreMessages (healthcare.projects.locations.datasets.hl7V2Stores.messages.list): DatasetsHl7V2Store: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListHl7V2StoreMessages (healthcare.projects.locations.datasets.hl7V2Stores.messages.list)",
+        () => probe("ListHl7V2StoreMessages", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RollbackHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.rollback): DatasetsHl7V2Store: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RollbackHl7V2Store (healthcare.projects.locations.datasets.hl7V2Stores.rollback)",
+        () => probe("RollbackHl7V2Store", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("DatasetsHl7V2StoresMessage", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetMessage (healthcare.projects.locations.datasets.hl7V2Stores.messages.get): DatasetsHl7V2StoresMessage: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetMessage (healthcare.projects.locations.datasets.hl7V2Stores.messages.get)",
+        () => probe("GetMessage", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
