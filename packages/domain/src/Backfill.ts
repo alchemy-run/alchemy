@@ -150,6 +150,11 @@ export interface Limits {
   readonly apply: number;
   /** How long to wait before calling a stale source again, in milliseconds. */
   readonly staleRetryMillis: number;
+  /**
+   * How long before the first retry of a refused or failed call, in milliseconds:
+   * right after a deploy its new code may not have reached the object yet.
+   */
+  readonly firstRetryMillis: number;
   /** How long a key without sources waits before asking whether discovery is complete again. */
   readonly pollMillis: number;
   /**
@@ -170,6 +175,7 @@ export const defaultLimits: Limits = {
   concurrency: 5,
   apply: 200,
   staleRetryMillis: 30_000,
+  firstRetryMillis: 3_000,
   pollMillis: 5_000,
   leafSize: 256,
   depth: DEPTH,
@@ -246,6 +252,29 @@ const RETRY_MS = 30_000;
 /** How long a key that is waiting to be told discovery is complete waits before asking. */
 const SAFETY_POLL_MS = 60_000;
 
+/**
+ * Run a job again after a refusal or a failure: soon the first time (a deploy's
+ * new code may not have reached the object yet), then at the slow pace (an
+ * object kept busy on older code stays on it, so it must be left idle).
+ */
+const makeRetry = (storage: Storage, jobs: Jobs, limits: Limits) => {
+  const key = (id: string) => `bf:retry:${id}`;
+  return {
+    later: (id: string, slowMillis: number) =>
+      Effect.gen(function* () {
+        const retried = (yield* storage.get<boolean>(key(id))) === true;
+        if (!retried) yield* storage.put({ [key(id)]: true });
+        yield* jobs.schedule(id, retried ? slowMillis : limits.firstRetryMillis);
+      }),
+    /** The job went through: its next failure retries soon again. */
+    clear: (id: string) =>
+      Effect.gen(function* () {
+        if ((yield* storage.get(key(id))) !== undefined) yield* storage.delete([key(id)]);
+      }),
+  };
+};
+type Retry = ReturnType<typeof makeRetry>;
+
 /** A target's generation: `view:Name#2` is 2. */
 const generationOf = (target: string) => Number(/#(\d+)$/.exec(target)?.[1] ?? 0);
 
@@ -258,7 +287,7 @@ class Stale extends Error {
  * A source's durable outbox of control messages: staged with the state change
  * that produced them, sent in order, deleted once sent. One flush at a time.
  */
-const outbox = (storage: Storage, jobs: Jobs, net: Network, depth: number) => {
+const outbox = (storage: Storage, jobs: Jobs, net: Network, depth: number, retry: Retry) => {
   const send = (message: Message): Effect.Effect<void> => {
     switch (message.kind) {
       case "source":
@@ -291,7 +320,10 @@ const outbox = (storage: Storage, jobs: Jobs, net: Network, depth: number) => {
     return yield* Effect.gen(function* () {
       while (true) {
         const rows = yield* storage.list<Message>({ prefix: "bf:q:", limit: 50 });
-        if (rows.length === 0) return true;
+        if (rows.length === 0) {
+          yield* retry.clear("bf-flush");
+          return true;
+        }
         for (const [key, message] of rows) {
           yield* send(message);
           yield* storage.delete([key]);
@@ -299,7 +331,7 @@ const outbox = (storage: Storage, jobs: Jobs, net: Network, depth: number) => {
       }
     }).pipe(
       // A send failed: the rest stay staged, and the backstop sends them later.
-      Effect.catchCause(() => Effect.as(jobs.schedule("bf-flush", RETRY_MS), false)),
+      Effect.catchCause(() => Effect.as(retry.later("bf-flush", RETRY_MS), false)),
       Effect.ensuring(storage.delete(["bf:q-lease"])),
     );
   });
@@ -377,7 +409,8 @@ export const makeSource = (
   host: SourceHost,
   limits: Limits = defaultLimits,
 ) => {
-  const queue = outbox(storage, jobs, net, limits.depth);
+  const retry = makeRetry(storage, jobs, limits);
+  const queue = outbox(storage, jobs, net, limits.depth, retry);
   const stateKey = (target: string) => `bf:s:${enc(target)}`;
   const keyKey = (target: string, key: string) => `bf:k:${enc(target)}:${enc(key)}`;
   const keysPrefix = (target: string) => `bf:k:${enc(target)}:`;
@@ -657,6 +690,7 @@ export const makeConsumer = (
   const pullingPrefix = (target: string) => `bf:p:${T(target)}:`;
   const bufferPrefix = (target: string) => `bf:b:${T(target)}:`;
   const jobId = (target: string) => `bf-merge:${target}`;
+  const retry = makeRetry(storage, jobs, limits);
   /**
    * A message for another generation of this consumer. A newer one means this
    * instance still runs older code: refuse it, so the sender tries again once
@@ -925,7 +959,7 @@ export const makeConsumer = (
           const asked = yield* askPhase(target, backfill).pipe(
             Effect.catchCause(() => Effect.succeed(undefined)),
           );
-          if (asked === undefined) return yield* jobs.schedule(jobId(target), RETRY_MS);
+          if (asked === undefined) return yield* retry.later(jobId(target), RETRY_MS);
           const { phase, ask } = asked;
           const ready = phase === "ready" || phase === "complete";
           yield* storage.exclusive(
@@ -948,11 +982,13 @@ export const makeConsumer = (
         const outcome = yield* applyBuffered(target);
         yield* trace("merge", { key: host.key, target, outcome });
         if (host.after) yield* host.after;
-        if (outcome === "done" || outcome === "waiting") return;
+        if (outcome === "done" || outcome === "waiting") return yield* retry.clear(jobId(target));
         // A remote failure never fails the job (which a durable callback would retry
         // with a growing delay, then park): it asks again after a fixed wait.
         const failed = outcome === "starved" ? yield* pullStarved(target) : false;
-        yield* jobs.schedule(jobId(target), failed ? RETRY_MS : 0);
+        if (failed) return yield* retry.later(jobId(target), RETRY_MS);
+        yield* retry.clear(jobId(target));
+        yield* jobs.schedule(jobId(target), 0);
       }),
 
     /** Is a backfill of `target` still running on this key? */
@@ -999,6 +1035,7 @@ export const makeNode = (
   limits: Limits = defaultLimits,
 ) => {
   const sweepKey = (target: string) => `sw:${enc(target)}`;
+  const retry = makeRetry(storage, jobs, limits);
   const getSweep = (target: string) => storage.get<Sweep>(sweepKey(target));
   const reportPrefix = (target: string, phase: string) => `rp:${enc(target)}:${phase}:`;
   const unsettledPrefix = (target: string) => `us:${enc(target)}:`;
@@ -1147,12 +1184,14 @@ export const makeNode = (
         // ready phase (a stale instance is scanned again from the start).
         if (stale) yield* storage.delete([cursorKey]);
         else if (rows.length > 0) yield* storage.put({ [cursorKey]: rows[rows.length - 1]![0] });
-        if (stale || rows.length === limits.nodePage)
-          yield* jobs.schedule(`late:${target}`, stale ? limits.staleRetryMillis : 0);
+        if (stale) return yield* retry.later(`late:${target}`, limits.staleRetryMillis);
+        yield* retry.clear(`late:${target}`);
+        if (rows.length === limits.nodePage) yield* jobs.schedule(`late:${target}`, 0);
         return;
       }
-      if (rows.length > 0)
-        yield* jobs.schedule(`late:${target}`, stale ? limits.staleRetryMillis : 0);
+      if (stale) return yield* retry.later(`late:${target}`, limits.staleRetryMillis);
+      yield* retry.clear(`late:${target}`);
+      if (rows.length > 0) yield* jobs.schedule(`late:${target}`, 0);
     });
 
   const begin = (path: string, target: string, phase: Sweep["phase"]) =>
@@ -1242,7 +1281,7 @@ export const makeNode = (
           failed: sweep.children.filter((_, i) => !told[i]),
         });
         // A child that could not be told is told on the next step.
-        if (told.includes(false)) return yield* jobs.schedule(`step:${target}`, RETRY_MS);
+        if (told.includes(false)) return yield* retry.later(`step:${target}`, RETRY_MS);
         // A child that linked while these were told was not among them: tell it on another step.
         const toldAll = yield* storage.exclusive(
           Effect.gen(function* () {
@@ -1333,8 +1372,9 @@ export const makeNode = (
         }),
       );
       // Instances still on older code keep it while calls keep them busy: back off.
-      if (next && !next.own)
-        yield* jobs.schedule(`step:${target}`, stale ? limits.staleRetryMillis : 0);
+      if (stale) return yield* retry.later(`step:${target}`, limits.staleRetryMillis);
+      yield* retry.clear(`step:${target}`);
+      if (next && !next.own) yield* jobs.schedule(`step:${target}`, 0);
     });
 
   return {
@@ -1446,8 +1486,10 @@ export const makeNode = (
       Effect.gen(function* () {
         const path = (yield* storage.get<string>("path")) ?? "";
         const parent = parentOf(path);
-        if (id === "news")
-          return yield* net.node.news(parent, (yield* storage.get<Array<string>>("known")) ?? []);
+        if (id === "news") {
+          yield* net.node.news(parent, (yield* storage.get<Array<string>>("known")) ?? []);
+          return yield* retry.clear(id);
+        }
         const [kind, ...rest] = id.split(":");
         const target = rest.join(":");
         if (kind === "step") return yield* step(path, target);
@@ -1457,10 +1499,11 @@ export const makeNode = (
           const sweep = yield* getSweep(target);
           if (sweep?.reported && sweep.phase !== "complete")
             yield* net.node.report(parent, target, sweep.phase, path);
+          yield* retry.clear(id);
         }
       }).pipe(
         // A remote failure asks again after a fixed wait, rather than failing the job.
-        Effect.catchCause(() => jobs.schedule(id, RETRY_MS)),
+        Effect.catchCause(() => retry.later(id, RETRY_MS)),
       ),
   };
 };

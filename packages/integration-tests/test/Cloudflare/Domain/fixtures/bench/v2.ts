@@ -7,6 +7,10 @@ import { After, benchWorker, hosted } from "./worker.ts";
 /** The second deploy adds the view: the deploy waits for its backfill. */
 export default class DomainBenchWorker extends Cloudflare.Worker<DomainBenchWorker>()(
   "DomainBenchWorker",
-  { main: import.meta.url },
+  {
+    main: import.meta.url,
+    // Protocol traces (`backfill …`) in the Worker logs.
+    ...(process.env.DOMAIN_BENCH_DEBUG ? { env: { DEBUG: "1" } } : {}),
+  },
   benchWorker("v2", Deposits).pipe(Effect.provide(hosted(After.layer(Layer.empty)))),
 ) {}

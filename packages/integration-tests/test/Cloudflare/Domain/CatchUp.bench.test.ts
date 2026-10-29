@@ -124,20 +124,21 @@ const usage = (scriptName: string, from: Date, to: Date) =>
     } satisfies Usage;
   });
 
-/** Analytics arrive minutes late: read until two reads a minute apart agree. */
+/**
+ * Analytics arrive minutes late, and later the more there are: wait five minutes,
+ * then read until three reads a minute apart agree. Read before the stack is
+ * destroyed: a deleted Worker's rows lose its script name.
+ */
 const settledUsage = (scriptName: string, from: Date, to: Date) =>
   Effect.gen(function* () {
+    yield* Effect.sleep("5 minutes");
     let last = yield* usage(scriptName, from, to);
-    for (let attempt = 0; attempt < 10; attempt++) {
+    let agreed = 0;
+    for (let attempt = 0; attempt < 15 && agreed < 2; attempt++) {
       yield* Effect.sleep("1 minute");
       const next = yield* usage(scriptName, from, to);
-      if (
-        next.requests === last.requests &&
-        next.rowsWritten === last.rowsWritten &&
-        next.requests > 0
-      ) {
-        return next;
-      }
+      agreed =
+        next.requests === last.requests && next.rowsWritten === last.rowsWritten ? agreed + 1 : 0;
       last = next;
     }
     return last;
@@ -199,7 +200,6 @@ for (const instances of sizes) {
         }
 
         const settleEnd = new Date(deployEnd.getTime() + 2 * 60_000);
-        yield* Effect.sleep("2 minutes");
         const seed = yield* settledUsage(scriptName, seedStart, seedEnd);
         const backfill = yield* settledUsage(scriptName, deployStart, settleEnd);
         const events = instances * EVENTS;
