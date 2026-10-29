@@ -14,6 +14,13 @@ export default Contributions.make({
         (module) => module.stateStore,
       ),
     },
+    "aws-dynamodb": {
+      description: "DynamoDB state store in the profile's AWS account",
+      load: Contributions.lazy(
+        () => import("./Alchemist/DynamoDBStateStore.ts"),
+        (module) => module.stateStore,
+      ),
+    },
   },
   cli: {
     provider: {

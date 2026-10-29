@@ -80,7 +80,7 @@ type S3Deps = Credentials | HttpClient | Region;
  * the store is built (the CLI's run log sets one) must not reach them. Floors
  * already stricter than Info are left alone.
  */
-const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLevel, (level) =>
+export const withoutSdkDebugLogs = Effect.updateService(References.MinimumLogLevel, (level) =>
   LogLevel.isLessThan(level, "Info") ? "Info" : level,
 );
 

@@ -103,6 +103,10 @@ with no extra setup. For purely local iteration,
 `Alchemy.localState()` writes state under `.alchemy/` next to
 your code instead.
 
+`AWS.dynamoDBState()` stores state in a DynamoDB table
+(`alchemy-state`) instead, which makes deploys of large stacks
+much faster. See [DynamoDB state store](/state-store#dynamodb-state-store).
+
 ## Next steps
 
 - [AWS overview](/aws) — pick a runtime and resources.
