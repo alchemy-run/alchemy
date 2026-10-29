@@ -26,7 +26,7 @@ export type SubscribeDataExchangeShape = (
  * Creates a Subscription to a Data Clean Room.
  *
  * Bind it to a {@link DataExchange} and provide {@link SubscribeDataExchangeHttp}. The
- * host gets `roles/analyticshub.subscriber` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/analyticshub.subscriber`, `roles/bigquery.user` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `dataExchanges.subscribe`

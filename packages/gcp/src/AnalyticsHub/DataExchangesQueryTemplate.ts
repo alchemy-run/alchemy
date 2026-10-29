@@ -133,6 +133,9 @@ export type DataExchangesQueryTemplate = Resource<
  * Query templates have no labels. Alchemy stamps ownership into the
  * description so `list` / `pnpm nuke:gcp` can find them.
  *
+ * Only a drafted template can be deleted. Once one is submitted or
+ * approved, destroy leaves it for its data exchange's delete to remove.
+ *
  * ### Creating a Query Template
  * **Example:** Draft TVF in a data clean room
  * ```typescript
@@ -359,6 +362,10 @@ export const DataExchangesQueryTemplateProvider = () =>
         analyticshub.deleteProjectsLocationsDataExchangesQueryTemplates({
           name: output.name,
         }),
+      ).pipe(
+        // A submitted or approved template can't be deleted on its own;
+        // it goes away with its data exchange.
+        Effect.catchTag("QueryTemplateNotDrafted", () => Effect.void),
       );
     }),
   });

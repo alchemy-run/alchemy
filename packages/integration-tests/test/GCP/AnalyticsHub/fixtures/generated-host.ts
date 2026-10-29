@@ -16,57 +16,52 @@ export default class AnalyticsHubGeneratedHost extends GCP.Function<AnalyticsHub
   "AnalyticsHubGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.AnalyticsHub.ApproveQueryTemplate(ProbeQueryTemplate);
-    const p1 = yield* GCP.AnalyticsHub.DeleteSubscription();
-    const p2 = yield* GCP.AnalyticsHub.GetDataExchange(ProbeDataExchange);
-    const p3 = yield* GCP.AnalyticsHub.GetListing(ProbeListing);
-    const p4 = yield* GCP.AnalyticsHub.GetQueryTemplate(ProbeQueryTemplate);
-    const p5 = yield* GCP.AnalyticsHub.GetSubscription();
-    const p6 = yield* GCP.AnalyticsHub.ListDataExchangeListings(ProbeDataExchange);
-    const p7 = yield* GCP.AnalyticsHub.ListDataExchangeQueryTemplates(ProbeDataExchange);
-    const p8 = yield* GCP.AnalyticsHub.ListDataExchanges();
-    const p9 = yield* GCP.AnalyticsHub.ListDataExchangeSubscriptions(ProbeDataExchange);
-    const p10 = yield* GCP.AnalyticsHub.ListListingSubscriptions(ProbeListing);
-    const p11 = yield* GCP.AnalyticsHub.ListSubscriptions();
-    const p12 = yield* GCP.AnalyticsHub.RefreshSubscription();
-    const p13 = yield* GCP.AnalyticsHub.RevokeSubscription();
-    const p14 = yield* GCP.AnalyticsHub.SubmitQueryTemplate(ProbeQueryTemplate);
-    const p15 = yield* GCP.AnalyticsHub.SubscribeDataExchange(ProbeDataExchange);
-    const p16 = yield* GCP.AnalyticsHub.SubscribeListing(ProbeListing);
+    const p0 = yield* GCP.AnalyticsHub.DeleteSubscription();
+    const p1 = yield* GCP.AnalyticsHub.GetDataExchange(ProbeDataExchange);
+    const p2 = yield* GCP.AnalyticsHub.GetListing(ProbeListing);
+    const p3 = yield* GCP.AnalyticsHub.GetQueryTemplate(ProbeQueryTemplate);
+    const p4 = yield* GCP.AnalyticsHub.GetSubscription();
+    const p5 = yield* GCP.AnalyticsHub.ListDataExchangeListings(ProbeDataExchange);
+    const p6 = yield* GCP.AnalyticsHub.ListDataExchangeQueryTemplates(ProbeDataExchange);
+    const p7 = yield* GCP.AnalyticsHub.ListDataExchanges();
+    const p8 = yield* GCP.AnalyticsHub.ListDataExchangeSubscriptions(ProbeDataExchange);
+    const p9 = yield* GCP.AnalyticsHub.ListListingSubscriptions(ProbeListing);
+    const p10 = yield* GCP.AnalyticsHub.ListSubscriptions();
+    const p11 = yield* GCP.AnalyticsHub.RefreshSubscription();
+    const p12 = yield* GCP.AnalyticsHub.RevokeSubscription();
+    const p13 = yield* GCP.AnalyticsHub.SubscribeDataExchange(ProbeDataExchange);
+    const p14 = yield* GCP.AnalyticsHub.SubscribeListing(ProbeListing);
     return {
       fetch: serveProbes({
-        ApproveQueryTemplate: probeOutcome(Retry.none(p0({} as never))),
         DeleteSubscription: probeOutcome(
-          Retry.none(p1({ subscription: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p0({ subscription: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetDataExchange: probeOutcome(Retry.none(p2({} as never))),
-        GetListing: probeOutcome(Retry.none(p3({} as never))),
-        GetQueryTemplate: probeOutcome(Retry.none(p4({} as never))),
+        GetDataExchange: probeOutcome(Retry.none(p1({} as never))),
+        GetListing: probeOutcome(Retry.none(p2({} as never))),
+        GetQueryTemplate: probeOutcome(Retry.none(p3({} as never))),
         GetSubscription: probeOutcome(
-          Retry.none(p5({ subscription: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p4({ subscription: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListDataExchangeListings: probeOutcome(Retry.none(p6({} as never))),
-        ListDataExchangeQueryTemplates: probeOutcome(Retry.none(p7({} as never))),
-        ListDataExchanges: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListDataExchangeSubscriptions: probeOutcome(Retry.none(p9({} as never))),
-        ListListingSubscriptions: probeOutcome(Retry.none(p10({} as never))),
-        ListSubscriptions: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),
+        ListDataExchangeListings: probeOutcome(Retry.none(p5({} as never))),
+        ListDataExchangeQueryTemplates: probeOutcome(Retry.none(p6({} as never))),
+        ListDataExchanges: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListDataExchangeSubscriptions: probeOutcome(Retry.none(p8({} as never))),
+        ListListingSubscriptions: probeOutcome(Retry.none(p9({} as never))),
+        ListSubscriptions: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
         RefreshSubscription: probeOutcome(
-          Retry.none(p12({ subscription: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p11({ subscription: "alchemy-missing", location: "us-central1" } as never)),
         ),
         RevokeSubscription: probeOutcome(
-          Retry.none(p13({ subscription: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p12({ subscription: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        SubmitQueryTemplate: probeOutcome(Retry.none(p14({} as never))),
-        SubscribeDataExchange: probeOutcome(Retry.none(p15({} as never))),
-        SubscribeListing: probeOutcome(Retry.none(p16({} as never))),
+        SubscribeDataExchange: probeOutcome(Retry.none(p13({} as never))),
+        SubscribeListing: probeOutcome(Retry.none(p14({} as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
-          GCP.AnalyticsHub.ApproveQueryTemplateHttp,
           GCP.AnalyticsHub.DeleteSubscriptionHttp,
           GCP.AnalyticsHub.GetDataExchangeHttp,
           GCP.AnalyticsHub.GetListingHttp,
@@ -80,7 +75,6 @@ export default class AnalyticsHubGeneratedHost extends GCP.Function<AnalyticsHub
           GCP.AnalyticsHub.ListSubscriptionsHttp,
           GCP.AnalyticsHub.RefreshSubscriptionHttp,
           GCP.AnalyticsHub.RevokeSubscriptionHttp,
-          GCP.AnalyticsHub.SubmitQueryTemplateHttp,
           GCP.AnalyticsHub.SubscribeDataExchangeHttp,
           GCP.AnalyticsHub.SubscribeListingHttp,
         ),

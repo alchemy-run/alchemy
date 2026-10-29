@@ -18,12 +18,22 @@
       "DataExchangesListing": "ProbeListing",
       "DataExchangesQueryTemplate": "ProbeQueryTemplate"
     },
-    "untestable": {}
+    "untestable": {},
+    "skip": {
+      "SubmitQueryTemplate": "moves the template out of DRAFTED, which can't be undone: the template then can't be deleted on its own",
+      "ApproveQueryTemplate": "moves the template out of DRAFTED, which can't be undone: the template then can't be deleted on its own"
+    }
   },
   "permissions": {
     "analyticshub.projects.locations.dataExchanges.listings.listSubscriptions": "analyticshub.listings.viewSubscriptions",
     "analyticshub.projects.locations.dataExchanges.listSubscriptions": "analyticshub.dataExchanges.viewSubscriptions",
     "analyticshub.projects.locations.dataExchanges.subscribe": "analyticshub.dataExchanges.subscribe",
     "analyticshub.projects.locations.dataExchanges.listings.subscribe": "analyticshub.listings.subscribe"
+  },
+  "roles": {
+    "analyticshub.projects.locations.dataExchanges.subscribe": [
+      "roles/analyticshub.subscriber",
+      "roles/bigquery.user"
+    ]
   }
 }

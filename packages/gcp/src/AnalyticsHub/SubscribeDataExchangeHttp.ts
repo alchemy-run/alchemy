@@ -19,7 +19,7 @@ export const SubscribeDataExchangeHttp = Layer.effect(
         resource: "GCP.AnalyticsHub.DataExchange",
         operation: analyticshub.subscribeProjectsLocationsDataExchanges,
         param: "name",
-        iam: { role: "roles/analyticshub.subscriber" },
+        iam: { role: "roles/analyticshub.subscriber", also: ["roles/bigquery.user"] },
       },
     ],
   }),

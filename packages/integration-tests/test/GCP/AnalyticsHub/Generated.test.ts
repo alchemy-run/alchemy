@@ -135,13 +135,9 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("DataExchangesQueryTemplate", { concurrent: true }, () => {
-      test.provider(
-        "ApproveQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.approve)",
-        () => probe("ApproveQueryTemplate", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:analyticshub", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ApproveQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.approve): moves the template out of DRAFTED, which can't be undone: the template then can't be deleted on its own",
+        () => Effect.void,
       );
       test.provider(
         "GetQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.get)",
@@ -151,13 +147,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "SubmitQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.submit)",
-        () => probe("SubmitQueryTemplate", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:analyticshub", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "SubmitQueryTemplate (analyticshub.projects.locations.dataExchanges.queryTemplates.submit): moves the template out of DRAFTED, which can't be undone: the template then can't be deleted on its own",
+        () => Effect.void,
       );
     });
 
