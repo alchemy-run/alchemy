@@ -458,8 +458,8 @@ const make = (options: Options) =>
     /** Fires now, then on every local commit of `key` and every `watchMillis`. */
     const ticks = (key: string): Stream.Stream<void> =>
       // Subscribe before the first read, so no commit falls between the two.
-      Stream.unwrap(
-        Effect.map(PubSub.subscribe(commits), (subscription) =>
+      PubSub.subscribe(commits).pipe(
+        Effect.map((subscription) =>
           Stream.merge(
             Stream.tick(watchMillis),
             Stream.fromSubscription(subscription).pipe(
@@ -468,6 +468,7 @@ const make = (options: Options) =>
             ),
           ),
         ),
+        Stream.unwrap,
       );
     /** The current value, then every new one, by `version`. */
     const watch = <A>(key: string, read: Effect.Effect<A>, version: (a: A) => number | string) =>
