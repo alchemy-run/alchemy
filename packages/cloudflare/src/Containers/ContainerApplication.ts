@@ -1,4 +1,5 @@
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
+import type { DockerfileBuild, DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -365,7 +366,8 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
  * Build the container image from your own Dockerfile — no Effect program is
  * bundled. The image is shipped as-is.
  */
-export interface ExternalContainerProps extends ContainerApplicationPropsBase {
+export interface ExternalContainerProps
+  extends ContainerApplicationPropsBase, DockerfileBuildOptions {
   /**
    * The build context directory containing the Dockerfile and any files it
    * copies. Only valid with a `dockerfile` PATH (not inline content).
@@ -443,7 +445,7 @@ export interface DurableObjectApplicationSettings {
  * new application and Durable Object namespace.
  */
 export interface DurableObjectContainerProps
-  extends DurableObjectApplicationSettings, PlatformProps {
+  extends DurableObjectApplicationSettings, PlatformProps, DockerfileBuildOptions {
   /** Select images and instance sizes in `ctx.container.start()`. */
   schedulingPolicy: "durable_object";
   /**
@@ -506,7 +508,8 @@ export interface AnyContainerApplicationProps extends Omit<
   runtime?: "bun" | "node";
   external?: string[];
   autoInstallExternals?: boolean;
-  build?: Bundle.BundleConfig;
+  /** Bundler config for `main`; Docker build args and secrets for `context`. */
+  build?: Bundle.BundleConfig & DockerfileBuild;
 }
 
 export type ContainerServices = ContainerApplication | PlatformServices | ProcessServices;
@@ -961,6 +964,7 @@ export declare namespace DevContainerImage {
     readonly dockerfile: string;
     readonly context?: string;
     readonly buildArgs?: Record<string, string>;
+    readonly buildSecrets?: Record<string, string | Redacted.Redacted<string>>;
   }
   export interface Pull extends Base {
     readonly imageUri: string;
