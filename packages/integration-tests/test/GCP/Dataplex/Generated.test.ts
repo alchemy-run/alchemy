@@ -302,13 +302,21 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("LakesAsset", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetAsset (dataplex.projects.locations.lakes.zones.assets.get): LakesAsset: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetAsset (dataplex.projects.locations.lakes.zones.assets.get)",
+        () => probe("GetAsset", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListAssetActions (dataplex.projects.locations.lakes.zones.assets.actions.list): LakesAsset: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListAssetActions (dataplex.projects.locations.lakes.zones.assets.actions.list)",
+        () => probe("ListAssetActions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -389,9 +397,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("MetadataFeed", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetMetadataFeed (dataplex.projects.locations.metadataFeeds.get): MetadataFeed: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetMetadataFeed (dataplex.projects.locations.metadataFeeds.get)",
+        () => probe("GetMetadataFeed", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

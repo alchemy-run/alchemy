@@ -6,6 +6,7 @@ import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeAspectType,
+  ProbeAsset,
   ProbeCategory,
   ProbeDataProduct,
   ProbeEntry,
@@ -13,6 +14,7 @@ import {
   ProbeEntryType,
   ProbeGlossary,
   ProbeLake,
+  ProbeMetadataFeed,
   ProbeScan,
   ProbeTerm,
   ProbeZone,
@@ -36,45 +38,48 @@ export default class DataplexGeneratedHost extends GCP.Function<DataplexGenerate
     const p5 = yield* GCP.Dataplex.GenerateDataScanDataQualityRules(ProbeScan);
     const p6 = yield* GCP.Dataplex.GenerateJobDataQualityRules(ProbeScan);
     const p7 = yield* GCP.Dataplex.GetAspectType(ProbeAspectType);
-    const p8 = yield* GCP.Dataplex.GetCategory(ProbeCategory);
-    const p9 = yield* GCP.Dataplex.GetChangeRequest();
-    const p10 = yield* GCP.Dataplex.GetDataProduct(ProbeDataProduct);
-    const p11 = yield* GCP.Dataplex.GetDataScan(ProbeScan);
-    const p12 = yield* GCP.Dataplex.GetDataScanJob(ProbeScan);
-    const p13 = yield* GCP.Dataplex.GetEntry(ProbeEntry);
-    const p14 = yield* GCP.Dataplex.GetEntryGroup(ProbeEntryGroup);
-    const p15 = yield* GCP.Dataplex.GetEntryType(ProbeEntryType);
-    const p16 = yield* GCP.Dataplex.GetGlossary(ProbeGlossary);
-    const p17 = yield* GCP.Dataplex.GetLake(ProbeLake);
-    const p18 = yield* GCP.Dataplex.GetMetadataJob();
-    const p19 = yield* GCP.Dataplex.GetTerm(ProbeTerm);
-    const p20 = yield* GCP.Dataplex.GetZone(ProbeZone);
-    const p21 = yield* GCP.Dataplex.ListAspectTypes();
-    const p22 = yield* GCP.Dataplex.ListChangeRequests();
-    const p23 = yield* GCP.Dataplex.ListDataDomains();
-    const p24 = yield* GCP.Dataplex.ListDataProductDataAssets(ProbeDataProduct);
-    const p25 = yield* GCP.Dataplex.ListDataProducts();
-    const p26 = yield* GCP.Dataplex.ListDataScanJobs(ProbeScan);
-    const p27 = yield* GCP.Dataplex.ListDataScans();
-    const p28 = yield* GCP.Dataplex.ListEntryGroupEntries(ProbeEntryGroup);
-    const p29 = yield* GCP.Dataplex.ListEntryGroups();
-    const p30 = yield* GCP.Dataplex.ListEntryTypes();
-    const p31 = yield* GCP.Dataplex.ListGlossaries();
-    const p32 = yield* GCP.Dataplex.ListGlossaryCategories(ProbeGlossary);
-    const p33 = yield* GCP.Dataplex.ListGlossaryTerms(ProbeGlossary);
-    const p34 = yield* GCP.Dataplex.ListLakeActions(ProbeLake);
-    const p35 = yield* GCP.Dataplex.ListLakes();
-    const p36 = yield* GCP.Dataplex.ListLakeTasks(ProbeLake);
-    const p37 = yield* GCP.Dataplex.ListLakeZones(ProbeLake);
-    const p38 = yield* GCP.Dataplex.ListMetadataFeeds();
-    const p39 = yield* GCP.Dataplex.ListMetadataJobs();
-    const p40 = yield* GCP.Dataplex.ListZoneActions(ProbeZone);
-    const p41 = yield* GCP.Dataplex.ListZoneAssets(ProbeZone);
-    const p42 = yield* GCP.Dataplex.ListZoneEntities(ProbeZone);
-    const p43 = yield* GCP.Dataplex.PatchChangeRequest();
-    const p44 = yield* GCP.Dataplex.RejectChangeRequest();
-    const p45 = yield* GCP.Dataplex.RequestDataProductAccess(ProbeDataProduct);
-    const p46 = yield* GCP.Dataplex.RunDataScan(ProbeScan);
+    const p8 = yield* GCP.Dataplex.GetAsset(ProbeAsset);
+    const p9 = yield* GCP.Dataplex.GetCategory(ProbeCategory);
+    const p10 = yield* GCP.Dataplex.GetChangeRequest();
+    const p11 = yield* GCP.Dataplex.GetDataProduct(ProbeDataProduct);
+    const p12 = yield* GCP.Dataplex.GetDataScan(ProbeScan);
+    const p13 = yield* GCP.Dataplex.GetDataScanJob(ProbeScan);
+    const p14 = yield* GCP.Dataplex.GetEntry(ProbeEntry);
+    const p15 = yield* GCP.Dataplex.GetEntryGroup(ProbeEntryGroup);
+    const p16 = yield* GCP.Dataplex.GetEntryType(ProbeEntryType);
+    const p17 = yield* GCP.Dataplex.GetGlossary(ProbeGlossary);
+    const p18 = yield* GCP.Dataplex.GetLake(ProbeLake);
+    const p19 = yield* GCP.Dataplex.GetMetadataFeed(ProbeMetadataFeed);
+    const p20 = yield* GCP.Dataplex.GetMetadataJob();
+    const p21 = yield* GCP.Dataplex.GetTerm(ProbeTerm);
+    const p22 = yield* GCP.Dataplex.GetZone(ProbeZone);
+    const p23 = yield* GCP.Dataplex.ListAspectTypes();
+    const p24 = yield* GCP.Dataplex.ListAssetActions(ProbeAsset);
+    const p25 = yield* GCP.Dataplex.ListChangeRequests();
+    const p26 = yield* GCP.Dataplex.ListDataDomains();
+    const p27 = yield* GCP.Dataplex.ListDataProductDataAssets(ProbeDataProduct);
+    const p28 = yield* GCP.Dataplex.ListDataProducts();
+    const p29 = yield* GCP.Dataplex.ListDataScanJobs(ProbeScan);
+    const p30 = yield* GCP.Dataplex.ListDataScans();
+    const p31 = yield* GCP.Dataplex.ListEntryGroupEntries(ProbeEntryGroup);
+    const p32 = yield* GCP.Dataplex.ListEntryGroups();
+    const p33 = yield* GCP.Dataplex.ListEntryTypes();
+    const p34 = yield* GCP.Dataplex.ListGlossaries();
+    const p35 = yield* GCP.Dataplex.ListGlossaryCategories(ProbeGlossary);
+    const p36 = yield* GCP.Dataplex.ListGlossaryTerms(ProbeGlossary);
+    const p37 = yield* GCP.Dataplex.ListLakeActions(ProbeLake);
+    const p38 = yield* GCP.Dataplex.ListLakes();
+    const p39 = yield* GCP.Dataplex.ListLakeTasks(ProbeLake);
+    const p40 = yield* GCP.Dataplex.ListLakeZones(ProbeLake);
+    const p41 = yield* GCP.Dataplex.ListMetadataFeeds();
+    const p42 = yield* GCP.Dataplex.ListMetadataJobs();
+    const p43 = yield* GCP.Dataplex.ListZoneActions(ProbeZone);
+    const p44 = yield* GCP.Dataplex.ListZoneAssets(ProbeZone);
+    const p45 = yield* GCP.Dataplex.ListZoneEntities(ProbeZone);
+    const p46 = yield* GCP.Dataplex.PatchChangeRequest();
+    const p47 = yield* GCP.Dataplex.RejectChangeRequest();
+    const p48 = yield* GCP.Dataplex.RequestDataProductAccess(ProbeDataProduct);
+    const p49 = yield* GCP.Dataplex.RunDataScan(ProbeScan);
     return {
       fetch: serveProbes({
         ApproveChangeRequest: outcome(
@@ -95,53 +100,56 @@ export default class DataplexGeneratedHost extends GCP.Function<DataplexGenerate
         GenerateDataScanDataQualityRules: outcome(Retry.none(p5({} as never))),
         GenerateJobDataQualityRules: outcome(Retry.none(p6({ job: "alchemy-missing" } as never))),
         GetAspectType: outcome(Retry.none(p7({} as never))),
-        GetCategory: outcome(Retry.none(p8({} as never))),
+        GetAsset: outcome(Retry.none(p8({} as never))),
+        GetCategory: outcome(Retry.none(p9({} as never))),
         GetChangeRequest: outcome(
-          Retry.none(p9({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p10({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetDataProduct: outcome(Retry.none(p10({} as never))),
-        GetDataScan: outcome(Retry.none(p11({} as never))),
-        GetDataScanJob: outcome(Retry.none(p12({ job: "alchemy-missing" } as never))),
-        GetEntry: outcome(Retry.none(p13({} as never))),
-        GetEntryGroup: outcome(Retry.none(p14({} as never))),
-        GetEntryType: outcome(Retry.none(p15({} as never))),
-        GetGlossary: outcome(Retry.none(p16({} as never))),
-        GetLake: outcome(Retry.none(p17({} as never))),
+        GetDataProduct: outcome(Retry.none(p11({} as never))),
+        GetDataScan: outcome(Retry.none(p12({} as never))),
+        GetDataScanJob: outcome(Retry.none(p13({ job: "alchemy-missing" } as never))),
+        GetEntry: outcome(Retry.none(p14({} as never))),
+        GetEntryGroup: outcome(Retry.none(p15({} as never))),
+        GetEntryType: outcome(Retry.none(p16({} as never))),
+        GetGlossary: outcome(Retry.none(p17({} as never))),
+        GetLake: outcome(Retry.none(p18({} as never))),
+        GetMetadataFeed: outcome(Retry.none(p19({} as never))),
         GetMetadataJob: outcome(
-          Retry.none(p18({ metadataJob: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p20({ metadataJob: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        GetTerm: outcome(Retry.none(p19({} as never))),
-        GetZone: outcome(Retry.none(p20({} as never))),
-        ListAspectTypes: outcome(Retry.none(p21({ location: "us-central1" } as never))),
-        ListChangeRequests: outcome(Retry.none(p22({ location: "us-central1" } as never))),
-        ListDataDomains: outcome(Retry.none(p23({ location: "us-central1" } as never))),
-        ListDataProductDataAssets: outcome(Retry.none(p24({} as never))),
-        ListDataProducts: outcome(Retry.none(p25({ location: "us-central1" } as never))),
-        ListDataScanJobs: outcome(Retry.none(p26({} as never))),
-        ListDataScans: outcome(Retry.none(p27({ location: "us-central1" } as never))),
-        ListEntryGroupEntries: outcome(Retry.none(p28({} as never))),
-        ListEntryGroups: outcome(Retry.none(p29({ location: "us-central1" } as never))),
-        ListEntryTypes: outcome(Retry.none(p30({ location: "us-central1" } as never))),
-        ListGlossaries: outcome(Retry.none(p31({ location: "us-central1" } as never))),
-        ListGlossaryCategories: outcome(Retry.none(p32({} as never))),
-        ListGlossaryTerms: outcome(Retry.none(p33({} as never))),
-        ListLakeActions: outcome(Retry.none(p34({} as never))),
-        ListLakes: outcome(Retry.none(p35({ location: "us-central1" } as never))),
-        ListLakeTasks: outcome(Retry.none(p36({} as never))),
-        ListLakeZones: outcome(Retry.none(p37({} as never))),
-        ListMetadataFeeds: outcome(Retry.none(p38({ location: "us-central1" } as never))),
-        ListMetadataJobs: outcome(Retry.none(p39({ location: "us-central1" } as never))),
-        ListZoneActions: outcome(Retry.none(p40({} as never))),
-        ListZoneAssets: outcome(Retry.none(p41({} as never))),
-        ListZoneEntities: outcome(Retry.none(p42({} as never))),
+        GetTerm: outcome(Retry.none(p21({} as never))),
+        GetZone: outcome(Retry.none(p22({} as never))),
+        ListAspectTypes: outcome(Retry.none(p23({ location: "us-central1" } as never))),
+        ListAssetActions: outcome(Retry.none(p24({} as never))),
+        ListChangeRequests: outcome(Retry.none(p25({ location: "us-central1" } as never))),
+        ListDataDomains: outcome(Retry.none(p26({ location: "us-central1" } as never))),
+        ListDataProductDataAssets: outcome(Retry.none(p27({} as never))),
+        ListDataProducts: outcome(Retry.none(p28({ location: "us-central1" } as never))),
+        ListDataScanJobs: outcome(Retry.none(p29({} as never))),
+        ListDataScans: outcome(Retry.none(p30({ location: "us-central1" } as never))),
+        ListEntryGroupEntries: outcome(Retry.none(p31({} as never))),
+        ListEntryGroups: outcome(Retry.none(p32({ location: "us-central1" } as never))),
+        ListEntryTypes: outcome(Retry.none(p33({ location: "us-central1" } as never))),
+        ListGlossaries: outcome(Retry.none(p34({ location: "us-central1" } as never))),
+        ListGlossaryCategories: outcome(Retry.none(p35({} as never))),
+        ListGlossaryTerms: outcome(Retry.none(p36({} as never))),
+        ListLakeActions: outcome(Retry.none(p37({} as never))),
+        ListLakes: outcome(Retry.none(p38({ location: "us-central1" } as never))),
+        ListLakeTasks: outcome(Retry.none(p39({} as never))),
+        ListLakeZones: outcome(Retry.none(p40({} as never))),
+        ListMetadataFeeds: outcome(Retry.none(p41({ location: "us-central1" } as never))),
+        ListMetadataJobs: outcome(Retry.none(p42({ location: "us-central1" } as never))),
+        ListZoneActions: outcome(Retry.none(p43({} as never))),
+        ListZoneAssets: outcome(Retry.none(p44({} as never))),
+        ListZoneEntities: outcome(Retry.none(p45({} as never))),
         PatchChangeRequest: outcome(
-          Retry.none(p43({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p46({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
         ),
         RejectChangeRequest: outcome(
-          Retry.none(p44({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p47({ changeRequest: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        RequestDataProductAccess: outcome(Retry.none(p45({} as never))),
-        RunDataScan: outcome(Retry.none(p46({} as never))),
+        RequestDataProductAccess: outcome(Retry.none(p48({} as never))),
+        RunDataScan: outcome(Retry.none(p49({} as never))),
       }),
     };
   }).pipe(
@@ -156,6 +164,7 @@ export default class DataplexGeneratedHost extends GCP.Function<DataplexGenerate
           GCP.Dataplex.GenerateDataScanDataQualityRulesHttp,
           GCP.Dataplex.GenerateJobDataQualityRulesHttp,
           GCP.Dataplex.GetAspectTypeHttp,
+          GCP.Dataplex.GetAssetHttp,
           GCP.Dataplex.GetCategoryHttp,
           GCP.Dataplex.GetChangeRequestHttp,
           GCP.Dataplex.GetDataProductHttp,
@@ -166,10 +175,12 @@ export default class DataplexGeneratedHost extends GCP.Function<DataplexGenerate
           GCP.Dataplex.GetEntryTypeHttp,
           GCP.Dataplex.GetGlossaryHttp,
           GCP.Dataplex.GetLakeHttp,
+          GCP.Dataplex.GetMetadataFeedHttp,
           GCP.Dataplex.GetMetadataJobHttp,
           GCP.Dataplex.GetTermHttp,
           GCP.Dataplex.GetZoneHttp,
           GCP.Dataplex.ListAspectTypesHttp,
+          GCP.Dataplex.ListAssetActionsHttp,
           GCP.Dataplex.ListChangeRequestsHttp,
           GCP.Dataplex.ListDataDomainsHttp,
           GCP.Dataplex.ListDataProductDataAssetsHttp,
@@ -185,11 +196,11 @@ export default class DataplexGeneratedHost extends GCP.Function<DataplexGenerate
           GCP.Dataplex.ListLakeActionsHttp,
           GCP.Dataplex.ListLakesHttp,
           GCP.Dataplex.ListLakeTasksHttp,
+        ),
+        Layer.mergeAll(
           GCP.Dataplex.ListLakeZonesHttp,
           GCP.Dataplex.ListMetadataFeedsHttp,
           GCP.Dataplex.ListMetadataJobsHttp,
-        ),
-        Layer.mergeAll(
           GCP.Dataplex.ListZoneActionsHttp,
           GCP.Dataplex.ListZoneAssetsHttp,
           GCP.Dataplex.ListZoneEntitiesHttp,

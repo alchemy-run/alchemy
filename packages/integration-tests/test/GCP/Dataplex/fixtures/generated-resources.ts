@@ -92,3 +92,27 @@ export const ProbeScan = Effect.gen(function* () {
     dataProfileSpec: { samplingPercent: 100 },
   });
 });
+
+const LandingBucket = GCP.Storage.Bucket("ProbeLanding", {
+  location: "US-CENTRAL1",
+  forceDestroy: true,
+});
+export const ProbeAsset = Effect.gen(function* () {
+  const bucket = yield* LandingBucket;
+  const zone = yield* ProbeZone;
+  return yield* GCP.Dataplex.LakesAsset("ProbeAsset", {
+    zone: zone.name,
+    resourceSpec: {
+      type: "STORAGE_BUCKET",
+      name: Output.interpolate`projects/${bucket.projectNumber}/buckets/${bucket.bucketName}`,
+    },
+    discoverySpec: { enabled: false },
+  });
+});
+export const ProbeMetadataFeed = Effect.gen(function* () {
+  const topic = yield* GCP.PubSub.Topic("ProbeCatalogFeed", {});
+  return yield* GCP.Dataplex.MetadataFeed("ProbeMetadataFeed", {
+    location: "us-central1",
+    pubsubTopic: topic.name,
+  });
+});
