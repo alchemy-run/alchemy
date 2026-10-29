@@ -151,7 +151,17 @@ export interface Limits {
   readonly staleRetryMillis: number;
   /** How long a key without sources waits before asking whether discovery is complete again. */
   readonly pollMillis: number;
+  /**
+   * Instances a directory node lists before it splits into 16 children, so every
+   * node's share of a sweep stays bounded and the tree grows as log16 of the instances.
+   */
+  readonly leafSize: number;
+  /** The depth instances list themselves at, before any split. */
+  readonly depth: number;
 }
+
+/** The depth instances list themselves at: 16^4 leaves, each splitting once it fills. */
+export const DEPTH = 4;
 
 export const defaultLimits: Limits = {
   page: 100,
@@ -160,6 +170,8 @@ export const defaultLimits: Limits = {
   apply: 200,
   staleRetryMillis: 30_000,
   pollMillis: 5_000,
+  leafSize: 256,
+  depth: DEPTH,
 };
 
 // ---------------------------------------------------------------- keys
@@ -171,18 +183,22 @@ const pad = (n: number, width: number) => String(Math.max(0, Math.floor(n))).pad
 const trace = (step: string, fields: Record<string, unknown>) =>
   Effect.logDebug(`backfill ${step} ${JSON.stringify(fields)}`);
 
-/** The depth of the directory tree's leaves: 16^4 of them. */
-export const DEPTH = 4;
-
 /** The leaf an instance is listed in: a prefix of the FNV-1a hash of its source and id. */
-export const leafOf = ({ source, id }: SourceRef): string => {
+export const leafOf = (ref: SourceRef, depth: number = DEPTH): string =>
+  hashOf(ref).slice(0, depth);
+
+/** The FNV-1a hash of an instance's source and id, as 8 hex digits: its path in the tree. */
+const hashOf = ({ source, id }: SourceRef): string => {
   let hash = 0x811c9dc5;
   for (const char of `${source}/${id}`) {
     hash ^= char.charCodeAt(0);
     hash = Math.imul(hash, 0x01000193) >>> 0;
   }
-  return hash.toString(16).padStart(8, "0").slice(0, DEPTH);
+  return hash.toString(16).padStart(8, "0");
 };
+
+/** The child of a split node that lists an instance: one more hex digit of its hash. */
+const childFor = (path: string, ref: SourceRef) => hashOf(ref).slice(0, path.length + 1);
 
 const parentOf = (path: string) => path.slice(0, -1);
 const refKey = (ref: SourceRef) => `${enc(ref.source)}:${enc(ref.id)}`;
@@ -225,7 +241,7 @@ class Stale extends Error {
  * A source's durable outbox of control messages: staged with the state change
  * that produced them, sent in order, deleted once sent. One flush at a time.
  */
-const outbox = (storage: Storage, jobs: Jobs, net: Network) => {
+const outbox = (storage: Storage, jobs: Jobs, net: Network, depth: number) => {
   const send = (message: Message): Effect.Effect<void> => {
     switch (message.kind) {
       case "source":
@@ -233,7 +249,7 @@ const outbox = (storage: Storage, jobs: Jobs, net: Network) => {
       case "ready":
         return net.consumer.ready(message.target, message.key);
       case "settled":
-        return net.node.settled(leafOf(message.ref), message.target, message.ref);
+        return net.node.settled(leafOf(message.ref, depth), message.target, message.ref);
     }
   };
   const acquire = storage.exclusive(
@@ -336,7 +352,7 @@ export const makeSource = (
   host: SourceHost,
   limits: Limits = defaultLimits,
 ) => {
-  const queue = outbox(storage, jobs, net);
+  const queue = outbox(storage, jobs, net, limits.depth);
   const stateKey = (target: string) => `bf:s:${enc(target)}`;
   const keyKey = (target: string, key: string) => `bf:k:${enc(target)}:${enc(key)}`;
   const keysPrefix = (target: string) => `bf:k:${enc(target)}:`;
@@ -958,6 +974,22 @@ export const makeNode = (
       }
     });
 
+  /**
+   * Move a page of listed instances to the children (each lists itself and links
+   * in, joining any running sweep), until none are left here.
+   */
+  const split = (path: string) =>
+    Effect.gen(function* () {
+      const rows = yield* storage.list<SourceRef>({ prefix: "i:", limit: limits.nodePage });
+      if (rows.length === 0) return;
+      yield* Effect.forEach(rows, ([, ref]) => net.node.register(childFor(path, ref), ref), {
+        concurrency: limits.concurrency,
+        discard: true,
+      });
+      yield* storage.exclusive(storage.delete(rows.map(([key]) => key)));
+      yield* jobs.schedule("split", 0);
+    });
+
   /** Scan and ready the instances that joined late, a page at a time. */
   const late = (path: string, target: string) =>
     Effect.gen(function* () {
@@ -1173,15 +1205,25 @@ export const makeNode = (
   return {
     register: (path: string, ref: SourceRef) =>
       Effect.gen(function* () {
-        yield* storage.exclusive(
+        const forward = yield* storage.exclusive(
           Effect.gen(function* () {
+            // Split: its children list instances now.
+            if (yield* storage.get("split")) return childFor(path, ref);
             const key = `i:${refKey(ref)}`;
-            const fresh = (yield* storage.get(key)) === undefined;
-            yield* storage.put({ path, [key]: ref });
-            if (fresh) yield* join(path, ref, key);
+            if ((yield* storage.get(key)) !== undefined) return undefined;
+            const count = ((yield* storage.get<number>("count")) ?? 0) + 1;
+            yield* storage.put({ path, [key]: ref, count });
+            yield* join(path, ref, key);
+            // Full: split into 16 children by the next hex digit, a page at a time.
+            if (count > limits.leafSize && path.length < 8) {
+              yield* storage.put({ split: true });
+              yield* jobs.schedule("split", 0);
+            }
+            return undefined;
           }),
         );
         yield* ensureLinked(path);
+        if (forward !== undefined) yield* net.node.register(forward, ref);
       }),
     child: (path: string, child: string) =>
       Effect.gen(function* () {
@@ -1232,13 +1274,18 @@ export const makeNode = (
         }),
       ),
     settled: (path: string, target: string, ref: SourceRef) =>
-      storage.exclusive(
-        Effect.gen(function* () {
-          yield* storage.put({ path, [settledKey(target, ref)]: true });
-          yield* storage.delete([`${unsettledPrefix(target)}${refKey(ref)}`]);
-          yield* settle(path, target);
-        }),
-      ),
+      Effect.gen(function* () {
+        const split = yield* storage.exclusive(
+          Effect.gen(function* () {
+            yield* storage.put({ path, [settledKey(target, ref)]: true });
+            yield* storage.delete([`${unsettledPrefix(target)}${refKey(ref)}`]);
+            yield* settle(path, target);
+            return (yield* storage.get<boolean>("split")) === true;
+          }),
+        );
+        // An instance reports to the leaf it first listed in: pass it down to where it is now.
+        if (split) yield* net.node.settled(childFor(path, ref), target, ref);
+      }),
     phase: (_path: string, target: string) =>
       Effect.gen(function* () {
         if (yield* storage.get(`done:${enc(target)}`)) return "complete" as Phase;
@@ -1265,6 +1312,7 @@ export const makeNode = (
         const target = rest.join(":");
         if (kind === "step") return yield* step(path, target);
         if (kind === "late") return yield* late(path, target);
+        if (id === "split") return yield* split(path);
         if (kind === "report") {
           const sweep = yield* getSweep(target);
           if (sweep?.reported && sweep.phase !== "complete")

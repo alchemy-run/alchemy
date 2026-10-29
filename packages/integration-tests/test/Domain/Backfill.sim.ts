@@ -187,6 +187,9 @@ export class Sim {
       page: 3,
       nodePage: 2,
       apply: 4,
+      leafSize: 3,
+      // Few, shallow leaves: they fill and split all the time.
+      depth: 1,
     },
     /** More consumers deployed at the same time: they share the directory and the sources. */
     readonly others: ReadonlyArray<string> = [],
@@ -406,7 +409,9 @@ export class Sim {
     // The first commit lists the instance in the directory before it persists.
     const register =
       source.events.length === 0
-        ? this.retry(this.net.node.register(Backfill.leafOf(source.ref), source.ref))
+        ? this.retry(
+            this.net.node.register(Backfill.leafOf(source.ref, this.limits.depth), source.ref),
+          )
         : Effect.void;
     return register.pipe(
       Effect.andThen(

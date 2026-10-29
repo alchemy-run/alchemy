@@ -122,6 +122,16 @@ describe("Domain backfill (simulated)", () => {
 
   scenario("a hot key fed by every source", (sim) => backfill(sim, 25, 80, 1));
 
+  scenario("leaves that fill split, and the sweep reaches the instances they moved", (sim) =>
+    Effect.gen(function* () {
+      yield* backfill(sim, 60, 120, 4);
+      // 60 instances over 16 leaves of 3: leaves split into deeper children.
+      const splits = [...sim.nodes.entries()].filter(([, node]) => node.object.data.get("split"));
+      expect(splits.length).toBeGreaterThan(0);
+      expect(Math.max(...[...sim.nodes.keys()].map((path) => path.length))).toBeGreaterThan(1);
+    }),
+  );
+
   scenario("an event routed to several keys", (sim) =>
     Effect.gen(function* () {
       for (let i = 0; i < 30; i++) {
