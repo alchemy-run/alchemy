@@ -11,6 +11,10 @@
     "untestable": {
       "Workload": "Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)"
     },
-    "location": "global"
+    "location": "global",
+    "skip": {
+      "ListDbFindingSummaries": "Compliance Manager summaries answer 400 INVALID_ARGUMENT for a project outside an organization, at every location (checked global, us, us-central1)",
+      "ListDbFrameworkComplianceSummaries": "Compliance Manager summaries answer 400 INVALID_ARGUMENT for a project outside an organization, at every location (checked global, us, us-central1)"
+    }
   }
 }

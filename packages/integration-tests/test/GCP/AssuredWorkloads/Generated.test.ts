@@ -81,13 +81,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "ListDbFindingSummaries (assuredworkloads.projects.locations.dbFindingSummaries.list)",
-        () => probe("ListDbFindingSummaries", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:assuredworkloads", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListDbFindingSummaries (assuredworkloads.projects.locations.dbFindingSummaries.list): Compliance Manager summaries answer 400 INVALID_ARGUMENT for a project outside an organization, at every location (checked global, us, us-central1)",
+        () => Effect.void,
       );
       test.provider(
         "ListDbFrameworkComplianceReportDbControlComplianceSummaries (assuredworkloads.projects.locations.dbFrameworkComplianceReports.dbControlComplianceSummaries.list)",
@@ -97,13 +93,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "ListDbFrameworkComplianceSummaries (assuredworkloads.projects.locations.dbFrameworkComplianceSummaries.list)",
-        () => probe("ListDbFrameworkComplianceSummaries", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:assuredworkloads", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListDbFrameworkComplianceSummaries (assuredworkloads.projects.locations.dbFrameworkComplianceSummaries.list): Compliance Manager summaries answer 400 INVALID_ARGUMENT for a project outside an organization, at every location (checked global, us, us-central1)",
+        () => Effect.void,
       );
     });
 

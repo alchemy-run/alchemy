@@ -17,10 +17,8 @@ export default class AssuredWorkloadsGeneratedHost extends GCP.Function<AssuredW
   Effect.gen(function* () {
     const p0 = yield* GCP.AssuredWorkloads.AggregateDbFrameworkComplianceReport();
     const p1 = yield* GCP.AssuredWorkloads.FetchDbFrameworkComplianceReport();
-    const p2 = yield* GCP.AssuredWorkloads.ListDbFindingSummaries();
-    const p3 =
+    const p2 =
       yield* GCP.AssuredWorkloads.ListDbFrameworkComplianceReportDbControlComplianceSummaries();
-    const p4 = yield* GCP.AssuredWorkloads.ListDbFrameworkComplianceSummaries();
     return {
       fetch: serveProbes({
         AggregateDbFrameworkComplianceReport: probeOutcome(
@@ -33,14 +31,10 @@ export default class AssuredWorkloadsGeneratedHost extends GCP.Function<AssuredW
             p1({ dbFrameworkComplianceReport: "alchemy-missing", location: "global" } as never),
           ),
         ),
-        ListDbFindingSummaries: probeOutcome(Retry.none(p2({ location: "global" } as never))),
         ListDbFrameworkComplianceReportDbControlComplianceSummaries: probeOutcome(
           Retry.none(
-            p3({ dbFrameworkComplianceReport: "alchemy-missing", location: "global" } as never),
+            p2({ dbFrameworkComplianceReport: "alchemy-missing", location: "global" } as never),
           ),
-        ),
-        ListDbFrameworkComplianceSummaries: probeOutcome(
-          Retry.none(p4({ location: "global" } as never)),
         ),
       }),
     };
@@ -50,9 +44,7 @@ export default class AssuredWorkloadsGeneratedHost extends GCP.Function<AssuredW
         Layer.mergeAll(
           GCP.AssuredWorkloads.AggregateDbFrameworkComplianceReportHttp,
           GCP.AssuredWorkloads.FetchDbFrameworkComplianceReportHttp,
-          GCP.AssuredWorkloads.ListDbFindingSummariesHttp,
           GCP.AssuredWorkloads.ListDbFrameworkComplianceReportDbControlComplianceSummariesHttp,
-          GCP.AssuredWorkloads.ListDbFrameworkComplianceSummariesHttp,
         ),
       ),
     ),
