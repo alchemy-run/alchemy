@@ -89,8 +89,7 @@
     "storage.defaultObjectAccessControls.insert": "lifecycle of GCP.Storage.DefaultObjectAccessControl",
     "storage.objectAccessControls.insert": "lifecycle of GCP.Storage.ObjectAccessControl",
     "storage.notifications.insert": "lifecycle of GCP.Storage.Notification",
-    "storage.objects.insert": "uploads go to the media upload endpoint: use GCP.Storage.PutObject",
-    "storage.anywhereCaches.pause": "deprecated: Cloud Storage answers 503 \"The Cache Pause feature has been deprecated\""
+    "storage.objects.insert": "uploads go to the media upload endpoint: use GCP.Storage.PutObject"
   },
   "projectGrant": {
     "storage.buckets.restore": "a soft-deleted bucket has no IAM policy: restore is authorized on the project"

@@ -532,7 +532,8 @@ const classify = (options: {
     }
     const types = parseOperation(moduleSource, fn);
     if (types === undefined) {
-      results.push({ id, kind: "project", reason: `no distilled operation ${fn}` });
+      // Patched out of distilled (a deprecated or broken method).
+      results.push({ id, kind: "skip", reason: `no distilled operation ${fn}` });
       continue;
     }
     // `get` on [secrets, versions] → GetSecretVersion; `list` keeps the
