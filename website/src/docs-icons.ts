@@ -55,6 +55,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   Fly: b("flydotio"),
   Railway: b("railway"),
   Celld: l("server"),
+  Rivet: l("atom"),
   PlanetScale: b("planetscale"),
   Neon: b("neon"),
   Turso: b("turso"),

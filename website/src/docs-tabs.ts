@@ -24,13 +24,18 @@ export interface DocsTab {
   slot: "start" | "hub" | "end";
   /** Dropdown category (required for slot: "hub"). */
   category?: DocsCategory;
+  /** Further dropdowns that also list this hub (its `category` stays its home). */
+  alsoIn?: DocsCategory[];
   /** One-line scope hint shown in the dropdown. */
   hint?: string;
+  /** Listed as coming soon: shown in its dropdown, but not a link yet. */
+  soon?: boolean;
 }
 
 /** Hub categories, in header order. */
 export const DOCS_CATEGORIES = [
   "Clouds",
+  "Durable Objects",
   "Containers",
   "Databases",
   "Auth",
@@ -47,6 +52,7 @@ const hub = (
   category: DocsCategory,
   hint: string,
   extraPrefixes: string[] = [],
+  alsoIn?: DocsCategory[],
 ): DocsTab => ({
   label,
   href: `/${slug}`,
@@ -54,6 +60,7 @@ const hub = (
   slot: "hub",
   category,
   hint,
+  ...(alsoIn ? { alsoIn } : {}),
 });
 
 export const DOCS_TABS: DocsTab[] = [
@@ -66,15 +73,32 @@ export const DOCS_TABS: DocsTab[] = [
     slot: "start",
   },
 
-  hub("Cloudflare", "cloudflare", "Clouds", "workers · durable objects · R2 · D1", [
-    "/providers/cloudflare",
-  ]),
+  hub(
+    "Cloudflare",
+    "cloudflare",
+    "Clouds",
+    "workers · durable objects · R2 · D1",
+    ["/providers/cloudflare"],
+    ["Durable Objects"],
+  ),
   hub("AWS", "aws", "Clouds", "lambda · ECS · S3 · DynamoDB", ["/providers/aws"]),
   hub("GCP", "gcp", "Clouds", "cloud run · storage · pub/sub", ["/providers/gcp"]),
   hub("Hetzner", "hetzner", "Clouds", "servers · networks · volumes", ["/providers/hetzner"]),
   hub("Fly", "fly", "Clouds", "apps · machines · volumes", ["/providers/fly"]),
   hub("Railway", "railway", "Clouds", "services · environments · volumes", ["/providers/railway"]),
-  hub("Celld", "celld", "Clouds", "self-hosted workers · durable objects", ["/providers/celld"]),
+
+  hub("Celld", "celld", "Durable Objects", "self-hosted workers · durable objects", [
+    "/providers/celld",
+  ]),
+  {
+    label: "Rivet",
+    href: "/rivet",
+    prefixes: [],
+    slot: "hub",
+    category: "Durable Objects",
+    hint: "coming soon",
+    soon: true,
+  },
 
   hub("PlanetScale", "planetscale", "Databases", "MySQL · Postgres · branches", [
     "/providers/planetscale",
@@ -145,9 +169,9 @@ const alphabetically = (a: string, b: string) => a.localeCompare(b, "en", { sens
 export const DOCS_TAB_GROUPS: DocsTabGroup[] = (() => {
   const sections = DOCS_CATEGORIES.map((category) => ({
     heading: category,
-    tabs: DOCS_TABS.filter((tab) => tab.category === category).sort((a, b) =>
-      alphabetically(a.label, b.label),
-    ),
+    tabs: DOCS_TABS.filter(
+      (tab) => tab.category === category || tab.alsoIn?.includes(category),
+    ).sort((a, b) => alphabetically(a.label, b.label)),
   })).filter((section) => section.tabs.length > 0);
   const own = sections.filter((section) => section.tabs.length > 1);
   const more = sections
@@ -162,6 +186,16 @@ export const DOCS_TAB_GROUPS: DocsTabGroup[] = (() => {
 /** Every hub tab in a group, across its sections. */
 export const groupTabs = (group: DocsTabGroup): DocsTab[] =>
   group.sections.flatMap((section) => section.tabs);
+
+/**
+ * Whether `tab` is at home in `group`: the dropdown underlined while you're
+ * in that hub. A hub listed in another dropdown through `alsoIn` doesn't
+ * light that one up.
+ */
+export const groupOwns = (group: DocsTabGroup, tab: DocsTab): boolean =>
+  group.sections.some(
+    (section) => (section.heading ?? group.label) === tab.category && section.tabs.includes(tab),
+  );
 
 const matches = (pathname: string, prefix: string) =>
   pathname === prefix || pathname.startsWith(`${prefix}/`);

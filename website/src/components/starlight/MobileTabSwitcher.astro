@@ -60,11 +60,20 @@ const grouped: { heading?: string; tabs: typeof DOCS_TABS }[] = [
           {group.heading && (
             <div class="alc-switcher__heading">{group.heading}</div>
           )}
-          {group.tabs.map((tab) => (
-            <a
-              href={tab.href}
-              class:list={["alc-switcher__item", { "alc-switcher__item--active": tab.label === current.label }]}
+          {group.tabs.map((tab) => {
+            const Item = tab.soon ? "span" : "a";
+            return (
+            <Item
+              href={tab.soon ? undefined : tab.href}
+              class:list={[
+                "alc-switcher__item",
+                {
+                  "alc-switcher__item--active": tab.label === current.label,
+                  "alc-switcher__item--soon": tab.soon,
+                },
+              ]}
               aria-current={tab.label === current.label ? "true" : undefined}
+              aria-disabled={tab.soon ? "true" : undefined}
             >
               {TAB_ICONS[tab.label] && (
                 <svg
@@ -77,8 +86,9 @@ const grouped: { heading?: string; tabs: typeof DOCS_TABS }[] = [
                 />
               )}
               <span>{tab.label}</span>
-            </a>
-          ))}
+            </Item>
+            );
+          })}
         </>
       ))
     }
@@ -157,6 +167,11 @@ const grouped: { heading?: string; tabs: typeof DOCS_TABS }[] = [
   }
   .alc-switcher__item:hover {
     color: var(--alc-accent-deep);
+  }
+  .alc-switcher__item--soon,
+  .alc-switcher__item--soon:hover {
+    color: var(--alc-fg-4);
+    cursor: default;
   }
   .alc-switcher__item--active {
     color: var(--alc-accent-deep);
