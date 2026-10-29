@@ -731,13 +731,11 @@ export const evaluateAvailable = (
       }
       const nested = new Set(ancestors).add(expr);
       if (Array.isArray(expr)) {
-        return yield* Effect.all(expr.map((item) => evaluateAvailable(item, upstream, nested)));
+        return yield* Effect.forEach(expr, (item) => evaluateAvailable(item, upstream, nested));
       }
       return Object.fromEntries(
-        yield* Effect.all(
-          Object.entries(expr).map(([key, value]) =>
-            evaluateAvailable(value, upstream, nested).pipe(Effect.map((value) => [key, value])),
-          ),
+        yield* Effect.forEach(Object.entries(expr), ([key, value]) =>
+          evaluateAvailable(value, upstream, nested).pipe(Effect.map((value) => [key, value])),
         ),
       );
     }
