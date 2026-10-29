@@ -25,7 +25,7 @@ export const linkedContainer = (main: string, marker: string) =>
       const bundled = typeof BUNDLE_MARKER === "string" ? BUNDLE_MARKER : marker;
       return {
         marker: () => Effect.succeed(bundled),
-        fetch: HttpServerResponse.text(bundled),
+        fetch: Effect.succeed(HttpServerResponse.text(bundled)),
       };
     }),
   );
