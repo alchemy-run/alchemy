@@ -648,6 +648,7 @@ Hosting, management, scaling, upgrades, storage and private networking for a Cel
 - [Containers](https://alchemy.run/celld/compute/containers) — Attach a container image to a Celld Durable Object, start it, wait for its port and run commands, on EC2 hosts with gVisor isolation.
 - [Durable Objects](https://alchemy.run/celld/compute/durable-objects) — Declare a Celld Durable Object, persist its state in native storage, and call it by name from a Worker.
 - [Durable schedules](https://alchemy.run/celld/compute/durable-schedules) — Register an archive callback, schedule and cancel jobs, and coordinate them with cell storage.
+- [Effect workflows](https://alchemy.run/celld/compute/effect-workflows) — Run Effect workflows on Celld Durable Objects. Declare a workflow with effect/workflow, implement it with Workflows.layer, start runs with Workflows.RunWorkflow, and let them sleep, wait for signals and undo steps durably.
 - [Hibernatable WebSockets](https://alchemy.run/celld/compute/hibernatable-websockets) — Accept native Celld sockets and validate versioned Session attachments after a wake.
 - [Service bindings](https://alchemy.run/celld/compute/service-bindings) — Call another Worker in the same Celld Application over a native service binding, without leaving the fleet.
 - [Static assets](https://alchemy.run/celld/compute/static-assets) — Serve a directory of static files from a Celld Worker, with _headers, _redirects and SPA fallback, and run the Worker first when it needs to.
@@ -962,8 +963,8 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Story](https://alchemy.run/domain/story) — A specification you can run. Given some history, when a command is sent, then these events are recorded.
 - [Testing a model](https://alchemy.run/domain/testing-models) — Test your model's rules, views, policies and deadlines with stories that run it in memory.
 - [Testing an Api](https://alchemy.run/domain/testing-apis) — Test what each client may do and see, in process, over HTTP, and against a real deployment.
-- [Integrate with foldkit](https://alchemy.run/domain/foldkit) — Run domain commands from foldkit commands, watch views with subscriptions, and give the app its Api client as a resource.
-- [Optimistic updates](https://alchemy.run/domain/optimistic-updates) — Show a change the moment the user asks for it, then confirm it when the bank's event arrives, or mark it rejected.
+- [Integrate with Foldkit](https://alchemy.run/domain/foldkit) — Derive Foldkit Commands from an Api, follow View snapshots, and seed the Model from Flags.
+- [Optimistic updates](https://alchemy.run/domain/optimistic-updates) — Show pending intent, confirm it by commandId from a View feed, and retry an unknown outcome safely.
 - [Offline and local first](https://alchemy.run/domain/local-first) — Choose how local an app is, and keep it working offline by recording intents and sending them when the connection returns.
 - [Sessions and middleware](https://alchemy.run/domain/sessions) — Authenticate every request, carry who is asking into the domain, and sign browsers in with a cookie.
 - [Sign in with better-auth](https://alchemy.run/domain/better-auth) — Sign users in to a Domain Api with GitHub or Google through better-auth, and give every command and view the signed-in user.
