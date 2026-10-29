@@ -10,11 +10,11 @@ import * as SqlMessageStorage from "effect/cluster/SqlMessageStorage";
 import * as SqlRunnerStorage from "effect/cluster/SqlRunnerStorage";
 import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
-import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Path from "effect/Path";
+import * as Queue from "effect/Queue";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
 import {
@@ -89,18 +89,16 @@ describe("Domain.Cluster on SQLite", () => {
       Effect.gen(function* () {
         const api = yield* ContractApi.Client;
         yield* api.Increment("c-1", { by: 1 });
-        const watched = yield* api.Counter.watch("c-1").pipe(
-          Stream.take(2),
-          Stream.runCollect,
+        const seen = yield* Queue.unbounded<{ readonly cursor: number }>();
+        yield* api.Counter.watch("c-1").pipe(
+          Stream.runForEach((item) => Queue.offer(seen, item)),
           Effect.forkChild,
         );
-        yield* Effect.sleep("100 millis");
-        const committed = yield* Effect.sync(() => Date.now());
+        expect((yield* Queue.take(seen)).cursor).toBe(1);
         yield* api.Increment("c-1", { by: 2 });
-        const [, second] = yield* Fiber.join(watched).pipe(Effect.timeout("2 seconds"));
-        expect(second!.cursor).toBe(2);
-        // The poll runs once a minute here: only the in-process signal is this fast.
-        expect((yield* Effect.sync(() => Date.now())) - committed).toBeLessThan(1_000);
+        // The poll runs once a minute here: only the in-process signal arrives this soon.
+        const second = yield* Queue.take(seen).pipe(Effect.timeout("10 seconds"));
+        expect(second.cursor).toBe(2);
       }).pipe(Effect.scoped, Effect.provide(hosted(onSqlite({ watchMillis: 60_000 })))),
   );
 
