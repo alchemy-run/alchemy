@@ -48,7 +48,7 @@ const teardownStateTable = Effect.fn("AWS.state.teardownTable")(function* (name?
 
   const table = yield* dynamodb.describeTable({ TableName: tableName }).pipe(
     Effect.map((result) => result.Table),
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );
   if (table !== undefined) {
     if (table.TableStatus !== "DELETING") {
