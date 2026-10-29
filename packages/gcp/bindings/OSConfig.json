@@ -14,7 +14,10 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {},
+    "untestable": {
+      "FoldersLocationsGlobalPolicyOrchestrator": "folder-level: needs a folder and folder IAM the testing account lacks",
+      "OrganizationsLocationsGlobalPolicyOrchestrator": "organization-level: needs org IAM the testing account lacks"
+    },
     "enable": [
       "osconfig.googleapis.com"
     ]

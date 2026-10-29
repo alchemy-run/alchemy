@@ -38,9 +38,8 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {},
-    "enable": [
-      "oracledatabase.googleapis.com"
-    ]
+    "untestable": {
+      "*": "Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour"
+    }
   }
 }

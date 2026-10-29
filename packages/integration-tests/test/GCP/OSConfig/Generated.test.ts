@@ -68,15 +68,15 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("FoldersLocationsGlobalPolicyOrchestrator", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPolicyOrchestrator@FoldersLocationsGlobalPolicyOrchestrator (osconfig.folders.locations.global.policyOrchestrators.get): FoldersLocationsGlobalPolicyOrchestrator: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPolicyOrchestrator@FoldersLocationsGlobalPolicyOrchestrator (osconfig.folders.locations.global.policyOrchestrators.get): FoldersLocationsGlobalPolicyOrchestrator: folder-level: needs a folder and folder IAM the testing account lacks",
         () => Effect.void,
       );
     });
 
     describe("OrganizationsLocationsGlobalPolicyOrchestrator", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPolicyOrchestrator@OrganizationsLocationsGlobalPolicyOrchestrator (osconfig.organizations.locations.global.policyOrchestrators.get): OrganizationsLocationsGlobalPolicyOrchestrator: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPolicyOrchestrator@OrganizationsLocationsGlobalPolicyOrchestrator (osconfig.organizations.locations.global.policyOrchestrators.get): OrganizationsLocationsGlobalPolicyOrchestrator: organization-level: needs org IAM the testing account lacks",
         () => Effect.void,
       );
     });

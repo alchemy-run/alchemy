@@ -53,9 +53,6 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
-            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
-              service: "baremetalsolution.googleapis.com",
-            });
             const host = yield* BareMetalSolutionGeneratedHost;
             return { uri: host.uri };
           }),
@@ -68,298 +65,162 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("NfsShare", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetNfsShare (baremetalsolution.projects.locations.nfsShares.get): NfsShare: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetNfsShare (baremetalsolution.projects.locations.nfsShares.get): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RenameNfsShare (baremetalsolution.projects.locations.nfsShares.rename): NfsShare: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RenameNfsShare (baremetalsolution.projects.locations.nfsShares.rename): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider(
-        "CreateSshKey (baremetalsolution.projects.locations.sshKeys.create)",
-        () => probe("CreateSshKey", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "CreateSshKey (baremetalsolution.projects.locations.sshKeys.create): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "DeleteSshKey (baremetalsolution.projects.locations.sshKeys.delete)",
-        () => probe("DeleteSshKey", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DeleteSshKey (baremetalsolution.projects.locations.sshKeys.delete): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "DetachInstanceLun (baremetalsolution.projects.locations.instances.detachLun)",
-        () => probe("DetachInstanceLun", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DetachInstanceLun (baremetalsolution.projects.locations.instances.detachLun): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "DisableInstanceHyperthreading (baremetalsolution.projects.locations.instances.disableHyperthreading)",
-        () => probe("DisableInstanceHyperthreading", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DisableInstanceHyperthreading (baremetalsolution.projects.locations.instances.disableHyperthreading): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "DisableInstanceInteractiveSerialConsole (baremetalsolution.projects.locations.instances.disableInteractiveSerialConsole)",
-        () => probe("DisableInstanceInteractiveSerialConsole", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DisableInstanceInteractiveSerialConsole (baremetalsolution.projects.locations.instances.disableInteractiveSerialConsole): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "EnableInstanceHyperthreading (baremetalsolution.projects.locations.instances.enableHyperthreading)",
-        () => probe("EnableInstanceHyperthreading", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "EnableInstanceHyperthreading (baremetalsolution.projects.locations.instances.enableHyperthreading): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "EnableInstanceInteractiveSerialConsole (baremetalsolution.projects.locations.instances.enableInteractiveSerialConsole)",
-        () => probe("EnableInstanceInteractiveSerialConsole", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "EnableInstanceInteractiveSerialConsole (baremetalsolution.projects.locations.instances.enableInteractiveSerialConsole): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "EvictVolume (baremetalsolution.projects.locations.volumes.evict)",
-        () => probe("EvictVolume", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "EvictVolume (baremetalsolution.projects.locations.volumes.evict): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "EvictVolumeLun (baremetalsolution.projects.locations.volumes.luns.evict)",
-        () => probe("EvictVolumeLun", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "EvictVolumeLun (baremetalsolution.projects.locations.volumes.luns.evict): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "GetInstance (baremetalsolution.projects.locations.instances.get)",
-        () => probe("GetInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "GetInstance (baremetalsolution.projects.locations.instances.get): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "GetNetwork (baremetalsolution.projects.locations.networks.get)",
-        () => probe("GetNetwork", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "GetNetwork (baremetalsolution.projects.locations.networks.get): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "GetVolume (baremetalsolution.projects.locations.volumes.get)",
-        () => probe("GetVolume", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "GetVolume (baremetalsolution.projects.locations.volumes.get): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "GetVolumeLun (baremetalsolution.projects.locations.volumes.luns.get)",
-        () => probe("GetVolumeLun", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "GetVolumeLun (baremetalsolution.projects.locations.volumes.luns.get): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "ListInstances (baremetalsolution.projects.locations.instances.list)",
-        () => probe("ListInstances", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListInstances (baremetalsolution.projects.locations.instances.list): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "ListNetworks (baremetalsolution.projects.locations.networks.list)",
-        () => probe("ListNetworks", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListNetworks (baremetalsolution.projects.locations.networks.list): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "ListNetworkUsage (baremetalsolution.projects.locations.networks.listNetworkUsage)",
-        () => probe("ListNetworkUsage", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListNetworkUsage (baremetalsolution.projects.locations.networks.listNetworkUsage): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "ListNfsShares (baremetalsolution.projects.locations.nfsShares.list)",
-        () => probe("ListNfsShares", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListNfsShares (baremetalsolution.projects.locations.nfsShares.list): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "ListOsImages (baremetalsolution.projects.locations.osImages.list)",
-        () => probe("ListOsImages", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListOsImages (baremetalsolution.projects.locations.osImages.list): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "ListSshKeys (baremetalsolution.projects.locations.sshKeys.list)",
-        () => probe("ListSshKeys", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListSshKeys (baremetalsolution.projects.locations.sshKeys.list): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "ListVolumeLuns (baremetalsolution.projects.locations.volumes.luns.list)",
-        () => probe("ListVolumeLuns", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListVolumeLuns (baremetalsolution.projects.locations.volumes.luns.list): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "ListVolumes (baremetalsolution.projects.locations.volumes.list)",
-        () => probe("ListVolumes", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListVolumes (baremetalsolution.projects.locations.volumes.list): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "ListVolumeSnapshots (baremetalsolution.projects.locations.volumes.snapshots.list)",
-        () => probe("ListVolumeSnapshots", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListVolumeSnapshots (baremetalsolution.projects.locations.volumes.snapshots.list): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "LoadInstanceAuthInfo (baremetalsolution.projects.locations.instances.loadAuthInfo)",
-        () => probe("LoadInstanceAuthInfo", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "LoadInstanceAuthInfo (baremetalsolution.projects.locations.instances.loadAuthInfo): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "PatchInstance (baremetalsolution.projects.locations.instances.patch)",
-        () => probe("PatchInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "PatchInstance (baremetalsolution.projects.locations.instances.patch): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "PatchNetwork (baremetalsolution.projects.locations.networks.patch)",
-        () => probe("PatchNetwork", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "PatchNetwork (baremetalsolution.projects.locations.networks.patch): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "PatchVolume (baremetalsolution.projects.locations.volumes.patch)",
-        () => probe("PatchVolume", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "PatchVolume (baremetalsolution.projects.locations.volumes.patch): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "ReimageInstance (baremetalsolution.projects.locations.instances.reimage)",
-        () => probe("ReimageInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ReimageInstance (baremetalsolution.projects.locations.instances.reimage): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "RenameInstance (baremetalsolution.projects.locations.instances.rename)",
-        () => probe("RenameInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "RenameInstance (baremetalsolution.projects.locations.instances.rename): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "RenameNetwork (baremetalsolution.projects.locations.networks.rename)",
-        () => probe("RenameNetwork", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "RenameNetwork (baremetalsolution.projects.locations.networks.rename): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "RenameVolume (baremetalsolution.projects.locations.volumes.rename)",
-        () => probe("RenameVolume", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "RenameVolume (baremetalsolution.projects.locations.volumes.rename): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "ResetInstance (baremetalsolution.projects.locations.instances.reset)",
-        () => probe("ResetInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ResetInstance (baremetalsolution.projects.locations.instances.reset): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "ResizeVolume (baremetalsolution.projects.locations.volumes.resize)",
-        () => probe("ResizeVolume", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ResizeVolume (baremetalsolution.projects.locations.volumes.resize): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "StartInstance (baremetalsolution.projects.locations.instances.start)",
-        () => probe("StartInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "StartInstance (baremetalsolution.projects.locations.instances.start): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
-      test.provider(
-        "StopInstance (baremetalsolution.projects.locations.instances.stop)",
-        () => probe("StopInstance", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:baremetalsolution", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "StopInstance (baremetalsolution.projects.locations.instances.stop): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
       );
     });
 
     describe("VolumesSnapshot", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSnapshot (baremetalsolution.projects.locations.volumes.snapshots.get): VolumesSnapshot: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetSnapshot (baremetalsolution.projects.locations.volumes.snapshots.get): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RestoreVolumeSnapshot (baremetalsolution.projects.locations.volumes.snapshots.restoreVolumeSnapshot): VolumesSnapshot: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RestoreVolumeSnapshot (baremetalsolution.projects.locations.volumes.snapshots.restoreVolumeSnapshot): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
         () => Effect.void,
       );
     });

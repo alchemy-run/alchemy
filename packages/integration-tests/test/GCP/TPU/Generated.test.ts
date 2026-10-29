@@ -66,16 +66,16 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Node", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetNodeGuestAttributes (tpu.projects.locations.nodes.getGuestAttributes): Node: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetNodeGuestAttributes (tpu.projects.locations.nodes.getGuestAttributes): Node: TPU VMs bill by the hour and need TPU quota the testing project doesn't have",
         () => Effect.void,
       );
-      test.provider.todo(
-        "StartNode (tpu.projects.locations.nodes.start): Node: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "StartNode (tpu.projects.locations.nodes.start): Node: TPU VMs bill by the hour and need TPU quota the testing project doesn't have",
         () => Effect.void,
       );
-      test.provider.todo(
-        "StopNode (tpu.projects.locations.nodes.stop): Node: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "StopNode (tpu.projects.locations.nodes.stop): Node: TPU VMs bill by the hour and need TPU quota the testing project doesn't have",
         () => Effect.void,
       );
     });
@@ -132,8 +132,8 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("QueuedResource", { concurrent: true }, () => {
-      test.provider.todo(
-        "ResetQueuedResource (tpu.projects.locations.queuedResources.reset): QueuedResource: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ResetQueuedResource (tpu.projects.locations.queuedResources.reset): QueuedResource: a queued resource provisions TPU VMs: hourly billing and TPU quota",
         () => Effect.void,
       );
     });

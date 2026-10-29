@@ -68,8 +68,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ContactCenter", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetContactCenter (contactcenteraiplatform.projects.locations.contactCenters.get): ContactCenter: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetContactCenter (contactcenteraiplatform.projects.locations.contactCenters.get): ContactCenter: a contact center instance is a paid subscription that takes 30–45 minutes to provision",
         () => Effect.void,
       );
     });

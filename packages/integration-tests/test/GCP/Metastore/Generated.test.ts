@@ -68,8 +68,8 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Federation", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetFederation (metastore.projects.locations.federations.get): Federation: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetFederation (metastore.projects.locations.federations.get): Federation: a federation fronts running Dataproc Metastore services (20–40 minutes each to provision, billed per hour)",
         () => Effect.void,
       );
     });
@@ -94,83 +94,83 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Service", { concurrent: true }, () => {
-      test.provider.todo(
-        "AlterServiceLocation (metastore.projects.locations.services.alterLocation): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "AlterServiceLocation (metastore.projects.locations.services.alterLocation): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "AlterServiceTableProperties (metastore.projects.locations.services.alterTableProperties): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "AlterServiceTableProperties (metastore.projects.locations.services.alterTableProperties): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "CancelServiceMigration (metastore.projects.locations.services.cancelMigration): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "CancelServiceMigration (metastore.projects.locations.services.cancelMigration): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "CompleteServiceMigration (metastore.projects.locations.services.completeMigration): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "CompleteServiceMigration (metastore.projects.locations.services.completeMigration): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "CreateServiceMetadataImport (metastore.projects.locations.services.metadataImports.create): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "CreateServiceMetadataImport (metastore.projects.locations.services.metadataImports.create): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "DeleteServiceMigrationExecution (metastore.projects.locations.services.migrationExecutions.delete): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "DeleteServiceMigrationExecution (metastore.projects.locations.services.migrationExecutions.delete): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ExportServiceMetadata (metastore.projects.locations.services.exportMetadata): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ExportServiceMetadata (metastore.projects.locations.services.exportMetadata): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetService (metastore.projects.locations.services.get): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetService (metastore.projects.locations.services.get): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetServiceMetadataImport (metastore.projects.locations.services.metadataImports.get): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetServiceMetadataImport (metastore.projects.locations.services.metadataImports.get): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetServiceMigrationExecution (metastore.projects.locations.services.migrationExecutions.get): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetServiceMigrationExecution (metastore.projects.locations.services.migrationExecutions.get): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListServiceBackups (metastore.projects.locations.services.backups.list): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListServiceBackups (metastore.projects.locations.services.backups.list): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListServiceMetadataImports (metastore.projects.locations.services.metadataImports.list): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListServiceMetadataImports (metastore.projects.locations.services.metadataImports.list): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListServiceMigrationExecutions (metastore.projects.locations.services.migrationExecutions.list): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListServiceMigrationExecutions (metastore.projects.locations.services.migrationExecutions.list): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "MoveServiceTableToDatabase (metastore.projects.locations.services.moveTableToDatabase): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "MoveServiceTableToDatabase (metastore.projects.locations.services.moveTableToDatabase): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "PatchServiceMetadataImport (metastore.projects.locations.services.metadataImports.patch): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "PatchServiceMetadataImport (metastore.projects.locations.services.metadataImports.patch): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "QueryServiceMetadata (metastore.projects.locations.services.queryMetadata): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "QueryServiceMetadata (metastore.projects.locations.services.queryMetadata): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RestoreService (metastore.projects.locations.services.restore): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RestoreService (metastore.projects.locations.services.restore): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "StartServiceMigration (metastore.projects.locations.services.startMigration): Service: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "StartServiceMigration (metastore.projects.locations.services.startMigration): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
         () => Effect.void,
       );
     });
 
     describe("ServicesBackup", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetBackup (metastore.projects.locations.services.backups.get): ServicesBackup: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBackup (metastore.projects.locations.services.backups.get): ServicesBackup: a backup needs a running Dataproc Metastore service (20–40 minutes to provision, billed per hour)",
         () => Effect.void,
       );
     });

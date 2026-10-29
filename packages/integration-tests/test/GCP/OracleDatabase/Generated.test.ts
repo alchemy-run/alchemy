@@ -53,9 +53,6 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
-            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
-              service: "oracledatabase.googleapis.com",
-            });
             const host = yield* OracleDatabaseGeneratedHost;
             return { uri: host.uri };
           }),
@@ -68,232 +65,148 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AutonomousDatabase", { concurrent: true }, () => {
-      test.provider.todo(
-        "FailoverAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.failover): AutonomousDatabase: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "FailoverAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.failover): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetAutonomousDatabaseRefreshableClones (oracledatabase.projects.locations.autonomousDatabases.getRefreshableClones): AutonomousDatabase: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetAutonomousDatabaseRefreshableClones (oracledatabase.projects.locations.autonomousDatabases.getRefreshableClones): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RefreshAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.refresh): AutonomousDatabase: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RefreshAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.refresh): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RestoreAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.restore): AutonomousDatabase: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RestoreAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.restore): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "SwitchoverAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.switchover): AutonomousDatabase: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "SwitchoverAutonomousDatabase (oracledatabase.projects.locations.autonomousDatabases.switchover): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
     });
 
     describe("CloudExadataInfrastructure", { concurrent: true }, () => {
-      test.provider.todo(
-        "ConfigureCloudExadataInfrastructureExascale (oracledatabase.projects.locations.cloudExadataInfrastructures.configureExascale): CloudExadataInfrastructure: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ConfigureCloudExadataInfrastructureExascale (oracledatabase.projects.locations.cloudExadataInfrastructures.configureExascale): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListCloudExadataInfrastructureDbServers (oracledatabase.projects.locations.cloudExadataInfrastructures.dbServers.list): CloudExadataInfrastructure: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListCloudExadataInfrastructureDbServers (oracledatabase.projects.locations.cloudExadataInfrastructures.dbServers.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
     });
 
     describe("CloudVmCluster", { concurrent: true }, () => {
-      test.provider.todo(
-        "ListCloudVmClusterDbNodes (oracledatabase.projects.locations.cloudVmClusters.dbNodes.list): CloudVmCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListCloudVmClusterDbNodes (oracledatabase.projects.locations.cloudVmClusters.dbNodes.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
     });
 
     describe("ExadbVmCluster", { concurrent: true }, () => {
-      test.provider.todo(
-        "ListExadbVmClusterDbNodes (oracledatabase.projects.locations.exadbVmClusters.dbNodes.list): ExadbVmCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListExadbVmClusterDbNodes (oracledatabase.projects.locations.exadbVmClusters.dbNodes.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RemoveExadbVmClusterVirtualMachine (oracledatabase.projects.locations.exadbVmClusters.removeVirtualMachine): ExadbVmCluster: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RemoveExadbVmClusterVirtualMachine (oracledatabase.projects.locations.exadbVmClusters.removeVirtualMachine): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
     });
 
     describe("OdbNetwork", { concurrent: true }, () => {
-      test.provider.todo(
-        "ListOdbNetworkOdbSubnets (oracledatabase.projects.locations.odbNetworks.odbSubnets.list): OdbNetwork: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListOdbNetworkOdbSubnets (oracledatabase.projects.locations.odbNetworks.odbSubnets.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider(
-        "GetDatabase (oracledatabase.projects.locations.databases.get)",
-        () => probe("GetDatabase", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "GetDatabase (oracledatabase.projects.locations.databases.get): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "GetPluggableDatabase (oracledatabase.projects.locations.pluggableDatabases.get)",
-        () => probe("GetPluggableDatabase", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "GetPluggableDatabase (oracledatabase.projects.locations.pluggableDatabases.get): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListAutonomousDatabaseBackups (oracledatabase.projects.locations.autonomousDatabaseBackups.list)",
-        () => probe("ListAutonomousDatabaseBackups", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListAutonomousDatabaseBackups (oracledatabase.projects.locations.autonomousDatabaseBackups.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListAutonomousDatabaseCharacterSets (oracledatabase.projects.locations.autonomousDatabaseCharacterSets.list)",
-        () => probe("ListAutonomousDatabaseCharacterSets", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListAutonomousDatabaseCharacterSets (oracledatabase.projects.locations.autonomousDatabaseCharacterSets.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListAutonomousDatabases (oracledatabase.projects.locations.autonomousDatabases.list)",
-        () => probe("ListAutonomousDatabases", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListAutonomousDatabases (oracledatabase.projects.locations.autonomousDatabases.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListAutonomousDbVersions (oracledatabase.projects.locations.autonomousDbVersions.list)",
-        () => probe("ListAutonomousDbVersions", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListAutonomousDbVersions (oracledatabase.projects.locations.autonomousDbVersions.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListCloudExadataInfrastructures (oracledatabase.projects.locations.cloudExadataInfrastructures.list)",
-        () => probe("ListCloudExadataInfrastructures", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListCloudExadataInfrastructures (oracledatabase.projects.locations.cloudExadataInfrastructures.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListCloudVmClusters (oracledatabase.projects.locations.cloudVmClusters.list)",
-        () => probe("ListCloudVmClusters", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListCloudVmClusters (oracledatabase.projects.locations.cloudVmClusters.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListDatabaseCharacterSets (oracledatabase.projects.locations.databaseCharacterSets.list)",
-        () => probe("ListDatabaseCharacterSets", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListDatabaseCharacterSets (oracledatabase.projects.locations.databaseCharacterSets.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListDatabases (oracledatabase.projects.locations.databases.list)",
-        () => probe("ListDatabases", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListDatabases (oracledatabase.projects.locations.databases.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListDbSystemInitialStorageSizes (oracledatabase.projects.locations.dbSystemInitialStorageSizes.list)",
-        () => probe("ListDbSystemInitialStorageSizes", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListDbSystemInitialStorageSizes (oracledatabase.projects.locations.dbSystemInitialStorageSizes.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListDbSystems (oracledatabase.projects.locations.dbSystems.list)",
-        () => probe("ListDbSystems", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListDbSystems (oracledatabase.projects.locations.dbSystems.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListDbSystemShapes (oracledatabase.projects.locations.dbSystemShapes.list)",
-        () => probe("ListDbSystemShapes", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListDbSystemShapes (oracledatabase.projects.locations.dbSystemShapes.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListDbVersions (oracledatabase.projects.locations.dbVersions.list)",
-        () => probe("ListDbVersions", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListDbVersions (oracledatabase.projects.locations.dbVersions.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListEntitlements (oracledatabase.projects.locations.entitlements.list)",
-        () => probe("ListEntitlements", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListEntitlements (oracledatabase.projects.locations.entitlements.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListExadbVmClusters (oracledatabase.projects.locations.exadbVmClusters.list)",
-        () => probe("ListExadbVmClusters", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListExadbVmClusters (oracledatabase.projects.locations.exadbVmClusters.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListExascaleDbStorageVaults (oracledatabase.projects.locations.exascaleDbStorageVaults.list)",
-        () => probe("ListExascaleDbStorageVaults", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListExascaleDbStorageVaults (oracledatabase.projects.locations.exascaleDbStorageVaults.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListGiVersionMinorVersions (oracledatabase.projects.locations.giVersions.minorVersions.list)",
-        () => probe("ListGiVersionMinorVersions", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListGiVersionMinorVersions (oracledatabase.projects.locations.giVersions.minorVersions.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListGiVersions (oracledatabase.projects.locations.giVersions.list)",
-        () => probe("ListGiVersions", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListGiVersions (oracledatabase.projects.locations.giVersions.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListOdbNetworks (oracledatabase.projects.locations.odbNetworks.list)",
-        () => probe("ListOdbNetworks", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListOdbNetworks (oracledatabase.projects.locations.odbNetworks.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
-      test.provider(
-        "ListPluggableDatabases (oracledatabase.projects.locations.pluggableDatabases.list)",
-        () => probe("ListPluggableDatabases", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:oracledatabase", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListPluggableDatabases (oracledatabase.projects.locations.pluggableDatabases.list): Oracle Database@Google Cloud needs an Oracle Cloud subscription linked through the Marketplace, and Exadata infrastructure bills per hour",
+        () => Effect.void,
       );
     });
 

@@ -75,15 +75,15 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("FolderBigQueryExport", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetBigQueryExport@FolderBigQueryExport (securitycenter.folders.bigQueryExports.get): FolderBigQueryExport: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBigQueryExport@FolderBigQueryExport (securitycenter.folders.bigQueryExports.get): FolderBigQueryExport: folder-level: needs a folder and folder IAM the testing account lacks",
         () => Effect.void,
       );
     });
 
     describe("FolderMuteConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetMuteConfig@FolderMuteConfig (securitycenter.folders.muteConfigs.get): FolderMuteConfig: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetMuteConfig@FolderMuteConfig (securitycenter.folders.muteConfigs.get): FolderMuteConfig: folder-level: needs a folder and folder IAM the testing account lacks",
         () => Effect.void,
       );
     });
@@ -96,15 +96,15 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("OrganizationBigQueryExport", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetBigQueryExport@OrganizationBigQueryExport (securitycenter.organizations.bigQueryExports.get): OrganizationBigQueryExport: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetBigQueryExport@OrganizationBigQueryExport (securitycenter.organizations.bigQueryExports.get): OrganizationBigQueryExport: organization-level: needs org IAM the testing account lacks",
         () => Effect.void,
       );
     });
 
     describe("OrganizationMuteConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetMuteConfig@OrganizationMuteConfig (securitycenter.organizations.muteConfigs.get): OrganizationMuteConfig: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetMuteConfig@OrganizationMuteConfig (securitycenter.organizations.muteConfigs.get): OrganizationMuteConfig: organization-level: needs org IAM the testing account lacks",
         () => Effect.void,
       );
     });

@@ -50,7 +50,12 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {},
+    "untestable": {
+      "FolderBigQueryExport": "folder-level: needs a folder and folder IAM the testing account lacks",
+      "FolderMuteConfig": "folder-level: needs a folder and folder IAM the testing account lacks",
+      "OrganizationBigQueryExport": "organization-level: needs org IAM the testing account lacks",
+      "OrganizationMuteConfig": "organization-level: needs org IAM the testing account lacks"
+    },
     "enable": [
       "securitycenter.googleapis.com"
     ]

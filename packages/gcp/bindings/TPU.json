@@ -15,7 +15,10 @@
   },
   "probes": {
     "resources": {},
-    "untestable": {},
+    "untestable": {
+      "Node": "TPU VMs bill by the hour and need TPU quota the testing project doesn't have",
+      "QueuedResource": "a queued resource provisions TPU VMs: hourly billing and TPU quota"
+    },
     "enable": [
       "tpu.googleapis.com"
     ]
