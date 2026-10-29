@@ -15,27 +15,18 @@ export default class OrgPolicyGeneratedHost extends GCP.Function<OrgPolicyGenera
   "OrgPolicyGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.OrgPolicy.DeletePolicy();
-    const p1 = yield* GCP.OrgPolicy.ListConstraints();
-    const p2 = yield* GCP.OrgPolicy.ListPolicies();
-    const p3 = yield* GCP.OrgPolicy.PatchPolicy();
+    const p0 = yield* GCP.OrgPolicy.ListConstraints();
+    const p1 = yield* GCP.OrgPolicy.ListPolicies();
     return {
       fetch: serveProbes({
-        DeletePolicy: probeOutcome(Retry.none(p0({ policy: "alchemy-missing" } as never))),
-        ListConstraints: probeOutcome(Retry.none(p1({} as never))),
-        ListPolicies: probeOutcome(Retry.none(p2({} as never))),
-        PatchPolicy: probeOutcome(Retry.none(p3({ policy: "alchemy-missing" } as never))),
+        ListConstraints: probeOutcome(Retry.none(p0({} as never))),
+        ListPolicies: probeOutcome(Retry.none(p1({} as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Layer.mergeAll(
-          GCP.OrgPolicy.DeletePolicyHttp,
-          GCP.OrgPolicy.ListConstraintsHttp,
-          GCP.OrgPolicy.ListPoliciesHttp,
-          GCP.OrgPolicy.PatchPolicyHttp,
-        ),
+        Layer.mergeAll(GCP.OrgPolicy.ListConstraintsHttp, GCP.OrgPolicy.ListPoliciesHttp),
       ),
     ),
   ),

@@ -73,14 +73,6 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("project", { concurrent: true }, () => {
       test.provider(
-        "DeletePolicy (orgpolicy.projects.policies.delete)",
-        () => probe("DeletePolicy", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:orgpolicy", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "ListConstraints (orgpolicy.projects.constraints.list)",
         () => probe("ListConstraints", true),
         {
@@ -91,14 +83,6 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "ListPolicies (orgpolicy.projects.policies.list)",
         () => probe("ListPolicies", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:orgpolicy", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "PatchPolicy (orgpolicy.projects.policies.patch)",
-        () => probe("PatchPolicy", false),
         {
           tags: ["provider:gcp", "provider:gcp:orgpolicy", "live"],
           timeout: 600_000,
@@ -137,7 +121,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        'orgpolicy.projects.policies.patch: changing a project\'s policy needs roles/orgpolicy.policyAdmin, which IAM grants only on an organization ("Role roles/orgpolicy.policyAdmin is not supported for this resource" on a project)',
+        () => Effect.void,
+      );
+      test.provider.skip(
         "orgpolicy.projects.policies.getEffectivePolicy: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'orgpolicy.projects.policies.delete: changing a project\'s policy needs roles/orgpolicy.policyAdmin, which IAM grants only on an organization ("Role roles/orgpolicy.policyAdmin is not supported for this resource" on a project)',
         () => Effect.void,
       );
       test.provider.skip(

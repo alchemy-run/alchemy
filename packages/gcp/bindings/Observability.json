@@ -15,6 +15,9 @@
     },
     "untestable": {
       "BucketsDatasetsLink": "The `_Trace` bucket and its `Spans` dataset only exist once the project stores trace data in Observability; until then create fails with BadRequest (\"Unable to create link; parent bucket of \u2026 is not found\"). (GCP_TEST_OBSERVABILITY_DATASET)"
+    },
+    "locations": {
+      "ListTraceScopes": "global"
     }
   }
 }

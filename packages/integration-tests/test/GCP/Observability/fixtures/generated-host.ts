@@ -84,7 +84,7 @@ export default class ObservabilityGeneratedHost extends GCP.Function<Observabili
           ),
         ),
         ListBuckets: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
-        ListTraceScopes: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListTraceScopes: probeOutcome(Retry.none(p10({ location: "global" } as never))),
         PatchBucket: probeOutcome(
           Retry.none(p11({ bucket: "alchemy-missing", location: "us-central1" } as never)),
         ),
