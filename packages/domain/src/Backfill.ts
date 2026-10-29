@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Semaphore from "effect/Semaphore";
 import {
   type ReplayInput,
   type ReplayResult,
@@ -1161,12 +1162,20 @@ export const makeNode = (
   const ensureLinked = (path: string) =>
     Effect.gen(function* () {
       if (path === "" || (yield* storage.get("linked"))) return;
-      yield* net.node
-        .child(parentOf(path), path)
-        .pipe(Effect.tapCause((cause) => trace("link-failed", { path, cause: String(cause) })));
-      yield* storage.exclusive(storage.put({ linked: true, path }));
-      yield* trace("linked", { path });
+      // One link at a time: registrations arriving together all find the node
+      // unlinked, and would each call its parent, and so on up to a flooded root.
+      yield* linking.withPermits(1)(
+        Effect.gen(function* () {
+          if (yield* storage.get("linked")) return;
+          yield* net.node
+            .child(parentOf(path), path)
+            .pipe(Effect.tapCause((cause) => trace("link-failed", { path, cause: String(cause) })));
+          yield* storage.exclusive(storage.put({ linked: true, path }));
+          yield* trace("linked", { path });
+        }),
+      );
     });
+  const linking = Semaphore.makeUnsafe(1);
 
   /** Every sweep this node takes part in. */
   const sweeps = Effect.map(storage.list<Sweep>({ prefix: "sw:" }), (rows) =>
