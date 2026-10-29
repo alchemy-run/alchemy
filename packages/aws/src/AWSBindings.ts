@@ -24,6 +24,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import * as Stream from "effect/Stream";
 import type * as rolldown from "rolldown";
 import { DEFAULT_LOCAL_ENDPOINT } from "./AuthProvider.ts";
 import { Credentials, makeAssumeRoleResolver } from "./Credentials.ts";
@@ -124,10 +125,15 @@ const KEY_ENV = {
  * FQN.
  */
 const realCloudMarker = (resource: ResourceLike) =>
-  Effect.sync(
-    () =>
-      `ALCHEMY_AWS_REAL_CLOUD_${createHash("sha256").update(resource.FQN).digest("hex").slice(0, 12)}`,
-  );
+  Effect.sync(() => {
+    let marker = realCloudMarkers.get(resource.FQN);
+    if (marker === undefined) {
+      marker = `ALCHEMY_AWS_REAL_CLOUD_${createHash("sha256").update(resource.FQN).digest("hex").slice(0, 12)}`;
+      realCloudMarkers.set(resource.FQN, marker);
+    }
+    return marker;
+  });
+const realCloudMarkers = new Map<string, string>();
 
 /**
  * Env var holding the Role a Google-service-account host assumes with its
@@ -486,7 +492,9 @@ const withWebIdentity = Effect.fn(function* <Op>(
  * Resolve a distilled operation (or several, with `Effect.all`) with the
  * host's AWS credentials, once when the binding's layer is built: by
  * assuming the Role {@link Bind} created for this host if there is one,
- * as-is otherwise (the host's own role, or the deployer).
+ * as-is otherwise (the host's own role, or the deployer). On a host emulated
+ * by `alchemy dev`, each call whose bound resources live in the real cloud
+ * signs with the developer's credentials instead (see `bindDevCredentials`).
  *
  * @param region the region a host with a created key signs in, e.g. a
  *   bucket's own. Its outer Effect may read resource attributes onto the
@@ -500,12 +508,18 @@ export const withCredentials: <Op>(
   operation: Effect.Effect<Op, never, any>,
   region?: Effect.Effect<Effect.Effect<string>, never, any>,
 ) {
-  // An emulated host reaching a real-cloud resource signs with the
-  // developer's credentials (see `bindDevCredentials`).
-  if (globalThis.__ALCHEMY_RUNTIME__) {
-    const dev = yield* withDevCredentials(operation, region);
-    if (dev !== undefined) return dev.op;
-  }
+  const op = yield* withHostCredentials(operation, region);
+  if (!globalThis.__ALCHEMY_RUNTIME__) return op;
+  // Decided per call: a layer may resolve its operations before any
+  // resource is bound, and one operation can serve several bound resources.
+  const dev = yield* withDevCredentials(operation, region);
+  return dev === undefined ? op : routeCalls(op, dev.op, dev.applies, dev.context);
+});
+
+const withHostCredentials = Effect.fn(function* <Op>(
+  operation: Effect.Effect<Op, never, any>,
+  region?: Effect.Effect<Effect.Effect<string>, never, any>,
+) {
   // A host running as an IAM role signs with its own credentials.
   if (globalThis.__ALCHEMY_HOST_IDENTITY__ === "AWS.IAM.Role")
     return yield* operation as Effect.Effect<Op>;
@@ -567,25 +581,28 @@ export const withCredentials: <Op>(
 const DEV_CREDENTIALS_TTL_MS = 60_000;
 
 /**
- * Resolve an operation for a bound resource in the real cloud, on a host
+ * Resolve an operation for bound resources in the real cloud, on a host
  * emulated by `alchemy dev`: sign with the developer's credentials (read
  * from the emulator parameter named in {@link DEV_CREDENTIALS_ENV}) against
- * the real endpoint. `undefined` unless every bound resource is marked.
+ * the real endpoint. `applies` tells, per call, whether every resource the
+ * calling client is bound to is marked; `undefined` on any other host.
  */
 const withDevCredentials = Effect.fn(function* <Op>(
   operation: Effect.Effect<Op, never, any>,
   region: Effect.Effect<Effect.Effect<string>, never, any> | undefined,
 ) {
   const runtime = yield* CurrentRuntimeContext;
-  const targets = yield* Binding.Targets;
-  if (runtime === undefined || targets.length === 0) return undefined;
-  for (const target of targets) {
-    if ((yield* runtime.get<string>(yield* realCloudMarker(target))) === undefined) {
-      return undefined;
-    }
-  }
+  if (runtime === undefined) return undefined;
   const parameterName = yield* runtime.get<string>(DEV_CREDENTIALS_ENV);
   if (parameterName === undefined) return undefined;
+  const applies = Effect.gen(function* () {
+    const targets = yield* Binding.Targets;
+    if (targets.length === 0) return false;
+    for (const target of targets) {
+      if ((yield* runtime.get<string>(yield* realCloudMarker(target))) === undefined) return false;
+    }
+    return true;
+  });
 
   // The host's own context reaches the emulator; provided explicitly because
   // the read runs inside a call whose context names the real cloud.
@@ -664,28 +681,58 @@ const withDevCredentials = Effect.fn(function* <Op>(
     FetchHttpClient.layer,
   );
   const op = yield* (operation as Effect.Effect<Op>).pipe(Effect.provide(context));
-  // A distilled operation prefers the CALLER's context over the one it was
-  // yielded in, and the emulated host's ambient names the emulator: provide
-  // the real cloud around every call too.
-  return { op: provideCalls(op, context) };
+  return { op, applies, context };
 });
 
-/** Provide `context` around every call of an operation (or a tuple/record of them). */
-const provideCalls = <Op>(op: Op, context: Layer.Layer<any>): Op => {
-  if (typeof op === "function") {
-    return ((...args: unknown[]) => {
-      const result = (op as (...args: unknown[]) => unknown)(...args);
-      return Effect.isEffect(result) ? Effect.provide(result, context) : result;
-    }) as Op;
+/**
+ * Route every call of an operation (or a tuple/record of them, or a
+ * paginated operation's `pages`/`items`) to `dev` when `useDev` holds for
+ * the calling client, to `host` otherwise. A distilled operation prefers
+ * the CALLER's context over the one it was yielded in, and an emulated
+ * host's ambient names the emulator, so `context` is provided around each
+ * dev call too.
+ */
+const routeCalls = <Op>(
+  host: Op,
+  dev: Op,
+  useDev: Effect.Effect<boolean>,
+  context: Layer.Layer<any>,
+): Op => {
+  if (typeof host === "function" && typeof dev === "function") {
+    const routed = (...args: unknown[]) => {
+      const onHost = (host as (...args: unknown[]) => unknown)(...args);
+      const onDev = (dev as (...args: unknown[]) => unknown)(...args);
+      if (Effect.isEffect(onHost) && Effect.isEffect(onDev)) {
+        return Effect.flatMap(useDev, (yes) => (yes ? Effect.provide(onDev, context) : onHost));
+      }
+      if (Stream.isStream(onHost) && Stream.isStream(onDev)) {
+        return Stream.unwrap(
+          Effect.map(useDev, (yes) => (yes ? Stream.provide(onDev, context) : onHost)),
+        );
+      }
+      return onHost;
+    };
+    for (const key of Object.keys(host)) {
+      (routed as unknown as Record<string, unknown>)[key] = routeCalls(
+        (host as Record<string, unknown>)[key],
+        (dev as Record<string, unknown>)[key],
+        useDev,
+        context,
+      );
+    }
+    return routed as Op;
   }
-  if (typeof op === "object" && op !== null) {
+  if (typeof host === "object" && host !== null && typeof dev === "object" && dev !== null) {
     return (
-      Array.isArray(op)
-        ? op.map((value) => provideCalls(value, context))
+      Array.isArray(host)
+        ? host.map((value, i) => routeCalls(value, (dev as unknown[])[i], useDev, context))
         : Object.fromEntries(
-            Object.entries(op).map(([key, value]) => [key, provideCalls(value, context)]),
+            Object.entries(host).map(([key, value]) => [
+              key,
+              routeCalls(value, (dev as Record<string, unknown>)[key], useDev, context),
+            ]),
           )
     ) as Op;
   }
-  return op;
+  return host;
 };

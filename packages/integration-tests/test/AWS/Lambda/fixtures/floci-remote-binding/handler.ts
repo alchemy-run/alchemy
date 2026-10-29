@@ -1,5 +1,6 @@
 import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as S3 from "@alchemy.run/aws/S3";
+import * as SQS from "@alchemy.run/aws/SQS";
 import * as Alchemy from "alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -11,7 +12,8 @@ import * as Stream from "effect/Stream";
 /**
  * A Lambda emulated by floci under `alchemy dev` whose bucket is pinned to
  * the real cloud with `Alchemy.remote()`: its PutObject/GetObject calls must
- * reach real S3, not the emulator.
+ * reach real S3, not the emulator. The queue covers bindings that resolve
+ * their credentials when the layer is built, before any resource is bound.
  */
 export class RemoteBindingFunction extends Lambda.Function<RemoteBindingFunction>()(
   "RemoteBindingFunction",
@@ -26,13 +28,23 @@ export default RemoteBindingFunction.make(
     const putObject = yield* S3.PutObject(bucket);
     const getObject = yield* S3.GetObject(bucket);
     const bucketName = yield* bucket.bucketName;
+    const queue = yield* SQS.Queue("RemoteBindingQueue").pipe(Alchemy.remote());
+    const sendMessage = yield* SQS.SendMessage(queue);
+    const queueUrl = yield* queue.queueUrl;
 
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
         const url = yield* Effect.sync(() => new URL(request.originalUrl));
         if (url.pathname === "/info") {
-          return yield* HttpServerResponse.json({ bucketName: yield* bucketName });
+          return yield* HttpServerResponse.json({
+            bucketName: yield* bucketName,
+            queueUrl: yield* queueUrl,
+          });
+        }
+        if (url.pathname === "/send") {
+          yield* sendMessage({ MessageBody: url.searchParams.get("value") ?? "" });
+          return HttpServerResponse.text("ok");
         }
         const key = url.searchParams.get("key");
         if (!key) return HttpServerResponse.text("Missing key", { status: 400 });
@@ -48,5 +60,5 @@ export default RemoteBindingFunction.make(
         ),
       ),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(S3.PutObjectHttp, S3.GetObjectHttp))),
+  }).pipe(Effect.provide(Layer.mergeAll(S3.PutObjectHttp, S3.GetObjectHttp, SQS.SendMessageHttp))),
 );

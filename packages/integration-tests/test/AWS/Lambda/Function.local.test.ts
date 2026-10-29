@@ -423,7 +423,7 @@ test.provider(
 );
 
 test.provider(
-  "a dev Function's bindings reach an Alchemy.remote() bucket in the real cloud",
+  "a dev Function's bindings reach Alchemy.remote() resources in the real cloud",
   (stack) =>
     Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
@@ -457,7 +457,10 @@ test.provider(
           times: 60,
         }),
       );
-      const { bucketName } = JSON.parse(info.body) as { bucketName: string };
+      const { bucketName, queueUrl } = JSON.parse(info.body) as {
+        bucketName: string;
+        queueUrl: string;
+      };
 
       // A freshly-minted live key takes a few seconds to propagate.
       const put = yield* fetchText("/put?key=hello.txt&value=from-floci").pipe(
@@ -478,6 +481,23 @@ test.provider(
       );
       expect(object).toBe("from-floci");
 
+      // A binding that resolves its credentials when the layer is built
+      // (before any resource is bound) reaches the real queue too.
+      const sent = yield* fetchText("/send?value=from-floci");
+      expect(sent).toEqual({ status: 200, body: "ok" });
+      const received = yield* SQS.receiveMessage({
+        QueueUrl: queueUrl,
+        WaitTimeSeconds: 5,
+      }).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (result): boolean => (result.Messages ?? []).length > 0,
+          times: 10,
+        }),
+        Effect.provide(liveContext),
+      );
+      expect(received.Messages?.[0]?.Body).toBe("from-floci");
+
       // The developer's credentials reach the Lambda through the emulator.
       const { name, stage } = yield* Stack;
       const relayed = yield* SSM.getParameter({
@@ -494,9 +514,15 @@ test.provider(
         Effect.provide(liveContext),
       );
       expect(gone).toBe(true);
+      const queueGone = yield* SQS.getQueueAttributes({ QueueUrl: queueUrl }).pipe(
+        Effect.map(() => false),
+        Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
+        Effect.provide(liveContext),
+      );
+      expect(queueGone).toBe(true);
     }),
   {
-    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:s3", "local"],
+    tags: ["provider:aws", "provider:aws:lambda", "provider:aws:s3", "provider:aws:sqs", "local"],
     timeout: 540_000,
   },
 );

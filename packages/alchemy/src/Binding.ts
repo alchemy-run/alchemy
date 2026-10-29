@@ -1,6 +1,5 @@
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
-import type * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import type { Input } from "./Input.ts";
 import * as Output from "./Output.ts";
@@ -140,12 +139,13 @@ export const Service = <
 };
 
 /**
- * The resources the binding being built targets: the resource arguments of
- * the `.bind(...)` call whose implementation is running. Provided at deploy
- * AND inside a deployed Function/Worker, so an implementation can route its
- * client per bound resource at runtime (e.g. AWS bindings on a locally
- * emulated host reaching an `Alchemy.remote()` resource in the real cloud).
- * Empty outside a bind.
+ * The resources a binding targets: the resource arguments of its `.bind(...)`
+ * call. Provided while the implementation builds the client and, inside a
+ * deployed Function/Worker, around every call of that client, so an
+ * implementation can route per bound resource at runtime even when it
+ * resolved its operations before any resource was bound (e.g. AWS bindings
+ * on a locally emulated host reaching an `Alchemy.remote()` resource in the
+ * real cloud). Empty outside a bind.
  */
 export const Targets = Context.Reference<readonly ResourceLike[]>("alchemy/Binding/Targets", {
   defaultValue: () => [],
@@ -187,8 +187,16 @@ const routeClientDataPlane = (
   client: unknown,
 ): Effect.Effect<any> =>
   Effect.suspend(() => {
-    if (globalThis.__ALCHEMY_RUNTIME__) return Effect.succeed(client);
     const resources = targetsOf(resolvedArgs);
+    if (globalThis.__ALCHEMY_RUNTIME__) {
+      return Effect.succeed(
+        resources.length === 0
+          ? client
+          : wrapClientInvocations(client, (effect) =>
+              Effect.provideService(effect, Targets, resources),
+            ),
+      );
+    }
     // Account-scoped clients (no resource among the args) need no routing:
     // the ambient environment is already mode-aware — a dev run's ambient IS
     // the emulator (see AWS/Providers.ts), a deploy's is the live chain.
@@ -217,7 +225,7 @@ const routeClientDataPlane = (
               "all through Alchemy.remote(), or none).",
           );
         }
-        return wrapClientInvocations(client, local[0]!);
+        return wrapClientInvocations(client, Effect.provide(local[0]!));
       }
       // Live-mode / `Alchemy.remote()`: ambient in a `dev` run is the
       // emulator, so provide the registration-captured live environment
@@ -227,7 +235,7 @@ const routeClientDataPlane = (
           planes.flatMap((p) => (p.kind === "live" && p.layer !== undefined ? [p.layer] : [])),
         ),
       ];
-      if (live.length === 1) return wrapClientInvocations(client, live[0]!);
+      if (live.length === 1) return wrapClientInvocations(client, Effect.provide(live[0]!));
       return client;
     });
   });
@@ -249,15 +257,17 @@ const describeResolution = (plane: DataPlaneResolution): string => {
 
 /**
  * Wrap every invocation surface of a binding client so its returned Effects
- * run with `layer` provided closest. Handles the client shapes bindings
+ * run through `around` (e.g. with a layer provided closest). Handles the client shapes bindings
  * return: a callable (the common per-operation client), an object of
  * methods/Effects (multi-method clients), or a bare Effect. Anything else
  * passes through untouched. Proxies preserve identity, extra properties,
  * and method names.
  */
-const wrapClientInvocations = (client: unknown, layer: Layer.Layer<any, any, never>): unknown => {
-  const provide = (value: unknown): unknown =>
-    Effect.isEffect(value) ? Effect.provide(value as Effect.Effect<any, any, any>, layer) : value;
+const wrapClientInvocations = (
+  client: unknown,
+  around: (effect: Effect.Effect<any, any, any>) => Effect.Effect<any, any, any>,
+): unknown => {
+  const provide = (value: unknown): unknown => (Effect.isEffect(value) ? around(value) : value);
   if (Effect.isEffect(client)) return provide(client);
   if (typeof client === "function") {
     return new Proxy(client, {
@@ -266,8 +276,9 @@ const wrapClientInvocations = (client: unknown, layer: Layer.Layer<any, any, nev
   }
   if (typeof client === "object" && client !== null) {
     return new Proxy(client, {
-      get: (target, prop, receiver) => {
-        const value = Reflect.get(target, prop, receiver);
+      // Getters read the client itself, so private fields still resolve.
+      get: (target, prop) => {
+        const value = Reflect.get(target, prop, target);
         if (typeof value === "function") {
           return (...args: any[]) => provide(Reflect.apply(value, target, args));
         }
