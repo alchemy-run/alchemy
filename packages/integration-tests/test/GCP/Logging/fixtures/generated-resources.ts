@@ -1,4 +1,5 @@
 import * as GCP from "@alchemy.run/gcp";
+import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as Effect from "effect/Effect";
 
 /** Logging resources the generated bindings bind, mirroring each resource suite's smallest shape. */
@@ -47,4 +48,27 @@ export const ProbeLocationsView = Effect.gen(function* () {
     bucketName: bucket.name,
     filter: 'LOG_ID("stdout")',
   });
+});
+
+export const ProbeLogScope = Effect.gen(function* () {
+  const { project } = yield* GcpEnvironment.current;
+  return yield* GCP.Logging.LogScope("ProbeLogScope", { resourceNames: [`projects/${project}`] });
+});
+export const ProbeFolderLogScope = Effect.gen(function* () {
+  const { project } = yield* GcpEnvironment.current;
+  return yield* GCP.Logging.FolderLogScope("ProbeFolderLogScope", {
+    resourceNames: [`projects/${project}`],
+  });
+});
+export const ProbeFolderView = Effect.gen(function* () {
+  const bucket = yield* ProbeFolderBucket;
+  return yield* GCP.Logging.FolderBucketsView("ProbeFolderView", {
+    bucketName: bucket.name,
+    filter: 'LOG_ID("stdout")',
+  });
+});
+const AnalyticsBucket = GCP.Logging.LogBucket("ProbeAnalyticsBucket", { analyticsEnabled: true });
+export const ProbeLink = Effect.gen(function* () {
+  const bucket = yield* AnalyticsBucket;
+  return yield* GCP.Logging.BucketsLink("ProbeLink", { bucket: bucket.name });
 });

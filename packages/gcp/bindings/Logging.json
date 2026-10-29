@@ -111,7 +111,11 @@
       "Metric": "ProbeMetric",
       "SavedQuery": "ProbeSavedQuery",
       "BucketsView": "ProbeView",
-      "LocationsBucketsView": "ProbeLocationsView"
+      "LocationsBucketsView": "ProbeLocationsView",
+      "LogScope": "ProbeLogScope",
+      "FolderLogScope": "ProbeFolderLogScope",
+      "FolderBucketsView": "ProbeFolderView",
+      "BucketsLink": "ProbeLink"
     },
     "untestable": {
       "BillingBucket": "needs GOOGLE_BILLING_ACCOUNT (an external prerequisite the testing project lacks)",

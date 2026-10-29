@@ -177,8 +177,7 @@
       "CustomJob": "ProbeCustomJob",
       "DeploymentResourcePool": "ProbeDeploymentResourcePool",
       "EvaluationItem": "ProbeEvaluationItem",
-      "FeatureOnlineStore": "ProbeFeatureOnlineStore",
-      "TuningJob": "ProbeTuningJob"
+      "FeatureOnlineStore": "ProbeFeatureOnlineStore"
     },
     "untestable": {
       "Agent": "AgentService is v1beta1-only; the v1 SDK gets \"This API version is not supported by AgentService\"",
@@ -188,7 +187,8 @@
       "OnlineEvaluator": "an evaluator needs an existing evaluation metric (GCP_TEST_AIPLATFORM_EVALUATION_METRIC)",
       "RagCorpora": "new projects must switch RAG Engine to Serverless mode first; Spanner mode is restricted in us-central1",
       "SemanticGovernancePolicy": "a policy governs an existing Vertex AI Agent, which the v1 API cannot create (GCP_TEST_AGENT)",
-      "SpecialistPool": "Vertex AI data labeling is shut down (\"Data labeling service is shutdown\")"
+      "SpecialistPool": "Vertex AI data labeling is shut down (\"Data labeling service is shutdown\")",
+      "TuningJob": "the tuning service agent can't read the public sample dataset (gs://cloud-samples-data/ai-platform/tuning/sft_train.jsonl)"
     }
   },
   "permissions": {

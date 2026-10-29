@@ -96,9 +96,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("BucketsLink", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetLink@BucketsLink (logging.projects.locations.buckets.links.get): BucketsLink: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetLink@BucketsLink (logging.projects.locations.buckets.links.get)",
+        () => probe("GetLink@BucketsLink", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -183,13 +187,21 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("FolderBucketsView", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetView@FolderBucketsView (logging.folders.locations.buckets.views.get): FolderBucketsView: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetView@FolderBucketsView (logging.folders.locations.buckets.views.get)",
+        () => probe("GetView@FolderBucketsView", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListViewLogs@FolderBucketsView (logging.folders.locations.buckets.views.logs.list): FolderBucketsView: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListViewLogs@FolderBucketsView (logging.folders.locations.buckets.views.logs.list)",
+        () => probe("ListViewLogs@FolderBucketsView", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -201,9 +213,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("FolderLogScope", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetLogScope@FolderLogScope (logging.folders.locations.logScopes.get): FolderLogScope: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetLogScope@FolderLogScope (logging.folders.locations.logScopes.get)",
+        () => probe("GetLogScope@FolderLogScope", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -312,9 +328,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("LogScope", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetLogScope@LogScope (logging.projects.locations.logScopes.get): LogScope: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetLogScope@LogScope (logging.projects.locations.logScopes.get)",
+        () => probe("GetLogScope@LogScope", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

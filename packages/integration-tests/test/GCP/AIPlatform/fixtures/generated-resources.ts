@@ -146,10 +146,3 @@ export const ProbeFeatureOnlineStore = GCP.AIPlatform.FeatureOnlineStore(
     location: "us-central1",
   },
 );
-export const ProbeTuningJob = GCP.AIPlatform.TuningJob("ProbeTuningJob", {
-  location: "us-central1",
-  baseModel: "gemini-2.5-flash",
-  supervisedTuningSpec: {
-    trainingDatasetUri: "gs://cloud-samples-data/ai-platform/tuning/sft_train.jsonl",
-  },
-});
