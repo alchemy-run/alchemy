@@ -1181,7 +1181,6 @@ export const ProviderLive = () =>
                   // An account not entitled to a jurisdiction rejects the list
                   // route with `Forbidden` ("Access Denied") or `InvalidRoute`
                   // — there are simply no buckets there, so treat as empty.
-                  // @ts-expect-error
                   Effect.catchTag(["InvalidRoute", "Forbidden"], () => Effect.succeed([])),
                 ),
               { concurrency: jurisdictions.length },
