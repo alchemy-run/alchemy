@@ -85,7 +85,8 @@ const BumpWriterLive = BumpWriter.toLayer(
       }
     });
   }),
-  { batch: { size: 3, wait: "200 millis" } },
+  // Long enough that four quick sends land in one wait, even on a slow machine.
+  { batch: { size: 3, wait: "2 seconds" } },
 );
 
 /** Copies every increment of `c-*` onto `mirror-c-*`, at least once. */
@@ -463,7 +464,11 @@ export const hostContract = (name: string, host: () => HostLayer) =>
       provide(
         Effect.gen(function* () {
           const holds = yield* Hold;
-          yield* holds.schedule("h-2", new ExpireHold(), { after: "100 millis", commandId: "x" });
+          // h-2 is due later than h-3, so a slow machine still cancels it in time.
+          const h2 = yield* holds.schedule("h-2", new ExpireHold(), {
+            after: "1 second",
+            commandId: "x",
+          });
           yield* holds.schedule("h-3", new ExpireHold(), { after: "100 millis", commandId: "x" });
           yield* holds.unschedule("h-2", "x");
           const twice = yield* Effect.flip(holds.unschedule("h-2", "x"));
@@ -480,7 +485,9 @@ export const hostContract = (name: string, host: () => HostLayer) =>
               ),
             ),
           );
-          yield* Effect.sleep("300 millis");
+          // Past h-2's due time, and then some.
+          const left = DateTime.toEpochMillis(h2.at) + 500 - (yield* Effect.sync(() => Date.now()));
+          yield* Effect.sleep(Math.max(0, left));
           expect((yield* holds.state("h-2")).status).toBe("none");
           // Scheduled again after a cancel: it can be cancelled again.
           yield* holds.schedule("h-2", new ExpireHold(), { after: "1 hour", commandId: "x" });
