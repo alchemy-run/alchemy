@@ -75,11 +75,12 @@ const recordOps = (
 
 /**
  * One operation of an external system: its arguments, success value and business errors.
+ * `error` is one schema, or a list of them when the vendor can refuse in several ways.
  */
 export interface OpSpec {
   readonly args?: Fields;
   readonly success?: Fields | Schema.Top;
-  readonly error?: Schema.Top;
+  readonly error?: Schema.Top | ReadonlyArray<Schema.Top>;
 }
 
 type ArgsOf<S extends OpSpec> = S["args"] extends Fields ? Schema.Struct<S["args"]>["Type"] : void;
@@ -88,7 +89,12 @@ type SuccessOf<S extends OpSpec> = S["success"] extends Schema.Top
   : S["success"] extends Fields
     ? Schema.Struct<S["success"]>["Type"]
     : void;
-type ErrorOf<S extends OpSpec> = S["error"] extends Schema.Top ? S["error"]["Type"] : never;
+type ErrorOf<S extends OpSpec> =
+  S["error"] extends ReadonlyArray<Schema.Top>
+    ? S["error"][number]["Type"]
+    : S["error"] extends Schema.Top
+      ? S["error"]["Type"]
+      : never;
 
 /**
  * The service shape of an external system: one Effect-returning function per operation.
@@ -196,6 +202,7 @@ export const make = <const Name extends string, const Ops extends Record<string,
     if (RESERVED.has(op)) {
       throw new Error(`ExternalSystem '${name}' cannot declare an operation named '${op}'`);
     }
+    // oxlint-disable-next-line effecttsgo/floating-effect -- returns `cls`, which is Effect-able; nothing to run
     Object.defineProperty(cls, op, {
       value: { kind: "ExternalSystemOp", system: name, op } satisfies Op,
       enumerable: true,
@@ -227,3 +234,16 @@ export const successSchema = (spec: OpSpec): Schema.Top =>
     : "ast" in (spec.success as object)
       ? (spec.success as Schema.Top)
       : Schema.Struct(spec.success as Fields);
+
+/**
+ * The schema of an operation's declared `error`: the schema itself, a
+ * `Schema.Union` of a list, or `Schema.Never` when it declares none.
+ *
+ * @internal
+ */
+export const errorSchema = (spec: OpSpec): Schema.Top =>
+  spec.error === undefined
+    ? Schema.Never
+    : Array.isArray(spec.error)
+      ? Schema.Union(spec.error as ReadonlyArray<Schema.Top>)
+      : (spec.error as Schema.Top);

@@ -117,7 +117,7 @@ export const LogsRetentionFlagProvider = () =>
             ),
             // Logpull is Enterprise-only; unentitled zones reject with the
             // typed error — skip them rather than fail the whole listing.
-            Effect.catchTag("LogsControlNotAuthorized", () => Effect.succeed(undefined)),
+            Effect.catchTag("LogsControlNotAuthorized", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -190,5 +190,5 @@ export const LogsRetentionFlagProvider = () =>
 const getFlag = (zoneId: string) =>
   logs.getControlRetention({ zoneId }).pipe(
     Effect.map((r) => r.flag ?? false),
-    Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+    Effect.catchTag("InvalidRoute", () => Effect.undefined),
   );

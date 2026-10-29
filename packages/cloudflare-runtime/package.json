@@ -164,11 +164,29 @@
       "worker": "./src/core/bindings/DurableObjectNamespace.ts",
       "import": "./dist/core/node/bindings/DurableObjectNamespace.mjs"
     },
-    "./core/bindings/Flagship": {
-      "types": "./dist/core/node/bindings/Flagship.d.mts",
-      "bun": "./src/core/bindings/Flagship.ts",
-      "worker": "./src/core/bindings/Flagship.ts",
-      "import": "./dist/core/node/bindings/Flagship.mjs"
+    "./core/bindings/flagship": {
+      "types": "./dist/core/node/bindings/flagship/index.d.mts",
+      "bun": "./src/core/bindings/flagship/index.ts",
+      "worker": "./src/core/bindings/flagship/index.ts",
+      "import": "./dist/core/node/bindings/flagship/index.mjs"
+    },
+    "./core/bindings/flagship/Flagship": {
+      "types": "./dist/core/node/bindings/flagship/Flagship.d.mts",
+      "bun": "./src/core/bindings/flagship/Flagship.ts",
+      "worker": "./src/core/bindings/flagship/Flagship.ts",
+      "import": "./dist/core/node/bindings/flagship/Flagship.mjs"
+    },
+    "./core/bindings/flagship/FlagshipEvaluate": {
+      "types": "./dist/core/node/bindings/flagship/FlagshipEvaluate.shared.d.mts",
+      "bun": "./src/core/bindings/flagship/FlagshipEvaluate.shared.ts",
+      "worker": "./src/core/bindings/flagship/FlagshipEvaluate.shared.ts",
+      "import": "./dist/core/node/bindings/flagship/FlagshipEvaluate.shared.mjs"
+    },
+    "./core/bindings/flagship/FlagshipOptions": {
+      "types": "./dist/core/node/bindings/flagship/FlagshipOptions.shared.d.mts",
+      "bun": "./src/core/bindings/flagship/FlagshipOptions.shared.ts",
+      "worker": "./src/core/bindings/flagship/FlagshipOptions.shared.ts",
+      "import": "./dist/core/node/bindings/flagship/FlagshipOptions.shared.mjs"
     },
     "./core/bindings/hyperdrive": {
       "types": "./dist/core/node/bindings/hyperdrive/index.d.mts",

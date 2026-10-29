@@ -5,7 +5,7 @@ import * as RpcSchema from "effect/rpc/RpcSchema";
 import * as Schema from "effect/Schema";
 import * as SchemaAST from "effect/SchemaAST";
 import type { Entry } from "./Api.ts";
-import { nameOf, readRpcs } from "./ReadRpcs.ts";
+import { nameOf, readRpcs, type ReadRpcs } from "./ReadRpcs.ts";
 
 /** A JSON Schema (draft 2020-12), self-contained: its definitions are under `$defs`. */
 export const JsonSchemaObject = Schema.Record(Schema.String, Schema.Json);
@@ -15,11 +15,19 @@ export const EntryKind = Schema.Literals(["Command", "View", "Aggregate", "Strea
 export type EntryKind = typeof EntryKind.Type;
 
 /**
- * The call a client makes: `send` for a command; `get`, `watch` and `events`
- * for a view or an aggregate, and `list` for a view; a stream has `peek`,
- * `watch`, `events` and `list`.
+ * The call a client makes: `send` for a command; `get`, `watch`, `events` and
+ * `list` for a view or an aggregate, and `snapshot` for a view; a stream has
+ * `peek`, `watch`, `events` and `list`.
  */
-export const OperationName = Schema.Literals(["send", "get", "peek", "watch", "events", "list"]);
+export const OperationName = Schema.Literals([
+  "send",
+  "get",
+  "peek",
+  "watch",
+  "events",
+  "list",
+  "snapshot",
+]);
 export type OperationName = typeof OperationName.Type;
 
 /**
@@ -75,6 +83,10 @@ interface Surface {
   readonly calls: ReadonlyArray<{ readonly operation: OperationName; readonly rpc: Rpc.Any }>;
 }
 
+/** The client call behind each read RPC: a stream's `get` is its `peek`. */
+const operationOf = (kind: "View" | "Aggregate" | "Stream", call: keyof ReadRpcs): OperationName =>
+  call === "get" && kind === "Stream" ? "peek" : call;
+
 /** The calls of each kind of entry. A new kind of entry adds its case here. */
 const surfaceOf = (entry: Entry): Surface => {
   switch (entry.kind) {
@@ -87,11 +99,11 @@ const surfaceOf = (entry: Entry): Surface => {
       return {
         name,
         mode: "read",
-        calls: Object.values(readRpcs(entry)).map((rpc) => ({
-          // Read RPCs are tagged `<name>.<operation>`.
-          operation: rpc._tag.slice(name.length + 1) as OperationName,
-          rpc,
-        })),
+        calls: Object.entries(readRpcs(entry)).flatMap(([call, rpc]) =>
+          rpc === undefined
+            ? []
+            : [{ operation: operationOf(entry.kind, call as keyof ReadRpcs), rpc }],
+        ),
       };
     }
   }

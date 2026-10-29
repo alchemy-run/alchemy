@@ -3,6 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { ContainerPlatform } from "@alchemy.run/cloudflare/Containers/ContainerPlatform";
 import { Docker } from "@alchemy.run/docker/Docker";
 import { assert, describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Deploy from "alchemy/Deploy";
 import * as Destroy from "alchemy/Destroy";
@@ -10,7 +11,6 @@ import * as Drift from "alchemy/Drift";
 import * as Provider from "alchemy/Provider";
 import { Stack } from "alchemy/Stack";
 import { State, type ResourceState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
@@ -35,6 +35,9 @@ import EffectfulContainerWorker from "./fixtures/effectful/worker.ts";
 import { ExternalContainer } from "./fixtures/external/object.ts";
 import ExternalContainerWorker from "./fixtures/external/worker.ts";
 import { applications, cyclicApplication } from "./fixtures/identity/applications.ts";
+import LinkedChanged from "./fixtures/linked/changed.ts";
+import { LinkedContainer } from "./fixtures/linked/container.ts";
+import LinkedFirst from "./fixtures/linked/first.ts";
 import {
   publicationApplications,
   sharedApplication,
@@ -836,6 +839,59 @@ describe.concurrent(
           expect(gone).toBeUndefined();
         }).pipe(withBuilder("alchemy-default-cache", { attestations: false }), logLevel),
       { timeout: 120_000 },
+    );
+
+    test.provider(
+      "rebuilds a changed generated bundle in a fresh builder without pulling base layers",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const docker = yield* Docker;
+          const program = (live: typeof LinkedFirst) =>
+            Effect.gen(function* () {
+              const app: Cloudflare.ContainerApplication = yield* LinkedContainer.Application;
+              return { app };
+            }).pipe(Effect.provide(live));
+          const first = yield* stack.deploy(program(LinkedFirst));
+
+          const changed = yield* Effect.gen(function* () {
+            const changed = yield* stack.deploy(program(LinkedChanged));
+            const completed = (yield* buildHistory).filter((build) => build.status === "Completed");
+            expect(completed).toHaveLength(1);
+            const log = yield* docker.run([
+              "buildx",
+              "history",
+              "logs",
+              completed[0]!.ref.split("/").at(-1)!,
+              "--progress",
+              "plain",
+            ]);
+            const text = `${log.stdout}\n${log.stderr}`;
+            expect(text).toContain("importing cache manifest from registry.cloudflare.com/");
+            // A plain COPY applies onto the base snapshot, so BuildKit
+            // downloads and extracts every cached base layer first. A linked
+            // copy is exported on its own and the base layers stay remote.
+            expect(text).not.toMatch(/extracting sha256:/);
+            return changed;
+          }).pipe(withBuilder("alchemy-linked-copy-changed", { attestations: false }));
+          expect(changed.app.applicationId).toBe(first.app.applicationId);
+          expect(changed.app.hash?.digest).not.toBe(first.app.hash?.digest);
+
+          yield* stack.destroy();
+          const gone = yield* Containers.getContainerApplication({
+            accountId: first.app.accountId,
+            applicationId: first.app.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+            Effect.repeat({
+              until: (app) => app === undefined,
+              schedule: Schedule.spaced("1 second"),
+              times: 8,
+            }),
+          );
+          expect(gone).toBeUndefined();
+        }).pipe(withBuilder("alchemy-linked-copy", { attestations: false }), logLevel),
+      { timeout: 180_000 },
     );
 
     // Publication reuse was confined to a provider instance in:
@@ -1826,6 +1882,42 @@ describe.concurrent(
           yield* scratch.destroy();
         }).pipe(logLevel),
       { tags: ["provider:cloudflare:r2", "provider:cloudflare:worker"], timeout: 900_000 },
+    );
+
+    // The API rejects network keys it does not know (`unrecognized key:
+    // "assignipv4"`), so camelCase props must reach it as wire names.
+    test.provider(
+      "deploys and updates a network configuration",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const network = { assignIpv4: "none", assignIpv6: "none", mode: "private" } as const;
+          const program = (maxInstances: number) =>
+            Cloudflare.Container("Networked", {
+              image: "mendhak/http-https-echo:41",
+              maxInstances,
+              network,
+            }).Application;
+
+          const first = yield* stack.deploy(program(1));
+          expect(first.configuration.network).toMatchObject(network);
+          const observed = yield* Containers.getContainerApplication({
+            accountId: first.accountId,
+            applicationId: first.applicationId,
+          }).pipe(Effect.map(scheduledApplication));
+          expect(observed.configuration.network).toMatchObject(network);
+
+          const updated = yield* stack.deploy(program(2));
+          expect(updated.applicationId).toBe(first.applicationId);
+          expect(updated.maxInstances).toBe(2);
+          expect((yield* stack.plan(program(2))).resources.Networked.action).toBe("noop");
+
+          yield* stack.destroy();
+          expect(
+            yield* waitForApplicationDeleted(first.accountId, first.applicationId),
+          ).toBeUndefined();
+        }).pipe(logLevel),
+      { timeout: 300_000 },
     );
   },
 );

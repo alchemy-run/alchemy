@@ -255,7 +255,7 @@ const isMissing = isMissingStripeResource;
 
 const getById = (account: string, id: string) =>
   GetAccountExternalAccount({ account, id }).pipe(
-    Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissing, () => Effect.undefined),
   );
 
 const listExternalAccounts = Effect.fn(function* (account: string) {
@@ -266,7 +266,7 @@ const listExternalAccounts = Effect.fn(function* (account: string) {
       account,
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
-    }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+    }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
     if (response === undefined) {
       break;
     }
@@ -293,7 +293,7 @@ const listAllConnectAccounts = Effect.fn(function* () {
       Effect.catchIf(
         (e) =>
           e._tag === "InvalidRequestError" || e._tag === "Forbidden" || e._tag === "Unauthorized",
-        () => Effect.succeed(undefined),
+        () => Effect.undefined,
       ),
     );
     if (response === undefined) {

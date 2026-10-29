@@ -142,13 +142,13 @@ export const MetadataStoresArtifact = Resource<MetadataStoresArtifact>(
 export class MetadataStoresArtifactNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoresArtifactNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MetadataStoresArtifactStillExists extends Data.TaggedError(
   "GCP.AIPlatform.MetadataStoresArtifactStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parentOf = (name: string) => {
@@ -182,7 +182,7 @@ const toAttrs = (artifact: aiplatform.GoogleCloudAiplatformV1Artifact, project: 
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsMetadataStoresArtifacts({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listArtifacts = (parent: string) =>
   aiplatform.listProjectsLocationsMetadataStoresArtifacts.pages({ parent, pageSize: 100 }).pipe(
@@ -206,7 +206,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (artifact) => artifact === undefined,
-      () => new MetadataStoresArtifactStillExists({ name }),
+      () => new MetadataStoresArtifactStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -308,7 +308,7 @@ export const MetadataStoresArtifactProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MetadataStoresArtifactNotResolved({ name });
+        return yield* new MetadataStoresArtifactNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== (news.description ?? "");
@@ -375,7 +375,7 @@ export const MetadataStoresArtifactProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

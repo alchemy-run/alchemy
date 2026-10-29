@@ -118,11 +118,11 @@ export type UrlList = Resource<
 export const UrlList = Resource<UrlList>("GCP.NetworkSecurity.UrlList");
 
 export class UrlListNotResolved extends Data.TaggedError("GCP.NetworkSecurity.UrlListNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class UrlListStillExists extends Data.TaggedError("GCP.NetworkSecurity.UrlListStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (list: networksecurity.UrlList, project: string, region: string) => {
@@ -144,12 +144,12 @@ const toAttrs = (list: networksecurity.UrlList, project: string, region: string)
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsUrlLists({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((list) =>
-      list ? Effect.succeed(list) : Effect.fail(new UrlListNotResolved({ name })),
+      list ? Effect.succeed(list) : Effect.fail(new UrlListNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.UrlListNotResolved",
@@ -161,7 +161,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((list) =>
-      list === undefined ? Effect.void : Effect.fail(new UrlListStillExists({ name })),
+      list === undefined
+        ? Effect.void
+        : Effect.fail(new UrlListStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.NetworkSecurity.UrlListStillExists",
@@ -253,7 +255,7 @@ export const UrlListProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -262,7 +264,7 @@ export const UrlListProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new UrlListNotResolved({ name });
+        return yield* new UrlListNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;
@@ -298,7 +300,7 @@ export const UrlListProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

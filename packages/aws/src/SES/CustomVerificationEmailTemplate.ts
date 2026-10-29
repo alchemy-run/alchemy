@@ -137,7 +137,7 @@ export const CustomVerificationEmailTemplateProvider = () =>
       const getTemplate = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getCustomVerificationEmailTemplate({ TemplateName: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       // The get returns no tags, so ownership costs a second API call. Only

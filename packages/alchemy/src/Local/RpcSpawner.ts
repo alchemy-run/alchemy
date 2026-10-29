@@ -4,6 +4,7 @@ import type * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Console from "effect/Console";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -33,6 +34,10 @@ export class RpcSpawner extends Context.Service<
     readonly url: string;
   }
 >()("alchemy/Local/RpcSpawner") {}
+
+class InvalidServerEntryUrl extends Data.TaggedError("InvalidServerEntryUrl")<{
+  cause: unknown;
+}> {}
 
 /**
  * The spawner forks one child per distinct `serverEntryUrl`. Stack-specific
@@ -282,7 +287,7 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
       const entry = yield* Effect.result(
         Effect.try({
           try: () => new URL(decoded.success.serverEntryUrl),
-          catch: (cause) => cause,
+          catch: (cause) => new InvalidServerEntryUrl({ cause }),
         }),
       );
       if (entry._tag === "Failure" || entry.success.protocol !== "file:") {

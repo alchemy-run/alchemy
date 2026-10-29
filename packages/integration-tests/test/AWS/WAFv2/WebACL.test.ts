@@ -1,13 +1,14 @@
 import * as AWS from "@alchemy.run/aws";
 import { WebACL } from "@alchemy.run/aws/WAFv2";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { Region as AwsRegion } from "@distilled.cloud/aws/Region";
 import type * as WAFV2 from "@distilled.cloud/aws/wafv2";
 import * as wafv2 from "@distilled.cloud/aws/wafv2";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -225,4 +226,56 @@ test.provider.skipIf(process.env.AWS_TEST_WAF_CLOUDFRONT === "0")(
       );
     }),
   { tags: ["provider:aws", "provider:aws:wafv2", "live"], timeout: 120_000 },
+);
+
+// #2688: `read` must observe the rules, default action and tags, or an
+// out-of-band change reads as `unchanged`.
+test.provider(
+  "drift detects and repairs out-of-band rule and default action changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const acl = yield* stack.deploy(
+        WebACL("DriftAcl", {
+          rules: [flagshipRules[1], flagshipRules[2]],
+          tags: { team: "declared" },
+        }),
+      );
+      expect((yield* driftOf(stack, "DriftAcl"))?.action).toBe("unchanged");
+
+      const current = yield* wafv2.getWebACL({
+        Name: acl.webAclName,
+        Scope: "REGIONAL",
+        Id: acl.webAclId,
+      });
+      yield* wafv2.updateWebACL({
+        Name: acl.webAclName,
+        Scope: "REGIONAL",
+        Id: acl.webAclId,
+        LockToken: current.LockToken!,
+        DefaultAction: { Block: {} },
+        Rules: [flagshipRules[1]],
+        VisibilityConfig: current.WebACL!.VisibilityConfig,
+      });
+
+      const drifted = yield* waitForDrift(stack, "DriftAcl", "drifted");
+      expect(drifted?.attr?.configuration?.defaultAction).toEqual({ Block: {} });
+      expect(drifted?.attr?.configuration?.rules).toHaveLength(1);
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.DriftAcl?.action).toBe("repaired");
+      expect((yield* waitForDrift(stack, "DriftAcl", "unchanged"))?.action).toBe("unchanged");
+      const restored = yield* wafv2.getWebACL({
+        Name: acl.webAclName,
+        Scope: "REGIONAL",
+        Id: acl.webAclId,
+      });
+      expect(restored.WebACL?.DefaultAction?.Allow).toBeDefined();
+      expect(restored.WebACL?.Rules?.map((r) => r.Name)).toEqual(["rate-limit", "block-path"]);
+
+      yield* stack.destroy();
+      yield* assertWebAclDeleted(acl.webAclName, acl.webAclId, "REGIONAL");
+    }),
+  { tags: ["provider:aws", "provider:aws:wafv2", "live"], timeout: 180_000 },
 );

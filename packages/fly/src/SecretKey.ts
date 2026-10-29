@@ -184,7 +184,7 @@ export const SecretKey: typeof SecretKeyResource = Object.assign(
 
 export class SecretKeyNotCreated extends Data.TaggedError("Fly.SecretKeyNotCreated")<{
   appName: string;
-  name: string;
+  secretName: string;
 }> {}
 
 export class SecretKeyAppRequired extends Data.TaggedError("Fly.SecretKeyAppRequired")<{
@@ -223,7 +223,7 @@ const getByName = (appName: string, secretName: string) =>
       app_name: appName,
       secret_name: secretName,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listKeys = (appName: string) =>
   machines.listSecretKeys({ app_name: appName }).pipe(
@@ -346,7 +346,7 @@ export const SecretKeyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecretKeyNotCreated({ appName, name });
+        return yield* new SecretKeyNotCreated({ appName, secretName: name });
       }
 
       // Sync — re-set when the caller supplied new material. Observed

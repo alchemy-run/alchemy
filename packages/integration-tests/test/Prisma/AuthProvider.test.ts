@@ -36,7 +36,10 @@ const prismaAuthProvider = getAuthProvider<PrismaAuthConfig, PrismaResolvedCrede
 
 const readStoredCredentials = Effect.gen(function* () {
   const auth = yield* prismaAuthProvider;
-  return yield* auth.read("default", { method: "stored", serviceToken: "stored-token" });
+  return yield* auth.read(
+    "default",
+    Effect.succeed({ method: "stored" as const, serviceToken: "stored-token" }),
+  );
 });
 
 const readEnvironmentCredentials = Effect.gen(function* () {
@@ -77,10 +80,10 @@ describe("Prisma auth provider", { tags: ["unit", "provider:prisma", "local"] },
   it.effect("returns redacted details for stored credentials", () =>
     Effect.gen(function* () {
       const auth = yield* prismaAuthProvider;
-      const details = yield* auth.details("default", {
-        method: "stored",
-        serviceToken: "stored-token",
-      });
+      const details = yield* auth.details(
+        "default",
+        Effect.succeed({ method: "stored" as const, serviceToken: "stored-token" }),
+      );
 
       expect(details.lines).toEqual([{ key: "serviceToken", value: "stor****" }]);
     }).pipe(Effect.provide(testLayer())),

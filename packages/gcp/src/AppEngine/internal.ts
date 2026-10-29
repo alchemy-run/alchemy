@@ -198,10 +198,8 @@ export const resolveAppsId = (requested: string | undefined, existing: string | 
 
 export const getApplication = (appsId: string) =>
   appsId.length === 0
-    ? Effect.succeed(undefined)
-    : appengine
-        .getApps({ appsId })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    ? Effect.undefined
+    : appengine.getApps({ appsId }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const resolveLocation = (
   requested: string | undefined,
@@ -225,7 +223,7 @@ export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect.pipe(
     Effect.catchIf(
       (error): error is E & { readonly _tag: "NotFound" } => error._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 
@@ -379,7 +377,7 @@ export const stampEnvVariables = (
   labels: Record<string, string>,
   env: Record<string, string | undefined> | undefined,
 ): Record<string, string | undefined> => ({
-  ...(env ?? {}),
+  ...env,
   [OWNERSHIP_ENV]: fitMarker(labels, 200),
 });
 

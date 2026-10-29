@@ -327,6 +327,16 @@ export const RouteProvider = () =>
           // Target change can be done via ReplaceRoute (update)
         }),
 
+        // Routes have no id or tags: the identity is (route table,
+        // destination), and the target and state are what drift compares.
+        read: Effect.fn(function* ({ olds, output }) {
+          const identity = output ?? olds;
+          if (identity?.routeTableId === undefined) return undefined;
+          const route = yield* describeRoute(identity.routeTableId, identity);
+          if (route === undefined) return undefined;
+          return toRouteAttributes(identity.routeTableId, identity, route);
+        }),
+
         reconcile: Effect.fn(function* ({ news, session }) {
           const dest =
             news.destinationCidrBlock ||
@@ -385,24 +395,7 @@ export const RouteProvider = () =>
 
           // Re-read final state.
           const route = yield* describeRoute(news.routeTableId, news);
-          return {
-            routeTableId: news.routeTableId,
-            destinationCidrBlock: news.destinationCidrBlock,
-            destinationIpv6CidrBlock: news.destinationIpv6CidrBlock,
-            destinationPrefixListId: news.destinationPrefixListId,
-            origin: route?.Origin ?? "CreateRoute",
-            state: route?.State ?? "active",
-            gatewayId: route?.GatewayId,
-            natGatewayId: route?.NatGatewayId,
-            instanceId: route?.InstanceId,
-            networkInterfaceId: route?.NetworkInterfaceId,
-            vpcPeeringConnectionId: route?.VpcPeeringConnectionId,
-            transitGatewayId: route?.TransitGatewayId,
-            localGatewayId: route?.LocalGatewayId,
-            carrierGatewayId: route?.CarrierGatewayId,
-            egressOnlyInternetGatewayId: route?.EgressOnlyInternetGatewayId,
-            coreNetworkArn: route?.CoreNetworkArn,
-          };
+          return toRouteAttributes(news.routeTableId, news, route);
         }),
 
         // Routes are entries embedded inside RouteTables. Enumerate by
@@ -499,7 +492,40 @@ export const RouteProvider = () =>
 /**
  * Find a specific route in a route table
  */
-const describeRoute = (routeTableId: string, props: RouteProps) =>
+/** The attributes `read` and `reconcile` both report for a route. */
+const toRouteAttributes = (
+  routeTableId: RouteTableId,
+  destination: Pick<
+    RouteProps,
+    "destinationCidrBlock" | "destinationIpv6CidrBlock" | "destinationPrefixListId"
+  >,
+  route: EC2.Route | undefined,
+): Route["Attributes"] => ({
+  routeTableId,
+  destinationCidrBlock: destination.destinationCidrBlock,
+  destinationIpv6CidrBlock: destination.destinationIpv6CidrBlock,
+  destinationPrefixListId: destination.destinationPrefixListId,
+  origin: route?.Origin ?? "CreateRoute",
+  state: route?.State ?? "active",
+  gatewayId: route?.GatewayId,
+  natGatewayId: route?.NatGatewayId,
+  instanceId: route?.InstanceId,
+  networkInterfaceId: route?.NetworkInterfaceId,
+  vpcPeeringConnectionId: route?.VpcPeeringConnectionId,
+  transitGatewayId: route?.TransitGatewayId,
+  localGatewayId: route?.LocalGatewayId,
+  carrierGatewayId: route?.CarrierGatewayId,
+  egressOnlyInternetGatewayId: route?.EgressOnlyInternetGatewayId,
+  coreNetworkArn: route?.CoreNetworkArn,
+});
+
+const describeRoute = (
+  routeTableId: string,
+  props: Pick<
+    RouteProps,
+    "destinationCidrBlock" | "destinationIpv6CidrBlock" | "destinationPrefixListId"
+  >,
+) =>
   Effect.gen(function* () {
     const result = yield* ec2
       .describeRouteTables({ RouteTableIds: [routeTableId] })

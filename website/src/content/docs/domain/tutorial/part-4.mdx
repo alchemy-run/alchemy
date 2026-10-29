@@ -331,7 +331,7 @@ import { AccountSummary } from "../src/AccountSummary.view.ts";
 import { Bank, BankHandlers } from "../src/Bank.model.ts";
 +import { CurrentActor } from "../src/CurrentActor.context.ts";
 +import { CustomerId } from "../src/Customer.id.ts";
-import { DepositMoney } from "../src/DepositMoney.command.ts";
+import { DepositMoney, MoneyDeposited } from "../src/DepositMoney.command.ts";
 import { AccountOpened } from "../src/OpenAccount.command.ts";
 // ...
 
@@ -428,7 +428,7 @@ const World = SessionLive.pipe(
 );
 
 const signedInAs = (customerId: string) =>
-  BankApi.testClient.pipe(Effect.provide(sessionClient(customerId)));
+  BankApi.clientInProcess.pipe(Effect.provide(sessionClient(customerId)));
 
 const inBank = <A, E>(effect: Effect.Effect<A, E, Scope.Scope | Layer.Success<typeof World>>) =>
   effect.pipe(Effect.scoped, Effect.provide(World));
@@ -437,16 +437,17 @@ it.live("a customer registers, deposits, and reads only their own balance", () =
   inBank(
     Effect.gen(function* () {
       const sam = yield* signedInAs("c-1");
-      yield* sam.RegisterCustomer({ target: CustomerId.make("c-1"), name: "sam" });
+      yield* sam.RegisterCustomer(CustomerId.make("c-1"), { name: "sam" });
 
       // The policy opens the account shortly after; wait for its summary.
       const accountId = AccountId.make("c-1-main");
       yield* sam.AccountSummary.watch(accountId).pipe(
+        Stream.map(({ state }) => state),
         Stream.filter((summary) => summary?.owner === "c-1"),
         Stream.runHead,
       );
 
-      const { reply } = yield* sam.DepositMoney({ target: accountId, amount: 100 });
+      const { reply } = yield* sam.DepositMoney(accountId, { amount: 100 });
       expect(reply.balance).toBe(100);
 
       const alex = yield* signedInAs("c-2");
@@ -457,7 +458,7 @@ it.live("a customer registers, deposits, and reads only their own balance", () =
 );
 ```
 
-`testClient` calls the Api in the same process, through the real middleware. Each client is signed in as one customer, and someone else's balance comes back as `NotOwner`.
+`clientInProcess` calls the Api in the same process, through the real middleware. Each client is signed in as one customer, and someone else's balance comes back as `NotOwner`.
 
 ```sh
 bun vitest run

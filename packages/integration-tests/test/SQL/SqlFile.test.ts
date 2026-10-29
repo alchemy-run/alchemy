@@ -1,5 +1,14 @@
-import { splitSqliteStatements, splitSqlStatements } from "@alchemy.run/sql/SqlFile";
-import { describe, expect, test } from "@alchemy.run/test";
+import { stripSslQueryParams } from "@alchemy.run/sql/PostgresDriver";
+import {
+  applySqlImports,
+  splitSqliteStatements,
+  splitSqlStatements,
+} from "@alchemy.run/sql/SqlFile";
+import { describe, expect, layer, test } from "@alchemy.run/test";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Path from "effect/Path";
 
 describe("SqlFile", { tags: ["unit", "local"] }, () => {
   describe("splitSqlStatements", () => {
@@ -88,5 +97,54 @@ describe("SqlFile", { tags: ["unit", "local"] }, () => {
       expect(splitSqliteStatements(";;\n-- only a comment\n")).toEqual([]);
       expect(splitSqliteStatements("")).toEqual([]);
     });
+  });
+});
+
+const withFs = layer(NodeServices.layer);
+
+withFs("applySqlImports", (it) => {
+  it.effect(
+    "applies new and changed files once, and keeps hashes only for listed files",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const rootDir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-imports-" });
+        yield* fs.writeFileString(path.join(rootDir, "a.sql"), "SELECT 1;");
+        yield* fs.writeFileString(path.join(rootDir, "b.sql"), "SELECT 2;");
+        const applied: string[] = [];
+        const apply = (file: { id: string }) => Effect.sync(() => void applied.push(file.id));
+
+        const first = yield* applySqlImports({
+          importFiles: ["a.sql", "b.sql"],
+          rootDir,
+          previous: { "gone.sql": "stale" },
+          apply,
+        });
+        expect(Object.keys(first).sort()).toEqual(["a.sql", "b.sql"]);
+
+        yield* fs.writeFileString(path.join(rootDir, "b.sql"), "SELECT 3;");
+        const second = yield* applySqlImports({
+          importFiles: ["a.sql", "b.sql"],
+          rootDir,
+          previous: first,
+          apply,
+        });
+        expect(second["a.sql"]).toEqual(first["a.sql"]);
+        expect(second["b.sql"]).not.toEqual(first["b.sql"]);
+        expect(applied).toEqual(["a.sql", "b.sql", "b.sql"]);
+      }),
+    { tags: ["unit", "local"] },
+  );
+});
+
+describe("stripSslQueryParams", { tags: ["unit", "local"] }, () => {
+  test("drops sslmode and channel_binding and keeps everything else", () => {
+    expect(
+      stripSslQueryParams(
+        "postgresql://u:p@host/db?sslmode=require&channel_binding=require&application_name=x",
+      ),
+    ).toEqual("postgresql://u:p@host/db?application_name=x");
+    expect(stripSslQueryParams("not a url")).toEqual("not a url");
   });
 });

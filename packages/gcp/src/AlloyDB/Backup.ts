@@ -175,7 +175,7 @@ export type Backup = Resource<
 export const Backup = Resource<Backup>("GCP.AlloyDB.Backup");
 
 export class BackupNotResolved extends Data.TaggedError("GCP.AlloyDB.BackupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BackupClusterMissing extends Data.TaggedError("GCP.AlloyDB.BackupClusterMissing")<{
@@ -183,17 +183,17 @@ export class BackupClusterMissing extends Data.TaggedError("GCP.AlloyDB.BackupCl
 }> {}
 
 export class BackupNotReady extends Data.TaggedError("GCP.AlloyDB.BackupNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class BackupFailed extends Data.TaggedError("GCP.AlloyDB.BackupFailed")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class BackupStillExists extends Data.TaggedError("GCP.AlloyDB.BackupStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string | undefined) => {
@@ -365,12 +365,12 @@ const isPlaceholder = (backup: alloydb.Backup) => {
 const getByName = (name: string) =>
   alloydb
     .getProjectsLocationsBackups({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ name })),
+      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.BackupNotResolved",
@@ -383,17 +383,17 @@ const waitUntilReady = (name: string) =>
   Effect.gen(function* () {
     const backup = yield* getByName(name);
     if (backup === undefined) {
-      return yield* new BackupNotReady({ name, state: "MISSING" });
+      return yield* new BackupNotReady({ resourceName: name, state: "MISSING" });
     }
     if (isFailed(backup.state)) {
       return yield* new BackupFailed({
-        name,
+        resourceName: name,
         state: backup.state ?? "FAILED",
       });
     }
     if (!(isAvailable(backup.state) && backup.reconciling !== true)) {
       return yield* new BackupNotReady({
-        name,
+        resourceName: name,
         state: backup.state ?? "STATE_UNSPECIFIED",
       });
     }
@@ -409,7 +409,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup === undefined ? Effect.void : Effect.fail(new BackupStillExists({ name })),
+      backup === undefined
+        ? Effect.void
+        : Effect.fail(new BackupStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AlloyDB.BackupStillExists",
@@ -584,7 +586,7 @@ export const BackupProvider = () =>
               times: 40,
               schedule: Schedule.spaced("15 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -593,7 +595,7 @@ export const BackupProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new BackupNotResolved({ name });
+        return yield* new BackupNotResolved({ resourceName: name });
       }
 
       if (!isAvailable(current.state) || current.reconciling === true) {
@@ -648,7 +650,7 @@ export const BackupProvider = () =>
 
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* alloydb.deleteProjectsLocationsBackups({ name: output.name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         Effect.retry({
           while: (error) => error._tag === "Conflict",
           times: 40,

@@ -162,7 +162,7 @@ export type AppsGuardrail = Resource<
 export const AppsGuardrail = Resource<AppsGuardrail>("GCP.CES.AppsGuardrail");
 
 export class AppsGuardrailNotResolved extends Data.TaggedError("GCP.CES.AppsGuardrailNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (app: string, guardrailId: string) => `${app}/guardrails/${guardrailId}`;
@@ -206,10 +206,10 @@ const toAttrs = (guardrail: ces.Guardrail, project: string, region: string, appH
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ces
         .getProjectsLocationsAppsGuardrails({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   collectPages(
@@ -295,7 +295,7 @@ export const AppsGuardrailProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsGuardrailNotResolved({ name });
+        return yield* new AppsGuardrailNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

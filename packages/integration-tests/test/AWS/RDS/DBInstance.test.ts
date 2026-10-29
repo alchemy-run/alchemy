@@ -9,6 +9,7 @@ import { Aurora, type AuroraProps } from "@alchemy.run/aws/RDS/Aurora";
 import { DBParameterGroup } from "@alchemy.run/aws/RDS/DBParameterGroup";
 import { DBSubnetGroup } from "@alchemy.run/aws/RDS/DBSubnetGroup";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import * as rds from "@distilled.cloud/aws/rds";
@@ -19,7 +20,6 @@ import * as Drift from "alchemy/Drift";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -32,6 +32,7 @@ import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
+import { driftOf } from "../drift.ts";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -275,6 +276,13 @@ lifecycle(3, process.env.AWS_TEST_RDS_DBINSTANCE)(
         .deploy(program("updated"))
         .pipe(Effect.provideService(HttpClient.HttpClient, client));
       expect(updated.endpointPort).toBe(5434);
+      // #2688: drift observes autoMinorVersionUpgrade.
+      const observedInstance = (yield* rds.describeDBInstances({
+        DBInstanceIdentifier: updated.dbInstanceIdentifier,
+      })).DBInstances![0]!;
+      expect((yield* driftOf(stack, "ListInstance"))?.attr?.autoMinorVersionUpgrade).toBe(
+        observedInstance.AutoMinorVersionUpgrade,
+      );
       expect(requests.filter((request) => request.port !== null)).toEqual([]);
       expect(requests.filter((request) => request.securityGroups.length > 0)).toEqual([]);
       const cluster = (yield* rds.describeDBClusters({

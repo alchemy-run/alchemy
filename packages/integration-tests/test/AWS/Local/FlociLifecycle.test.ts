@@ -1,4 +1,4 @@
-import { execFile, spawnSync } from "node:child_process";
+import { execFile } from "node:child_process";
 import * as Floci from "@alchemy.run/aws/Local/Floci";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Effect from "effect/Effect";
@@ -15,14 +15,6 @@ import * as Effect from "effect/Effect";
  * opportunistic ELB/CloudFront edge ports, so the suite never touches the
  * shared `alchemy-floci` container or competes with it for host ports.
  */
-
-const dockerAvailable = (() => {
-  try {
-    return spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-  } catch {
-    return false;
-  }
-})();
 
 const docker = (args: ReadonlyArray<string>) =>
   Effect.callback<string, Error>((resume) => {
@@ -93,7 +85,7 @@ const holdPort = (name: string, port: number) =>
   );
 
 describe.sequential("FlociLifecycle", { tags: ["provider:aws", "local"] }, () => {
-  it.live.skipIf(!dockerAvailable)(
+  it.live(
     "starts a fresh container and publishes the gateway",
     () =>
       Effect.gen(function* () {
@@ -112,7 +104,7 @@ describe.sequential("FlociLifecycle", { tags: ["provider:aws", "local"] }, () =>
     { timeout: 180_000 },
   );
 
-  it.live.skipIf(!dockerAvailable)(
+  it.live(
     "reattaches to a serving container without recreating it",
     () =>
       Effect.gen(function* () {
@@ -129,7 +121,7 @@ describe.sequential("FlociLifecycle", { tags: ["provider:aws", "local"] }, () =>
     { timeout: 180_000 },
   );
 
-  it.live.skipIf(!dockerAvailable)(
+  it.live(
     "revives a stopped container",
     () =>
       Effect.gen(function* () {
@@ -152,7 +144,7 @@ describe.sequential("FlociLifecycle", { tags: ["provider:aws", "local"] }, () =>
   // published. `docker start` on it is a no-op success, so the manager
   // reused it and polled an unreachable endpoint for the whole readiness
   // timeout (300s × 4 attempts by default).
-  it.live.skipIf(!dockerAvailable)(
+  it.live(
     "replaces a running container whose gateway is not published",
     () =>
       Effect.gen(function* () {
@@ -176,7 +168,7 @@ describe.sequential("FlociLifecycle", { tags: ["provider:aws", "local"] }, () =>
   // port held elsewhere) must be dropped, not leave an unreachable
   // container behind — and the dropped port must not make every later
   // ensure recreate (and wipe) the container.
-  it.live.skipIf(!dockerAvailable)(
+  it.live(
     "starts without a port Docker cannot publish, and keeps the container",
     () =>
       Effect.gen(function* () {
@@ -200,7 +192,7 @@ describe.sequential("FlociLifecycle", { tags: ["provider:aws", "local"] }, () =>
     { timeout: 180_000 },
   );
 
-  it.live.skipIf(!dockerAvailable)(
+  it.live(
     "recreates the container when the requested ports change",
     () =>
       Effect.gen(function* () {
@@ -216,7 +208,7 @@ describe.sequential("FlociLifecycle", { tags: ["provider:aws", "local"] }, () =>
     { timeout: 180_000 },
   );
 
-  it.live.skipIf(!dockerAvailable || !!process.env.ALCHEMY_FLOCI_IMAGE)(
+  it.live.skipIf(!!process.env.ALCHEMY_FLOCI_IMAGE)(
     "recreates the container when the image changes",
     () =>
       Effect.gen(function* () {
@@ -238,7 +230,7 @@ describe.sequential("FlociLifecycle", { tags: ["provider:aws", "local"] }, () =>
     { timeout: 180_000 },
   );
 
-  it.live.skipIf(!dockerAvailable)(
+  it.live(
     "converges concurrent ensures onto one container",
     () =>
       Effect.gen(function* () {

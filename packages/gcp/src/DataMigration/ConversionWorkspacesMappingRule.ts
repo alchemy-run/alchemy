@@ -277,11 +277,11 @@ const isWellFormed = (name: string) => name.length > 0 && !name.includes("//");
 
 const getByName = (name: string) =>
   !isWellFormed(name)
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dm.getProjectsLocationsConversionWorkspacesMappingRules({ name }).pipe(
         // Deleted rules stay readable as a `DELETED` revision.
         Effect.map((rule) => (rule.state === "DELETED" ? undefined : rule)),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
 
 const listRules = (parent: string) =>
@@ -421,7 +421,7 @@ export const ConversionWorkspacesMappingRuleProvider = () =>
               conditionalColumnSetValue: news.conditionalColumnSetValue,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           current = created;
         } else {
@@ -430,7 +430,7 @@ export const ConversionWorkspacesMappingRuleProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, output?.name ?? name);

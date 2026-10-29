@@ -98,6 +98,7 @@ describe("Domain Api.describe", () => {
       ["Balance", "View", "watch", "read", true],
       ["Balance", "View", "events", "read", true],
       ["Balance", "View", "list", "read", false],
+      ["Balance", "View", "snapshot", "read", false],
       ["Receipts", "Stream", "peek", "read", false],
       ["Receipts", "Stream", "watch", "read", true],
       ["Receipts", "Stream", "events", "read", true],
@@ -112,9 +113,13 @@ describe("Domain Api.describe", () => {
     const deposit = operation(Domain.Api.describe(WalletApi), "Deposit");
     expect(deposit.input).toMatchObject({
       type: "object",
-      properties: { target: { type: "string" }, amount: {}, commandId: {} },
+      properties: {
+        target: { type: "string" },
+        commandId: {},
+        input: { type: "object", properties: { amount: { type: "integer" } } },
+      },
     });
-    expect([...(deposit.input.required as string[])].sort()).toEqual(["amount", "target"]);
+    expect([...(deposit.input.required as string[])].sort()).toEqual(["input", "target"]);
     expect(deposit.success).toMatchObject({
       type: "object",
       properties: {
@@ -134,22 +139,29 @@ describe("Domain Api.describe", () => {
     expect(get.input.required).toEqual(["key"]);
     expect(JSON.stringify(get.success)).toContain('"balance"');
     expect(JSON.stringify(get.success)).toContain('"null"');
-    expect(tagsOf(get.error)).toEqual(["NotOwner"]);
+    // `atLeast` can also time out waiting for the caller's write.
+    expect(tagsOf(get.error)).toEqual(["ConsistencyTimeout", "NotOwner"]);
 
-    // A live read is described by what each element carries, not by the stream.
+    // A live read is described by what each element carries, not by the stream:
+    // the state and the cursor it is valid at.
     const watch = operation(catalog, "Balance.watch");
-    expect(watch.success).toEqual(get.success);
-    expect(watch.error).toEqual(get.error);
+    expect(watch.success).toMatchObject({
+      type: "object",
+      properties: { state: get.success, cursor: {} },
+      required: ["state", "cursor"],
+    });
+    expect(tagsOf(watch.error)).toEqual(["NotOwner"]);
 
     // An aggregate read runs its contract's middleware too.
     expect(tagsOf(operation(catalog, "Wallet.get").error)).toEqual(["NotOwner", "Unauthenticated"]);
-    expect(tagsOf(operation(catalog, "Wallet.events").success)).toEqual(["Deposited"]);
+    // `events` sends its history, a `CaughtUp` frame, then live events.
+    expect(tagsOf(operation(catalog, "Wallet.events").success)).toEqual(["CaughtUp", "Deposited"]);
     expect(tagsOf(operation(catalog, "Receipts.peek").success)).toEqual(["Receipt"]);
   });
 
   it("describes an entry with no rejections as one that cannot fail typed", () => {
-    const peek = operation(Domain.Api.describe(WalletApi), "Receipts.peek");
-    expect(peek.error).toEqual({ not: {} });
+    const watch = operation(Domain.Api.describe(WalletApi), "Receipts.watch");
+    expect(watch.error).toEqual({ not: {} });
   });
 
   it("includes the errors of middleware applied to the whole Api", () => {
@@ -163,7 +175,7 @@ describe("Domain Api.describe", () => {
       "RateLimited",
       "Unauthenticated",
     ]);
-    expect(tagsOf(operation(catalog, "Receipts.peek").error)).toEqual(["RateLimited"]);
+    expect(tagsOf(operation(catalog, "Receipts.watch").error)).toEqual(["RateLimited"]);
   });
 
   it("is plain JSON that decodes as a Catalog and is the same on every call", () => {

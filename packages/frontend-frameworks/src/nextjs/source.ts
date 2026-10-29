@@ -657,7 +657,7 @@ const makeProvider = (options: NextjsSourceOptions): SourceProvider => {
       const [assets, input] = yield* Effect.all([
         output.clientDirectory !== undefined
           ? readClientAssets(output.clientDirectory, assetsConfigOf(ctx))
-          : Effect.succeed(undefined),
+          : Effect.undefined,
         hashInputTree(root, options, ctx.dotAlchemy),
       ]);
       return {

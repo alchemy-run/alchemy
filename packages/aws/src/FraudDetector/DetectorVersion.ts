@@ -127,7 +127,7 @@ export const DetectorVersionProvider = () =>
       const getVersion = Effect.fn(function* (detectorId: string, detectorVersionId: string) {
         return yield* frauddetector
           .getDetectorVersion({ detectorId, detectorVersionId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       /**
@@ -140,7 +140,7 @@ export const DetectorVersionProvider = () =>
         for (const rule of rules) {
           const existing = yield* frauddetector
             .getRules({ detectorId, ruleId: rule.ruleId })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           const details = existing?.ruleDetails ?? [];
           if (details.length === 0) {
             const created = yield* frauddetector.createRule({

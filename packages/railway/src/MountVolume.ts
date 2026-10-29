@@ -66,7 +66,7 @@ export interface ServiceBinding {
  * second {@link Volume} attached via `service`, is this error.
  */
 export class MultipleVolumes extends Data.TaggedError("Railway.MultipleVolumes")<{
-  name: string;
+  resourceName: string;
   paths: readonly string[];
   volumeIds: readonly string[];
 }> {}
@@ -92,7 +92,7 @@ export const assertHostDisk = (input: {
   const mounts = distinctMounts(input.mounts);
   if (mounts.length <= 1) return Effect.void;
   return new MultipleVolumes({
-    name: input.name,
+    resourceName: input.name,
     paths: mounts.map((mount) => mount.path),
     volumeIds: mounts.map((mount) => mount.volumeId),
   });

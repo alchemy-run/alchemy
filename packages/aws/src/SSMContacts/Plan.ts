@@ -81,7 +81,7 @@ export const PlanProvider = () =>
       const getContact = (arn: string) =>
         contacts
           .getContact({ ContactId: arn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       const buildAttrs = (contact: contacts.GetContactResult) => ({
         contactArn: contact.ContactArn,

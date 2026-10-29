@@ -1,4 +1,5 @@
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -18,7 +19,6 @@ import { Platform } from "@/Platform.ts";
 import * as Provider from "@/Provider.ts";
 import type { Resource } from "@/Resource.ts";
 import { InMemoryService, State } from "@/State/index.ts";
-import * as Test from "@/Test/Alchemy";
 
 interface Widget extends Resource<
   "Test.PlatformWidget",

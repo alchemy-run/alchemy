@@ -5,10 +5,23 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class ServerlessCacheNotReady extends Data.TaggedError("ServerlessCacheNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ServerlessCacheUnexpectedResponse extends Data.TaggedError(
+  "ServerlessCacheUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Cache engine for a serverless cache.
@@ -287,7 +300,7 @@ export const ServerlessCacheProvider = () =>
       const readCache = Effect.fn(function* (name: string) {
         const response = yield* elasticache
           .describeServerlessCaches({ ServerlessCacheName: name })
-          .pipe(Effect.catchTag("ServerlessCacheNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ServerlessCacheNotFoundFault", () => Effect.undefined));
         return response?.ServerlessCaches?.[0];
       });
 
@@ -306,11 +319,15 @@ export const ServerlessCacheProvider = () =>
         return yield* readCache(name).pipe(
           Effect.flatMap((cache) => {
             if (!cache?.ARN) {
-              return Effect.fail(new Error(`Serverless cache '${name}' not found`));
+              return Effect.fail(
+                new ServerlessCacheNotReady({ message: `Serverless cache '${name}' not found` }),
+              );
             }
             if (cache.Status !== "available") {
               return Effect.fail(
-                new Error(`Serverless cache '${name}' not available (status: ${cache.Status})`),
+                new ServerlessCacheNotReady({
+                  message: `Serverless cache '${name}' not available (status: ${cache.Status})`,
+                }),
               );
             }
             return Effect.succeed(cache);
@@ -331,7 +348,9 @@ export const ServerlessCacheProvider = () =>
               cache.Status !== "deleting"
             ) {
               return Effect.fail(
-                new Error(`Serverless cache '${name}' still settling (status: ${cache.Status})`),
+                new ServerlessCacheNotReady({
+                  message: `Serverless cache '${name}' still settling (status: ${cache.Status})`,
+                }),
               );
             }
             return Effect.succeed(cache);
@@ -347,11 +366,9 @@ export const ServerlessCacheProvider = () =>
           !cache.Endpoint?.Address ||
           cache.Endpoint.Port === undefined
         ) {
-          return yield* Effect.fail(
-            new Error(
-              `Serverless cache '${cache.ServerlessCacheName}' is missing its ARN or endpoint (status: ${cache.Status})`,
-            ),
-          );
+          return yield* new ServerlessCacheUnexpectedResponse({
+            message: `Serverless cache '${cache.ServerlessCacheName}' is missing its ARN or endpoint (status: ${cache.Status})`,
+          });
         }
         return {
           serverlessCacheName: cache.ServerlessCacheName,

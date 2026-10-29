@@ -187,11 +187,11 @@ export type CaPool = Resource<
 export const CaPool = Resource<CaPool>("GCP.PrivateCA.CaPool");
 
 export class CaPoolNotResolved extends Data.TaggedError("GCP.PrivateCA.CaPoolNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CaPoolStillExists extends Data.TaggedError("GCP.PrivateCA.CaPoolStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -330,7 +330,7 @@ const toAttrs = (pool: privateca.CaPool, project: string) => {
 const getByName = (name: string) =>
   privateca
     .getProjectsLocationsCaPools({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Wait for a Certificate Authority Service operation; CA creation and
@@ -354,7 +354,7 @@ const waitForOperation = (operation: privateca.Operation, options?: { notFoundOk
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool ? Effect.succeed(pool) : Effect.fail(new CaPoolNotResolved({ name })),
+      pool ? Effect.succeed(pool) : Effect.fail(new CaPoolNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CaPoolNotResolved",
@@ -366,7 +366,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((pool) =>
-      pool === undefined ? Effect.void : Effect.fail(new CaPoolStillExists({ name })),
+      pool === undefined ? Effect.void : Effect.fail(new CaPoolStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.PrivateCA.CaPoolStillExists",
@@ -493,7 +493,7 @@ export const CaPoolProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -502,7 +502,7 @@ export const CaPoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CaPoolNotResolved({ name });
+        return yield* new CaPoolNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -542,7 +542,7 @@ export const CaPoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CaPoolNotResolved({ name });
+        return yield* new CaPoolNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project);
@@ -555,7 +555,7 @@ export const CaPoolProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

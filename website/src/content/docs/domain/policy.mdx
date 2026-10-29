@@ -5,11 +5,38 @@ description: How a policy reacts to events with commands and calls to outside sy
 
 import DAG from "../../../components/DAG.astro";
 
-A policy is one of the business's standing rules about what to do when something happens. Whenever a customer registers, the bank opens their main account. Whenever an account's withdrawals for the day cross a threshold, the bank has it scored for fraud, and freezes it if the risk is high.
+A policy is one of the business's standing rules about what to do when something happens. In the example bank, whenever a customer registers, their main account is opened, and whenever an account's withdrawals for the day cross a threshold, it's scored for fraud and frozen if the risk is high.
 
 The name comes from business policy, and that's the point: a policy doesn't just react, it decides. It's triggered by an event, works out whether and how to act, and acts by sending commands to aggregates or calling systems outside the model.
 
-That's a different kind of rule from an aggregate's. An aggregate enforces invariants, which must hold the instant a command commits and can refuse it. A policy applies a procedure, which runs after the event and decides what happens next. This page covers how to declare one, how to implement it, and the one property every policy must have, which is that running it twice does no harm.
+That's a different kind of rule from an aggregate's. An aggregate enforces invariants, which must hold the instant a command commits and can refuse it. A policy applies a procedure, which runs after the event and decides what happens next. This chapter covers how to find the policies in a business, how to declare and implement one, and the one property every policy must have, which is that running it twice does no harm.
+
+## Find the policies in your business
+
+Policies hide in sentences that start with "whenever" or "when … then". Whenever a customer registers, open their main account. When money settles on a closed account, refund it. When a large transfer is requested, wait for an agent to approve it. People in the business say these all the time, often as "we always …" or "the rule is that …".
+
+Each sentence has two halves. The "whenever" names an event, which is what the policy listens for. The "then" names what the business does next, which becomes a command to an aggregate or a call to a system outside the model. Between them sits whatever judgment the business applies: the fraud rule only freezes an account when the score is high.
+
+<DAG
+  nodes={[
+    { id: "event", label: "Whenever …", type: "CustomerRegistered", kind: "event", layer: 0 },
+    { id: "policy", label: "the rule", type: "open a main account", kind: "policy", layer: 1 },
+    { id: "command", label: "… then", type: "OpenAccount", kind: "command", layer: 2 },
+  ]}
+  edges={[
+    { from: "event", to: "policy", dashed: true },
+    { from: "policy", to: "command" },
+  ]}
+  caption="A policy is a sentence the business already says, written as code."
+/>
+
+Writing these down as policies, instead of burying them in the code that handles a request, keeps them visible. The registration command only registers. The rule about main accounts has its own name, its own file and its own tests, and changing it touches nothing else.
+
+## Policy or invariant?
+
+Before you write a policy, check that the rule can tolerate a delay. A policy runs shortly after the event, so there's always a moment when the event has happened and the policy hasn't acted yet.
+
+"Open a main account for every new customer" is fine with that: for a moment, a customer has no account. "A frozen account can't be withdrawn from" isn't. If a policy enforced it, a withdrawal could slip through between the freeze and the policy noticing. Rules that must hold at every instant are invariants, and they belong in an aggregate's `decide`. Rules about what happens next are policies.
 
 ## Declare what triggers it
 
@@ -125,6 +152,17 @@ export class Welcome extends Domain.Policy("Welcome", {
   caption="Two sources, one partition per customer. Within it, events from different sources have no order between them."
 />
 
+`key` can also be a string Schema, such as an org id. `keyOf` then returns the value, and the handler gets it as `key`.
+
+```typescript
+export class OrgLimits extends Domain.Policy("OrgLimits", {
+  from: Account,
+  key: OrgId,
+  keyOf: { MoneyWithdrawn: ({ event }) => event.orgId },
+  on: [MoneyWithdrawn],
+}) {}
+```
+
 The key is also the policy's unit of concurrency. Pick the narrowest thing whose events must be handled in sequence: everything for one key runs one at a time, and more keys mean more parallelism.
 
 ## Tune it on its Layer
@@ -206,7 +244,7 @@ The freeze is then recorded as done by `FraudReview`, so the account's history s
 
 ## Chain policies into a process
 
-One policy covers one reaction. A process with several steps, like a transfer that debits one account, credits another, and refunds the first if the second fails, is a [saga](/domain/saga), and a policy decides when to start one.
+One policy covers one reaction, and it should stay small: hear one kind of event, decide one thing, send one command or make one call. When you find a policy waiting for a second event, tracking how far along something is, or undoing what it did earlier, it has grown into a process. A process with several steps, like a transfer that debits one account, credits another, and refunds the first if the second fails, is a [saga](/domain/saga). The policy stays small: it hears that a transfer was requested and starts the saga.
 
 <DAG
   nodes={[
@@ -220,7 +258,7 @@ One policy covers one reaction. A process with several steps, like a transfer th
     { from: "debit", to: "credit", dashed: true },
     { from: "credit", to: "refund", dashed: true },
   ]}
-  caption="Each step is a policy reacting to the last. If the credit is refused, a refund undoes the debit."
+  caption="One process, three steps across two accounts. If the credit is refused, a refund undoes the debit."
 />
 
-Next, [Api](/domain/api) decides which commands and reads each kind of client can reach.
+Next, [Saga](/domain/saga): a process that takes several steps, and undoes them when one fails.

@@ -128,7 +128,7 @@ export class ResourceRecordSetNotResolved extends Data.TaggedError(
   "GCP.DNS.ResourceRecordSetNotResolved",
 )<{
   managedZone: string;
-  name: string;
+  resourceName: string;
   type: string;
 }> {}
 
@@ -232,12 +232,12 @@ const toAttrs = (record: dns.ResourceRecordSet, project: string, managedZone: st
 const getZone = (project: string, managedZone: string) =>
   dns
     .getManagedZones({ project, managedZone })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const getByName = (project: string, managedZone: string, name: string, type: string) =>
   dns
     .getResourceRecordSets({ project, managedZone, name, type })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toRecordName = (
   id: string,
@@ -387,7 +387,7 @@ export const ResourceRecordSetProvider = () =>
       if (current === undefined) {
         return yield* new ResourceRecordSetNotResolved({
           managedZone,
-          name,
+          resourceName: name,
           type,
         });
       }

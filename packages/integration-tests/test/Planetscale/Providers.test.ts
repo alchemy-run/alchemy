@@ -1,6 +1,7 @@
 import * as Planetscale from "@alchemy.run/planetscale";
 import { Credentials } from "@alchemy.run/planetscale/Credentials";
 import { expect, it } from "@alchemy.run/test";
+import * as NodeCrypto from "@effect/platform-node/NodeCrypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { AuthProviders } from "alchemy/Auth/AuthProvider";
@@ -47,7 +48,11 @@ it.live(
             ConfigProvider.ConfigProvider,
             ConfigProvider.fromUnknown({ ALCHEMY_PROFILE: `non-existent-${uuidv4()}` }),
           ),
-        ).pipe(Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer))),
+        ).pipe(
+          Layer.provideMerge(
+            Layer.mergeAll(NodeServices.layer, NodeCrypto.layer, FetchHttpClient.layer),
+          ),
+        ),
       ),
       Effect.scoped,
       Effect.provide(Interaction.layerNonInteractive()),

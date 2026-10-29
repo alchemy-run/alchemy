@@ -25,7 +25,7 @@ const asRedactedUrl = (
 ): Effect.Effect<Redacted.Redacted<string>, MySQLUrlMissing> =>
   value.length > 0
     ? Effect.succeed(Redacted.make(value))
-    : Effect.fail(new MySQLUrlMissing({ name }));
+    : Effect.fail(new MySQLUrlMissing({ resourceName: name }));
 
 const fromProcessEnv = (key: string): string => {
   const unpacked = unpackEnvValue<unknown>(process.env[key]);
@@ -44,7 +44,7 @@ const firstUrl = (
   const found = values.find((value) => value.length > 0);
   return found !== undefined
     ? asRedactedUrl(found, name)
-    : Effect.fail(new MySQLUrlMissing({ name }));
+    : Effect.fail(new MySQLUrlMissing({ resourceName: name }));
 };
 
 /**

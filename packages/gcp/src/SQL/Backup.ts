@@ -120,7 +120,7 @@ export type Backup = Resource<
  * ```typescript
  * const instance = yield* GCP.SQL.Instance("AppDb", {
  *   tier: "db-f1-micro",
- *   backupEnabled: true,
+ *   backup: { enabled: true },
  * });
  * const backup = yield* GCP.SQL.Backup("Nightly", {
  *   instance: instance.instanceName,
@@ -143,16 +143,16 @@ export type Backup = Resource<
 export const Backup = Resource<Backup>("GCP.SQL.Backup");
 
 export class BackupNotResolved extends Data.TaggedError("GCP.SQL.BackupNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class BackupNotReady extends Data.TaggedError("GCP.SQL.BackupNotReady")<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
 export class BackupStillExists extends Data.TaggedError("GCP.SQL.BackupStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const backupNameOf = (project: string, backupId: string) =>
@@ -224,9 +224,9 @@ const recoverIfBackupMissing =
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : sqladmin.getBackupBackups({ name }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
         recoverIfBackupMissing(name, () => undefined),
       );
 
@@ -269,7 +269,7 @@ const waitForOperation = (
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ name })),
+      backup ? Effect.succeed(backup) : Effect.fail(new BackupNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.SQL.BackupNotResolved",
@@ -288,13 +288,13 @@ const waitUntilReady = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (backup): backup is sqladmin.Backup => backup !== undefined,
-      () => new BackupNotResolved({ name }),
+      () => new BackupNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (backup) => !isBusy(backup.state),
       (backup) =>
         new BackupNotReady({
-          name,
+          resourceName: name,
           state: backup.state,
         }),
     ),
@@ -309,7 +309,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((backup) =>
-      backup === undefined ? Effect.void : Effect.fail(new BackupStillExists({ name })),
+      backup === undefined
+        ? Effect.void
+        : Effect.fail(new BackupStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.SQL.BackupStillExists",
@@ -402,9 +404,7 @@ export const BackupProvider = () =>
           .pipe(
             Effect.catchTag("Conflict", (error) =>
               findByOwnership(env.project, ownership).pipe(
-                Effect.flatMap((existing) =>
-                  existing ? Effect.succeed(undefined) : Effect.fail(error),
-                ),
+                Effect.flatMap((existing) => (existing ? Effect.undefined : Effect.fail(error))),
               ),
             ),
             Effect.retry({
@@ -429,7 +429,7 @@ export const BackupProvider = () =>
                 ? Effect.succeed(existing)
                 : Effect.fail(
                     new BackupNotResolved({
-                      name:
+                      resourceName:
                         name ?? `projects/${env.project}/backups/${ownership[alchemyLabelKeys.id]}`,
                     }),
                   ),
@@ -445,7 +445,7 @@ export const BackupProvider = () =>
 
       const currentName = current.name ?? "";
       if (currentName.length === 0) {
-        return yield* new BackupNotResolved({ name: currentName });
+        return yield* new BackupNotResolved({ resourceName: currentName });
       }
 
       if (isBusy(current.state)) {

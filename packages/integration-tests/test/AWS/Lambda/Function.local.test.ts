@@ -31,12 +31,12 @@ import * as AWS from "@alchemy.run/aws";
 import * as Endpoint from "@alchemy.run/aws/Endpoint";
 import * as Region from "@alchemy.run/aws/Region";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Logs from "@distilled.cloud/aws/cloudwatch-logs";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as SQS from "@distilled.cloud/aws/sqs";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
@@ -45,7 +45,7 @@ import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { cloneFixture } from "../../Cloudflare/Utils/Fixture.ts";
-import { dockerAvailable, FLOCI_ENDPOINT, rawS3GetObject } from "../Local/fixtures/raw.ts";
+import { FLOCI_ENDPOINT, rawS3GetObject } from "../Local/fixtures/raw.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -69,7 +69,7 @@ const flociContext = Layer.mergeAll(
   ),
 );
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "dev deploys a Function into floci with a reachable URL and hot reload",
   (stack) =>
     Effect.gen(function* () {
@@ -279,7 +279,7 @@ test.provider.skipIf(!dockerAvailable)(
   { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 540_000 },
 );
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "SQS -> dev Function (bundle: false) -> S3 event pumping in the emulator",
   (stack) =>
     Effect.gen(function* () {
@@ -366,7 +366,7 @@ test.provider.skipIf(!dockerAvailable)(
   },
 );
 
-test.provider.skipIf(!dockerAvailable)(
+test.provider(
   "logging.retention creates the log group with its policy before the first invoke",
   (stack) =>
     Effect.gen(function* () {

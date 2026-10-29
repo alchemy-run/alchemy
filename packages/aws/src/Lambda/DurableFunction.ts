@@ -378,6 +378,7 @@ const composeDurableImpl = (
     // Executions start on the alias when the function sets one.
     // Typed like the iterator `FunctionName` resolves through, whose
     // RuntimeContext the host always provides.
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the host provides RuntimeContext at runtime
     const Qualifier = qualifierOf(host).bind(`${host.LogicalId}.qualifier`) as Effect.Effect<
       Effect.Effect<string>
     >;

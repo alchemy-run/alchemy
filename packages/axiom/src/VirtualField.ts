@@ -96,7 +96,7 @@ export const VirtualFieldProvider = () =>
           // re-creating.
           const observed = output?.id
             ? yield* get({ id: output.id }).pipe(
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
 
@@ -115,7 +115,7 @@ export const VirtualFieldProvider = () =>
         read: Effect.fn(function* ({ output }) {
           if (!output?.id) return undefined;
           return yield* get({ id: output.id }).pipe(
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
         }),
       };

@@ -14,6 +14,23 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { findPublicHostedZoneId } from "../Route53/HostedZoneLookup.ts";
 
+export class CertificateNotReady extends Data.TaggedError("CertificateNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CertificateUnexpectedResponse extends Data.TaggedError(
+  "CertificateUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CertificateOperationFailed extends Data.TaggedError("CertificateOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface CertificateProps {
   /**
    * Primary domain name for the certificate.
@@ -299,7 +316,7 @@ export const CertificateProvider = () =>
       const describeCertificate = Effect.fn(function* (certificateArn: string) {
         return yield* acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
           Effect.map((response) => response.Certificate),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           withCertRegion(regionOfCertificateArn(certificateArn)),
         );
       });
@@ -366,13 +383,16 @@ export const CertificateProvider = () =>
               validations.length === 0 ||
               validations.some((option) => option.ResourceRecord === undefined)
             ) {
-              return Effect.fail(new Error("CertificateValidationRecordPending"));
+              return Effect.fail(
+                new CertificateNotReady({ message: "CertificateValidationRecordPending" }),
+              );
             }
             return Effect.succeed(detail!);
           }),
           Effect.retry({
             while: (error) =>
-              error instanceof Error && error.message === "CertificateValidationRecordPending",
+              error._tag === "CertificateNotReady" &&
+              error.message === "CertificateValidationRecordPending",
             schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
           }),
         );
@@ -577,19 +597,24 @@ export const CertificateProvider = () =>
                   Tags: createTagsList(desiredTags),
                 })
                 .pipe(
-                  Effect.flatMap((response) =>
-                    response.CertificateArn
-                      ? describeCertificate(response.CertificateArn).pipe(
-                          Effect.map((detail) => detail!),
-                        )
-                      : Effect.fail(new Error("requestCertificate returned no certificate ARN")),
+                  Effect.flatMap(
+                    Effect.fnUntraced(function* (response) {
+                      if (!response.CertificateArn) {
+                        return yield* new CertificateUnexpectedResponse({
+                          message: "requestCertificate returned no certificate ARN",
+                        });
+                      }
+                      return (yield* describeCertificate(response.CertificateArn))!;
+                    }),
                   ),
                 ),
             );
           }
 
           if (!certificate?.CertificateArn) {
-            return yield* Effect.fail(new Error("Failed to obtain ACM certificate"));
+            return yield* new CertificateOperationFailed({
+              message: "Failed to obtain ACM certificate",
+            });
           }
 
           const certificateArn = certificate.CertificateArn;
@@ -710,10 +735,11 @@ export const waitForRoute53Change = Effect.fn(function* (changeId: string) {
       Effect.flatMap((changeInfo) =>
         changeInfo.Status === "INSYNC"
           ? Effect.succeed(changeInfo)
-          : Effect.fail(new Error("Route53ChangePending")),
+          : Effect.fail(new CertificateNotReady({ message: "Route53ChangePending" })),
       ),
       Effect.retry({
-        while: (error) => error instanceof Error && error.message === "Route53ChangePending",
+        while: (error) =>
+          error._tag === "CertificateNotReady" && error.message === "Route53ChangePending",
         schedule: Schedule.max([Schedule.fixed("2 seconds"), Schedule.recurs(60)]),
       }),
     );
@@ -830,7 +856,7 @@ export const validationRecordsOf = (
 export const describeCertificateDetail = (certificateArn: string) =>
   acm.describeCertificate({ CertificateArn: certificateArn }).pipe(
     Effect.map((response) => response.Certificate),
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
     withCertRegion(regionOfCertificateArn(certificateArn)),
   );
 
@@ -842,32 +868,31 @@ export const describeCertificateDetail = (certificateArn: string) =>
  */
 export const waitForCertificateIssued = (certificateArn: string) =>
   describeCertificateDetail(certificateArn).pipe(
-    Effect.flatMap((detail) => {
-      if (!detail?.CertificateArn) {
-        return Effect.fail(new Error("CertificateNotFound"));
-      }
-      if (detail.Status === "ISSUED") {
-        return Effect.succeed(detail);
-      }
-      if (isTerminalFailure(detail.Status)) {
-        if (detail.FailureReason === "CAA_ERROR") {
-          return Effect.fail(
-            new CertificateCaaError({
+    Effect.flatMap(
+      Effect.fnUntraced(function* (detail) {
+        if (!detail?.CertificateArn) {
+          return yield* new CertificateUnexpectedResponse({ message: "CertificateNotFound" });
+        }
+        if (detail.Status === "ISSUED") {
+          return detail;
+        }
+        if (isTerminalFailure(detail.Status)) {
+          if (detail.FailureReason === "CAA_ERROR") {
+            return yield* new CertificateCaaError({
               certificateArn,
               domainName: detail.DomainName ?? "",
-            }),
-          );
+            });
+          }
+          return yield* new CertificateOperationFailed({
+            message: `Certificate issuance failed with status ${detail.Status}${detail.FailureReason ? ` (${detail.FailureReason})` : ""}`,
+          });
         }
-        return Effect.fail(
-          new Error(
-            `Certificate issuance failed with status ${detail.Status}${detail.FailureReason ? ` (${detail.FailureReason})` : ""}`,
-          ),
-        );
-      }
-      return Effect.fail(new Error("CertificatePendingValidation"));
-    }),
+        return yield* new CertificateNotReady({ message: "CertificatePendingValidation" });
+      }),
+    ),
     Effect.retry({
-      while: (error) => error instanceof Error && error.message === "CertificatePendingValidation",
+      while: (error) =>
+        error._tag === "CertificateNotReady" && error.message === "CertificatePendingValidation",
       schedule: Schedule.max([Schedule.fixed("10 seconds"), Schedule.recurs(60)]),
     }),
   );

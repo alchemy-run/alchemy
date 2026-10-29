@@ -139,7 +139,7 @@ export const LocationsStoredInfoType = Resource<LocationsStoredInfoType>(
 export class LocationsStoredInfoTypeNotResolved extends Data.TaggedError(
   "GCP.DLP.LocationsStoredInfoTypeNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, storedInfoTypeId: string) =>
@@ -177,10 +177,10 @@ const toAttrs = (stored: dlp.GooglePrivacyDlpV2StoredInfoType, project: string, 
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getProjectsLocationsStoredInfoTypes({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const LocationsStoredInfoTypeProvider = () =>
   Provider.succeed(LocationsStoredInfoType, {
@@ -267,7 +267,7 @@ export const LocationsStoredInfoTypeProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new LocationsStoredInfoTypeNotResolved({ name });
+        return yield* new LocationsStoredInfoTypeNotResolved({ resourceName: name });
       }
 
       const observed = current.currentVersion?.config;

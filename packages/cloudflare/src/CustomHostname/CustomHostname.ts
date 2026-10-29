@@ -453,7 +453,7 @@ export const CustomHostnameProvider = () =>
 const observeById = (zoneId: string, customHostnameId: string) =>
   customHostnames.getCustomHostname({ zoneId, customHostnameId }).pipe(
     Effect.map(narrowHostname),
-    Effect.catchTag("CustomHostnameNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("CustomHostnameNotFound", () => Effect.undefined),
   );
 
 // Locate an existing custom hostname by exact hostname. The API only

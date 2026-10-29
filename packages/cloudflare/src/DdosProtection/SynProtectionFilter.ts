@@ -198,7 +198,7 @@ type ObservedFilter = ddos.GetAdvancedTcpProtectionSynProtectionFilterItemRespon
 const getFilter = (accountId: string, filterId: string) =>
   ddos.getAdvancedTcpProtectionSynProtectionFilterItem({ accountId, filterId }).pipe(
     Effect.map((filter): ObservedFilter | undefined => filter),
-    Effect.catchTag("SynProtectionFilterNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("SynProtectionFilterNotFound", () => Effect.undefined),
   );
 
 /**

@@ -32,7 +32,7 @@ export const toBdaTagList = (tags: Record<string, string>): bda.Tag[] =>
 export const readBdaTags = Effect.fn(function* (resourceARN: string) {
   const response = yield* bda
     .listTagsForResource({ resourceARN })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return toBdaTagRecord(response?.tags);
 });
 

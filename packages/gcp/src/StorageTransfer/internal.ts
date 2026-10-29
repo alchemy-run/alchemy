@@ -17,18 +17,18 @@ export const DEFAULT_AGENT_POOL = "transfer_service_default";
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.StorageTransfer.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ResourceNotReady extends Data.TaggedError("GCP.StorageTransfer.ResourceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
 export class ResourceStillExists extends Data.TaggedError(
   "GCP.StorageTransfer.ResourceStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -238,18 +238,18 @@ export const collectPages = <Page, Item, E, R>(
 
 export const getAgentPool = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : storagetransfer.getProjectsAgentPools({ name }).pipe(
         retryApiDisabled,
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
 
 export const getTransferJob = (jobName: string, projectId: string) =>
   jobName.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : storagetransfer.getTransferJobs({ jobName, projectId }).pipe(
         retryApiDisabled,
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
 
 export const isDeletedJob = (job: storagetransfer.TransferJob | undefined) =>
@@ -259,11 +259,11 @@ export const waitAgentPoolCreated = (name: string) =>
   getAgentPool(name).pipe(
     Effect.filterOrFail(
       (pool): pool is storagetransfer.AgentPool => pool !== undefined,
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (pool) => (pool.state ?? "") !== "DELETING",
-      () => new ResourceNotResolved({ name }),
+      () => new ResourceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (pool) => {
@@ -272,7 +272,7 @@ export const waitAgentPoolCreated = (name: string) =>
       },
       (pool) =>
         new ResourceNotReady({
-          name,
+          resourceName: name,
           state: pool.state ?? "UNKNOWN",
         }),
     ),
@@ -281,13 +281,15 @@ export const waitAgentPoolCreated = (name: string) =>
       times: 10,
       schedule: Schedule.spaced("1 second"),
     }),
-    Effect.catchTag("GCP.StorageTransfer.ResourceNotResolved", () => Effect.succeed(undefined)),
+    Effect.catchTag("GCP.StorageTransfer.ResourceNotResolved", () => Effect.undefined),
   );
 
 export const waitAgentPoolGone = (name: string) =>
   getAgentPool(name).pipe(
     Effect.flatMap((pool) =>
-      pool === undefined ? Effect.void : Effect.fail(new ResourceStillExists({ name })),
+      pool === undefined
+        ? Effect.void
+        : Effect.fail(new ResourceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.StorageTransfer.ResourceStillExists",

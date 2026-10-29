@@ -5,20 +5,13 @@ import {
 } from "@distilled.cloud/aws/Credentials";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as sts from "@distilled.cloud/aws/sts";
+import { cacheUntilExpiry } from "alchemy/Auth/CredentialsCache";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
-import * as Ref from "effect/Ref";
 import * as Schedule from "effect/Schedule";
-import * as Semaphore from "effect/Semaphore";
 import { AWSEnvironment } from "./Environment.ts";
-
-/**
- * Refresh assumed-role credentials this long before they actually expire, so a
- * request never signs with credentials on the verge of expiring.
- */
-const CREDENTIAL_REFRESH_WINDOW_MS = 5 * 60 * 1000;
 
 // NB: do not re-export `fromEnv` here — it is unavailable under the
 // browser/workerd bundle condition (`credentials.browser`), which would break
@@ -45,7 +38,7 @@ export const fromEnvironment = Layer.effect(
 
 /**
  * Build a single-flight, expiry-aware assumed-role credentials **resolver**,
- * constructing the cache (a `Ref` + a 1-permit refresh semaphore) exactly once.
+ * constructing the cache exactly once.
  *
  * The OUTER effect builds the cache and returns the INNER resolver; run the
  * outer ONCE (e.g. when a binding initializes) and reuse the returned resolver
@@ -128,35 +121,9 @@ export const makeAssumeRoleResolver = (options: {
       ),
     );
 
-    // Single-flight, expiry-aware cache. A `Ref` holds the last-resolved
-    // credentials; a 1-permit semaphore serializes refreshes so that N
-    // concurrent callers observing stale/expiring credentials trigger
-    // exactly ONE `AssumeRole` call (the rest await the permit and then see
-    // the freshly-cached value via the re-check inside the critical section).
-    const cache = yield* Ref.make<ResolvedCredentials | undefined>(undefined);
-    const refreshLock = yield* Semaphore.make(1);
-
-    const isFresh = (creds: ResolvedCredentials | undefined): creds is ResolvedCredentials =>
-      creds !== undefined &&
-      (creds.expiration === undefined ||
-        creds.expiration - CREDENTIAL_REFRESH_WINDOW_MS > Date.now());
-
-    return Effect.gen(function* () {
-      const current = yield* Ref.get(cache);
-      // Fast path: cached and not within the refresh window.
-      if (isFresh(current)) return current;
-      // Slow path: acquire the refresh permit, re-check (another fiber may
-      // have refreshed while we waited), then resolve once and cache.
-      return yield* refreshLock.withPermits(1)(
-        Effect.gen(function* () {
-          const latest = yield* Ref.get(cache);
-          if (isFresh(latest)) return latest;
-          const resolved = yield* resolve;
-          yield* Ref.set(cache, resolved);
-          return resolved;
-        }),
-      );
-    });
+    // Expiry-aware and single-flight: N concurrent callers observing
+    // stale/expiring credentials trigger exactly ONE `AssumeRole` call.
+    return yield* cacheUntilExpiry(resolve, (creds) => creds.expiration);
   });
 
 /**
