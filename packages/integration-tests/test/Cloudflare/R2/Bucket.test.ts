@@ -1173,6 +1173,51 @@ test.provider(
 );
 
 test.provider(
+  "create and delete bucket in the us jurisdiction",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+
+      yield* stack.destroy();
+
+      const bucket = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("UsBucket", {
+            forceDestroy: true,
+            jurisdiction: "us",
+          });
+        }),
+      );
+      expect(bucket.jurisdiction).toEqual("us");
+
+      const actual = yield* getBucketWhenReady(bucket.bucketName, accountId, "us");
+      expect(actual.jurisdiction).toEqual("us");
+
+      // The bucket lives only in the `us` partition, not the default one.
+      const outsideUs = yield* r2
+        .getBucket({ accountId, bucketName: bucket.bucketName })
+        .pipe(Effect.flip);
+      expect(outsideUs._tag).toEqual("NoSuchBucket");
+
+      // An unchanged redeploy reads the bucket back from the `us` partition.
+      const plan = yield* stack.plan(
+        Effect.gen(function* () {
+          return yield* Cloudflare.R2.Bucket("UsBucket", {
+            forceDestroy: true,
+            jurisdiction: "us",
+          });
+        }),
+      );
+      expect(plan.resources.UsBucket?.action).toEqual("noop");
+
+      yield* stack.destroy();
+
+      yield* waitForBucketToBeDeleted(bucket.bucketName, accountId, "us");
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:r2", "live"] },
+);
+
+test.provider(
   "managed r2.dev domain is enabled and disabled",
   (stack) =>
     Effect.gen(function* () {
@@ -1353,8 +1398,12 @@ test.provider(
 
 // R2 bucket creates are eventually consistent — a read immediately after
 // deploy can briefly return NoSuchBucket until the bucket propagates.
-const getBucketWhenReady = Effect.fn(function* (bucketName: string, accountId: string) {
-  return yield* r2.getBucket({ accountId, bucketName }).pipe(
+const getBucketWhenReady = Effect.fn(function* (
+  bucketName: string,
+  accountId: string,
+  jurisdiction?: Cloudflare.R2.Bucket.Jurisdiction,
+) {
+  return yield* r2.getBucket({ accountId, bucketName, jurisdiction }).pipe(
     Effect.retry({
       while: (e) => e._tag === "NoSuchBucket",
       // Cap the backoff at 2s so we keep sampling instead of sleeping
@@ -1367,12 +1416,19 @@ const getBucketWhenReady = Effect.fn(function* (bucketName: string, accountId: s
   );
 });
 
-const waitForBucketToBeDeleted = Effect.fn(function* (bucketName: string, accountId: string) {
-  yield* r2.getBucket({ accountId, bucketName }).pipe(
+const waitForBucketToBeDeleted = Effect.fn(function* (
+  bucketName: string,
+  accountId: string,
+  jurisdiction?: Cloudflare.R2.Bucket.Jurisdiction,
+) {
+  yield* r2.getBucket({ accountId, bucketName, jurisdiction }).pipe(
     Effect.flatMap(() => Effect.fail(new BucketStillExists())),
     Effect.retry({
-      while: (e): e is BucketStillExists => e instanceof BucketStillExists,
-      schedule: Schedule.exponential(100),
+      while: (e) => e._tag === "BucketStillExists",
+      schedule: Schedule.max([
+        Schedule.min([Schedule.exponential("100 millis"), Schedule.spaced("2 seconds")]),
+        Schedule.recurs(20),
+      ]),
     }),
     Effect.catchTag("NoSuchBucket", () => Effect.void),
   );
