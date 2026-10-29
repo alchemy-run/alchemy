@@ -32,7 +32,8 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
     Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 30 }),
   );
 
-// A postgres db.t3.micro creates in ~5 minutes and deletes in ~2–4.
+// Deploy (postgres db.t3.micro + VPC Lambda) measured ~12 minutes; destroy
+// waits up to ~25 minutes for Lambda to release its VPC ENIs.
 test.provider.skipIf(!!process.env.FAST)(
   "connects to a DBInstance with its managed master secret and IAM auth",
   (stack) =>
@@ -113,6 +114,6 @@ test.provider.skipIf(!!process.env.FAST)(
     }),
   {
     tags: ["provider:aws", "provider:aws:ec2", "provider:aws:lambda", "provider:aws:rds", "live"],
-    timeout: 1_800_000,
+    timeout: 2_700_000,
   },
 );
