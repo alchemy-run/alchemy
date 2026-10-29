@@ -934,6 +934,30 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "BatchMigratableResourceMigrate (aiplatform.projects.locations.migratableResources.batchMigrate)",
+        () => probe("BatchMigratableResourceMigrate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "BatchPipelineJobCancel (aiplatform.projects.locations.pipelineJobs.batchCancel)",
+        () => probe("BatchPipelineJobCancel", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "BatchPipelineJobDelete (aiplatform.projects.locations.pipelineJobs.batchDelete)",
+        () => probe("BatchPipelineJobDelete", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "BatchSliceImport (aiplatform.projects.locations.models.evaluations.slices.batchImport)",
         () => probe("BatchSliceImport", false),
         {
@@ -1192,6 +1216,14 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "ImportModelEvaluation (aiplatform.projects.locations.models.evaluations.import)",
         () => probe("ImportModelEvaluation", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "IngestMemoryBankEvents (aiplatform.projects.locations.memoryBanks.ingestEvents)",
+        () => probe("IngestMemoryBankEvents", false),
         {
           tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
           timeout: 600_000,
@@ -1656,6 +1688,14 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "RawModelPredict (aiplatform.projects.locations.publishers.models.rawPredict)",
         () => probe("RawModelPredict", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "RebaseTuningJobTunedModel (aiplatform.projects.locations.tuningJobs.rebaseTunedModel)",
+        () => probe("RebaseTuningJobTunedModel", false),
         {
           tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
           timeout: 600_000,
@@ -2419,27 +2459,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "aiplatform.projects.locations.migratableResources.batchMigrate: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "aiplatform.projects.locations.persistentResources.reboot: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.pipelineJobs.batchCancel: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.pipelineJobs.batchDelete: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.memoryBanks.ingestEvents: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "aiplatform.projects.locations.tuningJobs.rebaseTunedModel: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

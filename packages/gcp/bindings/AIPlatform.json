@@ -204,7 +204,12 @@
   },
   "permissions": {
     "aiplatform.projects.getCacheConfig": "aiplatform.cacheConfigs.get",
-    "aiplatform.projects.updateCacheConfig": "aiplatform.cacheConfigs.update"
+    "aiplatform.projects.updateCacheConfig": "aiplatform.cacheConfigs.update",
+    "aiplatform.projects.locations.pipelineJobs.batchCancel": "aiplatform.pipelineJobs.cancel",
+    "aiplatform.projects.locations.pipelineJobs.batchDelete": "aiplatform.pipelineJobs.delete",
+    "aiplatform.projects.locations.memoryBanks.ingestEvents": "aiplatform.memories.create",
+    "aiplatform.projects.locations.tuningJobs.rebaseTunedModel": "aiplatform.tuningJobs.create",
+    "aiplatform.projects.locations.migratableResources.batchMigrate": "aiplatform.migratableResources.migrate"
   },
   "skip": {
     "aiplatform.projects.locations.reasoningEngines.get": "the hand-written binding of the same name reaches the same resource",

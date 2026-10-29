@@ -55,5 +55,8 @@
       "PluginsInstance": "Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest (\"Invalid resource state \u2026 API Hub instance \u2026\"). Set (GCP_TEST_APIHUB_INSTANCE)",
       "RuntimeProjectAttachment": "Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest (\"Invalid resource state \u2026 API Hub instance \u2026\"). Set (GCP_TEST_APIHUB_INSTANCE)"
     }
+  },
+  "permissions": {
+    "apihub.projects.locations.updateStyleGuide": "apihub.styleGuides.update"
   }
 }
