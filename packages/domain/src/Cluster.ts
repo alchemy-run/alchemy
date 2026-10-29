@@ -6,16 +6,19 @@ import * as ClusterSchema from "effect/cluster/ClusterSchema";
 import * as ClusterWorkflowEngine from "effect/cluster/ClusterWorkflowEngine";
 import * as DeliverAt from "effect/cluster/DeliverAt";
 import * as Entity from "effect/cluster/Entity";
+import * as MachineId from "effect/cluster/MachineId";
 import type * as MessageStorage from "effect/cluster/MessageStorage";
 import * as Sharding from "effect/cluster/Sharding";
 import type * as ShardingConfig from "effect/cluster/ShardingConfig";
 import * as SingleRunner from "effect/cluster/SingleRunner";
+import * as Snowflake from "effect/cluster/Snowflake";
 import type { ConfigError } from "effect/Config";
 import * as Digest from "effect/crypto/Digest";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Predicate from "effect/Predicate";
 import * as PrimaryKey from "effect/PrimaryKey";
 import * as PubSub from "effect/PubSub";
 import * as Rpc from "effect/rpc/Rpc";
@@ -24,6 +27,7 @@ import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Migrator from "effect/sql/Migrator";
 import * as SqlClient from "effect/sql/SqlClient";
+import * as SqlErrors from "effect/sql/SqlError";
 import type { SqlError } from "effect/sql/SqlError";
 import type * as Statement from "effect/sql/Statement";
 import * as Stream from "effect/Stream";
@@ -98,6 +102,31 @@ export interface Options {
    * @default the cluster's `entityMaxIdleTime`
    */
   readonly entityMaxIdleTime?: Duration.Input;
+  /**
+   * How long the sweeper keeps rows that only serve dedupe. `"forever"`
+   * keeps them.
+   *
+   * - `receipts`: receipts of accepted commands. A command sent again after
+   *   this time is decided again.
+   * - `cancelled`: cancelled timers. After this time, `unschedule` answers
+   *   `NotScheduled` instead of `AlreadyCancelled`.
+   * - `messages`: processed cluster messages to this host's entities, and
+   *   their replies. Effect never deletes them; saga (`Workflow/*`) messages
+   *   are left to the workflow engine.
+   *
+   * @default { receipts: "30 days", cancelled: "7 days", messages: "7 days" }
+   */
+  readonly retention?: {
+    readonly receipts?: Duration.Input | "forever";
+    readonly cancelled?: Duration.Input | "forever";
+    readonly messages?: Duration.Input | "forever";
+  };
+  /**
+   * Prefix of the cluster's message tables, for `retention.messages`: the
+   * `prefix` given to `SqlMessageStorage`.
+   * @default "cluster"
+   */
+  readonly clusterTablePrefix?: string;
 }
 
 /**
@@ -401,6 +430,17 @@ const emptyProjectionMeta: ProjectionMeta = {
   checkpoints: {},
 };
 
+const retentionMillis = (
+  value: Duration.Input | "forever" | undefined,
+  fallback: Duration.Input,
+): number | undefined =>
+  value === "forever" ? undefined : Duration.toMillis(Duration.fromInputUnsafe(value ?? fallback));
+
+/** A conflict the database resolved by aborting the transaction. */
+const isConflict = (error: SqlErrors.SqlError): boolean =>
+  error.isRetryable ||
+  (Predicate.hasProperty(error.reason.cause, "errno") && error.reason.cause.errno === 1020);
+
 const parse = (text: string | null): Json => (text === null ? null : JSON.parse(text));
 
 const make = (options: Options) =>
@@ -412,6 +452,15 @@ const make = (options: Options) =>
     const watchMillis = options.watchMillis ?? 250;
     const sweep = options.sweep ?? { intervalMillis: 10_000, afterMillis: 30_000 };
     const keep = options.viewEntries ?? 50;
+    const retention = {
+      receipts: retentionMillis(options.retention?.receipts, "30 days"),
+      cancelled: retentionMillis(options.retention?.cancelled, "7 days"),
+      messages: retentionMillis(options.retention?.messages, "7 days"),
+    };
+    const clusterTables = {
+      messages: sql(`${options.clusterTablePrefix ?? "cluster"}_messages`),
+      replies: sql(`${options.clusterTablePrefix ?? "cluster"}_replies`),
+    };
     const t = tableNames(prefix);
     const table = {
       aggregates: sql(t.aggregates),
@@ -433,6 +482,22 @@ const make = (options: Options) =>
     if (options.migrations !== false) yield* runMigrations(prefix);
 
     const now = Clock.currentTimeMillis;
+    /**
+     * Run a transaction, and run it again when the database aborted it to
+     * resolve a conflict (a deadlock, a serialization failure, or MariaDB's
+     * `ER_CHECKREAD` under `innodb_snapshot_isolation`, which the driver does
+     * not mark as retryable). The whole transaction runs again, never one
+     * statement inside it: on InnoDB the abort already rolled back the rest
+     * (https://github.com/Effect-TS/effect/issues/10162).
+     */
+    const transact = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+      sql.withTransaction(effect).pipe(
+        Effect.retry({
+          while: (error) => SqlErrors.isSqlError(error) && isConflict(error),
+          schedule: Schedule.exponential("10 millis"),
+          times: 8,
+        }),
+      );
     /** Insert rows, or nothing when there are none. */
     const insertAll = (
       into: Statement.Identifier,
@@ -633,6 +698,34 @@ const make = (options: Options) =>
         yield* wakeAt(fire.at);
       });
 
+    const sqlTrue = sql.onDialectOrElse({
+      sqlite: () => sql.literal("1"),
+      mssql: () => sql.literal("1"),
+      orElse: () => sql.literal("TRUE"),
+    });
+    /** Delete the rows `retention` no longer keeps. */
+    const prune = Effect.gen(function* () {
+      const at = yield* now;
+      if (retention.receipts !== undefined)
+        yield* sql`DELETE FROM ${table.receipts} WHERE at < ${at - retention.receipts}`;
+      if (retention.cancelled !== undefined)
+        yield* sql`DELETE FROM ${table.schedules} WHERE token = ${CANCELLED} AND at < ${at - retention.cancelled}`;
+      if (retention.messages !== undefined) {
+        // Message ids are snowflakes: the time they were made is in their high bits.
+        const before = String(
+          Snowflake.make({
+            timestamp: at - retention.messages,
+            machineId: MachineId.make(0),
+            sequence: 0,
+          }),
+        );
+        // Domain entities only (`Domain.Aggregate/…`, `Domain.View/…`, …).
+        const ours = "Domain.%";
+        yield* sql`DELETE FROM ${clusterTables.replies} WHERE request_id IN (SELECT id FROM ${clusterTables.messages} WHERE id < ${before} AND processed = ${sqlTrue} AND entity_type LIKE ${ours})`;
+        yield* sql`DELETE FROM ${clusterTables.messages} WHERE id < ${before} AND processed = ${sqlTrue} AND entity_type LIKE ${ours}`;
+      }
+    });
+
     /**
      * Forward outbox rows older than `afterMillis`, and send again the
      * `Fire` of timers due that long ago. At start (`everyTimer`), every
@@ -665,6 +758,7 @@ const make = (options: Options) =>
             ),
           { discard: true },
         );
+        yield* prune;
       }).pipe(
         Effect.catchCause((cause) => Effect.logWarning("Domain.Cluster: sweep failed", cause)),
       );
@@ -798,9 +892,7 @@ const make = (options: Options) =>
                 reportDefects(
                   Effect.gen(function* () {
                     const meta = payload.meta as Aggregate.SendMeta;
-                    const { sent, delivered } = yield* sql.withTransaction(
-                      commit(id, payload.command, meta),
-                    );
+                    const { sent, delivered } = yield* transact(commit(id, payload.command, meta));
                     if (sent._tag === "Accepted") yield* committed(id, delivered);
                     return sent as unknown;
                   }).pipe(Effect.orDie),
@@ -809,7 +901,7 @@ const make = (options: Options) =>
                 reportDefects(
                   Effect.gen(function* () {
                     const meta = payload.meta as Aggregate.SendMeta;
-                    const outcome = yield* sql.withTransaction(
+                    const outcome = yield* transact(
                       Effect.gen(function* () {
                         if (yield* receiptOf(id, meta.commandId)) return undefined;
                         const token = yield* Effect.sync(() => crypto.randomUUID());
@@ -842,29 +934,26 @@ const make = (options: Options) =>
                 ),
               Unschedule: ({ payload }) =>
                 reportDefects(
-                  sql
-                    .withTransaction(
-                      Effect.gen(function* () {
-                        const { commandId } = payload;
-                        if (yield* receiptOf(id, commandId)) return "AlreadyExecuted";
-                        const rows = yield* sql<{
-                          token: string;
-                        }>`SELECT token FROM ${table.schedules} WHERE name = ${kit.name} AND id = ${id} AND command_id = ${commandId}`;
-                        if (rows.length === 0) return "NotScheduled";
-                        if (rows[0]!.token === CANCELLED) return "AlreadyCancelled";
-                        const at = yield* now;
-                        yield* sql`UPDATE ${table.schedules} SET token = ${CANCELLED}, at = ${at} WHERE name = ${kit.name} AND id = ${id} AND command_id = ${commandId}`;
-                        return "Cancelled";
-                      }),
-                    )
-                    .pipe(
-                      Effect.map((outcome) => outcome as unknown),
-                      Effect.orDie,
-                    ),
+                  Effect.gen(function* () {
+                    const { commandId } = payload;
+                    if (yield* receiptOf(id, commandId)) return "AlreadyExecuted";
+                    const rows = yield* sql<{
+                      token: string;
+                    }>`SELECT token FROM ${table.schedules} WHERE name = ${kit.name} AND id = ${id} AND command_id = ${commandId}`;
+                    if (rows.length === 0) return "NotScheduled";
+                    if (rows[0]!.token === CANCELLED) return "AlreadyCancelled";
+                    const at = yield* now;
+                    yield* sql`UPDATE ${table.schedules} SET token = ${CANCELLED}, at = ${at} WHERE name = ${kit.name} AND id = ${id} AND command_id = ${commandId}`;
+                    return "Cancelled";
+                  }).pipe(
+                    transact,
+                    Effect.map((outcome) => outcome as unknown),
+                    Effect.orDie,
+                  ),
                 ),
               Fire: ({ payload }) =>
                 Effect.gen(function* () {
-                  const outcome = yield* sql.withTransaction(
+                  const outcome = yield* transact(
                     Effect.gen(function* () {
                       const rows =
                         yield* sql<ScheduleRow>`SELECT token, command, meta FROM ${table.schedules} WHERE name = ${kit.name} AND id = ${id} AND command_id = ${payload.commandId}`;
@@ -1012,9 +1101,9 @@ const make = (options: Options) =>
               Deliver: ({ payload }) =>
                 Effect.gen(function* () {
                   const deliveries = [payload.delivery as Delivery];
-                  const delivered = yield* sql
-                    .withTransaction(apply(key, deliveries))
-                    .pipe(kit.observe(key, deliveries));
+                  const delivered = yield* transact(apply(key, deliveries)).pipe(
+                    kit.observe(key, deliveries),
+                  );
                   if (delivered === undefined) return;
                   yield* announce(keyOf(key));
                   if (delivered) yield* kick(keyOf(key));
@@ -1173,27 +1262,20 @@ const make = (options: Options) =>
               if (run.length < size && waitMillis > 0 && (yield* now) - run[0]!.at < waitMillis) {
                 return yield* flushAt(key, run[0]!.at + waitMillis);
               }
-              const exit = yield* Effect.exit(
-                sql.withTransaction(
-                  Effect.gen(function* () {
-                    yield* kit.run(key, run);
-                    const handled: Record<string, number> = {};
-                    for (const { delivery } of run)
-                      handled[delivery.source] = Math.max(
-                        handled[delivery.source] ?? 0,
-                        delivery.seq,
-                      );
-                    const last = run[run.length - 1]!.position;
-                    const fresh = (yield* metaOf(key)) ?? meta;
-                    yield* putMeta(key, true, {
-                      ...fresh,
-                      processed: last,
-                      checkpoints: mergeCheckpoints(fresh.checkpoints, handled),
-                    });
-                    yield* sql`DELETE FROM ${table.projectionInputs} WHERE name = ${kit.name} AND id = ${key} AND position <= ${last}`;
-                  }),
-                ),
-              );
+              const exit = yield* Effect.gen(function* () {
+                yield* kit.run(key, run);
+                const handled: Record<string, number> = {};
+                for (const { delivery } of run)
+                  handled[delivery.source] = Math.max(handled[delivery.source] ?? 0, delivery.seq);
+                const last = run[run.length - 1]!.position;
+                const fresh = (yield* metaOf(key)) ?? meta;
+                yield* putMeta(key, true, {
+                  ...fresh,
+                  processed: last,
+                  checkpoints: mergeCheckpoints(fresh.checkpoints, handled),
+                });
+                yield* sql`DELETE FROM ${table.projectionInputs} WHERE name = ${kit.name} AND id = ${key} AND position <= ${last}`;
+              }).pipe(transact, Effect.exit);
               if (exit._tag === "Failure") {
                 yield* Effect.logError(`projection ${kit.name} failed; retrying`, exit.cause);
                 return yield* flushAt(key, (yield* now) + PROJECTION_RETRY_MS);
@@ -1207,9 +1289,10 @@ const make = (options: Options) =>
             const key = (yield* Entity.CurrentAddress).entityId;
             return entity.of({
               Deliver: ({ payload }) =>
-                sql
-                  .withTransaction(accept(key, payload.delivery as Delivery))
-                  .pipe(Effect.andThen(process(key)), Effect.orDie),
+                transact(accept(key, payload.delivery as Delivery)).pipe(
+                  Effect.andThen(process(key)),
+                  Effect.orDie,
+                ),
               Flush: () => process(key).pipe(Effect.orDie),
             });
           }),
