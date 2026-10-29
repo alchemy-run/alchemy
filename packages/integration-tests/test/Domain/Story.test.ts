@@ -423,6 +423,22 @@ describe("Domain Story", () => {
     ),
   );
 
+  it.effect("an answer the success schema rejects fails the policy", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.call(Approval.check, { total: 16 }),
+      Story.succeed(Approval.check, { ok: "yes" } as never),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(String((failure as any).message)).toMatch(
+          /a policy or projection failed: .*Approval\.check returned a value its success schema rejects/s,
+        ),
+      ),
+    ),
+  );
+
   it.effect("asserts what a real call was sent and returned", () =>
     real(
       Story.given(c1, new Incremented({ by: 10, total: 10 })),
