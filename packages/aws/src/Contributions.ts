@@ -8,17 +8,17 @@ export default Contributions.make({
   ),
   stateStores: {
     aws: {
-      description: "S3 state store in the profile's AWS account",
-      load: Contributions.lazy(
-        () => import("./Alchemist/StateStore.ts"),
-        (module) => module.stateStore,
-      ),
-    },
-    "aws-dynamodb": {
       description: "DynamoDB state store in the profile's AWS account",
       load: Contributions.lazy(
         () => import("./Alchemist/DynamoDBStateStore.ts"),
         (module) => module.stateStore,
+      ),
+    },
+    "aws-s3": {
+      description: "S3 state store in the profile's AWS account",
+      load: Contributions.lazy(
+        () => import("./Alchemist/StateStore.ts"),
+        (module) => module.s3StateStore,
       ),
     },
   },

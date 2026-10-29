@@ -96,16 +96,15 @@ profiles with `--profile` or `$ALCHEMY_PROFILE`.
 ## State storage
 
 For AWS stacks, pass `AWS.state()` as the Stack's `state`
-option. Deploy state is stored in an account-regional S3 bucket
-(`alchemy-state-{accountId}-{region}-an`), created lazily on the
-first deploy — the same configuration works locally and in CI
-with no extra setup. For purely local iteration,
-`Alchemy.localState()` writes state under `.alchemy/` next to
-your code instead.
+option. Deploy state is stored in a DynamoDB table
+(`alchemy-state`), created lazily on the first deploy. In CI,
+provision it once with `alchemy state bootstrap --backend aws`.
+For purely local iteration, `Alchemy.localState()` writes state
+under `.alchemy/` next to your code instead.
 
-`AWS.dynamoDBState()` stores state in a DynamoDB table
-(`alchemy-state`) instead, which makes deploys of large stacks
-much faster. See [DynamoDB state store](/state-store#dynamodb-state-store).
+State from earlier versions lives in an S3 bucket; move it with
+`alchemy state migrate`. See
+[Migrating from the S3 store](/state-store#migrating-from-the-s3-store).
 
 ## Next steps
 

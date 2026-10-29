@@ -109,12 +109,9 @@ provisions the store your `alchemy.run.ts` configures:
 alchemy state bootstrap --profile <your-ci-profile>
 ```
 
-`AWS.state()` behaves the same way: it creates its S3 bucket on first
-use, except in CI, where `alchemy state bootstrap --backend aws`
-provisions it.
-
-`AWS.dynamoDBState()` does the same with a DynamoDB table; see
-[DynamoDB state store](#dynamodb-state-store).
+`AWS.state()` behaves the same way: it creates its DynamoDB table on
+first use, except in CI, where `alchemy state bootstrap --backend aws`
+provisions it. See [AWS state store](#aws-state-store).
 
 `GCP.state()` does the same with a Cloud Storage bucket in your project,
 `alchemy-state-<project>`. In CI, provision it with
@@ -152,10 +149,9 @@ Address a named store from the CLI with `--name`:
 alchemy state list --backend cloudflare --name team-a
 ```
 
-`AWS.state({ name })` does the same with a separate S3 bucket
-(`alchemy-state-<name>-<account>-<region>-an`). Pass `bucketName` to
-choose the full bucket name yourself. `GCP.state({ name })` uses
-`alchemy-state-<name>-<project>`.
+`AWS.state({ name })` does the same with a separate DynamoDB table,
+`alchemy-state-<name>`; pass `tableName` to choose the full table name
+yourself. `GCP.state({ name })` uses `alchemy-state-<name>-<project>`.
 
 ### Pin the account
 
@@ -177,16 +173,16 @@ attaches it to the store's Worker as a custom domain and uses it from then on:
 state: Cloudflare.state({ domain: "alchemy-state.example.com" }),
 ```
 
-## DynamoDB state store
+## AWS state store
 
-`AWS.dynamoDBState()` keeps state in one on-demand DynamoDB table per account and region, `alchemy-state`. It is the faster AWS store: a deploy loads a stage's records with one query instead of reading an S3 object per resource.
+`AWS.state()` keeps state in one on-demand DynamoDB table per account and region, `alchemy-state`. A deploy loads a stage's records with one query instead of reading an object per resource.
 
 ```typescript
 Alchemy.Stack(
   "MyApp",
   {
     providers: AWS.providers(),
-    state: AWS.dynamoDBState(),
+    state: AWS.state(),
   },
   Effect.gen(function* () {
     // ...
@@ -194,15 +190,41 @@ Alchemy.Stack(
 );
 ```
 
-A DynamoDB item holds at most 400 KB. A record larger than `overflowThreshold` (300 KiB by default) is written to an S3 overflow bucket, `alchemy-state-overflow-<account>-<region>-an`, and its item keeps the object's key. The bucket is created the first time a record needs it.
+A DynamoDB item holds at most 400 KB. A record larger than `overflowThreshold` (300 KiB by default) is written to an S3 overflow bucket, `alchemy-state-overflow-<account>-<region>-an`, and its item keeps the object's key.
 
-Like `AWS.state()`, the store creates its table on first use, except in CI. Provision the table and its overflow bucket ahead of time with:
+The store creates its table, with deletion protection, and the overflow bucket on first use, except in CI. Provision them ahead of time with:
 
 ```sh
-alchemy state bootstrap --backend aws-dynamodb --profile <your-ci-profile>
+alchemy state bootstrap --backend aws --profile <your-ci-profile>
 ```
 
-`AWS.dynamoDBState({ name: "team-a" })` uses a separate table, `alchemy-state-team-a`.
+`AWS.state({ name: "team-a" })` uses a separate table, `alchemy-state-team-a`. `kmsKeyId` encrypts the table and the overflow bucket with your own KMS key.
+
+The credentials that deploy need DynamoDB access to the table and S3 access to the overflow bucket. The first deploy of a stage also lists the old S3 store's bucket, to check the stage isn't still there; `migrateFrom: false` skips that.
+
+### Migrating from the S3 store
+
+Earlier versions kept AWS state in an S3 bucket, `alchemy-state-<account>-<region>-an`. A stage still there fails to deploy until you move it. Run this in the project, so it migrates the store your entrypoint configures:
+
+```sh
+alchemy state migrate --profile <your-profile>
+```
+
+The command moves every stage, or the ones `--stack` and `--stage` select. It closes each moved stage's S3 objects in the bucket policy, so every older alchemy, say in a CI job you haven't upgraded, fails at its first read instead of deploying from the old copy. The S3 objects stay where they are. A stage you create in DynamoDB afterwards is locked in S3 too, so a teammate still on the S3 store can't create it a second time.
+
+A stage another deploy is running is skipped and reported. Run the command again once that deploy finishes; it picks up where it stopped, including after a crash.
+
+To go back to an older alchemy, move the stages back first:
+
+```sh
+alchemy state migrate --rollback
+```
+
+Roll back with the version you migrated with, before downgrading. State written by a newer version may use fields an older one can't read.
+
+### Keeping state in S3
+
+`AWS.state({ backend: "s3" })` keeps using the S3 bucket. So does any config that passes `bucketName`, `prefix` or `encryption`, which only the S3 store takes. Bootstrap it with `--backend aws-s3`.
 
 ## Postgres state store
 

@@ -20,7 +20,7 @@ import { provisionStateBucket, stateBucketExists, stateEnvironment } from "../St
  * Ensure a state table and its overflow bucket (by default the account's in
  * this region), with the settings first use would give them.
  */
-const bootstrapStateTable = Effect.fn("AWS.dynamoDBState.bootstrap")(function* (name?: string) {
+const bootstrapStateTable = Effect.fn("AWS.state.bootstrap")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
   if (name !== undefined) yield* Provisioning.storeName(name);
   const tableName = createStateTableName(name);
@@ -34,10 +34,12 @@ const bootstrapStateTable = Effect.fn("AWS.dynamoDBState.bootstrap")(function* (
 });
 
 /**
- * Delete a state table and empty and delete its overflow bucket, every
- * object version included. A missing table or bucket is not an error.
+ * Delete a state table, lifting its deletion protection, and empty and
+ * delete its overflow bucket, every object version included. The S3 store it
+ * replaced is kept: `--backend aws-s3` tears that down. A missing table or
+ * bucket is not an error.
  */
-const teardownStateTable = Effect.fn("AWS.dynamoDBState.teardown")(function* (name?: string) {
+const teardownStateTable = Effect.fn("AWS.state.teardownTable")(function* (name?: string) {
   const { accountId, region } = yield* AWSEnvironment.current;
   if (name !== undefined) yield* Provisioning.storeName(name);
   const tableName = createStateTableName(name);
@@ -50,6 +52,9 @@ const teardownStateTable = Effect.fn("AWS.dynamoDBState.teardown")(function* (na
   );
   if (table !== undefined) {
     if (table.TableStatus !== "DELETING") {
+      if (table.DeletionProtectionEnabled) {
+        yield* dynamodb.updateTable({ TableName: tableName, DeletionProtectionEnabled: false });
+      }
       yield* dynamodb.deleteTable({ TableName: tableName }).pipe(
         Effect.catchTag("ResourceNotFoundException", () => Effect.void),
         // Still creating or updating.
@@ -111,5 +116,8 @@ export const lifecycle: StateStoreLifecycle = {
   teardown: ({ name }) => teardownStateTable(name).pipe(Effect.provide(environment)),
 };
 
-/** The DynamoDB state store AWS contributes. */
-export const stateStore: StateStoreImpl = { layer: dynamoDBState, lifecycle };
+/** The state store AWS contributes, as `--backend aws`. */
+export const stateStore: StateStoreImpl = {
+  layer: (options) => dynamoDBState(options),
+  lifecycle,
+};
