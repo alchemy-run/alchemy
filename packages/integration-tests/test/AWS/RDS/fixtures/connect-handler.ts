@@ -2,6 +2,7 @@ import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as RDS from "@alchemy.run/aws/RDS";
 import * as Drizzle from "@alchemy.run/drizzle/Postgres";
 import { sql } from "drizzle-orm";
+import * as Cause from "effect/Cause";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -93,7 +94,12 @@ export default RdsConnectFunction.make(
           { error: "Not found", method: request.method, pathname },
           { status: 404 },
         );
-      }).pipe(Effect.orDie),
+      }).pipe(
+        // Surface the cause so a failing request explains itself in the test.
+        Effect.catchCause((cause) =>
+          HttpServerResponse.json({ error: Cause.pretty(cause) }, { status: 500 }),
+        ),
+      ),
     };
   }).pipe(Effect.provide(RDS.ConnectHttp)),
 );

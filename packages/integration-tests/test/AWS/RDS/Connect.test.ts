@@ -14,8 +14,7 @@ import { RdsConnectInfra } from "./fixtures/connect-infra.ts";
 const { test } = Test.make({ providers: AWS.providers() });
 
 class NotReady extends Data.TaggedError("NotReady")<{
-  readonly status: number;
-  readonly body: string;
+  readonly message: string;
 }> {}
 
 // A fresh function URL (DNS, IAM propagation, VPC ENI attachment) and the
@@ -26,10 +25,15 @@ const send = (request: HttpClientRequest.HttpClientRequest) =>
       response.status === 200
         ? response.json
         : Effect.flatMap(response.text, (body) =>
-            Effect.fail(new NotReady({ status: response.status, body })),
+            Effect.fail(
+              new NotReady({
+                message: `${request.method} ${request.url} -> ${response.status}: ${body}`,
+              }),
+            ),
           ),
     ),
-    Effect.retry({ schedule: Schedule.spaced("3 seconds"), times: 30 }),
+    Effect.tapError((error) => Effect.logWarning(error.message)),
+    Effect.retry({ schedule: Schedule.spaced("5 seconds"), times: 36 }),
   );
 
 // Deploy (postgres db.t3.micro + VPC Lambda) measured ~12 minutes; destroy
