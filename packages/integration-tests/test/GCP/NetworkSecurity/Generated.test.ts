@@ -567,9 +567,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("SecurityProfileGroup", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSecurityProfileGroup@SecurityProfileGroup (networksecurity.projects.locations.securityProfileGroups.get): SecurityProfileGroup: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetSecurityProfileGroup@SecurityProfileGroup (networksecurity.projects.locations.securityProfileGroups.get)",
+        () => probe("GetSecurityProfileGroup@SecurityProfileGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

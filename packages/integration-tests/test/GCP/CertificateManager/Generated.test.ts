@@ -65,9 +65,13 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Certificate", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetCertificate (certificatemanager.projects.locations.certificates.get): Certificate: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetCertificate (certificatemanager.projects.locations.certificates.get)",
+        () => probe("GetCertificate", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:certificatemanager", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -98,9 +102,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("CertificateMapEntry", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetCertificateMapEntry (certificatemanager.projects.locations.certificateMaps.certificateMapEntries.get): CertificateMapEntry: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetCertificateMapEntry (certificatemanager.projects.locations.certificateMaps.certificateMapEntries.get)",
+        () => probe("GetCertificateMapEntry", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:certificatemanager", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

@@ -106,7 +106,8 @@
       "InterceptDeploymentGroup": "ProbeInterceptGroup",
       "InterceptEndpointGroup": "ProbeInterceptEndpoints",
       "MirroringDeploymentGroup": "ProbeMirroringGroup",
-      "MirroringEndpointGroup": "ProbeMirroringEndpoints"
+      "MirroringEndpointGroup": "ProbeMirroringEndpoints",
+      "SecurityProfileGroup": "ProbeProfileGroup"
     },
     "untestable": {
       "AuthzPolicy": "Needs an existing application load balancer forwarding rule; set (GCP_TEST_AUTHZ_POLICY_TARGET)",

@@ -104,3 +104,10 @@ export const ProbeMirroringEndpoints = Effect.gen(function* () {
     mirroringDeploymentGroup: group.name,
   });
 });
+export const ProbeProfileGroup = Effect.gen(function* () {
+  const profile = yield* ProbeSecurityProfile;
+  return yield* GCP.NetworkSecurity.SecurityProfileGroup("ProbeProfileGroup", {
+    location: "global",
+    threatPreventionProfile: profile.name,
+  });
+});

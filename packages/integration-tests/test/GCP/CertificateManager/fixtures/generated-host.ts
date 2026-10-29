@@ -5,8 +5,10 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
 import {
+  ProbeCertificate,
   ProbeCertificateMap,
   ProbeDnsAuthorization,
+  ProbeMapEntry,
   ProbeTrustConfig,
 } from "./generated-resources.ts";
 
@@ -20,35 +22,41 @@ export default class CertificateManagerGeneratedHost extends GCP.Function<Certif
   "CertificateManagerGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.CertificateManager.GetCertificateMap(ProbeCertificateMap);
-    const p1 = yield* GCP.CertificateManager.GetDnsAuthorization(ProbeDnsAuthorization);
-    const p2 = yield* GCP.CertificateManager.GetTrustConfig(ProbeTrustConfig);
-    const p3 = yield* GCP.CertificateManager.ListCertificateIssuanceConfigs();
-    const p4 = yield* GCP.CertificateManager.ListCertificateMapEntries(ProbeCertificateMap);
-    const p5 = yield* GCP.CertificateManager.ListCertificateMaps();
-    const p6 = yield* GCP.CertificateManager.ListCertificates();
-    const p7 = yield* GCP.CertificateManager.ListDnsAuthorizations();
-    const p8 = yield* GCP.CertificateManager.ListTrustConfigs();
+    const p0 = yield* GCP.CertificateManager.GetCertificate(ProbeCertificate);
+    const p1 = yield* GCP.CertificateManager.GetCertificateMap(ProbeCertificateMap);
+    const p2 = yield* GCP.CertificateManager.GetCertificateMapEntry(ProbeMapEntry);
+    const p3 = yield* GCP.CertificateManager.GetDnsAuthorization(ProbeDnsAuthorization);
+    const p4 = yield* GCP.CertificateManager.GetTrustConfig(ProbeTrustConfig);
+    const p5 = yield* GCP.CertificateManager.ListCertificateIssuanceConfigs();
+    const p6 = yield* GCP.CertificateManager.ListCertificateMapEntries(ProbeCertificateMap);
+    const p7 = yield* GCP.CertificateManager.ListCertificateMaps();
+    const p8 = yield* GCP.CertificateManager.ListCertificates();
+    const p9 = yield* GCP.CertificateManager.ListDnsAuthorizations();
+    const p10 = yield* GCP.CertificateManager.ListTrustConfigs();
     return {
       fetch: serveProbes({
-        GetCertificateMap: outcome(Retry.none(p0({} as never))),
-        GetDnsAuthorization: outcome(Retry.none(p1({} as never))),
-        GetTrustConfig: outcome(Retry.none(p2({} as never))),
+        GetCertificate: outcome(Retry.none(p0({} as never))),
+        GetCertificateMap: outcome(Retry.none(p1({} as never))),
+        GetCertificateMapEntry: outcome(Retry.none(p2({} as never))),
+        GetDnsAuthorization: outcome(Retry.none(p3({} as never))),
+        GetTrustConfig: outcome(Retry.none(p4({} as never))),
         ListCertificateIssuanceConfigs: outcome(
-          Retry.none(p3({ location: "us-central1" } as never)),
+          Retry.none(p5({ location: "us-central1" } as never)),
         ),
-        ListCertificateMapEntries: outcome(Retry.none(p4({} as never))),
-        ListCertificateMaps: outcome(Retry.none(p5({ location: "us-central1" } as never))),
-        ListCertificates: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        ListDnsAuthorizations: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListTrustConfigs: outcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListCertificateMapEntries: outcome(Retry.none(p6({} as never))),
+        ListCertificateMaps: outcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListCertificates: outcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListDnsAuthorizations: outcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListTrustConfigs: outcome(Retry.none(p10({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.CertificateManager.GetCertificateHttp,
           GCP.CertificateManager.GetCertificateMapHttp,
+          GCP.CertificateManager.GetCertificateMapEntryHttp,
           GCP.CertificateManager.GetDnsAuthorizationHttp,
           GCP.CertificateManager.GetTrustConfigHttp,
           GCP.CertificateManager.ListCertificateIssuanceConfigsHttp,

@@ -25,7 +25,9 @@
     "resources": {
       "CertificateMap": "ProbeCertificateMap",
       "DnsAuthorization": "ProbeDnsAuthorization",
-      "TrustConfig": "ProbeTrustConfig"
+      "TrustConfig": "ProbeTrustConfig",
+      "Certificate": "ProbeCertificate",
+      "CertificateMapEntry": "ProbeMapEntry"
     },
     "untestable": {}
   },
