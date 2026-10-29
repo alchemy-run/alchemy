@@ -385,20 +385,24 @@ export const replaceOnIdentity = (input: {
 };
 
 /**
- * Create OS Config's service agents in the project. Google creates them on
- * first use of some APIs but not all: an orchestrator fails with "Service
- * agent ...@gcp-sa-osconfig-rollout... does not exist" until they exist.
+ * Create the service agents a policy orchestrator runs as: OS Config's and
+ * Progressive Rollout's. Google creates them on first use of some APIs but
+ * not all: an orchestrator fails with "Service agent ...@gcp-sa-progrollout...
+ * does not exist" until they exist.
  */
 export const ensureOsConfigServiceIdentity = (project: string) =>
-  Effect.gen(function* () {
-    const operation = yield* serviceusage
-      .generateServiceIdentityServices({
-        parent: `projects/${project}/services/osconfig.googleapis.com`,
-      })
-      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
-    if (operation === undefined) return;
-    yield* waitForGcpOperation(operation, (name) => serviceusage.getOperations({ name }), {
-      budget: "2 minutes",
-      interval: "2 seconds",
-    });
-  });
+  Effect.forEach(
+    ["osconfig.googleapis.com", "progressiverollout.googleapis.com"],
+    (service) =>
+      Effect.gen(function* () {
+        const operation = yield* serviceusage
+          .generateServiceIdentityServices({ parent: `projects/${project}/services/${service}` })
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
+        if (operation === undefined) return;
+        yield* waitForGcpOperation(operation, (name) => serviceusage.getOperations({ name }), {
+          budget: "2 minutes",
+          interval: "2 seconds",
+        });
+      }),
+    { discard: true },
+  );
