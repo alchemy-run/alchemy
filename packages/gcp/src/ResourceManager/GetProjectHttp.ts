@@ -19,7 +19,7 @@ export const GetProjectHttp = Layer.effect(
         resource: "GCP.ResourceManager.Project",
         operation: cloudresourcemanager.getProjects,
         param: "name",
-        iam: { role: "roles/resourcemanager.folderViewer" },
+        iam: { role: "roles/browser" },
       },
     ],
   }),

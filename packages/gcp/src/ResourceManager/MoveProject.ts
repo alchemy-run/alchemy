@@ -26,7 +26,7 @@ export type MoveProjectShape = (
  * Move a project to another place in your resource hierarchy, under a new resource parent.
  *
  * Bind it to a {@link Project} and provide {@link MoveProjectHttp}. The
- * host gets `roles/resourcemanager.folderMover` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/resourcemanager.projectMover` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `projects.move`

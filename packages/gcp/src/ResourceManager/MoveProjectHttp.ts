@@ -19,7 +19,7 @@ export const MoveProjectHttp = Layer.effect(
         resource: "GCP.ResourceManager.Project",
         operation: cloudresourcemanager.moveProjects,
         param: "name",
-        iam: { role: "roles/resourcemanager.folderMover" },
+        iam: { role: "roles/resourcemanager.projectMover" },
       },
     ],
   }),

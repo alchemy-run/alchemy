@@ -23,7 +23,7 @@ export type SearchProjectShape = () => Effect.Effect<
  * Search for projects that the caller has the `resourcemanager.projects.get` permission on, and also satisfy the specified query.
  *
  * A call on the stack's project, so it takes no resource.
- * Provide {@link SearchProjectHttp}. The host gets `roles/resourcemanager.folderViewer` on the project.
+ * Provide {@link SearchProjectHttp}. The host gets `roles/browser` on the project.
  *
  * ### Usage
  * **Example:** Call `projects.search`

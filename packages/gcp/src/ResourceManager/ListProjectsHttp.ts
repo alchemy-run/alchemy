@@ -18,7 +18,7 @@ export const ListProjectsHttp = Layer.effect(
       {
         operation: cloudresourcemanager.listProjects,
         // A global call: nothing names the project.
-        role: "roles/resourcemanager.folderViewer",
+        role: "roles/browser",
       },
     ],
   }),

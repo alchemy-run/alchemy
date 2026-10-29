@@ -23,7 +23,7 @@ export type GetProjectShape = (
  * Retrieves the project identified by the specified `name` (for example, `projects/415104041262`).
  *
  * Bind it to a {@link Project} and provide {@link GetProjectHttp}. The
- * host gets `roles/resourcemanager.folderViewer` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/browser` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `projects.get`

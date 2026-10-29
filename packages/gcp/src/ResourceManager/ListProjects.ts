@@ -23,7 +23,7 @@ export type ListProjectsShape = () => Effect.Effect<
  * Lists projects that are direct children of the specified folder or organization resource.
  *
  * A call on the stack's project, so it takes no resource.
- * Provide {@link ListProjectsHttp}. The host gets `roles/resourcemanager.folderViewer` on the project.
+ * Provide {@link ListProjectsHttp}. The host gets `roles/browser` on the project.
  *
  * ### Usage
  * **Example:** Call `projects.list`

@@ -34,6 +34,20 @@
   },
   "permissionService": "resourcemanager",
   "skip": {
-    "cloudresourcemanager.projects.undelete": "only a broad admin role grants resourcemanager.projects.undelete"
+    "cloudresourcemanager.projects.undelete": "only a broad admin role grants resourcemanager.projects.undelete",
+    "cloudresourcemanager.folders.get": "folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project (\"Role ... is not supported for this resource\")",
+    "cloudresourcemanager.folders.list": "folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project (\"Role ... is not supported for this resource\")",
+    "cloudresourcemanager.folders.search": "folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project (\"Role ... is not supported for this resource\")",
+    "cloudresourcemanager.folders.move": "folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project (\"Role ... is not supported for this resource\")",
+    "cloudresourcemanager.folders.undelete": "folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project (\"Role ... is not supported for this resource\")",
+    "cloudresourcemanager.folders.capabilities.get": "folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project (\"Role ... is not supported for this resource\")",
+    "cloudresourcemanager.folders.capabilities.patch": "folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project (\"Role ... is not supported for this resource\")",
+    "cloudresourcemanager.organizations.search": "organizations sit above the project: reading one needs organizationViewer on the organization, which IAM rejects on a project"
+  },
+  "roles": {
+    "cloudresourcemanager.projects.get": "roles/browser",
+    "cloudresourcemanager.projects.list": "roles/browser",
+    "cloudresourcemanager.projects.search": "roles/browser",
+    "cloudresourcemanager.projects.move": "roles/resourcemanager.projectMover"
   }
 }

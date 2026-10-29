@@ -74,15 +74,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "GetCapability (cloudresourcemanager.folders.capabilities.get): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "GetCapabilityConfig@Folder (cloudresourcemanager.folders.capabilityConfigs.get): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetFolder (cloudresourcemanager.folders.get): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
       test.provider.skip(
@@ -90,19 +82,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "MoveFolder (cloudresourcemanager.folders.move): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "PatchCapability (cloudresourcemanager.folders.capabilities.patch): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "PatchCapabilityConfig@Folder (cloudresourcemanager.folders.capabilityConfigs.patch): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "UndeleteFolder (cloudresourcemanager.folders.undelete): Folder: Live create returns Forbidden: Permission 'resourcemanager.folders.create' denied on resource '//cloudresourcemanager.googleapis.com/organizations/531963060189'. (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
     });
@@ -119,14 +99,6 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "GetTagValueNamespaced (cloudresourcemanager.tagValues.getNamespaced)",
         () => probe("GetTagValueNamespaced", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "ListFolders (cloudresourcemanager.folders.list)",
-        () => probe("ListFolders", true),
         {
           tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
           timeout: 600_000,
@@ -151,22 +123,6 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "ListTagValues (cloudresourcemanager.tagValues.list)",
         () => probe("ListTagValues", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "SearchFolder (cloudresourcemanager.folders.search)",
-        () => probe("SearchFolder", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "SearchOrganization (cloudresourcemanager.organizations.search)",
-        () => probe("SearchOrganization", false),
         {
           tags: ["provider:gcp", "provider:gcp:resourcemanager", "live"],
           timeout: 600_000,
@@ -274,6 +230,26 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        'cloudresourcemanager.folders.get: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'cloudresourcemanager.folders.move: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'cloudresourcemanager.folders.undelete: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'cloudresourcemanager.folders.capabilities.get: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'cloudresourcemanager.folders.capabilities.patch: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        () => Effect.void,
+      );
+      test.provider.skip(
         "cloudresourcemanager.locations.tagBindingCollections.patch: addressed under `locations/`, not a project",
         () => Effect.void,
       );
@@ -319,6 +295,18 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "cloudresourcemanager.liens.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'cloudresourcemanager.folders.list: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        'cloudresourcemanager.folders.search: folders sit above the project: their roles (folderViewer, folderEditor, folderMover) are granted on a folder or organization, and IAM rejects them on a project ("Role ... is not supported for this resource")',
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.organizations.search: organizations sit above the project: reading one needs organizationViewer on the organization, which IAM rejects on a project",
         () => Effect.void,
       );
       test.provider.skip(
