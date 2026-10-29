@@ -40,6 +40,12 @@ export interface BindingIam {
    * under a condition matching only the bound resource and its children.
    */
   scopeByCondition?: boolean;
+  /**
+   * More roles granted on the project alongside `role`, for operations
+   * that also write somewhere the bound resource's grant doesn't reach
+   * (a de-identify fills a destination dataset it creates).
+   */
+  also?: string[];
 }
 
 const nameExpression = (value: string) =>
@@ -62,6 +68,12 @@ export const grantFor = (iam: BindingIam, name: Input<string>): Input<GcpIamGran
     : iam.scopeByCondition
       ? { role: iam.role, condition: resourceNameCondition(name) }
       : { role: iam.role };
+
+/** Every grant `iam` makes: its role on the resource, plus `also` on the project. */
+export const grantsFor = (iam: BindingIam, name: Input<string>): Input<GcpIamGrant>[] => [
+  grantFor(iam, name),
+  ...(iam.also ?? []).map((role) => ({ role })),
+];
 
 /**
  * Shared HTTP scaffolding for GCP named-resource bindings.
@@ -88,7 +100,7 @@ export const makeNamedHttpBinding = <
       const resourceName = options.resourceName(resource);
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${resource})`({
-          iam: [grantFor(options.iam, resourceName)],
+          iam: grantsFor(options.iam, resourceName),
         });
       }
       const name = yield* resourceName;
@@ -172,7 +184,7 @@ export const makeGcpBinding = <Shape>(options: {
       const resourceName = attributes.name!;
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${resource})`({
-          iam: [grantFor(variant.iam, attributes[variant.grantOn ?? "name"]!)],
+          iam: grantsFor(variant.iam, attributes[variant.grantOn ?? "name"]!),
         });
       }
       // Flat-path variants address the resource by `params` alone.
@@ -228,6 +240,8 @@ export interface GcpProjectBindingVariant {
   readonly children?: ReadonlyArray<readonly [collection: string, field: string]>;
   /** Role the host gets on the project. */
   readonly role: string;
+  /** More roles granted on the project alongside `role`. */
+  readonly also?: readonly string[];
 }
 
 /** The project a project-scoped binding was deployed against was not handed to the host. */
@@ -258,7 +272,7 @@ export const makeGcpProjectBinding = <Shape>(options: {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const { project } = yield* GcpEnvironment.current;
         yield* bind`${options.tag}(${{ LogicalId: "project" }})`({
-          iam: [...new Set(options.variants.map((variant) => variant.role))].map((role) => ({
+          iam: [...new Set(options.variants.flatMap((variant) => [variant.role, ...(variant.also ?? [])]))].map((role) => ({
             role,
           })),
           env: { [PROJECT_KEY]: project },

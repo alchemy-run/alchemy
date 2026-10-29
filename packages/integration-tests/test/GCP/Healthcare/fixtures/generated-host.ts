@@ -38,59 +38,62 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
     const p8 = yield* GCP.Healthcare.ConditionalFhirPatch(ProbeFhirStore);
     const p9 = yield* GCP.Healthcare.ConditionalFhirUpdate(ProbeFhirStore);
     const p10 = yield* GCP.Healthcare.CreateFhirStoreFhir(ProbeFhirStore);
-    const p11 = yield* GCP.Healthcare.DeleteConsentRevision(ProbeConsent);
-    const p12 = yield* GCP.Healthcare.DeleteDicomStoreStudy(ProbeDicomStore);
-    const p13 = yield* GCP.Healthcare.DeleteDicomStoreStudySery(ProbeDicomStore);
-    const p14 = yield* GCP.Healthcare.DeleteDicomStoreStudySeryInstance(ProbeDicomStore);
-    const p15 = yield* GCP.Healthcare.EvaluateConsentStoreUserConsents(ProbeConsentStore);
-    const p16 = yield* GCP.Healthcare.ExecuteFhirBundle(ProbeFhirStore);
-    const p17 = yield* GCP.Healthcare.ExplainFhirStoreDataAccess(ProbeFhirStore);
-    const p18 = yield* GCP.Healthcare.ExportDicomStore(ProbeDicomStore);
-    const p19 = yield* GCP.Healthcare.ExportFhirStore(ProbeFhirStore);
-    const p20 = yield* GCP.Healthcare.ExportHl7V2Store(ProbeHl7V2Store);
-    const p21 = yield* GCP.Healthcare.GetAttributeDefinition(ProbeAttribute);
-    const p22 = yield* GCP.Healthcare.GetConsent(ProbeConsent);
-    const p23 = yield* GCP.Healthcare.GetConsentArtifact(ProbeArtifact);
-    const p24 = yield* GCP.Healthcare.GetConsentStore(ProbeConsentStore);
-    const p25 = yield* GCP.Healthcare.GetDataset(ProbeDataset);
-    const p26 = yield* GCP.Healthcare.GetDicomStore(ProbeDicomStore);
-    const p27 = yield* GCP.Healthcare.GetDICOMStoreMetrics(ProbeDicomStore);
-    const p28 = yield* GCP.Healthcare.GetFhirStore(ProbeFhirStore);
-    const p29 = yield* GCP.Healthcare.GetFHIRStoreMetrics(ProbeFhirStore);
-    const p30 = yield* GCP.Healthcare.GetHl7V2Store(ProbeHl7V2Store);
-    const p31 = yield* GCP.Healthcare.GetHL7v2StoreMetrics(ProbeHl7V2Store);
-    const p32 = yield* GCP.Healthcare.GetMessage(ProbeHl7Message);
-    const p33 = yield* GCP.Healthcare.GetUserDataMapping(ProbeMapping);
-    const p34 = yield* GCP.Healthcare.ImportDicomStore(ProbeDicomStore);
-    const p35 = yield* GCP.Healthcare.ImportFhirStore(ProbeFhirStore);
-    const p36 = yield* GCP.Healthcare.ImportHl7V2Store(ProbeHl7V2Store);
-    const p37 = yield* GCP.Healthcare.IngestHl7V2StoreMessage(ProbeHl7V2Store);
-    const p38 = yield* GCP.Healthcare.ListConsentRevisions(ProbeConsent);
-    const p39 = yield* GCP.Healthcare.ListConsentStoreAttributeDefinitions(ProbeConsentStore);
-    const p40 = yield* GCP.Healthcare.ListConsentStoreConsentArtifacts(ProbeConsentStore);
-    const p41 = yield* GCP.Healthcare.ListConsentStoreConsents(ProbeConsentStore);
-    const p42 = yield* GCP.Healthcare.ListConsentStoreUserDataMappings(ProbeConsentStore);
-    const p43 = yield* GCP.Healthcare.ListDatasetConsentStores(ProbeDataset);
-    const p44 = yield* GCP.Healthcare.ListDatasetDicomStores(ProbeDataset);
-    const p45 = yield* GCP.Healthcare.ListDatasetFhirStores(ProbeDataset);
-    const p46 = yield* GCP.Healthcare.ListDatasetHl7V2Stores(ProbeDataset);
-    const p47 = yield* GCP.Healthcare.ListDatasets();
-    const p48 = yield* GCP.Healthcare.ListHl7V2StoreMessages(ProbeHl7V2Store);
-    const p49 = yield* GCP.Healthcare.QueryConsentStoreAccessibleData(ProbeConsentStore);
-    const p50 = yield* GCP.Healthcare.RejectConsent(ProbeConsent);
-    const p51 = yield* GCP.Healthcare.RevokeConsent(ProbeConsent);
-    const p52 = yield* GCP.Healthcare.RollbackFhirStore(ProbeFhirStore);
-    const p53 = yield* GCP.Healthcare.RollbackHl7V2Store(ProbeHl7V2Store);
-    const p54 = yield* GCP.Healthcare.SearchDicomStoreForInstances(ProbeDicomStore);
-    const p55 = yield* GCP.Healthcare.SearchDicomStoreForSeries(ProbeDicomStore);
-    const p56 = yield* GCP.Healthcare.SearchDicomStoreForStudies(ProbeDicomStore);
-    const p57 = yield* GCP.Healthcare.SearchFhirStoreFhir(ProbeFhirStore);
-    const p58 = yield* GCP.Healthcare.SearchSeryForInstances(ProbeDicomStore);
-    const p59 = yield* GCP.Healthcare.SearchStudyForInstances(ProbeDicomStore);
-    const p60 = yield* GCP.Healthcare.SearchStudyForSeries(ProbeDicomStore);
-    const p61 = yield* GCP.Healthcare.SetDicomStoreBlobStorageSettings(ProbeDicomStore);
-    const p62 = yield* GCP.Healthcare.StoreDicomStoreInstances(ProbeDicomStore);
-    const p63 = yield* GCP.Healthcare.StoreStudyInstances(ProbeDicomStore);
+    const p11 = yield* GCP.Healthcare.DeidentifyDataset(ProbeDataset);
+    const p12 = yield* GCP.Healthcare.DeidentifyDicomStore(ProbeDicomStore);
+    const p13 = yield* GCP.Healthcare.DeidentifyFhirStore(ProbeFhirStore);
+    const p14 = yield* GCP.Healthcare.DeleteConsentRevision(ProbeConsent);
+    const p15 = yield* GCP.Healthcare.DeleteDicomStoreStudy(ProbeDicomStore);
+    const p16 = yield* GCP.Healthcare.DeleteDicomStoreStudySery(ProbeDicomStore);
+    const p17 = yield* GCP.Healthcare.DeleteDicomStoreStudySeryInstance(ProbeDicomStore);
+    const p18 = yield* GCP.Healthcare.EvaluateConsentStoreUserConsents(ProbeConsentStore);
+    const p19 = yield* GCP.Healthcare.ExecuteFhirBundle(ProbeFhirStore);
+    const p20 = yield* GCP.Healthcare.ExplainFhirStoreDataAccess(ProbeFhirStore);
+    const p21 = yield* GCP.Healthcare.ExportDicomStore(ProbeDicomStore);
+    const p22 = yield* GCP.Healthcare.ExportFhirStore(ProbeFhirStore);
+    const p23 = yield* GCP.Healthcare.ExportHl7V2Store(ProbeHl7V2Store);
+    const p24 = yield* GCP.Healthcare.GetAttributeDefinition(ProbeAttribute);
+    const p25 = yield* GCP.Healthcare.GetConsent(ProbeConsent);
+    const p26 = yield* GCP.Healthcare.GetConsentArtifact(ProbeArtifact);
+    const p27 = yield* GCP.Healthcare.GetConsentStore(ProbeConsentStore);
+    const p28 = yield* GCP.Healthcare.GetDataset(ProbeDataset);
+    const p29 = yield* GCP.Healthcare.GetDicomStore(ProbeDicomStore);
+    const p30 = yield* GCP.Healthcare.GetDICOMStoreMetrics(ProbeDicomStore);
+    const p31 = yield* GCP.Healthcare.GetFhirStore(ProbeFhirStore);
+    const p32 = yield* GCP.Healthcare.GetFHIRStoreMetrics(ProbeFhirStore);
+    const p33 = yield* GCP.Healthcare.GetHl7V2Store(ProbeHl7V2Store);
+    const p34 = yield* GCP.Healthcare.GetHL7v2StoreMetrics(ProbeHl7V2Store);
+    const p35 = yield* GCP.Healthcare.GetMessage(ProbeHl7Message);
+    const p36 = yield* GCP.Healthcare.GetUserDataMapping(ProbeMapping);
+    const p37 = yield* GCP.Healthcare.ImportDicomStore(ProbeDicomStore);
+    const p38 = yield* GCP.Healthcare.ImportFhirStore(ProbeFhirStore);
+    const p39 = yield* GCP.Healthcare.ImportHl7V2Store(ProbeHl7V2Store);
+    const p40 = yield* GCP.Healthcare.IngestHl7V2StoreMessage(ProbeHl7V2Store);
+    const p41 = yield* GCP.Healthcare.ListConsentRevisions(ProbeConsent);
+    const p42 = yield* GCP.Healthcare.ListConsentStoreAttributeDefinitions(ProbeConsentStore);
+    const p43 = yield* GCP.Healthcare.ListConsentStoreConsentArtifacts(ProbeConsentStore);
+    const p44 = yield* GCP.Healthcare.ListConsentStoreConsents(ProbeConsentStore);
+    const p45 = yield* GCP.Healthcare.ListConsentStoreUserDataMappings(ProbeConsentStore);
+    const p46 = yield* GCP.Healthcare.ListDatasetConsentStores(ProbeDataset);
+    const p47 = yield* GCP.Healthcare.ListDatasetDicomStores(ProbeDataset);
+    const p48 = yield* GCP.Healthcare.ListDatasetFhirStores(ProbeDataset);
+    const p49 = yield* GCP.Healthcare.ListDatasetHl7V2Stores(ProbeDataset);
+    const p50 = yield* GCP.Healthcare.ListDatasets();
+    const p51 = yield* GCP.Healthcare.ListHl7V2StoreMessages(ProbeHl7V2Store);
+    const p52 = yield* GCP.Healthcare.QueryConsentStoreAccessibleData(ProbeConsentStore);
+    const p53 = yield* GCP.Healthcare.RejectConsent(ProbeConsent);
+    const p54 = yield* GCP.Healthcare.RevokeConsent(ProbeConsent);
+    const p55 = yield* GCP.Healthcare.RollbackFhirStore(ProbeFhirStore);
+    const p56 = yield* GCP.Healthcare.RollbackHl7V2Store(ProbeHl7V2Store);
+    const p57 = yield* GCP.Healthcare.SearchDicomStoreForInstances(ProbeDicomStore);
+    const p58 = yield* GCP.Healthcare.SearchDicomStoreForSeries(ProbeDicomStore);
+    const p59 = yield* GCP.Healthcare.SearchDicomStoreForStudies(ProbeDicomStore);
+    const p60 = yield* GCP.Healthcare.SearchFhirStoreFhir(ProbeFhirStore);
+    const p61 = yield* GCP.Healthcare.SearchSeryForInstances(ProbeDicomStore);
+    const p62 = yield* GCP.Healthcare.SearchStudyForInstances(ProbeDicomStore);
+    const p63 = yield* GCP.Healthcare.SearchStudyForSeries(ProbeDicomStore);
+    const p64 = yield* GCP.Healthcare.SetDicomStoreBlobStorageSettings(ProbeDicomStore);
+    const p65 = yield* GCP.Healthcare.StoreDicomStoreInstances(ProbeDicomStore);
+    const p66 = yield* GCP.Healthcare.StoreStudyInstances(ProbeDicomStore);
     return {
       fetch: serveProbes({
         ActivateConsent: probeOutcome(Retry.none(p0({} as never))),
@@ -108,86 +111,89 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
             p10({ type: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        DeleteConsentRevision: probeOutcome(Retry.none(p11({} as never))),
+        DeidentifyDataset: probeOutcome(Retry.none(p11({} as never))),
+        DeidentifyDicomStore: probeOutcome(Retry.none(p12({} as never))),
+        DeidentifyFhirStore: probeOutcome(Retry.none(p13({} as never))),
+        DeleteConsentRevision: probeOutcome(Retry.none(p14({} as never))),
         DeleteDicomStoreStudy: probeOutcome(
-          Retry.none(p12({ dicomWebPath: "alchemy-missing" } as never)),
+          Retry.none(p15({ dicomWebPath: "alchemy-missing" } as never)),
         ),
         DeleteDicomStoreStudySery: probeOutcome(
-          Retry.none(p13({ dicomWebPath: "alchemy-missing" } as never)),
+          Retry.none(p16({ dicomWebPath: "alchemy-missing" } as never)),
         ),
         DeleteDicomStoreStudySeryInstance: probeOutcome(
-          Retry.none(p14({ dicomWebPath: "alchemy-missing" } as never)),
+          Retry.none(p17({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        EvaluateConsentStoreUserConsents: probeOutcome(Retry.none(p15({} as never))),
-        ExecuteFhirBundle: probeOutcome(Retry.none(p16({} as never))),
-        ExplainFhirStoreDataAccess: probeOutcome(Retry.none(p17({} as never))),
-        ExportDicomStore: probeOutcome(Retry.none(p18({} as never))),
-        ExportFhirStore: probeOutcome(Retry.none(p19({} as never))),
-        ExportHl7V2Store: probeOutcome(Retry.none(p20({} as never))),
-        GetAttributeDefinition: probeOutcome(Retry.none(p21({} as never))),
-        GetConsent: probeOutcome(Retry.none(p22({} as never))),
-        GetConsentArtifact: probeOutcome(Retry.none(p23({} as never))),
-        GetConsentStore: probeOutcome(Retry.none(p24({} as never))),
-        GetDataset: probeOutcome(Retry.none(p25({} as never))),
-        GetDicomStore: probeOutcome(Retry.none(p26({} as never))),
-        GetDICOMStoreMetrics: probeOutcome(Retry.none(p27({} as never))),
-        GetFhirStore: probeOutcome(Retry.none(p28({} as never))),
-        GetFHIRStoreMetrics: probeOutcome(Retry.none(p29({} as never))),
-        GetHl7V2Store: probeOutcome(Retry.none(p30({} as never))),
-        GetHL7v2StoreMetrics: probeOutcome(Retry.none(p31({} as never))),
-        GetMessage: probeOutcome(Retry.none(p32({} as never))),
-        GetUserDataMapping: probeOutcome(Retry.none(p33({} as never))),
+        EvaluateConsentStoreUserConsents: probeOutcome(Retry.none(p18({} as never))),
+        ExecuteFhirBundle: probeOutcome(Retry.none(p19({} as never))),
+        ExplainFhirStoreDataAccess: probeOutcome(Retry.none(p20({} as never))),
+        ExportDicomStore: probeOutcome(Retry.none(p21({} as never))),
+        ExportFhirStore: probeOutcome(Retry.none(p22({} as never))),
+        ExportHl7V2Store: probeOutcome(Retry.none(p23({} as never))),
+        GetAttributeDefinition: probeOutcome(Retry.none(p24({} as never))),
+        GetConsent: probeOutcome(Retry.none(p25({} as never))),
+        GetConsentArtifact: probeOutcome(Retry.none(p26({} as never))),
+        GetConsentStore: probeOutcome(Retry.none(p27({} as never))),
+        GetDataset: probeOutcome(Retry.none(p28({} as never))),
+        GetDicomStore: probeOutcome(Retry.none(p29({} as never))),
+        GetDICOMStoreMetrics: probeOutcome(Retry.none(p30({} as never))),
+        GetFhirStore: probeOutcome(Retry.none(p31({} as never))),
+        GetFHIRStoreMetrics: probeOutcome(Retry.none(p32({} as never))),
+        GetHl7V2Store: probeOutcome(Retry.none(p33({} as never))),
+        GetHL7v2StoreMetrics: probeOutcome(Retry.none(p34({} as never))),
+        GetMessage: probeOutcome(Retry.none(p35({} as never))),
+        GetUserDataMapping: probeOutcome(Retry.none(p36({} as never))),
         ImportDicomStore: probeOutcome(
-          Retry.none(p34({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+          Retry.none(p37({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         ImportFhirStore: probeOutcome(
-          Retry.none(p35({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+          Retry.none(p38({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         ImportHl7V2Store: probeOutcome(
-          Retry.none(p36({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+          Retry.none(p39({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        IngestHl7V2StoreMessage: probeOutcome(Retry.none(p37({} as never))),
-        ListConsentRevisions: probeOutcome(Retry.none(p38({} as never))),
-        ListConsentStoreAttributeDefinitions: probeOutcome(Retry.none(p39({} as never))),
-        ListConsentStoreConsentArtifacts: probeOutcome(Retry.none(p40({} as never))),
-        ListConsentStoreConsents: probeOutcome(Retry.none(p41({} as never))),
-        ListConsentStoreUserDataMappings: probeOutcome(Retry.none(p42({} as never))),
-        ListDatasetConsentStores: probeOutcome(Retry.none(p43({} as never))),
-        ListDatasetDicomStores: probeOutcome(Retry.none(p44({} as never))),
-        ListDatasetFhirStores: probeOutcome(Retry.none(p45({} as never))),
-        ListDatasetHl7V2Stores: probeOutcome(Retry.none(p46({} as never))),
-        ListDatasets: probeOutcome(Retry.none(p47({ location: "us-central1" } as never))),
-        ListHl7V2StoreMessages: probeOutcome(Retry.none(p48({} as never))),
-        QueryConsentStoreAccessibleData: probeOutcome(Retry.none(p49({} as never))),
-        RejectConsent: probeOutcome(Retry.none(p50({} as never))),
-        RevokeConsent: probeOutcome(Retry.none(p51({} as never))),
-        RollbackFhirStore: probeOutcome(Retry.none(p52({} as never))),
-        RollbackHl7V2Store: probeOutcome(Retry.none(p53({} as never))),
+        IngestHl7V2StoreMessage: probeOutcome(Retry.none(p40({} as never))),
+        ListConsentRevisions: probeOutcome(Retry.none(p41({} as never))),
+        ListConsentStoreAttributeDefinitions: probeOutcome(Retry.none(p42({} as never))),
+        ListConsentStoreConsentArtifacts: probeOutcome(Retry.none(p43({} as never))),
+        ListConsentStoreConsents: probeOutcome(Retry.none(p44({} as never))),
+        ListConsentStoreUserDataMappings: probeOutcome(Retry.none(p45({} as never))),
+        ListDatasetConsentStores: probeOutcome(Retry.none(p46({} as never))),
+        ListDatasetDicomStores: probeOutcome(Retry.none(p47({} as never))),
+        ListDatasetFhirStores: probeOutcome(Retry.none(p48({} as never))),
+        ListDatasetHl7V2Stores: probeOutcome(Retry.none(p49({} as never))),
+        ListDatasets: probeOutcome(Retry.none(p50({ location: "us-central1" } as never))),
+        ListHl7V2StoreMessages: probeOutcome(Retry.none(p51({} as never))),
+        QueryConsentStoreAccessibleData: probeOutcome(Retry.none(p52({} as never))),
+        RejectConsent: probeOutcome(Retry.none(p53({} as never))),
+        RevokeConsent: probeOutcome(Retry.none(p54({} as never))),
+        RollbackFhirStore: probeOutcome(Retry.none(p55({} as never))),
+        RollbackHl7V2Store: probeOutcome(Retry.none(p56({} as never))),
         SearchDicomStoreForInstances: probeOutcome(
-          Retry.none(p54({ dicomWebPath: "alchemy-missing" } as never)),
+          Retry.none(p57({ dicomWebPath: "alchemy-missing" } as never)),
         ),
         SearchDicomStoreForSeries: probeOutcome(
-          Retry.none(p55({ dicomWebPath: "alchemy-missing" } as never)),
-        ),
-        SearchDicomStoreForStudies: probeOutcome(
-          Retry.none(p56({ dicomWebPath: "alchemy-missing" } as never)),
-        ),
-        SearchFhirStoreFhir: probeOutcome(Retry.none(p57({} as never))),
-        SearchSeryForInstances: probeOutcome(
           Retry.none(p58({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        SearchStudyForInstances: probeOutcome(
+        SearchDicomStoreForStudies: probeOutcome(
           Retry.none(p59({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        SearchStudyForSeries: probeOutcome(
-          Retry.none(p60({ dicomWebPath: "alchemy-missing" } as never)),
+        SearchFhirStoreFhir: probeOutcome(Retry.none(p60({} as never))),
+        SearchSeryForInstances: probeOutcome(
+          Retry.none(p61({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        SetDicomStoreBlobStorageSettings: probeOutcome(Retry.none(p61({} as never))),
-        StoreDicomStoreInstances: probeOutcome(
+        SearchStudyForInstances: probeOutcome(
           Retry.none(p62({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        StoreStudyInstances: probeOutcome(
+        SearchStudyForSeries: probeOutcome(
           Retry.none(p63({ dicomWebPath: "alchemy-missing" } as never)),
+        ),
+        SetDicomStoreBlobStorageSettings: probeOutcome(Retry.none(p64({} as never))),
+        StoreDicomStoreInstances: probeOutcome(
+          Retry.none(p65({ dicomWebPath: "alchemy-missing" } as never)),
+        ),
+        StoreStudyInstances: probeOutcome(
+          Retry.none(p66({ dicomWebPath: "alchemy-missing" } as never)),
         ),
       }),
     };
@@ -206,6 +212,9 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
           GCP.Healthcare.ConditionalFhirPatchHttp,
           GCP.Healthcare.ConditionalFhirUpdateHttp,
           GCP.Healthcare.CreateFhirStoreFhirHttp,
+          GCP.Healthcare.DeidentifyDatasetHttp,
+          GCP.Healthcare.DeidentifyDicomStoreHttp,
+          GCP.Healthcare.DeidentifyFhirStoreHttp,
           GCP.Healthcare.DeleteConsentRevisionHttp,
           GCP.Healthcare.DeleteDicomStoreStudyHttp,
           GCP.Healthcare.DeleteDicomStoreStudySeryHttp,
@@ -232,11 +241,11 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
           GCP.Healthcare.ImportDicomStoreHttp,
           GCP.Healthcare.ImportFhirStoreHttp,
           GCP.Healthcare.ImportHl7V2StoreHttp,
+        ),
+        Layer.mergeAll(
           GCP.Healthcare.IngestHl7V2StoreMessageHttp,
           GCP.Healthcare.ListConsentRevisionsHttp,
           GCP.Healthcare.ListConsentStoreAttributeDefinitionsHttp,
-        ),
-        Layer.mergeAll(
           GCP.Healthcare.ListConsentStoreConsentArtifactsHttp,
           GCP.Healthcare.ListConsentStoreConsentsHttp,
           GCP.Healthcare.ListConsentStoreUserDataMappingsHttp,

@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
+import { grantsFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { CertificateAuthority } from "./CertificateAuthority.ts";
 
 /**
@@ -18,7 +18,7 @@ export const makeCertificateAuthorityHttpBinding = <I extends { name?: string },
     return Effect.fn(function* (ca: CertificateAuthority) {
       // CAs have no IAM policy of their own; access is granted on the parent pool.
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* bind`${options.tag}(${ca})`({ iam: [grantFor(options.iam, ca.caPool)] });
+        yield* bind`${options.tag}(${ca})`({ iam: grantsFor(options.iam, ca.caPool) });
       }
       const name = yield* ca.name;
       return Effect.fn(`${options.tag}(${ca.LogicalId})`)(function* (request?: Omit<I, "name">) {

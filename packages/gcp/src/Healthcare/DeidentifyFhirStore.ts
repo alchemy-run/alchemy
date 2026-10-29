@@ -26,7 +26,7 @@ export type DeidentifyFhirStoreShape = (
  * De-identifies data from the source store and writes it to the destination store.
  *
  * Bind it to a {@link DatasetsFhirStore} and provide {@link DeidentifyFhirStoreHttp}. The
- * host gets `roles/healthcare.fhirStoreAdmin` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/healthcare.fhirStoreAdmin`, `roles/healthcare.fhirResourceEditor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `fhirStores.deidentify`

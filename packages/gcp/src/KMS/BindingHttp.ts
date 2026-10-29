@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { grantFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
+import { grantsFor, type BindingIam, type GcpHttpOp } from "../HttpBinding.ts";
 import type { CryptoKey } from "./CryptoKey.ts";
 
 /**
@@ -17,7 +17,7 @@ export const makeCryptoKeyHttpBinding = <I extends { name?: string }, A, E>(opti
     const run = yield* GCPBindings.withCredentials(options.operation);
     return Effect.fn(function* (key: CryptoKey) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
-        yield* bind`${options.tag}(${key})`({ iam: [grantFor(options.iam, key.name)] });
+        yield* bind`${options.tag}(${key})`({ iam: grantsFor(options.iam, key.name) });
       }
       const name = yield* key.name;
       return Effect.fn(`${options.tag}(${key.LogicalId})`)(function* (request?: Omit<I, "name">) {

@@ -19,7 +19,7 @@ export const DeidentifyDicomStoreHttp = Layer.effect(
         resource: "GCP.Healthcare.DatasetsDicomStore",
         operation: healthcare.deidentifyProjectsLocationsDatasetsDicomStores,
         param: "sourceStore",
-        iam: { role: "roles/healthcare.dicomStoreAdmin" },
+        iam: { role: "roles/healthcare.dicomStoreAdmin", also: ["roles/healthcare.dicomEditor"] },
       },
     ],
   }),

@@ -19,7 +19,10 @@ export const DeidentifyFhirStoreHttp = Layer.effect(
         resource: "GCP.Healthcare.DatasetsFhirStore",
         operation: healthcare.deidentifyProjectsLocationsDatasetsFhirStores,
         param: "sourceStore",
-        iam: { role: "roles/healthcare.fhirStoreAdmin" },
+        iam: {
+          role: "roles/healthcare.fhirStoreAdmin",
+          also: ["roles/healthcare.fhirResourceEditor"],
+        },
       },
     ],
   }),

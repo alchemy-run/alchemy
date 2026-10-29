@@ -1,7 +1,7 @@
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, grantsFor } from "../HttpBinding.ts";
 import type { Database } from "./Database.ts";
 import type { DocumentSnapshot, ReadDatabaseClient } from "./ReadDatabase.ts";
 import { decodeFields, encodeFields, fieldPath } from "./Values.ts";
@@ -180,7 +180,7 @@ export const makeFirestoreDatabaseBinding = <Client>(options: {
     return Effect.fn(function* (database: Database) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${database})`({
-          iam: [grantFor(options.iam, database.name)],
+          iam: grantsFor(options.iam, database.name),
         });
       }
       const databaseName = yield* database.name;

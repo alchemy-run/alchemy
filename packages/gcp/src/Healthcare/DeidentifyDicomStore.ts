@@ -26,7 +26,7 @@ export type DeidentifyDicomStoreShape = (
  * De-identifies data from the source store and writes it to the destination store.
  *
  * Bind it to a {@link DatasetsDicomStore} and provide {@link DeidentifyDicomStoreHttp}. The
- * host gets `roles/healthcare.dicomStoreAdmin` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/healthcare.dicomStoreAdmin`, `roles/healthcare.dicomEditor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `dicomStores.deidentify`

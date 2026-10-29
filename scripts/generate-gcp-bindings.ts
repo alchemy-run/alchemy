@@ -138,9 +138,11 @@ interface ServiceConfig extends Partial<ApiConfig> {
    * Permission (or method id) → role, where `roles.json`'s smallest role is
    * a poor fit: `artifactregistry.repositories.get` is smallest in a
    * migration role that also reads Cloud Storage, and copying an object
-   * needs `storage.objects.get` on the source besides `create`.
+   * needs `storage.objects.get` on the source besides `create`. A list
+   * grants its first role as usual and the rest on the project, for calls
+   * that also write somewhere else (a de-identify fills a new dataset).
    */
-  roles?: Record<string, string>;
+  roles?: Record<string, string | string[]>;
   /** Derived binding name → name to use. */
   names?: Record<string, string>;
   /** Method id → reason it is not a binding. */
@@ -413,6 +415,8 @@ interface Variant {
   projectGrant?: string;
   permission: string;
   role: string;
+  /** More roles granted on the project alongside `role`. */
+  also: string[];
   types: OperationTypes;
 }
 
@@ -770,7 +774,9 @@ const classify = (options: {
       grantOn: config.grantOn?.[id],
       projectGrant: config.projectGrant?.[id],
       permission,
-      role: config.roles?.[id] ?? roles[permission]!,
+      ...(([role, ...also]) => ({ role: role!, also }))(
+        [config.roles?.[id] ?? roles[permission]!].flat(),
+      ),
       types,
     });
     bindings.set(name, binding);
@@ -836,7 +842,9 @@ const emitProjectContract = (service: string, binding: Binding) => {
   const responses = [...new Set(binding.variants.map((v) => `${v.api.ns}.${v.types.response}`))];
   const errors = [...new Set(binding.variants.map((v) => `${v.api.ns}.${v.types.error}`))];
   const variable = variableName(binding.name);
-  const grants = [...new Set(binding.variants.map((v) => `\`${v.role}\``))].join(", ");
+  const grants = [
+    ...new Set(binding.variants.flatMap((v) => [v.role, ...v.also].map((r) => `\`${r}\``))),
+  ].join(", ");
   const exampleFields = [
     ...(located && !global ? ['location: "us-central1"'] : []),
     ...childFieldsOf(first).map(([, field]) => `${field}: "..."`),
@@ -884,7 +892,7 @@ const emitProjectHttp = (service: string, binding: Binding) => {
     (v) => `    {
       operation: ${v.api.ns}.${v.fn},
       ${v.param !== undefined ? `param: "${v.param}",` : v.projectField !== undefined ? `projectField: "${v.projectField}",` : "// A global call: nothing names the project."}${v.scope === "location" ? "\n      location: true," : ""}${v.children.length ? `\n      children: [${v.children.map(([c, f]) => `["${c}", "${f}"]`).join(", ")}],` : ""}
-      role: "${v.role}",
+      role: "${v.role}",${v.also.length ? `\n      also: ${JSON.stringify(v.also)},` : ""}
     },`,
   );
   return `${HEADER(service)}${apiImports(binding, false)}
@@ -984,7 +992,9 @@ const emitContract = (service: string, config: ServiceConfig, binding: Binding) 
   const errors = [...new Set(binding.variants.map((v) => `${v.api.ns}.${v.types.error}`))];
   const resourceDocs = resourceTypes.map((r) => `{@link ${r}}`).join(" or ");
   const variable = variableName(binding.name);
-  const grants = [...new Set(binding.variants.map((v) => `\`${v.role}\``))].join(", ");
+  const grants = [
+    ...new Set(binding.variants.flatMap((v) => [v.role, ...v.also].map((r) => `\`${r}\``))),
+  ].join(", ");
   return `${HEADER(service)}${apiImports(binding, true)}
 import * as ${bindingNs} from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
@@ -1031,11 +1041,12 @@ const emitHttp = (service: string, config: ServiceConfig, binding: Binding) => {
     const resource = config.resources[v.resource]!;
     const type = resource.type ?? `GCP.${service}.${v.resource}`;
     const iamKind = v.projectGrant ? undefined : v.grantOn ? v.grantOn.iamKind : resource.iamKind;
+    const also = v.also.length ? `, also: ${JSON.stringify(v.also)}` : "";
     const iam = iamKind
-      ? `{ role: "${v.role}", on: "${iamKind}" }`
+      ? `{ role: "${v.role}", on: "${iamKind}"${also} }`
       : resource.scopeByCondition && !v.projectGrant
-        ? `{ role: "${v.role}", scopeByCondition: true }`
-        : `{ role: "${v.role}" }`;
+        ? `{ role: "${v.role}", scopeByCondition: true${also} }`
+        : `{ role: "${v.role}"${also} }`;
     const children =
       (v.children.length
         ? `\n      children: [${v.children.map(([c, f]) => `["${c}", "${f}"]`).join(", ")}],`

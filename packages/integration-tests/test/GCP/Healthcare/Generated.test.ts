@@ -65,9 +65,13 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Dataset", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeidentifyDataset (healthcare.projects.locations.datasets.deidentify): de-identify needs the admin permission on the source and data-plane write on the destination it fills; a binding grants one role",
-        () => Effect.void,
+      test.provider(
+        "DeidentifyDataset (healthcare.projects.locations.datasets.deidentify)",
+        () => probe("DeidentifyDataset", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
       test.provider(
         "GetDataset (healthcare.projects.locations.datasets.get)",
@@ -271,9 +275,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("DatasetsDicomStore", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeidentifyDicomStore (healthcare.projects.locations.datasets.dicomStores.deidentify): de-identify needs the admin permission on the source and data-plane write on the destination it fills; a binding grants one role",
-        () => Effect.void,
+      test.provider(
+        "DeidentifyDicomStore (healthcare.projects.locations.datasets.dicomStores.deidentify)",
+        () => probe("DeidentifyDicomStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
       test.provider(
         "DeleteDicomStoreStudy (healthcare.projects.locations.datasets.dicomStores.studies.delete)",
@@ -470,9 +478,13 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider.skip(
-        "DeidentifyFhirStore (healthcare.projects.locations.datasets.fhirStores.deidentify): de-identify needs the admin permission on the source and data-plane write on the destination it fills; a binding grants one role",
-        () => Effect.void,
+      test.provider(
+        "DeidentifyFhirStore (healthcare.projects.locations.datasets.fhirStores.deidentify)",
+        () => probe("DeidentifyFhirStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
       );
       test.provider(
         "ExecuteFhirBundle (healthcare.projects.locations.datasets.fhirStores.fhir.executeBundle)",

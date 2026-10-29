@@ -26,7 +26,7 @@ export type DeidentifyDatasetShape = (
  * Creates a new dataset containing de-identified data from the source dataset.
  *
  * Bind it to a {@link Dataset} and provide {@link DeidentifyDatasetHttp}. The
- * host gets `roles/healthcare.datasetAdmin` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/healthcare.datasetAdmin`, `roles/healthcare.dicomEditor`, `roles/healthcare.fhirResourceEditor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `datasets.deidentify`

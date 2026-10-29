@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as GCPBindings from "../GCPBindings.ts";
-import { type BindingIam, type GcpHttpOp, grantFor } from "../HttpBinding.ts";
+import { type BindingIam, type GcpHttpOp, grantsFor } from "../HttpBinding.ts";
 import type { Service } from "./Service.ts";
 import type { ServicesConnector } from "./ServicesConnector.ts";
 
@@ -19,7 +19,7 @@ export const makeServiceHttpBinding = <I extends { name: string }, A, E>(options
     return Effect.fn(function* (service: Service) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${service})`({
-          iam: [grantFor(options.iam, service.name)],
+          iam: grantsFor(options.iam, service.name),
         });
       }
       const name = yield* service.name;
@@ -45,7 +45,7 @@ export const makeConnectorHttpBinding = <I extends { name: string }, A, E>(optio
     return Effect.fn(function* (connector: ServicesConnector) {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         yield* bind`${options.tag}(${connector})`({
-          iam: [grantFor(options.iam, connector.name)],
+          iam: grantsFor(options.iam, connector.name),
         });
       }
       const name = yield* connector.name;

@@ -19,7 +19,10 @@ export const DeidentifyDatasetHttp = Layer.effect(
         resource: "GCP.Healthcare.Dataset",
         operation: healthcare.deidentifyProjectsLocationsDatasets,
         param: "sourceDataset",
-        iam: { role: "roles/healthcare.datasetAdmin" },
+        iam: {
+          role: "roles/healthcare.datasetAdmin",
+          also: ["roles/healthcare.dicomEditor", "roles/healthcare.fhirResourceEditor"],
+        },
       },
     ],
   }),
