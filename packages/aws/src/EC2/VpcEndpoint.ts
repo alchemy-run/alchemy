@@ -774,9 +774,11 @@ const waitForVpcEndpointDeleted = (vpcEndpointId: string, session: ScopedPlanSta
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "VpcEndpointDeleting",
-      schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(60)]).pipe(
+      // Interface endpoints sometimes take well over 3 minutes to leave
+      // `deleting`; budget 10.
+      schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(120)]).pipe(
         Schedule.tap(({ attempt }) =>
-          session.note(`Waiting for VPC Endpoint deletion... (${attempt * 3}s)`),
+          session.note(`Waiting for VPC Endpoint deletion... (${attempt * 5}s)`),
         ),
       ),
     }),
