@@ -39,7 +39,7 @@ test.provider.skipIf(!!process.env.FAST)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const region = yield* Region;
+      const region = yield* yield* Region;
       const { functionUrl, dbInstanceIdentifier, endpointAddress } = yield* stack.deploy(
         Effect.gen(function* () {
           const { network, endpointSecurityGroup, instance } = yield* RdsConnectInfra;
