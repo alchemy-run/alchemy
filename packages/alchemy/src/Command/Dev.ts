@@ -191,8 +191,15 @@ export const DevProviderLocal = () =>
               Stream.tap((text) =>
                 Effect.sync(() => {
                   if (Deferred.isDoneUnsafe(deferred)) return;
-                  buffer += text;
-                  const url = extractUrl(buffer);
+                  // Scan the new chunk plus a bounded tail of earlier output
+                  // (for a URL split across chunks): rescanning everything
+                  // printed so far on every chunk is quadratic for a chatty
+                  // server that never prints a URL. The whole chunk is
+                  // scanned before trimming, so a URL followed by more than
+                  // the window in the same chunk is still found.
+                  const scanned = buffer + text;
+                  buffer = scanned.slice(-URL_SCAN_WINDOW);
+                  const url = extractUrl(scanned);
                   if (!url) return;
                   Deferred.doneUnsafe(anyUrl, Effect.void);
                   if (isLocalUrl(url)) {
@@ -268,6 +275,9 @@ const URL_REGEX = /https?:\/\/[^\s)\],"'`]+/;
  * otherwise be eaten by the URL regex, so strip them first.
  * @internal
  */
+/** Characters of recent output searched for the dev server's URL. */
+const URL_SCAN_WINDOW = 8192;
+
 export const extractUrl = (text: string) => {
   const clean = stripVTControlCharacters(text);
   const url = clean.match(LOCAL_URL_REGEX)?.[0] ?? clean.match(URL_REGEX)?.[0];

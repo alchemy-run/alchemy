@@ -253,6 +253,34 @@ test.provider(
 );
 
 test.provider(
+  "extracts a URL followed by more output than the scan window in one write",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const output = yield* stack.deploy(
+        Command.Dev("Dev", {
+          command: `node ${urlServerScript}`,
+          env: {
+            PID_FILE: pidFile,
+            MARKER: "url-long-chunk",
+            URL_LINE: `Local: http://localhost:5173/ ${"x".repeat(16_384)}`,
+          },
+        }),
+      );
+
+      expect(output.url).toBe("http://localhost:5173/");
+
+      const { pid } = yield* waitForPidFile(pidFile, "url-long-chunk");
+      yield* stack.destroy();
+      yield* waitForDeath(pid);
+    }),
+  { tags: ["local"], timeout: 30_000 },
+);
+
+test.provider(
   "extracts a URL printed to stderr",
   (stack) =>
     Effect.gen(function* () {

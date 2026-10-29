@@ -61,9 +61,13 @@ jobs:
 
       - id: release
         name: Prepare release
+        # Pass the input through the environment: `${{ }}` in `run` is pasted
+        # into the script before the shell parses it, so quotes can't contain it.
+        env:
+          RELEASE_SPEC: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          node scripts/release/prepare.ts '${{ inputs.version }}' | tee -a "$GITHUB_OUTPUT"
+          node scripts/release/prepare.ts "$RELEASE_SPEC" | tee -a "$GITHUB_OUTPUT"
 
       - name: Build release packages
         run: pnpm build:pkg
