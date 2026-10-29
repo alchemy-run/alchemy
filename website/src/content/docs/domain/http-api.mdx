@@ -17,7 +17,7 @@ export const BankHttp = DomainHttp.toHttpApi(CustomerApi, {
 });
 ```
 
-`include` is required. It lists what to publish: an entry's name publishes all of its calls, and `"<entry>.<operation>"` publishes one. Nothing else is served, and a name the Api cannot serve is a type error. A public path has to stay once a client calls it, so nothing is published unless you list it.
+`include` is required. It lists what to publish: an entry's name publishes all of its calls, and `"<entry>.<operation>"` publishes one. Nothing else is served. A name the Api cannot serve is a type error, and serving it dies with a `DefinitionError`, as does a `status` for a failure no call declares. A public path has to stay once a client calls it, so nothing is published unless you list it.
 
 `BankHttp` has:
 

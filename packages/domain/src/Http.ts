@@ -6,7 +6,7 @@ import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
 import * as HttpApiGroup from "effect/http-api/HttpApiGroup";
 import * as HttpApiSchema from "effect/http-api/HttpApiSchema";
 import type { HttpServerRequest } from "effect/http/HttpServerRequest";
-import type * as Layer from "effect/Layer";
+import * as Layer from "effect/Layer";
 import type * as Rpc from "effect/rpc/Rpc";
 import type * as RpcGroup from "effect/rpc/RpcGroup";
 import * as RpcSchema from "effect/rpc/RpcSchema";
@@ -16,6 +16,7 @@ import * as Scope from "effect/Scope";
 import * as Sink from "effect/Sink";
 import * as Stream from "effect/Stream";
 import type { Entry } from "./Api.ts";
+import { DefinitionError } from "./internal.ts";
 import { nameOf, readRpcs, type ReadRpcs } from "./ReadRpcs.ts";
 
 /**
@@ -98,13 +99,16 @@ export interface Options<A extends Publishable> {
   /**
    * What to publish: an entry's name publishes all its calls, and
    * `"<name>.<operation>"` (`"Balance.get"`) publishes one. Nothing else is
-   * served. A published path is public: plan to keep it.
+   * served. A published path is public: plan to keep it. A name the Api
+   * cannot serve is a type error, and the Layer dies with a `DefinitionError`.
    */
   readonly include: ReadonlyArray<Includable<A>>;
   /**
    * The HTTP status of each typed failure, by `_tag`, such as
    * `{ NotOwner: 403 }`. A failure not listed here answers with its
    * `httpApiStatus` annotation if its schema has one, and with 422 if not.
+   * A tag no published call can fail with is a typo: the Layer dies with a
+   * `DefinitionError`.
    */
   readonly status?: Readonly<Record<string, number>>;
 }
@@ -237,26 +241,34 @@ const call = (client: Client, operation: Operation, request: DecodedRequest) => 
  * with a typed failure event. The in-process client lives until the stream
  * ends.
  */
-const live = (
+const live = Effect.fn(function* (
   client: Effect.Effect<Client, never, Scope.Scope>,
   operation: Operation,
   request: DecodedRequest,
-) =>
-  Effect.gen(function* () {
-    const scope = yield* Scope.make();
-    const peeled = yield* Effect.gen(function* () {
-      const reads = call(yield* client, operation, request) as Stream.Stream<unknown, unknown>;
-      return yield* Stream.peel(reads, Sink.take(1));
-    }).pipe(
-      Scope.provide(scope),
-      Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
-    );
-    const [first, rest] = peeled;
-    return Stream.fromIterable(first).pipe(
-      Stream.concat(rest),
-      Stream.onExit((exit) => Scope.close(scope, exit)),
-    );
-  });
+) {
+  const scope = yield* Scope.make();
+  const peeled = yield* Effect.gen(function* () {
+    const reads = call(yield* client, operation, request) as Stream.Stream<unknown, unknown>;
+    return yield* Stream.peel(reads, Sink.take(1));
+  }).pipe(
+    Scope.provide(scope),
+    Effect.onError((cause) => Scope.close(scope, Exit.failCause(cause))),
+  );
+  const [first, rest] = peeled;
+  return Stream.fromIterable(first).pipe(
+    Stream.concat(rest),
+    Stream.onExit((exit) => Scope.close(scope, exit)),
+  );
+});
+
+/** A call that answers once, through a client that lives for the request. */
+const once = Effect.fn(function* (
+  client: Effect.Effect<Client, never, Scope.Scope>,
+  operation: Operation,
+  request: DecodedRequest,
+) {
+  return yield* call(yield* client, operation, request) as Effect.Effect<unknown, unknown>;
+});
 
 /**
  * The SSE body of a live read: each value the RPC streams is one event's
@@ -389,13 +401,15 @@ export const toHttpApi = <A extends Publishable>(
   const calls = operationsOf(api);
   // Follow-up once `expose` lands (#2585): default `include` to the entries
   // whose `exposureOf(entry).http` is true.
+  // A name the Api cannot serve fails the Layer, like the model's own definition problems.
+  const problems: Array<DefinitionError> = [];
   const included = new Set<string>();
   for (const wanted of options.include as ReadonlyArray<string>) {
     const matched = calls.filter(
       (operation) => operation.entry === wanted || operation.rpc === wanted,
     );
     if (matched.length === 0) {
-      throw new Error(`${name} has no entry or call named ${wanted}`);
+      problems.push(new DefinitionError(`${name} has no entry or call named ${wanted}`));
     }
     for (const operation of matched) included.add(operation.rpc);
   }
@@ -407,7 +421,8 @@ export const toHttpApi = <A extends Publishable>(
     for (const failure of failuresOf(rpc)) tags.add(tagOf(failure));
   }
   for (const tag of Object.keys(options.status ?? {})) {
-    if (!tags.has(tag)) throw new Error(`${name} has no typed failure named ${tag}`);
+    if (!tags.has(tag))
+      problems.push(new DefinitionError(`${name} has no typed failure named ${tag}`));
   }
   const withStatus = (failure: Schema.Top): Schema.Top => {
     const tag = tagOf(failure);
@@ -434,9 +449,14 @@ export const toHttpApi = <A extends Publishable>(
   }
 
   const layerFor = (httpApi: HttpApi.HttpApi<string, HttpApiGroup.Constraint>) => {
-    if (!(name in httpApi.groups)) {
-      throw new Error(`${httpApi.identifier} does not hold the ${name} group: add it first`);
-    }
+    const problem =
+      problems[0] ??
+      (name in httpApi.groups
+        ? undefined
+        : new DefinitionError(
+            `${httpApi.identifier} does not hold the ${name} group: add it first`,
+          ));
+    if (problem) return Layer.effectDiscard(Effect.die(problem));
     return HttpApiBuilder.group(httpApi as never, name as never, (handlers: any) => {
       // The Api's in-process client: its handlers and middleware, nothing
       // serialized. One per request, as `yield* Api` builds one server per request.
@@ -451,12 +471,7 @@ export const toHttpApi = <A extends Publishable>(
                 declaredOnly,
                 Effect.map(Stream.catchIf((error) => !isDeclared(error), Stream.die)),
               )
-            : Effect.gen(function* () {
-                return yield* call(yield* client, operation, request) as Effect.Effect<
-                  unknown,
-                  unknown
-                >;
-              }).pipe(declaredOnly, Effect.scoped),
+            : once(client, operation, request).pipe(declaredOnly, Effect.scoped),
         );
       }
       return handlers;

@@ -3,8 +3,10 @@ import * as DomainHttp from "@alchemy.run/domain/Http";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as BunHttpServer from "@effect/platform-bun/BunHttpServer";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Sse from "effect/encoding/Sse";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as HttpApi from "effect/http-api/HttpApi";
 import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
@@ -497,14 +499,39 @@ describe("Domain toHttpApi", () => {
         ["Balance.snapshot", "GET", "/Balance/:key/snapshot"],
       ],
     );
-    // @ts-expect-error not a call of the view.
-    expect(() => DomainHttp.toHttpApi(WalletApi, { include: ["Balance.peek"] })).toThrow(
-      "Balance.peek",
-    );
-    // @ts-expect-error not an entry of the Api.
-    expect(() => DomainHttp.toHttpApi(WalletApi, { include: ["Withdraw"] })).toThrow("Withdraw");
-    expect(() =>
-      DomainHttp.toHttpApi(WalletApi, { include: ["Deposit"], status: { NotOwnr: 403 } }),
-    ).toThrow("NotOwnr");
   });
+
+  it.live("a name the Api cannot serve fails the Layer with a DefinitionError", () =>
+    Effect.gen(function* () {
+      /** The defect building the surface's Layer dies with. */
+      const defectOf = (surface: { readonly layer: Layer.Layer<any, never, any> }) =>
+        Layer.build(surface.layer).pipe(
+          Effect.provide(Hosted),
+          Effect.scoped,
+          Effect.exit,
+          Effect.map((exit) => (Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined)),
+        );
+
+      // @ts-expect-error not a call of the view.
+      const peek = yield* defectOf(DomainHttp.toHttpApi(WalletApi, { include: ["Balance.peek"] }));
+      expect(peek).toMatchObject({
+        _tag: "DefinitionError",
+        message: "WalletApi has no entry or call named Balance.peek",
+      });
+      // @ts-expect-error not an entry of the Api.
+      const withdraw = yield* defectOf(DomainHttp.toHttpApi(WalletApi, { include: ["Withdraw"] }));
+      expect(withdraw).toMatchObject({ _tag: "DefinitionError" });
+      // A status for a failure no call declares is a typo.
+      const typo = yield* defectOf(
+        DomainHttp.toHttpApi(WalletApi, { include: ["Deposit"], status: { NotOwnr: 403 } }),
+      );
+      expect(typo).toMatchObject({
+        _tag: "DefinitionError",
+        message: "WalletApi has no typed failure named NotOwnr",
+      });
+      // `layerFor` an HttpApi that does not hold the group.
+      const elsewhere = yield* defectOf({ layer: WalletHttp.layerFor(HttpApi.make("Elsewhere")) });
+      expect(elsewhere).toMatchObject({ _tag: "DefinitionError" });
+    }),
+  );
 });
