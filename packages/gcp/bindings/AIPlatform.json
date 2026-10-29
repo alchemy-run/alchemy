@@ -189,7 +189,12 @@
       "FeatureGroup": "ProbeFeatureGroup",
       "FeatureGroupsFeature": "ProbeGroupFeature",
       "FeatureOnlineStoresFeatureView": "ProbeFeatureView",
-      "Schedule": "ProbeSchedule"
+      "Schedule": "ProbeSchedule",
+      "HyperparameterTuningJob": "ProbeHyperparameterTuningJob",
+      "NasJob": "ProbeNasJob",
+      "PipelineJob": "ProbePipelineJob",
+      "BatchPredictionJob": "ProbeBatchPredictionJob",
+      "EvaluationRun": "ProbeEvaluationRun"
     },
     "untestable": {
       "Agent": "AgentService is v1beta1-only; the v1 SDK gets \"This API version is not supported by AgentService\"",
@@ -200,7 +205,9 @@
       "RagCorpora": "new projects must switch RAG Engine to Serverless mode first; Spanner mode is restricted in us-central1",
       "SemanticGovernancePolicy": "a policy governs an existing Vertex AI Agent, which the v1 API cannot create (GCP_TEST_AGENT)",
       "SpecialistPool": "Vertex AI data labeling is shut down (\"Data labeling service is shutdown\")",
-      "TuningJob": "the tuning service agent can't read the public sample dataset (gs://cloud-samples-data/ai-platform/tuning/sft_train.jsonl)"
+      "TuningJob": "the tuning service agent can't read the public sample dataset (gs://cloud-samples-data/ai-platform/tuning/sft_train.jsonl)",
+      "NotebookExecutionJob": "a notebook execution provisions a runtime VM for ~10 minutes (slow-gated in NotebookExecutionJob.test.ts)",
+      "PersistentResource": "a persistent resource keeps a VM pool running for ~15 minutes to provision (slow-gated in PersistentResource.test.ts)"
     }
   },
   "permissions": {

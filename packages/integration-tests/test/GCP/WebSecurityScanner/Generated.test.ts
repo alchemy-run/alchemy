@@ -76,41 +76,77 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ScanConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetScanConfig (websecurityscanner.projects.scanConfigs.get): ScanConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetScanConfig (websecurityscanner.projects.scanConfigs.get)",
+        () => probe("GetScanConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:websecurityscanner", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetScanConfigScanRun (websecurityscanner.projects.scanConfigs.scanRuns.get): ScanConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetScanConfigScanRun (websecurityscanner.projects.scanConfigs.scanRuns.get)",
+        () => probe("GetScanConfigScanRun", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:websecurityscanner", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetScanConfigScanRunFinding (websecurityscanner.projects.scanConfigs.scanRuns.findings.get): ScanConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetScanConfigScanRunFinding (websecurityscanner.projects.scanConfigs.scanRuns.findings.get)",
+        () => probe("GetScanConfigScanRunFinding", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:websecurityscanner", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListScanConfigScanRunCrawledUrls (websecurityscanner.projects.scanConfigs.scanRuns.crawledUrls.list): ScanConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListScanConfigScanRunCrawledUrls (websecurityscanner.projects.scanConfigs.scanRuns.crawledUrls.list)",
+        () => probe("ListScanConfigScanRunCrawledUrls", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:websecurityscanner", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListScanConfigScanRunFindings (websecurityscanner.projects.scanConfigs.scanRuns.findings.list): ScanConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListScanConfigScanRunFindings (websecurityscanner.projects.scanConfigs.scanRuns.findings.list)",
+        () => probe("ListScanConfigScanRunFindings", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:websecurityscanner", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListScanConfigScanRunFindingTypeStats (websecurityscanner.projects.scanConfigs.scanRuns.findingTypeStats.list): ScanConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListScanConfigScanRunFindingTypeStats (websecurityscanner.projects.scanConfigs.scanRuns.findingTypeStats.list)",
+        () => probe("ListScanConfigScanRunFindingTypeStats", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:websecurityscanner", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListScanConfigScanRuns (websecurityscanner.projects.scanConfigs.scanRuns.list): ScanConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListScanConfigScanRuns (websecurityscanner.projects.scanConfigs.scanRuns.list)",
+        () => probe("ListScanConfigScanRuns", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:websecurityscanner", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "StartScanConfig (websecurityscanner.projects.scanConfigs.start): ScanConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "StartScanConfig (websecurityscanner.projects.scanConfigs.start)",
+        () => probe("StartScanConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:websecurityscanner", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "StopScanConfigScanRun (websecurityscanner.projects.scanConfigs.scanRuns.stop): ScanConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "StopScanConfigScanRun (websecurityscanner.projects.scanConfigs.scanRuns.stop)",
+        () => probe("StopScanConfigScanRun", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:websecurityscanner", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

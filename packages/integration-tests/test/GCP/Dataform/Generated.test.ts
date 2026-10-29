@@ -119,30 +119,38 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("RepositoriesReleaseConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetReleaseConfig (dataform.projects.locations.repositories.releaseConfigs.get): RepositoriesReleaseConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetReleaseConfig (dataform.projects.locations.repositories.releaseConfigs.get)",
+        () => probe("GetReleaseConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("RepositoriesWorkflowConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetWorkflowConfig (dataform.projects.locations.repositories.workflowConfigs.get): RepositoriesWorkflowConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetWorkflowConfig (dataform.projects.locations.repositories.workflowConfigs.get)",
+        () => probe("GetWorkflowConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("RepositoriesWorkflowInvocation", { concurrent: true }, () => {
-      test.provider.todo(
-        "CancelWorkflowInvocation (dataform.projects.locations.repositories.workflowInvocations.cancel): RepositoriesWorkflowInvocation: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "CancelWorkflowInvocation (dataform.projects.locations.repositories.workflowInvocations.cancel): RepositoriesWorkflowInvocation: an invocation runs a compilation result, which needs workspace files written through the API first; RepositoriesWorkflowInvocation.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetWorkflowInvocation (dataform.projects.locations.repositories.workflowInvocations.get): RepositoriesWorkflowInvocation: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetWorkflowInvocation (dataform.projects.locations.repositories.workflowInvocations.get): RepositoriesWorkflowInvocation: an invocation runs a compilation result, which needs workspace files written through the API first; RepositoriesWorkflowInvocation.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "QueryWorkflowInvocation (dataform.projects.locations.repositories.workflowInvocations.query): RepositoriesWorkflowInvocation: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "QueryWorkflowInvocation (dataform.projects.locations.repositories.workflowInvocations.query): RepositoriesWorkflowInvocation: an invocation runs a compilation result, which needs workspace files written through the API first; RepositoriesWorkflowInvocation.test.ts covers it",
         () => Effect.void,
       );
     });

@@ -37,3 +37,15 @@ export const ProbePrivateConnection = Effect.gen(function* () {
     vpcPeeringConfig: { vpcName: network.networkName, subnet: "10.8.9.0/29" },
   });
 });
+export const ProbeMappingRule = Effect.gen(function* () {
+  const workspace = yield* ProbeConversionWorkspace;
+  return yield* GCP.DataMigration.ConversionWorkspacesMappingRule("ProbeMappingRule", {
+    conversionWorkspace: workspace.name,
+    location: "us-central1",
+    displayName: "rename-schema",
+    ruleScope: "DATABASE_ENTITY_TYPE_SCHEMA",
+    ruleOrder: "1000",
+    filter: { entities: ["src_schema"] },
+    singleEntityRename: { newName: "dst_schema" },
+  });
+});

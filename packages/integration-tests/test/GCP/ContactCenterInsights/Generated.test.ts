@@ -241,37 +241,69 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ConversationsAssessment", { concurrent: true }, () => {
-      test.provider.todo(
-        "AppealAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.appeal): ConversationsAssessment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "AppealAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.appeal)",
+        () => probe("AppealAssessment@ConversationsAssessment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "CreateAssessmentNote@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.create): ConversationsAssessment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CreateAssessmentNote@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.create)",
+        () => probe("CreateAssessmentNote@ConversationsAssessment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "DeleteAssessmentNote@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.delete): ConversationsAssessment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DeleteAssessmentNote@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.delete)",
+        () => probe("DeleteAssessmentNote@ConversationsAssessment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "FinalizeAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.finalize): ConversationsAssessment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "FinalizeAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.finalize)",
+        () => probe("FinalizeAssessment@ConversationsAssessment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.get): ConversationsAssessment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.get)",
+        () => probe("GetAssessment@ConversationsAssessment", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListAssessmentNotes@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.list): ConversationsAssessment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListAssessmentNotes@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.list)",
+        () => probe("ListAssessmentNotes@ConversationsAssessment", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "PatchAssessmentNote@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.patch): ConversationsAssessment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "PatchAssessmentNote@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.notes.patch)",
+        () => probe("PatchAssessmentNote@ConversationsAssessment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "PublishAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.publish): ConversationsAssessment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "PublishAssessment@ConversationsAssessment (contactcenterinsights.projects.locations.conversations.assessments.publish)",
+        () => probe("PublishAssessment@ConversationsAssessment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

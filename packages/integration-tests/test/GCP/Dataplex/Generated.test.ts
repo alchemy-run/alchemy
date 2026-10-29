@@ -121,9 +121,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("DataProductsDataAsset", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDataAsset (dataplex.projects.locations.dataProducts.dataAssets.get): DataProductsDataAsset: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDataAsset (dataplex.projects.locations.dataProducts.dataAssets.get)",
+        () => probe("GetDataAsset", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -217,9 +221,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("EntryGroupsEntryLink", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetEntryLink (dataplex.projects.locations.entryGroups.entryLinks.get): EntryGroupsEntryLink: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetEntryLink (dataplex.projects.locations.entryGroups.entryLinks.get)",
+        () => probe("GetEntryLink", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -338,43 +346,75 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("LakesEntitiesPartition", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPartition (dataplex.projects.locations.lakes.zones.entities.partitions.get): LakesEntitiesPartition: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetPartition (dataplex.projects.locations.lakes.zones.entities.partitions.get)",
+        () => probe("GetPartition", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("LakesEntity", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetEntity (dataplex.projects.locations.lakes.zones.entities.get): LakesEntity: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetEntity (dataplex.projects.locations.lakes.zones.entities.get)",
+        () => probe("GetEntity", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListEntityPartitions (dataplex.projects.locations.lakes.zones.entities.partitions.list): LakesEntity: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListEntityPartitions (dataplex.projects.locations.lakes.zones.entities.partitions.list)",
+        () => probe("ListEntityPartitions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("LakesTask", { concurrent: true }, () => {
-      test.provider.todo(
-        "CancelTaskJob (dataplex.projects.locations.lakes.tasks.jobs.cancel): LakesTask: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CancelTaskJob (dataplex.projects.locations.lakes.tasks.jobs.cancel)",
+        () => probe("CancelTaskJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetTask (dataplex.projects.locations.lakes.tasks.get): LakesTask: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTask (dataplex.projects.locations.lakes.tasks.get)",
+        () => probe("GetTask", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetTaskJob (dataplex.projects.locations.lakes.tasks.jobs.get): LakesTask: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTaskJob (dataplex.projects.locations.lakes.tasks.jobs.get)",
+        () => probe("GetTaskJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListTaskJobs (dataplex.projects.locations.lakes.tasks.jobs.list): LakesTask: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListTaskJobs (dataplex.projects.locations.lakes.tasks.jobs.list)",
+        () => probe("ListTaskJobs", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RunTask (dataplex.projects.locations.lakes.tasks.run): LakesTask: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RunTask (dataplex.projects.locations.lakes.tasks.run)",
+        () => probe("RunTask", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dataplex", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

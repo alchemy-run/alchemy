@@ -1,6 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import { deployProject } from "../../deployProject.ts";
 
 /** Dataplex resources the generated bindings bind, mirroring each resource suite's smallest shape. */
 
@@ -114,5 +115,71 @@ export const ProbeMetadataFeed = Effect.gen(function* () {
   return yield* GCP.Dataplex.MetadataFeed("ProbeMetadataFeed", {
     location: "us-central1",
     pubsubTopic: topic.name,
+  });
+});
+export const ProbeEntity = Effect.gen(function* () {
+  const bucket = yield* LandingBucket;
+  const zone = yield* ProbeZone;
+  const asset = yield* ProbeAsset;
+  return yield* GCP.Dataplex.LakesEntity("ProbeEntity", {
+    zone: zone.name,
+    asset: asset.assetId,
+    type: "TABLE",
+    system: "CLOUD_STORAGE",
+    dataPath: Output.interpolate`gs://${bucket.bucketName}/events`,
+    format: { format: "PARQUET" },
+    schema: { userManaged: true, fields: [{ name: "id", type: "STRING", mode: "REQUIRED" }] },
+  });
+});
+export const ProbePartition = Effect.gen(function* () {
+  const bucket = yield* LandingBucket;
+  const entity = yield* ProbeEntity;
+  return yield* GCP.Dataplex.LakesEntitiesPartition("ProbePartition", {
+    entity: entity.name,
+    values: ["2024-01-01"],
+    location: Output.interpolate`gs://${bucket.bucketName}/events/dt=2024-01-01`,
+  });
+});
+/** An on-demand task: it only runs when RunTask is called. */
+export const ProbeTask = Effect.gen(function* () {
+  const project = yield* deployProject;
+  const bucket = yield* LandingBucket;
+  const lake = yield* ProbeLake;
+  return yield* GCP.Dataplex.LakesTask("ProbeTask", {
+    lake: lake.name,
+    triggerSpec: { type: "ON_DEMAND" },
+    executionSpec: {
+      serviceAccount: `alchemy-testing@${project}.iam.gserviceaccount.com`,
+      args: { output_location: Output.interpolate`gs://${bucket.bucketName}/task-out` },
+    },
+    spark: { sqlScript: "SELECT 1" },
+  });
+});
+export const ProbeEntryLink = Effect.gen(function* () {
+  const type = yield* ProbeEntryType;
+  const group = yield* ProbeEntryGroup;
+  const left = yield* ProbeEntry;
+  const right = yield* GCP.Dataplex.EntryGroupsEntry("ProbeRightEntry", {
+    entryGroup: group.name,
+    entryType: type.name,
+  });
+  return yield* GCP.Dataplex.EntryGroupsEntryLink("ProbeEntryLink", {
+    entryGroup: group.name,
+    entryLinkType: "projects/dataplex-types/locations/global/entryLinkTypes/related",
+    entryReferences: [
+      { name: left.name, type: "UNSPECIFIED" },
+      { name: right.name, type: "UNSPECIFIED" },
+    ],
+  });
+});
+export const ProbeDataAsset = Effect.gen(function* () {
+  const dataset = yield* GCP.BigQuery.Dataset("ProbeProductData", {
+    location: "US-CENTRAL1",
+    forceDestroy: true,
+  });
+  const product = yield* ProbeDataProduct;
+  return yield* GCP.Dataplex.DataProductsDataAsset("ProbeDataAsset", {
+    parent: product.name,
+    resource: Output.interpolate`//bigquery.googleapis.com/projects/${dataset.project}/datasets/${dataset.datasetId}`,
   });
 });

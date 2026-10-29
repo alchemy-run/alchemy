@@ -80,7 +80,12 @@
       "LakesZone": "ProbeZone",
       "DataScan": "ProbeScan",
       "LakesAsset": "ProbeAsset",
-      "MetadataFeed": "ProbeMetadataFeed"
+      "MetadataFeed": "ProbeMetadataFeed",
+      "LakesEntity": "ProbeEntity",
+      "LakesEntitiesPartition": "ProbePartition",
+      "LakesTask": "ProbeTask",
+      "EntryGroupsEntryLink": "ProbeEntryLink",
+      "DataProductsDataAsset": "ProbeDataAsset"
     },
     "untestable": {
       "DataDomain": "Data domains are allowlisted: the testing project gets Forbidden \"Permission 'dataplex.dataDomains.get' denied\". Set (GCP_TEST_DATAPLEX_DATA_DOMAIN)",

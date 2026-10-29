@@ -72,13 +72,21 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("BatchPredictionJob", { concurrent: true }, () => {
-      test.provider.todo(
-        "CancelBatchPredictionJob (aiplatform.projects.locations.batchPredictionJobs.cancel): BatchPredictionJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CancelBatchPredictionJob (aiplatform.projects.locations.batchPredictionJobs.cancel)",
+        () => probe("CancelBatchPredictionJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetBatchPredictionJob (aiplatform.projects.locations.batchPredictionJobs.get): BatchPredictionJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetBatchPredictionJob (aiplatform.projects.locations.batchPredictionJobs.get)",
+        () => probe("GetBatchPredictionJob", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -333,13 +341,21 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("EvaluationRun", { concurrent: true }, () => {
-      test.provider.todo(
-        "CancelEvaluationRun (aiplatform.projects.locations.evaluationRuns.cancel): EvaluationRun: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CancelEvaluationRun (aiplatform.projects.locations.evaluationRuns.cancel)",
+        () => probe("CancelEvaluationRun", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetEvaluationRun (aiplatform.projects.locations.evaluationRuns.get): EvaluationRun: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetEvaluationRun (aiplatform.projects.locations.evaluationRuns.get)",
+        () => probe("GetEvaluationRun", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -592,13 +608,21 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("HyperparameterTuningJob", { concurrent: true }, () => {
-      test.provider.todo(
-        "CancelHyperparameterTuningJob (aiplatform.projects.locations.hyperparameterTuningJobs.cancel): HyperparameterTuningJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CancelHyperparameterTuningJob (aiplatform.projects.locations.hyperparameterTuningJobs.cancel)",
+        () => probe("CancelHyperparameterTuningJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetHyperparameterTuningJob (aiplatform.projects.locations.hyperparameterTuningJobs.get): HyperparameterTuningJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetHyperparameterTuningJob (aiplatform.projects.locations.hyperparameterTuningJobs.get)",
+        () => probe("GetHyperparameterTuningJob", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -872,27 +896,43 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("NasJob", { concurrent: true }, () => {
-      test.provider.todo(
-        "CancelNasJob (aiplatform.projects.locations.nasJobs.cancel): NasJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CancelNasJob (aiplatform.projects.locations.nasJobs.cancel)",
+        () => probe("CancelNasJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetNasJob (aiplatform.projects.locations.nasJobs.get): NasJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetNasJob (aiplatform.projects.locations.nasJobs.get)",
+        () => probe("GetNasJob", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetNasJobNasTrialDetail (aiplatform.projects.locations.nasJobs.nasTrialDetails.get): NasJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetNasJobNasTrialDetail (aiplatform.projects.locations.nasJobs.nasTrialDetails.get)",
+        () => probe("GetNasJobNasTrialDetail", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListNasJobNasTrialDetails (aiplatform.projects.locations.nasJobs.nasTrialDetails.list): NasJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListNasJobNasTrialDetails (aiplatform.projects.locations.nasJobs.nasTrialDetails.list)",
+        () => probe("ListNasJobNasTrialDetails", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("NotebookExecutionJob", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetNotebookExecutionJob (aiplatform.projects.locations.notebookExecutionJobs.get): NotebookExecutionJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetNotebookExecutionJob (aiplatform.projects.locations.notebookExecutionJobs.get): NotebookExecutionJob: a notebook execution provisions a runtime VM for ~10 minutes (slow-gated in NotebookExecutionJob.test.ts)",
         () => Effect.void,
       );
     });
@@ -924,20 +964,28 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("PersistentResource", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPersistentResource (aiplatform.projects.locations.persistentResources.get): PersistentResource: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetPersistentResource (aiplatform.projects.locations.persistentResources.get): PersistentResource: a persistent resource keeps a VM pool running for ~15 minutes to provision (slow-gated in PersistentResource.test.ts)",
         () => Effect.void,
       );
     });
 
     describe("PipelineJob", { concurrent: true }, () => {
-      test.provider.todo(
-        "CancelPipelineJob (aiplatform.projects.locations.pipelineJobs.cancel): PipelineJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CancelPipelineJob (aiplatform.projects.locations.pipelineJobs.cancel)",
+        () => probe("CancelPipelineJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetPipelineJob (aiplatform.projects.locations.pipelineJobs.get): PipelineJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetPipelineJob (aiplatform.projects.locations.pipelineJobs.get)",
+        () => probe("GetPipelineJob", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

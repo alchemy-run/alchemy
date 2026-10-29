@@ -49,3 +49,10 @@ export const ProbePhraseMatcher = GCP.ContactCenterInsights.PhraseMatcher("Probe
     },
   ],
 });
+export const ProbeAssessment = Effect.gen(function* () {
+  const conversation = yield* ProbeConversation;
+  return yield* GCP.ContactCenterInsights.ConversationsAssessment("ProbeAssessment", {
+    parent: conversation.name,
+    agentInfo: { agentId: "agent-1", displayName: "Ada", agentType: "HUMAN_AGENT" },
+  });
+});

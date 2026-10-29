@@ -22,9 +22,12 @@
     "resources": {
       "ConnectionProfile": "ProbeConnectionProfile",
       "ConversionWorkspace": "ProbeConversionWorkspace",
-      "PrivateConnection": "ProbePrivateConnection"
+      "PrivateConnection": "ProbePrivateConnection",
+      "ConversionWorkspacesMappingRule": "ProbeMappingRule"
     },
-    "untestable": {}
+    "untestable": {
+      "MigrationJob": "a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it"
+    }
   },
   "permissionCollections": {
     "conversionWorkspaces": "conversionworkspaces",

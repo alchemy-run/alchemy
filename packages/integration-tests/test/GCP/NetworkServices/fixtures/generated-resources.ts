@@ -77,3 +77,40 @@ export const ProbeTcpRoute = Effect.gen(function* () {
     ],
   });
 });
+export const ProbeAuthzExtension = Effect.gen(function* () {
+  const health = yield* GCP.Compute.RegionHealthCheck("ProbeAuthzHc", {
+    region: "us-central1",
+    type: "HTTP",
+    httpHealthCheck: { port: 80 },
+  });
+  const backend = yield* GCP.Compute.RegionBackendService("ProbeAuthzBe", {
+    region: "us-central1",
+    protocol: "HTTP2",
+    loadBalancingScheme: "INTERNAL_MANAGED",
+    healthChecks: [health.selfLink.as<string>()],
+  });
+  return yield* GCP.NetworkServices.AuthzExtension("ProbeAuthzExtension", {
+    location: "us-central1",
+    service: backend.selfLink.as<string>(),
+    authority: "authz.example.com",
+    timeout: "0.1s",
+    loadBalancingScheme: "INTERNAL_MANAGED",
+  });
+});
+export const ProbeTlsRoute = Effect.gen(function* () {
+  const mesh = yield* ProbeMesh;
+  const backend = yield* GCP.Compute.BackendService("ProbeTlsBackend", {
+    loadBalancingScheme: "INTERNAL_SELF_MANAGED",
+    protocol: "HTTP",
+  });
+  return yield* GCP.NetworkServices.TlsRoute("ProbeTlsRoute", {
+    location: "global",
+    meshes: [mesh.name],
+    rules: [
+      {
+        matches: [{ sniHost: ["api.example.com"], alpn: ["h2"] }],
+        action: { destinations: [{ serviceName: backend.selfLink ?? backend.name, weight: 1 }] },
+      },
+    ],
+  });
+});

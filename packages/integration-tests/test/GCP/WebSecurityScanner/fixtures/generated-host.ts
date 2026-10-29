@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeScanConfig } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated WebSecurityScanner binding as its own
@@ -15,13 +16,54 @@ export default class WebSecurityScannerGeneratedHost extends GCP.Function<WebSec
   "WebSecurityScannerGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.WebSecurityScanner.ListScanConfigs();
+    const p0 = yield* GCP.WebSecurityScanner.GetScanConfig(ProbeScanConfig);
+    const p1 = yield* GCP.WebSecurityScanner.GetScanConfigScanRun(ProbeScanConfig);
+    const p2 = yield* GCP.WebSecurityScanner.GetScanConfigScanRunFinding(ProbeScanConfig);
+    const p3 = yield* GCP.WebSecurityScanner.ListScanConfigs();
+    const p4 = yield* GCP.WebSecurityScanner.ListScanConfigScanRunCrawledUrls(ProbeScanConfig);
+    const p5 = yield* GCP.WebSecurityScanner.ListScanConfigScanRunFindings(ProbeScanConfig);
+    const p6 = yield* GCP.WebSecurityScanner.ListScanConfigScanRunFindingTypeStats(ProbeScanConfig);
+    const p7 = yield* GCP.WebSecurityScanner.ListScanConfigScanRuns(ProbeScanConfig);
+    const p8 = yield* GCP.WebSecurityScanner.StartScanConfig(ProbeScanConfig);
+    const p9 = yield* GCP.WebSecurityScanner.StopScanConfigScanRun(ProbeScanConfig);
     return {
       fetch: serveProbes({
-        ListScanConfigs: outcome(Retry.none(p0({} as never))),
+        GetScanConfig: outcome(Retry.none(p0({} as never))),
+        GetScanConfigScanRun: outcome(Retry.none(p1({ scanRun: "alchemy-missing" } as never))),
+        GetScanConfigScanRunFinding: outcome(
+          Retry.none(p2({ scanRun: "alchemy-missing", finding: "alchemy-missing" } as never)),
+        ),
+        ListScanConfigs: outcome(Retry.none(p3({} as never))),
+        ListScanConfigScanRunCrawledUrls: outcome(
+          Retry.none(p4({ scanRun: "alchemy-missing" } as never)),
+        ),
+        ListScanConfigScanRunFindings: outcome(
+          Retry.none(p5({ scanRun: "alchemy-missing" } as never)),
+        ),
+        ListScanConfigScanRunFindingTypeStats: outcome(
+          Retry.none(p6({ scanRun: "alchemy-missing" } as never)),
+        ),
+        ListScanConfigScanRuns: outcome(Retry.none(p7({} as never))),
+        StartScanConfig: outcome(Retry.none(p8({} as never))),
+        StopScanConfigScanRun: outcome(Retry.none(p9({ scanRun: "alchemy-missing" } as never))),
       }),
     };
   }).pipe(
-    Effect.provide(Layer.mergeAll(Layer.mergeAll(GCP.WebSecurityScanner.ListScanConfigsHttp))),
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.WebSecurityScanner.GetScanConfigHttp,
+          GCP.WebSecurityScanner.GetScanConfigScanRunHttp,
+          GCP.WebSecurityScanner.GetScanConfigScanRunFindingHttp,
+          GCP.WebSecurityScanner.ListScanConfigsHttp,
+          GCP.WebSecurityScanner.ListScanConfigScanRunCrawledUrlsHttp,
+          GCP.WebSecurityScanner.ListScanConfigScanRunFindingsHttp,
+          GCP.WebSecurityScanner.ListScanConfigScanRunFindingTypeStatsHttp,
+          GCP.WebSecurityScanner.ListScanConfigScanRunsHttp,
+          GCP.WebSecurityScanner.StartScanConfigHttp,
+          GCP.WebSecurityScanner.StopScanConfigScanRunHttp,
+        ),
+      ),
+    ),
   ),
 ) {}

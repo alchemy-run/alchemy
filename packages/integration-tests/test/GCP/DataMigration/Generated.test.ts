@@ -191,67 +191,71 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ConversionWorkspacesMappingRule", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetMappingRule (datamigration.projects.locations.conversionWorkspaces.mappingRules.get): ConversionWorkspacesMappingRule: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetMappingRule (datamigration.projects.locations.conversionWorkspaces.mappingRules.get)",
+        () => probe("GetMappingRule", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datamigration", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("MigrationJob", { concurrent: true }, () => {
-      test.provider.todo(
-        "DemoteMigrationJobDestination (datamigration.projects.locations.migrationJobs.demoteDestination): MigrationJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "DemoteMigrationJobDestination (datamigration.projects.locations.migrationJobs.demoteDestination): MigrationJob: a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "FetchMigrationJobSourceObjects (datamigration.projects.locations.migrationJobs.fetchSourceObjects): MigrationJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "FetchMigrationJobSourceObjects (datamigration.projects.locations.migrationJobs.fetchSourceObjects): MigrationJob: a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GenerateMigrationJobSshScript (datamigration.projects.locations.migrationJobs.generateSshScript): MigrationJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GenerateMigrationJobSshScript (datamigration.projects.locations.migrationJobs.generateSshScript): MigrationJob: a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GenerateMigrationJobTcpProxyScript (datamigration.projects.locations.migrationJobs.generateTcpProxyScript): MigrationJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GenerateMigrationJobTcpProxyScript (datamigration.projects.locations.migrationJobs.generateTcpProxyScript): MigrationJob: a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetMigrationJob (datamigration.projects.locations.migrationJobs.get): MigrationJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetMigrationJob (datamigration.projects.locations.migrationJobs.get): MigrationJob: a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetMigrationJobObject (datamigration.projects.locations.migrationJobs.objects.get): MigrationJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetMigrationJobObject (datamigration.projects.locations.migrationJobs.objects.get): MigrationJob: a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListMigrationJobObjects (datamigration.projects.locations.migrationJobs.objects.list): MigrationJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListMigrationJobObjects (datamigration.projects.locations.migrationJobs.objects.list): MigrationJob: a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "LookupMigrationJobObject (datamigration.projects.locations.migrationJobs.objects.lookup): MigrationJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "LookupMigrationJobObject (datamigration.projects.locations.migrationJobs.objects.lookup): MigrationJob: a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "PromoteMigrationJob (datamigration.projects.locations.migrationJobs.promote): MigrationJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "PromoteMigrationJob (datamigration.projects.locations.migrationJobs.promote): MigrationJob: a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RestartMigrationJob (datamigration.projects.locations.migrationJobs.restart): MigrationJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RestartMigrationJob (datamigration.projects.locations.migrationJobs.restart): MigrationJob: a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ResumeMigrationJob (datamigration.projects.locations.migrationJobs.resume): MigrationJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ResumeMigrationJob (datamigration.projects.locations.migrationJobs.resume): MigrationJob: a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "StartMigrationJob (datamigration.projects.locations.migrationJobs.start): MigrationJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "StartMigrationJob (datamigration.projects.locations.migrationJobs.start): MigrationJob: a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "StopMigrationJob (datamigration.projects.locations.migrationJobs.stop): MigrationJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "StopMigrationJob (datamigration.projects.locations.migrationJobs.stop): MigrationJob: a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "VerifyMigrationJob (datamigration.projects.locations.migrationJobs.verify): MigrationJob: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "VerifyMigrationJob (datamigration.projects.locations.migrationJobs.verify): MigrationJob: a migration job needs a Cloud SQL destination instance (slow and billed per hour); MigrationJob.test.ts covers it",
         () => Effect.void,
       );
     });

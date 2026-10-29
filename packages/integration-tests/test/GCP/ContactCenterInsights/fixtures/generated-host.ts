@@ -7,6 +7,7 @@ import { outcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeAnalysis,
   ProbeAnalysisRule,
+  ProbeAssessment,
   ProbeConversation,
   ProbePhraseMatcher,
   ProbeQaQuestionTag,
@@ -23,79 +24,94 @@ export default class ContactCenterInsightsGeneratedHost extends GCP.Function<Con
   "ContactCenterInsightsGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.ContactCenterInsights.BulkConversationAnalyze();
-    const p1 = yield* GCP.ContactCenterInsights.BulkConversationDelete();
-    const p2 = yield* GCP.ContactCenterInsights.BulkDatasetDeleteFeedbackLabels();
-    const p3 = yield* GCP.ContactCenterInsights.BulkDatasetDownloadFeedbackLabels();
-    const p4 = yield* GCP.ContactCenterInsights.BulkDatasetUploadFeedbackLabels();
-    const p5 = yield* GCP.ContactCenterInsights.BulkSegmentAnalyze(ProbeConversation);
-    const p6 = yield* GCP.ContactCenterInsights.CalculateConversationStats();
-    const p7 = yield* GCP.ContactCenterInsights.CreateDataset();
-    const p8 = yield* GCP.ContactCenterInsights.DeleteDataset();
-    const p9 = yield* GCP.ContactCenterInsights.DeleteDatasetConversation();
-    const p10 = yield* GCP.ContactCenterInsights.ExportDatasetInsightsdata();
-    const p11 = yield* GCP.ContactCenterInsights.GenerateConversationSignedAudio();
-    const p12 = yield* GCP.ContactCenterInsights.GetAnalyse(ProbeAnalysis);
-    const p13 = yield* GCP.ContactCenterInsights.GetAnalysisRule(ProbeAnalysisRule);
-    const p14 = yield* GCP.ContactCenterInsights.GetConversation(ProbeConversation);
-    const p15 = yield* GCP.ContactCenterInsights.GetDataset();
-    const p16 = yield* GCP.ContactCenterInsights.GetDatasetConversation();
-    const p17 = yield* GCP.ContactCenterInsights.GetPhraseMatcher(ProbePhraseMatcher);
-    const p18 = yield* GCP.ContactCenterInsights.GetQaQuestionTag(ProbeQaQuestionTag);
-    const p19 = yield* GCP.ContactCenterInsights.GetView(ProbeView);
-    const p20 = yield* GCP.ContactCenterInsights.ImportIssueModel();
-    const p21 = yield* GCP.ContactCenterInsights.IngestConversation();
-    const p22 = yield* GCP.ContactCenterInsights.IngestDatasetConversation();
-    const p23 = yield* GCP.ContactCenterInsights.ListAnalysisRules();
-    const p24 = yield* GCP.ContactCenterInsights.ListAssessmentRules();
-    const p25 = yield* GCP.ContactCenterInsights.ListAuthorizedViewSets();
-    const p26 = yield* GCP.ContactCenterInsights.ListConversationAnalyses(ProbeConversation);
-    const p27 = yield* GCP.ContactCenterInsights.ListConversationAssessments(ProbeConversation);
-    const p28 = yield* GCP.ContactCenterInsights.ListConversationFeedbackLabels(ProbeConversation);
-    const p29 = yield* GCP.ContactCenterInsights.ListConversations();
-    const p30 = yield* GCP.ContactCenterInsights.ListDatasetAllFeedbackLabels();
-    const p31 = yield* GCP.ContactCenterInsights.ListDatasetConversationFeedbackLabels();
-    const p32 = yield* GCP.ContactCenterInsights.ListDatasetConversations();
-    const p33 = yield* GCP.ContactCenterInsights.ListDatasets();
-    const p34 = yield* GCP.ContactCenterInsights.ListIssueModels();
-    const p35 = yield* GCP.ContactCenterInsights.ListPhraseMatchers();
-    const p36 = yield* GCP.ContactCenterInsights.ListQaQuestionTags();
-    const p37 = yield* GCP.ContactCenterInsights.ListQaScorecards();
-    const p38 = yield* GCP.ContactCenterInsights.ListViews();
-    const p39 = yield* GCP.ContactCenterInsights.PatchDataset();
-    const p40 = yield* GCP.ContactCenterInsights.SampleConversation();
-    const p41 = yield* GCP.ContactCenterInsights.SampleDatasetConversation();
-    const p42 = yield* GCP.ContactCenterInsights.UploadConversation();
+    const p0 = yield* GCP.ContactCenterInsights.AppealAssessment(ProbeAssessment);
+    const p1 = yield* GCP.ContactCenterInsights.BulkConversationAnalyze();
+    const p2 = yield* GCP.ContactCenterInsights.BulkConversationDelete();
+    const p3 = yield* GCP.ContactCenterInsights.BulkDatasetDeleteFeedbackLabels();
+    const p4 = yield* GCP.ContactCenterInsights.BulkDatasetDownloadFeedbackLabels();
+    const p5 = yield* GCP.ContactCenterInsights.BulkDatasetUploadFeedbackLabels();
+    const p6 = yield* GCP.ContactCenterInsights.BulkSegmentAnalyze(ProbeConversation);
+    const p7 = yield* GCP.ContactCenterInsights.CalculateConversationStats();
+    const p8 = yield* GCP.ContactCenterInsights.CreateAssessmentNote(ProbeAssessment);
+    const p9 = yield* GCP.ContactCenterInsights.CreateDataset();
+    const p10 = yield* GCP.ContactCenterInsights.DeleteAssessmentNote(ProbeAssessment);
+    const p11 = yield* GCP.ContactCenterInsights.DeleteDataset();
+    const p12 = yield* GCP.ContactCenterInsights.DeleteDatasetConversation();
+    const p13 = yield* GCP.ContactCenterInsights.ExportDatasetInsightsdata();
+    const p14 = yield* GCP.ContactCenterInsights.FinalizeAssessment(ProbeAssessment);
+    const p15 = yield* GCP.ContactCenterInsights.GenerateConversationSignedAudio();
+    const p16 = yield* GCP.ContactCenterInsights.GetAnalyse(ProbeAnalysis);
+    const p17 = yield* GCP.ContactCenterInsights.GetAnalysisRule(ProbeAnalysisRule);
+    const p18 = yield* GCP.ContactCenterInsights.GetAssessment(ProbeAssessment);
+    const p19 = yield* GCP.ContactCenterInsights.GetConversation(ProbeConversation);
+    const p20 = yield* GCP.ContactCenterInsights.GetDataset();
+    const p21 = yield* GCP.ContactCenterInsights.GetDatasetConversation();
+    const p22 = yield* GCP.ContactCenterInsights.GetPhraseMatcher(ProbePhraseMatcher);
+    const p23 = yield* GCP.ContactCenterInsights.GetQaQuestionTag(ProbeQaQuestionTag);
+    const p24 = yield* GCP.ContactCenterInsights.GetView(ProbeView);
+    const p25 = yield* GCP.ContactCenterInsights.ImportIssueModel();
+    const p26 = yield* GCP.ContactCenterInsights.IngestConversation();
+    const p27 = yield* GCP.ContactCenterInsights.IngestDatasetConversation();
+    const p28 = yield* GCP.ContactCenterInsights.ListAnalysisRules();
+    const p29 = yield* GCP.ContactCenterInsights.ListAssessmentNotes(ProbeAssessment);
+    const p30 = yield* GCP.ContactCenterInsights.ListAssessmentRules();
+    const p31 = yield* GCP.ContactCenterInsights.ListAuthorizedViewSets();
+    const p32 = yield* GCP.ContactCenterInsights.ListConversationAnalyses(ProbeConversation);
+    const p33 = yield* GCP.ContactCenterInsights.ListConversationAssessments(ProbeConversation);
+    const p34 = yield* GCP.ContactCenterInsights.ListConversationFeedbackLabels(ProbeConversation);
+    const p35 = yield* GCP.ContactCenterInsights.ListConversations();
+    const p36 = yield* GCP.ContactCenterInsights.ListDatasetAllFeedbackLabels();
+    const p37 = yield* GCP.ContactCenterInsights.ListDatasetConversationFeedbackLabels();
+    const p38 = yield* GCP.ContactCenterInsights.ListDatasetConversations();
+    const p39 = yield* GCP.ContactCenterInsights.ListDatasets();
+    const p40 = yield* GCP.ContactCenterInsights.ListIssueModels();
+    const p41 = yield* GCP.ContactCenterInsights.ListPhraseMatchers();
+    const p42 = yield* GCP.ContactCenterInsights.ListQaQuestionTags();
+    const p43 = yield* GCP.ContactCenterInsights.ListQaScorecards();
+    const p44 = yield* GCP.ContactCenterInsights.ListViews();
+    const p45 = yield* GCP.ContactCenterInsights.PatchAssessmentNote(ProbeAssessment);
+    const p46 = yield* GCP.ContactCenterInsights.PatchDataset();
+    const p47 = yield* GCP.ContactCenterInsights.PublishAssessment(ProbeAssessment);
+    const p48 = yield* GCP.ContactCenterInsights.SampleConversation();
+    const p49 = yield* GCP.ContactCenterInsights.SampleDatasetConversation();
+    const p50 = yield* GCP.ContactCenterInsights.UploadConversation();
     return {
       fetch: serveProbes({
-        BulkConversationAnalyze: outcome(Retry.none(p0({ location: "us-central1" } as never))),
+        "AppealAssessment@ConversationsAssessment": outcome(Retry.none(p0({} as never))),
+        BulkConversationAnalyze: outcome(Retry.none(p1({ location: "us-central1" } as never))),
         BulkConversationDelete: outcome(
-          Retry.none(p1({ dataset: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        BulkDatasetDeleteFeedbackLabels: outcome(
           Retry.none(p2({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        BulkDatasetDownloadFeedbackLabels: outcome(
+        BulkDatasetDeleteFeedbackLabels: outcome(
           Retry.none(p3({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        BulkDatasetUploadFeedbackLabels: outcome(
+        BulkDatasetDownloadFeedbackLabels: outcome(
           Retry.none(p4({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        BulkSegmentAnalyze: outcome(Retry.none(p5({} as never))),
+        BulkDatasetUploadFeedbackLabels: outcome(
+          Retry.none(p5({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        BulkSegmentAnalyze: outcome(Retry.none(p6({} as never))),
         CalculateConversationStats: outcome(
-          Retry.none(p6({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p7({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        "CreateAssessmentNote@ConversationsAssessment": outcome(
+          Retry.none(p8({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         CreateDataset: outcome(
           Retry.none(
-            p7({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p9({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
+        "DeleteAssessmentNote@ConversationsAssessment": outcome(
+          Retry.none(p10({ note: "alchemy-missing" } as never)),
+        ),
         DeleteDataset: outcome(
-          Retry.none(p8({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p11({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
         DeleteDatasetConversation: outcome(
           Retry.none(
-            p9({
+            p12({
               dataset: "alchemy-missing",
               conversation: "alchemy-missing",
               location: "us-central1",
@@ -103,57 +119,60 @@ export default class ContactCenterInsightsGeneratedHost extends GCP.Function<Con
           ),
         ),
         ExportDatasetInsightsdata: outcome(
-          Retry.none(p10({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p13({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
+        "FinalizeAssessment@ConversationsAssessment": outcome(Retry.none(p14({} as never))),
         GenerateConversationSignedAudio: outcome(
           Retry.none(
-            p11({
+            p15({
               dataset: "alchemy-missing",
               conversation: "alchemy-missing",
               location: "us-central1",
             } as never),
           ),
         ),
-        GetAnalyse: outcome(Retry.none(p12({} as never))),
-        GetAnalysisRule: outcome(Retry.none(p13({} as never))),
-        GetConversation: outcome(Retry.none(p14({} as never))),
+        GetAnalyse: outcome(Retry.none(p16({} as never))),
+        GetAnalysisRule: outcome(Retry.none(p17({} as never))),
+        "GetAssessment@ConversationsAssessment": outcome(Retry.none(p18({} as never))),
+        GetConversation: outcome(Retry.none(p19({} as never))),
         GetDataset: outcome(
-          Retry.none(p15({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p20({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
         GetDatasetConversation: outcome(
           Retry.none(
-            p16({
+            p21({
               dataset: "alchemy-missing",
               conversation: "alchemy-missing",
               location: "us-central1",
             } as never),
           ),
         ),
-        GetPhraseMatcher: outcome(Retry.none(p17({} as never))),
-        GetQaQuestionTag: outcome(Retry.none(p18({} as never))),
-        GetView: outcome(Retry.none(p19({} as never))),
+        GetPhraseMatcher: outcome(Retry.none(p22({} as never))),
+        GetQaQuestionTag: outcome(Retry.none(p23({} as never))),
+        GetView: outcome(Retry.none(p24({} as never))),
         ImportIssueModel: outcome(
           Retry.none(
-            p20({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p25({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        IngestConversation: outcome(Retry.none(p21({ location: "us-central1" } as never))),
+        IngestConversation: outcome(Retry.none(p26({ location: "us-central1" } as never))),
         IngestDatasetConversation: outcome(
-          Retry.none(p22({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p27({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListAnalysisRules: outcome(Retry.none(p23({ location: "us-central1" } as never))),
-        ListAssessmentRules: outcome(Retry.none(p24({ location: "us-central1" } as never))),
-        ListAuthorizedViewSets: outcome(Retry.none(p25({ location: "us-central1" } as never))),
-        ListConversationAnalyses: outcome(Retry.none(p26({} as never))),
-        ListConversationAssessments: outcome(Retry.none(p27({} as never))),
-        ListConversationFeedbackLabels: outcome(Retry.none(p28({} as never))),
-        ListConversations: outcome(Retry.none(p29({ location: "us-central1" } as never))),
+        ListAnalysisRules: outcome(Retry.none(p28({ location: "us-central1" } as never))),
+        "ListAssessmentNotes@ConversationsAssessment": outcome(Retry.none(p29({} as never))),
+        ListAssessmentRules: outcome(Retry.none(p30({ location: "us-central1" } as never))),
+        ListAuthorizedViewSets: outcome(Retry.none(p31({ location: "us-central1" } as never))),
+        ListConversationAnalyses: outcome(Retry.none(p32({} as never))),
+        ListConversationAssessments: outcome(Retry.none(p33({} as never))),
+        ListConversationFeedbackLabels: outcome(Retry.none(p34({} as never))),
+        ListConversations: outcome(Retry.none(p35({ location: "us-central1" } as never))),
         ListDatasetAllFeedbackLabels: outcome(
-          Retry.none(p30({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p36({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ListDatasetConversationFeedbackLabels: outcome(
           Retry.none(
-            p31({
+            p37({
               dataset: "alchemy-missing",
               conversation: "alchemy-missing",
               location: "us-central1",
@@ -161,28 +180,33 @@ export default class ContactCenterInsightsGeneratedHost extends GCP.Function<Con
           ),
         ),
         ListDatasetConversations: outcome(
-          Retry.none(p32({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p38({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListDatasets: outcome(Retry.none(p33({ location: "us-central1" } as never))),
-        ListIssueModels: outcome(Retry.none(p34({ location: "us-central1" } as never))),
-        ListPhraseMatchers: outcome(Retry.none(p35({ location: "us-central1" } as never))),
-        ListQaQuestionTags: outcome(Retry.none(p36({ location: "us-central1" } as never))),
-        ListQaScorecards: outcome(Retry.none(p37({ location: "us-central1" } as never))),
-        ListViews: outcome(Retry.none(p38({ location: "us-central1" } as never))),
+        ListDatasets: outcome(Retry.none(p39({ location: "us-central1" } as never))),
+        ListIssueModels: outcome(Retry.none(p40({ location: "us-central1" } as never))),
+        ListPhraseMatchers: outcome(Retry.none(p41({ location: "us-central1" } as never))),
+        ListQaQuestionTags: outcome(Retry.none(p42({ location: "us-central1" } as never))),
+        ListQaScorecards: outcome(Retry.none(p43({ location: "us-central1" } as never))),
+        ListViews: outcome(Retry.none(p44({ location: "us-central1" } as never))),
+        "PatchAssessmentNote@ConversationsAssessment": outcome(
+          Retry.none(p45({ note: "alchemy-missing" } as never)),
+        ),
         PatchDataset: outcome(
-          Retry.none(p39({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p46({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        SampleConversation: outcome(Retry.none(p40({ location: "us-central1" } as never))),
+        "PublishAssessment@ConversationsAssessment": outcome(Retry.none(p47({} as never))),
+        SampleConversation: outcome(Retry.none(p48({ location: "us-central1" } as never))),
         SampleDatasetConversation: outcome(
-          Retry.none(p41({ dataset: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p49({ dataset: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        UploadConversation: outcome(Retry.none(p42({ location: "us-central1" } as never))),
+        UploadConversation: outcome(Retry.none(p50({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.ContactCenterInsights.AppealAssessmentHttp,
           GCP.ContactCenterInsights.BulkConversationAnalyzeHttp,
           GCP.ContactCenterInsights.BulkConversationDeleteHttp,
           GCP.ContactCenterInsights.BulkDatasetDeleteFeedbackLabelsHttp,
@@ -190,13 +214,17 @@ export default class ContactCenterInsightsGeneratedHost extends GCP.Function<Con
           GCP.ContactCenterInsights.BulkDatasetUploadFeedbackLabelsHttp,
           GCP.ContactCenterInsights.BulkSegmentAnalyzeHttp,
           GCP.ContactCenterInsights.CalculateConversationStatsHttp,
+          GCP.ContactCenterInsights.CreateAssessmentNoteHttp,
           GCP.ContactCenterInsights.CreateDatasetHttp,
+          GCP.ContactCenterInsights.DeleteAssessmentNoteHttp,
           GCP.ContactCenterInsights.DeleteDatasetHttp,
           GCP.ContactCenterInsights.DeleteDatasetConversationHttp,
           GCP.ContactCenterInsights.ExportDatasetInsightsdataHttp,
+          GCP.ContactCenterInsights.FinalizeAssessmentHttp,
           GCP.ContactCenterInsights.GenerateConversationSignedAudioHttp,
           GCP.ContactCenterInsights.GetAnalyseHttp,
           GCP.ContactCenterInsights.GetAnalysisRuleHttp,
+          GCP.ContactCenterInsights.GetAssessmentHttp,
           GCP.ContactCenterInsights.GetConversationHttp,
           GCP.ContactCenterInsights.GetDatasetHttp,
           GCP.ContactCenterInsights.GetDatasetConversationHttp,
@@ -207,6 +235,7 @@ export default class ContactCenterInsightsGeneratedHost extends GCP.Function<Con
           GCP.ContactCenterInsights.IngestConversationHttp,
           GCP.ContactCenterInsights.IngestDatasetConversationHttp,
           GCP.ContactCenterInsights.ListAnalysisRulesHttp,
+          GCP.ContactCenterInsights.ListAssessmentNotesHttp,
           GCP.ContactCenterInsights.ListAssessmentRulesHttp,
           GCP.ContactCenterInsights.ListAuthorizedViewSetsHttp,
           GCP.ContactCenterInsights.ListConversationAnalysesHttp,
@@ -217,14 +246,16 @@ export default class ContactCenterInsightsGeneratedHost extends GCP.Function<Con
           GCP.ContactCenterInsights.ListDatasetConversationFeedbackLabelsHttp,
           GCP.ContactCenterInsights.ListDatasetConversationsHttp,
           GCP.ContactCenterInsights.ListDatasetsHttp,
+        ),
+        Layer.mergeAll(
           GCP.ContactCenterInsights.ListIssueModelsHttp,
           GCP.ContactCenterInsights.ListPhraseMatchersHttp,
           GCP.ContactCenterInsights.ListQaQuestionTagsHttp,
           GCP.ContactCenterInsights.ListQaScorecardsHttp,
           GCP.ContactCenterInsights.ListViewsHttp,
+          GCP.ContactCenterInsights.PatchAssessmentNoteHttp,
           GCP.ContactCenterInsights.PatchDatasetHttp,
-        ),
-        Layer.mergeAll(
+          GCP.ContactCenterInsights.PublishAssessmentHttp,
           GCP.ContactCenterInsights.SampleConversationHttp,
           GCP.ContactCenterInsights.SampleDatasetConversationHttp,
           GCP.ContactCenterInsights.UploadConversationHttp,

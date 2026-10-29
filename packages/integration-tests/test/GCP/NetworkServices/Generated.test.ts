@@ -65,16 +65,20 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AgentGateway", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetAgentGateway (networkservices.projects.locations.agentGateways.get): AgentGateway: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetAgentGateway (networkservices.projects.locations.agentGateways.get): AgentGateway: an agent gateway takes ~7 minutes to create and delete (slow-gated in AgentGateway.test.ts)",
         () => Effect.void,
       );
     });
 
     describe("AuthzExtension", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetAuthzExtension (networkservices.projects.locations.authzExtensions.get): AuthzExtension: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetAuthzExtension (networkservices.projects.locations.authzExtensions.get)",
+        () => probe("GetAuthzExtension", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -343,26 +347,30 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("TlsRoute", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTlsRoute (networkservices.projects.locations.tlsRoutes.get): TlsRoute: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTlsRoute (networkservices.projects.locations.tlsRoutes.get)",
+        () => probe("GetTlsRoute", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("WasmPlugin", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetWasmPlugin (networkservices.projects.locations.wasmPlugins.get): WasmPlugin: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetWasmPlugin (networkservices.projects.locations.wasmPlugins.get): WasmPlugin: a plugin's image is a .wasm artifact uploaded to Artifact Registry through the upload API first; WasmPlugin.test.ts covers it",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListWasmPluginVersions (networkservices.projects.locations.wasmPlugins.versions.list): WasmPlugin: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListWasmPluginVersions (networkservices.projects.locations.wasmPlugins.versions.list): WasmPlugin: a plugin's image is a .wasm artifact uploaded to Artifact Registry through the upload API first; WasmPlugin.test.ts covers it",
         () => Effect.void,
       );
     });
 
     describe("WasmPluginsVersion", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetVersion (networkservices.projects.locations.wasmPlugins.versions.get): WasmPluginsVersion: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetVersion (networkservices.projects.locations.wasmPlugins.versions.get): WasmPluginsVersion: a plugin's image is a .wasm artifact uploaded to Artifact Registry through the upload API first; WasmPlugin.test.ts covers it",
         () => Effect.void,
       );
     });

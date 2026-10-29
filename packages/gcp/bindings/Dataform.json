@@ -29,7 +29,12 @@
       "Repository": "ProbeRepo",
       "RepositoriesWorkspace": "ProbeWorkspace",
       "ProjectsLocationsFolder": "ProbeFolder",
-      "Team": "ProbeTeam"
+      "Team": "ProbeTeam",
+      "RepositoriesReleaseConfig": "ProbeReleaseConfig",
+      "RepositoriesWorkflowConfig": "ProbeWorkflowConfig"
+    },
+    "untestable": {
+      "RepositoriesWorkflowInvocation": "an invocation runs a compilation result, which needs workspace files written through the API first; RepositoriesWorkflowInvocation.test.ts covers it"
     }
   }
 }

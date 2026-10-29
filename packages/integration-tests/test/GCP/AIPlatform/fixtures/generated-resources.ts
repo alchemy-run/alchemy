@@ -281,3 +281,91 @@ export const ProbeSchedule = Effect.gen(function* () {
     },
   });
 });
+
+const echoWorkerPool = {
+  machineSpec: { machineType: "n1-standard-4" },
+  replicaCount: "1",
+  containerSpec: {
+    imageUri: "us-docker.pkg.dev/vertex-ai/training/tf-cpu.2-12.py310:latest",
+    command: ["echo", "ok"],
+  },
+};
+/** One echo trial: the job finishes in minutes. */
+export const ProbeHyperparameterTuningJob = GCP.AIPlatform.HyperparameterTuningJob(
+  "ProbeHyperparameterTuningJob",
+  {
+    location,
+    displayName: "alchemy-probe-hpt",
+    maxTrialCount: 1,
+    parallelTrialCount: 1,
+    studySpec: {
+      metrics: [{ metricId: "accuracy", goal: "MAXIMIZE" }],
+      parameters: [{ parameterId: "lr", doubleValueSpec: { minValue: 0.001, maxValue: 0.1 } }],
+    },
+    trialJobSpec: { workerPoolSpecs: [echoWorkerPool] },
+  },
+);
+export const ProbeNasJob = GCP.AIPlatform.NasJob("ProbeNasJob", {
+  location,
+  displayName: "alchemy-probe-nas",
+  nasJobSpec: {
+    searchSpaceSpec: "{}",
+    multiTrialAlgorithmSpec: {
+      metric: { metricId: "accuracy", goal: "MAXIMIZE" },
+      searchTrialSpec: {
+        maxTrialCount: 1,
+        maxParallelTrialCount: 1,
+        searchTrialJobSpec: { workerPoolSpecs: [echoWorkerPool] },
+      },
+    },
+  },
+});
+/** An empty pipeline: it completes without running a task. */
+export const ProbePipelineJob = Effect.gen(function* () {
+  const bucket = yield* PipelineRoot;
+  return yield* GCP.AIPlatform.PipelineJob("ProbePipelineJob", {
+    location,
+    displayName: "alchemy-probe-pipeline",
+    pipelineSpec: {
+      pipelineInfo: { name: "alchemy-echo" },
+      schemaVersion: "2.1.0",
+      sdkVersion: "kfp-2.0.0",
+      components: {},
+      root: { dag: { tasks: {} } },
+    },
+    runtimeConfig: { gcsOutputDirectory: Output.interpolate`gs://${bucket.bucketName}/pipeline` },
+  });
+});
+export const ProbeBatchPredictionJob = Effect.gen(function* () {
+  const project = yield* deployProject;
+  const bucket = yield* PipelineRoot;
+  return yield* GCP.AIPlatform.BatchPredictionJob("ProbeBatchPredictionJob", {
+    location,
+    displayName: "alchemy-probe-batch",
+    model: `projects/${project}/locations/${location}/publishers/google/models/gemini-2.5-flash`,
+    inputConfig: {
+      instancesFormat: "jsonl",
+      gcsSource: { uris: ["gs://cloud-samples-data/vertex-ai/batch.jsonl"] },
+    },
+    outputConfig: {
+      predictionsFormat: "jsonl",
+      gcsDestination: { outputUriPrefix: Output.interpolate`gs://${bucket.bucketName}/batch/` },
+    },
+  });
+});
+export const ProbeEvaluationRun = Effect.gen(function* () {
+  const set = yield* ProbeEvaluationSet;
+  return yield* GCP.AIPlatform.EvaluationRun("ProbeEvaluationRun", {
+    location,
+    displayName: "alchemy-probe-eval-run",
+    dataSource: { evaluationSet: set.name },
+    evaluationConfig: {
+      metrics: [
+        {
+          metric: "instruction_following_v1",
+          predefinedMetricSpec: { metricSpecName: "instruction_following_v1" },
+        },
+      ],
+    },
+  });
+});
