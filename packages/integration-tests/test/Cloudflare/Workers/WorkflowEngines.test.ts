@@ -61,6 +61,8 @@ const freshId = (prefix: string) =>
 describe.concurrent.each([
   { engine: "durable-object", dev: true, stage: "durable-workflow-local" },
   { engine: "durable-object", dev: false, stage: "durable-workflow-live" },
+  { engine: "durable-object-eu", dev: true, stage: "durable-workflow-eu-local" },
+  { engine: "durable-object-eu", dev: false, stage: "durable-workflow-eu-live" },
   { engine: "native", dev: true, stage: "native-engine-local" },
   { engine: "native", dev: false, stage: "native-engine-live" },
 ] as const)("Workflows on the $engine engine (dev: $dev)", ({ engine, dev, stage }) => {
