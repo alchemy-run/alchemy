@@ -19,6 +19,12 @@
     "untestable": {
       "TagTemplate": "Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated (\"Project \u2026 is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)",
       "TaxonomiesPolicyTag": "Tag templates moved to Dataplex; projects without legacy Data Catalog access get DataCatalogDeprecated (\"Project \u2026 is not allowed to perform read operations (GCP_TEST_DATACATALOG_TAG_TEMPLATES)"
+    },
+    "allowedOutcomes": {
+      "DataCatalogDeprecated": "entry groups moved to Dataplex; the testing project has no legacy Data Catalog access"
+    },
+    "ambiguousTags": {
+      "DataCatalogNotFoundOrDenied": "Data Catalog answers a missing entry and a denied permission with the same 403"
     }
   }
 }

@@ -14,9 +14,10 @@ const sharedStack = Core.scratchStack(testOptions, "DataCatalogGenerated");
 
 let baseUrl: string;
 
-const ALLOWED: string[] = [];
-
-const AMBIGUOUS: string[] = [];
+// A plain read may answer DataCatalogDeprecated: entry groups moved to Dataplex; the testing project has no legacy Data Catalog access.
+const ALLOWED: string[] = ["DataCatalogDeprecated"];
+// DataCatalogNotFoundOrDenied is retried while a grant propagates: Data Catalog answers a missing entry and a denied permission with the same 403.
+const AMBIGUOUS: string[] = ["DataCatalogNotFoundOrDenied"];
 
 /**
  * Call one binding on the deployed host. `callProbe` retries while the
