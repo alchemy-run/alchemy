@@ -464,7 +464,7 @@ const make = (options: Options) =>
         ),
       );
     /** The current value, then every new one, by `version`. */
-    const watch = <A>(key: string, read: Effect.Effect<A>, version: (a: A) => number) =>
+    const watch = <A>(key: string, read: Effect.Effect<A>, version: (a: A) => number | string) =>
       ticks(key).pipe(
         Stream.mapEffect(() => read),
         Stream.changesWith((a, b) => version(a) === version(b)),
@@ -1315,7 +1315,8 @@ const make = (options: Options) =>
               )
               .pipe(Effect.orDie),
           read,
-          changes: (key: string) => watch(keyOf(key), read(key), (meta) => meta.seq),
+          // Every change of the meta, `advance` included (it moves only the checkpoints).
+          changes: (key: string) => watch(keyOf(key), read(key), (meta) => JSON.stringify(meta)),
           list: (key: string) => entriesAfter(key, 0),
           tail: (key: string, after: number) =>
             follow(
