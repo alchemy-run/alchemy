@@ -4,7 +4,15 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
-import { ProbeApp } from "./generated-resources.ts";
+import {
+  ProbeAgent,
+  ProbeApp,
+  ProbeDeployment,
+  ProbeExample,
+  ProbeGuardrail,
+  ProbeTool,
+  ProbeVersion,
+} from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated CES binding as its own
@@ -23,26 +31,39 @@ export default class CESGeneratedHost extends GCP.Function<CESGeneratedHost>()(
     const p4 = yield* GCP.CES.ExportApp(ProbeApp);
     const p5 = yield* GCP.CES.GenerateAppOnboardingSuggestions(ProbeApp);
     const p6 = yield* GCP.CES.GenerateSessionChatToken(ProbeApp);
-    const p7 = yield* GCP.CES.GetApp(ProbeApp);
-    const p8 = yield* GCP.CES.GetAppChangelog(ProbeApp);
-    const p9 = yield* GCP.CES.GetAppConversation(ProbeApp);
-    const p10 = yield* GCP.CES.GetAppExtendedAgentCard(ProbeApp);
-    const p11 = yield* GCP.CES.ImportApp();
-    const p12 = yield* GCP.CES.ListAppAgents(ProbeApp);
-    const p13 = yield* GCP.CES.ListAppChangelogs(ProbeApp);
-    const p14 = yield* GCP.CES.ListAppConversations(ProbeApp);
-    const p15 = yield* GCP.CES.ListAppDeployments(ProbeApp);
-    const p16 = yield* GCP.CES.ListAppExamples(ProbeApp);
-    const p17 = yield* GCP.CES.ListAppGuardrails(ProbeApp);
-    const p18 = yield* GCP.CES.ListApps();
-    const p19 = yield* GCP.CES.ListAppTools(ProbeApp);
-    const p20 = yield* GCP.CES.ListAppToolsets(ProbeApp);
-    const p21 = yield* GCP.CES.ListAppVersions(ProbeApp);
-    const p22 = yield* GCP.CES.RunSession(ProbeApp);
-    const p23 = yield* GCP.CES.SendAppMessage(ProbeApp);
-    const p24 = yield* GCP.CES.StreamAppMessage(ProbeApp);
-    const p25 = yield* GCP.CES.StreamAssistantSessionChatAiAssistant(ProbeApp);
-    const p26 = yield* GCP.CES.StreamRunSession(ProbeApp);
+    const p7 = yield* GCP.CES.GetAgent(ProbeAgent);
+    const p8 = yield* GCP.CES.GetApp(ProbeApp);
+    const p9 = yield* GCP.CES.GetAppChangelog(ProbeApp);
+    const p10 = yield* GCP.CES.GetAppConversation(ProbeApp);
+    const p11 = yield* GCP.CES.GetAppExtendedAgentCard(ProbeApp);
+    const p12 = yield* GCP.CES.GetDeployment(ProbeDeployment);
+    const p13 = yield* GCP.CES.GetDeploymentExtendedAgentCard(ProbeDeployment);
+    const p14 = yield* GCP.CES.GetExample(ProbeExample);
+    const p15 = yield* GCP.CES.GetGuardrail(ProbeGuardrail);
+    const p16 = yield* GCP.CES.GetTool(ProbeTool);
+    const p17 = yield* GCP.CES.GetVersion(ProbeVersion);
+    const p18 = yield* GCP.CES.GetVersionExtendedAgentCard(ProbeVersion);
+    const p19 = yield* GCP.CES.ImportApp();
+    const p20 = yield* GCP.CES.ListAppAgents(ProbeApp);
+    const p21 = yield* GCP.CES.ListAppChangelogs(ProbeApp);
+    const p22 = yield* GCP.CES.ListAppConversations(ProbeApp);
+    const p23 = yield* GCP.CES.ListAppDeployments(ProbeApp);
+    const p24 = yield* GCP.CES.ListAppExamples(ProbeApp);
+    const p25 = yield* GCP.CES.ListAppGuardrails(ProbeApp);
+    const p26 = yield* GCP.CES.ListApps();
+    const p27 = yield* GCP.CES.ListAppTools(ProbeApp);
+    const p28 = yield* GCP.CES.ListAppToolsets(ProbeApp);
+    const p29 = yield* GCP.CES.ListAppVersions(ProbeApp);
+    const p30 = yield* GCP.CES.RestoreVersion(ProbeVersion);
+    const p31 = yield* GCP.CES.RunSession(ProbeApp);
+    const p32 = yield* GCP.CES.SendAppMessage(ProbeApp);
+    const p33 = yield* GCP.CES.SendDeploymentMessage(ProbeDeployment);
+    const p34 = yield* GCP.CES.SendVersionMessage(ProbeVersion);
+    const p35 = yield* GCP.CES.StreamAppMessage(ProbeApp);
+    const p36 = yield* GCP.CES.StreamAssistantSessionChatAiAssistant(ProbeApp);
+    const p37 = yield* GCP.CES.StreamDeploymentMessage(ProbeDeployment);
+    const p38 = yield* GCP.CES.StreamRunSession(ProbeApp);
+    const p39 = yield* GCP.CES.StreamVersionMessage(ProbeVersion);
     return {
       fetch: serveProbes({
         BatchConversationDelete: outcome(Retry.none(p0({} as never))),
@@ -56,32 +77,45 @@ export default class CESGeneratedHost extends GCP.Function<CESGeneratedHost>()(
         ExportApp: outcome(Retry.none(p4({} as never))),
         GenerateAppOnboardingSuggestions: outcome(Retry.none(p5({} as never))),
         GenerateSessionChatToken: outcome(Retry.none(p6({ session: "alchemy-missing" } as never))),
-        GetApp: outcome(Retry.none(p7({} as never))),
-        GetAppChangelog: outcome(Retry.none(p8({ changelog: "alchemy-missing" } as never))),
-        GetAppConversation: outcome(Retry.none(p9({ conversation: "alchemy-missing" } as never))),
-        GetAppExtendedAgentCard: outcome(Retry.none(p10({} as never))),
+        GetAgent: outcome(Retry.none(p7({} as never))),
+        GetApp: outcome(Retry.none(p8({} as never))),
+        GetAppChangelog: outcome(Retry.none(p9({ changelog: "alchemy-missing" } as never))),
+        GetAppConversation: outcome(Retry.none(p10({ conversation: "alchemy-missing" } as never))),
+        GetAppExtendedAgentCard: outcome(Retry.none(p11({} as never))),
+        GetDeployment: outcome(Retry.none(p12({} as never))),
+        GetDeploymentExtendedAgentCard: outcome(Retry.none(p13({} as never))),
+        GetExample: outcome(Retry.none(p14({} as never))),
+        GetGuardrail: outcome(Retry.none(p15({} as never))),
+        GetTool: outcome(Retry.none(p16({} as never))),
+        GetVersion: outcome(Retry.none(p17({} as never))),
+        GetVersionExtendedAgentCard: outcome(Retry.none(p18({} as never))),
         ImportApp: outcome(
-          Retry.none(
-            p11({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
-          ),
+          Retry.none(p19({ location: "us", body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ListAppAgents: outcome(Retry.none(p12({} as never))),
-        ListAppChangelogs: outcome(Retry.none(p13({} as never))),
-        ListAppConversations: outcome(Retry.none(p14({} as never))),
-        ListAppDeployments: outcome(Retry.none(p15({} as never))),
-        ListAppExamples: outcome(Retry.none(p16({} as never))),
-        ListAppGuardrails: outcome(Retry.none(p17({} as never))),
-        ListApps: outcome(Retry.none(p18({ location: "us-central1" } as never))),
-        ListAppTools: outcome(Retry.none(p19({} as never))),
-        ListAppToolsets: outcome(Retry.none(p20({} as never))),
-        ListAppVersions: outcome(Retry.none(p21({} as never))),
-        RunSession: outcome(Retry.none(p22({ session: "alchemy-missing" } as never))),
-        SendAppMessage: outcome(Retry.none(p23({} as never))),
-        StreamAppMessage: outcome(Retry.none(p24({} as never))),
+        ListAppAgents: outcome(Retry.none(p20({} as never))),
+        ListAppChangelogs: outcome(Retry.none(p21({} as never))),
+        ListAppConversations: outcome(Retry.none(p22({} as never))),
+        ListAppDeployments: outcome(Retry.none(p23({} as never))),
+        ListAppExamples: outcome(Retry.none(p24({} as never))),
+        ListAppGuardrails: outcome(Retry.none(p25({} as never))),
+        ListApps: outcome(Retry.none(p26({ location: "us" } as never))),
+        ListAppTools: outcome(Retry.none(p27({} as never))),
+        ListAppToolsets: outcome(Retry.none(p28({} as never))),
+        ListAppVersions: outcome(Retry.none(p29({} as never))),
+        RestoreVersion: outcome(
+          Retry.none(p30({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        RunSession: outcome(Retry.none(p31({ session: "alchemy-missing" } as never))),
+        SendAppMessage: outcome(Retry.none(p32({} as never))),
+        SendDeploymentMessage: outcome(Retry.none(p33({} as never))),
+        SendVersionMessage: outcome(Retry.none(p34({} as never))),
+        StreamAppMessage: outcome(Retry.none(p35({} as never))),
         StreamAssistantSessionChatAiAssistant: outcome(
-          Retry.none(p25({ assistantSession: "alchemy-missing" } as never)),
+          Retry.none(p36({ assistantSession: "alchemy-missing" } as never)),
         ),
-        StreamRunSession: outcome(Retry.none(p26({ session: "alchemy-missing" } as never))),
+        StreamDeploymentMessage: outcome(Retry.none(p37({} as never))),
+        StreamRunSession: outcome(Retry.none(p38({ session: "alchemy-missing" } as never))),
+        StreamVersionMessage: outcome(Retry.none(p39({} as never))),
       }),
     };
   }).pipe(
@@ -95,10 +129,18 @@ export default class CESGeneratedHost extends GCP.Function<CESGeneratedHost>()(
           GCP.CES.ExportAppHttp,
           GCP.CES.GenerateAppOnboardingSuggestionsHttp,
           GCP.CES.GenerateSessionChatTokenHttp,
+          GCP.CES.GetAgentHttp,
           GCP.CES.GetAppHttp,
           GCP.CES.GetAppChangelogHttp,
           GCP.CES.GetAppConversationHttp,
           GCP.CES.GetAppExtendedAgentCardHttp,
+          GCP.CES.GetDeploymentHttp,
+          GCP.CES.GetDeploymentExtendedAgentCardHttp,
+          GCP.CES.GetExampleHttp,
+          GCP.CES.GetGuardrailHttp,
+          GCP.CES.GetToolHttp,
+          GCP.CES.GetVersionHttp,
+          GCP.CES.GetVersionExtendedAgentCardHttp,
           GCP.CES.ImportAppHttp,
           GCP.CES.ListAppAgentsHttp,
           GCP.CES.ListAppChangelogsHttp,
@@ -110,11 +152,16 @@ export default class CESGeneratedHost extends GCP.Function<CESGeneratedHost>()(
           GCP.CES.ListAppToolsHttp,
           GCP.CES.ListAppToolsetsHttp,
           GCP.CES.ListAppVersionsHttp,
+          GCP.CES.RestoreVersionHttp,
           GCP.CES.RunSessionHttp,
           GCP.CES.SendAppMessageHttp,
+          GCP.CES.SendDeploymentMessageHttp,
+          GCP.CES.SendVersionMessageHttp,
           GCP.CES.StreamAppMessageHttp,
           GCP.CES.StreamAssistantSessionChatAiAssistantHttp,
+          GCP.CES.StreamDeploymentMessageHttp,
           GCP.CES.StreamRunSessionHttp,
+          GCP.CES.StreamVersionMessageHttp,
         ),
       ),
     ),

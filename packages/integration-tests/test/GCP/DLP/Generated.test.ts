@@ -59,27 +59,43 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("DeidentifyTemplate", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDeidentifyTemplate@DeidentifyTemplate (dlp.projects.deidentifyTemplates.get): DeidentifyTemplate: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDeidentifyTemplate@DeidentifyTemplate (dlp.projects.deidentifyTemplates.get)",
+        () => probe("GetDeidentifyTemplate@DeidentifyTemplate", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("InspectTemplate", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetInspectTemplate@InspectTemplate (dlp.projects.inspectTemplates.get): InspectTemplate: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetInspectTemplate@InspectTemplate (dlp.projects.inspectTemplates.get)",
+        () => probe("GetInspectTemplate@InspectTemplate", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("JobTrigger", { concurrent: true }, () => {
-      test.provider.todo(
-        "ActivateJobTrigger@JobTrigger (dlp.projects.jobTriggers.activate): JobTrigger: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ActivateJobTrigger@JobTrigger (dlp.projects.jobTriggers.activate)",
+        () => probe("ActivateJobTrigger@JobTrigger", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetJobTrigger@JobTrigger (dlp.projects.jobTriggers.get): JobTrigger: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetJobTrigger@JobTrigger (dlp.projects.jobTriggers.get)",
+        () => probe("GetJobTrigger@JobTrigger", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

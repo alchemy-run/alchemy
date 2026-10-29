@@ -247,49 +247,81 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("AppsAgent", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetAgent (ces.projects.locations.apps.agents.get): AppsAgent: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetAgent (ces.projects.locations.apps.agents.get)",
+        () => probe("GetAgent", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("AppsDeployment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetDeployment (ces.projects.locations.apps.deployments.get): AppsDeployment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDeployment (ces.projects.locations.apps.deployments.get)",
+        () => probe("GetDeployment", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetDeploymentExtendedAgentCard (ces.projects.locations.apps.deployments.getExtendedAgentCard): AppsDeployment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDeploymentExtendedAgentCard (ces.projects.locations.apps.deployments.getExtendedAgentCard)",
+        () => probe("GetDeploymentExtendedAgentCard", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SendDeploymentMessage (ces.projects.locations.apps.deployments.message.send): AppsDeployment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SendDeploymentMessage (ces.projects.locations.apps.deployments.message.send)",
+        () => probe("SendDeploymentMessage", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "StreamDeploymentMessage (ces.projects.locations.apps.deployments.message.stream): AppsDeployment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "StreamDeploymentMessage (ces.projects.locations.apps.deployments.message.stream)",
+        () => probe("StreamDeploymentMessage", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("AppsExample", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetExample (ces.projects.locations.apps.examples.get): AppsExample: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetExample (ces.projects.locations.apps.examples.get)",
+        () => probe("GetExample", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("AppsGuardrail", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetGuardrail (ces.projects.locations.apps.guardrails.get): AppsGuardrail: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetGuardrail (ces.projects.locations.apps.guardrails.get)",
+        () => probe("GetGuardrail", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("AppsTool", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTool (ces.projects.locations.apps.tools.get): AppsTool: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTool (ces.projects.locations.apps.tools.get)",
+        () => probe("GetTool", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -301,25 +333,45 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("AppsVersion", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetVersion (ces.projects.locations.apps.versions.get): AppsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetVersion (ces.projects.locations.apps.versions.get)",
+        () => probe("GetVersion", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetVersionExtendedAgentCard (ces.projects.locations.apps.versions.getExtendedAgentCard): AppsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetVersionExtendedAgentCard (ces.projects.locations.apps.versions.getExtendedAgentCard)",
+        () => probe("GetVersionExtendedAgentCard", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RestoreVersion (ces.projects.locations.apps.versions.restore): AppsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RestoreVersion (ces.projects.locations.apps.versions.restore)",
+        () => probe("RestoreVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SendVersionMessage (ces.projects.locations.apps.versions.message.send): AppsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SendVersionMessage (ces.projects.locations.apps.versions.message.send)",
+        () => probe("SendVersionMessage", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "StreamVersionMessage (ces.projects.locations.apps.versions.message.stream): AppsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "StreamVersionMessage (ces.projects.locations.apps.versions.message.stream)",
+        () => probe("StreamVersionMessage", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

@@ -8,7 +8,9 @@ import {
   ProbeExclusion,
   ProbeFolderBucket,
   ProbeLocationsBucket,
+  ProbeLocationsView,
   ProbeLogBucket,
+  ProbeView,
 } from "./generated-resources.ts";
 
 /**
@@ -30,25 +32,28 @@ export default class LoggingGeneratedHost extends GCP.Function<LoggingGeneratedH
     const p6 = yield* GCP.Logging.GetBucket(ProbeLocationsBucket);
     const p7 = yield* GCP.Logging.GetExclusion(ProbeExclusion);
     const p8 = yield* GCP.Logging.GetSink();
-    const p9 = yield* GCP.Logging.ListBucketLinks(ProbeLogBucket);
-    const p10 = yield* GCP.Logging.ListBucketLinks(ProbeFolderBucket);
-    const p11 = yield* GCP.Logging.ListBucketLinks(ProbeLocationsBucket);
-    const p12 = yield* GCP.Logging.ListBuckets();
-    const p13 = yield* GCP.Logging.ListBucketViews(ProbeLogBucket);
-    const p14 = yield* GCP.Logging.ListBucketViews(ProbeFolderBucket);
-    const p15 = yield* GCP.Logging.ListBucketViews(ProbeLocationsBucket);
-    const p16 = yield* GCP.Logging.ListExclusions();
-    const p17 = yield* GCP.Logging.ListLogs();
-    const p18 = yield* GCP.Logging.ListLogScopes();
-    const p19 = yield* GCP.Logging.ListSinks();
-    const p20 = yield* GCP.Logging.PatchSink();
-    const p21 = yield* GCP.Logging.UndeleteBucket(ProbeLogBucket);
-    const p22 = yield* GCP.Logging.UndeleteBucket(ProbeFolderBucket);
-    const p23 = yield* GCP.Logging.UndeleteBucket(ProbeLocationsBucket);
-    const p24 = yield* GCP.Logging.UpdateBucketAsync(ProbeLogBucket);
-    const p25 = yield* GCP.Logging.UpdateBucketAsync(ProbeFolderBucket);
-    const p26 = yield* GCP.Logging.UpdateBucketAsync(ProbeLocationsBucket);
-    const p27 = yield* GCP.Logging.UpdateSink();
+    const p9 = yield* GCP.Logging.GetView(ProbeView);
+    const p10 = yield* GCP.Logging.GetView(ProbeLocationsView);
+    const p11 = yield* GCP.Logging.ListBucketLinks(ProbeLogBucket);
+    const p12 = yield* GCP.Logging.ListBucketLinks(ProbeFolderBucket);
+    const p13 = yield* GCP.Logging.ListBucketLinks(ProbeLocationsBucket);
+    const p14 = yield* GCP.Logging.ListBuckets();
+    const p15 = yield* GCP.Logging.ListBucketViews(ProbeLogBucket);
+    const p16 = yield* GCP.Logging.ListBucketViews(ProbeFolderBucket);
+    const p17 = yield* GCP.Logging.ListBucketViews(ProbeLocationsBucket);
+    const p18 = yield* GCP.Logging.ListExclusions();
+    const p19 = yield* GCP.Logging.ListLogs();
+    const p20 = yield* GCP.Logging.ListLogScopes();
+    const p21 = yield* GCP.Logging.ListSinks();
+    const p22 = yield* GCP.Logging.ListViewLogs(ProbeView);
+    const p23 = yield* GCP.Logging.PatchSink();
+    const p24 = yield* GCP.Logging.UndeleteBucket(ProbeLogBucket);
+    const p25 = yield* GCP.Logging.UndeleteBucket(ProbeFolderBucket);
+    const p26 = yield* GCP.Logging.UndeleteBucket(ProbeLocationsBucket);
+    const p27 = yield* GCP.Logging.UpdateBucketAsync(ProbeLogBucket);
+    const p28 = yield* GCP.Logging.UpdateBucketAsync(ProbeFolderBucket);
+    const p29 = yield* GCP.Logging.UpdateBucketAsync(ProbeLocationsBucket);
+    const p30 = yield* GCP.Logging.UpdateSink();
     return {
       fetch: serveProbes({
         CreateBucketAsync: outcome(
@@ -64,25 +69,28 @@ export default class LoggingGeneratedHost extends GCP.Function<LoggingGeneratedH
         "GetBucket@LocationsBucket": outcome(Retry.none(p6({} as never))),
         "GetExclusion@Exclusion": outcome(Retry.none(p7({} as never))),
         GetSink: outcome(Retry.none(p8({ sink: "alchemy-missing" } as never))),
-        "ListBucketLinks@LogBucket": outcome(Retry.none(p9({} as never))),
-        "ListBucketLinks@FolderBucket": outcome(Retry.none(p10({} as never))),
-        "ListBucketLinks@LocationsBucket": outcome(Retry.none(p11({} as never))),
-        ListBuckets: outcome(Retry.none(p12({ location: "us-central1" } as never))),
-        "ListBucketViews@LogBucket": outcome(Retry.none(p13({} as never))),
-        "ListBucketViews@FolderBucket": outcome(Retry.none(p14({} as never))),
-        "ListBucketViews@LocationsBucket": outcome(Retry.none(p15({} as never))),
-        ListExclusions: outcome(Retry.none(p16({} as never))),
-        ListLogs: outcome(Retry.none(p17({} as never))),
-        ListLogScopes: outcome(Retry.none(p18({ location: "us-central1" } as never))),
-        ListSinks: outcome(Retry.none(p19({} as never))),
-        PatchSink: outcome(Retry.none(p20({ sink: "alchemy-missing" } as never))),
-        "UndeleteBucket@LogBucket": outcome(Retry.none(p21({} as never))),
-        "UndeleteBucket@FolderBucket": outcome(Retry.none(p22({} as never))),
-        "UndeleteBucket@LocationsBucket": outcome(Retry.none(p23({} as never))),
-        "UpdateBucketAsync@LogBucket": outcome(Retry.none(p24({} as never))),
-        "UpdateBucketAsync@FolderBucket": outcome(Retry.none(p25({} as never))),
-        "UpdateBucketAsync@LocationsBucket": outcome(Retry.none(p26({} as never))),
-        UpdateSink: outcome(Retry.none(p27({ sink: "alchemy-missing" } as never))),
+        "GetView@BucketsView": outcome(Retry.none(p9({} as never))),
+        "GetView@LocationsBucketsView": outcome(Retry.none(p10({} as never))),
+        "ListBucketLinks@LogBucket": outcome(Retry.none(p11({} as never))),
+        "ListBucketLinks@FolderBucket": outcome(Retry.none(p12({} as never))),
+        "ListBucketLinks@LocationsBucket": outcome(Retry.none(p13({} as never))),
+        ListBuckets: outcome(Retry.none(p14({ location: "us-central1" } as never))),
+        "ListBucketViews@LogBucket": outcome(Retry.none(p15({} as never))),
+        "ListBucketViews@FolderBucket": outcome(Retry.none(p16({} as never))),
+        "ListBucketViews@LocationsBucket": outcome(Retry.none(p17({} as never))),
+        ListExclusions: outcome(Retry.none(p18({} as never))),
+        ListLogs: outcome(Retry.none(p19({} as never))),
+        ListLogScopes: outcome(Retry.none(p20({ location: "us-central1" } as never))),
+        ListSinks: outcome(Retry.none(p21({} as never))),
+        "ListViewLogs@BucketsView": outcome(Retry.none(p22({} as never))),
+        PatchSink: outcome(Retry.none(p23({ sink: "alchemy-missing" } as never))),
+        "UndeleteBucket@LogBucket": outcome(Retry.none(p24({} as never))),
+        "UndeleteBucket@FolderBucket": outcome(Retry.none(p25({} as never))),
+        "UndeleteBucket@LocationsBucket": outcome(Retry.none(p26({} as never))),
+        "UpdateBucketAsync@LogBucket": outcome(Retry.none(p27({} as never))),
+        "UpdateBucketAsync@FolderBucket": outcome(Retry.none(p28({} as never))),
+        "UpdateBucketAsync@LocationsBucket": outcome(Retry.none(p29({} as never))),
+        UpdateSink: outcome(Retry.none(p30({ sink: "alchemy-missing" } as never))),
       }),
     };
   }).pipe(
@@ -96,6 +104,7 @@ export default class LoggingGeneratedHost extends GCP.Function<LoggingGeneratedH
           GCP.Logging.GetBucketHttp,
           GCP.Logging.GetExclusionHttp,
           GCP.Logging.GetSinkHttp,
+          GCP.Logging.GetViewHttp,
           GCP.Logging.ListBucketLinksHttp,
           GCP.Logging.ListBucketsHttp,
           GCP.Logging.ListBucketViewsHttp,
@@ -103,6 +112,7 @@ export default class LoggingGeneratedHost extends GCP.Function<LoggingGeneratedH
           GCP.Logging.ListLogsHttp,
           GCP.Logging.ListLogScopesHttp,
           GCP.Logging.ListSinksHttp,
+          GCP.Logging.ListViewLogsHttp,
           GCP.Logging.PatchSinkHttp,
           GCP.Logging.UndeleteBucketHttp,
           GCP.Logging.UpdateBucketAsyncHttp,

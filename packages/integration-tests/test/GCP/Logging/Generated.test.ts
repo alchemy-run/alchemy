@@ -103,13 +103,21 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("BucketsView", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetView@BucketsView (logging.projects.locations.buckets.views.get): BucketsView: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetView@BucketsView (logging.projects.locations.buckets.views.get)",
+        () => probe("GetView@BucketsView", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListViewLogs@BucketsView (logging.projects.locations.buckets.views.logs.list): BucketsView: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListViewLogs@BucketsView (logging.projects.locations.buckets.views.logs.list)",
+        () => probe("ListViewLogs@BucketsView", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -250,9 +258,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("LocationsBucketsView", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetView@LocationsBucketsView (logging.locations.buckets.views.get): LocationsBucketsView: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetView@LocationsBucketsView (logging.locations.buckets.views.get)",
+        () => probe("GetView@LocationsBucketsView", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

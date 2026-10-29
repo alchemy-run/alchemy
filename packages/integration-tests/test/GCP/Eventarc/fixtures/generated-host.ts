@@ -4,6 +4,14 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import {
+  ProbeApiSource,
+  ProbeBus,
+  ProbeChannel,
+  ProbeEnrollment,
+  ProbePipeline,
+  ProbeTrigger,
+} from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Eventarc binding as its own
@@ -15,39 +23,60 @@ export default class EventarcGeneratedHost extends GCP.Function<EventarcGenerate
   "EventarcGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.Eventarc.GetProvider();
-    const p1 = yield* GCP.Eventarc.ListChannelConnections();
-    const p2 = yield* GCP.Eventarc.ListChannels();
-    const p3 = yield* GCP.Eventarc.ListEnrollments();
-    const p4 = yield* GCP.Eventarc.ListGoogleApiSources();
-    const p5 = yield* GCP.Eventarc.ListMessageBuses();
-    const p6 = yield* GCP.Eventarc.ListPipelines();
-    const p7 = yield* GCP.Eventarc.ListProviders();
-    const p8 = yield* GCP.Eventarc.ListTriggers();
+    const p0 = yield* GCP.Eventarc.GetChannel(ProbeChannel);
+    const p1 = yield* GCP.Eventarc.GetEnrollment(ProbeEnrollment);
+    const p2 = yield* GCP.Eventarc.GetGoogleApiSource(ProbeApiSource);
+    const p3 = yield* GCP.Eventarc.GetMessageBuse(ProbeBus);
+    const p4 = yield* GCP.Eventarc.GetPipeline(ProbePipeline);
+    const p5 = yield* GCP.Eventarc.GetProvider();
+    const p6 = yield* GCP.Eventarc.GetTrigger(ProbeTrigger);
+    const p7 = yield* GCP.Eventarc.ListChannelConnections();
+    const p8 = yield* GCP.Eventarc.ListChannels();
+    const p9 = yield* GCP.Eventarc.ListEnrollments();
+    const p10 = yield* GCP.Eventarc.ListGoogleApiSources();
+    const p11 = yield* GCP.Eventarc.ListMessageBuseEnrollments(ProbeBus);
+    const p12 = yield* GCP.Eventarc.ListMessageBuses();
+    const p13 = yield* GCP.Eventarc.ListPipelines();
+    const p14 = yield* GCP.Eventarc.ListProviders();
+    const p15 = yield* GCP.Eventarc.ListTriggers();
     return {
       fetch: serveProbes({
+        GetChannel: outcome(Retry.none(p0({} as never))),
+        GetEnrollment: outcome(Retry.none(p1({} as never))),
+        GetGoogleApiSource: outcome(Retry.none(p2({} as never))),
+        GetMessageBuse: outcome(Retry.none(p3({} as never))),
+        GetPipeline: outcome(Retry.none(p4({} as never))),
         GetProvider: outcome(
-          Retry.none(p0({ provider: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p5({ provider: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListChannelConnections: outcome(Retry.none(p1({ location: "us-central1" } as never))),
-        ListChannels: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListEnrollments: outcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListGoogleApiSources: outcome(Retry.none(p4({ location: "us-central1" } as never))),
-        ListMessageBuses: outcome(Retry.none(p5({ location: "us-central1" } as never))),
-        ListPipelines: outcome(Retry.none(p6({ location: "us-central1" } as never))),
-        ListProviders: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListTriggers: outcome(Retry.none(p8({ location: "us-central1" } as never))),
+        GetTrigger: outcome(Retry.none(p6({} as never))),
+        ListChannelConnections: outcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListChannels: outcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListEnrollments: outcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListGoogleApiSources: outcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListMessageBuseEnrollments: outcome(Retry.none(p11({} as never))),
+        ListMessageBuses: outcome(Retry.none(p12({ location: "us-central1" } as never))),
+        ListPipelines: outcome(Retry.none(p13({ location: "us-central1" } as never))),
+        ListProviders: outcome(Retry.none(p14({ location: "us-central1" } as never))),
+        ListTriggers: outcome(Retry.none(p15({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.Eventarc.GetChannelHttp,
+          GCP.Eventarc.GetEnrollmentHttp,
+          GCP.Eventarc.GetGoogleApiSourceHttp,
+          GCP.Eventarc.GetMessageBuseHttp,
+          GCP.Eventarc.GetPipelineHttp,
           GCP.Eventarc.GetProviderHttp,
+          GCP.Eventarc.GetTriggerHttp,
           GCP.Eventarc.ListChannelConnectionsHttp,
           GCP.Eventarc.ListChannelsHttp,
           GCP.Eventarc.ListEnrollmentsHttp,
           GCP.Eventarc.ListGoogleApiSourcesHttp,
+          GCP.Eventarc.ListMessageBuseEnrollmentsHttp,
           GCP.Eventarc.ListMessageBusesHttp,
           GCP.Eventarc.ListPipelinesHttp,
           GCP.Eventarc.ListProvidersHttp,

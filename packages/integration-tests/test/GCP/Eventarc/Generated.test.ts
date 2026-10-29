@@ -48,9 +48,13 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Channel", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetChannel (eventarc.projects.locations.channels.get): Channel: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetChannel (eventarc.projects.locations.channels.get)",
+        () => probe("GetChannel", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:eventarc", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -62,34 +66,54 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Enrollment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetEnrollment (eventarc.projects.locations.enrollments.get): Enrollment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetEnrollment (eventarc.projects.locations.enrollments.get)",
+        () => probe("GetEnrollment", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:eventarc", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("GoogleApiSource", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetGoogleApiSource (eventarc.projects.locations.googleApiSources.get): GoogleApiSource: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetGoogleApiSource (eventarc.projects.locations.googleApiSources.get)",
+        () => probe("GetGoogleApiSource", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:eventarc", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("MessageBus", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetMessageBuse (eventarc.projects.locations.messageBuses.get): MessageBus: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetMessageBuse (eventarc.projects.locations.messageBuses.get)",
+        () => probe("GetMessageBuse", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:eventarc", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListMessageBuseEnrollments (eventarc.projects.locations.messageBuses.listEnrollments): MessageBus: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListMessageBuseEnrollments (eventarc.projects.locations.messageBuses.listEnrollments)",
+        () => probe("ListMessageBuseEnrollments", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:eventarc", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("Pipeline", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPipeline (eventarc.projects.locations.pipelines.get): Pipeline: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetPipeline (eventarc.projects.locations.pipelines.get)",
+        () => probe("GetPipeline", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:eventarc", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -169,9 +193,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Trigger", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTrigger (eventarc.projects.locations.triggers.get): Trigger: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTrigger (eventarc.projects.locations.triggers.get)",
+        () => probe("GetTrigger", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:eventarc", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

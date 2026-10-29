@@ -29,8 +29,15 @@
   },
   "probes": {
     "resources": {
-      "App": "ProbeApp"
+      "App": "ProbeApp",
+      "AppsAgent": "ProbeAgent",
+      "AppsTool": "ProbeTool",
+      "AppsGuardrail": "ProbeGuardrail",
+      "AppsExample": "ProbeExample",
+      "AppsVersion": "ProbeVersion",
+      "AppsDeployment": "ProbeDeployment"
     },
-    "untestable": {}
+    "untestable": {},
+    "location": "us"
   }
 }

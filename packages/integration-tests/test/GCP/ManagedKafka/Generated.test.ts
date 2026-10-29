@@ -99,17 +99,29 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ClustersAcl", { concurrent: true }, () => {
-      test.provider.todo(
-        "AddAclEntry (managedkafka.projects.locations.clusters.acls.addAclEntry): ClustersAcl: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "AddAclEntry (managedkafka.projects.locations.clusters.acls.addAclEntry)",
+        () => probe("AddAclEntry", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetAcl (managedkafka.projects.locations.clusters.acls.get): ClustersAcl: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetAcl (managedkafka.projects.locations.clusters.acls.get)",
+        () => probe("GetAcl", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RemoveAclEntry (managedkafka.projects.locations.clusters.acls.removeAclEntry): ClustersAcl: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RemoveAclEntry (managedkafka.projects.locations.clusters.acls.removeAclEntry)",
+        () => probe("RemoveAclEntry", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -125,25 +137,45 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ConnectClustersConnector", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetConnector (managedkafka.projects.locations.connectClusters.connectors.get): ConnectClustersConnector: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetConnector (managedkafka.projects.locations.connectClusters.connectors.get)",
+        () => probe("GetConnector", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "PauseConnector (managedkafka.projects.locations.connectClusters.connectors.pause): ConnectClustersConnector: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "PauseConnector (managedkafka.projects.locations.connectClusters.connectors.pause)",
+        () => probe("PauseConnector", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RestartConnector (managedkafka.projects.locations.connectClusters.connectors.restart): ConnectClustersConnector: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RestartConnector (managedkafka.projects.locations.connectClusters.connectors.restart)",
+        () => probe("RestartConnector", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ResumeConnector (managedkafka.projects.locations.connectClusters.connectors.resume): ConnectClustersConnector: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ResumeConnector (managedkafka.projects.locations.connectClusters.connectors.resume)",
+        () => probe("ResumeConnector", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "StopConnector (managedkafka.projects.locations.connectClusters.connectors.stop): ConnectClustersConnector: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "StopConnector (managedkafka.projects.locations.connectClusters.connectors.stop)",
+        () => probe("StopConnector", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -190,17 +222,29 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("SchemaRegistriesSubjectsVersion", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetVersion@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.get): SchemaRegistriesSubjectsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetVersion@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.get)",
+        () => probe("GetVersion@SchemaRegistriesSubjectsVersion", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetVersionSchema@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.getSchema): SchemaRegistriesSubjectsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetVersionSchema@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.getSchema)",
+        () => probe("GetVersionSchema@SchemaRegistriesSubjectsVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListVersionReferencedby@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.referencedby.list): SchemaRegistriesSubjectsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListVersionReferencedby@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.referencedby.list)",
+        () => probe("ListVersionReferencedby@SchemaRegistriesSubjectsVersion", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

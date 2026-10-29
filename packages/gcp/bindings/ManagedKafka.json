@@ -40,7 +40,10 @@
       "Cluster": "Brokers",
       "ClustersTopic": "Events",
       "ConnectCluster": "Connect",
-      "SchemaRegistry": "Schemas"
+      "SchemaRegistry": "Schemas",
+      "ClustersAcl": "ProbeAcl",
+      "SchemaRegistriesSubjectsVersion": "ProbeSchemaVersion",
+      "ConnectClustersConnector": "ProbeConnector"
     },
     "untestable": {}
   }

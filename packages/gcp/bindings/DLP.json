@@ -71,7 +71,10 @@
       "ContentPolicy": "ProbeContentPolicy",
       "DlpJob": "ProbeDlpJob",
       "LocationsStoredInfoType": "ProbeLocationsStoredInfoType",
-      "StoredInfoType": "ProbeStoredInfoType"
+      "StoredInfoType": "ProbeStoredInfoType",
+      "DeidentifyTemplate": "ProbeDeidentify",
+      "InspectTemplate": "ProbeInspect",
+      "JobTrigger": "ProbeTrigger"
     },
     "untestable": {
       "OrganizationStoredInfoType": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",

@@ -42,3 +42,27 @@ export const ProbeStoredInfoType = GCP.DLP.StoredInfoType("ProbeStoredInfoType",
   description: "internal account numbers",
   regex: { pattern: "ACCT[0-9]{8}" },
 });
+
+export const ProbeDeidentify = GCP.DLP.DeidentifyTemplate("ProbeDeidentify", {
+  deidentifyConfig: {
+    infoTypeTransformations: {
+      transformations: [
+        {
+          infoTypes: [{ name: "EMAIL_ADDRESS" }],
+          primitiveTransformation: { replaceWithInfoTypeConfig: {} },
+        },
+      ],
+    },
+  },
+});
+export const ProbeInspect = GCP.DLP.InspectTemplate("ProbeInspect", {
+  inspectConfig: { infoTypes: [{ name: "EMAIL_ADDRESS" }], includeQuote: true },
+});
+export const ProbeTrigger = GCP.DLP.JobTrigger("ProbeTrigger", {
+  status: "PAUSED",
+  inspectJob: {
+    inspectConfig: { infoTypes: [{ name: "EMAIL_ADDRESS" }] },
+    storageConfig: { hybridOptions: { description: "probe" } },
+  },
+  triggers: [{ manual: {} }],
+});
