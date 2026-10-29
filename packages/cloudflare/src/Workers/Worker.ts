@@ -950,12 +950,26 @@ export interface WorkerProps<
    */
   bundle?: boolean;
   /**
-   * Module rules selecting which files in the directory containing
-   * {@link main} are uploaded as additional modules when {@link bundle}
-   * is `false`. Each rule's globs are matched against POSIX-style paths
-   * relative to that directory, mirroring Wrangler's `rules`
-   * configuration. When provided, these rules replace
-   * {@link defaultModuleRules}.
+   * Module rules selecting files uploaded as additional modules, mirroring
+   * Wrangler's `rules` configuration. Each rule's globs are matched against
+   * POSIX-style paths relative to the directory containing {@link main}.
+   *
+   * When {@link bundle} is `false`, every matching file in that directory is
+   * uploaded and these rules replace {@link defaultModuleRules}.
+   *
+   * When Alchemy bundles {@link main} (not `vite`), an import whose file
+   * matches is emitted as its own module instead of being bundled, ahead of
+   * the built-in rules (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`). Globs may also be absolute (files outside the
+   * entry's directory only match those or `**`), `!` globs exclude, and
+   * JavaScript, TypeScript and JSON are always bundled. Rules don't apply
+   * inside nested `?worker` imports.
+   * The module type follows the extension; unknown ones upload as Data:
+   *
+   * ```ts
+   * import font from "./font.ttf"; // ArrayBuffer
+   *
+   * rules: [{ globs: ["**\/*.ttf"] }]
+   * ```
    *
    * @default defaultModuleRules — ESModule (`**\/*.js`, `**\/*.mjs`), CompiledWasm (`**\/*.wasm`), Text (`**\/*.txt`, `**\/*.html`, `**\/*.sql`), Data (`**\/*.bin`)
    */

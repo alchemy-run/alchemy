@@ -6,12 +6,16 @@ import * as FileSystem from "effect/FileSystem";
 import { flow } from "effect/Function";
 import type * as Path from "effect/Path";
 import * as Stream from "effect/Stream";
+import path from "pathe";
+import picomatch from "picomatch";
 import type * as rolldown from "rolldown";
 import { isWorkflowExport } from "../../Workflows/Workflow.ts";
 import { isDurableObjectExport } from "../DurableObject.ts";
 import type { SourceContext, SourceProvider } from "../Source.ts";
 import type { SqlMigrationSnapshot } from "../SqlMigrationsRuntime.ts";
+import type { WorkerProps } from "../Worker.ts";
 import type { WorkerExport } from "../WorkerRuntimeContext.ts";
+import type { ModuleRule } from "./Prebuilt.ts";
 import { bundleSource } from "./shared.ts";
 import { workerModulePlugin } from "./WorkerModulePlugin.ts";
 
@@ -51,7 +55,68 @@ export interface WorkerBundleOptions {
       };
   stack: { name: string; stage: string };
   extraOptions: WorkerBuildOptions | undefined;
+  rules?: readonly ModuleRule[] | undefined;
 }
+
+/**
+ * The bundler options for a Worker's props, as local dev records them in its
+ * hashed config (a change restarts the instance). Builds themselves go
+ * through the Worker's source provider (`resolveSource`), which derives the
+ * same options from its {@link SourceContext} in {@link makeRolldownSource}.
+ */
+export const workerBundleOptions = (options: {
+  id: string;
+  props: Pick<WorkerProps, "main" | "isExternal" | "exports" | "build" | "rules">;
+  compatibility: WorkerBundleOptions["compatibility"];
+  stack: WorkerBundleOptions["stack"];
+}): WorkerBundleOptions => ({
+  id: options.id,
+  main: options.props.main!,
+  compatibility: options.compatibility,
+  entry: options.props.isExternal
+    ? { kind: "external" }
+    : { kind: "effect", exports: options.props.exports ?? {} },
+  stack: options.stack,
+  extraOptions: options.props.build,
+  rules: options.props.rules,
+});
+
+/**
+ * Lower the Worker's `rules` to bundler module rules: an import whose
+ * resolved file matches a glob is emitted as its own module instead of being
+ * loaded by rolldown. Globs match the path relative to the entry's directory,
+ * or an absolute path; `!` globs exclude, as in the
+ * prebuilt (`bundle: false`) walk. JavaScript, TypeScript and JSON are always
+ * bundled. The uploaded module type follows the file extension, and unknown
+ * extensions upload as Data.
+ */
+const toModuleRules = (main: string, rules: readonly ModuleRule[] | undefined) => {
+  const globs = rules?.flatMap((rule) => rule.globs) ?? [];
+  const include = globs.filter((glob) => !glob.startsWith("!"));
+  if (include.length === 0) return undefined;
+  const exclude = globs.filter((glob) => glob.startsWith("!")).map((glob) => glob.slice(1));
+  const root = path.dirname(main);
+  const isIncluded = picomatch(include, { dot: true });
+  const isExcluded = exclude.length ? picomatch(exclude, { dot: true }) : () => false;
+  return [
+    {
+      type: "Data" as const,
+      test: (id: string) => {
+        const file = path.normalize(id);
+        if (/\.([cm]?[jt]sx?|json)$/.test(file)) return false;
+        const relative = path.relative(root, file);
+        // Absolute globs match any file; relative ones match from the entry's
+        // directory, or from the filesystem root for files outside it.
+        const outside = relative.startsWith("../") || path.isAbsolute(relative);
+        const targets = [file, outside ? file.replace(/^\//, "") : relative];
+        return (
+          targets.some((target) => isIncluded(target)) &&
+          !targets.some((target) => isExcluded(target))
+        );
+      },
+    },
+  ];
+};
 
 /**
  * Rebuild any `builtin:esm-external-require` plugin instance with OUR copy of
@@ -154,11 +219,16 @@ export const WorkerBundle = Effect.gen(function* () {
     // The Cloudflare-flavored plugin set, shared by the parent build and
     // by every nested `?worker` module build (see WorkerModulePlugin.ts).
     const overrides = options.extraOptions?.input;
-    const cloudflarePlugins = () =>
+    // Nested `?worker` builds keep only their entry chunk (see
+    // WorkerModulePlugin.ts), so `rules` apply to the parent build alone: a
+    // matching import inside a nested worker fails to load rather than
+    // pointing at a module that is never uploaded.
+    const cloudflarePlugins = (moduleRules?: ReturnType<typeof toModuleRules>) =>
       configureCloudflarePlugins(
         cloudflareRolldown({
           compatibilityDate: options.compatibility.date,
           compatibilityFlags: options.compatibility.flags,
+          moduleRules,
         }),
         esmExternalRequirePlugin,
         overrides?.resolve?.alias,
@@ -190,7 +260,7 @@ export const WorkerBundle = Effect.gen(function* () {
       input: realMain,
       plugins: [
         overrides?.plugins,
-        cloudflarePlugins(),
+        cloudflarePlugins(toModuleRules(realMain, options.rules)),
         workerModules,
         options.entry.kind === "effect"
           ? [virtualEntryPlugin(makeEffectVirtualEntry(options.entry.exports, options.stack))]
@@ -316,7 +386,10 @@ ${[
  * under the same key as `build()`, so a diff that had to build shares
  * its output with the reconcile in the same run.
  */
-export const makeRolldownSource = (options: { main: string }): SourceProvider => {
+export const makeRolldownSource = (options: {
+  main: string;
+  rules: readonly ModuleRule[] | undefined;
+}): SourceProvider => {
   const bundleOptions = (ctx: SourceContext): WorkerBundleOptions => ({
     id: ctx.id,
     main: options.main,
@@ -324,6 +397,7 @@ export const makeRolldownSource = (options: { main: string }): SourceProvider =>
     entry: ctx.entry,
     stack: ctx.stack,
     extraOptions: ctx.extraOptions,
+    rules: options.rules,
   });
   return bundleSource({
     build: (ctx) =>

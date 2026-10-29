@@ -361,6 +361,14 @@ export const loadSource = (
   );
 
 /**
+ * Whether a Worker has no code at all — no `main`, `script`, `vite` or
+ * `source` — and only serves its `assets`. Every other Worker resolves a
+ * {@link SourceProvider} with {@link resolveSource}.
+ */
+export const isAssetsOnly = (props: WorkerProps) =>
+  props.main === undefined && props.script === undefined && !props.vite && !props.source;
+
+/**
  * Resolve the {@link SourceProvider} for a Worker from its props. The
  * `source` descriptor (external providers) wins; legacy props map to the
  * built-in providers, preserving the historical precedence exactly:
@@ -412,7 +420,7 @@ export const resolveSource = (
   if (props.bundle === false) {
     return Effect.succeed(makePrebuiltSource({ main: props.main!, rules: props.rules }));
   }
-  return Effect.succeed(makeRolldownSource({ main: props.main! }));
+  return Effect.succeed(makeRolldownSource({ main: props.main!, rules: props.rules }));
 };
 
 /**

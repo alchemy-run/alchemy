@@ -29,6 +29,7 @@ import { sha256 } from "alchemy/Util/sha256";
 import { ANSI_RESET, ansiFg, colorsEnabled } from "alchemy/Util/Terminal";
 import { theme } from "alchemy/Util/Theme";
 import * as Cause from "effect/Cause";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
 import * as Exit from "effect/Exit";
@@ -63,10 +64,8 @@ import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalEdge } from "./LocalEdge.ts";
 import { routePatternHost } from "./RoutePattern.ts";
 import { materializeRuntimeBindings, WorkerValidationError } from "./RuntimeBindings.ts";
-import { loadSource, SourceProviderError, type DevContext } from "./Source.ts";
-import { watchPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
-import { isPythonMain, watchPythonWorkerBundle } from "./Sources/Python.ts";
-import { WorkerBundle, type WorkerBundleOptions } from "./Sources/Rolldown.ts";
+import { resolveSource, SourceProviderError, type DevContext } from "./Source.ts";
+import { workerBundleOptions } from "./Sources/Rolldown.ts";
 import { DEFAULT_DEV_PORT, type ViteChildConfig } from "./ViteChild.shared.ts";
 import { startViteChild } from "./ViteChild.ts";
 import { resolveViteMain } from "./ViteMain.ts";
@@ -134,7 +133,6 @@ export const LocalWorkerProvider = () =>
     Worker,
     LOCAL_PROVIDERS_URL,
     Effect.gen(function* () {
-      const bundler = yield* WorkerBundle;
       const runtimeBase = process.cwd();
       const dotAlchemy = yield* dotAlchemyDirectory;
       const runtime = yield* Runtime;
@@ -279,7 +277,13 @@ export const LocalWorkerProvider = () =>
           const ext = path.extname(file.path);
           const type = moduleTypeFromExtension(ext);
           if (type === "SourceMap") continue;
-          if (type === "Data" || type === "Wasm") {
+          if (type === "Data" && typeof file.content === "string") {
+            modules.push({
+              name: file.path,
+              type,
+              content: new TextEncoder().encode(file.content),
+            });
+          } else if (type === "Data" || type === "Wasm") {
             if (!(file.content instanceof Uint8Array)) {
               return yield* WorkerValidationError.make({
                 message: `Expected Uint8Array for ${file.path} (${type})`,
@@ -523,19 +527,12 @@ export const LocalWorkerProvider = () =>
             : undefined,
           viteEnvironments: props.vite?.viteEnvironments,
           viteRootDir: props.vite?.rootDir,
-          bundleOptions: {
+          bundleOptions: workerBundleOptions({
             id,
-            main: props.main!,
+            props,
             compatibility,
-            entry: props.isExternal
-              ? { kind: "external" as const }
-              : {
-                  kind: "effect" as const,
-                  exports: props.exports ?? {},
-                },
             stack: { name: stack.name, stage: stack.stage },
-            extraOptions: props.build,
-          } satisfies WorkerBundleOptions,
+          }),
           assets: props.assets,
           dev,
           crons: Array.from(new Set([...getCronBindings(bindings), ...(props.crons ?? [])])),
@@ -1078,8 +1075,7 @@ export const LocalWorkerProvider = () =>
        * while a rebuild is in flight, serve every successful bundle, and
        * log build/serve errors without tearing the instance down.
        *
-       * Shared by the built-in bundler (`runWorker`) and bundle-mode
-       * external source providers (`runSource`) — both speak the same
+       * Used by every bundle-mode source (`runSource`), which all speak the
        * {@link Bundle.BundleWatchEvent} protocol.
        */
       const serveBundleStream = Effect.fn(function* <E, R>(
@@ -1089,6 +1085,11 @@ export const LocalWorkerProvider = () =>
       ) {
         let start = Date.now();
         let status: "start" | "update" = "start";
+        // Resolved once the first bundle is served (or its build or serve
+        // failed): the instance's `start` returns at readiness, so a restart
+        // never completes while the previous bundle is still the latest
+        // serve (`latestServes`) that restart hooks re-serve.
+        const firstServe = yield* Deferred.make<void>();
         yield* bundles.pipe(
           Stream.tap((event) => {
             if (event._tag === "Start") {
@@ -1108,6 +1109,7 @@ export const LocalWorkerProvider = () =>
                 // parked requests with the error now instead of after the
                 // pending timeout.
                 proxy.fail(event.error.message),
+                Deferred.succeed(firstServe, undefined),
               ]);
             }
             return Effect.void;
@@ -1136,55 +1138,16 @@ export const LocalWorkerProvider = () =>
                   ]);
                 }
               }),
+              Effect.ensuring(Deferred.succeed(firstServe, undefined)),
             ),
           ),
           Stream.runDrain,
+          // A stream that ends or fails before any bundle must not park
+          // `start` forever.
+          Effect.ensuring(Deferred.succeed(firstServe, undefined)),
           Effect.forkScoped,
         );
-      });
-
-      const runWorker = Effect.fn(function* (worker: RunnableWorkerConfig) {
-        const start = Date.now();
-        const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
-        // Inline `script` workers bypass the bundler entirely — the string
-        // IS the module (mirroring the deploy path, which uploads it as a
-        // single `main.js`). There is nothing to watch: script changes flow
-        // through the hashed config and restart the instance.
-        if (worker.script !== undefined) {
-          yield* serveWith(
-            worker,
-            {
-              files: [{ path: "main.js", content: worker.script, hash: "" }],
-              hash: "",
-            },
-            proxy,
-          );
-          yield* Effect.log(workerStartedMessage(Date.now() - start, proxy.url));
-          return proxy.url;
-        }
-        const bundles: Stream.Stream<
-          Bundle.BundleWatchEvent,
-          Bundle.BundleError,
-          ChildProcessSpawner.ChildProcessSpawner | FileSystem.FileSystem | Path.Path | Scope.Scope
-        > = isPythonMain(worker.bundleOptions.main)
-          ? watchPythonWorkerBundle({
-              id: worker.bundleOptions.id,
-              fqn: worker.fqn,
-              main: worker.bundleOptions.main,
-              compatibility: worker.compatibility,
-            })
-          : worker.prebuilt
-            ? // Prebuilt (`bundle: false`): fs-watch the entry directory
-              // and re-read the module graph byte-for-byte — running the
-              // rolldown watcher would re-bundle the prebuilt artifact
-              // and violate the deploy path's byte-for-byte contract.
-              watchPrebuiltWorkerBundle({
-                main: worker.bundleOptions.main,
-                rules: worker.rules,
-              })
-            : bundler.watch(worker.bundleOptions);
-        yield* serveBundleStream(worker, proxy, bundles);
-        return proxy.url;
+        yield* Deferred.await(firstServe);
       });
 
       // Assets-only Worker: there is no entry module to bundle or watch.
@@ -1390,24 +1353,28 @@ export const LocalWorkerProvider = () =>
         return url;
       });
 
-      // External source provider (`props.source`): the provider owns the
-      // dev story. Two modes (see `SourceDevHandle`):
-      // - `server`: the source runs its own dev server (framework dev);
-      //   the proxy is pointed at its URL.
-      // - `bundle`: the source supplies rebuild events; each successful
-      //   bundle is served through the same make-before-break `serveWith`
-      //   path the built-in bundler uses.
+      // Every Worker served from bundles goes through its source provider's
+      // `dev()`, as deploy goes through its `build()` (see `resolveSource`):
+      // the built-in sources (inline script, Python, prebuilt, rolldown)
+      // and external ones (`props.source`). Two modes (see
+      // `SourceDevHandle`); `server` sources are run by `runVite`, so this
+      // serves `bundle`: each successful bundle is served through the
+      // make-before-break `serveWith` path.
       const runSource = Effect.fn(function* (worker: RunnableWorkerConfig) {
         const proxy = yield* maybeStartProxy(worker.fqn, worker.dev);
-        // Queue requests until the source's first output is served —
-        // whether that's the first workerd serve (bundle mode) or the dev
-        // server URL (server mode).
+        // Queue requests until the source's first bundle is served.
         yield* proxy.unset();
-        // `loadSource` is typed against the full `SourceServices` union
+        // `resolveSource` is typed against the full `SourceServices` union
         // (which includes the per-run Artifacts cache the live provider
         // supplies); local dev has no run-scoped cache, so hand the
-        // module a fresh in-memory one.
-        const source = yield* loadSource(worker.source!).pipe(
+        // source a fresh in-memory one.
+        const source = yield* resolveSource({
+          source: worker.source,
+          script: worker.script,
+          main: worker.source ? undefined : worker.bundleOptions.main,
+          bundle: worker.prebuilt ? false : undefined,
+          rules: worker.rules,
+        }).pipe(
           Effect.provideService(
             AlchemyArtifacts,
             makeScopedArtifacts(createArtifactStore(), worker.fqn),
@@ -1450,7 +1417,7 @@ export const LocalWorkerProvider = () =>
         const handle = yield* source.dev(devCtx);
         if (handle.mode !== "bundle") {
           return yield* new SourceProviderError({
-            provider: worker.source!.provider,
+            provider: worker.source?.provider ?? "built-in",
             message: "A source declared devMode 'bundle' but returned a server-mode dev handle.",
           });
         }
@@ -1601,7 +1568,7 @@ export const LocalWorkerProvider = () =>
               ? runVite(worker, config.viteRootDir, invalidate)
               : config.assetsOnly
                 ? runAssetsOnly(worker)
-                : runWorker(worker);
+                : runSource(worker);
           // In dev, `urls` is the dev server's actual surface — localhost
           // first, then LAN addresses for wildcard hosts. Deployed domains
           // are not served by this session, so they don't appear.
@@ -1723,6 +1690,6 @@ const moduleTypeFromExtension = (ext: string): Module["type"] | "SourceMap" => {
     case ".map":
       return "SourceMap";
     default:
-      return "Text";
+      return "Data";
   }
 };

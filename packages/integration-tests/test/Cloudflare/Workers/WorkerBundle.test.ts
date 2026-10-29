@@ -1,5 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { WorkerBundle } from "@alchemy.run/cloudflare/Workers/Sources/Rolldown";
+import {
+  WorkerBundle,
+  type WorkerBundleOptions,
+} from "@alchemy.run/cloudflare/Workers/Sources/Rolldown";
 import { describe, expect, layer } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as NodeServices from "@effect/platform-node/NodeServices";
@@ -82,6 +85,57 @@ layer(NodeServices.layer)("WorkerBundle", (it) => {
           if (!file.path.endsWith(".js")) continue;
           expect(decode(file.content)).not.toContain("Calling `require` for");
         }
+      }),
+    { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
+  );
+  // #2729: an import with an extension rolldown can't load is emitted as its
+  // own module when it matches the Worker's `rules`, instead of failing.
+  it.effect(
+    "emits imports matching rules as separate modules",
+    () =>
+      Effect.gen(function* () {
+        const path = yield* Path.Path;
+        const root = yield* writeFixture({
+          "package.json": "{}",
+          "src/font.ttf": "FONT_BYTES",
+          "src/skip.ttf": "SKIP_BYTES",
+          "shared/logo.png": "LOGO_BYTES",
+          "src/worker.mjs": `import font from "./font.ttf"; import logo from "../shared/logo.png"; export default { fetch: () => new Response(font + logo) };`,
+        });
+        const bundler = yield* WorkerBundle;
+        const build = (rules: WorkerBundleOptions["rules"]) =>
+          bundler.build({
+            id: "worker-bundle-rules",
+            main: path.join(root, "src/worker.mjs"),
+            compatibility: { date: "2026-03-17", flags: [] },
+            entry: { kind: "external" },
+            stack: { name: "worker-bundle-test", stage: "test" },
+            extraOptions: undefined,
+            rules,
+          });
+
+        const output = yield* build([{ globs: ["**/*.ttf", `${root}/shared/*.png`] }]);
+        const entry = decode(output.files[0].content);
+        // `font.ttf` is in the entry's directory; `logo.png` is outside it
+        // and matches an absolute glob.
+        for (const [ext, bytes] of [
+          [".ttf", "FONT_BYTES"],
+          [".png", "LOGO_BYTES"],
+        ]) {
+          const file = output.files.find((file) => file.path.endsWith(ext));
+          expect(file && decode(file.content)).toBe(bytes);
+          expect(entry).toContain(path.basename(file!.path));
+        }
+
+        // `!` globs exclude, as in the prebuilt walk: the excluded import is
+        // left to rolldown, which can't load it.
+        const excluded = yield* Effect.flip(
+          build([{ globs: ["**/*.ttf", "**/*.png", `!${root}/src/font.ttf`] }]),
+        );
+        expect(String(excluded.cause ?? excluded.message)).toContain("font.ttf");
+
+        const error = yield* Effect.flip(build(undefined));
+        expect(String(error.cause ?? error.message)).toContain("font.ttf");
       }),
     { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   );
@@ -322,7 +376,16 @@ describe(
             },
           },
         });
-        return { url: worker.url.as<string>(), aliasUrl: aliased.url.as<string>() };
+        const moduleRules = yield* Cloudflare.Worker("ModuleRulesWorker", {
+          main: new URL("./fixtures/module-rules/worker.mjs", import.meta.url).href,
+          compatibility: { date: "2025-04-01" },
+          rules: [{ globs: ["**/*.ttf"] }],
+        });
+        return {
+          url: worker.url.as<string>(),
+          aliasUrl: aliased.url.as<string>(),
+          moduleRulesUrl: moduleRules.url.as<string>(),
+        };
       }),
     );
 
@@ -347,6 +410,31 @@ describe(
           execa: "aliased:package",
           readable: "aliased:package",
           event: "builtin:ok",
+        });
+      }),
+    );
+
+    // #2729: a bundled Worker imports a file rolldown can't load (`.ttf`)
+    // through `rules`, next to the built-in `.bin` and `.txt` rules. The
+    // font's bytes cover every value, so any text decoding along the way
+    // (bundle, upload, runtime) would change them.
+    test(
+      "bundled worker serves imports matched by rules as Data modules",
+      Effect.gen(function* () {
+        const { moduleRulesUrl } = yield* stack;
+        const client = yield* HttpClient.HttpClient;
+        const body = yield* client.get(moduleRulesUrl).pipe(
+          Effect.flatMap((response) => response.json),
+          Effect.retry({ schedule: Schedule.spaced("1 second"), times: 8 }),
+        );
+        const hex = (bytes: Uint8Array) => Buffer.from(bytes).toString("hex");
+        const fs = yield* FileSystem.FileSystem;
+        const fixture = (name: string) =>
+          fs.readFile(new URL(`./fixtures/module-rules/${name}`, import.meta.url).pathname);
+        expect(body).toEqual({
+          font: { type: "[object ArrayBuffer]", hex: hex(yield* fixture("font.ttf")) },
+          data: hex(yield* fixture("data.bin")),
+          notice: "module-rules-notice\n",
         });
       }),
     );

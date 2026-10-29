@@ -36,3 +36,8 @@ declare module "*.bin" {
 declare module "distilled:export-types" {
   export function getExportTypes(module: unknown): Record<string, string>;
 }
+
+declare module "*.ttf" {
+  const value: ArrayBuffer;
+  export default value;
+}
