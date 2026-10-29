@@ -627,7 +627,7 @@ export const Bucket = Resource<Bucket>("Cloudflare.R2.Bucket", {
 
 export declare namespace Bucket {
   export type StorageClass = "Standard" | "InfrequentAccess";
-  export type Jurisdiction = "default" | "eu" | "fedramp";
+  export type Jurisdiction = "default" | "eu" | "us" | "fedramp";
   export type Location = "apac" | "eeur" | "enam" | "weur" | "wnam" | "oc";
   export type LifecycleRule = {
     id: string;
@@ -1178,7 +1178,7 @@ export const ProviderLive = () =>
             // R2 buckets are account-scoped but partitioned by jurisdiction, so
             // enumerate each jurisdiction. Accounts not entitled to a given
             // jurisdiction (e.g. `fedramp`) reject the route — treat as empty.
-            const jurisdictions: Bucket.Jurisdiction[] = ["default", "eu", "fedramp"];
+            const jurisdictions: Bucket.Jurisdiction[] = ["default", "eu", "us", "fedramp"];
             const perJurisdiction = yield* Effect.forEach(
               jurisdictions,
               (jurisdiction) =>
