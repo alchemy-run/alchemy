@@ -4,6 +4,7 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { callProbe } from "../bindingHost.ts";
 import CloudNumberRegistryGeneratedHost from "./fixtures/generated-host.ts";
 
@@ -15,6 +16,8 @@ let baseUrl: string;
 
 const ALLOWED: string[] = [];
 
+const AMBIGUOUS: string[] = [];
+
 /**
  * Call one binding on the deployed host. `callProbe` retries while the
  * binding's IAM grant propagates, so a result means the call was authorized
@@ -22,8 +25,19 @@ const ALLOWED: string[] = [];
  */
 const probe = (name: string, expectSuccess: boolean) =>
   Effect.gen(function* () {
-    const result = yield* callProbe<string>(baseUrl, name);
-    const outcome = result.ok ? result.value : result.error._tag;
+    const call = callProbe<string>(baseUrl, name).pipe(
+      Effect.map((result) => (result.ok ? result.value : result.error._tag)),
+    );
+    const outcome =
+      AMBIGUOUS.length === 0
+        ? yield* call
+        : yield* call.pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("10 seconds"),
+              until: (value) => !AMBIGUOUS.includes(value),
+              times: 30,
+            }),
+          );
     if (expectSuccess)
       expect(ALLOWED.includes(outcome) ? "succeeded" : outcome).toEqual("succeeded");
     else expect(typeof outcome).toEqual("string");

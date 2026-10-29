@@ -18,6 +18,9 @@
       "CatalogsDatabase": "ProbeDatabase",
       "CatalogsDatabasesTable": "ProbeTable"
     },
-    "untestable": {}
+    "untestable": {},
+    "ambiguousTags": {
+      "BigLakeResourceNotFound": "BigLake answers a missing resource and a denied permission with the same 403"
+    }
   }
 }

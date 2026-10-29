@@ -4,6 +4,7 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { callProbe } from "../bindingHost.ts";
 import BigLakeGeneratedHost from "./fixtures/generated-host.ts";
 
@@ -14,6 +15,8 @@ const sharedStack = Core.scratchStack(testOptions, "BigLakeGenerated");
 let baseUrl: string;
 
 const ALLOWED: string[] = [];
+// BigLakeResourceNotFound is retried while a grant propagates: BigLake answers a missing resource and a denied permission with the same 403.
+const AMBIGUOUS: string[] = ["BigLakeResourceNotFound"];
 
 /**
  * Call one binding on the deployed host. `callProbe` retries while the
@@ -22,8 +25,19 @@ const ALLOWED: string[] = [];
  */
 const probe = (name: string, expectSuccess: boolean) =>
   Effect.gen(function* () {
-    const result = yield* callProbe<string>(baseUrl, name);
-    const outcome = result.ok ? result.value : result.error._tag;
+    const call = callProbe<string>(baseUrl, name).pipe(
+      Effect.map((result) => (result.ok ? result.value : result.error._tag)),
+    );
+    const outcome =
+      AMBIGUOUS.length === 0
+        ? yield* call
+        : yield* call.pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("10 seconds"),
+              until: (value) => !AMBIGUOUS.includes(value),
+              times: 30,
+            }),
+          );
     if (expectSuccess)
       expect(ALLOWED.includes(outcome) ? "succeeded" : outcome).toEqual("succeeded");
     else expect(typeof outcome).toEqual("string");

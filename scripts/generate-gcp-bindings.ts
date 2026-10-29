@@ -231,6 +231,12 @@ interface ProbeConfig {
    * The call is still authorized.
    */
   allowedOutcomes?: Record<string, string>;
+  /**
+   * Error tag → why it is ambiguous: an API that answers a missing resource
+   * and a denied permission alike (BigLake's 403 "denied (or it may not
+   * exist)"). Probes retry it while a fresh grant propagates, then accept it.
+   */
+  ambiguousTags?: Record<string, string>;
 }
 
 // ============ Discovery ============
@@ -1563,6 +1569,7 @@ import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import { callProbe } from "../bindingHost.ts";
 import ${service}GeneratedHost from "./fixtures/generated-host.ts";
 
@@ -1576,6 +1583,10 @@ ${Object.entries(config.probes!.allowedOutcomes ?? {})
   .map(([tag, reason]) => `// A plain read may answer ${tag}: ${reason}.`)
   .join("\n")}
 const ALLOWED: string[] = ${JSON.stringify(Object.keys(config.probes!.allowedOutcomes ?? {}))};
+${Object.entries(config.probes!.ambiguousTags ?? {})
+  .map(([tag, reason]) => `// ${tag} is retried while a grant propagates: ${reason}.`)
+  .join("\n")}
+const AMBIGUOUS: string[] = ${JSON.stringify(Object.keys(config.probes!.ambiguousTags ?? {}))};
 
 /**
  * Call one binding on the deployed host. \`callProbe\` retries while the
@@ -1584,8 +1595,19 @@ const ALLOWED: string[] = ${JSON.stringify(Object.keys(config.probes!.allowedOut
  */
 const probe = (name: string, expectSuccess: boolean) =>
   Effect.gen(function* () {
-    const result = yield* callProbe<string>(baseUrl, name);
-    const outcome = result.ok ? result.value : result.error._tag;
+    const call = callProbe<string>(baseUrl, name).pipe(
+      Effect.map((result) => (result.ok ? result.value : result.error._tag)),
+    );
+    const outcome =
+      AMBIGUOUS.length === 0
+        ? yield* call
+        : yield* call.pipe(
+            Effect.repeat({
+              schedule: Schedule.spaced("10 seconds"),
+              until: (value) => !AMBIGUOUS.includes(value),
+              times: 30,
+            }),
+          );
     if (expectSuccess) expect(ALLOWED.includes(outcome) ? "succeeded" : outcome).toEqual("succeeded");
     else expect(typeof outcome).toEqual("string");
   });
