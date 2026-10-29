@@ -682,7 +682,8 @@ const aggregateObject = (
         after: (after: number) => reportDefects(eventsAfter(after)),
         // The backfill protocol, as a source.
         bfScan: (id: string, target: string) => reportDefects(sourceFor(id).scan(target)),
-        bfReady: (id: string, target: string) => reportDefects(sourceFor(id).ready(target)),
+        bfReady: (id: string, target: string, reportTo: string) =>
+          reportDefects(sourceFor(id).ready(target, reportTo)),
         bfPull: (id: string, target: string, key: string, after: number) =>
           reportDefects(sourceFor(id).pull(target, key, after)),
         // A live read of this instance: accept its WebSocket, then push on every commit.
@@ -872,7 +873,8 @@ const viewObject = (kit: ViewKit, net: Backfill.Network, model: () => ReadonlyAr
         after: (after: number) => reportDefects(entriesAfter(after)),
         // The backfill protocol, as a source and as a consumer.
         bfScan: (key: string, target: string) => reportDefects(sourceFor(key).scan(target)),
-        bfReady: (key: string, target: string) => reportDefects(sourceFor(key).ready(target)),
+        bfReady: (key: string, target: string, reportTo: string) =>
+          reportDefects(sourceFor(key).ready(target, reportTo)),
         bfPull: (key: string, target: string, consumerKey: string, after: number) =>
           reportDefects(sourceFor(key).pull(target, consumerKey, after)),
         bfFeed: (key: string, target: string, stream: string, ref: Backfill.SourceRef) =>
@@ -1289,10 +1291,10 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
             ? unwrapDefects(namespace.getByName(ref.id).bfScan(ref.id, target))
             : Effect.succeed("discovered" as const);
         },
-        ready: (ref, target) => {
+        ready: (ref, target, reportTo) => {
           const namespace = sources.get(ref.source);
           return namespace
-            ? unwrapDefects(namespace.getByName(ref.id).bfReady(ref.id, target))
+            ? unwrapDefects(namespace.getByName(ref.id).bfReady(ref.id, target, reportTo))
             : Effect.succeed("settled" as const);
         },
         pull: (ref, target, key, after) => {

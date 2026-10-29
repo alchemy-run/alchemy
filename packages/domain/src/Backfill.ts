@@ -99,7 +99,8 @@ export type ScanResult =
 export interface SourceRpc {
   readonly scan: (ref: SourceRef, target: string) => Effect.Effect<ScanResult>;
   /** Tell its keys discovery is complete. */
-  readonly ready: (ref: SourceRef, target: string) => Effect.Effect<ReadyResult>;
+  /** `reportTo`: the directory node to tell when every key it feeds has gone live. */
+  readonly ready: (ref: SourceRef, target: string, reportTo: string) => Effect.Effect<ReadyResult>;
   readonly pull: (
     ref: SourceRef,
     target: string,
@@ -218,7 +219,13 @@ type Message =
       readonly ref: SourceRef;
     }
   | { readonly kind: "ready"; readonly target: string; readonly key: string }
-  | { readonly kind: "settled"; readonly target: string; readonly ref: SourceRef };
+  | {
+      readonly kind: "settled";
+      readonly target: string;
+      readonly ref: SourceRef;
+      /** The node that readied it; absent on rows staged by earlier code. */
+      readonly to?: string;
+    };
 
 const OUTBOX_LEASE_MS = 60_000;
 
@@ -228,6 +235,9 @@ const OUTBOX_LEASE_MS = 60_000;
  * one still on older code don't keep it there.
  */
 const RETRY_MS = 30_000;
+
+/** How long a key that is waiting to be told discovery is complete waits before asking. */
+const SAFETY_POLL_MS = 60_000;
 
 /** A target's generation: `view:Name#2` is 2. */
 const generationOf = (target: string) => Number(/#(\d+)$/.exec(target)?.[1] ?? 0);
@@ -249,7 +259,11 @@ const outbox = (storage: Storage, jobs: Jobs, net: Network, depth: number) => {
       case "ready":
         return net.consumer.ready(message.target, message.key);
       case "settled":
-        return net.node.settled(leafOf(message.ref, depth), message.target, message.ref);
+        return net.node.settled(
+          message.to ?? leafOf(message.ref, depth),
+          message.target,
+          message.ref,
+        );
     }
   };
   const acquire = storage.exclusive(
@@ -263,6 +277,8 @@ const outbox = (storage: Storage, jobs: Jobs, net: Network, depth: number) => {
   );
   /** Send every staged message; `true` when the outbox is empty. */
   const flush: Effect.Effect<boolean> = Effect.gen(function* () {
+    // Nothing staged: no lease to take.
+    if ((yield* storage.list({ prefix: "bf:q:", limit: 1 })).length === 0) return true;
     // Another flush holds the lease; it may stop before this one's rows: try again later.
     if (!(yield* acquire)) return yield* Effect.as(jobs.schedule("bf-flush", RETRY_MS), false);
     return yield* Effect.gen(function* () {
@@ -308,6 +324,8 @@ interface SourceState {
   readonly ready: boolean;
   /** Keys still pulling (not yet switched to live delivery). */
   readonly pending: number;
+  /** The directory nodes to tell when every key has gone live: each one that readied it. */
+  readonly reportTo?: ReadonlyArray<string>;
 }
 
 /** What a source instance gives the protocol. */
@@ -378,11 +396,14 @@ export const makeSource = (
   /** Every key is live: the target is live here. Callers hold the exclusive section. */
   const settle = (target: string, messages: Array<Message>) =>
     Effect.gen(function* () {
+      const state = yield* getState(target);
       yield* clear(keysPrefix(target));
       yield* clear(`bf:r:${enc(target)}:`);
       yield* storage.delete([stateKey(target)]);
       yield* host.markLive(target);
-      messages.push({ kind: "settled", target, ref: host.ref });
+      const to = state?.reportTo ?? [];
+      if (to.length === 0) messages.push({ kind: "settled", target, ref: host.ref });
+      for (const path of to) messages.push({ kind: "settled", target, ref: host.ref, to: path });
     });
 
   /** Route deliveries to a scanned target by key: send to live keys, index for pulling ones. */
@@ -477,7 +498,7 @@ export const makeSource = (
         return ((yield* queue.flush) ? "discovered" : "stale") as ScanResult;
       }),
 
-    ready: (target: string) =>
+    ready: (target: string, reportTo: string) =>
       Effect.gen(function* () {
         if (!host.model().includes(target)) return "stale" as ReadyResult;
         if (!host.targets().includes(target)) return "settled" as ReadyResult;
@@ -508,7 +529,14 @@ export const makeSource = (
               yield* queue.stage(messages);
               return "settled" as const;
             }
-            yield* storage.put({ [stateKey(target)]: { ...state, ready: true } });
+            const to = state.reportTo ?? [];
+            yield* storage.put({
+              [stateKey(target)]: {
+                ...state,
+                ready: true,
+                reportTo: to.includes(reportTo) ? to : [...to, reportTo],
+              },
+            });
             yield* queue.stage(messages);
             return "pending" as const;
           }),
@@ -652,14 +680,21 @@ export const makeConsumer = (
     });
 
   /** Record a feed's buffered count and whether it starves the merge. */
+  const starves = (feed: Feed | undefined) =>
+    feed !== undefined && !feed.live && feed.buffered === 0;
   const putFeed = (target: string, stream: string, feed: Feed) =>
     Effect.gen(function* () {
+      const before = yield* storage.get<Feed>(feedKey(target, stream));
       yield* storage.put({ [feedKey(target, stream)]: feed });
-      if (!feed.live) yield* storage.put({ [pullingKey(target, stream)]: true });
-      else yield* storage.delete([pullingKey(target, stream)]);
-      if (!feed.live && feed.buffered === 0)
-        yield* storage.put({ [starvedKey(target, stream)]: true });
-      else yield* storage.delete([starvedKey(target, stream)]);
+      // The indexes change only when the feed's state does: one write per row otherwise.
+      if (before === undefined || before.live !== feed.live) {
+        if (!feed.live) yield* storage.put({ [pullingKey(target, stream)]: true });
+        else yield* storage.delete([pullingKey(target, stream)]);
+      }
+      if (before === undefined || starves(before) !== starves(feed)) {
+        if (starves(feed)) yield* storage.put({ [starvedKey(target, stream)]: true });
+        else yield* storage.delete([starvedKey(target, stream)]);
+      }
     });
 
   /** Buffer deliveries in merge order. Callers hold the exclusive section. */
@@ -766,7 +801,7 @@ export const makeConsumer = (
             yield* storage.delete(rows.map(([key]) => key));
           }
         }
-        yield* storage.delete([backfillKey(target)]);
+        yield* storage.delete([backfillKey(target), `bf:asked:${T(target)}`]);
         yield* storage.put({ [doneKey(target)]: true });
         return "done" as const;
       }),
@@ -851,7 +886,14 @@ export const makeConsumer = (
         const backfill = yield* storage.get<Backfill>(backfillKey(target));
         if (!backfill) return;
         if (!backfill.ready) {
-          // No source has said discovery is complete: ask the directory.
+          // A key with sources is told when discovery is complete; ask the directory only
+          // rarely, as a safety net. One fed only live has no source to tell it: it asks.
+          const pulling =
+            (yield* storage.list({ prefix: pullingPrefix(target), limit: 1 })).length > 0;
+          if (pulling && !(yield* storage.get(`bf:asked:${T(target)}`))) {
+            yield* storage.put({ [`bf:asked:${T(target)}`]: true });
+            return yield* jobs.schedule(jobId(target), SAFETY_POLL_MS);
+          }
           const asked = yield* askPhase(target, backfill).pipe(
             Effect.catchCause(() => Effect.succeed(undefined)),
           );
@@ -931,6 +973,12 @@ export const makeNode = (
   const reportPrefix = (target: string, phase: string) => `rp:${enc(target)}:${phase}:`;
   const unsettledPrefix = (target: string) => `us:${enc(target)}:`;
   const settledKey = (target: string, ref: SourceRef) => `st:${enc(target)}:${refKey(ref)}`;
+
+  /** Remember this node's path (jobs read it), written once. */
+  const keepPath = (path: string) =>
+    Effect.gen(function* () {
+      if ((yield* storage.get<string>("path")) !== path) yield* storage.put({ path });
+    });
 
   /**
    * Link this node into its parent, and so on up to the root, before answering:
@@ -1046,7 +1094,7 @@ export const makeNode = (
         if (scanned !== "discovered") continue;
         if (discovering) continue;
         const ready = yield* net.source
-          .ready(ref, target)
+          .ready(ref, target, path)
           .pipe(Effect.catchCause(() => Effect.succeed("stale" as const)));
         if (ready === "stale") {
           stale = true;
@@ -1080,8 +1128,8 @@ export const makeNode = (
       const children = (yield* storage.list({ prefix: "c:" })).map(([key]) => key.slice(2));
       const previous = yield* getSweep(target);
       const adopting = phase !== "discover" && previous === undefined ? null : previous?.adopting;
+      yield* keepPath(path);
       yield* storage.put({
-        path,
         [sweepKey(target)]: {
           phase,
           children,
@@ -1178,7 +1226,7 @@ export const makeNode = (
           ? Effect.map(net.source.scan(ref, target), (result) =>
               result === "discovered" ? "done" : result,
             )
-          : Effect.map(net.source.ready(ref, target), (result) =>
+          : Effect.map(net.source.ready(ref, target, path), (result) =>
               result === "settled" ? "done" : result,
             );
       const results = yield* Effect.forEach(
@@ -1239,7 +1287,8 @@ export const makeNode = (
             const key = `i:${refKey(ref)}`;
             if ((yield* storage.get(key)) !== undefined) return undefined;
             const count = ((yield* storage.get<number>("count")) ?? 0) + 1;
-            yield* storage.put({ path, [key]: ref, count });
+            yield* keepPath(path);
+            yield* storage.put({ [key]: ref, count });
             yield* join(path, ref, key);
             // Full: split into 16 children by the next hex digit, a page at a time.
             if (count > limits.leafSize && path.length < 8) {
@@ -1257,7 +1306,8 @@ export const makeNode = (
         yield* storage.exclusive(
           Effect.gen(function* () {
             const fresh = (yield* storage.get(`c:${child}`)) === undefined;
-            yield* storage.put({ path, [`c:${child}`]: true });
+            yield* keepPath(path);
+            yield* storage.put({ [`c:${child}`]: true });
             if (!fresh) return;
             // Linked while sweeps run: it takes part in each one's current phase.
             for (const { target, sweep } of yield* sweeps) {
@@ -1278,7 +1328,8 @@ export const makeNode = (
           const known = (yield* storage.get<Array<string>>("known")) ?? [];
           const fresh = targets.filter((target) => !known.includes(target));
           if (fresh.length === 0) return;
-          yield* storage.put({ path, known: [...known, ...fresh] });
+          yield* keepPath(path);
+          yield* storage.put({ known: [...known, ...fresh] });
           if (path !== "") return yield* jobs.schedule("news", 0);
           for (const target of fresh) yield* begin(path, target, "discover");
         }),
@@ -1304,7 +1355,8 @@ export const makeNode = (
       Effect.gen(function* () {
         const split = yield* storage.exclusive(
           Effect.gen(function* () {
-            yield* storage.put({ path, [settledKey(target, ref)]: true });
+            yield* keepPath(path);
+            yield* storage.put({ [settledKey(target, ref)]: true });
             yield* storage.delete([`${unsettledPrefix(target)}${refKey(ref)}`]);
             yield* settle(path, target);
             return (yield* storage.get<boolean>("split")) === true;

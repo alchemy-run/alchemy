@@ -216,10 +216,10 @@ export const make = (
             sourceRoles.get(ref.source)?.(ref.id).scan(target) ??
             Effect.succeed("discovered" as const),
         ),
-      ready: (ref, target) =>
+      ready: (ref, target, reportTo) =>
         Effect.suspend(
           () =>
-            sourceRoles.get(ref.source)?.(ref.id).ready(target) ??
+            sourceRoles.get(ref.source)?.(ref.id).ready(target, reportTo) ??
             Effect.succeed("settled" as const),
         ),
       pull: (ref, target, key, after) =>

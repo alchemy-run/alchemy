@@ -68,9 +68,9 @@ class SimObject {
   }
 
   private write(key: string, value: unknown) {
-    if (value === undefined) {
-      if (this.data.delete(key)) this.dirty = true;
-    } else {
+    // A delete leaves the key in the sorted list, skipped when read: only new keys re-sort.
+    if (value === undefined) this.data.delete(key);
+    else {
       if (!this.data.has(key)) this.dirty = true;
       this.data.set(key, value);
     }
@@ -129,7 +129,7 @@ class SimObject {
         ) {
           const key = this.sorted[i]!;
           if (!key.startsWith(options.prefix)) break;
-          if (!inRange(key)) continue;
+          if (!inRange(key) || !this.data.has(key)) continue;
           stored.push(key);
           if (stored.length >= limit + (this.overlay?.size ?? 0)) break;
         }
@@ -446,8 +446,10 @@ export class Sim {
     source: {
       scan: (ref, target) =>
         this.call(this.source(ref).object, () => this.busy(this.source(ref)).role.scan(target)),
-      ready: (ref, target) =>
-        this.call(this.source(ref).object, () => this.busy(this.source(ref)).role.ready(target)),
+      ready: (ref, target, reportTo) =>
+        this.call(this.source(ref).object, () =>
+          this.busy(this.source(ref)).role.ready(target, reportTo),
+        ),
       pull: (ref, target, key, after) =>
         this.call(this.source(ref).object, () =>
           this.busy(this.source(ref)).role.pull(target, key, after),
