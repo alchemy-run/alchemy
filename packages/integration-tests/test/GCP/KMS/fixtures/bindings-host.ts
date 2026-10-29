@@ -125,8 +125,26 @@ export default class KmsBindingsHost extends GCP.Function<KmsBindingsHost>()(
 
     const version = probeParam("version");
 
+    const listKeyRings = yield* GCP.KMS.ListKeyRings();
+    const listEkmConnections = yield* GCP.KMS.ListEkmConnections();
+    const listKeyHandles = yield* GCP.KMS.ListKeyHandles();
+    const listRetiredResources = yield* GCP.KMS.ListRetiredResources();
+    const listHsmInstances = yield* GCP.KMS.ListSingleTenantHsmInstances();
+
     return {
       fetch: serveProbes({
+        project: Effect.gen(function* () {
+          const location = "us-central1";
+          const rings = yield* listKeyRings({ location, pageSize: 1000 });
+          const ekm = yield* listEkmConnections({ location });
+          const handles = yield* listKeyHandles({ location });
+          const retired = yield* listRetiredResources({ location });
+          const hsm = yield* listHsmInstances({ location });
+          return {
+            rings: (rings.keyRings ?? []).map((ring) => ring.name),
+            rest: [ekm, handles, retired, hsm].map((page) => typeof page),
+          };
+        }),
         roundTrip: Effect.gen(function* () {
           const encrypted = yield* encrypt({ body: { plaintext } });
           const decrypted = yield* decrypt({
@@ -226,6 +244,11 @@ export default class KmsBindingsHost extends GCP.Function<KmsBindingsHost>()(
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
+        GCP.KMS.ListKeyRingsHttp,
+        GCP.KMS.ListEkmConnectionsHttp,
+        GCP.KMS.ListKeyHandlesHttp,
+        GCP.KMS.ListRetiredResourcesHttp,
+        GCP.KMS.ListSingleTenantHsmInstancesHttp,
         GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
         GCP.Storage.PutObjectHttp,
         GCP.KMS.EncryptHttp,

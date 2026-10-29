@@ -155,7 +155,10 @@ describe(
               )
               .map((binding) => binding.role);
             expect(roles).toEqual(["roles/artifactregistry.reader"]);
-            expect(yield* projectGrantsOf(hostAccount)).toEqual([]);
+            // ListRepositories is the only project-level grant.
+            expect(yield* projectGrantsOf(hostAccount)).toEqual([
+              { role: "roles/artifactregistry.reader", condition: undefined },
+            ]);
           }),
         {
           tags: ["provider:gcp", "provider:gcp:artifactregistry", "live"],
@@ -450,6 +453,18 @@ describe(
             }
           }),
         { tags: ["provider:gcp", "live"], timeout: 900_000 },
+      );
+    });
+
+    describe("ListRepositories", () => {
+      test.provider(
+        "lists a location's repositories",
+        (_stack) =>
+          Effect.gen(function* () {
+            const listed = yield* expectProbe<string[]>(baseUrl, "listRepositories");
+            expect(listed).toContain(repository.name);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:artifactregistry", "live"], timeout: 600_000 },
       );
     });
   },

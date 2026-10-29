@@ -59,8 +59,13 @@ export default class WorkflowsBindingsHost extends GCP.Function<WorkflowsBinding
 
     const execution = probeParam("execution");
 
+    const listWorkflows = yield* GCP.Workflows.ListWorkflows();
+
     return {
       fetch: serveProbes({
+        listWorkflows: listWorkflows({ location: "us-central1", pageSize: 1000 }).pipe(
+          Effect.map((page) => (page.workflows ?? []).map((workflow) => workflow.name)),
+        ),
         createExecution: createExecution({
           body: { argument: JSON.stringify({ name: "alchemy" }) },
         }),
@@ -107,6 +112,7 @@ export default class WorkflowsBindingsHost extends GCP.Function<WorkflowsBinding
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
+        GCP.Workflows.ListWorkflowsHttp,
         GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
         GCP.Storage.PutObjectHttp,
         GCP.Workflows.CreateExecutionHttp,

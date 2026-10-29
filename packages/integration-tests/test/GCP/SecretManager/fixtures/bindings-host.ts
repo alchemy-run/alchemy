@@ -72,6 +72,7 @@ export default class SecretManagerBindingsHost extends GCP.Function<SecretManage
     const enableVersion = yield* GCP.SecretManager.EnableSecretVersion(GenSecret);
     const rotate = yield* GCP.SecretManager.RotateSecret(GenSecret);
     const enableRotation = yield* GCP.SecretManager.EnableSecretManagedRotation(GenSecret);
+    const listSecrets = yield* GCP.SecretManager.ListSecrets();
 
     const roundTrip = (add: typeof addVersion, read: typeof access, value: string) =>
       Effect.gen(function* () {
@@ -90,6 +91,14 @@ export default class SecretManagerBindingsHost extends GCP.Function<SecretManage
 
     return {
       fetch: serveProbes({
+        listSecrets: Effect.gen(function* () {
+          const global = yield* listSecrets({ pageSize: 25000 });
+          const regional = yield* listSecrets({ location: "us-central1", pageSize: 25000 });
+          return {
+            global: (global.secrets ?? []).map((secret) => secret.name),
+            regional: (regional.secrets ?? []).map((secret) => secret.name),
+          };
+        }),
         ops: roundTrip(addVersion, access, "per-op-global"),
         opsRegional: roundTrip(addRegional, accessRegional, "per-op-regional"),
         getSecret: Effect.all({ global: getSecret(), regional: getRegional() }),
@@ -159,6 +168,7 @@ export default class SecretManagerBindingsHost extends GCP.Function<SecretManage
         GCP.SecretManager.EnableSecretVersionHttp,
         GCP.SecretManager.RotateSecretHttp,
         GCP.SecretManager.EnableSecretManagedRotationHttp,
+        GCP.SecretManager.ListSecretsHttp,
       ),
     ),
   ),

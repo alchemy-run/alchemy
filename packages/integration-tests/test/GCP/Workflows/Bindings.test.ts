@@ -242,5 +242,18 @@ describe(
         { tags: ["provider:gcp", "live"], timeout: 900_000 },
       );
     });
+
+    describe("ListWorkflows", () => {
+      test.provider(
+        "lists a location's workflows",
+        (_stack) =>
+          Effect.gen(function* () {
+            const listed = yield* expectProbe<string[]>(baseUrl, "listWorkflows");
+            expect(listed).toContain(workflowName);
+            yield* expectProjectGrants;
+          }),
+        { tags: ["provider:gcp", "provider:gcp:workflows", "live"], timeout: 600_000 },
+      );
+    });
   },
 );

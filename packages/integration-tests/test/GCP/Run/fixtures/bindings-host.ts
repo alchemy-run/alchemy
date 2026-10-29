@@ -95,10 +95,28 @@ export default class RunBindingsHost extends GCP.Function<RunBindingsHost>()(
     const getPoolRevision = yield* GCP.Run.GetWorkerPoolRevision(GenWorkers);
     const deletePoolRevision = yield* GCP.Run.DeleteWorkerPoolRevision(GenWorkers);
 
+    const listServices = yield* GCP.Run.ListServices();
+    const listJobs = yield* GCP.Run.ListJobs();
+    const listWorkerPools = yield* GCP.Run.ListWorkerPools();
+    const listInstances = yield* GCP.Run.ListInstances();
+
     const execution = probeParam("execution");
 
     return {
       fetch: serveProbes({
+        project: Effect.gen(function* () {
+          const location = "us-central1";
+          const services = yield* listServices({ location, pageSize: 1000 });
+          const jobs = yield* listJobs({ location, pageSize: 1000 });
+          const pools = yield* listWorkerPools({ location, pageSize: 1000 });
+          const instances = yield* listInstances({ location, pageSize: 1000 });
+          return {
+            services: (services.services ?? []).map((item) => item.name),
+            jobs: (jobs.jobs ?? []).map((item) => item.name),
+            pools: (pools.workerPools ?? []).map((item) => item.name),
+            instances: instances.instances ?? [],
+          };
+        }),
         getJob: getJob(),
         listExecutions: listExecutions(),
         execution: Effect.gen(function* () {
@@ -147,6 +165,10 @@ export default class RunBindingsHost extends GCP.Function<RunBindingsHost>()(
     Effect.provide(GCP.Run.InvokeServiceHttp),
     Effect.provide(
       Layer.mergeAll(
+        GCP.Run.ListServicesHttp,
+        GCP.Run.ListJobsHttp,
+        GCP.Run.ListWorkerPoolsHttp,
+        GCP.Run.ListInstancesHttp,
         GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
         GCP.Storage.PutObjectHttp,
         GCP.Run.GetJobHttp,

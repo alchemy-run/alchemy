@@ -62,12 +62,14 @@ export function consumeTableAuditLogs<Req = never, ResourceReq = never>(
           resource.LogicalId,
           {
             ...props,
-            filter: Output.map(resource.name, (resourceName) =>
-              resourceAuditLogFilter({
-                serviceNames: ["bigquery.googleapis.com"],
-                resourceName,
-                methods,
-              }),
+            filter: Output.map(
+              Output.interpolate`projects/${resource.project}/datasets/${resource.datasetId}/tables/${resource.tableId}`,
+              (resourceName) =>
+                resourceAuditLogFilter({
+                  serviceNames: ["bigquery.googleapis.com"],
+                  resourceName,
+                  methods,
+                }),
             ),
           },
           process,

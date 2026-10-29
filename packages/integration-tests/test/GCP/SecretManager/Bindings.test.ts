@@ -384,5 +384,23 @@ describe(
         { tags: ["provider:gcp", "live"], timeout: 900_000 },
       );
     });
+
+    describe("ListSecrets", () => {
+      test.provider(
+        "lists the project's secrets and a location's, granted viewer on the project",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{ global: string[]; regional: string[] }>(
+              baseUrl,
+              "listSecrets",
+            );
+            // Listed names may carry the project number.
+            const ids = (names: string[]) => names.map((name) => name.split("/").at(-1));
+            expect(ids(out.global)).toContain(secrets.gen.split("/").at(-1));
+            expect(ids(out.regional)).toContain(secrets.genRegional.split("/").at(-1));
+          }),
+        { tags: ["provider:gcp", "provider:gcp:secretmanager", "live"], timeout: 600_000 },
+      );
+    });
   },
 );

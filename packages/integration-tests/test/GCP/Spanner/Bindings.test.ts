@@ -364,5 +364,25 @@ describe(
         { tags: ["provider:gcp", "live"], timeout: 900_000 },
       );
     });
+
+    describe("project bindings", () => {
+      test.provider(
+        "lists the project's instances, instance configs and config operations",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{
+              instances: string[];
+              configs: string[];
+              operations: unknown[];
+            }>(baseUrl, "project");
+            const ids = (names: string[]) => names.map((name) => name.split("/").at(-1));
+            expect(ids(out.instances)).toContain(names.instance.split("/").at(-1));
+            expect(ids(out.configs)).toContain("regional-us-central1");
+            // No custom configs are being changed: the call is authorized.
+            expect(Array.isArray(out.operations)).toEqual(true);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:spanner", "live"], timeout: 600_000 },
+      );
+    });
   },
 );

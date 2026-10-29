@@ -253,10 +253,20 @@ export const HmacKeyProvider = () =>
       let secret = output?.secret;
 
       if (current === undefined) {
-        const created = yield* storage.createProjectsHmacKeys({
-          projectId,
-          serviceAccountEmail,
-        });
+        const created = yield* storage
+          .createProjectsHmacKeys({
+            projectId,
+            serviceAccountEmail,
+          })
+          .pipe(
+            // A service account created moments ago is not visible to Cloud
+            // Storage yet.
+            Effect.retry({
+              while: (error) => error._tag === "NotFound",
+              schedule: Schedule.exponential("500 millis", 1.5),
+              times: 10,
+            }),
+          );
         current = created.metadata;
         secret = toSecret(created.secret) ?? secret;
       }

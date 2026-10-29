@@ -113,7 +113,11 @@ export const callProbe = <A = unknown>(baseUrl: string, name: string) =>
     Effect.flatMap((outcome) =>
       !outcome.ok &&
       (outcome.error._tag === "Forbidden" || outcome.error._tag === "PermissionDenied")
-        ? Effect.fail(new ProbeNotReady({ reason: `IAM: ${outcome.error._tag}` }))
+        ? Effect.fail(
+            new ProbeNotReady({
+              reason: `IAM: ${outcome.error._tag} ${outcome.error.message ?? ""}`,
+            }),
+          )
         : Effect.succeed(outcome),
     ),
     Effect.mapError((error) =>
@@ -124,6 +128,7 @@ export const callProbe = <A = unknown>(baseUrl: string, name: string) =>
       schedule: Schedule.spaced("10 seconds"),
       times: 42,
     }),
+    Effect.mapError((error) => new ProbeNotReady({ reason: `probe ${name}: ${error.reason}` })),
   );
 
 /** {@link callProbe}, failing the test unless the probe succeeded. */

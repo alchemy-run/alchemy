@@ -175,7 +175,8 @@ export const makeGcpBinding = <Shape>(options: {
           iam: [grantFor(variant.iam, attributes[variant.grantOn ?? "name"]!)],
         });
       }
-      const name = yield* resourceName;
+      // Flat-path variants address the resource by `params` alone.
+      const name = variant.param !== undefined ? yield* resourceName : undefined;
       const filled: [string, Effect.Effect<string>][] = [];
       for (const [field, attribute] of Object.entries(variant.params ?? {})) {
         filled.push([field, yield* attributes[attribute]!]);
@@ -184,7 +185,7 @@ export const makeGcpBinding = <Shape>(options: {
         request?: Record<string, unknown>,
       ) {
         const input: Record<string, unknown> = { ...request };
-        let target = yield* name;
+        let target = name === undefined ? "" : yield* name;
         if (variant.append) target = `${target}/${variant.append}`;
         for (const [collection, field] of variant.children ?? []) {
           target = `${target}/${collection}/${input[field]}`;

@@ -2,13 +2,23 @@ import * as GCP from "@alchemy.run/gcp";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Core from "@alchemy.run/test/Core";
+import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as iam from "@distilled.cloud/gcp/unstable/iam_v1";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
+import { expectAuditEntry } from "../auditLogs.ts";
 import { callProbe, expectProbe } from "../bindingHost.ts";
 import StorageBindingsHost, {
+  AuditMarkers,
+  FolderAssets,
+  GEN_PART,
+  GEN_RESTORE,
+  GEN_SEED,
+  GenAssets,
+  GenHmacKey,
+  ManagedAssets,
   DeleteAssets,
   GetAssets,
   PutAssets,
@@ -36,6 +46,29 @@ let buckets: {
   delete: string;
   sign: string;
 };
+let gen: {
+  assets: string;
+  managed: string;
+  folders: string;
+  hmacAccessId: string;
+  markers: string;
+};
+
+/** Every project-level role the host's service account holds. */
+const projectRoles = () =>
+  resourcemanager
+    .getIamPolicyProjects({
+      resource: `projects/${project}`,
+      body: { options: { requestedPolicyVersion: 3 } },
+    })
+    .pipe(
+      Effect.map((policy) =>
+        (policy.bindings ?? [])
+          .filter((binding) => (binding.members ?? []).includes(`serviceAccount:${hostAccount}`))
+          .map((binding) => binding.role)
+          .sort(),
+      ),
+    );
 
 /** Roles the host's service account holds on one bucket's IAM policy. */
 const bucketRoles = (bucket: string) =>
@@ -76,6 +109,13 @@ describe(
               put: (yield* PutAssets).bucketName,
               delete: (yield* DeleteAssets).bucketName,
               sign: (yield* SignAssets).bucketName,
+              gen: {
+                assets: (yield* GenAssets).bucketName,
+                managed: (yield* ManagedAssets).bucketName,
+                folders: (yield* FolderAssets).bucketName,
+                hmacAccessId: (yield* GenHmacKey).accessId,
+                markers: (yield* AuditMarkers).bucketName,
+              },
             };
           }),
         );
@@ -91,6 +131,7 @@ describe(
           delete: out.delete,
           sign: out.sign,
         };
+        gen = out.gen;
       }),
       { timeout: 900_000 },
     );
@@ -298,6 +339,198 @@ describe(
           tags: ["provider:gcp", "provider:gcp:storage", "live"],
           timeout: 600_000,
         },
+      );
+    });
+
+    describe("generated bucket bindings", () => {
+      test.provider(
+        "reads the bucket, its ACLs, notifications and caches, granted on the bucket only",
+        (_stack) =>
+          Effect.gen(function* () {
+            // Concurrently: a probe still refused when the others finish
+            // is the one missing a permission.
+            const out = yield* Effect.all(
+              {
+                bucket: expectProbe<storage.Bucket>(baseUrl, "getBucket"),
+                layout: expectProbe<storage.BucketStorageLayout>(baseUrl, "getLayout"),
+                bucketAcls: expectProbe<storage.BucketAccessControls>(baseUrl, "listBucketAcls"),
+                defaultAcls: expectProbe<storage.ObjectAccessControls>(baseUrl, "listDefaultAcls"),
+                objectAcls: expectProbe<storage.ObjectAccessControls>(baseUrl, "listObjectAcls"),
+                notifications: expectProbe<storage.Notifications>(baseUrl, "listNotifications"),
+                caches: expectProbe<storage.AnywhereCaches>(baseUrl, "listCaches"),
+              },
+              { concurrency: "unbounded" },
+            );
+            expect(out.bucket.name).toEqual(gen.assets);
+            expect(out.layout.bucket).toEqual(gen.assets);
+            expect((out.bucketAcls.items ?? []).length).toBeGreaterThan(0);
+            expect((out.defaultAcls.items ?? []).length).toBeGreaterThan(0);
+            expect((out.objectAcls.items ?? []).length).toBeGreaterThan(0);
+            expect(out.notifications.items ?? []).toEqual([]);
+            expect(out.caches.items ?? []).toEqual([]);
+            const refusals = [
+              "missingBucketAcl",
+              "missingDefaultAcl",
+              "missingObjectAcl",
+              "missingNotification",
+              "missingCache",
+              "updateMissingCache",
+              "pauseMissingCache",
+              "resumeMissingCache",
+              "disableMissingCache",
+              "restoreLiveBucket",
+              "missingContext",
+            ];
+            const outcomes = yield* Effect.forEach(
+              refusals,
+              (name) => expectProbe<string>(baseUrl, name).pipe(Effect.map((tag) => [name, tag])),
+              { concurrency: "unbounded" },
+            );
+            expect(Object.fromEntries(outcomes)).toEqual(
+              Object.fromEntries(refusals.map((name) => [name, "NotFound"])),
+            );
+          }),
+        { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 600_000 },
+      );
+
+      test.provider(
+        "inserts, composes, copies, rewrites, patches and updates objects",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{
+              composed: string;
+              copied: string;
+              rewritten: boolean;
+              patched: Record<string, string>;
+              updated: Record<string, string>;
+            }>(baseUrl, `genObjects?bucket=${gen.assets}`);
+            expect(out).toMatchObject({
+              composed: "gen/composed.txt",
+              copied: "gen/copied.txt",
+              rewritten: true,
+              updated: { updated: "yes" },
+            });
+            // A patch merges into the object's existing metadata.
+            expect(out.patched.patched).toEqual("yes");
+            expect((yield* objectOf(gen.assets, "gen/composed.txt"))?.size).toEqual(
+              String("seed;part;".length),
+            );
+            expect((yield* objectOf(gen.assets, "gen/rewritten.txt"))?.size).toEqual(
+              String("seed;".length),
+            );
+            expect((yield* objectOf(gen.assets, GEN_PART))?.contentType).toEqual("text/plain");
+            expect(yield* objectOf(gen.assets, GEN_SEED)).toBeDefined();
+          }),
+        { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 600_000 },
+      );
+
+      test.provider(
+        "restores a soft-deleted object, and starts a bulk restore",
+        (_stack) =>
+          Effect.gen(function* () {
+            const live = yield* storage.getObjects({ bucket: gen.assets, object: GEN_RESTORE });
+            yield* storage.deleteObjects({ bucket: gen.assets, object: GEN_RESTORE });
+            const out = yield* expectProbe<{ restored: string; bulk: boolean }>(
+              baseUrl,
+              `genRestore?generation=${live.generation}`,
+            );
+            expect(out).toEqual({ restored: GEN_RESTORE, bulk: true });
+            expect((yield* objectOf(gen.assets, GEN_RESTORE))?.size).toEqual(
+              String("restore;".length),
+            );
+          }),
+        { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 600_000 },
+      );
+    });
+
+    describe("generated folder bindings", () => {
+      test.provider(
+        "reads managed folders, and gets, lists, renames and drops folders",
+        (_stack) =>
+          Effect.gen(function* () {
+            const managed = yield* expectProbe<{
+              folder: storage.ManagedFolder;
+              list: storage.ManagedFolders;
+            }>(baseUrl, "managed");
+            expect(managed.folder.name).toEqual("managed/");
+            expect((managed.list.items ?? []).map((folder) => folder.name)).toEqual(["managed/"]);
+            expect(yield* bucketRoles(gen.managed)).toEqual(["roles/storage.legacyBucketReader"]);
+
+            const folders = yield* expectProbe<{
+              kept: string;
+              listed: string[];
+              renamed: boolean;
+              dropped: string;
+              moved: string;
+            }>(baseUrl, "folders");
+            expect(folders.kept).toEqual("keep/");
+            expect(folders.listed).toContain("keep/");
+            expect(folders).toMatchObject({
+              renamed: true,
+              dropped: "BadRequest",
+              moved: "keep/moved.txt",
+            });
+            expect(yield* objectOf(gen.folders, "keep/moved.txt")).toBeDefined();
+            expect(yield* objectOf(gen.folders, "keep/source.txt")).toBeUndefined();
+            expect(yield* bucketRoles(gen.folders)).toEqual([
+              "roles/storage.legacyBucketReader",
+              "roles/storage.legacyBucketWriter",
+              "roles/storage.objectUser",
+            ]);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 600_000 },
+      );
+    });
+
+    describe("generated project bindings", () => {
+      test.provider(
+        "reads an HMAC key and lists keys and buckets in the project",
+        (_stack) =>
+          Effect.gen(function* () {
+            const hmac = yield* expectProbe<{ accessId: string; listed: string[] }>(
+              baseUrl,
+              "hmac",
+            );
+            expect(hmac).toEqual({ accessId: gen.hmacAccessId, listed: [gen.hmacAccessId] });
+            const listed = yield* expectProbe<string[]>(baseUrl, `buckets?prefix=${gen.assets}`);
+            expect(listed).toEqual([gen.assets]);
+
+            expect(yield* bucketRoles(gen.assets)).toEqual([
+              "roles/storage.bucketViewer",
+              "roles/storage.legacyBucketOwner",
+              "roles/storage.legacyObjectOwner",
+              "roles/storage.objectUser",
+              "roles/storage.objectViewer",
+            ]);
+            // HMAC keys and soft-deleted buckets have no IAM policy of their own.
+            expect(yield* projectRoles()).toEqual([
+              "roles/storage.admin",
+              "roles/storage.bucketViewer",
+              "roles/storage.viewer",
+            ]);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 600_000 },
+      );
+    });
+
+    describe("audit logs", () => {
+      test.provider(
+        "delivers the bucket's audit entries",
+        (_stack) =>
+          Effect.gen(function* () {
+            const entry = yield* expectAuditEntry({
+              bucket: gen.markers,
+              key: "bucket",
+              method: "",
+              trigger: storage.patchBuckets({
+                bucket: gen.assets,
+                body: { labels: { audited: "yes" } },
+              }),
+            });
+            expect(entry.serviceName).toEqual("storage.googleapis.com");
+            expect(entry.resourceName).toEqual(`projects/_/buckets/${gen.assets}`);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:storage", "live"], timeout: 900_000 },
       );
     });
   },

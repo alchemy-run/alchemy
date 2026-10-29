@@ -105,8 +105,19 @@ export default class FirestoreBindingsHost extends GCP.Function<FirestoreBinding
       Effect.map(getDatabase(), (database) => `${database.name}/documents/gen/${id}`);
     const thingsQuery = { from: [{ collectionId: "gen" }] };
 
+    const listDatabases = yield* GCP.Firestore.ListDatabases();
+    const listBackups = yield* GCP.Firestore.ListBackups();
+
     return {
       fetch: serveProbes({
+        project: Effect.gen(function* () {
+          const listed = yield* listDatabases();
+          const backups = yield* listBackups({ location: "us-central1" });
+          return {
+            databases: (listed.databases ?? []).map((database) => database.name),
+            backups: backups.backups ?? [],
+          };
+        }),
         getDatabase: getDatabase(),
         commit: Effect.gen(function* () {
           const a = yield* docName("a");
@@ -323,6 +334,8 @@ export default class FirestoreBindingsHost extends GCP.Function<FirestoreBinding
     Effect.provide(GCP.Firestore.ReadWriteDatabaseHttp),
     Effect.provide(
       Layer.mergeAll(
+        GCP.Firestore.ListDatabasesHttp,
+        GCP.Firestore.ListBackupsHttp,
         GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
         GCP.Storage.PutObjectHttp,
         GCP.Firestore.GetDatabaseHttp,

@@ -528,5 +528,27 @@ describe(
         { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 900_000 },
       );
     });
+
+    describe("project bindings", () => {
+      test.provider(
+        "lists topics, subscriptions, snapshots and schemas and validates a schema, granted viewer on the project",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{
+              topics: string[];
+              subscriptions: string[];
+              snapshots: string[];
+              schemas: string[];
+              validated: object;
+            }>(baseUrl, "project");
+            expect(out.topics).toContain(names.genTopic);
+            expect(out.subscriptions).toContain(names.genInbox);
+            expect(out.snapshots).toContain(names.genSnapshot);
+            expect(out.schemas).toContain(names.genSchema);
+            expect(out.validated).toEqual({});
+          }),
+        { tags: ["provider:gcp", "provider:gcp:pubsub", "live"], timeout: 600_000 },
+      );
+    });
   },
 );

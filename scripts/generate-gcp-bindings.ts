@@ -75,6 +75,35 @@ interface ResourceConfig {
    * binding fills those parameters; any further ones stay request fields.
    */
   attributes?: string[];
+  /**
+   * Attribute holding the name IAM grants target, when it isn't `name`:
+   * a Cloud Storage bucket is named by `bucketName`.
+   */
+  nameAttribute?: string;
+  /**
+   * Request fields (other than path parameters) the binding fills from the
+   * bound resource's attributes when the method takes them: a BigQuery job
+   * is read in its `location`.
+   */
+  fields?: Record<string, string>;
+  /**
+   * The resource's name in audit logs, from one attribute, when it isn't
+   * `name`: `projects/_/buckets/{bucketName}`.
+   */
+  auditName?: string;
+  /**
+   * The resource's TypeScript type when it isn't the key: Compute names the
+   * `HttpsHealthCheck` resource's type `HttpsHealthCheckResource`.
+   */
+  typeName?: string;
+  /** Why the resource gets no `consume<Resource>AuditLogs` source. */
+  noAuditLogs?: string;
+  /**
+   * The discovery collection whose methods manage this resource, when it
+   * isn't the pattern's last collection: `regionDisks` for
+   * `projects/*\/regions/*\/disks/*`, `buckets` for `b/*`.
+   */
+  collection?: string;
 }
 
 interface ApiConfig {
@@ -104,9 +133,10 @@ interface ServiceConfig extends Partial<ApiConfig> {
   /** Method id → IAM permission. */
   permissions?: Record<string, string>;
   /**
-   * Permission → role, where `roles.json`'s smallest role is a poor fit:
-   * `artifactregistry.repositories.get` is smallest in a migration role
-   * that also reads Cloud Storage.
+   * Permission (or method id) → role, where `roles.json`'s smallest role is
+   * a poor fit: `artifactregistry.repositories.get` is smallest in a
+   * migration role that also reads Cloud Storage, and copying an object
+   * needs `storage.objects.get` on the source besides `create`.
    */
   roles?: Record<string, string>;
   /** Derived binding name → name to use. */
@@ -144,6 +174,17 @@ interface ServiceConfig extends Partial<ApiConfig> {
   projectCalls?: string[];
   /** Don't generate bindings for calls on the project itself (`topics.list`). */
   noProjectBindings?: boolean;
+  /**
+   * Discovery collection → the collection its IAM permissions are named
+   * after: Compute checks `regionDisks.resize` as `compute.disks.resize`.
+   */
+  permissionCollections?: Record<string, string>;
+  /**
+   * Method verb → the verb its IAM permission is named after, for APIs that
+   * check many verbs as one: Compute checks `instanceGroupManagers.resize`
+   * as `compute.instanceGroupManagers.update`.
+   */
+  verbPermissions?: Record<string, string>;
 }
 
 // ============ Discovery ============
@@ -195,13 +236,15 @@ const patternSegments = (pattern: string): string[] | undefined => {
 };
 
 const singular = (word: string) =>
-  word.endsWith("ies")
-    ? `${word.slice(0, -3)}y`
-    : word.endsWith("sses") || word.endsWith("xes") || word.endsWith("ches")
-      ? word.slice(0, -2)
-      : word.endsWith("s") && !word.endsWith("ss")
-        ? word.slice(0, -1)
-        : word;
+  word.endsWith("aches")
+    ? word.slice(0, -1)
+    : word.endsWith("ies")
+      ? `${word.slice(0, -3)}y`
+      : word.endsWith("sses") || word.endsWith("xes") || word.endsWith("ches")
+        ? word.slice(0, -2)
+        : word.endsWith("s") && !word.endsWith("ss")
+          ? word.slice(0, -1)
+          : word;
 
 /**
  * A path with one parameter per segment, e.g.
@@ -313,9 +356,10 @@ const classify = (options: {
     key,
     ...value,
     segments: value.pattern.split("/"),
+    collection: value.collection ?? value.pattern.split("/").at(-2),
   }));
   const results: Classified[] = [];
-  const ownCollections = new Set(resources.map((r) => r.segments.at(-2)));
+  const ownCollections = new Set(resources.map((r) => r.collection));
   const methods = collectMethods(doc, [], []);
   // A method and its `locations` twin are one binding: if a hand-written
   // binding calls either, both are covered.
@@ -356,8 +400,13 @@ const classify = (options: {
       .filter((t) => t.segments.length > 1);
     // Otherwise the method's own path, for APIs with one parameter per segment.
     const flat = flatTarget(method.path);
+    // Or a call on the project named by a query parameter (`GET b?project=p`).
+    const projectQuery =
+      method.parameters?.project?.location === "query"
+        ? { param: undefined, segments: ["projects", "*"], params: ["project"] }
+        : undefined;
     const target: { param: string | undefined; segments: string[]; params?: string[] } | undefined =
-      targets.sort((a, b) => b.segments.length - a.segments.length)[0] ?? flat;
+      targets.sort((a, b) => b.segments.length - a.segments.length)[0] ?? flat ?? projectQuery;
     if (target === undefined) {
       results.push({ id, kind: "project", reason: "no resource-name path parameter" });
       continue;
@@ -380,7 +429,10 @@ const classify = (options: {
           (target.param === undefined) === (r.attributes !== undefined) &&
           r.segments.length <= target.segments.length &&
           r.segments.every((s, i) => s === target.segments[i]) &&
-          (config.append?.[id] !== undefined ||
+          // A flat target's further parameters are plain request fields
+          // (`b/{bucket}/o/{sourceObject}/moveTo/o/{destinationObject}`).
+          (target.param === undefined ||
+            config.append?.[id] !== undefined ||
             (target.segments.length - r.segments.length) % 2 === 0),
       )
       .sort((a, b) => b.segments.length - a.segments.length)[0];
@@ -388,13 +440,16 @@ const classify = (options: {
     const created =
       !projectCall &&
       (verb === "create" || verb === "insert") &&
-      resources.some((r) => r.segments.at(-2) === cols.at(-1));
+      resources.some((r) => r.collection === cols.at(-1));
     // Nothing to bind to: a call on the project (or one of its locations)
     // itself becomes a project-scoped binding.
     const scope =
       (matched !== undefined && !projectCall) || created
         ? undefined
-        : target.segments.join("/") === "projects/*"
+        : target.segments.join("/") === "projects/*" ||
+            // A flat path's further parameters (zone, region, a catalog
+            // entry like a disk type) are request fields.
+            (target.param === undefined && target.segments.join("/").startsWith("projects/*/"))
           ? ("project" as const)
           : target.param !== undefined && target.segments.join("/") === "projects/*/locations/*"
             ? ("location" as const)
@@ -426,12 +481,15 @@ const classify = (options: {
     // Flat target: the method parameter at each of the resource's wildcards,
     // filled from the matching attribute.
     const params: Record<string, string> | undefined =
-      target.param === undefined && resource.attributes
-        ? Object.fromEntries(
-            resource.attributes.map((attribute, i) => [target.params![i]!, attribute]),
-          )
+      target.param === undefined && "attributes" in resource && resource.attributes
+        ? Object.fromEntries([
+            ...resource.attributes.map((attribute, i) => [target.params![i]!, attribute]),
+            ...Object.entries(resource.fields ?? {}).filter(
+              ([field]) => method.parameters?.[field] !== undefined,
+            ),
+          ])
         : undefined;
-    const ownCollection = resource.segments.at(-2);
+    const ownCollection = "collection" in resource ? resource.collection : resource.segments.at(-2);
     if (
       (LIFECYCLE_VERBS.has(verb) && extra.length === 0 && cols.at(-1) === ownCollection) ||
       // Creating a child that is itself a configured resource is its provider's job.
@@ -440,19 +498,32 @@ const classify = (options: {
       results.push({ id, kind: "lifecycle" });
       continue;
     }
-    const scoped = cols.filter((c) => !SCOPE_COLLECTIONS.has(c));
+    // The method's own collection stays even when it shares a scope's name
+    // (Cloud Storage `folders`).
+    const scoped = cols.filter((c, i) => i === cols.length - 1 || !SCOPE_COLLECTIONS.has(c));
     const permission =
       config.permissions?.[id] ??
-      [verb === "patch" ? "update" : verb, verb]
+      [
+        verb === "patch"
+          ? "update"
+          : verb === "insert"
+            ? "create"
+            : verb === "aggregatedList"
+              ? "list"
+              : verb,
+        verb,
+        ...(config.verbPermissions?.[verb] ? [config.verbPermissions[verb]] : []),
+      ]
         // Only the method's own collection: a parent's permission
         // (`databases.create` for creating an index) is a different action.
         // Some services lowercase it (`artifactregistry.dockerimages.get`).
         .flatMap((v) =>
           scoped.length === 0
             ? []
-            : [scoped.at(-1)!, scoped.at(-1)!.toLowerCase()].map(
-                (c) => `${permissionService}.${c}.${v}`,
-              ),
+            : [
+                config.permissionCollections?.[scoped.at(-1)!] ?? scoped.at(-1)!,
+                scoped.at(-1)!.toLowerCase(),
+              ].map((c) => `${permissionService}.${c}.${v}`),
         )
         .find((p) => roles[p] !== undefined);
     if (permission === undefined || roles[permission] === undefined) {
@@ -514,7 +585,7 @@ const classify = (options: {
       grantOn: config.grantOn?.[id],
       projectGrant: config.projectGrant?.[id],
       permission,
-      role: roles[permission]!,
+      role: config.roles?.[id] ?? roles[permission]!,
       types,
     });
     bindings.set(name, binding);
@@ -642,6 +713,10 @@ ${variants.join("\n")}
 `;
 };
 
+/** Import a resource's type under its key. */
+const importName = (resource: ResourceConfig, key: string) =>
+  resource.typeName ? `${resource.typeName} as ${key}` : key;
+
 const emitContract = (service: string, config: ServiceConfig, binding: Binding) => {
   if (binding.variants[0]!.scope !== undefined) return emitProjectContract(service, binding);
   const first = binding.variants[0]!;
@@ -677,7 +752,7 @@ const emitContract = (service: string, config: ServiceConfig, binding: Binding) 
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-${resourceTypes.map((r) => `import type { ${r} } from "./${r}.ts";`).join("\n")}
+${resourceTypes.map((r) => `import type { ${importName(config.resources[r]!, r)} } from "./${r}.ts";`).join("\n")}
 
 export interface ${binding.name}Request
   extends Omit<${first.api.ns}.${first.types.request}, ${omitted.map((o) => `"${o}"`).join(" | ")}>${childType}
@@ -730,7 +805,11 @@ const emitHttp = (service: string, config: ServiceConfig, binding: Binding) => {
         : "") +
       (v.suffix ? `\n      suffix: ["${v.suffix[0]}", "${v.suffix[1]}"],` : "") +
       (v.append ? `\n      append: "${v.append}",` : "") +
-      (v.grantOn ? `\n      grantOn: "${v.grantOn.attribute}",` : "");
+      (v.grantOn
+        ? `\n      grantOn: "${v.grantOn.attribute}",`
+        : resource.nameAttribute
+          ? `\n      grantOn: "${resource.nameAttribute}",`
+          : "");
     return `    {
       resource: "${type}",
       operation: ${v.api.ns}.${v.fn},
@@ -765,6 +844,23 @@ ${variants.join("\n")}
  * `consume<Resource>AuditLogs`: the Cloud Audit Logs entries for one
  * resource and its children, through `GCP.Logging.AuditLogEventSource`.
  */
+/**
+ * The audit-log resource name expression: `name`, or a template over the
+ * resource's attributes (`auditName`, or `pattern` filled from
+ * `attributes`): `projects/{project}/zones/{zone}/instances/{instanceName}`.
+ */
+const auditNameOf = (resource: ResourceConfig) => {
+  let i = 0;
+  const template =
+    resource.auditName ??
+    (resource.attributes
+      ? resource.pattern.replace(/\*/g, () => `{${resource.attributes![i++]}}`)
+      : undefined);
+  return template
+    ? `Output.interpolate\`${template.replace(/\{(\w+)\}/g, "${resource.$1}")}\``
+    : "resource.name";
+};
+
 const emitAuditLogs = (
   service: string,
   key: string,
@@ -781,7 +877,7 @@ import {
   type AuditLogEventSourceProps,
   type AuditLogEventsHandler,
 } from "../Logging/AuditLogEventSource.ts";
-import type { ${key} } from "./${key}.ts";
+import type { ${importName(resource, key)} } from "./${key}.ts";
 
 export interface ${key}AuditLogsProps extends Omit<AuditLogEventSourceProps, "filter"> {
   /**
@@ -836,7 +932,7 @@ export function consume${key}AuditLogs<Req = never, ResourceReq = never>(
           resource.LogicalId,
           {
             ...props,
-            filter: Output.map(resource.name, (resourceName) =>
+            filter: Output.map(${auditNameOf(resource)}, (resourceName) =>
               resourceAuditLogFilter({
                 serviceNames: ${JSON.stringify(serviceNames)},
                 resourceName,
@@ -968,7 +1064,7 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
   // A child with no IAM of its own is covered by its parent's audit logs
   // (the filter matches the parent and everything below it).
   for (const [key, resource] of Object.entries(config.resources).filter(
-    ([, resource]) => !resource.lifecycleOnly,
+    ([, resource]) => !resource.lifecycleOnly && resource.noAuditLogs === undefined,
   )) {
     const file = `${key}AuditLogs.ts`;
     if (handWritten.has(file)) {

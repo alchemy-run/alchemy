@@ -44,8 +44,13 @@ export default class SchedulerBindingsHost extends GCP.Function<SchedulerBinding
     const runJob = yield* GCP.CloudScheduler.RunJob(RunJobTarget);
     const getJob = yield* GCP.CloudScheduler.GetJob(PausedJob);
 
+    const listJobs = yield* GCP.CloudScheduler.ListJobs();
+
     return {
       fetch: serveProbes({
+        listJobs: listJobs({ location: "us-central1", pageSize: 500 }).pipe(
+          Effect.map((page) => (page.jobs ?? []).map((job) => job.name)),
+        ),
         pause: pauseJob(),
         resume: resumeJob(),
         run: runJob(),
@@ -59,6 +64,7 @@ export default class SchedulerBindingsHost extends GCP.Function<SchedulerBinding
     Effect.provide(GCP.CloudScheduler.GetJobHttp),
     Effect.provide(
       Layer.mergeAll(
+        GCP.CloudScheduler.ListJobsHttp,
         GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
         GCP.Storage.PutObjectHttp,
       ),

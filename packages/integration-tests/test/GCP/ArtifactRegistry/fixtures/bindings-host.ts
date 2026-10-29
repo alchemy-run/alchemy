@@ -106,8 +106,13 @@ export default class ArtifactRegistryBindingsHost extends GCP.Function<ArtifactR
     const params = <A>(f: (p: Record<string, string>) => A) =>
       Effect.map(Effect.all({ package: pkg, version, tag, file, rule, attachment }), (p) => f(p));
 
+    const listRepositories = yield* GCP.ArtifactRegistry.ListRepositories();
+
     return {
       fetch: serveProbes({
+        listRepositories: listRepositories({ location: "us-central1", pageSize: 1000 }).pipe(
+          Effect.map((page) => (page.repositories ?? []).map((repo) => repo.name)),
+        ),
         listDockerImages: listImages({ pageSize: 10 }),
 
         getRepository: getRepository(),
@@ -228,6 +233,7 @@ export default class ArtifactRegistryBindingsHost extends GCP.Function<ArtifactR
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
+        GCP.ArtifactRegistry.ListRepositoriesHttp,
         GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
         GCP.Storage.PutObjectHttp,
         GCP.ArtifactRegistry.ListDockerImagesHttp,

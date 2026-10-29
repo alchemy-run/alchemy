@@ -67,14 +67,20 @@ const scopedRoles = (database: string) =>
     const hostBindings = (policy.bindings ?? []).filter((binding) =>
       (binding.members ?? []).includes(`serviceAccount:${hostAccount}`),
     );
-    // Only the user-credential bindings grant on the whole project: IAM
-    // Conditions don't match individual credentials.
+    // Only the user-credential bindings (IAM Conditions don't match
+    // individual credentials) and the project-wide lists grant on the
+    // whole project.
     expect(
       hostBindings
         .filter((binding) => binding.condition === undefined)
         .map((binding) => binding.role)
         .sort(),
-    ).toEqual(["roles/datastore.userCredsAdmin", "roles/datastore.userCredsViewer"]);
+    ).toEqual([
+      "roles/datastore.backupsViewer",
+      "roles/datastore.userCredsAdmin",
+      "roles/datastore.userCredsViewer",
+      "roles/datastore.viewer",
+    ]);
     const condition = `resource.name == "${database}" || resource.name.startsWith("${database}/")`;
     return hostBindings
       .filter((binding) => binding.condition?.expression === condition)
@@ -470,6 +476,25 @@ describe.skipIf(!!process.env.FAST)(
             }
           }),
         { tags: ["provider:gcp", "live"], timeout: 900_000 },
+      );
+    });
+
+    describe("project bindings", () => {
+      test.provider(
+        "lists the project's databases and a location's backups",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{ databases: string[]; backups: unknown[] }>(
+              baseUrl,
+              "project",
+            );
+            // Listed names may carry the project number.
+            const ids = out.databases.map((name) => name.split("/").at(-1));
+            expect(ids).toContain(databases.gen.split("/").at(-1));
+            // Other suites' backups may share the location: the call is authorized.
+            expect(Array.isArray(out.backups)).toEqual(true);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:firestore", "live"], timeout: 600_000 },
       );
     });
   },

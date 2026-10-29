@@ -355,4 +355,25 @@ describe("Run Bindings", { tags: ["provider:gcp", "provider:gcp:run", "live"] },
       { tags: ["provider:gcp", "live"], timeout: 900_000 },
     );
   });
+
+  describe("project bindings", () => {
+    test.provider(
+      "lists a location's services, jobs, worker pools and instances",
+      (_stack) =>
+        Effect.gen(function* () {
+          const out = yield* expectProbe<{
+            services: string[];
+            jobs: string[];
+            pools: string[];
+            instances: unknown[];
+          }>(baseUrl, "project");
+          expect(out.services).toContain(names.genApi);
+          expect(out.jobs).toContain(names.genJob);
+          expect(out.pools).toContain(names.genWorkers);
+          // No standalone instances: the call is authorized.
+          expect(Array.isArray(out.instances)).toEqual(true);
+        }),
+      { tags: ["provider:gcp", "provider:gcp:run", "live"], timeout: 600_000 },
+    );
+  });
 });

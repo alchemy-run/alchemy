@@ -219,5 +219,17 @@ describe(
         { tags: ["provider:gcp", "live"], timeout: 900_000 },
       );
     });
+
+    describe("ListQueues", () => {
+      test.provider(
+        "lists a location's queues",
+        (_stack) =>
+          Effect.gen(function* () {
+            const listed = yield* expectProbe<string[]>(baseUrl, "listQueues");
+            expect(listed).toContain(genQueueName);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:cloudtasks", "live"], timeout: 600_000 },
+      );
+    });
   },
 );

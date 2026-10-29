@@ -388,5 +388,19 @@ describe.skipIf(!!process.env.FAST)(
         live,
       );
     });
+
+    describe("ListInstances", () => {
+      test.provider(
+        "lists the project's instances",
+        (_stack) =>
+          Effect.gen(function* () {
+            const listed = yield* expectProbe<string[]>(baseUrl, "listInstances");
+            expect(listed.map((name) => name.split("/").at(-1))).toContain(
+              instanceName.split("/").at(-1),
+            );
+          }),
+        { tags: ["provider:gcp", "provider:gcp:bigtable", "live"], timeout: 600_000 },
+      );
+    });
   },
 );

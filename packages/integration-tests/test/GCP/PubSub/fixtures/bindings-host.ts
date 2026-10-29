@@ -137,6 +137,12 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
     const rollbackSchema = yield* GCP.PubSub.RollbackSchema(GenSchema);
     const deleteSchemaRevision = yield* GCP.PubSub.DeleteSchemaRevision(GenSchema);
 
+    const listTopics = yield* GCP.PubSub.ListTopics();
+    const listSubscriptions = yield* GCP.PubSub.ListSubscriptions();
+    const listSnapshots = yield* GCP.PubSub.ListSnapshots();
+    const listSchemas = yield* GCP.PubSub.ListSchemas();
+    const validateSchema = yield* GCP.PubSub.ValidateSchema();
+
     return {
       fetch: serveProbes({
         publish: publish({
@@ -200,6 +206,27 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
         validateValid: validate({
           encoding: "JSON",
           message: Buffer.from(JSON.stringify({ id: "abc" })).toString("base64"),
+        }),
+        project: Effect.gen(function* () {
+          const topics = yield* listTopics({ pageSize: 1000 });
+          const subscriptions = yield* listSubscriptions({ pageSize: 1000 });
+          const snapshots = yield* listSnapshots({ pageSize: 1000 });
+          const schemas = yield* listSchemas({ pageSize: 1000 });
+          const validated = yield* validateSchema({
+            body: {
+              schema: {
+                type: "AVRO",
+                definition: JSON.stringify({ type: "record", name: "Event", fields: [ID_FIELD] }),
+              },
+            },
+          });
+          return {
+            topics: (topics.topics ?? []).map((topic) => topic.name),
+            subscriptions: (subscriptions.subscriptions ?? []).map((sub) => sub.name),
+            snapshots: (snapshots.snapshots ?? []).map((snapshot) => snapshot.name),
+            schemas: (schemas.schemas ?? []).map((schema) => schema.name),
+            validated,
+          };
         }),
         getTopic: getTopic(),
         listTopicSubscriptions: listTopicSubscriptions(),
@@ -265,6 +292,11 @@ export default class PubSubBindingsHost extends GCP.Function<PubSubBindingsHost>
         GCP.PubSub.ListSchemaRevisionsHttp,
         GCP.PubSub.RollbackSchemaHttp,
         GCP.PubSub.DeleteSchemaRevisionHttp,
+        GCP.PubSub.ListTopicsHttp,
+        GCP.PubSub.ListSubscriptionsHttp,
+        GCP.PubSub.ListSnapshotsHttp,
+        GCP.PubSub.ListSchemasHttp,
+        GCP.PubSub.ValidateSchemaHttp,
         GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
         GCP.Storage.PutObjectHttp,
       ),

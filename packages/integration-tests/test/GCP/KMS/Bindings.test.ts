@@ -390,5 +390,19 @@ describe(
         { tags: ["provider:gcp", "live"], timeout: 900_000 },
       );
     });
+
+    describe("project bindings", () => {
+      test.provider(
+        "lists a location's key rings, EKM connections, key handles, retired resources and HSM instances",
+        (_stack) =>
+          Effect.gen(function* () {
+            const out = yield* expectProbe<{ rings: string[]; rest: string[] }>(baseUrl, "project");
+            expect(out.rings).toContain(names.ring);
+            // The project has none of the others: each call is authorized.
+            expect(out.rest).toEqual(["object", "object", "object", "object"]);
+          }),
+        { tags: ["provider:gcp", "provider:gcp:kms", "live"], timeout: 600_000 },
+      );
+    });
   },
 );

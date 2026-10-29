@@ -131,8 +131,13 @@ export default class BigtableBindingsHost extends GCP.Function<BigtableBindingsH
     const getMaterializedView = yield* B.GetInstanceMaterializedView(Db);
     const restore = yield* B.RestoreInstanceTable(Db);
 
+    const listInstances = yield* GCP.Bigtable.ListInstances();
+
     return {
       fetch: serveProbes({
+        listInstances: listInstances().pipe(
+          Effect.map((page) => (page.instances ?? []).map((item) => item.name)),
+        ),
         getInstance: getInstance(),
         getCluster: getCluster(),
         getTable: getTable(),
@@ -208,6 +213,7 @@ export default class BigtableBindingsHost extends GCP.Function<BigtableBindingsH
     Effect.provide(GCP.Bigtable.GetTableHttp),
     Effect.provide(
       Layer.mergeAll(
+        GCP.Bigtable.ListInstancesHttp,
         GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
         GCP.Storage.PutObjectHttp,
         GCP.Bigtable.CheckTableConsistencyHttp,

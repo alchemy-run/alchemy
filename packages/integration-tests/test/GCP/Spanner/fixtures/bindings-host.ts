@@ -142,8 +142,22 @@ export default class SpannerBindingsHost extends GCP.Function<SpannerBindingsHos
     const session = probeParam("session");
     const ITEM = "binding-item";
 
+    const listInstances = yield* GCP.Spanner.ListInstances();
+    const listInstanceConfigs = yield* GCP.Spanner.ListInstanceConfigs();
+    const listInstanceConfigOperations = yield* GCP.Spanner.ListInstanceConfigOperations();
+
     return {
       fetch: serveProbes({
+        project: Effect.gen(function* () {
+          const instances = yield* listInstances({ pageSize: 1000 });
+          const configs = yield* listInstanceConfigs({ pageSize: 1000 });
+          const operations = yield* listInstanceConfigOperations({ pageSize: 10 });
+          return {
+            instances: (instances.instances ?? []).map((item) => item.name),
+            configs: (configs.instanceConfigs ?? []).map((item) => item.name),
+            operations: operations.operations ?? [],
+          };
+        }),
         database: Effect.all({ database: getDatabase(), roles: listRoles() }),
         updateDdl: updateDdl({
           body: { statements: ["CREATE INDEX ItemsById ON Items(Id)"] },
@@ -269,6 +283,9 @@ export default class SpannerBindingsHost extends GCP.Function<SpannerBindingsHos
     Effect.provide(GCP.Spanner.ExecuteSqlHttp),
     Effect.provide(
       Layer.mergeAll(
+        GCP.Spanner.ListInstancesHttp,
+        GCP.Spanner.ListInstanceConfigsHttp,
+        GCP.Spanner.ListInstanceConfigOperationsHttp,
         GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
         GCP.Storage.PutObjectHttp,
         GCP.Spanner.GetDatabaseHttp,

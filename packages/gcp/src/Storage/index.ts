@@ -24,3 +24,4 @@ export * from "./WriteBucket.ts";
 export * from "./WriteBucketHttp.ts";
 export * from "./ReadWriteBucket.ts";
 export * from "./ReadWriteBucketHttp.ts";
+export * from "./generated.ts";

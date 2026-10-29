@@ -46,6 +46,7 @@ const expectProjectGrants = Effect.gen(function* () {
     { role: "roles/cloudscheduler.jobRunner", condition: undefined },
     { role: "roles/cloudscheduler.viewer", condition: undefined },
   ]);
+  // ListJobs adds no role: its viewer grant is already there.
 });
 
 const getJob = (name: string) => scheduler.getProjectsLocationsJobs({ name });
@@ -193,6 +194,19 @@ describe(
             }
           }),
         { tags: ["provider:gcp", "live"], timeout: 900_000 },
+      );
+    });
+
+    describe("ListJobs", () => {
+      test.provider(
+        "lists a location's jobs",
+        (_stack) =>
+          Effect.gen(function* () {
+            const listed = yield* expectProbe<string[]>(baseUrl, "listJobs");
+            expect(listed).toContain(jobs.paused);
+            yield* expectProjectGrants;
+          }),
+        { tags: ["provider:gcp", "provider:gcp:cloudscheduler", "live"], timeout: 600_000 },
       );
     });
   },

@@ -66,8 +66,13 @@ export default class CloudTasksBindingsHost extends GCP.Function<CloudTasksBindi
       return { queue: queue.name!, names: ids.map((id) => `${queue.name}/tasks/${id}`) };
     });
 
+    const listQueues = yield* GCP.CloudTasks.ListQueues();
+
     return {
       fetch: serveProbes({
+        listQueues: listQueues({ location: "us-central1", pageSize: 1000 }).pipe(
+          Effect.map((page) => (page.queues ?? []).map((queue) => queue.name)),
+        ),
         createTask: Effect.gen(function* () {
           const scheduleTime = yield* tomorrow;
           return yield* createTask({
@@ -118,6 +123,7 @@ export default class CloudTasksBindingsHost extends GCP.Function<CloudTasksBindi
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
+        GCP.CloudTasks.ListQueuesHttp,
         GCP.Logging.AuditLogEventSourceLive.pipe(Layer.provideMerge(GCP.Run.TopicEventSource)),
         GCP.Storage.PutObjectHttp,
         GCP.CloudTasks.CreateTaskHttp,
