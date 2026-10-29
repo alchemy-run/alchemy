@@ -17,7 +17,7 @@ import {
 } from "./holds.ts";
 
 const HoldsLive = Holds.layer(HoldDeadlineLive).pipe(
-  Layer.provide(DomainCloudflare.DurableObjects),
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 
 /**
