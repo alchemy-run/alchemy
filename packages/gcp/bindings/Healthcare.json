@@ -48,8 +48,10 @@
     },
     "args": {
       "DeidentifyDataset": "{ body: { destinationDataset: `projects/${yield* hostProject}/locations/us-central1/datasets/alchemy probe invalid` } }",
-      "DeidentifyDicomStore": "{ body: { destinationStore: `projects/${yield* hostProject}/locations/us-central1/datasets/alchemy-missing/dicomStores/alchemy-missing` } }",
       "DeidentifyFhirStore": "{ body: { destinationStore: `projects/${yield* hostProject}/locations/us-central1/datasets/alchemy-missing/fhirStores/alchemy-missing` } }"
+    },
+    "skip": {
+      "DeidentifyDicomStore": "a DICOM destination store that doesn't exist answers 403 like a denied call (the FHIR variant answers NotFound and passes), and a real destination would receive copied data; dicomEditor, granted alongside, carries dicomWebWrite"
     }
   },
   "roles": {

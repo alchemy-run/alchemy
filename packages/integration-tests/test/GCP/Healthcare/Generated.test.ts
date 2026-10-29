@@ -275,13 +275,9 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("DatasetsDicomStore", { concurrent: true }, () => {
-      test.provider(
-        "DeidentifyDicomStore (healthcare.projects.locations.datasets.dicomStores.deidentify)",
-        () => probe("DeidentifyDicomStore", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DeidentifyDicomStore (healthcare.projects.locations.datasets.dicomStores.deidentify): a DICOM destination store that doesn't exist answers 403 like a denied call (the FHIR variant answers NotFound and passes), and a real destination would receive copied data; dicomEditor, granted alongside, carries dicomWebWrite",
+        () => Effect.void,
       );
       test.provider(
         "DeleteDicomStoreStudy (healthcare.projects.locations.datasets.dicomStores.studies.delete)",
