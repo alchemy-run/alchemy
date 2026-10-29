@@ -22,15 +22,14 @@
     }
   },
   "probes": {
-    "resources": {
-      "BackupChannel": "ProbeBackupChannel",
-      "RestoreChannel": "ProbeRestoreChannel"
-    },
+    "resources": {},
     "untestable": {
       "BackupPlan": "a backup or restore plan needs a GKE cluster with the Backup for GKE add-on",
       "BackupPlansBackup": "a backup or restore plan needs a GKE cluster with the Backup for GKE add-on",
       "RestorePlan": "a backup or restore plan needs a GKE cluster with the Backup for GKE add-on",
-      "RestorePlansRestore": "a backup or restore plan needs a GKE cluster with the Backup for GKE add-on"
+      "RestorePlansRestore": "a backup or restore plan needs a GKE cluster with the Backup for GKE add-on",
+      "BackupChannel": "a channel's destination must be a different project (\"source and destination project cannot be same\"); the testing account has one project",
+      "RestoreChannel": "a channel's destination must be a different project (\"source and destination project cannot be same\"); the testing account has one project"
     }
   }
 }

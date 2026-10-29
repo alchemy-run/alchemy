@@ -65,29 +65,17 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("BackupChannel", { concurrent: true }, () => {
-      test.provider(
-        "GetBackupChannel (gkebackup.projects.locations.backupChannels.get)",
-        () => probe("GetBackupChannel", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:gkebackup", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetBackupChannel (gkebackup.projects.locations.backupChannels.get): BackupChannel: a channel\'s destination must be a different project ("source and destination project cannot be same"); the testing account has one project',
+        () => Effect.void,
       );
-      test.provider(
-        "GetBackupChannelBackupPlanBinding (gkebackup.projects.locations.backupChannels.backupPlanBindings.get)",
-        () => probe("GetBackupChannelBackupPlanBinding", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:gkebackup", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetBackupChannelBackupPlanBinding (gkebackup.projects.locations.backupChannels.backupPlanBindings.get): BackupChannel: a channel\'s destination must be a different project ("source and destination project cannot be same"); the testing account has one project',
+        () => Effect.void,
       );
-      test.provider(
-        "ListBackupChannelBackupPlanBindings (gkebackup.projects.locations.backupChannels.backupPlanBindings.list)",
-        () => probe("ListBackupChannelBackupPlanBindings", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:gkebackup", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'ListBackupChannelBackupPlanBindings (gkebackup.projects.locations.backupChannels.backupPlanBindings.list): BackupChannel: a channel\'s destination must be a different project ("source and destination project cannot be same"); the testing account has one project',
+        () => Effect.void,
       );
     });
 
@@ -165,29 +153,17 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("RestoreChannel", { concurrent: true }, () => {
-      test.provider(
-        "GetRestoreChannel (gkebackup.projects.locations.restoreChannels.get)",
-        () => probe("GetRestoreChannel", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:gkebackup", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetRestoreChannel (gkebackup.projects.locations.restoreChannels.get): RestoreChannel: a channel\'s destination must be a different project ("source and destination project cannot be same"); the testing account has one project',
+        () => Effect.void,
       );
-      test.provider(
-        "GetRestoreChannelRestorePlanBinding (gkebackup.projects.locations.restoreChannels.restorePlanBindings.get)",
-        () => probe("GetRestoreChannelRestorePlanBinding", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:gkebackup", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetRestoreChannelRestorePlanBinding (gkebackup.projects.locations.restoreChannels.restorePlanBindings.get): RestoreChannel: a channel\'s destination must be a different project ("source and destination project cannot be same"); the testing account has one project',
+        () => Effect.void,
       );
-      test.provider(
-        "ListRestoreChannelRestorePlanBindings (gkebackup.projects.locations.restoreChannels.restorePlanBindings.list)",
-        () => probe("ListRestoreChannelRestorePlanBindings", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:gkebackup", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'ListRestoreChannelRestorePlanBindings (gkebackup.projects.locations.restoreChannels.restorePlanBindings.list): RestoreChannel: a channel\'s destination must be a different project ("source and destination project cannot be same"); the testing account has one project',
+        () => Effect.void,
       );
     });
 
