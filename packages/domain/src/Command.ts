@@ -1,6 +1,3 @@
-import * as EffectContext from "effect/Context";
-import * as Effect from "effect/Effect";
-import * as Option from "effect/Option";
 import * as Rpc from "effect/rpc/Rpc";
 import * as Schema from "effect/Schema";
 import type * as Event from "./Event.ts";

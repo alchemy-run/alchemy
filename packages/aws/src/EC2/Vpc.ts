@@ -20,6 +20,11 @@ import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 
+export class VpcUnexpectedResponse extends Data.TaggedError("VpcUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type VpcId = `vpc-${string}`;
 export const VpcId = <const S extends string>(value: S): S & VpcId => value as S & VpcId;
 
@@ -523,7 +528,9 @@ export const VpcProvider = () =>
           const final = yield* ec2.describeVpcs({ VpcIds: [vpcId] });
           const finalVpc = final.Vpcs?.[0];
           if (!finalVpc) {
-            return yield* Effect.fail(new Error(`VPC ${vpcId} disappeared during reconcile`));
+            return yield* new VpcUnexpectedResponse({
+              message: `VPC ${vpcId} disappeared during reconcile`,
+            });
           }
 
           return vpcToAttributes(finalVpc, region, accountId, desiredTags);
@@ -615,7 +622,7 @@ const waitForVpcAvailable = (vpcId: string, session?: ScopedPlanStatusSession) =
     const vpc = result.Vpcs?.[0];
 
     if (!vpc) {
-      return yield* Effect.fail(new Error(`VPC ${vpcId} not found`));
+      return yield* new VpcUnexpectedResponse({ message: `VPC ${vpcId} not found` });
     }
 
     if (vpc.State === "available") {

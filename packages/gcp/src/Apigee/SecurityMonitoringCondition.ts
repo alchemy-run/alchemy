@@ -135,7 +135,7 @@ export const SecurityMonitoringCondition = Resource<SecurityMonitoringCondition>
 export class SecurityMonitoringConditionNotResolved extends Data.TaggedError(
   "GCP.Apigee.SecurityMonitoringConditionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, conditionId: string) =>
@@ -195,7 +195,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSecurityMonitoringConditions({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const toBody = (
   news: SecurityMonitoringConditionProps,
@@ -298,7 +298,7 @@ export const SecurityMonitoringConditionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecurityMonitoringConditionNotResolved({ name });
+        return yield* new SecurityMonitoringConditionNotResolved({ resourceName: name });
       }
 
       const desiredIncludeAll = news.includeAllResources === true;

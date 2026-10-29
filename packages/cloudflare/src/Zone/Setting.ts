@@ -297,7 +297,7 @@ export const SettingProvider = () =>
       if (!zoneId || !settingId) return undefined;
       const observed = yield* zones.getSetting({ zoneId, settingId }).pipe(
         // Zone deleted out-of-band — the setting is gone with it.
-        Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       // Settings are singletons that always exist with a Cloudflare
@@ -339,7 +339,7 @@ export const SettingProvider = () =>
       // Observe — if the zone itself is gone, so is the setting.
       const observed = yield* zones
         .getSetting({ zoneId, settingId })
-        .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("InvalidZoneIdentifier", () => Effect.undefined));
       if (observed === undefined) return;
       // Restore the pre-management value; skip the call when it already
       // matches (idempotent re-delete after a crashed run).
@@ -379,9 +379,7 @@ export const SettingProvider = () =>
             ),
             // Zone removed out-of-band or the setting is plan-gated / not
             // exposed to this token — skip it rather than fail the listing.
-            Effect.catchTag(["InvalidZoneIdentifier", "Forbidden"], () =>
-              Effect.succeed<SettingAttributes | undefined>(undefined),
-            ),
+            Effect.catchTag(["InvalidZoneIdentifier", "Forbidden"], () => Effect.undefined),
             // A handful of structured settings (e.g.
             // `automatic_platform_optimization`) can return a scalar value
             // (`"off"`) that distilled's `GetSettingResponse` union doesn't

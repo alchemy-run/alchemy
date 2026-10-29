@@ -29,7 +29,6 @@ import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import type * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
-import type * as Event from "./Event.ts";
 import { type Filter, matches } from "./Filter.ts";
 import { captureContext } from "./internal.ts";
 import { decodeEnvelope } from "./Kernel.ts";
@@ -484,7 +483,9 @@ const withCaughtUp = <A>(
 
 type Handler = (input: never) => unknown;
 
-const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string, Handler>> =>
+const handlersOf = (
+  entries: ReadonlyArray<Entry>,
+): Effect.Effect<Record<string, Handler>, never, Model.Internals> =>
   Effect.gen(function* () {
     const internals = yield* Model.Internals;
     const handlers: Record<string, Handler> = {};
@@ -499,6 +500,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
         // (the session's actor) travels with the command to its aggregate.
         handlers[entry.tag] = ({ target, commandId, input }: CommandPayload) =>
           declared.effect(
+            // oxlint-disable-next-line effecttsgo/new-schema-class -- `make` on a generic command class loses its instance type
             aggregate.send(target, new entry(input), { commandId }).pipe(
               Effect.map((receipt) => ({
                 reply: receipt.reply,
@@ -651,7 +653,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
           rpcs.list!,
           ({ key: id, atLeast, where, order, take, after }) =>
             host.query(refOf(id), { atLeast }).pipe(
-              Effect.flatMap((found) => check("list", refOf(id))(Option.getOrNull(found))),
+              Effect.flatMap((found) => found.pipe(Option.getOrNull, check("list", refOf(id)))),
               Effect.andThen(
                 host.list(refOf(id), {
                   where: where as Filter<unknown> | undefined,
@@ -715,7 +717,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
       });
     }
     return handlers;
-  }) as Effect.Effect<Record<string, Handler>>;
+  });
 
 // ---------------------------------------------------------------- live reads
 
@@ -1240,8 +1242,8 @@ export const protocolWebSocket = (
             if (ended) return;
             // A close without an `Exit` (a deploy, an evicted object) reconnects and resumes.
             if (++failures > RECONNECTS) {
-              return yield* new RpcClientError.RpcClientError({
-                reason: new RpcClientError.RpcClientDefect({
+              return yield* RpcClientError.RpcClientError.make({
+                reason: RpcClientError.RpcClientDefect.make({
                   message: `Live read ${request.tag} lost its connection`,
                   cause: Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined,
                 }),

@@ -15,6 +15,11 @@ import type { RegionID } from "../Region.ts";
 import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import type { VpcId } from "./Vpc.ts";
 
+export class SubnetUnexpectedResponse extends Data.TaggedError("SubnetUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type SubnetId<ID extends string = string> = `subnet-${ID}`;
 export const SubnetId = <ID extends string>(id: ID): ID & SubnetId<ID> =>
   `subnet-${id}` as ID & SubnetId<ID>;
@@ -545,7 +550,9 @@ export const SubnetProvider = () =>
           });
           const final = finalLookup.Subnets?.[0];
           if (!final) {
-            return yield* Effect.fail(new Error(`Subnet ${subnetId} disappeared during reconcile`));
+            return yield* new SubnetUnexpectedResponse({
+              message: `Subnet ${subnetId} disappeared during reconcile`,
+            });
           }
           return toSubnetAttributes(final);
         }),
@@ -664,7 +671,7 @@ const waitForSubnetAvailable = (subnetId: string, session?: ScopedPlanStatusSess
     const subnet = result.Subnets?.[0];
 
     if (!subnet) {
-      return yield* Effect.fail(new Error(`Subnet ${subnetId} not found`));
+      return yield* new SubnetUnexpectedResponse({ message: `Subnet ${subnetId} not found` });
     }
 
     if (subnet.State === "available") {

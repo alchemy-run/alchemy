@@ -167,7 +167,7 @@ export const DataStoresServingConfig = Resource<DataStoresServingConfig>(
 export class DataStoresServingConfigNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresServingConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_SOLUTION = "SOLUTION_TYPE_SEARCH";
@@ -205,10 +205,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsDataStoresServingConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DataStoresServingConfigProvider = () =>
   Provider.succeed(DataStoresServingConfig, {
@@ -297,7 +297,7 @@ export const DataStoresServingConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataStoresServingConfigNotResolved({ name });
+        return yield* new DataStoresServingConfigNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== displayName;

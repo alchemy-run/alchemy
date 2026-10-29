@@ -125,7 +125,7 @@ export const ConnectClustersConnector = Resource<ConnectClustersConnector>(
 export class ConnectClustersConnectorNotResolved extends Data.TaggedError(
   "GCP.ManagedKafka.ConnectClustersConnectorNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const connectClusterOf = (value: string, project: string, location: string) =>
@@ -252,7 +252,7 @@ export const ConnectClustersConnectorProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ConnectClustersConnectorNotResolved({ name });
+        return yield* new ConnectClustersConnectorNotResolved({ resourceName: name });
       }
 
       const configsChanged =

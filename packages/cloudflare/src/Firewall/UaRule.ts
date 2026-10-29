@@ -280,7 +280,7 @@ type ObservedUaRule = firewall.GetUaRuleResponse;
 const getUaRule = (zoneId: string, uaRuleId: string) =>
   firewall.getUaRule({ zoneId, uaRuleId }).pipe(
     Effect.map((rule): ObservedUaRule | undefined => rule),
-    Effect.catchTag("UaRuleNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("UaRuleNotFound", () => Effect.undefined),
   );
 
 /**

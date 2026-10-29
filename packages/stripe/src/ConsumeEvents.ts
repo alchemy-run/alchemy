@@ -2,7 +2,6 @@ import { sanitizeKey, type RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import type * as Effect from "effect/Effect";
 import type { StripeEventClass, StripeEventInstance } from "./Events.ts";
-import type { WebhookEndpoint } from "./WebhookEndpoint.ts";
 
 export interface ConsumeEventsProps<
   E extends readonly StripeEventClass[] = readonly StripeEventClass[],

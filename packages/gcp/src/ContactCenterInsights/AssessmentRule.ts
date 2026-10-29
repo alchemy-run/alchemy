@@ -139,7 +139,7 @@ export const AssessmentRule = Resource<AssessmentRule>("GCP.ContactCenterInsight
 export class AssessmentRuleNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AssessmentRuleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 // Assessment rule ids allow only `[A-Za-z0-9]{4,64}`, unlike the dashed
@@ -201,10 +201,10 @@ const toAttrs = (rule: cci.GoogleCloudContactcenterinsightsV1AssessmentRule, pro
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsAssessmentRules({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsAssessmentRules.pages({ parent, pageSize: 100 }).pipe(
@@ -298,7 +298,7 @@ export const AssessmentRuleProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AssessmentRuleNotResolved({ name });
+        return yield* new AssessmentRuleNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

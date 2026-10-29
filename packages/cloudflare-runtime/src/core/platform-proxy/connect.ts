@@ -564,7 +564,7 @@ const fetchEnvDescriptor = async (client: ProxyClient): Promise<EnvDescriptor> =
     });
   } catch (cause) {
     throw new Error(
-      `platform-proxy: could not reach the proxy worker at ${client.url} — ` +
+      `platform-proxy: could not reach the proxy worker at ${client.url.toString()} — ` +
         "the instance may have been disposed or restarted.",
       { cause },
     );

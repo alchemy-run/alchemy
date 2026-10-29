@@ -535,3 +535,44 @@ layer(services)("v8Flags", (it) => {
     );
   }
 });
+
+describe("parseAddressInUse", () => {
+  it("finds the socket or address in use", () => {
+    // Rust server on macOS, Linux and Windows.
+    expect(
+      Workerd.parseAddressInUse('Socket "entry": bind(): Address already in use (os error 48)\n'),
+    ).toEqual({ socket: "entry" });
+    expect(
+      Workerd.parseAddressInUse(
+        'Socket "entry:local": bind(): Address already in use (os error 98)\n',
+      ),
+    ).toEqual({ socket: "entry:local" });
+    expect(
+      Workerd.parseAddressInUse(
+        'Socket "entry": bind(): Only one usage of each socket address (protocol/network address/port) is normally permitted. (os error 10048)\n',
+      ),
+    ).toEqual({ socket: "entry" });
+    // C++ server over tokio-backed sockets names neither, including Windows'
+    // `SO_EXCLUSIVEADDRUSE` case.
+    expect(
+      Workerd.parseAddressInUse(
+        "*** Fatal uncaught kj::Exception: rust/cxx/kj-rs-io/ffi.rs:209: failed: bind(): Address already in use (os error 48)\n",
+      ),
+    ).toEqual({});
+    expect(
+      Workerd.parseAddressInUse(
+        "*** Fatal uncaught kj::Exception: rust/cxx/kj-rs-io\\ffi.rs:209: failed: bind(): An attempt was made to access a socket in a way forbidden by its access permissions. (os error 10013)\n",
+      ),
+    ).toEqual({});
+    // C++ server over kj's sockets.
+    expect(
+      Workerd.parseAddressInUse(
+        "kj/async-io-unix.c++:1: failed: Address already in use; toString() = 127.0.0.1:8787; stack: 7ff6a1b2c3d4\n",
+      ),
+    ).toEqual({ address: "127.0.0.1:8787" });
+    // Other bind failures are not address-in-use.
+    expect(
+      Workerd.parseAddressInUse('Socket "entry": bind(): Permission denied (os error 13)\n'),
+    ).toBeUndefined();
+  });
+});

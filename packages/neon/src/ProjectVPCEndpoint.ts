@@ -118,7 +118,7 @@ const observe = (scope: { projectId: string; vpcEndpointId: string }) =>
     Effect.map((result) =>
       result.endpoints.find((endpoint) => endpoint.vpc_endpoint_id === scope.vpcEndpointId),
     ),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const validateCloudScope = Effect.fn(function* (scope: {

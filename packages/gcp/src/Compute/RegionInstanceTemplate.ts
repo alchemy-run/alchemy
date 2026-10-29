@@ -334,7 +334,7 @@ const toAttrs = (
 const getByName = (project: string, region: string, instanceTemplate: string) =>
   compute
     .getRegionInstanceTemplates({ project, region, instanceTemplate })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, templateName: string) =>
   getByName(project, region, templateName).pipe(
@@ -463,7 +463,7 @@ export const RegionInstanceTemplateProvider = () =>
             },
           }),
           { ignoreAlreadyExists: true },
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = yield* awaitResource(env.project, region, templateName);
       }
 
@@ -489,6 +489,6 @@ export const RegionInstanceTemplateProvider = () =>
           instanceTemplate: output.templateName,
         }),
         { ignoreNotFound: true },
-      ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     }),
   });

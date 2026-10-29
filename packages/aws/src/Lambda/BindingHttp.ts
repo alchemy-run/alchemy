@@ -52,6 +52,7 @@ export const makeFunctionHttpBinding = <I extends { FunctionName?: string }, A, 
         ? // Same runtime path as `yield* output` (which keys the value by the
           // expression's source text), with a readable key; typed like the
           // iterator, whose RuntimeContext the host always provides.
+          // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the host provides RuntimeContext at runtime
           yield* target.bind(`${func.LogicalId}.qualifiedArn`) as Effect.Effect<
             Effect.Effect<string>
           >

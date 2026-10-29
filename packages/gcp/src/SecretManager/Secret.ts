@@ -221,7 +221,7 @@ export type Secret = Resource<
 export const Secret = Resource<Secret>("GCP.SecretManager.Secret");
 
 export class SecretNotResolved extends Data.TaggedError("GCP.SecretManager.SecretNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_REPLICATION: Replication = { automatic: {} };
@@ -390,7 +390,7 @@ const toAttrs = (secret: secretmanager.Secret, project: string) => {
 const getByName = (name: string) =>
   secretmanager
     .getProjectsSecrets({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilMissing = (name: string) =>
   getByName(name).pipe(
@@ -527,11 +527,11 @@ export const SecretProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecretNotResolved({ name });
+        return yield* new SecretNotResolved({ resourceName: name });
       }
 
       if (replicationFingerprint(toReplication(current.replication)) !== desiredReplicationFp) {
-        return yield* new SecretNotResolved({ name });
+        return yield* new SecretNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

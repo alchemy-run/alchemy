@@ -206,7 +206,7 @@ export const UserGroupProvider = () =>
             name,
             policies: desired.length > 0 ? desired : undefined,
           })
-          .pipe(Effect.catchTag("UserGroupNameInUse", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("UserGroupNameInUse", () => Effect.undefined));
         if (created) {
           return toAttributes(created, accountId);
         }
@@ -263,7 +263,7 @@ type ObservedUserGroup = iam.GetUserGroupResponse;
 const getUserGroup = (accountId: string, userGroupId: string) =>
   iam.getUserGroup({ accountId, userGroupId }).pipe(
     Effect.map((g): ObservedUserGroup | undefined => g),
-    Effect.catchTag("UserGroupNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("UserGroupNotFound", () => Effect.undefined),
   );
 
 /**

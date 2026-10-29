@@ -952,6 +952,7 @@ export default defineConfig({
                   link: "/gcp/compute/choosing-a-runtime",
                 },
                 { label: "Cloud Run", link: "/gcp/compute/cloud-run" },
+                { label: "Cloud Run sidecars", link: "/gcp/compute/sidecars" },
                 { label: "Cloud Run jobs", link: "/gcp/compute/jobs" },
                 { label: "Worker pools", link: "/gcp/compute/worker-pools" },
                 { label: "Cloud Functions", link: "/gcp/compute/cloud-functions" },

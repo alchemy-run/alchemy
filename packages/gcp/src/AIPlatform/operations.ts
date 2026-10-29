@@ -90,7 +90,8 @@ export const settlePendingCreates = (options: {
         Stream.flatMap((page) => Stream.fromIterable(page.operations ?? [])),
         Stream.filter((operation) => {
           const name = operation.name ?? "";
-          const type = String(operation.metadata?.["@type"] ?? "");
+          const rawType = operation.metadata?.["@type"];
+          const type = typeof rawType === "string" ? rawType : "";
           return (
             operation.done !== true &&
             name.includes(relative) &&

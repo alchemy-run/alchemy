@@ -284,7 +284,7 @@ export const buildAndPushArtifactRegistryImage = Effect.fn(function* (
 export const destroyImageRepository = Effect.fn(function* (name: string) {
   const operation = yield* artifactregistry
     .deleteProjectsLocationsRepositories({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   if (operation !== undefined) {
     yield* waitForDeleteOperation(operation);
   }
@@ -310,7 +310,7 @@ export const destroyHostImageRepository = Effect.fn(function* (
   const name = resourceName(output.project, output.location, repositoryId);
   const repository = yield* artifactregistry
     .getProjectsLocationsRepositories({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   if (repository === undefined) return;
   if (!(yield* hasAlchemyLabels(id, tagRecord(repository.labels)))) return;
   yield* destroyImageRepository(name);
@@ -391,7 +391,7 @@ export const makeImageSource = Effect.gen(function* () {
       envFrom !== undefined
         ? `FROM ${envFrom}`
         : source.dockerfile !== undefined && isInlineDockerfile(source.dockerfile)
-          ? String(source.dockerfile.content).trimEnd()
+          ? (source.dockerfile.content as string).trimEnd()
           : `FROM ${source.image ?? "oven/bun:1"}`;
     const lines = [preamble, `WORKDIR /app`, `COPY index.mjs /app/index.mjs`, `COPY *.js /app/`];
     if (port !== undefined) {
@@ -501,7 +501,7 @@ export const makeImageSource = Effect.gen(function* () {
     };
     const existing = yield* artifactregistry
       .getProjectsLocationsRepositories({ name })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     if (existing?.name) {
       return {
         name: existing.name,
@@ -522,7 +522,7 @@ export const makeImageSource = Effect.gen(function* () {
           labels: desiredLabels,
         },
       })
-      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (created !== undefined) {
       yield* waitForOperation(created);
     }
@@ -554,12 +554,11 @@ export const makeImageSource = Effect.gen(function* () {
       .getProjectsLocationsRepositoriesPackagesTags({
         name: tagResourceName(project, location, repositoryId, imageTag),
       })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
   const resolve = Effect.fn(function* (options: ArtifactRegistryResolveOptions) {
-    const { id, source, repositoryName, session, location } = options;
-    const platform = options.platform ?? "linux/amd64";
+    const { id, source, repositoryName, location } = options;
     const kind = imageSourceKind(source);
     if (kind === undefined) {
       return yield* Effect.die(

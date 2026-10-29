@@ -337,7 +337,7 @@ type ObservedNamespace = aisearch.ReadNamespaceResponse;
 const getNamespace = (accountId: string, name: string) =>
   aisearch
     .readNamespace({ accountId, name })
-    .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NamespaceNotFound", () => Effect.undefined));
 
 const createNamespaceName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

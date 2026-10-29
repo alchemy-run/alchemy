@@ -44,7 +44,14 @@ import {
   waitForOperation as waitForLongRunningOperation,
 } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
-import { boundContainersOf, directContainerNames } from "./Container.ts";
+import {
+  boundContainersOf,
+  directContainerNames,
+  flattenContainers,
+  isContainerAttributes,
+  type BoundContainer,
+  type Container,
+} from "./Container.ts";
 
 const DEFAULT_IMAGE = "us-docker.pkg.dev/cloudrun/container/hello";
 const MAX_NAME_LENGTH = 49;
@@ -162,8 +169,13 @@ export type ContainerSpec = {
    */
   livenessProbe?: Probe;
   /**
-   * Names of containers that must start, and pass their startup probe,
-   * before this one starts.
+   * Names of containers in the same revision that must start, and pass
+   * their startup probe, before this one starts. Without it, every
+   * container starts at once. It only orders startup: a dependency that
+   * crashes later doesn't stop this container.
+   *
+   * A container bound with `GCP.Run.bindContainer` or `GCP.Run.bindPort`
+   * is added for you.
    */
   dependsOn?: string[];
 };
@@ -180,8 +192,12 @@ export type RevisionScaling = {
 };
 
 export type RevisionTemplate = {
-  /** Containers that make up the revision. */
-  containers?: ContainerSpec[];
+  /**
+   * Containers that make up the revision. A `GCP.Run.Container` can be
+   * listed directly: its spec joins the revision, its bindings' roles go to
+   * the revision's service account, and the sidecars it binds join too.
+   */
+  containers?: (ContainerSpec | Container)[];
   /** Request timeout (e.g. `"300s"`). */
   timeout?: string;
   /** Max concurrent requests per instance. `0` uses the server default. */
@@ -519,6 +535,22 @@ export type ServiceShape = Main<ServiceServices>;
  * ```
  * The first container runs `main`; the rest deploy as sidecars.
  *
+ * **Example:** An image service with an Effect-native sidecar
+ * ```typescript
+ * const worker = yield* Worker; // a GCP.Run.Container
+ * const api = yield* GCP.Run.Service("api", {
+ *   template: {
+ *     containers: [
+ *       { image: proxyImage, ports: [{ containerPort: 8080 }], dependsOn: [worker.name] },
+ *       worker,
+ *     ],
+ *   },
+ * });
+ * ```
+ * A listed Container brings its bindings' roles and the sidecars it binds.
+ * `worker.name` is an Output that resolves to the container's name in the
+ * revision, so the proxy starts after it.
+ *
  * ### Effect-native Function with bindings
  * **Example:** Publish tweets to Pub/Sub, cache in Memorystore
  * ```typescript
@@ -605,17 +637,17 @@ export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRu
   });
 
 export class ServiceNotResolved extends Data.TaggedError("GCP.Run.ServiceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ServiceNotReady extends Data.TaggedError("GCP.Run.ServiceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
 
 export class ServiceReconciling extends Data.TaggedError("GCP.Run.ServiceReconciling")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -632,7 +664,7 @@ export class ServiceRpcPublic extends Data.TaggedError("GCP.Run.ServiceRpcPublic
 }
 
 export class ServiceStillExists extends Data.TaggedError("GCP.Run.ServiceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -702,9 +734,22 @@ const toId = (id: string, serviceId: string | undefined, existing?: string) =>
     );
   });
 
+/** `GCP.Run.Container`s listed in the template, as their resolved attributes. */
+const declaredContainersOf = (news: ServiceProps): BoundContainer[] =>
+  (news.template?.containers ?? []).filter(isContainerAttributes).map((container) => ({
+    spec: container.spec,
+    iam: container.iam,
+    sidecars: container.sidecars,
+  }));
+
 const desiredTemplate = (news: ServiceProps): cloudrun.GoogleCloudRunV2RevisionTemplate => {
   const template = news.template ?? {};
-  const [main = { image: DEFAULT_IMAGE }, ...rest] = template.containers ?? [];
+  // A listed `GCP.Run.Container` arrives resolved to its attributes, never
+  // as the resource the prop type names.
+  const containers = (template.containers ?? []).map((container): ContainerSpec =>
+    isContainerAttributes(container) ? container.spec : (container as ContainerSpec),
+  );
+  const [main = { image: DEFAULT_IMAGE }, ...rest] = containers;
   return {
     ...template,
     containers: [
@@ -1050,7 +1095,7 @@ const sourceOf = (news: ServiceProps, main: string) => ({
 const getByName = (name: string) =>
   cloudrun
     .getProjectsLocationsServices({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Waits on a Cloud Run long-running operation (revisions roll out in minutes). */
 const waitForOperation = (
@@ -1102,13 +1147,13 @@ const waitUntilReady = (name: string) =>
     Effect.filterOrFail(
       (service): service is cloudrun.GoogleCloudRunV2Service =>
         service !== undefined && service.deleteTime === undefined,
-      () => new ServiceNotResolved({ name }),
+      () => new ServiceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (service) => (service.terminalCondition?.state ?? "") !== "CONDITION_FAILED",
       (service) =>
         new ServiceNotReady({
-          name,
+          resourceName: name,
           state: service.terminalCondition?.state ?? "",
           message: service.terminalCondition?.message ?? "revision failed",
         }),
@@ -1117,7 +1162,7 @@ const waitUntilReady = (name: string) =>
       (service) => !isPendingService(service),
       (service) =>
         new ServiceReconciling({
-          name,
+          resourceName: name,
           state: service.terminalCondition?.state || "reconciling",
         }),
     ),
@@ -1132,7 +1177,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((service) =>
-      service === undefined ? Effect.void : Effect.fail(new ServiceStillExists({ name })),
+      service === undefined
+        ? Effect.void
+        : Effect.fail(new ServiceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Run.ServiceStillExists",
@@ -1248,7 +1295,14 @@ export const ServiceProvider = () =>
       const hostBindings = bindings as ResourceBinding<GcpHostBinding>[];
       // Bound sidecars run as this service's account, so their bindings'
       // roles are granted to it.
-      const boundContainers = boundContainersOf(hostBindings);
+      // Bound sidecars, plus the sidecars of Containers listed in the
+      // template. Listed Containers are already in `template`.
+      const declaredContainers = declaredContainersOf(news);
+      const declaredNames = new Set(declaredContainers.map((container) => container.spec.name));
+      const boundContainers = flattenContainers([
+        ...boundContainersOf(hostBindings),
+        ...declaredContainers.flatMap((container) => container.sidecars),
+      ]).filter((container) => !declaredNames.has(container.spec.name));
       const identity = yield* resolveHostIdentity({
         project: env.project,
         hostType: HOST_TYPE,
@@ -1257,7 +1311,7 @@ export const ServiceProvider = () =>
         effectNative: news.main !== undefined,
         bindings: [
           ...hostBindings,
-          ...boundContainers.map((container) => ({
+          ...[...declaredContainers, ...boundContainers].map((container) => ({
             sid: `GCP.Run.Container(${container.spec.name})`,
             data: { iam: container.iam },
           })),
@@ -1340,7 +1394,7 @@ export const ServiceProvider = () =>
           })
           .pipe(
             retryActAs,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
@@ -1350,7 +1404,7 @@ export const ServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ServiceNotResolved({ name });
+        return yield* new ServiceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -1431,7 +1485,7 @@ export const ServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ServiceNotResolved({ name });
+        return yield* new ServiceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region, {
@@ -1448,7 +1502,7 @@ export const ServiceProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

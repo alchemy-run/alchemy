@@ -189,7 +189,7 @@ const findLandingZoneArn = controltower.listLandingZones.pages({}).pipe(
 const readLandingZone = (landingZoneIdentifier: string) =>
   controltower.getLandingZone({ landingZoneIdentifier }).pipe(
     Effect.map((r) => r.landingZone),
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
   );
 
 const toAttributes = (
@@ -294,7 +294,7 @@ export const LandingZoneProvider = () =>
             .deleteLandingZone({
               landingZoneIdentifier: output.landingZoneArn,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (result !== undefined) {
             yield* session.note(`landing zone operation ${result.operationIdentifier}`);
             yield* waitForLandingZoneOperation(result.operationIdentifier);

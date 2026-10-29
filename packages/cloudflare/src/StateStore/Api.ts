@@ -14,6 +14,8 @@ import * as HttpApiError from "effect/http-api/HttpApiError";
 import * as Etag from "effect/http/Etag";
 import * as HttpPlatform from "effect/http/HttpPlatform";
 import * as HttpRouter from "effect/http/HttpRouter";
+import * as HttpServerRequest from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import { ReadSecret } from "../SecretsStore/ReadSecret.ts";
@@ -33,9 +35,43 @@ export const STATE_STORE_SCRIPT_NAME = DEFAULT_STATE_STORE_NAME;
  * compare against this constant; a mismatch (or 404) triggers a
  * forced redeploy via the bootstrap flow.
  */
-// TODO: bump to 8 before release. The Worker's typed `StateStoreFailure`
-// responses and secret read retry change its runtime behaviour.
-export const STATE_STORE_VERSION = 7 as const;
+// v8: failures behind the auth middleware answer as a typed `StateStoreFailure`
+// (v7 encoded them through `Unauthorized`'s schema and answered a bare 500),
+// FQNs longer than 100 URI-encoded chars are routed, secret reads retry, and
+// requests for the legacy bootstrap stack are refused.
+export const STATE_STORE_VERSION = 8 as const;
+
+/**
+ * The stack older Alchemy versions deployed the store itself with. Those
+ * versions redeploy a store they find out of date through this stack, and on a
+ * store whose rows are missing they generate a new auth token and encryption
+ * key and overwrite the existing secrets with them, losing all state. The
+ * Worker refuses every request for this stack, so such a redeploy fails while
+ * reading its state, before it touches a secret. Deleting the whole stack is
+ * the exception: bootstrap removes its records so it can't be destroyed.
+ */
+const LEGACY_BOOTSTRAP_STACK = "CloudflareStateStore";
+
+const isLegacyBootstrapRequest = (request: HttpServerRequest.HttpServerRequest) => {
+  const { pathname } = new URL(request.url, "http://store");
+  const match = new RegExp(`^/state/stacks/${LEGACY_BOOTSTRAP_STACK}(/.*)?$`).exec(pathname);
+  return match !== null && !(request.method === "DELETE" && match[1] === undefined);
+};
+
+const refuseLegacyBootstrap = <E, R>(
+  app: Effect.Effect<HttpServerResponse.HttpServerResponse, E, R>,
+) =>
+  Effect.flatMap(HttpServerRequest.HttpServerRequest, (request) =>
+    isLegacyBootstrapRequest(request)
+      ? Effect.succeed(
+          HttpServerResponse.text(
+            `This Cloudflare State Store was deployed by a newer version of Alchemy. ` +
+              `Upgrade alchemy to use it.`,
+            { status: 409 },
+          ),
+        )
+      : app,
+  );
 
 /**
  * Hard-coded OTLP/HTTP endpoints. Point at the public ingest relay
@@ -89,19 +125,9 @@ export const STATE_STORE_VERSION = 7 as const;
 //   Layer.provide(FetchHttpClient.layer),
 // );
 
-/**
- * Path on disk to *this* file, used as the worker's bundling entry.
- *
- * When running from source (e.g. dev / monorepo), `import.meta.url` points
- * at `Api.ts` and we can use it directly. When the alchemy CLI is run from
- * its published `bin/alchemy.js` bundle, this module is inlined into the
- * CLI bundle and `import.meta.url` resolves to `bin/alchemy.js` — which
- * has no `default` export and breaks the worker bundler with
- * `[MISSING_EXPORT] "default" is not exported by "bin/alchemy.js"`.
- *
- * In the bundled case, fall back to the published source file shipped
- * alongside the CLI under `../src/Cloudflare/StateStore/Api.ts`.
- */
+/** This module, the state-store Worker's bundling entry (see `Deploy.ts`). */
+export const API_MAIN = import.meta.url;
+
 /**
  * A failed Durable Object call, as the API's declared error: the operation and
  * the kind of failure for the client, the full cause in the Worker's logs.
@@ -111,15 +137,14 @@ const failed =
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, StateStoreFailure, R> =>
     effect.pipe(
       Effect.tapError((error) => Effect.logError(`State store ${operation} failed`, error)),
-      Effect.mapError(
-        (error) =>
-          new StateStoreFailure({
-            operation,
-            reason:
-              typeof error === "object" && error !== null && "_tag" in error
-                ? String(error._tag)
-                : "UnknownError",
-          }),
+      Effect.mapError((error) =>
+        StateStoreFailure.make({
+          operation,
+          reason:
+            typeof error === "object" && error !== null && "_tag" in error
+              ? String(error._tag)
+              : "UnknownError",
+        }),
       ),
     );
 
@@ -127,7 +152,7 @@ export default Worker(
   "Api",
   Effect.map(StateStoreName, (name) => ({
     name,
-    main: import.meta.url,
+    main: API_MAIN,
     workersDev: true,
     compatibility: {
       date: DEFAULT_COMPATIBILITY_DATE,
@@ -342,11 +367,20 @@ export default Worker(
         // file-response surface is stubbed.
         Layer.provide([Etag.layer, HttpPlatformStub, Path.layer]),
         HttpRouter.toHttpEffect,
+        // An FQN travels as one URI-encoded path segment, and the router's
+        // default 100-char cap on a parameter left a longer one unrouted.
+        Effect.provideService(HttpRouter.RouterConfig, { maxParamLength: MAX_PARAM_LENGTH }),
+        Effect.map(refuseLegacyBootstrap),
         // Effect.provide(TelemetryLive),
       ),
     };
   }).pipe(Effect.provide(Layer.mergeAll(ReadSecretBinding))),
 );
+
+/**
+ * Longest path parameter the worker routes, within a Cloudflare URL's 16 KiB.
+ */
+const MAX_PARAM_LENGTH = 16_384;
 
 /**
  * Stub `HttpPlatform` for the worker. The state-store API never

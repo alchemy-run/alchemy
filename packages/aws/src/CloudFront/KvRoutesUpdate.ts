@@ -5,7 +5,6 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Option from "effect/Option";
-import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Credentials } from "../Credentials.ts";
 import type { Providers } from "../Providers.ts";
@@ -84,7 +83,7 @@ export const KvRoutesUpdateProvider = () =>
       const getRoutes = Effect.fn(function* (store: string, fullKey: string) {
         const res = yield* kvs
           .getKey({ KvsARN: store, Key: fullKey })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
         if (!res) {
           return { routes: [] as string[], chunkNum: 1 };

@@ -36,7 +36,7 @@ export class OAuthNetworkError extends Data.TaggedError("OAuthNetworkError")<{
   cause: unknown;
 }> {
   override get message(): string {
-    return `Request to ${this.endpoint} failed: ${this.cause}`;
+    return `Request to ${this.endpoint} failed: ${this.cause instanceof Error ? this.cause.message : String(this.cause)}`;
   }
 }
 
@@ -77,7 +77,7 @@ export class OAuthCryptoError extends Data.TaggedError("OAuthCryptoError")<{
   cause: unknown;
 }> {
   override get message(): string {
-    return `${this.operation} failed: ${this.cause}`;
+    return `${this.operation} failed: ${this.cause instanceof Error ? this.cause.message : String(this.cause)}`;
   }
 }
 

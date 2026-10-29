@@ -140,7 +140,7 @@ export const ApiTokenProvider = () =>
           if (!output?.id) return undefined;
           return yield* get({ id: output.id }).pipe(
             Effect.map((current) => ({ ...current, token: output.token })),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
         }),
       };

@@ -116,7 +116,7 @@ export const EnvironmentsReference = Resource<EnvironmentsReference>(
 export class EnvironmentsReferenceNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsReferenceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, environmentId: string, referenceId: string) =>
@@ -239,7 +239,7 @@ export const EnvironmentsReferenceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsReferenceNotResolved({ name });
+        return yield* new EnvironmentsReferenceNotResolved({ resourceName: name });
       }
 
       if (

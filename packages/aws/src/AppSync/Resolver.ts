@@ -183,7 +183,7 @@ export const ResolverProvider = () =>
       const getResolverSafe = (apiId: string, typeName: string, fieldName: string) =>
         appsync.getResolver({ apiId, typeName, fieldName }).pipe(
           Effect.map((response) => response.resolver),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       const desiredWire = (news: ResolverProps) => ({

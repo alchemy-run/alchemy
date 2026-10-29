@@ -264,6 +264,7 @@ const pageNameFor = (title: string) =>
     if (
       title.trim() !== title ||
       title.length === 0 ||
+      // oxlint-disable-next-line no-control-regex -- rejects control characters on purpose
       /[\x00-\x1f\x7f/\\]/.test(title) ||
       title === "." ||
       title === ".."
@@ -444,8 +445,7 @@ export const readWikiPage = Effect.fn(
     return file === undefined ? undefined : yield* attributes(repository, props, wiki, file);
   },
   Effect.scoped,
-  (effect) =>
-    effect.pipe(Effect.catchTag("WikiRepositoryUnavailable", () => Effect.succeed(undefined))),
+  (effect) => effect.pipe(Effect.catchTag("WikiRepositoryUnavailable", () => Effect.undefined)),
 );
 
 const retryConcurrentPush = <A, E, R>(effect: Effect.Effect<A, E | WikiGitError, R>) =>

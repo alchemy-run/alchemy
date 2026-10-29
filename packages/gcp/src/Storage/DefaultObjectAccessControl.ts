@@ -121,7 +121,7 @@ const toAttrs = (acl: storage.ObjectAccessControl, bucketName: string) => ({
 const getByEntity = (bucketName: string, entity: string) =>
   storage
     .getDefaultObjectAccessControls({ bucket: bucketName, entity })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnBucket = (bucketName: string) =>
   storage.listDefaultObjectAccessControls({ bucket: bucketName }).pipe(

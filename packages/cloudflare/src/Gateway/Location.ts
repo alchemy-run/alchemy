@@ -335,7 +335,7 @@ type ObservedLocation = zeroTrust.GetGatewayLocationResponse;
 const getLocation = (accountId: string, locationId: string) =>
   zeroTrust.getGatewayLocation({ accountId, locationId }).pipe(
     Effect.map((l): ObservedLocation | undefined => l),
-    Effect.catchTag("GatewayLocationNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("GatewayLocationNotFound", () => Effect.undefined),
   );
 
 /**

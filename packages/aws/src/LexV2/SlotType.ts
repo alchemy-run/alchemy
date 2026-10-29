@@ -3,10 +3,16 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { retryWhileConflict, toLexName } from "./internal.ts";
+
+export class SlotTypeUnexpectedResponse extends Data.TaggedError("SlotTypeUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /** One enumerable value of a custom slot type, with optional synonyms. */
 export interface SlotTypeValueSpec {
@@ -107,7 +113,7 @@ const createSlotTypeName = (id: string, props: { slotTypeName?: string | undefin
 const describeSlotType = Effect.fn(function* (botId: string, localeId: string, slotTypeId: string) {
   return yield* lexm
     .describeSlotType({ botId, botVersion: "DRAFT", localeId, slotTypeId })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 });
 
 /** Find a slot type of the locale by exact name (used when state was lost). */
@@ -224,9 +230,9 @@ export const SlotTypeProvider = () =>
             );
             observed = yield* describeSlotType(news.botId, news.localeId, created.slotTypeId!);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read created Lex slot type ${slotTypeName}`),
-              );
+              return yield* new SlotTypeUnexpectedResponse({
+                message: `failed to read created Lex slot type ${slotTypeName}`,
+              });
             }
           } else if (
             // 3. SYNC — UpdateSlotType replaces the declared aspects; skip
@@ -253,9 +259,9 @@ export const SlotTypeProvider = () =>
             );
             observed = yield* describeSlotType(news.botId, news.localeId, observed.slotTypeId!);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`failed to read updated Lex slot type ${slotTypeName}`),
-              );
+              return yield* new SlotTypeUnexpectedResponse({
+                message: `failed to read updated Lex slot type ${slotTypeName}`,
+              });
             }
           }
 

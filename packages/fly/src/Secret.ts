@@ -207,7 +207,7 @@ export const Secret: typeof SecretResource = Object.assign(
 
 export class SecretNotCreated extends Data.TaggedError("Fly.SecretNotCreated")<{
   appName: string;
-  name: string;
+  secretName: string;
 }> {}
 
 export class SecretAppRequired extends Data.TaggedError("Fly.SecretAppRequired")<{
@@ -251,7 +251,7 @@ const getByName = (appName: string, secretName: string) =>
       secret_name: secretName,
       show_secrets: false,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listSecrets = (appName: string) =>
   machines
@@ -360,7 +360,7 @@ export const SecretProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecretNotCreated({ appName, name });
+        return yield* new SecretNotCreated({ appName, secretName: name });
       }
 
       // Sync — skip if we just created. Prefer observed digest vs hash of

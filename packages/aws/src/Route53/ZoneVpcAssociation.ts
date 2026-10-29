@@ -106,7 +106,7 @@ export const ZoneVpcAssociationProvider = () =>
       const observe = Effect.fn(function* (hostedZoneId: string, vpcId: string) {
         const detail = yield* route53
           .getHostedZone({ Id: hostedZoneId })
-          .pipe(Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchHostedZone", () => Effect.undefined));
         return (detail?.VPCs ?? []).find((vpc) => vpc.VPCId === vpcId);
       });
 

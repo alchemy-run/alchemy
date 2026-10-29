@@ -179,7 +179,7 @@ const toAttrs = (extension: networkservices.LbRouteExtension, project: string, r
 const getByName = (name: string) =>
   networkservices
     .getProjectsLocationsLbRouteExtensions({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const LbRouteExtensionProvider = () =>
   Provider.succeed(LbRouteExtension, {
@@ -282,7 +282,7 @@ export const LbRouteExtensionProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -336,7 +336,7 @@ export const LbRouteExtensionProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

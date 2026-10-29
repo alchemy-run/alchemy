@@ -558,7 +558,7 @@ const needsUpdate = (current: compute.HealthCheck, desired: compute.HealthCheck)
 const getByName = (project: string, healthCheck: string) =>
   compute
     .getHealthChecks({ project, healthCheck })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, healthCheckName: string) =>
   getByName(project, healthCheckName).pipe(
@@ -632,7 +632,7 @@ export const HealthCheckProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* awaitResource(env.project, healthCheckName);
       }
@@ -671,7 +671,7 @@ export const HealthCheckProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
             times: 8,
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(

@@ -1,6 +1,7 @@
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Clock from "effect/Clock";
 import * as Console from "effect/Console";
+import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -10,6 +11,13 @@ import * as Path from "effect/Path";
 import packageJson from "../../package.json" with { type: "json" };
 import { ANSI_RESET, ansiFg, colorsEnabled, unicodeEnabled } from "../Util/Terminal.ts";
 import { glyphsFor, theme } from "../Util/Theme.ts";
+
+export class CheckVersionUnexpectedResponse extends Data.TaggedError(
+  "CheckVersionUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const NPM_DIST_TAGS_URL = "https://registry.npmjs.org/-/package/alchemy/dist-tags";
 
@@ -107,7 +115,7 @@ const fetchDistTags = Effect.gen(function* () {
   const response = yield* http.get(NPM_DIST_TAGS_URL);
   const distTags = (yield* response.json) as Record<string, string> | null;
   if (typeof distTags !== "object" || distTags === null) {
-    return yield* Effect.fail(new Error("malformed dist-tags response"));
+    return yield* new CheckVersionUnexpectedResponse({ message: "malformed dist-tags response" });
   }
   return distTags;
 });
