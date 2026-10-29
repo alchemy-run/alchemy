@@ -128,7 +128,12 @@ export const ProbeEntity = Effect.gen(function* () {
     system: "CLOUD_STORAGE",
     dataPath: Output.interpolate`gs://${bucket.bucketName}/events`,
     format: { format: "PARQUET" },
-    schema: { userManaged: true, fields: [{ name: "id", type: "STRING", mode: "REQUIRED" }] },
+    schema: {
+      userManaged: true,
+      fields: [{ name: "id", type: "STRING", mode: "REQUIRED" }],
+      partitionFields: [{ name: "dt", type: "STRING" }],
+      partitionStyle: "HIVE_COMPATIBLE",
+    },
   });
 });
 export const ProbePartition = Effect.gen(function* () {
