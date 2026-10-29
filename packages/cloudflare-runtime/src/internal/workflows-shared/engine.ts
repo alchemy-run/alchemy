@@ -1471,6 +1471,26 @@ export class Engine extends DurableObject<Env, EngineProps> {
     void this.init(accountId, workflow, version, instance, event);
   }
 
+  async alarm(): Promise<void> {
+    const metadata = await this.ctx.storage.get<InstanceMetadata>(INSTANCE_METADATA);
+    if (metadata === undefined) {
+      return;
+    }
+
+    if (this.isRunning) {
+      await this.priorityQueue?.handleNextAlarm(1_000);
+      return;
+    }
+
+    await this.init(
+      metadata.accountId,
+      metadata.workflow,
+      metadata.version,
+      metadata.instance,
+      metadata.event,
+    );
+  }
+
   async hasInstance(): Promise<boolean> {
     // INSTANCE_METADATA is written exactly once, by the first init() for this
     // id, so its presence is the durable marker that the instance exists.
