@@ -92,6 +92,29 @@ Metrics: `domain.commands`, `domain.command.duration`, `domain.events`, `domain.
 
 More: [Observability](https://alchemy.run/domain/observability).
 
+## Hosting on Effect Cluster with SQL
+
+Outside Cloudflare, host the model on `effect/cluster` with its data in SQLite, Postgres, MySQL or MariaDB. Every aggregate instance, view key and policy key is a cluster entity; a command's events, state, receipt and outbox commit in one SQL transaction. Sagas run on `ClusterWorkflowEngine`.
+
+```ts
+// packages/server/src/main.ts
+import * as Domain from "@alchemy.run/domain";
+import { MysqlClient } from "@effect/sql-mysql2";
+import * as Config from "effect/Config";
+import * as Layer from "effect/Layer";
+
+export const BankLive = Bank.layer(BankHandlers).pipe(
+  Layer.provide(Domain.Cluster.layerSingleRunner()),   // one process; Cluster.layer() for several runners
+  Layer.provide(MysqlClient.layerConfig({ url: Config.Redacted("DATABASE_URL") })),
+);
+```
+
+- Tests: `Domain.Cluster.layerSingleRunner({ runnerStorage: "memory" })` on `SqliteClient.layer({ filename: ":memory:" })` gives each test a fresh database.
+- Several runners: create the tables in a deploy step (`Cluster.layerMigrations()` with the cluster's `SqlMessageStorage.layerMigrations` and `SqlRunnerStorage.layerMigrations`), then run `Cluster.layer({ migrations: false })`. On MySQL and MariaDB this step is required.
+- Live reads poll the database every 250 ms (`watchMillis`) for commits of other runners.
+
+More: [Effect Cluster and SQL](https://alchemy.run/domain/cluster), [Create the tables in a deploy step](https://alchemy.run/domain/cluster#create-the-tables-in-a-deploy-step).
+
 ## Pitfalls
 
 - Durable Object calls right after a fresh deploy can briefly hit alchemy's placeholder script. The Domain platform retries its own calls, so make test readiness probes retry the first real request.
