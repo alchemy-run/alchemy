@@ -29,6 +29,7 @@ import {
 import { makeCallback } from "alchemy/Callback";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Headers from "effect/http/Headers";
@@ -360,6 +361,10 @@ const clearPrefixes = (prefixes: ReadonlyArray<string>) =>
  * and its jobs as durable callbacks. Each step counts as progress, so a long
  * backfill never exhausts a callback's retry budget.
  */
+/** How many times, and for how long, a backfill job runs again within one alarm. */
+const INLINE_RUNS = 16;
+const INLINE_MILLIS = 2_000;
+
 const backfillRuntime = (
   run: (id: string) => Effect.Effect<void, never, DurableObjectState | RuntimeContext>,
 ) =>
@@ -396,22 +401,51 @@ const backfillRuntime = (
       exclusive: (effect) =>
         provide(exclusively(state.storage.transaction(effect)).pipe(Effect.orDie)),
     };
-    const callback = yield* makeCallback("domain:backfill", (job: { readonly id: string }) =>
-      run(job.id),
-    );
+    const durable = (id: string, afterMillis: number) =>
+      provide(
+        Effect.gen(function* () {
+          const step = ((yield* state.storage.get<number>("bf:step")) ?? 0) + 1;
+          yield* state.storage.put("bf:step", step);
+          yield* callback.schedule(id, {
+            after: `${afterMillis} millis`,
+            payload: { id },
+            progress: step,
+          });
+        }).pipe(Effect.orDie),
+      );
+    // A job that asks to run again at once (its next page, its next round) runs again
+    // in the same alarm, a bounded number of times: a durable job costs about ten
+    // written rows. Its row is removed only once the alarm returns, so a crash in
+    // between runs it again.
+    const running = new Map<string, { again: boolean }>();
+    const runInline = (job: {
+      readonly id: string;
+    }): Effect.Effect<void, never, DurableObjectState | RuntimeContext> =>
+      Effect.gen(function* () {
+        const slot = { again: false };
+        running.set(job.id, slot);
+        const started = yield* Clock.currentTimeMillis;
+        for (let runs = 1; ; runs++) {
+          slot.again = false;
+          yield* run(job.id);
+          if (!slot.again) return;
+          const elapsed = (yield* Clock.currentTimeMillis) - started;
+          if (runs >= INLINE_RUNS || elapsed >= INLINE_MILLIS) {
+            yield* durable(job.id, 0);
+            return;
+          }
+        }
+      }).pipe(Effect.ensuring(Effect.sync(() => running.delete(job.id))));
+    const callback = yield* makeCallback("domain:backfill", runInline);
     const jobs: Backfill.Jobs = {
-      schedule: (id, afterMillis) =>
-        provide(
-          Effect.gen(function* () {
-            const step = ((yield* state.storage.get<number>("bf:step")) ?? 0) + 1;
-            yield* state.storage.put("bf:step", step);
-            yield* callback.schedule(id, {
-              after: `${afterMillis} millis`,
-              payload: { id },
-              progress: step,
-            });
-          }).pipe(Effect.orDie),
-        ),
+      schedule: (id, afterMillis) => {
+        const slot = running.get(id);
+        if (slot !== undefined && afterMillis === 0) {
+          slot.again = true;
+          return Effect.void;
+        }
+        return durable(id, afterMillis);
+      },
     };
     return { storage, jobs, provide };
   });

@@ -707,19 +707,23 @@ export const makeConsumer = (
   /** Buffer deliveries in merge order. Callers hold the exclusive section. */
   const buffer = (target: string, deliveries: ReadonlyArray<Delivery>, live: boolean) =>
     Effect.gen(function* () {
+      // Each feed is written once per call, however many of its deliveries arrive.
+      const feeds = new Map<string, Feed>();
       for (const delivery of deliveries) {
         const key = orderKey(target, delivery);
         if ((yield* storage.get(key)) !== undefined) continue;
         yield* storage.put({ [key]: delivery });
-        const feed = (yield* storage.get<Feed>(feedKey(target, delivery.source))) ?? {
-          ref: null,
-          cursor: 0,
-          // Arriving live from a source it never heard of: one with no history for this key.
-          live,
-          buffered: 0,
-        };
-        yield* putFeed(target, delivery.source, { ...feed, buffered: feed.buffered + 1 });
+        const feed = feeds.get(delivery.source) ??
+          (yield* storage.get<Feed>(feedKey(target, delivery.source))) ?? {
+            ref: null,
+            cursor: 0,
+            // Arriving live from a source it never heard of: one with no history for this key.
+            live,
+            buffered: 0,
+          };
+        feeds.set(delivery.source, { ...feed, buffered: feed.buffered + 1 });
       }
+      for (const [stream, feed] of feeds) yield* putFeed(target, stream, feed);
     });
 
   /** Ask the directory whether discovery is complete; climb toward the root past nodes that don't know. */
@@ -783,20 +787,37 @@ export const makeConsumer = (
       Effect.gen(function* () {
         const backfill = yield* storage.get<Backfill>(backfillKey(target));
         if (!backfill) return "done" as const;
-        let applied = 0;
-        while (applied < limits.apply) {
-          if ((yield* storage.list({ prefix: starvedPrefix(target), limit: 1 })).length > 0)
-            return "starved" as const;
-          const [first] = yield* storage.list<Delivery>({ prefix: bufferPrefix(target), limit: 1 });
-          if (!first) break;
-          const [row, delivery] = first;
+        if ((yield* storage.list({ prefix: starvedPrefix(target), limit: 1 })).length > 0)
+          return "starved" as const;
+        // A page in merge order, each delivery applied on its own (as live, so watchers and
+        // downstream consumers see every change), each feed written once. It stops after
+        // the delivery that leaves a feed still pulling with nothing buffered.
+        const page = yield* storage.list<Delivery>({
+          prefix: bufferPrefix(target),
+          limit: limits.apply,
+        });
+        const feeds = new Map<string, Feed>();
+        const applied: Array<Delivery> = [];
+        let starved = false;
+        for (const [, delivery] of page) {
+          const feed =
+            feeds.get(delivery.source) ??
+            (yield* storage.get<Feed>(feedKey(target, delivery.source)))!;
+          const next = { ...feed, buffered: feed.buffered - 1 };
+          feeds.set(delivery.source, next);
           yield* host.apply([delivery]);
-          yield* storage.delete([row]);
-          const feed = (yield* storage.get<Feed>(feedKey(target, delivery.source)))!;
-          yield* putFeed(target, delivery.source, { ...feed, buffered: feed.buffered - 1 });
-          applied += 1;
+          applied.push(delivery);
+          if (starves(next)) {
+            starved = true;
+            break;
+          }
         }
-        if (applied >= limits.apply) return "more" as const;
+        if (applied.length > 0) {
+          yield* storage.delete(page.slice(0, applied.length).map(([row]) => row));
+          for (const [stream, feed] of feeds) yield* putFeed(target, stream, feed);
+        }
+        if (starved) return "starved" as const;
+        if (page.length >= limits.apply) return "more" as const;
         if (!backfill.ready) return "waiting" as const;
         if ((yield* storage.list({ prefix: pullingPrefix(target), limit: 1 })).length > 0)
           return "starved" as const;
