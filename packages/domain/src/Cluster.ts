@@ -1431,15 +1431,13 @@ const workflowEngine = Layer.effect(
           const instance = yield* WorkflowEngine.WorkflowInstance;
           const step = () =>
             makeCurrentActivity(instance.workflow._tag, instance.executionId, activity.name);
-          return yield* engine.activityExecute(
-            {
-              ...activity,
-              executeEncoded: Effect.suspend(() =>
-                Effect.provideService(activity.executeEncoded, CurrentActivity, step()),
-              ),
-            },
-            attempt,
-          );
+          // A copy of the activity (own fields, symbols included) whose every run gets a fresh step.
+          const withStep: typeof activity = Object.assign({}, activity, {
+            executeEncoded: Effect.suspend(() =>
+              Effect.provideService(activity.executeEncoded, CurrentActivity, step()),
+            ),
+          });
+          return yield* engine.activityExecute(withStep, attempt);
         }),
     });
   }),
