@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -117,16 +118,18 @@ const makeCheck = (
   ) => Exit.Exit<unknown, Schema.SchemaError>;
   return (value) => {
     const exit = decode(value);
-    const found = Exit.findError(exit);
-    // A success, or a defect inside the schema: pass it through as it is.
-    if (found._tag === "Failure") return exit as Exit.Exit<unknown>;
+    if (Exit.isSuccess(exit)) return Exit.succeed(exit.value);
+    const found = Cause.findError(exit.cause);
     return Exit.die(
-      new ExternalSystemSchemaError({
-        system,
-        op,
-        part,
-        message: `${system}.${op} ${describePart[part]}\n${found.success.message}`,
-      }),
+      found._tag === "Success"
+        ? new ExternalSystemSchemaError({
+            system,
+            op,
+            part,
+            message: `${system}.${op} ${describePart[part]}\n${found.success.message}`,
+          })
+        : // A defect inside the schema passes through.
+          Cause.squash(exit.cause),
     );
   };
 };
