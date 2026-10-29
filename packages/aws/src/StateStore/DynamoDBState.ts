@@ -243,8 +243,8 @@ const amortizeCheck = (
   checkLive: Effect.Effect<void, StateStoreError>,
   ttlMs: number,
   lastOkAt: number | undefined,
-): Effect.Effect<void, StateStoreError> => {
-  return Effect.suspend(() => {
+): Effect.Effect<void, StateStoreError> =>
+  Effect.suspend(() => {
     if (lastOkAt !== undefined && Date.now() - lastOkAt < ttlMs) {
       return Effect.void;
     }
@@ -256,7 +256,6 @@ const amortizeCheck = (
       ),
     );
   });
-};
 
 /**
  * One cached effect per key. A failed effect is dropped rather than cached,
@@ -384,10 +383,10 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
       s3.getObject({ Bucket: bucket, Key: ref }).pipe(
         Effect.flatMap((result) =>
           result.Body === undefined
-            ? Effect.succeed(undefined)
-            : Stream.mkString(Stream.decodeText(result.Body)),
+            ? Effect.void
+            : result.Body.pipe(Stream.decodeText, Stream.mkString),
         ),
-        Effect.catchTag("NoSuchKey", () => Effect.succeed(undefined)),
+        Effect.catchTag("NoSuchKey", () => Effect.void),
       ),
     );
     // A missing body is corruption, never a missing resource.
@@ -559,7 +558,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
       ExpressionAttributeNames: { "#expiresAt": "expiresAt" },
       ExpressionAttributeValues: { ":now": N(now) },
     });
-    if (!acquired) return yield* Effect.fail(heldError(stack, stage));
+    if (!acquired) return yield* heldError(stack, stage);
 
     const cursor = { lost: false };
     const gate = Semaphore.makeUnsafe(1);
@@ -596,7 +595,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
       1,
     )(
       Effect.gen(function* () {
-        if (cursor.lost) return yield* Effect.fail(lostError(stack, stage));
+        if (cursor.lost) return yield* lostError(stack, stage);
         const existing = yield* use(({ table }) =>
           dynamodb.getItem({
             TableName: table,
@@ -606,7 +605,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
         );
         if (str(existing.Item, "token") !== token) {
           cursor.lost = true;
-          return yield* Effect.fail(lostError(stack, stage));
+          return yield* lostError(stack, stage);
         }
         const observedAt = yield* Clock.currentTimeMillis;
         if (Number(existing.Item?.expiresAt?.N ?? 0) <= observedAt) {
@@ -621,7 +620,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
           });
           if (!reclaimed) {
             cursor.lost = true;
-            return yield* Effect.fail(lostError(stack, stage));
+            return yield* lostError(stack, stage);
           }
         }
       }),
@@ -805,7 +804,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
       guarded(request, (records) => {
         const record = records.get(request.fqn);
         return record === undefined
-          ? Effect.succeed(undefined)
+          ? Effect.undefined
           : parse<PersistedState>(record.text, `record '${request.fqn}'`);
       }),
     getReplacedResources: (request) =>
@@ -910,7 +909,7 @@ const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
 const describeStateTable = (table: string) =>
   dynamodb.describeTable({ TableName: table }).pipe(
     Effect.map((result) => result.Table),
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.void),
   );
 
 const validateKeySchema = (table: dynamodb.TableDescription) => {
