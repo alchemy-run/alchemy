@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { hostProject, probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeContentPolicy,
   ProbeDeidentify,
@@ -134,7 +134,14 @@ export default class DLPGeneratedHost extends GCP.Function<DLPGeneratedHost>()(
         HybridDlpJobInspect: probeOutcome(Retry.none(p26({} as never))),
         HybridJobTriggerInspect: probeOutcome(Retry.none(p27({} as never))),
         InspectContent: probeOutcome(Retry.none(p28({} as never))),
-        ListColumnDataProfiles: probeOutcome(Retry.none(p29({ location: "us-central1" } as never))),
+        ListColumnDataProfiles: probeOutcome(
+          Retry.none(
+            p29({
+              location: "us-central1",
+              filter: `project_id = ${yield* hostProject} AND dataset_id = alchemy_probe AND table_id = missing`,
+            } as never),
+          ),
+        ),
         ListConnections: probeOutcome(Retry.none(p30({ location: "us-central1" } as never))),
         ListContentPolicies: probeOutcome(Retry.none(p31({ location: "us-central1" } as never))),
         ListDeidentifyTemplates: probeOutcome(Retry.none(p32({} as never))),

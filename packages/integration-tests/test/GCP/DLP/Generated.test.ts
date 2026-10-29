@@ -380,7 +380,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListColumnDataProfiles (dlp.projects.locations.columnDataProfiles.list)",
-        () => probe("ListColumnDataProfiles", true),
+        () => probe("ListColumnDataProfiles", false),
         {
           tags: ["provider:gcp", "provider:gcp:dlp", "live"],
           timeout: 600_000,

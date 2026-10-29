@@ -91,6 +91,9 @@
       "OrganizationsLocationsInspectTemplate": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
       "OrganizationsLocationsJobTrigger": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
       "OrganizationsLocationsStoredInfoType": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)"
+    },
+    "args": {
+      "ListColumnDataProfiles": "{ location: \"us-central1\", filter: `project_id = ${yield* hostProject} AND dataset_id = alchemy_probe AND table_id = missing` }"
     }
   },
   "permissionCollections": {
