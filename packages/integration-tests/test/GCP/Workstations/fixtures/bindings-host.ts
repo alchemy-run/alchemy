@@ -1,11 +1,12 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
+import { CAPACITY_REGION } from "../../zones.ts";
 import { serveProbes } from "../../bindingHost.ts";
 
 /** Cluster → config → workstation, on the project's `default` network. */
 export const Dev = Effect.gen(function* () {
   const cluster = yield* GCP.Workstations.WorkstationCluster("Dev", {
-    location: "us-central1",
+    location: CAPACITY_REGION,
     network: "default",
     subnetwork: "default",
     labels: { env: "test" },

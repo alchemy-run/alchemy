@@ -24,7 +24,7 @@ export default class WorkstationsGeneratedHost extends GCP.Function<Workstations
     const p5 = yield* GCP.Workstations.SuspendWorkstation(ProbeWorkstation);
     return {
       fetch: serveProbes({
-        ListWorkstationClusters: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
+        ListWorkstationClusters: probeOutcome(Retry.none(p0({ location: "us-west1" } as never))),
         ListWorkstationClusterWorkstationConfigs: probeOutcome(Retry.none(p1({} as never))),
         ListWorkstationConfigUsable: probeOutcome(Retry.none(p2({} as never))),
         ListWorkstationConfigWorkstations: probeOutcome(Retry.none(p3({} as never))),
