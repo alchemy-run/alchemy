@@ -84,18 +84,20 @@ export const ProbeEngine = Effect.gen(function* () {
 });
 export const ProbeStoreControl = Effect.gen(function* () {
   const store = yield* ProbeCollectionsDataStore;
-  yield* ProbeEngine;
+  const engine = yield* ProbeEngine;
   return yield* GCP.DiscoveryEngine.CollectionsDataStoresControl("ProbeStoreControl", {
-    dataStore: store.name,
+    // through the engine, so it is created once the store has one
+    dataStore: Output.all(store.name, engine.name).pipe(Output.map(([name]) => name)),
     displayName: "greetings",
     synonyms: ["hello", "hi"],
   });
 });
 export const ProbeStoreServing = Effect.gen(function* () {
   const store = yield* ProbeCollectionsDataStore;
-  yield* ProbeEngine;
+  const engine = yield* ProbeEngine;
   return yield* GCP.DiscoveryEngine.CollectionsDataStoresServingConfig("ProbeStoreServing", {
-    dataStore: store.name,
+    // through the engine, so it is created once the store has one
+    dataStore: Output.all(store.name, engine.name).pipe(Output.map(([name]) => name)),
     displayName: "preview",
   });
 });
