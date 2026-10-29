@@ -12,6 +12,6 @@ export default class DomainCounterWorker extends Cloudflare.Worker<DomainCounter
   "DomainCounterWorker",
   { main: import.meta.url },
   serve("unrestricted").pipe(
-    Effect.provide(CountersLive.pipe(Layer.provide(DomainCloudflare.DurableObjects))),
+    Effect.provide(CountersLive.pipe(Layer.provide(DomainCloudflare.layerDurableObjects()))),
   ),
 ) {}

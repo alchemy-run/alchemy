@@ -1051,7 +1051,7 @@ const durableObjectPlatform = (
  *
  * const BankLive = SessionLive.pipe(
  *   Layer.provideMerge(Bank.layer(BankPolicies)),
- *   Layer.provide(DomainCloudflare.DurableObjects),
+ *   Layer.provide(DomainCloudflare.layerDurableObjects()),
  * );
  *
  * export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
@@ -1064,12 +1064,40 @@ const durableObjectPlatform = (
  * ) {}
  * ```
  *
+ * ### Restricting a model to a jurisdiction
+ * **Example:** Every Durable Object of the model in the EU
+ * ```typescript
+ * import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+ * import * as Layer from "effect/Layer";
+ * import { Bank, BankPolicies } from "./Bank.ts";
+ *
+ * const BankLive = Bank.layer(BankPolicies).pipe(
+ *   Layer.provide(DomainCloudflare.layerDurableObjects({ jurisdiction: "eu" })),
+ * );
+ * ```
+ *
  * @layer
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export const DurableObjects: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker> =
-  makeDurableObjects(undefined);
+export function layerDurableObjects({ jurisdiction }: DurableObjectsOptions = {}): Layer.Layer<
+  Platform | WorkflowEngine.WorkflowEngine,
+  never,
+  Worker
+> {
+  // The same options return the same Layer, so models that each provide it
+  // share one platform and one workflow engine.
+  let platform = platforms.get(jurisdiction);
+  if (platform === undefined)
+    platforms.set(
+      jurisdiction,
+      (platform = Layer.merge(
+        durableObjectPlatform(jurisdiction),
+        layerDurableObjectEngine({ jurisdiction }),
+      )),
+    );
+  return platform;
+}
 
 /** Options for {@link layerDurableObjects}. */
 export interface DurableObjectsOptions {
@@ -1094,52 +1122,6 @@ export interface DurableObjectsOptions {
 }
 
 const platforms = new Map<
-  DurableObjectJurisdiction,
+  DurableObjectJurisdiction | undefined,
   Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker>
 >();
-
-/**
- * {@link DurableObjects}, configured. Use it to keep a model's Durable
- * Objects inside a jurisdiction, for example the EU for personal data.
- * Calls with the same jurisdiction return the same Layer, so models that each
- * provide it share one platform and one workflow engine, as they do with
- * {@link DurableObjects}.
- *
- * ### Restricting a model to a jurisdiction
- * **Example:** Every Durable Object of the model in the EU
- * ```typescript
- * import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
- * import * as Layer from "effect/Layer";
- * import { Bank, BankPolicies } from "./Bank.ts";
- *
- * const BankLive = Bank.layer(BankPolicies).pipe(
- *   Layer.provide(DomainCloudflare.layerDurableObjects({ jurisdiction: "eu" })),
- * );
- * ```
- *
- * @layer
- * @provides Domain.Platform
- * @provides WorkflowEngine
- */
-export function layerDurableObjects({ jurisdiction }: DurableObjectsOptions = {}): Layer.Layer<
-  Platform | WorkflowEngine.WorkflowEngine,
-  never,
-  Worker
-> {
-  if (jurisdiction === undefined) return DurableObjects;
-  let platform = platforms.get(jurisdiction);
-  if (platform === undefined)
-    platforms.set(jurisdiction, (platform = makeDurableObjects(jurisdiction)));
-  return platform;
-}
-
-// A function declaration: `DurableObjects` above calls it while the module
-// is still evaluating.
-function makeDurableObjects(
-  jurisdiction: DurableObjectJurisdiction | undefined,
-): Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker> {
-  return Layer.merge(
-    durableObjectPlatform(jurisdiction),
-    layerDurableObjectEngine({ jurisdiction }),
-  );
-}

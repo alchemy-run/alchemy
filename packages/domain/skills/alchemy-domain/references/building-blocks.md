@@ -357,6 +357,6 @@ export const BankHandlers = Layer.mergeAll(
 );
 ```
 
-`Bank.layer(BankHandlers)` hosts the model on whatever platform is provided: `Domain.InMemory` or `DomainCloudflare.DurableObjects`.
+`Bank.layer(BankHandlers)` hosts the model on whatever platform is provided: `Domain.InMemory` or `DomainCloudflare.layerDurableObjects()`.
 
 More: [Domain Model: Declare the model](https://alchemy.run/domain/model#declare-the-model).

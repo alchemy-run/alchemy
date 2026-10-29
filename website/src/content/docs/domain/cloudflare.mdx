@@ -7,7 +7,7 @@ Host your model on Cloudflare, and every aggregate instance, view key and policy
 
 ## Host the model in a Worker
 
-Provide `DomainCloudflare.DurableObjects` as the platform, and serve your Apis from the Worker.
+Provide `DomainCloudflare.layerDurableObjects()` as the platform, and serve your Apis from the Worker.
 
 ```typescript
 // packages/server/src/BankWorker.ts
@@ -37,7 +37,7 @@ import { StripeSettlements } from "./Settlement/StripeSettlements.ts";
 /**
  * Everything the Worker serves: the middleware both Apis declare, and the
  * Bank hosted on Durable Objects, with the ledger in D1. Swap
- * `DomainCloudflare.DurableObjects` for `Domain.InMemory` and nothing else changes.
+ * `DomainCloudflare.layerDurableObjects()` for `Domain.InMemory` and nothing else changes.
  */
 const BankLive = Layer.mergeAll(
   SessionLive,
@@ -50,7 +50,7 @@ const BankLive = Layer.mergeAll(
   Layer.provideMerge(D1LedgerStore),
   Layer.provide(
     Layer.mergeAll(
-      DomainCloudflare.DurableObjects,
+      DomainCloudflare.layerDurableObjects(),
       SiftFraudCheck,
       StripePayments,
       Cloudflare.D1.QueryDatabaseBinding,
@@ -164,11 +164,11 @@ bun alchemy deploy
 | A stream key, like the card of `a-1` | One Durable Object per stream and key |
 | A saga run, like transfer `t-1` | One Durable Object per saga and run, holding its steps' results |
 
-Sagas run on `Cloudflare.Workflows.DurableObjectEngine`, the same engine you can use for plain Effect workflows. See [Effect workflows](/cloudflare/compute/effect-workflows).
+Sagas run on `Cloudflare.Workflows.layerDurableObjectEngine()`, the same engine you can use for plain Effect workflows. See [Effect workflows](/cloudflare/compute/effect-workflows).
 
 ## Keep the model in a jurisdiction
 
-Swap `DomainCloudflare.DurableObjects` in `BankLive` for `DomainCloudflare.layerDurableObjects({ jurisdiction })` to create and store every Durable Object of the model, saga runs included, only inside a jurisdiction, for example the EU for personal data:
+Pass a `jurisdiction` to `DomainCloudflare.layerDurableObjects` in `BankLive` to create and store every Durable Object of the model, saga runs included, only inside a jurisdiction, for example the EU for personal data:
 
 ```typescript
   Layer.provide(

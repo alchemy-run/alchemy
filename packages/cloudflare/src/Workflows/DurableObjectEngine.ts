@@ -78,7 +78,7 @@ import type { Worker } from "../Workers/Worker.ts";
  *   }).pipe(
  *     Effect.provide(
  *       SendWelcomeLive.pipe(
- *         Layer.provideMerge(Cloudflare.Workflows.DurableObjectEngine),
+ *         Layer.provideMerge(Cloudflare.Workflows.layerDurableObjectEngine()),
  *       ),
  *     ),
  *   ),
@@ -101,8 +101,15 @@ import type { Worker } from "../Workers/Worker.ts";
  * @provides WorkflowEngine
  * @product Durable Objects
  */
-export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =
-  makeEngine(undefined);
+export function layerDurableObjectEngine({
+  jurisdiction,
+}: DurableObjectEngineOptions = {}): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> {
+  // The same options return the same Layer, so providing it in several places
+  // builds one engine.
+  let engine = engines.get(jurisdiction);
+  if (engine === undefined) engines.set(jurisdiction, (engine = makeEngine(jurisdiction)));
+  return engine;
+}
 
 /** Options for {@link layerDurableObjectEngine}. */
 export interface DurableObjectEngineOptions {
@@ -121,35 +128,14 @@ export interface DurableObjectEngineOptions {
 }
 
 const engines = new Map<
-  DurableObjectJurisdiction,
+  DurableObjectJurisdiction | undefined,
   Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker>
 >();
 
-/**
- * {@link DurableObjectEngine}, configured. Use it to keep every workflow
- * execution inside a jurisdiction, for example the EU for personal data.
- * Calls with the same jurisdiction return the same Layer, so providing it in
- * several places builds one engine.
- *
- * @layer
- * @provides WorkflowEngine
- * @product Durable Objects
- */
-export function layerDurableObjectEngine({
-  jurisdiction,
-}: DurableObjectEngineOptions = {}): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> {
-  if (jurisdiction === undefined) return DurableObjectEngine;
-  let engine = engines.get(jurisdiction);
-  if (engine === undefined) engines.set(jurisdiction, (engine = makeEngine(jurisdiction)));
-  return engine;
-}
-
-// A function declaration: `DurableObjectEngine` above calls it while the
-// module is still evaluating.
-function makeEngine(
+const makeEngine = (
   jurisdiction: DurableObjectJurisdiction | undefined,
-): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> {
-  return Layer.effect(
+): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =>
+  Layer.effect(
     WorkflowEngine.WorkflowEngine,
     Effect.gen(function* () {
       // Workflows register while their Layers build, inside the Worker's init
@@ -325,7 +311,6 @@ function makeEngine(
       return engine;
     }),
   );
-}
 
 // ---------------------------------------------------------------- the execution object
 
