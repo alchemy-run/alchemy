@@ -10913,6 +10913,9 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
+      alchemy:
+        specifier: workspace:*
+        version: link:../packages/alchemy
       changelogen:
         specifier: 'catalog:'
         version: 0.6.2(magicast@0.5.5)

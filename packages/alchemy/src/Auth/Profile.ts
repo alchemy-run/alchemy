@@ -321,8 +321,7 @@ export const ProfileStoreLive = Layer.effect(
         return V0.mergeSidecar(provider, values, decoded.success);
       });
 
-    /** Expand the released v0 store and preserve every original file. */
-    const migrateCentralManifest = provideLockServices(
+    const migrateCentralManifestLocked = provideLockServices(
       withLock(
         "profiles-migrate",
         Effect.gen(function* () {
@@ -417,6 +416,12 @@ export const ProfileStoreLive = Layer.effect(
         }),
       ),
     );
+
+    /**
+     * Expand the released v0 store and preserve every original file. Checked
+     * once per process, on the first profile read, rather than on every read.
+     */
+    const migrateCentralManifest = yield* Effect.cached(migrateCentralManifestLocked);
 
     const readProviderFile = (profile: string, file: string) =>
       Effect.gen(function* () {

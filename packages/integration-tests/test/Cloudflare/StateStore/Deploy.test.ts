@@ -526,7 +526,7 @@ test.provider(
       const { accountId } = environment;
       const workerName = configuredWorkerName;
       const entrypoint = fileURLToPath(new URL("./fixtures/configured-store.ts", import.meta.url));
-      const source = { _tag: "Configured", entrypoint } as const;
+      const source = { type: "configured", entrypoint } as const;
       const alchemist = Alchemist.layer();
       yield* teardownStateStore({ workerName });
 

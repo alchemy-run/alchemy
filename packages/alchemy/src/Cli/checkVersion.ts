@@ -1,6 +1,5 @@
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import * as Clock from "effect/Clock";
-import * as Console from "effect/Console";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -11,8 +10,6 @@ import * as Path from "effect/Path";
 import * as Result from "effect/Result";
 import * as SemVer from "effect/SemVer";
 import packageJson from "../../package.json" with { type: "json" };
-import { ANSI_RESET, ansiFg, colorsEnabled, unicodeEnabled } from "../Util/Terminal.ts";
-import { glyphsFor, theme } from "../Util/Theme.ts";
 
 export class CheckVersionUnexpectedResponse extends Data.TaggedError(
   "CheckVersionUnexpectedResponse",
@@ -43,24 +40,6 @@ const compareVersions = (a: string, b: string): number => {
   const pa = Result.getOrUndefined(SemVer.parse(a));
   const pb = Result.getOrUndefined(SemVer.parse(b));
   return pa === undefined || pb === undefined ? 0 : SemVer.Order(pa, pb);
-};
-
-/**
- * Pick the dist-tag matching the current channel. For pre-release versions
- * like `2.0.0-beta.33`, we match the prerelease identifier (`beta`, `next`,
- * etc.), falling back through `next` → `latest`. Because our releases can
- * force prereleases onto `latest`, it may run ahead of the channel tag —
- * in that case offer `latest` instead of the channel pick.
- */
-const pickDistTag = (current: string, distTags: Record<string, string>): string | undefined => {
-  const pre = current.split("-", 2)[1];
-  if (!pre) return distTags.latest;
-  const id = pre.split(".")[0];
-  const channelPick = (id && distTags[id]) || distTags.next;
-  const { latest } = distTags;
-  if (channelPick === undefined) return latest;
-  if (latest === undefined) return channelPick;
-  return compareVersions(latest, channelPick) > 0 ? latest : channelPick;
 };
 
 const readCache = Effect.fn(
@@ -117,8 +96,7 @@ const refreshDistTags = Effect.fn(function* (cachePath: string) {
 });
 
 /**
- * Warn if a newer `alchemy` version is published on the dist-tag matching
- * the current channel. Runs to completion before any interactive prompts so
+ * Warn if a newer `alchemy` version is published on the `latest` dist-tag. Runs to completion before any interactive prompts so
  * the warning never interleaves with prompt rendering, and is bounded so it
  * can never stall the CLI: dist-tags are cached in
  * `.alchemy/version-check.json` for a day (failed attempts included), so at
@@ -139,27 +117,21 @@ export const checkLatestVersion = Effect.gen(function* () {
   if (distTags === undefined) return;
 
   const current = packageJson.version;
-  const latest = pickDistTag(current, distTags);
-  // Strictly newer only: a dist-tag pointing at (or behind) the installed
-  // version — e.g. a stale `next` after a force-latest release — must not
-  // prompt a "downgrade".
+  const { latest } = distTags;
+  // Strictly newer only: `latest` at (or behind) the installed version must
+  // not prompt a "downgrade".
   if (latest === undefined || compareVersions(latest, current) <= 0) return;
 
   const installCmd =
     typeof process !== "undefined" && process.versions.bun !== undefined
       ? `bun add alchemy@${latest}`
       : `pnpm add alchemy@${latest}`;
-  // Print via the Console service, not Effect.logWarning: this is a
-  // user-facing notice, not a log record, so it should reach the terminal
-  // regardless of the installed loggers or the configured log floor.
-  const useColor = colorsEnabled();
-  const glyphs = glyphsFor(unicodeEnabled());
-  const message =
-    `alchemy ${latest} is available (you're on ${current}). ` + `Run \`${installCmd}\` to upgrade.`;
-  yield* Console.warn(
-    useColor ? `${ansiFg(theme.color.warning)}${glyphs.warning} ${message}${ANSI_RESET}` : message,
+  // A warning record: above the default console floor, and a JSON record
+  // under --log-format json (commands run this check, after the flags parse).
+  yield* Effect.logWarning(
+    `alchemy ${latest} is available (you're on ${current}). Run \`${installCmd}\` to upgrade.`,
   );
 }).pipe(Effect.ignore);
 
 // Exported for tests.
-export const _internal = { pickDistTag, compareVersions };
+export const _internal = { compareVersions };
