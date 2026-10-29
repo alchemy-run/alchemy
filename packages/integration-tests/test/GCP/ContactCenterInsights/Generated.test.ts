@@ -170,32 +170,56 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     describe("Conversation", { concurrent: true }, () => {
-      test.provider.todo(
-        "BulkSegmentAnalyze (contactcenterinsights.projects.locations.conversations.segments.bulkAnalyze): Conversation: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "BulkSegmentAnalyze (contactcenterinsights.projects.locations.conversations.segments.bulkAnalyze)",
+        () => probe("BulkSegmentAnalyze", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetConversation (contactcenterinsights.projects.locations.conversations.get): Conversation: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetConversation (contactcenterinsights.projects.locations.conversations.get)",
+        () => probe("GetConversation", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListConversationAnalyses (contactcenterinsights.projects.locations.conversations.analyses.list): Conversation: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListConversationAnalyses (contactcenterinsights.projects.locations.conversations.analyses.list)",
+        () => probe("ListConversationAnalyses", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListConversationAssessments (contactcenterinsights.projects.locations.conversations.assessments.list): Conversation: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListConversationAssessments (contactcenterinsights.projects.locations.conversations.assessments.list)",
+        () => probe("ListConversationAssessments", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListConversationFeedbackLabels (contactcenterinsights.projects.locations.conversations.feedbackLabels.list): Conversation: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListConversationFeedbackLabels (contactcenterinsights.projects.locations.conversations.feedbackLabels.list)",
+        () => probe("ListConversationFeedbackLabels", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ConversationsAnalyses", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetAnalyse (contactcenterinsights.projects.locations.conversations.analyses.get): ConversationsAnalyses: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetAnalyse (contactcenterinsights.projects.locations.conversations.analyses.get)",
+        () => probe("GetAnalyse", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -283,9 +307,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("PhraseMatcher", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPhraseMatcher (contactcenterinsights.projects.locations.phraseMatchers.get): PhraseMatcher: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetPhraseMatcher (contactcenterinsights.projects.locations.phraseMatchers.get)",
+        () => probe("GetPhraseMatcher", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

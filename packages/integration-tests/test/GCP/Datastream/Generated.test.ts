@@ -48,9 +48,13 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ConnectionProfile", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetConnectionProfile (datastream.projects.locations.connectionProfiles.get): ConnectionProfile: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetConnectionProfile (datastream.projects.locations.connectionProfiles.get)",
+        () => probe("GetConnectionProfile", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

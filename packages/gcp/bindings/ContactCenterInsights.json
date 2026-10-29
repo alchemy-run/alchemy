@@ -73,7 +73,10 @@
     "resources": {
       "AnalysisRule": "ProbeAnalysisRule",
       "QaQuestionTag": "ProbeQaQuestionTag",
-      "View": "ProbeView"
+      "View": "ProbeView",
+      "Conversation": "ProbeConversation",
+      "ConversationsAnalyses": "ProbeAnalysis",
+      "PhraseMatcher": "ProbePhraseMatcher"
     },
     "untestable": {
       "AssessmentRule": "Needs Contact Center AI Insights features the testing project does not have enabled: create returns 404 NOT_FOUND \"Requested entity was not found.\" and list returns 400 INVALID_ARGUMENT. (GCP_TEST_CCAI_QUALITY)",

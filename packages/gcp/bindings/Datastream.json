@@ -16,7 +16,9 @@
     }
   },
   "probes": {
-    "resources": {},
+    "resources": {
+      "ConnectionProfile": "ProbeProfile"
+    },
     "untestable": {}
   }
 }

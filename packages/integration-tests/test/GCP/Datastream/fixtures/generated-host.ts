@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeProfile } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Datastream binding as its own
@@ -16,15 +17,17 @@ export default class DatastreamGeneratedHost extends GCP.Function<DatastreamGene
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.Datastream.DiscoverConnectionProfile();
-    const p1 = yield* GCP.Datastream.ListConnectionProfiles();
-    const p2 = yield* GCP.Datastream.ListPrivateConnections();
-    const p3 = yield* GCP.Datastream.ListStreams();
+    const p1 = yield* GCP.Datastream.GetConnectionProfile(ProbeProfile);
+    const p2 = yield* GCP.Datastream.ListConnectionProfiles();
+    const p3 = yield* GCP.Datastream.ListPrivateConnections();
+    const p4 = yield* GCP.Datastream.ListStreams();
     return {
       fetch: serveProbes({
         DiscoverConnectionProfile: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListConnectionProfiles: outcome(Retry.none(p1({ location: "us-central1" } as never))),
-        ListPrivateConnections: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListStreams: outcome(Retry.none(p3({ location: "us-central1" } as never))),
+        GetConnectionProfile: outcome(Retry.none(p1({} as never))),
+        ListConnectionProfiles: outcome(Retry.none(p2({ location: "us-central1" } as never))),
+        ListPrivateConnections: outcome(Retry.none(p3({ location: "us-central1" } as never))),
+        ListStreams: outcome(Retry.none(p4({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
@@ -32,6 +35,7 @@ export default class DatastreamGeneratedHost extends GCP.Function<DatastreamGene
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.Datastream.DiscoverConnectionProfileHttp,
+          GCP.Datastream.GetConnectionProfileHttp,
           GCP.Datastream.ListConnectionProfilesHttp,
           GCP.Datastream.ListPrivateConnectionsHttp,
           GCP.Datastream.ListStreamsHttp,
