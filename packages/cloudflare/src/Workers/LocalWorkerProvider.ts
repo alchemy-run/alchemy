@@ -950,6 +950,7 @@ export const LocalWorkerProvider = () =>
                       cache: worker.dev.cache,
                       // Per-worker request.cf override (`dev: { cf: {...} }`).
                       cf: worker.dev.cf,
+                      workerd: worker.dev.workerd,
                       modules: yield* toRuntimeModules(bundle),
                       assets: yield* toRuntimeAssets(worker.assets),
                       beforeServe,
@@ -1317,6 +1318,7 @@ export const LocalWorkerProvider = () =>
                         streamingTails: worker.streamingTailConsumers?.map((c) => c.service),
                         cache: worker.dev.cache,
                         cf: worker.dev.cf,
+                        workerd: worker.dev.workerd,
                         zone: worker.zone,
                         assets: yield* toRuntimeAssets(worker.assets),
                       },
@@ -1440,6 +1442,7 @@ export const LocalWorkerProvider = () =>
               cf: worker.dev.cf,
               zone: worker.zone,
               access: worker.dev.access,
+              workerd: worker.dev.workerd,
             },
           },
           runtimeContext: context,

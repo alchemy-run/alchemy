@@ -4,13 +4,16 @@ import * as NodeServices from "@effect/platform-node/NodeServices";
 import { assert, expect, layer } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Random from "effect/Random";
 import * as Schedule from "effect/Schedule";
 import { afterEach, beforeEach, describe, it, vi } from "vitest";
 import type { Config } from "../workerd/Config.ts";
+import { bin as workerdBin } from "../workerd/internal/workerd.ts";
 import * as Workerd from "../workerd/Workerd.ts";
 
 const services = Layer.provide(Workerd.WorkerdLive, NodeServices.layer);
@@ -460,27 +463,34 @@ describe("parseV8Flags", () => {
  * exists when V8 started with the flag, so the response tells whether the
  * flags reached the process.
  */
-const serveGcProbe = (config: Pick<Config, "v8Flags"> = {}) =>
+const serveGcProbe = (
+  config: Pick<Config, "v8Flags"> = {},
+  options?: Pick<Workerd.ServeOptions, "bin" | "env">,
+) =>
   Effect.gen(function* () {
     const workerd = yield* Workerd.Workerd;
-    const ports = yield* workerd.serve({
-      ...config,
-      sockets: [{ name: "http", address: "127.0.0.1:0", service: { name: "test" } }],
-      services: [
-        {
-          name: "test",
-          worker: {
-            compatibilityDate: "2026-03-10",
-            modules: [
-              {
-                name: "main.js",
-                esModule: "export default { fetch: () => new Response(typeof globalThis.gc) };",
-              },
-            ],
+    const ports = yield* workerd.serve(
+      {
+        ...config,
+        sockets: [{ name: "http", address: "127.0.0.1:0", service: { name: "test" } }],
+        services: [
+          {
+            name: "test",
+            worker: {
+              compatibilityDate: "2026-03-10",
+              modules: [
+                {
+                  name: "main.js",
+                  esModule: "export default { fetch: () => new Response(typeof globalThis.gc) };",
+                },
+              ],
+            },
           },
-        },
-      ],
-    });
+        ],
+      },
+      undefined,
+      options,
+    );
     const response = yield* Effect.promise(() =>
       fetch(`http://127.0.0.1:${ports.http}/`, {
         signal: AbortSignal.timeout(10_000),
@@ -534,6 +544,30 @@ layer(services)("v8Flags", (it) => {
       { timeout: 30_000 },
     );
   }
+});
+
+layer(services)("bin and env", (it) => {
+  it.effect.skipIf(process.platform === "win32")(
+    "runs the given binary with the extra environment variables",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dir = yield* fs.makeTempDirectoryScoped();
+        const marker = path.join(dir, "marker");
+        const bin = path.join(dir, "workerd");
+        yield* fs.writeFileString(
+          bin,
+          `#!/bin/sh\nprintf '%s' "$WORKERD_TEST_MARKER" > ${JSON.stringify(marker)}\nexec ${JSON.stringify(workerdBin)} "$@"\n`,
+        );
+        yield* fs.chmod(bin, 0o755);
+        expect(yield* serveGcProbe({}, { bin, env: { WORKERD_TEST_MARKER: "wrapped" } })).toBe(
+          "undefined",
+        );
+        expect(yield* fs.readFileString(marker)).toBe("wrapped");
+      }).pipe(Effect.provide(NodeServices.layer)),
+    { timeout: 30_000 },
+  );
 });
 
 describe("parseAddressInUse", () => {

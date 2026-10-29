@@ -43,6 +43,13 @@ export interface ServeOptions {
    * closes and the process is killed on purpose.
    */
   readonly onExit?: (exit: WorkerdExit) => void;
+  /**
+   * Path to the workerd binary to run instead of the one from the `workerd`
+   * package.
+   */
+  readonly bin?: string;
+  /** Extra environment variables for the workerd process. */
+  readonly env?: Record<string, string>;
 }
 
 /** How much trailing stderr output is kept for {@link WorkerdExit}. */
@@ -122,6 +129,7 @@ const make = (
     args: Array<string>,
     config: Buffer,
     configuredAddresses: Array<string>,
+    env: Record<string, string> | undefined,
   ) => Effect.Effect<ProcessHandle, ConfigError | SystemError>,
 ) =>
   Workerd.of({
@@ -161,7 +169,7 @@ const make = (
           }
         }
         const handle = yield* spawn(
-          workerd.bin,
+          options?.bin ?? workerd.bin,
           [
             "serve",
             "--binary",
@@ -174,6 +182,7 @@ const make = (
           ],
           Buffer.from(serializeConfig(config)),
           configuredAddresses,
+          options?.env,
         );
         let killed = false;
         yield* Effect.addFinalizer(() =>
@@ -270,18 +279,18 @@ const makeStreamPump = (
   };
 };
 
-const externalEnv = () => {
+const externalEnv = (extra: Record<string, string> | undefined) => {
   const env = { ...process.env };
   delete env.NODE_ENV;
-  return env;
+  return { ...env, ...extra };
 };
 
 const makeBun = () =>
-  make((command, args, config, configuredAddresses) =>
+  make((command, args, config, configuredAddresses, env) =>
     Effect.sync(() =>
       Bun.spawn({
         cmd: [command, ...args],
-        env: externalEnv(),
+        env: externalEnv(env),
         stdio: [config, "pipe", "pipe", "pipe"],
         killSignal: "SIGKILL",
       }),
@@ -357,12 +366,12 @@ const makeBun = () =>
   );
 
 const makeNode = () =>
-  make((command, args, config, configuredAddresses) => {
+  make((command, args, config, configuredAddresses, env) => {
     const stderrTail = makeTail();
     return Effect.try({
       try: () =>
         NodeChildProcess.spawn(command, args, {
-          env: externalEnv(),
+          env: externalEnv(env),
           stdio: ["pipe", "pipe", "pipe", "pipe"],
           killSignal: "SIGKILL",
         }),

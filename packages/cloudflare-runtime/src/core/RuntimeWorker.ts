@@ -109,6 +109,8 @@ export interface RuntimeWorker<B extends BindingHooks = BindingHooks> {
    * process output instead of inheriting the parent process's stdio.
    */
   readonly logging?: WorkerdLogging;
+  /** Overrides for the `workerd` process that serves this worker. */
+  readonly workerd?: WorkerdOptions;
   /**
    * Called after the `workerd` process exited on its own (for example when
    * V8 ran out of heap) and a replacement process is serving on the same
@@ -147,6 +149,21 @@ export interface WorkerdLogging {
    * errors instead.
    */
   readonly onOutput?: OutputSink;
+}
+
+export interface WorkerdOptions {
+  /**
+   * Path to the workerd binary, instead of the one from the `workerd`
+   * package. Useful where the npm binary can't run, e.g. NixOS.
+   */
+  readonly path?: string;
+  /**
+   * Extra V8 flags, e.g. `["--max-old-space-size=4096"]`. Applied after
+   * `ALCHEMY_WORKERD_V8_FLAGS`, so they win when both set the same flag.
+   */
+  readonly v8Flags?: ReadonlyArray<string>;
+  /** Extra environment variables for the workerd process. */
+  readonly env?: Record<string, string>;
 }
 
 export type BindingHooks = ReadonlyArray<BindingHook<any>>;
