@@ -84,6 +84,20 @@ export interface EmailIdentity extends Resource<
      */
     dkimTokens: string[];
     dkimStatus: sesv2.DkimStatus | undefined;
+    /**
+     * Default configuration set, the declared DKIM, feedback-forwarding and
+     * MAIL FROM settings, and the tags, as observed. Lets `alchemy drift`
+     * detect out-of-band changes.
+     */
+    configuration?: {
+      configurationSetName?: string;
+      dkimSigningEnabled?: boolean;
+      dkimSigningKeyLength?: string;
+      feedbackForwardingEnabled?: boolean;
+      mailFromDomain?: string;
+      mailFromBehaviorOnMxFailure?: string;
+      tags: Record<string, string>;
+    };
   },
   never,
   Providers
@@ -204,6 +218,38 @@ const toAttributes = (
   dkimStatus: identity.DkimAttributes?.Status,
 });
 
+/**
+ * The settings reconcile converges, as observed. Settings reconcile only
+ * applies when declared are only observed when declared. `read` and
+ * `reconcile` share it so a converged identity reads unchanged.
+ */
+const observeIdentityConfiguration = (
+  identity: sesv2.GetEmailIdentityResponse,
+  props: EmailIdentityProps | undefined,
+  tags: Record<string, string>,
+) => ({
+  configurationSetName: identity.ConfigurationSetName,
+  dkimSigningEnabled:
+    props?.dkimSigningEnabled === undefined
+      ? undefined
+      : (identity.DkimAttributes?.SigningEnabled ?? false),
+  dkimSigningKeyLength:
+    props?.dkimSigningKeyLength === undefined
+      ? undefined
+      : identity.DkimAttributes?.NextSigningKeyLength,
+  feedbackForwardingEnabled:
+    props?.feedbackForwardingEnabled === undefined
+      ? undefined
+      : (identity.FeedbackForwardingStatus ?? true),
+  mailFromDomain:
+    props?.mailFromDomain === undefined ? undefined : identity.MailFromAttributes?.MailFromDomain,
+  mailFromBehaviorOnMxFailure:
+    props?.mailFromDomain === undefined || props.mailFromBehaviorOnMxFailure === undefined
+      ? undefined
+      : identity.MailFromAttributes?.BehaviorOnMxFailure,
+  tags,
+});
+
 export const EmailIdentityProvider = () =>
   Provider.effect(
     EmailIdentity,
@@ -211,7 +257,7 @@ export const EmailIdentityProvider = () =>
       const getIdentity = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getEmailIdentity({ EmailIdentity: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       return EmailIdentity.Provider.of({
@@ -248,8 +294,11 @@ export const EmailIdentityProvider = () =>
           if (name === undefined) return undefined;
           const found = yield* getIdentity(name);
           if (!found) return undefined;
-          const attrs = toAttributes(name, identityArnOf(region, accountId, name), found);
           const tags = toTagRecord(found.Tags);
+          const attrs = {
+            ...toAttributes(name, identityArnOf(region, accountId, name), found),
+            configuration: observeIdentityConfiguration(found, olds, tags),
+          };
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
@@ -378,7 +427,10 @@ export const EmailIdentityProvider = () =>
           // 4. RETURN — re-read so DKIM tokens/status reflect any sync above.
           const final = yield* sesv2.getEmailIdentity({ EmailIdentity: name });
           yield* session.note(identityArn);
-          return toAttributes(name, identityArn, final);
+          return {
+            ...toAttributes(name, identityArn, final),
+            configuration: observeIdentityConfiguration(final, news, desiredTags),
+          };
         }),
 
         delete: Effect.fn(function* ({ output }) {

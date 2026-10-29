@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
 import { toSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -17,6 +18,18 @@ import type {
   LaunchTemplateName,
   LaunchTemplate as LaunchTemplateResource,
 } from "./LaunchTemplate.ts";
+
+export class AutoScalingGroupUnexpectedResponse extends Data.TaggedError(
+  "AutoScalingGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class AutoScalingGroupNotReady extends Data.TaggedError("AutoScalingGroupNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type AutoScalingGroupName = string;
 
@@ -292,7 +305,8 @@ export const AutoScalingGroupProvider = () =>
         return {
           LaunchTemplateId: spec.launchTemplateId as string | undefined,
           LaunchTemplateName: spec.launchTemplateName as string | undefined,
-          Version: spec.version === undefined ? "$Default" : String(spec.version),
+          Version:
+            spec.version === undefined ? "$Default" : String(spec.version as string | number),
         };
       };
 
@@ -480,9 +494,9 @@ export const AutoScalingGroupProvider = () =>
               Effect.filterOrFail(
                 Boolean,
                 () =>
-                  new Error(
-                    `Auto Scaling Group '${autoScalingGroupName}' was not readable after create`,
-                  ),
+                  new AutoScalingGroupUnexpectedResponse({
+                    message: `Auto Scaling Group '${autoScalingGroupName}' was not readable after create`,
+                  }),
               ),
               Effect.retry({
                 while: () => true,
@@ -533,9 +547,9 @@ export const AutoScalingGroupProvider = () =>
             Effect.filterOrFail(
               Boolean,
               () =>
-                new Error(
-                  `Auto Scaling Group '${autoScalingGroupName}' was not readable after reconcile`,
-                ),
+                new AutoScalingGroupUnexpectedResponse({
+                  message: `Auto Scaling Group '${autoScalingGroupName}' was not readable after reconcile`,
+                }),
             ),
           );
           yield* session.note(autoScalingGroupName);
@@ -554,10 +568,16 @@ export const AutoScalingGroupProvider = () =>
 
           yield* describeGroup(output.autoScalingGroupName).pipe(
             Effect.flatMap((group) =>
-              group ? Effect.fail(new Error("AutoScalingGroupStillExists")) : Effect.void,
+              group
+                ? Effect.fail(
+                    new AutoScalingGroupNotReady({ message: "AutoScalingGroupStillExists" }),
+                  )
+                : Effect.void,
             ),
             Effect.retry({
-              while: (error) => (error as Error).message === "AutoScalingGroupStillExists",
+              while: (error) =>
+                error._tag === "AutoScalingGroupNotReady" &&
+                error.message === "AutoScalingGroupStillExists",
               schedule: Schedule.max([Schedule.recurs(12), Schedule.exponential("250 millis")]),
             }),
           );

@@ -340,7 +340,7 @@ export const ClustersNodePool = Resource<ClustersNodePool>("GCP.Container.Cluste
 export class ClustersNodePoolNotResolved extends Data.TaggedError(
   "GCP.Container.ClustersNodePoolNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ClustersNodePoolClusterMissing extends Data.TaggedError(
@@ -352,7 +352,7 @@ export class ClustersNodePoolClusterMissing extends Data.TaggedError(
 export class ClustersNodePoolNotReady extends Data.TaggedError(
   "GCP.Container.ClustersNodePoolNotReady",
 )<{
-  name: string;
+  resourceName: string;
   status: string;
 }> {}
 
@@ -366,7 +366,7 @@ export class ClustersNodePoolOperationFailed extends Data.TaggedError(
 export class ClustersNodePoolStillExists extends Data.TaggedError(
   "GCP.Container.ClustersNodePoolStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -566,7 +566,7 @@ const getByRef = (project: string, zone: string, clusterId: string, nodePoolId: 
       clusterId,
       nodePoolId,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const getByName = (name: string) => {
   const parsed = parseName(name);
@@ -621,7 +621,7 @@ const waitUntilExists = (project: string, zone: string, clusterId: string, nodeP
   return getByRef(project, zone, clusterId, nodePoolId).pipe(
     Effect.filterOrFail(
       (pool): pool is container.NodePool => pool !== undefined,
-      () => new ClustersNodePoolNotResolved({ name }),
+      () => new ClustersNodePoolNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.ClustersNodePoolNotResolved",
@@ -636,7 +636,7 @@ const waitUntilReady = (project: string, zone: string, clusterId: string, nodePo
   return getByRef(project, zone, clusterId, nodePoolId).pipe(
     Effect.filterOrFail(
       (pool): pool is container.NodePool => pool !== undefined,
-      () => new ClustersNodePoolNotResolved({ name }),
+      () => new ClustersNodePoolNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (pool) => {
@@ -656,7 +656,7 @@ const waitUntilReady = (project: string, zone: string, clusterId: string, nodePo
       },
       (pool) =>
         new ClustersNodePoolNotReady({
-          name,
+          resourceName: name,
           status: pool.status ?? "STATUS_UNSPECIFIED",
         }),
     ),
@@ -675,7 +675,9 @@ const waitUntilGone = (project: string, zone: string, clusterId: string, nodePoo
   const name = resourceName(project, zone, clusterId, nodePoolId);
   return getByRef(project, zone, clusterId, nodePoolId).pipe(
     Effect.flatMap((pool) =>
-      pool === undefined ? Effect.void : Effect.fail(new ClustersNodePoolStillExists({ name })),
+      pool === undefined
+        ? Effect.void
+        : Effect.fail(new ClustersNodePoolStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Container.ClustersNodePoolStillExists",
@@ -949,7 +951,7 @@ export const ClustersNodePoolProvider = () =>
             zone: ref.zone,
             clusterId: ref.clusterId,
           })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         const workloadIdentity = (cluster?.workloadIdentityConfig?.workloadPool ?? "").length > 0;
         const created = yield* retryConflict(
           container
@@ -961,7 +963,7 @@ export const ClustersNodePoolProvider = () =>
                 nodePool: toCreatePool(news, nodePoolId, desiredLabels, workloadIdentity),
               },
             })
-            .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined))),
+            .pipe(Effect.catchTag("Conflict", () => Effect.undefined)),
         );
         if (created !== undefined) {
           yield* waitForOperation(ref.project, ref.zone, created);
@@ -970,7 +972,7 @@ export const ClustersNodePoolProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ClustersNodePoolNotResolved({ name });
+        return yield* new ClustersNodePoolNotResolved({ resourceName: name });
       }
 
       let live = current;
@@ -1143,7 +1145,7 @@ export const ClustersNodePoolProvider = () =>
           nodePoolId,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

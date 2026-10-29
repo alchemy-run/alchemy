@@ -1,16 +1,26 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Workers from "@distilled.cloud/cloudflare/workers";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
+import {
+  BuildInputs,
+  type BuildInputSet,
+  buildSecretsStack,
+} from "./fixtures/buildsecrets/stack.ts";
 import { GuardWorker } from "./fixtures/native/guard-worker.ts";
 import { policyStack, settingsStack, TEST_SSH_PUBLIC_KEY } from "./fixtures/native/settings.ts";
-import { directEnvStack, NativeImages, nativeStack } from "./fixtures/native/stack.ts";
+import {
+  directEnvStack,
+  growingStack,
+  NativeImages,
+  nativeStack,
+} from "./fixtures/native/stack.ts";
 
 /** What `/probe` reports about the running container (fixtures/native). */
 interface Probe {
@@ -472,6 +482,46 @@ for (const dev of [true, false]) {
         );
       }
 
+      // The second deploy uploads the Worker with a namespace for the new
+      // class; its container application must be created in that same deploy.
+      test.provider(
+        "a deployed Worker gains a container-backed class in one deploy",
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+
+            yield* stack.deploy(growingStack(false));
+            const grown = yield* stack.deploy(growingStack(true));
+
+            const application = grown.reviewerApplication!;
+            if (!dev) {
+              const observed = yield* Containers.getContainerApplication({
+                accountId: application.accountId,
+                applicationId: application.applicationId,
+              });
+              expect(observed.id).toBe(grown.worker.durableObjectNamespaces.NativeAsyncReviewer);
+              expect(observed.durableObjects?.namespaceId).toBe(observed.id);
+            }
+
+            const url = grown.worker.url!;
+            yield* waitUntilReady(url);
+            const reviewer = yield* getJson<ExecResult>(url, "/exec?class=reviewer").pipe(
+              within(`${url}/exec?class=reviewer`, "10 seconds"),
+              Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 40 }),
+              within(`${url}/exec?class=reviewer`, "120 seconds"),
+            );
+            expect(reviewer).toEqual({
+              stdout: "native",
+              exitCode: 7,
+              release: expect.stringMatching(/^3\.21\./),
+              images: ASYNC_REVIEWER_IMAGES,
+            });
+
+            yield* stack.destroy();
+          }),
+        { timeout: 180_000, retry: 0 },
+      );
+
       for (const scenario of ["execution", "membership"] as const) {
         test.provider(
           scenario === "execution"
@@ -779,6 +829,54 @@ for (const dev of [true, false]) {
           { timeout: 300_000, retry: 0 },
         );
       }
+
+      test.provider(
+        "builds a Container's Dockerfile with build args and BuildKit secrets",
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+
+            const withInputs = (inputs: BuildInputSet) =>
+              buildSecretsStack.pipe(Effect.provideService(BuildInputs, inputs));
+            const initial = { greeting: "hello", token: "alchemy-build-secret-value" };
+
+            const application = yield* Effect.gen(function* () {
+              const deployed = yield* stack.deploy(withInputs(initial));
+              const url = deployed.worker.url!;
+              yield* waitUntilReady(url);
+              // The build saw the arg and the secret's mount.
+              expect(
+                yield* getText(url, "/build").pipe(
+                  within("/build", "10 seconds"),
+                  Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 40 }),
+                ),
+              ).toBe(`hello ${initial.token.length}`);
+
+              // Secrets compare by value, so an unchanged program plans nothing.
+              const unchanged = yield* stack.plan(withInputs(initial));
+              expect(unchanged.resources.BuildSecretsImage?.action).toBe("noop");
+
+              // Rotating a secret reuses the published image.
+              const rotated = yield* stack.deploy(withInputs({ ...initial, token: "rotated" }));
+              expect(rotated.image.hash?.image).toBe(deployed.image.hash?.image);
+              expect(rotated.image.image).toBe(deployed.image.image);
+
+              // A build arg is part of the image's content hash.
+              const changed = yield* stack.deploy(
+                withInputs({ greeting: "howdy", token: "rotated" }),
+              );
+              expect(changed.image.hash?.image).not.toBe(deployed.image.hash?.image);
+              return deployed.application;
+            }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+
+            if (!dev) {
+              expect(
+                yield* waitForApplicationDeleted(application.accountId, application.applicationId),
+              ).toBeUndefined();
+            }
+          }),
+        { timeout: 300_000, retry: 0 },
+      );
     },
   );
 }

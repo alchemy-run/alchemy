@@ -113,7 +113,7 @@ export const EnvironmentProvider = () =>
             ApplicationId: applicationId,
             EnvironmentId: environmentId,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const findByName = Effect.fn(function* (applicationId: string, name: string) {

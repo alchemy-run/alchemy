@@ -250,7 +250,7 @@ export const TopicProvider = () =>
       // the delta.
       const observedState = yield* sns
         .getTopicAttributes({ TopicArn: topicArn })
-        .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       const observedAttributes = toAttributeMap(observedState?.Attributes);
 
       for (const [name, value] of Object.entries(desiredAttributes)) {
@@ -312,8 +312,8 @@ export const TopicProvider = () =>
         observedPolicy = yield* sns.getDataProtectionPolicy({ ResourceArn: topicArn }).pipe(
           Effect.map((r) => r.DataProtectionPolicy),
           Effect.catchTags({
-            NotFoundException: () => Effect.succeed(undefined),
-            InvalidParameterException: () => Effect.succeed(undefined),
+            NotFoundException: () => Effect.undefined,
+            InvalidParameterException: () => Effect.undefined,
           }),
         );
       }
@@ -432,22 +432,23 @@ const readTopic = Effect.fn(function* ({
         })
         .pipe(
           Effect.map((response) => response.DataProtectionPolicy),
-          Effect.catchTag(["NotFoundException", "FifoTopicDataProtectionUnsupported"], () =>
-            Effect.succeed(undefined),
+          Effect.catchTag(
+            ["NotFoundException", "FifoTopicDataProtectionUnsupported"],
+            () => Effect.undefined,
           ),
         ),
     ],
     { concurrency: "unbounded" },
   ).pipe(
     Effect.catchTags({
-      NotFoundException: () => Effect.succeed(undefined),
-      InvalidParameterException: () => Effect.succeed(undefined),
+      NotFoundException: () => Effect.undefined,
+      InvalidParameterException: () => Effect.undefined,
     }),
     // `list()` hydrates every topic in the account, so a topic deleted by a
     // parallel test between enumeration and hydration surfaces here —
     // `listTagsForResource` reports it as `ResourceNotFoundException`. Treat a
     // vanished topic as "not present" rather than failing the whole listing.
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
   );
 
   if (!topicState) {

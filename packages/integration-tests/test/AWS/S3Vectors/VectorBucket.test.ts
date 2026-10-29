@@ -1,10 +1,10 @@
 import * as AWS from "@alchemy.run/aws";
 import { Index, VectorBucket } from "@alchemy.run/aws/S3Vectors";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as s3vectors from "@distilled.cloud/aws/s3vectors";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";

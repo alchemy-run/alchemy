@@ -26,6 +26,7 @@
     "solid-js": "catalog:"
   },
   "devDependencies": {
+    "@alchemy.run/test": "workspace:*",
     "@cloudflare/workers-types": "catalog:",
     "@types/bun": "catalog:",
     "typescript": "catalog:",

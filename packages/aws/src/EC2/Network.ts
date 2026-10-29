@@ -2,6 +2,7 @@ import * as ec2 from "@distilled.cloud/aws/ec2";
 import { Region } from "@distilled.cloud/aws/Region";
 import * as Namespace from "alchemy/Namespace";
 import * as Output from "alchemy/Output";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { EIP as EIPResource } from "./EIP.ts";
 import { EIP } from "./EIP.ts";
@@ -21,6 +22,11 @@ import type { Vpc as VpcResource } from "./Vpc.ts";
 import { Vpc } from "./Vpc.ts";
 import type { VpcEndpoint as VpcEndpointResource } from "./VpcEndpoint.ts";
 import { VpcEndpoint } from "./VpcEndpoint.ts";
+
+export class NetworkInvalidProps extends Data.TaggedError("NetworkInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type NetworkNat = "none" | "single" | "per-az";
 
@@ -363,21 +369,23 @@ const resolveAvailabilityZones = (input?: number | string[]) =>
   Effect.gen(function* () {
     if (Array.isArray(input)) {
       if (input.length === 0) {
-        return yield* Effect.fail(new Error("EC2.Network requires at least one availability zone"));
+        return yield* new NetworkInvalidProps({
+          message: "EC2.Network requires at least one availability zone",
+        });
       }
       if (new Set(input).size !== input.length) {
-        return yield* Effect.fail(
-          new Error("EC2.Network availabilityZones must not contain duplicates"),
-        );
+        return yield* new NetworkInvalidProps({
+          message: "EC2.Network availabilityZones must not contain duplicates",
+        });
       }
       return input;
     }
 
     const desiredCount = input ?? 2;
     if (!Number.isInteger(desiredCount) || desiredCount <= 0) {
-      return yield* Effect.fail(
-        new Error("EC2.Network availabilityZones count must be a positive integer"),
-      );
+      return yield* new NetworkInvalidProps({
+        message: "EC2.Network availabilityZones count must be a positive integer",
+      });
     }
 
     if (globalThis.__ALCHEMY_RUNTIME__) {
@@ -401,11 +409,9 @@ const resolveAvailabilityZones = (input?: number | string[]) =>
       .sort((a, b) => a.localeCompare(b));
 
     if (zones.length < desiredCount) {
-      return yield* Effect.fail(
-        new Error(
-          `EC2.Network requested ${desiredCount} availability zones, but only ${zones.length} are available`,
-        ),
-      );
+      return yield* new NetworkInvalidProps({
+        message: `EC2.Network requested ${desiredCount} availability zones, but only ${zones.length} are available`,
+      });
     }
 
     return zones.slice(0, desiredCount);

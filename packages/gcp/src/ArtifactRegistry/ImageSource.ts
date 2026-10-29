@@ -1,5 +1,10 @@
 import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile, type InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
+import {
+  validateDockerfileBuild,
+  type DockerfileBuild,
+  type DockerfileImageSource,
+} from "@alchemy.run/docker/ImageSource";
 /**
  * INTERNAL — Artifact Registry image-source machinery for GKE workloads.
  * Not exported from the GCP barrel or `ArtifactRegistry/index.ts`.
@@ -56,10 +61,7 @@ export interface BundledImageSource {
   install?: PackageInstall;
 }
 
-export interface DockerfileImageSource {
-  context?: string;
-  dockerfile?: string | InlineDockerfile;
-}
+export type { DockerfileImageSource };
 
 export interface RegistryImageSource {
   image: string;
@@ -68,7 +70,8 @@ export interface RegistryImageSource {
 export interface ImageSourceLike {
   main?: string;
   handler?: string;
-  build?: BundledImageSource["build"];
+  /** Bundler config for `main`; Docker build args and secrets for `context`. */
+  build?: Bundle.BundleConfig & DockerfileBuild;
   context?: string;
   dockerfile?: string | InlineDockerfile;
   image?: string;
@@ -148,7 +151,7 @@ export const validateImageSource = (id: string, source: ImageSourceLike): Effect
       ),
     );
   }
-  return Effect.void;
+  return validateDockerfileBuild(id, source);
 };
 
 export interface ResolvedImage {
@@ -207,6 +210,8 @@ export const computeStaticSourceHash = Effect.fn(function* (
       return (yield* sha256Object({
         dockerfile: source.dockerfile.content,
         platform: platform ?? "linux/amd64",
+        // Absent when unset, so existing hashes hold. Secrets are excluded.
+        buildArgs: source.build?.args,
       })).slice(0, 16);
     }
     const fs = yield* FileSystem.FileSystem;
@@ -220,6 +225,7 @@ export const computeStaticSourceHash = Effect.fn(function* (
       contextHash,
       dockerfile: dockerfileContent,
       platform: platform ?? "linux/amd64",
+      buildArgs: source.build?.args,
     })).slice(0, 16);
   }
   return undefined;
@@ -258,6 +264,7 @@ export const buildAndPushArtifactRegistryImage = Effect.fn(function* (
     dockerfile?: string;
     platform?: string;
     location: string;
+    build?: DockerfileBuild;
   },
 ) {
   const credentials = yield* getArtifactRegistryCredentials(options.location);
@@ -266,6 +273,8 @@ export const buildAndPushArtifactRegistryImage = Effect.fn(function* (
     context: options.context,
     file: options.dockerfile,
     platform: options.platform,
+    "build-arg": options.build?.args,
+    secrets: options.build?.secrets,
   });
   yield* docker.image.push(options.imageUri, credentials, options.platform).pipe(
     Effect.retry({
@@ -284,7 +293,7 @@ export const buildAndPushArtifactRegistryImage = Effect.fn(function* (
 export const destroyImageRepository = Effect.fn(function* (name: string) {
   const operation = yield* artifactregistry
     .deleteProjectsLocationsRepositories({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   if (operation !== undefined) {
     yield* waitForDeleteOperation(operation);
   }
@@ -310,7 +319,7 @@ export const destroyHostImageRepository = Effect.fn(function* (
   const name = resourceName(output.project, output.location, repositoryId);
   const repository = yield* artifactregistry
     .getProjectsLocationsRepositories({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   if (repository === undefined) return;
   if (!(yield* hasAlchemyLabels(id, tagRecord(repository.labels)))) return;
   yield* destroyImageRepository(name);
@@ -391,7 +400,7 @@ export const makeImageSource = Effect.gen(function* () {
       envFrom !== undefined
         ? `FROM ${envFrom}`
         : source.dockerfile !== undefined && isInlineDockerfile(source.dockerfile)
-          ? String(source.dockerfile.content).trimEnd()
+          ? (source.dockerfile.content as string).trimEnd()
           : `FROM ${source.image ?? "oven/bun:1"}`;
     const lines = [preamble, `WORKDIR /app`, `COPY index.mjs /app/index.mjs`, `COPY *.js /app/`];
     if (port !== undefined) {
@@ -501,7 +510,7 @@ export const makeImageSource = Effect.gen(function* () {
     };
     const existing = yield* artifactregistry
       .getProjectsLocationsRepositories({ name })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     if (existing?.name) {
       return {
         name: existing.name,
@@ -522,7 +531,7 @@ export const makeImageSource = Effect.gen(function* () {
           labels: desiredLabels,
         },
       })
-      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (created !== undefined) {
       yield* waitForOperation(created);
     }
@@ -554,12 +563,11 @@ export const makeImageSource = Effect.gen(function* () {
       .getProjectsLocationsRepositoriesPackagesTags({
         name: tagResourceName(project, location, repositoryId, imageTag),
       })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   });
 
   const resolve = Effect.fn(function* (options: ArtifactRegistryResolveOptions) {
-    const { id, source, repositoryName, session, location } = options;
-    const platform = options.platform ?? "linux/amd64";
+    const { id, source, repositoryName, location } = options;
     const kind = imageSourceKind(source);
     if (kind === undefined) {
       return yield* Effect.die(
@@ -751,6 +759,7 @@ export const makeImageSource = Effect.gen(function* () {
         context: contextDir,
         platform,
         location,
+        build: source.build,
       });
       yield* session.note(`Pushed ${imageUri}`);
       return { imageUri, repositoryName, repositoryUri, codeHash };
@@ -772,6 +781,7 @@ export const makeImageSource = Effect.gen(function* () {
       dockerfile,
       platform,
       location,
+      build: source.build,
     });
     yield* session.note(`Pushed ${imageUri}`);
     return { imageUri, repositoryName, repositoryUri, codeHash };

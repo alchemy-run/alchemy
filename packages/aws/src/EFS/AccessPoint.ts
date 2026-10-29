@@ -197,14 +197,14 @@ export const AccessPointProvider = () =>
       const findById = Effect.fn(function* (accessPointId: string) {
         return yield* efs.describeAccessPoints({ AccessPointId: accessPointId }).pipe(
           Effect.map((r) => r.AccessPoints?.[0]),
-          Effect.catchTag("AccessPointNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("AccessPointNotFound", () => Effect.undefined),
         );
       });
 
       const findByToken = Effect.fn(function* (fileSystemId: string, token: string) {
         return yield* efs.describeAccessPoints({ FileSystemId: fileSystemId }).pipe(
           Effect.map((r) => r.AccessPoints?.find((ap) => ap.ClientToken === token)),
-          Effect.catchTag("FileSystemNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("FileSystemNotFound", () => Effect.undefined),
         );
       });
 

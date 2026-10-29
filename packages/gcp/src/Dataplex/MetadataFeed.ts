@@ -144,13 +144,13 @@ export const MetadataFeed = Resource<MetadataFeed>("GCP.Dataplex.MetadataFeed");
 export class MetadataFeedNotResolved extends Data.TaggedError(
   "GCP.Dataplex.MetadataFeedNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class MetadataFeedStillExists extends Data.TaggedError(
   "GCP.Dataplex.MetadataFeedStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, location: string, feedId: string) =>
@@ -191,7 +191,7 @@ const toAttrs = (feed: dataplex.GoogleCloudDataplexV1MetadataFeed, project: stri
 const getByName = (name: string) =>
   dataplex
     .getProjectsLocationsMetadataFeeds({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const topicResource = (topic: string, project: string) =>
   topic.includes("/") ? topic : `projects/${project}/topics/${topic}`;
@@ -202,7 +202,7 @@ const grantDataplexPubsub = (project: string, topic: string | undefined) =>
     const resource = topicResource(topic, project);
     const projectResource = yield* resourcemanager
       .getProjects({ name: `projects/${project}` })
-      .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
     const projectNumber = lastSegment(projectResource?.name ?? "");
     if (projectNumber.length === 0) return;
     const member = `serviceAccount:service-${projectNumber}@gcp-sa-dataplex.iam.gserviceaccount.com`;
@@ -236,7 +236,7 @@ const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (feed): feed is dataplex.GoogleCloudDataplexV1MetadataFeed => feed !== undefined,
-      () => new MetadataFeedNotResolved({ name }),
+      () => new MetadataFeedNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.MetadataFeedNotResolved",
@@ -248,7 +248,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((feed) =>
-      feed === undefined ? Effect.void : Effect.fail(new MetadataFeedStillExists({ name })),
+      feed === undefined
+        ? Effect.void
+        : Effect.fail(new MetadataFeedStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Dataplex.MetadataFeedStillExists",
@@ -331,7 +333,7 @@ export const MetadataFeedProvider = () =>
               pubsubTopic: news.pubsubTopic,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -339,7 +341,7 @@ export const MetadataFeedProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new MetadataFeedNotResolved({ name });
+        return yield* new MetadataFeedNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -382,7 +384,7 @@ export const MetadataFeedProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

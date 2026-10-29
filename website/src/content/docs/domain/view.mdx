@@ -7,7 +7,36 @@ import DAG from "../../../components/DAG.astro";
 
 A view answers a question: what's the balance of this account, what's on its statement, what does this customer hold across all their accounts. It reads events, folds them into state, and keeps that state current as new events arrive.
 
-Aggregates hold only what their rules need. Views hold everything people want to see, each shaped for one question. This page builds views up from the simplest case.
+Aggregates hold only what their rules need. Views hold everything people want to see, each shaped for one question. This chapter starts with why the two are kept apart and how to design a view from a screen, then builds views up from the simplest case.
+
+## Deciding and answering need different shapes
+
+An account needs exactly three things to decide a withdrawal: whether it's open, who owns it, and its balance. A customer's app needs much more. It shows a statement, line by line. It shows a dashboard with every account the customer holds. A support agent sees an account's freezes, closures and owner changes, and a fraud check needs today's total withdrawals.
+
+Putting all of that in the `Account` aggregate would make every rule harder to read, and every new screen a change to the code that guards the money. So the model keeps them apart. Aggregates are the **write side**, holding just what their rules need. Views are the **read side**: as many as there are questions, each built from the same events and shaped for the question it answers.
+
+<DAG
+  nodes={[
+    { id: "account", label: "Account", type: "open, owner, balance", kind: "aggregate", layer: 0 },
+    { id: "events", label: "Events", type: "the shared record", kind: "event", layer: 1 },
+    { id: "summary", label: "AccountSummary", type: "the balance now", kind: "view", layer: 2 },
+    { id: "statement", label: "Statement", type: "one line per movement", kind: "view", layer: 2 },
+    { id: "outflow", label: "DailyOutflow", type: "today's withdrawals", kind: "view", layer: 2 },
+  ]}
+  edges={[
+    { from: "account", to: "events" },
+    { from: "events", to: "summary", dashed: true },
+    { from: "events", to: "statement", dashed: true },
+    { from: "events", to: "outflow", dashed: true },
+  ]}
+  caption="One aggregate, many views. Adding a view never touches a rule."
+/>
+
+## Design a view from its question
+
+Start from the screen, not from the events. Write down the question it answers and the data it shows: "what's on this account's statement?" needs a list of lines, each with a kind, an amount and the balance after. Then decide what one instance of the view is about. A statement is about one account, so it's keyed by account. A dashboard is about one customer, so it's keyed by customer.
+
+Last, work backwards to the events that change that data. A statement line comes from each deposit and each withdrawal. If the data a screen needs isn't in any event, that's worth noticing: either the event is missing a fact the business cares about, or the screen is asking for something the business never recorded.
 
 ## Fold one aggregate's events
 
@@ -51,14 +80,9 @@ A view is never updated in the same step as the aggregate. The account commits i
 
 So a view is always correct, but it can be a moment behind. Most screens never notice. One that has just sent a command and wants to show its result waits for the view to catch up, using the command's receipt.
 
-```typescript
-// packages/server/test/depositThenRead.ts
-import * as Effect from "effect/Effect";
-import type { AccountId } from "@bank/domain/Account/Account.id";
-import type { CustomerClient } from "./flows.ts";
-
+```typescript title="packages/server/test/depositThenRead.ts"
 export const depositThenRead = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
-  const receipt = yield* bank.DepositMoney({ target: accountId, amount: 500 });
+  const receipt = yield* bank.DepositMoney(accountId, { amount: 500 });
   const summary = yield* bank.AccountSummary.get(accountId, {
     atLeast: { stream: receipt.stream, version: receipt.version },
   });
@@ -66,7 +90,7 @@ export const depositThenRead = Effect.fn(function* (bank: CustomerClient, accoun
 });
 ```
 
-`atLeast` makes `get` wait until the summary has applied that version of the account's stream.
+`atLeast` makes `get` wait until the summary has applied that version of the account's stream. If it hasn't within 10 seconds, the read fails with `ConsistencyTimeout`.
 
 ## Emit events of your own
 
@@ -128,6 +152,27 @@ AccountSummary: (d, _, { source, state }) => ({
 }),
 ```
 
+## Key a view by a value
+
+Some read models are about something the model has no aggregate for, like an organization that owns many accounts. Key the view by a string Schema instead of an aggregate. Each value gets its own instance, and `keyOf` returns the value itself, not a ref.
+
+```typescript
+export const OrgId = Schema.String.pipe(Schema.brand("OrgId"));
+
+export class OrgSchedule extends Domain.View("OrgSchedule", {
+  from: [Tour],
+  key: OrgId,
+  keyOf: { Tour: ({ event }) => event.orgId },
+  state: Schema.Struct({ tours: Schema.Record(Schema.String, Schema.String) }),
+  initial: { tours: {} },
+  evolve: {
+    TourBooked: (s, e, { source }) => ({ tours: { ...s.tours, [source.id]: e.unit } }),
+  },
+}) {}
+```
+
+Reads take the value too: `schedules.watch(orgId)`, `client.OrgSchedule.get(orgId)`, and `Story.view(OrgSchedule, orgId, ...)`. In handlers, `key` is the value, and a view, policy or projection that consumes this view gets it as `source`. Policies, projections and streams take a Schema `key` the same way. A view keyed by the same Schema follows this one without `keyOf`, so use a branded Schema to keep different kinds of ids apart.
+
 ## Route one event to several keys
 
 Some events matter to more than one key. A transfer request names two accounts, and both of their transfer histories should show it, one as money out and one as money in.
@@ -151,14 +196,9 @@ One `TransferRequested` updates both accounts: the sender's as `out` and the rec
 
 ## Read it
 
-Through an [Api](/domain/api), a view offers four reads for one key. `get` returns its current state, or `null` if nothing has happened to that key yet. `list` returns a page of its emitted events. `watch` streams the state now and after every change. `events` streams its emitted events, history first, then new ones as they're recorded.
+Through an [Api](/domain/api), a view offers these reads for one key. `get` returns its current state, or `null` if nothing has happened to that key yet. `list` returns a page of its emitted events. `watch` streams the state now and after every change, each with its cursor. `events` streams its emitted events: history first, then a `CaughtUp` frame, then new ones as they're recorded. `snapshot` returns the state with the cursor it is valid at.
 
-```typescript
-// packages/server/test/statementPage.ts
-import * as Effect from "effect/Effect";
-import type { AccountId } from "@bank/domain/Account/Account.id";
-import type { CustomerClient } from "./flows.ts";
-
+```typescript title="packages/server/test/statementPage.ts"
 export const statementPage = Effect.fn(function* (bank: CustomerClient, accountId: AccountId) {
   const page = yield* bank.Statement.list(accountId, { order: "desc", take: 10 });
   return page.entries.map(({ event }) => `${event.kind} ${event.amount}`);
@@ -166,6 +206,43 @@ export const statementPage = Effect.fn(function* (bank: CustomerClient, accountI
 ```
 
 A `where` filter narrows any read, like only deposits over a threshold. A filter can only narrow what you're already allowed to read; it never grants access.
+
+## Know when a live read is current
+
+`events` sends the key's history, then a `CaughtUp` frame, then new entries as they're recorded. Once `CaughtUp` arrives, the screen shows the key's current state and can stop showing "loading".
+
+```typescript
+yield* bank.Statement.events(accountId).pipe(
+  Stream.runForEach((frame) =>
+    Domain.Read.isCaughtUp(frame) ? markLive(frame.cursor) : addLine(frame),
+  ),
+);
+```
+
+`Stream.filter(Domain.Read.isEvent)` drops the frame when you don't need it.
+
+`watch` sends each state with its cursor, `{ state, cursor }`. Pass a cursor as `after` to `events` and the feed starts right after it: nothing arrives twice, and nothing is missed. That's how a screen that rendered a watched state follows the events from there, and how a dropped feed resumes from its last `CaughtUp`. Over `protocolWebSocket`, a read that reconnects sends `CaughtUp` again after the entries it missed.
+
+### Render a snapshot, then follow it
+
+`snapshot` returns a key's state together with its `cursor`: the `seq` of the last event the key had emitted when that state was read. Render the state, then follow `events` from the cursor. Every change after the snapshot arrives once, and none is missed, even when it was written between the two reads:
+
+```typescript title="packages/server/test/followSummary.ts"
+export const followSummary = Effect.fn(function* (
+  bank: CustomerClient,
+  accountId: AccountId,
+  render: (balance: number | undefined) => Effect.Effect<void>,
+) {
+  const { state, cursor } = yield* bank.AccountSummary.snapshot(accountId);
+  yield* render(state?.balance);
+  yield* bank.AccountSummary.events(accountId, { after: cursor }).pipe(
+    Stream.filter(Domain.Read.isEvent),
+    Stream.runForEach((entry) => render(entry.state?.balance)),
+  );
+});
+```
+
+A server can read the snapshot while it renders a page and send it with the page, so the browser shows data at once and starts its feed from the cursor. `snapshot` and `list` take `atLeast`, like `get`: pass a command's `stream` and `version` to wait until the view has applied it.
 
 ## Decide who may read it
 
@@ -181,4 +258,4 @@ validate: Effect.fn(function* (_request, summary) {
 
 Every key keeps an input log: each delivery it applied, in order, kept for good. A view's state is a fold of that log.
 
-Next, [Projection](/domain/projection) writes events into a store you own, when a view's built-in store isn't the right one.
+Next, [Projection](/domain/projection): a read model in a store you own, when a view's built-in store isn't the right one.

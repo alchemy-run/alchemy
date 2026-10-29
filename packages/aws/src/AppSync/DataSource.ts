@@ -194,7 +194,7 @@ export const DataSourceProvider = () =>
       const getDataSourceSafe = (apiId: string, name: string) =>
         appsync.getDataSource({ apiId, name }).pipe(
           Effect.map((response) => response.dataSource),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       /**

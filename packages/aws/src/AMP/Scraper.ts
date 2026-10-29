@@ -4,11 +4,17 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { decodeDefinition, encodeDefinition, syncAmpTags, toTagRecord } from "./internal.ts";
+
+export class ScraperNotReady extends Data.TaggedError("ScraperNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ScraperEksSource {
   /**
@@ -192,7 +198,7 @@ export const ScraperProvider = () =>
       const describe = Effect.fn(function* (scraperId: string) {
         const response = yield* amp
           .describeScraper({ scraperId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.scraper;
       });
 
@@ -228,13 +234,11 @@ export const ScraperProvider = () =>
           }),
         );
         if (scraper.status.statusCode !== "ACTIVE") {
-          return yield* Effect.fail(
-            new Error(
-              `AMP scraper ${scraperId} did not become ACTIVE (status: ${scraper.status.statusCode}${
-                scraper.statusReason ? `: ${scraper.statusReason}` : ""
-              })`,
-            ),
-          );
+          return yield* new ScraperNotReady({
+            message: `AMP scraper ${scraperId} did not become ACTIVE (status: ${scraper.status.statusCode}${
+              scraper.statusReason ? `: ${scraper.statusReason}` : ""
+            })`,
+          });
         }
         return scraper;
       });

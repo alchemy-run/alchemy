@@ -242,13 +242,13 @@ export const TaxonomyProvider = () =>
               activatedPolicyTypes,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* observe(id, undefined, env.project, location));
       }
 
       if (current === undefined) {
         return yield* new DatacatalogNotResolved({
-          name: output?.name ?? `${parent}/taxonomies`,
+          resourceName: output?.name ?? `${parent}/taxonomies`,
         });
       }
 

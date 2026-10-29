@@ -19,6 +19,7 @@
  * hashes the whole pack as it streams).
  */
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import { applyDelta } from "./Delta.ts";
 import {
@@ -157,18 +158,23 @@ export const scanPart = (
     let count = 0;
     while (count < options.remaining && pos < buf.length) {
       const offset = options.base + pos;
-      let header;
-      try {
-        header = decodeTypeSize(buf, pos);
-      } catch (error) {
+      const headerResult = yield* Effect.result(
+        Effect.try({
+          try: () => decodeTypeSize(buf, pos),
+          catch: (error) =>
+            PackFormatError.make({
+              reason: Schema.is(ObjectParseError)(error)
+                ? `entry at ${offset}: ${error.reason}`
+                : `entry at ${offset}: ${String(error)}`,
+            }),
+        }),
+      );
+      if (Result.isFailure(headerResult)) {
         // A header cut by the buffer edge: stop here, carry the tail.
         if (lenient || buf.length - pos < 16) break;
-        return yield* PackFormatError.make({
-          reason: Schema.is(ObjectParseError)(error)
-            ? `entry at ${offset}: ${error.reason}`
-            : `entry at ${offset}: ${String(error)}`,
-        });
+        return yield* headerResult.failure;
       }
+      const header = headerResult.success;
       if (header.size > options.maxObjectSize) {
         if (lenient) break;
         return yield* ObjectTooLargeError.make({
@@ -180,15 +186,17 @@ export const scanPart = (
       let baseOffset: number | undefined;
       let baseOid: Oid | undefined;
       if (header.type === 6) {
-        let ofs;
-        try {
-          ofs = decodeOfsDeltaOffset(buf, at);
-        } catch {
+        const ofsResult = yield* Effect.result(
+          Effect.try({
+            try: () => decodeOfsDeltaOffset(buf, at),
+            catch: () => PackFormatError.make({ reason: `entry at ${offset}: bad ofs-delta` }),
+          }),
+        );
+        if (Result.isFailure(ofsResult)) {
           if (lenient || buf.length - at < 16) break;
-          return yield* PackFormatError.make({
-            reason: `entry at ${offset}: bad ofs-delta`,
-          });
+          return yield* ofsResult.failure;
         }
+        const ofs = ofsResult.success;
         at = ofs.next;
         baseOffset = offset - ofs.value;
       } else if (header.type === 7) {
@@ -332,17 +340,22 @@ export const scanBounds = (
     let count = 0;
     while (count < options.remaining && pos < buf.length) {
       const offset = options.base + pos;
-      let header;
-      try {
-        header = decodeTypeSize(buf, pos);
-      } catch (error) {
+      const headerResult = yield* Effect.result(
+        Effect.try({
+          try: () => decodeTypeSize(buf, pos),
+          catch: (error) =>
+            PackFormatError.make({
+              reason: Schema.is(ObjectParseError)(error)
+                ? `entry at ${offset}: ${error.reason}`
+                : `entry at ${offset}: ${String(error)}`,
+            }),
+        }),
+      );
+      if (Result.isFailure(headerResult)) {
         if (buf.length - pos < 16) break;
-        return yield* PackFormatError.make({
-          reason: Schema.is(ObjectParseError)(error)
-            ? `entry at ${offset}: ${error.reason}`
-            : `entry at ${offset}: ${String(error)}`,
-        });
+        return yield* headerResult.failure;
       }
+      const header = headerResult.success;
       if (header.size > options.maxObjectSize) {
         return yield* ObjectTooLargeError.make({
           size: header.size,
@@ -353,15 +366,17 @@ export const scanBounds = (
       let baseOffset: number | undefined;
       let baseOid: Oid | undefined;
       if (header.type === 6) {
-        let ofs;
-        try {
-          ofs = decodeOfsDeltaOffset(buf, at);
-        } catch {
+        const ofsResult = yield* Effect.result(
+          Effect.try({
+            try: () => decodeOfsDeltaOffset(buf, at),
+            catch: () => PackFormatError.make({ reason: `entry at ${offset}: bad ofs-delta` }),
+          }),
+        );
+        if (Result.isFailure(ofsResult)) {
           if (buf.length - at < 16) break;
-          return yield* PackFormatError.make({
-            reason: `entry at ${offset}: bad ofs-delta`,
-          });
+          return yield* ofsResult.failure;
         }
+        const ofs = ofsResult.success;
         at = ofs.next;
         baseOffset = offset - ofs.value;
       } else if (header.type === 7) {

@@ -363,7 +363,7 @@ const toAttrs = (policy: compute.SecurityPolicy, project: string) => ({
 const getByName = (project: string, securityPolicy: string) =>
   compute
     .getSecurityPolicies({ project, securityPolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, securityPolicyName: string) =>
   getByName(project, securityPolicyName).pipe(

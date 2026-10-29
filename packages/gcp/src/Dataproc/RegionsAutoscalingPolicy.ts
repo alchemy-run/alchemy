@@ -96,7 +96,7 @@ export const RegionsAutoscalingPolicy = Resource<RegionsAutoscalingPolicy>(
 export class RegionsAutoscalingPolicyNotResolved extends Data.TaggedError(
   "GCP.Dataproc.RegionsAutoscalingPolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (project: string, region: string, policyId: string) =>
@@ -140,7 +140,7 @@ const desiredBody = (
 const getByName = (name: string) =>
   dataproc
     .getProjectsRegionsAutoscalingPolicies({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listRegion = (project: string, region: string) =>
   emptyOnMissing(
@@ -250,7 +250,7 @@ export const RegionsAutoscalingPolicyProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RegionsAutoscalingPolicyNotResolved({ name });
+        return yield* new RegionsAutoscalingPolicyNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);

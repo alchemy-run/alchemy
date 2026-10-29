@@ -89,7 +89,7 @@ export const AliasProvider = () =>
       const observeAlias = Effect.fn(function* (aliasName: string) {
         return yield* paymentcryptography.getAlias({ AliasName: aliasName }).pipe(
           Effect.map((r) => r.Alias),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

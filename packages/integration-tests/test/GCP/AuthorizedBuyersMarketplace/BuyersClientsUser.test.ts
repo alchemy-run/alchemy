@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as marketplace from "@distilled.cloud/gcp/authorizedbuyersmarketplace_v1";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { lifecycleParent, logLevel, probeName, probeParent, waitUntilGone } from "./common.ts";
 

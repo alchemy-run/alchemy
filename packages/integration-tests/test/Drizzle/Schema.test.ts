@@ -1,5 +1,6 @@
 import * as Drizzle from "@alchemy.run/drizzle";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import {
   Interaction,
   type InteractionError,
@@ -9,7 +10,6 @@ import {
 import * as Provider from "alchemy/Provider";
 import * as Stack from "alchemy/Stack";
 import { isResourceState, State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import { generate, type GenerateOptions } from "drizzle-kit/cli";
 import * as PostgresKit from "drizzle-kit/payload/postgres";
 import * as Effect from "effect/Effect";

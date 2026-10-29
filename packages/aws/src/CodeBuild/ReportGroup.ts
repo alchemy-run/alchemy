@@ -5,9 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
+
+export class ReportGroupUnexpectedResponse extends Data.TaggedError(
+  "ReportGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Where CodeBuild exports the raw report data.
@@ -227,7 +235,7 @@ export const ReportGroupProvider = () =>
               })
               .pipe(
                 Effect.map((res) => res.reportGroup),
-                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
               );
           }
 
@@ -247,9 +255,9 @@ export const ReportGroupProvider = () =>
           }
 
           if (observed === undefined || observed.arn === undefined) {
-            return yield* Effect.fail(
-              new Error(`CodeBuild report group '${name}' disappeared while reconciling`),
-            );
+            return yield* new ReportGroupUnexpectedResponse({
+              message: `CodeBuild report group '${name}' disappeared while reconciling`,
+            });
           }
 
           yield* session.note(name);

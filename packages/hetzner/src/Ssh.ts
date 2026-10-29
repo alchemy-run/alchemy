@@ -119,7 +119,7 @@ const runCommand = Effect.fn(function* (input: {
     stderr: "pipe",
     detached: false,
   }).pipe(
-    spawner.spawn,
+    (command) => spawner.spawn(command),
     Effect.flatMap((child) =>
       Effect.all(
         {

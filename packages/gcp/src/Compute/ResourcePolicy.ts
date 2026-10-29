@@ -432,7 +432,7 @@ const immutablePolicyChanged = (
 const getByName = (project: string, region: string, resourcePolicy: string) =>
   compute
     .getResourcePolicies({ project, region, resourcePolicy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitPolicyReady = (project: string, region: string, resourcePolicyName: string) =>
   getByName(project, region, resourcePolicyName).pipe(
@@ -572,7 +572,7 @@ export const ResourcePolicyProvider = () =>
             region,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitRegionOperation(env.project, region, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -643,7 +643,7 @@ export const ResourcePolicyProvider = () =>
           resourcePolicy: output.resourcePolicyName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

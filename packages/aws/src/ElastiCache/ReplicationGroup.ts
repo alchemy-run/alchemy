@@ -12,6 +12,18 @@ import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
 import { readElastiCacheTags, sameStringSet, tagsToWire } from "./internal.ts";
 
+export class ReplicationGroupNotReady extends Data.TaggedError("ReplicationGroupNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ReplicationGroupUnexpectedResponse extends Data.TaggedError(
+  "ReplicationGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface ReplicationGroupProps {
   /** Replication group identifier. Generated deterministically when omitted. */
   replicationGroupId?: string;
@@ -156,7 +168,7 @@ export const ReplicationGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* elasticache
           .describeReplicationGroups({ ReplicationGroupId: name })
-          .pipe(Effect.catchTag("ReplicationGroupNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ReplicationGroupNotFoundFault", () => Effect.undefined));
         return response?.ReplicationGroups?.[0];
       });
       const waitForAvailable = Effect.fn(function* (name: string) {
@@ -164,7 +176,11 @@ export const ReplicationGroupProvider = () =>
           Effect.flatMap((group) =>
             group?.Status === "available"
               ? Effect.succeed(group)
-              : Effect.fail(new Error(`Replication group '${name}' is not available`)),
+              : Effect.fail(
+                  new ReplicationGroupNotReady({
+                    message: `Replication group '${name}' is not available`,
+                  }),
+                ),
           ),
           Effect.retry({
             schedule: Schedule.max([
@@ -181,7 +197,11 @@ export const ReplicationGroupProvider = () =>
           Effect.flatMap((group) =>
             group === undefined
               ? Effect.void
-              : Effect.fail(new Error(`Replication group '${name}' is still deleting`)),
+              : Effect.fail(
+                  new ReplicationGroupNotReady({
+                    message: `Replication group '${name}' is still deleting`,
+                  }),
+                ),
           ),
           Effect.retry({
             schedule: Schedule.max([
@@ -209,9 +229,9 @@ export const ReplicationGroupProvider = () =>
         );
       const attrs = Effect.fn(function* (group: elasticache.ReplicationGroup) {
         if (!group.ReplicationGroupId || !group.ARN || !group.Status || !group.Engine) {
-          return yield* Effect.fail(
-            new Error("ElastiCache replication group is missing its id, ARN, status, or engine"),
-          );
+          return yield* new ReplicationGroupUnexpectedResponse({
+            message: "ElastiCache replication group is missing its id, ARN, status, or engine",
+          });
         }
         const engineVersion = group.MemberClusters?.[0]
           ? (yield* elasticache.describeCacheClusters({

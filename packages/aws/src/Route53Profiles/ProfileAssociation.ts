@@ -140,7 +140,7 @@ export const ProfileAssociationProvider = () =>
           })
           .pipe(
             Effect.map((r) => isLive(r.ProfileAssociation)),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
 
       const observeByPair = (profileId: string, resourceId: string) =>

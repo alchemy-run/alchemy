@@ -134,6 +134,7 @@ export function layer<
 ): Layer.Layer<
   Implemented<Name>,
   InitE,
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents -- generic in R; only looks like `never` to the linter
   InitR | Exclude<Requirements<ReturnType<typeof workflow.toLayer<R>>>, RuntimeContext>
 >;
 export function layer(

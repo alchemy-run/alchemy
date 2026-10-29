@@ -2,10 +2,10 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { notificationPath } from "@alchemy.run/cloudflare/Alerting/NotificationEventSource";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import * as GitHub from "@alchemy.run/github";
-import { Octokit as AmbientOctokit } from "@alchemy.run/github/Octokit";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as alerting from "@distilled.cloud/cloudflare/alerting";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Issues from "@distilled.cloud/github/issues";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -25,9 +25,6 @@ const { test } = Test.make({
 const { executeWhenReady, getWhenReady } = Test;
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
-
-// Out-of-band verification with the provider's credentials.
-const Octokit = AmbientOctokit.pipe(Effect.provide(GitHub.providers()));
 
 const Stack = Effect.gen(function* () {
   yield* Repo;
@@ -49,11 +46,8 @@ const Stack = Effect.gen(function* () {
 // is stable across runs, so the creation time singles out this run's issues.
 const issuesFor = (workerName: string, since: string) =>
   Effect.gen(function* () {
-    const octokit = yield* Octokit;
-    const { data } = yield* Effect.tryPromise(() =>
-      octokit.rest.issues.listForRepo({ owner, repo: repository, state: "open", since }),
-    );
-    return data.filter(
+    const issues = yield* Issues.listForRepo({ owner, repo: repository, state: "open", since });
+    return issues.filter(
       (issue) =>
         !issue.pull_request && issue.created_at >= since && issue.title.includes(workerName),
     );
@@ -112,18 +106,15 @@ test.provider(
       expect(issues[0]!.body).toContain(`/workers/services/view/${workerName}/production/issues/`);
 
       // The fixture repository is retained across runs: close this run's issues.
-      const octokit = yield* Octokit;
       yield* Effect.forEach(
         issues,
         (issue) =>
-          Effect.tryPromise(() =>
-            octokit.rest.issues.update({
-              owner,
-              repo: repository,
-              issue_number: issue.number,
-              state: "closed",
-            }),
-          ),
+          Issues.update({
+            owner,
+            repo: repository,
+            issue_number: issue.number,
+            state: "closed",
+          }),
         { discard: true },
       );
 

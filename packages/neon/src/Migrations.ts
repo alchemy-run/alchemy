@@ -1,93 +1,58 @@
 import {
-  makePgMigrationExecutor,
   runMigrations,
+  withPgClient as withClient,
+  withPgExecutor,
   type NormalizedMigrationsInput,
   type StampedMigrationsState,
 } from "@alchemy.run/sql/Migrations";
-import { importPg } from "@alchemy.run/sql/PostgresDriver";
-import * as Data from "effect/Data";
+import { stripSslQueryParams } from "@alchemy.run/sql/PostgresDriver";
+import { applySqlImports } from "@alchemy.run/sql/SqlFile";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import type { Client } from "pg";
-
-export class PgError extends Data.TaggedError("PgError")<{
-  message: string;
-  cause?: unknown;
-}> {}
+import type { Client, ClientConfig } from "pg";
 
 /**
- * Strip query-string SSL flags from a Neon connection URI. Neon's URIs
- * include `sslmode=require` and `channel_binding=require`, which trigger
- * a deprecation warning from `pg-connection-string`:
- *
- *   SECURITY WARNING: The SSL modes 'prefer', 'require', and 'verify-ca'
- *   are treated as aliases for 'verify-full'.
- *
- * We control SSL programmatically via the `ssl` option below, so removing
- * the conflicting query params silences the warning without changing the
- * effective behavior.
+ * Neon's URIs carry `sslmode=require`; TLS is set on the client instead,
+ * without verifying Neon's certificate chain.
  */
-const stripSslQueryParams = (uri: string): string => {
-  try {
-    const url = new URL(uri);
-    url.searchParams.delete("sslmode");
-    url.searchParams.delete("channel_binding");
-    return url.toString();
-  } catch {
-    return uri;
-  }
-};
+const clientConfig = (connectionUri: Redacted.Redacted<string>): ClientConfig => ({
+  connectionString: connectionUri.pipe(Redacted.value, stripSslQueryParams),
+  ssl: { rejectUnauthorized: false },
+});
 
-const toPgError = (cause: unknown) =>
-  new PgError({
-    message: cause instanceof Error ? cause.message : String(cause),
-    cause,
-  });
-
-/** Open a pg client for the scope of `use`, closing it afterwards. */
+/** A `pg` client on a Neon connection URI for the scope of `use`. */
 export const withPgClient = <A, E, R>(
   connectionUri: Redacted.Redacted<string>,
   use: (client: Client) => Effect.Effect<A, E, R>,
-): Effect.Effect<A, PgError | E, R> =>
-  Effect.acquireUseRelease(
-    Effect.tryPromise({
-      try: async () => {
-        const { Client } = await importPg();
-        const client = new Client({
-          connectionString: connectionUri.pipe(Redacted.value, stripSslQueryParams),
-          ssl: { rejectUnauthorized: false },
-        });
-        await client.connect();
-        return client;
-      },
-      catch: toPgError,
-    }),
-    use,
-    (client) => Effect.promise(() => client.end().catch(() => {})),
+) => withClient(clientConfig(connectionUri), use);
+
+/** Run one SQL script (several statements are fine). */
+export const runSql = (connectionUri: Redacted.Redacted<string>, sql: string) =>
+  withPgExecutor(clientConfig(connectionUri), (executor) => executor.query(sql)).pipe(
+    Effect.asVoid,
   );
 
-/**
- * Neon's migration adaptation is exactly this: the shared pipeline with a
- * connection-URI-scoped pg client as its executor.
- */
 export const runPgMigrations = (options: {
   connectionUri: Redacted.Redacted<string>;
   input: NormalizedMigrationsInput;
   stamped: StampedMigrationsState;
 }) =>
   runMigrations({
-    ...options,
-    withExecutor: (apply) =>
-      withPgClient(options.connectionUri, (client) => apply(makePgMigrationExecutor(client))),
+    input: options.input,
+    stamped: options.stamped,
+    withExecutor: (apply) => withPgExecutor(clientConfig(options.connectionUri), apply),
   });
 
-/**
- * Run a single SQL script against the database (used for `importFiles`).
- */
-export const runSql = (connectionUri: Redacted.Redacted<string>, sql: string) =>
-  withPgClient(connectionUri, (client) =>
-    Effect.tryPromise({
-      try: () => client.query(sql),
-      catch: toPgError,
-    }),
-  ).pipe(Effect.asVoid);
+/** Apply `importFiles`, each once and again only when it changes. */
+export const runImports = (
+  connectionUri: Redacted.Redacted<string>,
+  importFiles: ReadonlyArray<string>,
+  rootDir: string,
+  previous: Record<string, string>,
+) =>
+  applySqlImports({
+    importFiles,
+    rootDir,
+    previous,
+    apply: (file) => runSql(connectionUri, file.sql),
+  });

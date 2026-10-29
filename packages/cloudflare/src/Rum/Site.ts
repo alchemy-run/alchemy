@@ -303,7 +303,7 @@ type ObservedSite =
 const getSite = (accountId: string, siteTag: string) =>
   rum.getSiteInfo({ accountId, siteId: siteTag }).pipe(
     Effect.map((site): ObservedSite | undefined => site),
-    Effect.catchTag("SiteNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("SiteNotFound", () => Effect.undefined),
   );
 
 /**

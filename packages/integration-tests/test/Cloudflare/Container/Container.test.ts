@@ -1,11 +1,11 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { assert, describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import { destroy as destroyStack } from "alchemy/Destroy";
 import * as Plan from "alchemy/Plan";
 import { Stage } from "alchemy/Stage";
 import { State, inMemoryState } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";

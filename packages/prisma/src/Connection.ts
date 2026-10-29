@@ -35,6 +35,7 @@ import { physicalInstanceName } from "./internal/EnvName.ts";
 import type { ObservedConnectionRecord } from "./internal/Observed.ts";
 import { PrismaPaginationError } from "./internal/Pagination.ts";
 import {
+  concreteIdOf,
   concreteIdsChanged,
   isInputObject,
   isPrismaDevId,
@@ -44,6 +45,16 @@ import {
 import type { PostgresOrigin } from "./PostgresOrigin.ts";
 import type { Providers } from "./Providers.ts";
 import type { PrismaSecretConnection } from "./Types.ts";
+
+export class ConnectionConflict extends Data.TaggedError("ConnectionConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ConnectionUnexpectedResponse extends Data.TaggedError("ConnectionUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ConnectionProps {
   /**
@@ -460,18 +471,16 @@ const ProviderLive = () =>
               id: connectionId,
             }).pipe(
               Effect.map((response) => response.data),
-              Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("NotFound", () => Effect.undefined),
             );
             if (!connection) return undefined;
             if (
               connection.database.id !== output.databaseId ||
               connection.name !== output.connectionName
             ) {
-              return yield* Effect.fail(
-                new Error(
-                  `Prisma connection '${connection.id}' no longer matches persisted database '${output.databaseId}' and name '${output.connectionName}'. Refusing to refresh a mismatched connection.`,
-                ),
-              );
+              return yield* new ConnectionConflict({
+                message: `Prisma connection '${connection.id}' no longer matches persisted database '${output.databaseId}' and name '${output.connectionName}'. Refusing to refresh a mismatched connection.`,
+              });
             }
             const observed = extractConnectionSecrets(connection);
             return attrsFrom(connection, {
@@ -512,34 +521,28 @@ const ProviderLive = () =>
         reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
           const databaseId = yield* resolveDatabaseId(news.database);
           const name = yield* validateConnectionName(news.name ?? id);
-          const connectionId = isPrismaDevId(output?.connectionId)
-            ? undefined
-            : output?.connectionId;
+          const connectionId = concreteIdOf(output?.connectionId);
           let connection: ObservedConnectionRecord | undefined = connectionId
             ? yield* getConnection({ id: connectionId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
 
           const expectedName = physicalInstanceName(name, instanceId);
           const physicalName = connectionId && output ? output.connectionName : expectedName;
           if (connectionId && !isAdoptablePhysicalConnectionName(physicalName, name)) {
-            return yield* Effect.fail(
-              new Error(
-                `Persisted Prisma connection '${connectionId}' has physical name '${physicalName}', which does not match requested logical name '${name}'. Refusing to adopt or persist a mismatched connection.`,
-              ),
-            );
+            return yield* new ConnectionConflict({
+              message: `Persisted Prisma connection '${connectionId}' has physical name '${physicalName}', which does not match requested logical name '${name}'. Refusing to adopt or persist a mismatched connection.`,
+            });
           }
           if (
             connection &&
             (connection.database.id !== databaseId || connection.name !== physicalName)
           ) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma connection '${connection.id}' resolves to database '${connection.database.id}' with name '${connection.name}', not requested database '${databaseId}' and physical name '${physicalName}'. Refusing to rotate or persist mismatched identity; replace the connection instead.`,
-              ),
-            );
+            return yield* new ConnectionConflict({
+              message: `Prisma connection '${connection.id}' resolves to database '${connection.database.id}' with name '${connection.name}', not requested database '${databaseId}' and physical name '${physicalName}'. Refusing to rotate or persist mismatched identity; replace the connection instead.`,
+            });
           }
 
           if (!connection && !connectionId) {
@@ -595,20 +598,16 @@ const ProviderLive = () =>
               rotated.database.id !== databaseId ||
               rotated.name !== physicalName
             ) {
-              return yield* Effect.fail(
-                new Error(
-                  `Prisma rotated connection '${rotated.id}' for database '${rotated.database.id}' with name '${rotated.name}', but connection '${connection.id}' for database '${databaseId}' with name '${physicalName}' was requested. Refusing to persist mismatched credentials.`,
-                ),
-              );
+              return yield* new ConnectionUnexpectedResponse({
+                message: `Prisma rotated connection '${rotated.id}' for database '${rotated.database.id}' with name '${rotated.name}', but connection '${connection.id}' for database '${databaseId}' with name '${physicalName}' was requested. Refusing to persist mismatched credentials.`,
+              });
             }
             connection = rotated;
             secrets = extractConnectionSecrets(rotated);
             if (!hasCanonicalConnectionSecrets(secrets)) {
-              return yield* Effect.fail(
-                new Error(
-                  `Prisma rotated connection '${connection.id}' for database '${databaseId}' without returning a canonical connection URL. Refusing to persist missing or stale credentials.`,
-                ),
-              );
+              return yield* new ConnectionUnexpectedResponse({
+                message: `Prisma rotated connection '${connection.id}' for database '${databaseId}' without returning a canonical connection URL. Refusing to persist missing or stale credentials.`,
+              });
             }
           }
 
@@ -630,18 +629,16 @@ const ProviderLive = () =>
             id: output.connectionId,
           }).pipe(
             Effect.map((response) => response.data),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!connection) return;
           if (
             connection.database.id !== output.databaseId ||
             connection.name !== output.connectionName
           ) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma connection '${connection.id}' no longer matches persisted database '${output.databaseId}' and name '${output.connectionName}'. Refusing to delete a mismatched connection.`,
-              ),
-            );
+            return yield* new ConnectionConflict({
+              message: `Prisma connection '${connection.id}' no longer matches persisted database '${output.databaseId}' and name '${output.connectionName}'. Refusing to delete a mismatched connection.`,
+            });
           }
           yield* deleteConnection({ id: connection.id }).pipe(
             Effect.catchTag("NotFound", () => Effect.void),

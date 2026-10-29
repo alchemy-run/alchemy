@@ -1,15 +1,12 @@
+import * as Issues from "@distilled.cloud/github/issues";
 import * as Layer from "effect/Layer";
 import * as BindingHttp from "./BindingHttp.ts";
 import { ListIssueComments, type ListIssueCommentsRequest } from "./ListIssueComments.ts";
 
 export const listIssueCommentsOperation = BindingHttp.operation(
   "issues.listComments",
-  (octokit, repo) => (request: ListIssueCommentsRequest) =>
-    octokit.rest.issues.listComments({
-      owner: repo.owner,
-      repo: repo.repository,
-      ...request,
-    }),
+  (repo) => (request: ListIssueCommentsRequest) =>
+    Issues.listComments({ owner: repo.owner, repo: repo.repository, ...request }),
 );
 
 /**

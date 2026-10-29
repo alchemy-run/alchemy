@@ -515,7 +515,7 @@ const toAttrs = ({
 const describeApplicationDetail = Effect.fn(function* (applicationName: string) {
   const response = yield* analytics
     .describeApplication({ ApplicationName: applicationName })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   return response?.ApplicationDetail;
 });
 
@@ -535,7 +535,7 @@ const readApplication = Effect.fn(function* ({
   // just means it's gone.
   const tagsResponse = yield* analytics
     .listTagsForResource({ ResourceARN: detail.ApplicationARN })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
   if (!tagsResponse) {
     return undefined;
   }
@@ -1208,7 +1208,7 @@ export const ApplicationProvider = () =>
           const applicationArn = stable.ApplicationARN;
           const observedTagsResponse = yield* analytics
             .listTagsForResource({ ResourceARN: applicationArn })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           const observedTags = toTagRecord(observedTagsResponse?.Tags);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (removed.length > 0) {

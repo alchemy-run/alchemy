@@ -159,7 +159,7 @@ export const Firewallpolicy = Resource<Firewallpolicy>("GCP.RecaptchaEnterprise.
 export class FirewallpolicyNotResolved extends Data.TaggedError(
   "GCP.RecaptchaEnterprise.FirewallpolicyNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_ACTIONS: FirewallAction[] = [{ allow: {} }];
@@ -298,7 +298,7 @@ export const FirewallpolicyProvider = () =>
 
       if (current === undefined) {
         return yield* new FirewallpolicyNotResolved({
-          name: lookupName.length > 0 ? lookupName : path,
+          resourceName: lookupName.length > 0 ? lookupName : path,
         });
       }
 

@@ -248,7 +248,7 @@ const toAttrs = (
 const getByName = (project: string, interconnectGroup: string) =>
   compute
     .getInterconnectGroups({ project, interconnectGroup })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, interconnectGroupName: string) =>
   getByName(project, interconnectGroupName).pipe(

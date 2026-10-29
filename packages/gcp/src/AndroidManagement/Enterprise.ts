@@ -168,7 +168,7 @@ export const Enterprise = Resource<Enterprise>("GCP.AndroidManagement.Enterprise
 export class EnterpriseNotResolved extends Data.TaggedError(
   "GCP.AndroidManagement.EnterpriseNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (enterprise: androidmanagement.Enterprise, project: string) => {
@@ -279,7 +279,7 @@ export const EnterpriseProvider = () =>
 
       if (current === undefined) {
         return yield* new EnterpriseNotResolved({
-          name: output?.name ?? displayName,
+          resourceName: output?.name ?? displayName,
         });
       }
 

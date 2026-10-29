@@ -79,6 +79,7 @@ export const metadataReader = (plugins: ViteBuilder["config"]["plugins"]) => {
   if (typeof plugin.api?.getBuildMetadata !== "function") {
     throw fail("Foldkit SSR requires @foldkit/vite-plugin >= 0.25.0 with getBuildMetadata().");
   }
+  // oxlint-disable-next-line effecttsgo/schema-sync -- read inside Vite's build callback; a throw is caught by its tryPromise
   return () => Schema.decodeUnknownSync(BuildMetadata)(plugin.api.getBuildMetadata());
 };
 
@@ -93,24 +94,18 @@ export const readFoldkitOutput = (
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     if (output === "spa" && metadata) {
-      return yield* Effect.fail(
-        fail(
-          'Foldkit produced a server build. Set output: "server" for SSR/hybrid or output: "static" for prerendered assets.',
-        ),
+      return yield* fail(
+        'Foldkit produced a server build. Set output: "server" for SSR/hybrid or output: "static" for prerendered assets.',
       );
     }
     if (output === "server" && !metadata) {
-      return yield* Effect.fail(
-        fail(
-          'Foldkit produced no server handler. Enable ssr.build in vite.config.ts or omit output: "server".',
-        ),
+      return yield* fail(
+        'Foldkit produced no server handler. Enable ssr.build in vite.config.ts or omit output: "server".',
       );
     }
     if (output === "static" && metadata && metadata.manifest.prerendered.length === 0) {
-      return yield* Effect.fail(
-        fail(
-          'Static Foldkit output requires prerendered pages. Configure ssr.build.prerender or use output: "server".',
-        ),
+      return yield* fail(
+        'Static Foldkit output requires prerendered pages. Configure ssr.build.prerender or use output: "server".',
       );
     }
     // Packaging lives outside `.alchemy`, which Neon's packager refuses to
@@ -125,10 +120,8 @@ export const readFoldkitOutput = (
     };
     for (const directory of [clientDirectory, ...(metadata ? [metadata.serverDirectory] : [])]) {
       if (isWithin(distDirectory, directory) || isWithin(directory, distDirectory)) {
-        return yield* Effect.fail(
-          fail(
-            "Foldkit output directories must not overlap node_modules/.cache/alchemy/foldkit, which is reserved for deployment packaging.",
-          ),
+        return yield* fail(
+          "Foldkit output directories must not overlap node_modules/.cache/alchemy/foldkit, which is reserved for deployment packaging.",
         );
       }
     }
@@ -137,9 +130,7 @@ export const readFoldkitOutput = (
       (!isWithin(metadata.serverDirectory, metadata.serverEntry) ||
         metadata.serverEntry === metadata.serverDirectory)
     ) {
-      return yield* Effect.fail(
-        fail("Foldkit's server entry must be inside its server output directory."),
-      );
+      return yield* fail("Foldkit's server entry must be inside its server output directory.");
     }
     yield* fs.remove(distDirectory, { recursive: true, force: true });
     yield* fs.makeDirectory(distDirectory, { recursive: true });
@@ -166,9 +157,7 @@ export const readFoldkitOutput = (
       prefix: "server",
     });
     if (!modules.some((module) => module.name === `server/${entryName}`)) {
-      return yield* Effect.fail(
-        fail("Foldkit's generated server entry is missing from the build output."),
-      );
+      return yield* fail("Foldkit's generated server entry is missing from the build output.");
     }
     return {
       output: {
