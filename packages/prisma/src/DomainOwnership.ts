@@ -85,8 +85,8 @@ export const DomainOwnership = (id: string, props: DomainOwnershipProps) =>
           return yield* dns.records("Record", {
             records: Output.map(
               Output.all(verification.recordName, verification.recordValue),
-              ([name, value]) => [{ name, type: "TXT", value }],
-            ) as unknown as Input<DNS.DnsRecord[]>,
+              ([name, value]): DNS.DnsRecord[] => [{ name, type: "TXT", value }],
+            ),
           });
         })
       : undefined;
@@ -96,9 +96,6 @@ export const DomainOwnership = (id: string, props: DomainOwnershipProps) =>
       domain:
         published === undefined
           ? props.domain
-          : (Output.map(
-              Output.of(published as ResourceLike),
-              () => props.domain,
-            ) as unknown as string),
+          : Output.map(Output.of(published as ResourceLike), () => props.domain),
     });
   }).pipe(Namespace.push(id));

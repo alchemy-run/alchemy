@@ -121,7 +121,7 @@ const ProviderLive = () =>
           return ownerships.flat().map(attrsFrom);
         }),
         diff: Effect.fn(function* ({ news, output }) {
-          if (output === undefined || !isInputObject(news) || typeof news.domain !== "string") {
+          if (!output || !isInputObject(news) || typeof news.domain !== "string") {
             return undefined;
           }
           return normalizeDomain(news.domain) === normalizeDomain(output.domain)

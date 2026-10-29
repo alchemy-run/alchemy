@@ -1,16 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 
-interface NodeDns {
-  readonly resolveNs: (name: string) => Promise<string[]>;
-  readonly resolve4: (name: string) => Promise<string[]>;
-  readonly Resolver: new () => {
-    setServers(servers: string[]): void;
-    resolveCname(name: string): Promise<string[]>;
-    resolveTxt(name: string): Promise<string[][]>;
-  };
-}
-
 /** The record Prisma is about to look up. */
 export type ExpectedRecord =
   | { readonly type: "CNAME"; readonly name: string }
@@ -32,9 +22,9 @@ export const waitForAuthoritativeRecord = (
   options: { readonly margin: "always" | "if-unseen" },
 ) =>
   Effect.gen(function* () {
-    const dns = yield* Effect.tryPromise(
-      () => import("node:dns/promises") as unknown as Promise<NodeDns>,
-    ).pipe(Effect.orElseSucceed(() => undefined));
+    const dns = yield* Effect.tryPromise(() => import("node:dns/promises")).pipe(
+      Effect.orElseSucceed(() => undefined),
+    );
     if (dns === undefined || typeof dns.Resolver !== "function") return;
     const labels = record.name.split(".");
     let servers: string[] = [];
