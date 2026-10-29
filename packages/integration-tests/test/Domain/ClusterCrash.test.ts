@@ -14,24 +14,28 @@ import {
   ContractApi,
   Counter,
   eventually,
+  Hang,
   Hold,
   hosted,
   Increment,
+  Wallet,
 } from "./fixtures/HostContract.ts";
 
 const counters = ["c-0", "c-1", "c-2", "c-3"];
 
-/** Start the writer on `file`, wait until it is busy, then SIGKILL it after `millis`. */
-const killWriterAfter = (file: string, millis: number) =>
+/** Start the writer on `file`, wait for the line `ready` (or `waitFor`), then SIGKILL it after `millis`. */
+const killWriterAfter = (file: string, millis: number, mode?: "saga", waitFor = "ready") =>
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const path = yield* Path.Path;
     const writer = path.join(import.meta.dirname, "fixtures", "cluster-writer.ts");
-    const handle = yield* spawner.spawn(ChildProcess.make("bun", [writer, file]));
+    const handle = yield* spawner.spawn(
+      ChildProcess.make("bun", mode ? [writer, file, mode] : [writer, file]),
+    );
     yield* handle.stdout.pipe(
       Stream.decodeText(),
       Stream.splitLines,
-      Stream.filter((line) => line === "ready"),
+      Stream.filter((line) => line === waitFor),
       Stream.runHead,
     );
     yield* Effect.sleep(millis);
@@ -148,4 +152,34 @@ describe("Domain.Cluster after a SIGKILL", () => {
       { timeout: 90_000 },
     );
   }
+
+  it.live(
+    "a saga step killed after its command committed sends it once when the step runs again",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dir = yield* fs.makeTempDirectoryScoped({ prefix: "domain-cluster-saga-" });
+        const file = path.join(dir, "domain.db");
+        // The step's debit commits; the process dies before the step's result is stored.
+        yield* killWriterAfter(file, 50, "saga", "debited");
+        yield* Effect.gen(function* () {
+          const hangs = yield* Hang;
+          const wallets = yield* Wallet;
+          // The run resumes on the new process and runs the step again.
+          yield* hangs.get("h-1").result.pipe(Effect.timeout("60 seconds"));
+          expect(yield* wallets.state("w-h")).toEqual({ balance: 90 });
+        }).pipe(
+          Effect.scoped,
+          Effect.provide(
+            hosted(
+              Domain.Cluster.layerSingleRunner({ runnerStorage: "memory" }).pipe(
+                Layer.provideMerge(SqliteClient.layer({ filename: file })),
+              ),
+            ),
+          ),
+        );
+      }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
+    { timeout: 90_000 },
+  );
 });
