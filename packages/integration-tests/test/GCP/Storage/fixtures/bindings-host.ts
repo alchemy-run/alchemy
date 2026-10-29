@@ -148,7 +148,6 @@ export default class StorageBindingsHost extends GCP.Function<StorageBindingsHos
     const listCaches = yield* S.ListAnywhereCaches(GenAssets);
     const getCache = yield* S.GetAnywhereCache(GenAssets);
     const updateCache = yield* S.UpdateAnywhereCache(GenAssets);
-    const pauseCache = yield* S.PauseAnywhereCache(GenAssets);
     const resumeCache = yield* S.ResumeAnywhereCache(GenAssets);
     const disableCache = yield* S.DisableAnywhereCache(GenAssets);
     const composeObject = yield* S.ComposeObject(GenAssets);
@@ -194,7 +193,6 @@ export default class StorageBindingsHost extends GCP.Function<StorageBindingsHos
         updateMissingCache: outcome(
           updateCache({ anywhereCacheId: "us-central1-a", body: { ttl: "86400s" } }),
         ),
-        pauseMissingCache: outcome(pauseCache({ anywhereCacheId: "us-central1-a" })),
         resumeMissingCache: outcome(resumeCache({ anywhereCacheId: "us-central1-a" })),
         disableMissingCache: outcome(disableCache({ anywhereCacheId: "us-central1-a" })),
         // The bucket is live, so there is nothing to restore.
@@ -255,7 +253,7 @@ export default class StorageBindingsHost extends GCP.Function<StorageBindingsHos
           const dropped = yield* outcome(deleteFolderRecursive({ folder: "drop/" }));
           const moved = yield* moveObject({
             sourceObject: "keep/source.txt",
-            destinationObject: "keep/moved.txt",
+            destinationObject: "moved.txt",
           });
           return {
             kept: kept.name,
@@ -378,7 +376,6 @@ export default class StorageBindingsHost extends GCP.Function<StorageBindingsHos
         GCP.Storage.ListAnywhereCachesHttp,
         GCP.Storage.GetAnywhereCacheHttp,
         GCP.Storage.UpdateAnywhereCacheHttp,
-        GCP.Storage.PauseAnywhereCacheHttp,
         GCP.Storage.ResumeAnywhereCacheHttp,
         GCP.Storage.DisableAnywhereCacheHttp,
         GCP.Storage.ComposeObjectHttp,

@@ -375,7 +375,6 @@ describe(
               "missingNotification",
               "missingCache",
               "updateMissingCache",
-              "pauseMissingCache",
               "resumeMissingCache",
               "disableMissingCache",
               "restoreLiveBucket",
@@ -468,9 +467,9 @@ describe(
             expect(folders).toMatchObject({
               renamed: true,
               dropped: "BadRequest",
-              moved: "keep/moved.txt",
+              moved: "moved.txt",
             });
-            expect(yield* objectOf(gen.folders, "keep/moved.txt")).toBeDefined();
+            expect(yield* objectOf(gen.folders, "moved.txt")).toBeDefined();
             expect(yield* objectOf(gen.folders, "keep/source.txt")).toBeUndefined();
             expect(yield* bucketRoles(gen.folders)).toEqual([
               "roles/storage.legacyBucketReader",

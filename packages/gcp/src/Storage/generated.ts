@@ -51,8 +51,6 @@ export * from "./MoveObject.ts";
 export * from "./MoveObjectHttp.ts";
 export * from "./PatchObject.ts";
 export * from "./PatchObjectHttp.ts";
-export * from "./PauseAnywhereCache.ts";
-export * from "./PauseAnywhereCacheHttp.ts";
 export * from "./RenameFolder.ts";
 export * from "./RenameFolderHttp.ts";
 export * from "./RestoreBucket.ts";
