@@ -240,8 +240,6 @@ body:has(.sl-blog-metadata) .sl-markdown-content h3 {
 
 /* Highlight our own row (the last row) in a comparison table. */
 .alc-ours-last tbody tr:last-child td {
-  color: var(--alc-accent-text);
-  font-weight: 700;
   background: color-mix(in srgb, var(--alc-accent) 12%, transparent);
 }
 
