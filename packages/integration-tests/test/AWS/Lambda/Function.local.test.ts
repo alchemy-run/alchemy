@@ -525,9 +525,11 @@ test.provider(
         Effect.provide(liveContext),
       );
       expect(gone).toBe(true);
+      // SQS reports a deleted queue for up to a minute.
       const queueGone = yield* SQS.getQueueAttributes({ QueueUrl: queueUrl }).pipe(
         Effect.map(() => false),
         Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
+        Effect.repeat({ schedule: Schedule.spaced("5 seconds"), until: (gone) => gone, times: 14 }),
         Effect.provide(liveContext),
       );
       expect(queueGone).toBe(true);
@@ -544,15 +546,6 @@ test.provider(
     Effect.gen(function* () {
       const client = yield* HttpClient.HttpClient;
       yield* stack.destroy();
-      // The stub Lambda the bridge deploys, found by name in the real account.
-      const devStubs = Lambda.listFunctions.items({}).pipe(
-        Stream.map((fn) => fn.FunctionName ?? ""),
-        Stream.filter((name) => name.toLowerCase().includes("devstub")),
-        Stream.runCollect,
-        Effect.map((names) => new Set(names)),
-        Effect.provide(liveContext),
-      );
-      const stubsBefore = yield* devStubs;
 
       const fn = yield* stack.deploy(
         Effect.gen(function* () {
@@ -602,12 +595,29 @@ test.provider(
         );
       expect(yield* read("received/from-the-cloud")).toBe("from-the-cloud");
       expect(yield* read("seen/hello.txt")).toBe("uploads/hello.txt");
-      const stubs = [...(yield* devStubs)].filter((name) => !stubsBefore.has(name));
-      expect(stubs).toHaveLength(1);
+      // The real stub Lambda the events went through: the one sharing the
+      // emulated Function's bridge queue.
+      const local = yield* Lambda.getFunctionConfiguration({
+        FunctionName: fn.functionName,
+      }).pipe(Effect.provide(flociContext));
+      // Env values come back Redacted.
+      const bridgeQueueOf = (config: Lambda.FunctionConfiguration) => {
+        const value = config.Environment?.Variables?.ALCHEMY_DEV_BRIDGE_QUEUE_URL;
+        return Redacted.isRedacted(value) ? Redacted.value(value) : value;
+      };
+      const bridgeQueue = bridgeQueueOf(local);
+      expect(bridgeQueue).toBeDefined();
+      const stubs = Lambda.listFunctions.items({}).pipe(
+        Stream.filter((config) => bridgeQueueOf(config) === bridgeQueue),
+        Stream.map((config) => config.FunctionName),
+        Stream.runCollect,
+        Effect.provide(liveContext),
+      );
+      expect(yield* stubs).toHaveLength(1);
 
       yield* stack.destroy();
 
-      expect([...(yield* devStubs)].filter((name) => stubs.includes(name))).toEqual([]);
+      expect(yield* stubs).toHaveLength(0);
 
       const bucketGone = yield* S3.headBucket({ Bucket: bucketName }).pipe(
         Effect.map(() => false),
@@ -615,9 +625,11 @@ test.provider(
         Effect.provide(liveContext),
       );
       expect(bucketGone).toBe(true);
+      // SQS reports a deleted queue for up to a minute.
       const queueGone = yield* SQS.getQueueAttributes({ QueueUrl: queueUrl }).pipe(
         Effect.map(() => false),
         Effect.catchTag("QueueDoesNotExist", () => Effect.succeed(true)),
+        Effect.repeat({ schedule: Schedule.spaced("5 seconds"), until: (gone) => gone, times: 14 }),
         Effect.provide(liveContext),
       );
       expect(queueGone).toBe(true);
