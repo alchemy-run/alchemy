@@ -89,7 +89,15 @@ export default class MonitoringGeneratedHost extends GCP.Function<MonitoringGene
         ListNotificationChannels: probeOutcome(Retry.none(p21({} as never))),
         ListServiceLevelObjectives: probeOutcome(Retry.none(p22({} as never))),
         ListSnoozes: probeOutcome(Retry.none(p23({} as never))),
-        ListTimeSeries: probeOutcome(Retry.none(p24({} as never))),
+        ListTimeSeries: probeOutcome(
+          Retry.none(
+            p24({
+              filter: 'metric.type = "compute.googleapis.com/instance/cpu/utilization"',
+              "interval.startTime": "2026-01-01T00:00:00Z",
+              "interval.endTime": "2026-01-01T01:00:00Z",
+            } as never),
+          ),
+        ),
         ListUptimeCheckConfigs: probeOutcome(Retry.none(p25({} as never))),
         PatchSnooze: probeOutcome(Retry.none(p26({ snooze: "alchemy-missing" } as never))),
         SendNotificationChannelVerificationCode: probeOutcome(Retry.none(p27({} as never))),

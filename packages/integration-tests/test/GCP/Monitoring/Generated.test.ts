@@ -247,7 +247,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListTimeSeries (monitoring.projects.timeSeries.list)",
-        () => probe("ListTimeSeries", true),
+        () => probe("ListTimeSeries", false),
         {
           tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
           timeout: 600_000,
