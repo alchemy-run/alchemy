@@ -110,12 +110,8 @@ export const makeLanguageModel = ({
             error(
               AiError.NetworkError.make({
                 reason: "TransportError",
-                request: {
-                  method: "POST",
-                  url: "/v1/chat/completions",
-                  urlParams: [],
-                  headers: {},
-                },
+                method: "POST",
+                url: "/v1/chat/completions",
                 description: "Neon AI Gateway transport failed",
               }),
             ),
