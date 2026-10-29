@@ -114,6 +114,14 @@ async function runUnderNode() {
     process.exit(1);
   }
   NodeModule.enableCompileCache?.();
+  // `--fast-distilled` opts in to distilled's lazy service stubs (see
+  // register-oxc.js). The env var carries the choice to the loader and to
+  // every Node child alchemy starts with it (dev exec child, sidecar).
+  // Flags after a `--` separator belong to someone else.
+  const separator = args.indexOf("--");
+  if ((separator === -1 ? args : args.slice(0, separator)).includes("--fast-distilled")) {
+    process.env.ALCHEMY_FAST_DISTILLED = "1";
+  }
   const isCheckout = !(binDir.includes("/node_modules/") || binDir.includes("\\node_modules\\"));
   const register = isCheckout ? "register-dev-mode.js" : "register-oxc.js";
   await import(new URL(register, import.meta.url).href);

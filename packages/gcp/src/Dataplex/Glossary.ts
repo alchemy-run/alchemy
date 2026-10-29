@@ -156,7 +156,7 @@ const toAttrs = (glossary: dataplex.GoogleCloudDataplexV1Glossary, project: stri
 
 const getByName = (name: string) =>
   retryQuota(dataplex.getProjectsLocationsGlossaries({ name })).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 const listGlossaries = (project: string, region: string) => {
@@ -235,7 +235,7 @@ export const GlossaryProvider = () =>
           })
           .pipe(
             retryQuota,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -244,7 +244,7 @@ export const GlossaryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataplexNotResolved({ name });
+        return yield* new DataplexNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -291,7 +291,7 @@ export const GlossaryProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

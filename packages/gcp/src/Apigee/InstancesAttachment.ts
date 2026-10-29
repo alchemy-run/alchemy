@@ -78,7 +78,7 @@ export const InstancesAttachment = Resource<InstancesAttachment>("GCP.Apigee.Ins
 export class InstancesAttachmentNotResolved extends Data.TaggedError(
   "GCP.Apigee.InstancesAttachmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const instanceIdOf = (instance: string) => lastSegment(instance);
@@ -109,7 +109,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsInstancesAttachments({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const listByInstance = (parent: string) =>
   apigee.listOrganizationsInstancesAttachments
@@ -223,14 +223,14 @@ export const InstancesAttachmentProvider = () =>
             parent,
             body: { environment: news.environment },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created, { alreadyExistsOk: true });
         }
         const found = yield* findByEnvironment(parent, news.environment, organization, instanceId);
         if (found === undefined) {
           return yield* new InstancesAttachmentNotResolved({
-            name: `${parent}/attachments/${news.environment}`,
+            resourceName: `${parent}/attachments/${news.environment}`,
           });
         }
         return found;
@@ -242,9 +242,7 @@ export const InstancesAttachmentProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const deleted = yield* apigee
         .deleteOrganizationsInstancesAttachments({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (deleted !== undefined) {
         yield* waitForOperation(deleted, { notFoundOk: true });
       }

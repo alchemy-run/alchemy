@@ -506,7 +506,7 @@ export const Function: Platform<
 });
 
 export class FunctionNotCreated extends Data.TaggedError("Railway.FunctionNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -647,7 +647,7 @@ const readService = Query.fn((id: string) => serviceFields(Railway.service({ id 
 const getById = (serviceId: string) =>
   readService(serviceId).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const readInstance = Query.fn((environmentId: string, serviceId: string) =>
@@ -657,7 +657,7 @@ const readInstance = Query.fn((environmentId: string, serviceId: string) =>
 const getInstance = (environmentId: string, serviceId: string) =>
   readInstance(environmentId, serviceId).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listProjectServices = (projectId: string) =>
@@ -1154,12 +1154,12 @@ export const FunctionProvider = () =>
               environmentId,
               name,
               source: { image },
-            }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+            }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
             current = created ?? (yield* findByName(projectId, name));
           }
 
           if (current === undefined || isGoneService(current)) {
-            return yield* new FunctionNotCreated({ name, projectId });
+            return yield* new FunctionNotCreated({ resourceName: name, projectId });
           }
 
           if (current.name !== name) {

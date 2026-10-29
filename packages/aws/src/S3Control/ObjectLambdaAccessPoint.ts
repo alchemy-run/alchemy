@@ -163,7 +163,7 @@ export const ObjectLambdaAccessPointProvider = () =>
       const observeAccessPoint = (accountId: string, name: string) =>
         s3control
           .getAccessPointForObjectLambda({ AccountId: accountId, Name: name })
-          .pipe(Effect.catchTag("NoSuchAccessPoint", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchAccessPoint", () => Effect.undefined));
 
       const desiredConfiguration = (
         props: ObjectLambdaAccessPointProps,

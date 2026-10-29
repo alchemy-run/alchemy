@@ -122,12 +122,11 @@ export const verifyGoogleIdToken = (options: {
     if (alg !== "RS256" || kid === undefined) return false;
     const claims = decodeSegment(payload) as Claims | undefined;
     if (claims === undefined) return false;
-    let signatureBytes: Uint8Array<ArrayBuffer>;
-    try {
-      signatureBytes = base64UrlBytes(signature);
-    } catch {
-      return false;
-    }
+    // A malformed signature segment is an invalid token, not an error.
+    const signatureBytes = yield* Effect.try(() => base64UrlBytes(signature)).pipe(
+      Effect.orElseSucceed(() => undefined),
+    );
+    if (signatureBytes === undefined) return false;
 
     const http = yield* HttpClient.HttpClient;
     let key = (yield* loadKeys(http, false)).get(kid);

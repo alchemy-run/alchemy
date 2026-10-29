@@ -286,7 +286,7 @@ const makeClient = () => {
       calls.push(["listAppDomains", appId]);
       return Effect.succeed([]);
     },
-    createAppDomain: (appId: string, input: unknown) => {
+    createAppDomain: (appId: string, input: { hostname: string }) => {
       calls.push(["createAppDomain", { appId, input }]);
       return Effect.succeed({
         status: 201 as const,
@@ -294,7 +294,7 @@ const makeClient = () => {
           id: "domain-1",
           type: "custom-domain" as const,
           url: "https://api.prisma.test/v1/domains/domain-1",
-          hostname: "api.example.com",
+          hostname: input.hostname,
           appId: appId,
           status: "pending_dns" as const,
           foundryStatus: "pending_dns",
@@ -304,7 +304,7 @@ const makeClient = () => {
           dnsRecords: [
             {
               type: "CNAME" as const,
-              name: "api.example.com",
+              name: input.hostname,
               value: "service-1.prisma.build",
               ttl: null,
             },
@@ -2064,8 +2064,6 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
         expect(domain.dnsRecords[0]?.type).toBe("CNAME");
         expect(calls).toEqual([
           ["listAppDomains", "service-1"],
-          ["getApp", "service-1"],
-          ["getBranch", "branch-1"],
           ["createAppDomain", { appId: "service-1", input: { hostname: "api.example.com" } }],
         ]);
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
@@ -2271,7 +2269,7 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
   );
 
   it.effect(
-    "rejects Prisma custom domains on non-default branches",
+    "attaches Prisma custom domains to apps on non-default branches",
     () => {
       const { client, calls } = makeClient();
       Object.assign(client, {
@@ -2293,20 +2291,16 @@ describe("Prisma resource providers", { tags: ["unit", "provider:prisma", "local
 
       return Effect.gen(function* () {
         const domainProvider = yield* PrismaCustomDomain.Provider;
-        const error = yield* domainProvider
-          .reconcile(
-            reconcileInput("CustomDomain", { app: "service-1", hostname: "api.example.com" }),
-          )
-          .pipe(Effect.flip);
-
-        expect(error).toBeInstanceOf(Error);
-        expect((error as Error).message).toContain(
-          "custom domains can only be attached to apps on the default Branch",
+        const domain = yield* domainProvider.reconcile(
+          reconcileInput("CustomDomain", { app: "service-1", hostname: "api.preview.test" }),
         );
-        expect(calls).toEqual([
-          ["listAppDomains", "service-1"],
-          ["getApp", "service-1"],
-          ["getBranch", "branch-1"],
+
+        expect(domain.customDomainId).toBe("domain-1");
+        expect(domain.hostname).toBe("api.preview.test");
+        expect(domain.appId).toBe("service-1");
+        expect(calls).toContainEqual([
+          "createAppDomain",
+          { appId: "service-1", input: { hostname: "api.preview.test" } },
         ]);
       }).pipe(Effect.provide(providerLayer(client)), Effect.provide(managementApi(client).layer));
     },

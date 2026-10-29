@@ -173,7 +173,7 @@ export const GroupProvider = () =>
 
       if (current === undefined) {
         return yield* new ResourceNotResolved({
-          name: output?.name ?? name,
+          resourceName: output?.name ?? name,
         });
       }
 

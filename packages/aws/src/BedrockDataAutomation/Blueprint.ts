@@ -138,7 +138,7 @@ export const BlueprintProvider = () =>
       ) {
         return yield* bda.getBlueprint({ blueprintArn, blueprintStage }).pipe(
           Effect.map((r) => r.blueprint),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 

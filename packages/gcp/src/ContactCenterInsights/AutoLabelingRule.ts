@@ -144,7 +144,7 @@ export const AutoLabelingRule = Resource<AutoLabelingRule>(
 export class AutoLabelingRuleNotResolved extends Data.TaggedError(
   "GCP.ContactCenterInsights.AutoLabelingRuleNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_LABEL_KEY_TYPE = "LABEL_KEY_TYPE_CUSTOM";
@@ -183,10 +183,10 @@ const toAttrs = (rule: cci.GoogleCloudContactcenterinsightsV1AutoLabelingRule, p
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : cci
         .getProjectsLocationsAutoLabelingRules({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string) =>
   cci.listProjectsLocationsAutoLabelingRules.pages({ parent, pageSize: 100 }).pipe(
@@ -283,7 +283,7 @@ export const AutoLabelingRuleProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AutoLabelingRuleNotResolved({ name });
+        return yield* new AutoLabelingRuleNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

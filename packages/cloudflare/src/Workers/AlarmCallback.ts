@@ -86,12 +86,10 @@ const activePass = (storage: cf.DurableObjectStorage, callback: string) =>
     const current = yield* CurrentAlarmPass;
     const pass = current?.storage === storage ? current : undefined;
     if (pass !== undefined && !pass.active) {
-      return yield* Effect.fail(
-        new CallbackError({
-          callback,
-          message: "The alarm callback invocation has already finished",
-        }),
-      );
+      return yield* new CallbackError({
+        callback,
+        message: "The alarm callback invocation has already finished",
+      });
     }
     return pass;
   });

@@ -145,7 +145,7 @@ export class CdnConfigurationPending extends Data.TaggedError(
 const getConfig = (serviceId: string, environmentId: string) =>
   readEdgeConfig(serviceId, environmentId).pipe(
     Effect.map((edgeConfig) => edgeConfig ?? undefined),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const getReadyConfig = (serviceId: string, environmentId: string) =>

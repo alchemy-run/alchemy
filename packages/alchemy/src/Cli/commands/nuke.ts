@@ -58,12 +58,13 @@ const dryRunFlag = Flag.Boolean("dry-run").pipe(
 const compileFilter = (expression: string) =>
   Effect.try({
     try: () =>
+      // oxlint-disable-next-line typescript/no-implied-eval -- --filter is a user-supplied JS expression by design
       new Function("scope", `with (scope) { return (${expression}); }`) as (scope: {
         resource: Record<string, unknown>;
       }) => unknown,
     catch: (cause) =>
       new UserInputError({
-        message: `--filter expression ${JSON.stringify(expression)} failed to compile: ${cause}`,
+        message: `--filter expression ${JSON.stringify(expression)} failed to compile: ${cause instanceof Error ? cause.message : String(cause)}`,
       }),
   }).pipe(
     Effect.map(
@@ -72,7 +73,7 @@ const compileFilter = (expression: string) =>
           try: () => Boolean(predicate({ resource })),
           catch: (cause) =>
             new UserInputError({
-              message: `--filter expression ${JSON.stringify(expression)} threw while evaluating a resource: ${cause}`,
+              message: `--filter expression ${JSON.stringify(expression)} threw while evaluating a resource: ${cause instanceof Error ? cause.message : String(cause)}`,
             }),
         }),
     ),

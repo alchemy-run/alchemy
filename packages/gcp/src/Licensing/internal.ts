@@ -73,14 +73,14 @@ const emptyList = <A>() => Effect.succeed([] as A[]);
 
 export const getAssignment = (productId: string, skuId: string, userId: string) =>
   productId.length === 0 || skuId.length === 0 || userId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : licensing
         .getLicenseAssignments({
           productId,
           skuId,
           userId,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listAssignments = (productId: string, customerId: string, skuId?: string) => {
   if (productId.length === 0 || customerId.length === 0) {

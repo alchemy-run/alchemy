@@ -4,6 +4,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -13,6 +14,11 @@ import {
   sameShape,
   syncMailManagerTags,
 } from "./internal.ts";
+
+export class RuleSetUnexpectedResponse extends Data.TaggedError("RuleSetUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface RuleSetProps {
   /**
@@ -138,7 +144,7 @@ export const RuleSetProvider = () =>
       const getById = (ruleSetId: string) =>
         mm
           .getRuleSet({ RuleSetId: ruleSetId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
       // Rule sets have no name-keyed Get — enumerate and match. The physical
       // name is deterministic, so this recovers identity after a lost state
@@ -220,16 +226,16 @@ export const RuleSetProvider = () =>
                 Rules: desiredRules,
                 Tags: createTagsList(desiredTags),
               })
-              .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ConflictException", () => Effect.undefined));
             ruleSet =
               created !== undefined
                 ? yield* getById(created.RuleSetId)
                 : yield* observe(undefined, name);
           }
           if (ruleSet === undefined) {
-            return yield* Effect.fail(
-              new Error(`Mail Manager rule set '${name}' not found after create`),
-            );
+            return yield* new RuleSetUnexpectedResponse({
+              message: `Mail Manager rule set '${name}' not found after create`,
+            });
           }
 
           // 3. SYNC — diff OBSERVED name/rules against desired; apply only

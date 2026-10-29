@@ -329,7 +329,7 @@ const isMissingShippingRate = isMissingStripeResource;
 
 const getById = (shipping_rate_token: string) =>
   GetShippingRate({ shipping_rate_token }).pipe(
-    Effect.catchIf(isMissingShippingRate, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingShippingRate, () => Effect.undefined),
   );
 
 const listByActive = Effect.fn(function* (active: boolean) {

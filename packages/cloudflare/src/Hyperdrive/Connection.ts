@@ -307,7 +307,7 @@ export const ProviderLive = () =>
               } as Mtls,
               dev: output?.dev,
             })),
-            Effect.catchTag("HyperdriveConfigNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("HyperdriveConfigNotFound", () => Effect.undefined),
           );
       }
       const name = yield* createConfigName(id, olds?.name);
@@ -342,7 +342,7 @@ export const ProviderLive = () =>
       const observed = output?.hyperdriveId
         ? yield* hyperdrive
             .getConfig({ accountId: output.accountId, hyperdriveId: output.hyperdriveId })
-            .pipe(Effect.catchTag("HyperdriveConfigNotFound", () => Effect.succeed(undefined)))
+            .pipe(Effect.catchTag("HyperdriveConfigNotFound", () => Effect.undefined))
         : undefined;
 
       // Every `updateConfig` opens a new origin pool and leaves the old one

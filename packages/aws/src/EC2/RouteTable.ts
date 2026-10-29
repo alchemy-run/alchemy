@@ -1,19 +1,26 @@
 import type * as EC2 from "@distilled.cloud/aws/ec2";
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { Resource } from "alchemy/Resource";
-import { createInternalTags, createTagsList, diffTags } from "alchemy/Tags";
+import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
 import { AWSEnvironment } from "../Environment.ts";
+import { tagListRecord } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import type { VpcId } from "./Vpc.ts";
+
+export class RouteTableNotReady extends Data.TaggedError("RouteTableNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type RouteTableId<ID extends string = string> = `rtb-${ID}`;
 export const RouteTableId = <ID extends string>(id: ID): ID & RouteTableId<ID> =>
@@ -166,6 +173,12 @@ export interface RouteTable extends Resource<
     propagatingVgws?: Array<{
       gatewayId: string;
     }>;
+
+    /**
+     * Tags on the route table, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    tags?: Record<string, string>;
   },
   never,
   Providers
@@ -325,6 +338,25 @@ export const RouteTableProvider = () =>
           // Tags can be updated in-place
         }),
 
+        // The table owns only its existence and tags. Its routes and
+        // associations are managed by `Route` and `RouteTableAssociation`
+        // (which observe them), so the persisted snapshot is carried forward
+        // instead of reporting their changes as this table's drift.
+        read: Effect.fn(function* ({ id, output }) {
+          if (!output?.routeTableId) return undefined;
+          const routeTable = (yield* ec2
+            .describeRouteTables({ RouteTableIds: [output.routeTableId] })
+            .pipe(
+              Effect.catchTag("InvalidRouteTableID.NotFound", () =>
+                Effect.succeed({ RouteTables: [] }),
+              ),
+            )).RouteTables?.[0];
+          if (!routeTable?.RouteTableId) return undefined;
+          const tags = tagListRecord(routeTable.Tags);
+          const attrs = { ...output, ownerId: routeTable.OwnerId, tags };
+          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+        }),
+
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
           const { accountId, region } = yield* AWSEnvironment.current;
           const alchemyTags = yield* createInternalTags(id);
@@ -430,6 +462,7 @@ export const RouteTableProvider = () =>
             propagatingVgws: final.PropagatingVgws?.map((vgw) => ({
               gatewayId: vgw.GatewayId!,
             })),
+            tags: tagListRecord(final.Tags),
           };
         }),
 
@@ -515,7 +548,7 @@ const waitForRouteTableDeleted = (routeTableId: string, session: ScopedPlanStatu
       }
 
       // Still exists, fail to trigger retry
-      return yield* Effect.fail(new Error("Route table still exists"));
+      return yield* new RouteTableNotReady({ message: "Route table still exists" });
     }),
     {
       schedule: Schedule.max([Schedule.fixed(2000), Schedule.recurs(10)]).pipe(

@@ -1,255 +1,118 @@
 ---
 title: Optimistic updates
-description: Show a change the moment the user asks for it, then confirm it when the bank's event arrives, or mark it rejected.
+description: Show pending intent, confirm it by commandId from a View feed, and retry an unknown outcome safely.
 ---
 
-Show a deposit the moment the customer clicks, before the bank confirms it. Mark it pending, confirm it when the bank's event for it arrives, and mark it rejected if the bank says no.
+Show a deposit when the customer clicks. Confirm it when the bank's event arrives. A successful command reply means the write committed. The line waits for the feed before it becomes confirmed.
 
-## Name each command
+This guide uses `Bank = DomainFoldkit.make(CustomerApi)` from [Integrate with Foldkit](/domain/foldkit). The bank example keeps its own queue and line Model. The adapter has no generic pending-state helper.
 
-Every command can carry a `commandId` you choose. The events it causes carry the same id in their envelope, so the app can tell which event confirms which click. The ids also have to be unique, and `update` has to stay pure, so build them from a per-page-load `session` and a counter in the model.
-
-## Track each line's acknowledgement
+## Track each intent
 
 ```typescript
-// packages/web/src/Deposits.ts
-import type * as Domain from "@alchemy.run/domain";
-import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
-import { Command, Subscription, type Update } from "foldkit";
-import type { Document, HtmlBuilder } from "foldkit/html";
-import { defineMessageUnion } from "foldkit/message";
-import { AccountId, mainAccountId } from "@bank/domain/Account/Account.id";
+import * as DomainFoldkit from "@alchemy.run/domain/Foldkit";
 import { StatementLine } from "@bank/domain/Account/Statement.view";
-import { CustomerId } from "@bank/domain/Customer/Customer.id";
-import { CustomerApi } from "@bank/domain/CustomerApi.api";
+import * as Schema from "effect/Schema";
 
-type Bank = Domain.Api.ClientKey<"CustomerApi">;
-
-const mfa = { headers: { "x-mfa-code": "000000" } };
-
-export const Flags = Schema.Struct({
-  customerId: CustomerId,
-  // Unique per page load; with `sent`, it names every command this page sends.
-  session: Schema.String,
-});
-export type Flags = typeof Flags.Type;
-
-export const Line = Schema.Struct({
-  // The command that made it. A pending line and the event that confirms it share it.
+const Line = Schema.Struct({
   commandId: Schema.String,
   kind: StatementLine.fields.kind,
   amount: Schema.Number,
-  // The balance after this line; known once it's confirmed.
-  balance: Schema.NullOr(Schema.Number),
-  ack: Schema.Literals(["pending", "confirmed", "rejected"]),
-  reason: Schema.NullOr(Schema.String),
+  balance: Schema.Option(Schema.Number),
+  ack: Schema.Literals(["Pending", "Queued", "Confirmed", "Rejected", "Denied"]),
+  reason: Schema.Option(Schema.String),
 });
-export type Line = typeof Line.Type;
-
-export const Model = Schema.Struct({
-  accountId: AccountId,
-  session: Schema.String,
-  sent: Schema.Number,
-  // Pending and rejected lines first, then confirmed ones, newest first.
-  lines: Schema.Array(Line),
-});
-export type Model = typeof Model.Type;
-
-export const Message = defineMessageUnion({
-  ClickedDeposit: {},
-  ClickedWithdraw: {},
-  // Accepted isn't confirmed: the line stays pending until its event arrives.
-  Accepted: { commandId: Schema.String },
-  Rejected: { commandId: Schema.String, reason: Schema.String },
-  GotLine: { commandId: Schema.String, line: StatementLine },
-});
-export type Message = typeof Message.Type;
-
-export const Send = Command.define("Send", {
-  args: {
-    accountId: AccountId,
-    kind: Schema.Literals(["deposit", "withdrawal"]),
-    amount: Schema.Number,
-    commandId: Schema.String,
-  },
-  messages: [Message.Accepted, Message.Rejected],
-  execute: ({ accountId, kind, amount, commandId }) =>
-    Effect.gen(function* () {
-      const bank = yield* CustomerApi.Client;
-      yield* kind === "deposit"
-        ? bank.DepositMoney({ target: accountId, amount, commandId })
-        : bank.WithdrawMoney({ target: accountId, amount, commandId }, mfa);
-      return Message.Accepted({ commandId });
-    }).pipe(
-      Effect.catch((error) => Effect.succeed(Message.Rejected({ commandId, reason: error._tag }))),
-    ),
-});
-
-// Add a pending line above every other line, and send its command.
-const ask = (
-  model: Model,
-  kind: "deposit" | "withdrawal",
-  amount: number,
-): Update.Return<Model, Message, Bank> => {
-  const commandId = `${model.session}:${model.sent}`;
-  return {
-    model: {
-      ...model,
-      sent: model.sent + 1,
-      lines: [
-        { commandId, kind, amount, balance: null, ack: "pending", reason: null },
-        ...model.lines,
-      ],
-    },
-    commands: [Send({ accountId: model.accountId, kind, amount, commandId })],
-  };
-};
-
-// An event arrived: confirm the pending line with the same command id, or add a new line.
-const confirm = (model: Model, commandId: string, line: StatementLine): Model => {
-  const { kind, amount, balance } = line;
-  const confirmed: Line = { commandId, kind, amount, balance, ack: "confirmed", reason: null };
-  const others = model.lines.filter((l) => l.commandId !== commandId);
-  return {
-    ...model,
-    lines: [
-      ...others.filter((l) => l.ack !== "confirmed"),
-      confirmed,
-      ...others.filter((l) => l.ack === "confirmed"),
-    ],
-  };
-};
-
-export const update = (model: Model, message: Message): Update.Return<Model, Message, Bank> =>
-  Message.match<Update.Return<Model, Message, Bank>>(message, {
-    ClickedDeposit: () => ask(model, "deposit", 1_000),
-    ClickedWithdraw: () => ask(model, "withdrawal", 1_000),
-    Accepted: () => ({ model }),
-    Rejected: ({ commandId, reason }) => ({
-      model: {
-        ...model,
-        lines: model.lines.map((l) =>
-          l.commandId === commandId && l.ack === "pending" ? { ...l, ack: "rejected", reason } : l,
-        ),
-      },
-    }),
-    GotLine: ({ commandId, line }) => ({ model: confirm(model, commandId, line) }),
-  });
-
-export const init = (flags: Flags): Update.Return<Model, Message, Bank> => ({
-  model: { accountId: mainAccountId(flags.customerId), session: flags.session, sent: 0, lines: [] },
-});
-
-export const subscriptions = Subscription.make<Model, Message, Bank>()((entry) => ({
-  statement: entry(
-    { accountId: AccountId },
-    {
-      modelToDependencies: (model) => ({ accountId: model.accountId }),
-      dependenciesToStream: ({ accountId }) =>
-        Stream.unwrap(
-          Effect.gen(function* () {
-            const bank = yield* CustomerApi.Client;
-            return bank.Statement.events(accountId);
-          }),
-        ).pipe(
-          Stream.map(({ event, envelope }) =>
-            Message.GotLine({ commandId: envelope.commandId, line: event }),
-          ),
-          Stream.orDie,
-        ),
-    },
-  ),
-}));
-
-// The confirmed balance, plus every pending line. A rejected line no longer counts.
-export const shownBalance = (model: Model): number => {
-  const confirmed = model.lines.find((l) => l.ack === "confirmed")?.balance ?? 0;
-  return model.lines
-    .filter((l) => l.ack === "pending")
-    .reduce((sum, l) => sum + (l.kind === "withdrawal" ? -l.amount : l.amount), confirmed);
-};
-
-const cents = (amount: number) => (amount / 100).toFixed(2);
-
-export const view = (model: Model, h: HtmlBuilder<Message>): Document => ({
-  title: "Bank",
-  body: h.div(
-    [],
-    [
-      h.p([], [`Balance: ${cents(shownBalance(model))}`]),
-      h.button([h.OnClick(Message.ClickedDeposit())], ["Deposit 10.00"]),
-      h.button([h.OnClick(Message.ClickedWithdraw())], ["Withdraw 10.00"]),
-      h.ul(
-        [],
-        model.lines.map((l) =>
-          h.li([], [`${l.kind} ${cents(l.amount)}: ${l.ack}${l.reason ? ` (${l.reason})` : ""}`]),
-        ),
-      ),
-    ],
-  ),
-});
+type Line = typeof Line.Type;
 ```
 
-## Add the line before the bank answers
+Allocate the id with `DomainFoldkit.next(model.commandIds)`. Store the returned command id state in the Model. Add a pending line with the allocated id. Send `Bank.DepositMoney({ target, input, commandId })` through `Command.mapMessage`.
 
-`ask` adds a `pending` line and sends the command with its id in one step. The page shows it at once, and the balance counts it.
+The command and its pending line share one id. Each event caused by the command carries that id in `entry.envelope.commandId`.
 
-## Confirm from the stream, not the reply
+## Handle the command result
 
-The statement streams every line the bank records, each with the id of the command that caused it. A line with a matching id confirms the pending one, and takes the bank's balance. A line with no match, like a transfer or a deposit from another device, is simply added.
+Match the generated result with `Bank.Message.match`. Handle each failure through its named variant.
 
-Confirm from the stream rather than the command's reply: the event can arrive before the reply does. `Accepted` changes nothing.
+| Result | Line state | What happens next |
+| --- | --- | --- |
+| `SucceededDepositMoney` | `Pending` | Wait for the feed. |
+| `Rejected` | `Rejected` | Show the Rejection's fields. |
+| `Denied` | `Denied` | Request authentication or MFA before a retry. |
+| `Unknown` | `Queued` | Retry with the original id. |
 
-## Mark what the bank refused
+Do not mark a confirmed line pending when a late reply arrives. The feed can arrive before the reply.
 
-A typed rejection, like `InsufficientFunds`, marks the line `rejected` with its reason. The balance shown is the confirmed balance plus pending lines, so a rejected line simply stops counting. Nothing was committed early, so there's nothing to roll back.
-
-## Test it
+## Confirm by command id
 
 ```typescript
-// packages/web/test/deposits.test.ts
-import { expect, test } from "@effect/vitest";
-import * as Story from "foldkit/story";
-import { AccountId } from "@bank/domain/Account/Account.id";
-import { StatementLine } from "@bank/domain/Account/Statement.view";
-import { Message, type Model, Send, shownBalance, update } from "../src/Deposits.ts";
+import * as Option from "effect/Option";
+import { modifyFields } from "foldkit/struct";
 
-const model: Model = { accountId: AccountId.make("c-1-main"), session: "s", sent: 0, lines: [] };
-
-test("a deposit shows at once as pending, then its event confirms it", () =>
-  Story.story(
-    update,
-    Story.given(model),
-    Story.message(Message.ClickedDeposit()),
-    Story.model((next) => {
-      expect(next.lines[0]).toMatchObject({ commandId: "s:0", ack: "pending" });
-      expect(shownBalance(next)).toBe(1_000);
-    }),
-    Story.Command.resolve(Send, Message.Accepted({ commandId: "s:0" })),
-    Story.message(
-      Message.GotLine({
-        commandId: "s:0",
-        line: new StatementLine({ kind: "deposit", amount: 1_000, balance: 1_000 }),
-      }),
-    ),
-    Story.model((next) => expect(next.lines[0]).toMatchObject({ ack: "confirmed", balance: 1_000 })),
-  ));
-
-test("a refused withdrawal stops counting", () =>
-  Story.story(
-    update,
-    Story.given(model),
-    Story.message(Message.ClickedWithdraw()),
-    Story.Command.resolve(Send, Message.Rejected({ commandId: "s:0", reason: "InsufficientFunds" })),
-    Story.model((next) => {
-      expect(next.lines[0]).toMatchObject({ ack: "rejected", reason: "InsufficientFunds" });
-      expect(shownBalance(next)).toBe(0);
-    }),
-  ));
+const confirm = (model: Model, commandId: string, event: StatementLine) => {
+  const nextLine = Line.make({
+    commandId,
+    kind: event.kind,
+    amount: event.amount,
+    balance: Option.some(event.balance),
+    ack: "Confirmed",
+    reason: Option.none(),
+  });
+  const otherLines = model.lines.filter((line) => line.commandId !== commandId);
+  return modifyFields(model, { lines: () => [nextLine, ...otherLines] });
+};
 ```
 
-:::note
-Keep working without a connection with [Offline and local first](/domain/local-first). The [bank example](https://github.com/alchemy-run/alchemy/tree/main/examples/cloudflare-domain/packages/web/src) does both in one app.
-:::
+`Model` is the app's Model with a `lines: Schema.Array(Line)` field. This example replaces a pending line with the feed's line. It also accepts history and writes from another device. A repeated confirmation replaces the same line.
+
+Keep your own display order. The bank example puts unconfirmed lines above confirmed lines.
+
+## Resume the feed
+
+```typescript
+import { Subscription } from "foldkit";
+import { defineMessageUnion } from "foldkit/message";
+
+const Message = defineMessageUnion({
+  ReceivedStatementLine: { commandId: Schema.String, line: StatementLine, cursor: Schema.Number },
+  CaughtUpStatement: { cursor: Schema.Number },
+  FailedReadStatement: { reason: Schema.String },
+});
+
+const subscriptions = Subscription.make<Model, typeof Message.Type, typeof CustomerApi.Client.Identifier>()(() => ({
+  statement: Bank.Statement.events({
+    key: (model: Model) => model.accountId,
+    cursor: (model) => model.statementCursor,
+    isEnabled: (model) => model.online,
+    onEntry: (entry): typeof Message.Type => Message.ReceivedStatementLine({
+      commandId: entry.envelope.commandId,
+      line: entry.event,
+      cursor: entry.envelope.seq,
+    }),
+    onCaughtUp: (cursor): typeof Message.Type => Message.CaughtUpStatement({ cursor }),
+    onFailure: (error): typeof Message.Type => Message.FailedReadStatement({ reason: error._tag }),
+    onDefect: (): typeof Message.Type => Message.FailedReadStatement({ reason: "Read defect" }),
+  }),
+}));
+```
+
+
+A restart reads the latest Model cursor and passes it as `after`. Cursor changes leave the stream alive. The adapter drops entries at or below the applied cursor. A filtered feed can skip sequence numbers, so the adapter does not count gaps.
+
+
+The adapter does not reduce entries into state. Use `watch` for the current View state. Use this event feed to confirm intents or build the app's display list.
+
+## Keep the offline queue
+
+Save unresolved intents in order. An offline click adds a queued line. When online, send the oldest queued intent first.
+
+A transport retry acts on `Unknown`, with the same `commandId`. If the reply was lost after commit, the aggregate returns its stored receipt. It does not apply the intent twice.
+
+If a retry remains unknown, stop the batch. Leave later intents queued, so a withdrawal cannot pass an earlier deposit. A `Denied` line shows its reason and a retry control. It does not block other intents. After authentication, retry that line with its original id. A `Rejected` result ends that intent.
+
+Persist queued and pending intents after each Model change. A `Denied` line is not saved, so a reload drops it. On reload, replay the statement feed to confirm writes the server applied before the previous page closed.
+
+## Bound this pattern
+
+This example confirms one bank line by `commandId`. It does not prove that every effect of an arbitrary command has reached every View. A command can emit no events or several events. A View can drop or transform them.
+
+For general completion, use the success receipt with `snapshot({ atLeast: receipt })`. Design re-prediction and reconciliation for the application's own rules. Do not infer completion from a count of output events.

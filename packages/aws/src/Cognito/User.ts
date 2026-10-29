@@ -118,8 +118,9 @@ export const UserProvider = () =>
         return yield* cip
           .adminGetUser({ UserPoolId: userPoolId, Username: username })
           .pipe(
-            Effect.catchTag(["UserNotFoundException", "ResourceNotFoundException"], () =>
-              Effect.succeed(undefined),
+            Effect.catchTag(
+              ["UserNotFoundException", "ResourceNotFoundException"],
+              () => Effect.undefined,
             ),
           );
       });

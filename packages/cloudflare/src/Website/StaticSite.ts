@@ -349,6 +349,7 @@ const makeStaticSite = <const Bindings extends WorkerBindingProps = {}, Req = ne
         ? cast({
             directory: build.outdir,
             hash: build.hash.output,
+            // oxlint-disable-next-line typescript/no-misused-spread -- assets is a plain config object in practice; a top-level Output/Effect would be dropped (pre-existing)
             ...props.assets,
           })
         : undefined,

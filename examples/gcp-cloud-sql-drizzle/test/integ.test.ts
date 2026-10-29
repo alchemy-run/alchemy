@@ -1,11 +1,10 @@
 import { describe, expect } from "bun:test";
-import { spawnSync } from "node:child_process";
 import * as GCP from "@alchemy.run/gcp";
+import * as Test from "@alchemy.run/test/Bun";
 import * as run from "@distilled.cloud/gcp/run_v2";
 import * as secretmanager from "@distilled.cloud/gcp/secretmanager_v1";
 import * as sqladmin from "@distilled.cloud/gcp/sqladmin_v1";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Bun";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
@@ -26,12 +25,8 @@ const { getWhenReady } = Test;
 // Distilled routes the regional secret to its regional endpoint.
 const GcpHttp = Layer.mergeAll(GCP.GcpAuth, GCP.fromAuthProvider(), FetchHttpClient.layer);
 
-// The service is built from `main`, which needs a local image build.
-const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 15_000 }).status === 0;
-
 // Deploy, tests and destroy all sit behind the same Docker guard.
-describe.skipIf(!dockerAvailable)("gcp-cloud-sql-drizzle", () => {
+describe("gcp-cloud-sql-drizzle", () => {
   // Creating a Cloud SQL instance takes 5–10 minutes (and deleting one a
   // few more); everything else is bounded well below that.
   const stack = beforeAll(deploy(Stack), { timeout: 1_500_000 });

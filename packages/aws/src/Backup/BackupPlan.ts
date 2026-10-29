@@ -229,7 +229,7 @@ export const BackupPlanProvider = () =>
           if (!output?.backupPlanId) return undefined;
           const found = yield* backup
             .getBackupPlan({ BackupPlanId: output.backupPlanId })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (!found?.BackupPlanArn) return undefined;
           const attrs = {
             backupPlanId: output.backupPlanId,
@@ -257,7 +257,7 @@ export const BackupPlanProvider = () =>
           const live = output?.backupPlanId
             ? yield* backup
                 .getBackupPlan({ BackupPlanId: output.backupPlanId })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : undefined;
 
           let backupPlanId: string;

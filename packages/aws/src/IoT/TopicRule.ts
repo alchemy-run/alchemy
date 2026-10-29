@@ -135,7 +135,7 @@ export const TopicRuleProvider = () =>
           const ruleName = output?.ruleName ?? (yield* createName(id, olds ?? {}));
           const found = yield* iot
             .getTopicRule({ ruleName })
-            .pipe(Effect.catchTag("TopicRuleNotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("TopicRuleNotFound", () => Effect.undefined));
           if (!found) return undefined;
           const ruleArn = found.ruleArn ?? ruleArnOf(accountId, region, ruleName);
           const attrs = { ruleName, ruleArn };
@@ -158,7 +158,7 @@ export const TopicRuleProvider = () =>
           // OBSERVE
           const live = yield* iot
             .getTopicRule({ ruleName })
-            .pipe(Effect.catchTag("TopicRuleNotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("TopicRuleNotFound", () => Effect.undefined));
 
           // ENSURE / SYNC — createTopicRule for a new rule, replaceTopicRule
           // (a full upsert of the payload) for an existing one.

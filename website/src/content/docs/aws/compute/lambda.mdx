@@ -263,7 +263,7 @@ checks the body:
 ```typescript
 // test/integ.test.ts
 import * as AWS from "@alchemy.run/aws";
-import * as Test from "alchemy/Test/Bun";
+import * as Test from "@alchemy.run/test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -318,20 +318,30 @@ the response, keep them cheap, and anything that must not be lost
 gets written durably (a queue, a table) inside the handler itself.
 :::
 
-### Timeouts still export their trace
+### Timeouts interrupt the handler
 
-A Lambda that hits its timeout is killed mid-flight, and its buffered
-telemetry is lost with it, on exactly the invocation you most want a
-trace for. So the runtime watches the deadline. If the handler is
-still running 500 ms before the timeout, the runtime ends the
-invocation's root span with an `AWS.Lambda.InvocationTimeoutError`,
-logs a warning, and drains the exporters. The handler is not
-interrupted and the response is not changed: if it does finish in
-that last half second, it returns as normal, and its root span stays
-the timeout error, marked `aws.lambda.timeout.imminent`.
+When an invocation runs past its `timeout`, the runtime interrupts the
+handler, the same way `runMain` handles `SIGTERM`. Its `acquireRelease`,
+`ensuring` and scope finalizers run, and every open span ends, so the
+trace shows the call that hung. The root span ends with an
+`AWS.Lambda.InvocationTimeoutError`.
 
-Size the margin for one export round-trip to your telemetry backend,
-or set it to zero to turn the flush off:
+Lambda itself is configured with `timeout + timeoutMargin`, so the
+finalizers and the telemetry flush run in that margin. A handler that
+finishes inside its `timeout` is never cut short.
+
+Once cleanup is done, the runtime holds the invocation until Lambda's own
+timeout ends it. Lambda still logs `Task timed out`, counts a timeout and
+retries it like any other, and it resets the sandbox, so work that ignored
+the interruption, like a promise without an `AbortSignal`, can never resume
+in the next invocation. The unused rest of the margin is billed, but only
+on invocations that time out. If cleanup is still
+running 500 ms before Lambda's own timeout, the runtime ends the root
+span, marks it `aws.lambda.timeout.imminent`, and drains the exporters
+before Lambda kills the process.
+
+The margin defaults to one second. Size it for your finalizers plus one
+export round-trip to your telemetry backend:
 
 ```typescript
 // src/api.ts
@@ -345,9 +355,9 @@ export default class Api extends AWS.Lambda.Function<Api>()(
   {
     main: import.meta.url,
     functionUrl: true,
+    // interrupt the handler after 30 s; Lambda kills it at 32 s
     timeout: Duration.seconds(30),
-    // flush 1 s before the deadline instead of the default 500 ms
-    timeoutMargin: Duration.seconds(1),
+    timeoutMargin: Duration.seconds(2),
   },
   Effect.gen(function* () {
     return {
@@ -356,6 +366,12 @@ export default class Api extends AWS.Lambda.Function<Api>()(
   }),
 ) {}
 ```
+
+`timeout + timeoutMargin` must fit in Lambda's 900-second maximum. Set
+`timeoutMargin` to `Duration.zero` to never interrupt the handler; Lambda
+then kills it at `timeout`, and the runtime only flushes telemetry 500 ms
+before that. Durable functions are never interrupted, since their
+invocations replay from checkpoints.
 
 Construction-level finalizers run at **sandbox shutdown**. A Lambda sandbox
 with no registered extensions is killed with no signal at all, so

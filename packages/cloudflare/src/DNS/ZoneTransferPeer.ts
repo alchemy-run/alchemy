@@ -241,7 +241,7 @@ const undef = <T>(v: T | null | undefined): T | undefined => (v == null ? undefi
 const getPeer = (accountId: string, peerId: string) =>
   dns
     .getZoneTransferPeer({ accountId, peerId })
-    .pipe(Effect.catchTag("PeerNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("PeerNotFound", () => Effect.undefined));
 
 /**
  * Find a peer by exact name. Names are not unique on Cloudflare's side;

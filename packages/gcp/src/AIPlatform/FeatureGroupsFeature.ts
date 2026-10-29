@@ -124,13 +124,13 @@ export const FeatureGroupsFeature = Resource<FeatureGroupsFeature>(
 export class FeatureGroupsFeatureNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.FeatureGroupsFeatureNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FeatureGroupsFeatureStillExists extends Data.TaggedError(
   "GCP.AIPlatform.FeatureGroupsFeatureStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parentOf = (project: string, location: string, featureGroup: string) =>
@@ -163,14 +163,14 @@ const toAttrs = (feature: aiplatform.GoogleCloudAiplatformV1Feature, project: st
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsFeatureGroupsFeatures({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((feature) =>
       feature
         ? Effect.succeed(feature)
-        : Effect.fail(new FeatureGroupsFeatureNotResolved({ name })),
+        : Effect.fail(new FeatureGroupsFeatureNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureGroupsFeatureNotResolved",
@@ -184,7 +184,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((feature) =>
       feature === undefined
         ? Effect.void
-        : Effect.fail(new FeatureGroupsFeatureStillExists({ name })),
+        : Effect.fail(new FeatureGroupsFeatureStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.FeatureGroupsFeatureStillExists",
@@ -315,7 +315,7 @@ export const FeatureGroupsFeatureProvider = () =>
               pointOfContact: news.pointOfContact,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -323,7 +323,7 @@ export const FeatureGroupsFeatureProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FeatureGroupsFeatureNotResolved({ name });
+        return yield* new FeatureGroupsFeatureNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -374,7 +374,7 @@ export const FeatureGroupsFeatureProvider = () =>
       const operation = yield* aiplatform
         .deleteProjectsLocationsFeatureGroupsFeatures({ name: output.name })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

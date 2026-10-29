@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import { DataCatalog } from "@alchemy.run/aws/Athena/DataCatalog";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as athena from "@distilled.cloud/aws/athena";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

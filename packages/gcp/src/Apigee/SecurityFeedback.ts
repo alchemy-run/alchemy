@@ -126,7 +126,7 @@ export const SecurityFeedback = Resource<SecurityFeedback>("GCP.Apigee.SecurityF
 export class SecurityFeedbackNotResolved extends Data.TaggedError(
   "GCP.Apigee.SecurityFeedbackNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, feedbackId: string) =>
@@ -180,7 +180,7 @@ const toAttrs = (feedback: apigee.GoogleCloudApigeeV1SecurityFeedback, organizat
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSecurityFeedback({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const toBody = (
   news: SecurityFeedbackProps,
@@ -279,7 +279,7 @@ export const SecurityFeedbackProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecurityFeedbackNotResolved({ name });
+        return yield* new SecurityFeedbackNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== (news.displayName ?? "");

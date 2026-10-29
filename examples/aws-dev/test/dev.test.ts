@@ -35,7 +35,6 @@
  *                          the new marker; restoring it must swap back
  */
 import { afterAll, expect, test } from "bun:test";
-import { spawnSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { DevCli, fetchOk } from "@alchemy.run/test/DevCli";
@@ -63,19 +62,17 @@ const cli = new DevCli({
 const markerPath = path.join(root, "src", "marker.ts");
 const markerSource = fs.readFileSync(markerPath, "utf8");
 
-// The whole suite needs docker (floci runs as a container).
-const dockerAvailable = spawnSync("docker", ["info"], { stdio: "ignore" }).status === 0;
 afterAll(async () => {
   // Always leave the repo tree clean, even on a mid-reload failure.
   fs.writeFileSync(markerPath, markerSource);
 
   await cli.stop();
-  if (!process.env.NO_DESTROY && dockerAvailable) {
+  if (!process.env.NO_DESTROY) {
     cli.destroy();
   }
 }, 180_000);
 
-test.skipIf(!dockerAvailable)(
+test(
   "alchemy dev serves every local AWS binding end-to-end with hot reload",
   async () => {
     cli.start();

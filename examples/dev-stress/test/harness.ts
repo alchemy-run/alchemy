@@ -492,7 +492,3 @@ export const waitForJson = async <T>(
 
 /** `http://localhost:<port>` */
 export const at = (port: number, path = "/"): URL => new URL(path, `http://localhost:${port}`);
-
-/** Docker gate — floci (the AWS emulator) and Containers both need it. */
-export const dockerAvailable =
-  spawnSync("docker", ["info"], { stdio: "ignore", timeout: 30_000 }).status === 0;

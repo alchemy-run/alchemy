@@ -222,7 +222,7 @@ export const DnssecProvider = () =>
                 : toAttributes(zoneId, observed, captureInitial(observed)),
             ),
             // Plan-gated or partial zones reject the route; skip them.
-            Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+            Effect.catchTag("InvalidRoute", () => Effect.undefined),
           ),
         { concurrency: 10 },
       );
@@ -246,7 +246,7 @@ export const DnssecProvider = () =>
       if (!zoneId) return undefined;
       const observed = yield* dns.getDnssec({ zoneId }).pipe(
         // Zone deleted out-of-band — DNSSEC config is gone with it.
-        Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+        Effect.catchTag("InvalidRoute", () => Effect.undefined),
       );
       if (observed === undefined) return undefined;
       if (output !== undefined) {
@@ -320,7 +320,7 @@ export const DnssecProvider = () =>
       // Observe — if the zone itself is gone, so is its DNSSEC config.
       const observed = yield* dns
         .getDnssec({ zoneId })
-        .pipe(Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("InvalidRoute", () => Effect.undefined));
       if (observed === undefined) return;
       if (output.initialStatus === "disabled") {
         // The zone had DNSSEC off before we managed it — deactivate.

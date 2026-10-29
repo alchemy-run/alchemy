@@ -13,6 +13,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { effectClass, taggedFunction } from "alchemy/Util/effect";
 import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { Scope } from "effect/Scope";
 import * as Stream from "effect/Stream";
@@ -22,6 +23,11 @@ import { generateLocalId } from "../LocalRuntime.ts";
 import { Worker, WorkerEnvironment, type WorkerServices } from "../Workers/Worker.ts";
 import { generateWorkflowName } from "./WorkflowName.ts";
 import { type WorkflowEvent, WorkflowStep, WorkflowStepContext } from "./WorkflowRuntime.ts";
+
+export class WorkflowInvalidProps extends Data.TaggedError("WorkflowInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export { WorkflowEvent, WorkflowStep, WorkflowStepContext } from "./WorkflowRuntime.ts";
 
@@ -1123,7 +1129,7 @@ export const WorkflowResource = Resource<WorkflowResource>(WorkflowResourceTypeI
 const getWorkflowOrUndefined = (accountId: string, workflowName: string) =>
   workflows
     .getWorkflow({ accountId, workflowName })
-    .pipe(Effect.catchTag("WorkflowNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("WorkflowNotFound", () => Effect.undefined));
 
 export const ProviderLive = () =>
   Provider.succeed(WorkflowResource, {
@@ -1230,11 +1236,9 @@ export const ProviderLive = () =>
         output?.workflowName !== undefined &&
         news.workflowName !== output.workflowName
       ) {
-        return yield* Effect.fail(
-          new Error(
-            `Workflow physical name changed from '${output.workflowName}' to '${news.workflowName}' during an in-place update; a replacement is required.`,
-          ),
-        );
+        return yield* new WorkflowInvalidProps({
+          message: `Workflow physical name changed from '${output.workflowName}' to '${news.workflowName}' during an in-place update; a replacement is required.`,
+        });
       }
 
       const existing = yield* getWorkflowOrUndefined(acct, workflowName);
@@ -1326,11 +1330,9 @@ export const ProviderLocal = () =>
         output?.workflowName !== undefined &&
         news.workflowName !== output.workflowName
       ) {
-        return yield* Effect.fail(
-          new Error(
-            `Workflow physical name changed from '${output.workflowName}' to '${news.workflowName}' during an in-place update; a replacement is required.`,
-          ),
-        );
+        return yield* new WorkflowInvalidProps({
+          message: `Workflow physical name changed from '${output.workflowName}' to '${news.workflowName}' during an in-place update; a replacement is required.`,
+        });
       }
       return {
         workflowId: output?.workflowId ?? generateLocalId(),
@@ -1374,7 +1376,11 @@ const resolveWorkflowScriptName = (
   ];
   return scripts.length === 1
     ? Effect.succeed(scripts[0]!)
-    : Effect.fail(new Error("Workflow requires exactly one hosting Worker script"));
+    : Effect.fail(
+        new WorkflowInvalidProps({
+          message: "Workflow requires exactly one hosting Worker script",
+        }),
+      );
 };
 
 const toPutSchedules = (schedules: string[]): workflows.UpdateRequestSchedulesList =>

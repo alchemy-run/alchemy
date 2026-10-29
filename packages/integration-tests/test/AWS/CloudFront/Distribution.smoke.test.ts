@@ -11,9 +11,9 @@ import {
 import type { PolicyStatement } from "@alchemy.run/aws/IAM/Policy";
 import { Bucket } from "@alchemy.run/aws/S3";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as cloudfront from "@distilled.cloud/aws/cloudfront";
 import * as Output from "alchemy/Output";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 

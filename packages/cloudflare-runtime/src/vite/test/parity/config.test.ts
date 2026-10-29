@@ -5,6 +5,7 @@ import { cloudflare as officialCloudflare } from "@cloudflare/vite-plugin";
 import * as vite from "vite";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import cloudflareVitePlugin from "../../plugin.ts";
+import { AHEAD_OF_RELEASE_BUILT_IN_MODULES } from "./ahead-of-release.ts";
 
 // Differential conformance: the same project resolved with
 // `@cloudflare/vite-plugin` and with Alchemy's plugin must look the same to
@@ -60,8 +61,12 @@ const alchemy = (flags: Array<string>) =>
     compatibilityFlags: flags,
   });
 
+// Built-ins ported ahead of the installed release are left out on both sides.
 const sorted = (values: ReadonlyArray<unknown> | undefined) =>
-  [...(values ?? [])].map((value) => String(value)).sort();
+  [...(values ?? [])]
+    .map((value) => String(value))
+    .filter((value) => !AHEAD_OF_RELEASE_BUILT_IN_MODULES.includes(value))
+    .sort();
 
 /** What a framework can observe of a Worker environment's resolved options. */
 const workerEnvironment = (config: vite.ResolvedConfig) => {

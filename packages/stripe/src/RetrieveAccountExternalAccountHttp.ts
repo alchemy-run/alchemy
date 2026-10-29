@@ -40,7 +40,7 @@ export const RetrieveAccountExternalAccountHttp = Layer.effect(
         function* (request?: { expand?: string[] }) {
           return yield* auth(
             GetAccountExternalAccount({
-              ...(request ?? {}),
+              ...request,
               id: yield* id,
               account: yield* account,
             }),

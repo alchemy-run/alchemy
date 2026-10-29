@@ -377,7 +377,7 @@ interface ObservedGreTunnel {
 const getTunnel = (accountId: string, greTunnelId: string) =>
   magicTransit.getGreTunnel({ accountId, greTunnelId, xMagicNewHcTarget: true }).pipe(
     Effect.map((r): ObservedGreTunnel | undefined => r.greTunnel ?? undefined),
-    Effect.catchTag("GreTunnelNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("GreTunnelNotFound", () => Effect.undefined),
   );
 
 /**

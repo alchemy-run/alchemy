@@ -245,7 +245,7 @@ const toAttrs = (alert: StripeBillingAlert): AlertAttributes => ({
 const isMissingAlert = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetBillingAlert({ id }).pipe(Effect.catchIf(isMissingAlert, () => Effect.succeed(undefined)));
+  GetBillingAlert({ id }).pipe(Effect.catchIf(isMissingAlert, () => Effect.undefined));
 
 const listAlerts = Effect.fn(function* () {
   const alerts: StripeBillingAlert[] = [];

@@ -2,9 +2,9 @@ import * as AWS from "@alchemy.run/aws";
 import { ExperimentTemplate, TargetAccountConfiguration } from "@alchemy.run/aws/FIS";
 import { Role } from "@alchemy.run/aws/IAM/Role";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as fis from "@distilled.cloud/aws/fis";
 import * as sts from "@distilled.cloud/aws/sts";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });
