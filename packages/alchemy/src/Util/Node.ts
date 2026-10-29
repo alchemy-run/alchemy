@@ -1,5 +1,11 @@
 import * as NodeNet from "node:net";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+
+export class NodeOperationFailed extends Data.TaggedError("NodeOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The process's working directory, captured ONCE at module load.
@@ -121,7 +127,11 @@ export const findAvailablePort = (host = "127.0.0.1") =>
         } else if (port !== undefined) {
           resume(Effect.succeed(port));
         } else {
-          resume(Effect.fail(new Error("Failed to allocate an available port")));
+          resume(
+            Effect.fail(
+              new NodeOperationFailed({ message: "Failed to allocate an available port" }),
+            ),
+          );
         }
       });
     });

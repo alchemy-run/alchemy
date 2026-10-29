@@ -74,7 +74,7 @@ export const makeRedisBinding = <Client>(options: { makeClient: (url: Url) => Cl
         Effect.mapError(
           () =>
             new RedisUrlMissing({
-              name: asPlain(redis.name) ?? redis.LogicalId,
+              resourceName: asPlain(redis.name) ?? redis.LogicalId,
             }),
         ),
       );

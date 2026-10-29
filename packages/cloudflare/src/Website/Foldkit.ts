@@ -1,4 +1,3 @@
-import type { MemoOptions } from "alchemy/Command/Memo";
 import type { InputProps } from "alchemy/Input";
 import { effectClass } from "alchemy/Util/effect";
 import * as Effect from "effect/Effect";

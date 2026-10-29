@@ -135,7 +135,7 @@ export const ApiDestinationProvider = () =>
           const name = output?.apiDestinationName ?? (yield* createDestinationName(id, olds ?? {}));
           const described = yield* eventbridge
             .describeApiDestination({ Name: name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (!described?.Name || !described.ApiDestinationArn) {
             return undefined;
           }
@@ -178,7 +178,7 @@ export const ApiDestinationProvider = () =>
           // destination falls through to create.
           const observed = yield* eventbridge
             .describeApiDestination({ Name: name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!observed?.ApiDestinationArn) {
             // Ensure — create the destination; tolerate an AlreadyExists

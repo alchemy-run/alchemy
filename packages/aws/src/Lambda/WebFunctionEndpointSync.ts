@@ -193,7 +193,7 @@ export const createEndpointConfig = (spec: WebFunctionEndpointSpec): LambdaWeb.E
 
 export const getEndpoint = (functionName: string, endpointName: string) =>
   LambdaWeb.getWebFunctionEndpoint({ functionName, endpointName }).pipe(
-    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
   );
 
 /**

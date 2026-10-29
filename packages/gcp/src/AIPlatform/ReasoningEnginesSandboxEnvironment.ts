@@ -144,7 +144,7 @@ export const ReasoningEnginesSandboxEnvironment = Resource<ReasoningEnginesSandb
 export class ReasoningEnginesSandboxEnvironmentNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.ReasoningEnginesSandboxEnvironmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const engineNameOf = (project: string, location: string, reasoningEngine: string) =>
@@ -178,11 +178,11 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform.getReasoningEnginesSandboxEnvironments({ name }).pipe(
         Effect.catchTags({
-          NotFound: () => Effect.succeed(undefined),
-          SandboxEnvironmentsNotEnabled: () => Effect.succeed(undefined),
+          NotFound: () => Effect.undefined,
+          SandboxEnvironmentsNotEnabled: () => Effect.undefined,
         }),
       );
 
@@ -191,7 +191,7 @@ const waitUntilExists = (name: string) =>
     Effect.filterOrFail(
       (sandbox): sandbox is aiplatform.GoogleCloudAiplatformV1SandboxEnvironment =>
         sandbox !== undefined,
-      () => new AiPlatformNotResolved({ name }),
+      () => new AiPlatformNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.NotResolved",
@@ -204,7 +204,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (sandbox) => sandbox === undefined,
-      () => new AiPlatformStillExists({ name }),
+      () => new AiPlatformStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -333,9 +333,9 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
           .pipe(
             GcpRetry.none,
             Effect.catchTags({
-              SandboxEnvironmentsNotEnabled: () => Effect.succeed(undefined),
-              BadRequest: () => Effect.succeed(undefined),
-              Conflict: () => Effect.succeed(undefined),
+              SandboxEnvironmentsNotEnabled: () => Effect.undefined,
+              BadRequest: () => Effect.undefined,
+              Conflict: () => Effect.undefined,
             }),
             Effect.timeoutOption("20 seconds"),
           );
@@ -353,7 +353,7 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new ReasoningEnginesSandboxEnvironmentNotResolved({
-          name: output?.name ?? parent,
+          resourceName: output?.name ?? parent,
         });
       }
 
@@ -365,7 +365,7 @@ export const ReasoningEnginesSandboxEnvironmentProvider = () =>
         .deleteReasoningEnginesSandboxEnvironments({
           name: output.name,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

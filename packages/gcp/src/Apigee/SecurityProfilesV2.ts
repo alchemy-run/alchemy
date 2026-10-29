@@ -130,7 +130,7 @@ export const SecurityProfilesV2 = Resource<SecurityProfilesV2>("GCP.Apigee.Secur
 export class SecurityProfilesV2NotResolved extends Data.TaggedError(
   "GCP.Apigee.SecurityProfilesV2NotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_ASSESSMENTS: Record<string, ProfileAssessmentConfig> = {
@@ -200,7 +200,7 @@ const toAttrs = (profile: apigee.GoogleCloudApigeeV1SecurityProfileV2, organizat
 const getByName = (name: string) =>
   apigee
     .getOrganizationsSecurityProfilesV2({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const toBody = (
   news: SecurityProfilesV2Props,
@@ -300,7 +300,7 @@ export const SecurityProfilesV2Provider = () =>
       }
 
       if (current === undefined) {
-        return yield* new SecurityProfilesV2NotResolved({ name });
+        return yield* new SecurityProfilesV2NotResolved({ resourceName: name });
       }
 
       const descriptionChanged = (current.description ?? "") !== desiredDescription;

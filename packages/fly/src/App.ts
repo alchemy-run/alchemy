@@ -202,12 +202,12 @@ export interface AppBinding {
 export const App = Resource<App>("Fly.App");
 
 export class AppNotCreated extends Data.TaggedError("Fly.AppNotCreated")<{
-  name: string;
+  resourceName: string;
   /** Fly's rejection of the create request, when there was one. */
   reason?: string;
 }> {
   get message() {
-    return `Fly App ${this.name} was not created${this.reason ? `: ${this.reason}` : ""}`;
+    return `Fly App ${this.resourceName} was not created${this.reason ? `: ${this.reason}` : ""}`;
   }
 }
 
@@ -234,9 +234,7 @@ const resolveAppName = (id: string, name: string | undefined, existing?: string)
   });
 
 const getByName = (appName: string) =>
-  machines
-    .getApp({ app_name: appName })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  machines.getApp({ app_name: appName }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const hasAlchemyMachines = (appName: string) =>
   machines.listMachines({ app_name: appName }).pipe(
@@ -348,11 +346,11 @@ export const ensureApp = Effect.fn(function* (input: {
       current = yield* observe;
     }
     if (current === undefined) {
-      return yield* new AppNotCreated({ name: input.name, reason: rejection });
+      return yield* new AppNotCreated({ resourceName: input.name, reason: rejection });
     }
   }
   if (current === undefined) {
-    return yield* new AppNotCreated({ name: input.name });
+    return yield* new AppNotCreated({ resourceName: input.name });
   }
   return current;
 });

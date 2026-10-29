@@ -509,7 +509,7 @@ export const GatewayResourceProvider = () =>
           accountId: acct,
           id: gatewayId,
         })
-        .pipe(Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("GatewayNotFound", () => Effect.undefined));
 
       // Ensure — create if missing. Tolerate `GatewayAlreadyExists` for
       // idempotency: a peer reconciler may have created it concurrently,
@@ -559,7 +559,7 @@ export const GatewayResourceProvider = () =>
         })
         .pipe(
           Effect.map((gateway) => mapGateway(gateway, acct)),
-          Effect.catchTag("GatewayNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("GatewayNotFound", () => Effect.undefined),
         );
     }),
     // AI Gateways are account-scoped; the list API returns the full gateway

@@ -519,7 +519,7 @@ export const BranchProtectionProvider = () =>
           branch: olds.branch,
         }).pipe(
           Effect.map((protection) => attrsOf(olds.branch, protection)),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       },
       (effect, { olds }) => effect.pipe(withBaseUrl(olds.baseUrl)),

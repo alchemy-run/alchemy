@@ -315,7 +315,7 @@ export const ListenerProvider = () =>
         .describeListeners({
           ListenerArns: [output.listenerArn],
         })
-        .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.undefined));
       const listener = described?.Listeners?.[0];
       if (!listener?.ListenerArn) {
         return undefined;
@@ -400,7 +400,7 @@ export const ListenerProvider = () =>
           .describeListeners({
             ListenerArns: [output.listenerArn],
           })
-          .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.undefined));
         listener = described?.Listeners?.[0];
       }
       if (!listener?.ListenerArn) {
@@ -410,8 +410,8 @@ export const ListenerProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              LoadBalancerNotFoundException: () => Effect.succeed(undefined),
-              ListenerNotFoundException: () => Effect.succeed(undefined),
+              LoadBalancerNotFoundException: () => Effect.undefined,
+              ListenerNotFoundException: () => Effect.undefined,
             }),
           );
         listener = listed?.Listeners?.find((l) => l.Port === news.port);
@@ -475,7 +475,7 @@ export const ListenerProvider = () =>
         const desiredSni = new Set(certs.slice(1));
         const observedCerts = yield* elbv2
           .describeListenerCertificates({ ListenerArn: listenerArn })
-          .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ListenerNotFoundException", () => Effect.undefined));
         const observedSni = (observedCerts?.Certificates ?? [])
           .filter((c) => !c.IsDefault && c.CertificateArn)
           .map((c) => c.CertificateArn!);

@@ -46,7 +46,6 @@ import {
   decodeBoundsRequest,
   encodeScanResult,
   frame,
-  Hasher,
   HASHER_BINDING,
   InternalSecret,
 } from "./Hasher/Hasher.ts";
@@ -58,7 +57,6 @@ import { concatBytes, utf8Decode } from "./Protocol/ObjectCodec.ts";
 import { hashBounds, resolveDeltas, scanPart } from "./Protocol/PartialScan.ts";
 import { decodePktLines, flushPkt, pktText } from "./Protocol/Pkt.ts";
 import { progressMessage, pumpPackBody, wrapSideband } from "./Protocol/Sideband.ts";
-import { RegistryStore } from "./RegistryObject.ts";
 import {
   buildAdvertisement,
   BUNDLE_COUNT_HEADER,
@@ -67,7 +65,6 @@ import {
   BUNDLE_SIDEBAND_HEADER,
   GitRepo,
   GitRepoLive,
-  isolatePushGate,
   parseUploadPackRequest,
   RepoStore,
   WWW_AUTHENTICATE,
@@ -132,7 +129,6 @@ const makeCore = Effect.gen(function* () {
   // ── init: DO namespaces ────────────────────────────────────────────────
   // RPC-boundary tagged errors are reconstructed by the stubs themselves —
   // both DO classes declare `errors: [...]` (see DurableObjectProps.errors).
-  const registry = yield* RegistryStore;
   const repos = yield* RepoStore;
   // The Worker streams clone bundles straight out of R2 (DESIGN.md §11):
   // the DO plans the clone, the bytes bypass it entirely.
@@ -141,13 +137,6 @@ const makeCore = Effect.gen(function* () {
   const workerBlobs = yield* BlobStore;
   const engine = yield* Engine;
   const internalSecret = yield* InternalSecret;
-  // The push pipeline's verifier (DESIGN §22.10): pack parts are inflated
-  // and hashed by this service — fanned out across Worker invocations by
-  // `HasherSelf`, inline under `HasherInline`.
-  const hasher = yield* Hasher;
-  const pushGate = yield* isolatePushGate;
-  /** Staging batches in flight to the Repo DO per push (DESIGN §22.10). */
-  const STAGE_CONCURRENCY = 6;
 
   const operations = yield* Operations;
   const {

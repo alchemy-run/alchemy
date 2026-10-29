@@ -141,13 +141,13 @@ export const CertificateMap = Resource<CertificateMap>("GCP.CertificateManager.C
 export class CertificateMapNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.CertificateMapNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateMapStillExists extends Data.TaggedError(
   "GCP.CertificateManager.CertificateMapStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -237,12 +237,14 @@ const toAttrs = (map: certificatemanager.CertificateMap, project: string) => {
 const getByName = (name: string) =>
   certificatemanager
     .getProjectsLocationsCertificateMaps({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((map) =>
-      map ? Effect.succeed(map) : Effect.fail(new CertificateMapNotResolved({ name })),
+      map
+        ? Effect.succeed(map)
+        : Effect.fail(new CertificateMapNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateMapNotResolved",
@@ -254,7 +256,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((map) =>
-      map === undefined ? Effect.void : Effect.fail(new CertificateMapStillExists({ name })),
+      map === undefined
+        ? Effect.void
+        : Effect.fail(new CertificateMapStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateMapStillExists",
@@ -347,7 +351,7 @@ export const CertificateMapProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -356,7 +360,7 @@ export const CertificateMapProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateMapNotResolved({ name });
+        return yield* new CertificateMapNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -395,7 +399,7 @@ export const CertificateMapProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -412,12 +412,12 @@ const findRelease = Effect.fn(
     const request = { owner: props.owner, repo: props.repository };
     if (releaseId !== undefined) {
       const existing = yield* Repos.getRelease({ ...request, release_id: releaseId }).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (existing !== undefined && existing.tag_name === props.tagName) return existing;
     }
     const published = yield* Repos.getReleaseByTag({ ...request, tag: props.tagName }).pipe(
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
     if (published !== undefined) return published;
 
@@ -426,7 +426,7 @@ const findRelease = Effect.fn(
       Stream.filter((release) => release.tag_name === props.tagName),
       Stream.runHead,
       Effect.map(Option.getOrUndefined),
-      Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NotFound", () => Effect.undefined),
     );
   },
   (effect, props: ReleaseProps, _releaseId?: number) => effect.pipe(withBaseUrl(props.baseUrl)),

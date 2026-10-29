@@ -303,7 +303,7 @@ const toAttrs = (cert: compute.SslCertificate, project: string) => {
 const getByName = (project: string, sslCertificate: string) =>
   compute
     .getSslCertificates({ project, sslCertificate })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, sslCertificateName: string) =>
   getByName(project, sslCertificateName).pipe(
@@ -441,7 +441,7 @@ export const SslCertificateProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current =
           created !== undefined
@@ -469,7 +469,7 @@ export const SslCertificateProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(

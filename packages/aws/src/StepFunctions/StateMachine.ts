@@ -534,7 +534,7 @@ export const StateMachineProvider = () =>
       const describeOrUndefined = Effect.fn(function* (stateMachineArn: string) {
         return yield* sfn
           .describeStateMachine({ stateMachineArn })
-          .pipe(Effect.catchTag("StateMachineDoesNotExist", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("StateMachineDoesNotExist", () => Effect.undefined));
       });
 
       /**
@@ -757,7 +757,7 @@ export const StateMachineProvider = () =>
                           }
                         : undefined,
                     ),
-                    Effect.catchTag("StateMachineDoesNotExist", () => Effect.succeed(undefined)),
+                    Effect.catchTag("StateMachineDoesNotExist", () => Effect.undefined),
                   ),
               { concurrency: 5 },
             );
@@ -851,7 +851,7 @@ export const StateMachineProvider = () =>
                 tags: toSfnTags(desiredTags),
               })
               .pipe(
-                Effect.catchTag("StateMachineAlreadyExists", () => Effect.succeed(undefined)),
+                Effect.catchTag("StateMachineAlreadyExists", () => Effect.undefined),
                 retryWhileDeleting,
                 retryWhileRolePropagates,
               );

@@ -281,7 +281,7 @@ export const BillingBudget = Resource<BillingBudget>("GCP.BillingBudgets.Billing
 export class BillingBudgetNotResolved extends Data.TaggedError(
   "GCP.BillingBudgets.BillingBudgetNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toMoney = (money: billingbudgets.GoogleTypeMoney | Money | undefined): Money | undefined => {
@@ -521,7 +521,7 @@ export const BillingBudgetProvider = () =>
 
       if (current === undefined || !current.name) {
         return yield* new BillingBudgetNotResolved({
-          name: output?.name ?? `${parent}/budgets`,
+          resourceName: output?.name ?? `${parent}/budgets`,
         });
       }
 

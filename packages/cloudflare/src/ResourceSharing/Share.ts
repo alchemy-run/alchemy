@@ -390,7 +390,7 @@ const getShare = (accountId: string, shareId: string) =>
     Effect.map((share): ObservedShare | undefined =>
       share.status === "deleted" ? undefined : share,
     ),
-    Effect.catchTag("ShareNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("ShareNotFound", () => Effect.undefined),
   );
 
 /**

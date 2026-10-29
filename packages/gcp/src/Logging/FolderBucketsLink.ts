@@ -94,13 +94,13 @@ export const FolderBucketsLink = Resource<FolderBucketsLink>("GCP.Logging.Folder
 export class FolderBucketsLinkNotResolved extends Data.TaggedError(
   "GCP.Logging.FolderBucketsLinkNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class FolderBucketsLinkFailed extends Data.TaggedError(
   "GCP.Logging.FolderBucketsLinkFailed",
 )<{
-  name: string;
+  resourceName: string;
   state: string | undefined;
 }> {}
 
@@ -129,22 +129,22 @@ const toAttrs = (link: logging.Link, bucketName: string) => {
 const getByName = (name: string) =>
   logging
     .getFoldersLocationsBucketsLinks({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilActive = (name: string) =>
   Effect.gen(function* () {
     const link = yield* getByName(name);
     if (link === undefined || isDeleted(link)) {
-      return yield* new FolderBucketsLinkNotResolved({ name });
+      return yield* new FolderBucketsLinkNotResolved({ resourceName: name });
     }
     if (link.lifecycleState === "FAILED") {
       return yield* new FolderBucketsLinkFailed({
-        name,
+        resourceName: name,
         state: link.lifecycleState,
       });
     }
     if (isPending(link.lifecycleState)) {
-      return yield* new FolderBucketsLinkNotResolved({ name });
+      return yield* new FolderBucketsLinkNotResolved({ resourceName: name });
     }
     return link;
   }).pipe(
@@ -254,7 +254,7 @@ export const FolderBucketsLinkProvider = () =>
       }
 
       if (isDeleted(current)) {
-        return yield* new FolderBucketsLinkNotResolved({ name });
+        return yield* new FolderBucketsLinkNotResolved({ resourceName: name });
       }
 
       if (isPending(current.lifecycleState)) {
@@ -274,7 +274,7 @@ export const FolderBucketsLinkProvider = () =>
         Effect.flatMap((link) =>
           isDeleted(link)
             ? Effect.void
-            : Effect.fail(new FolderBucketsLinkNotResolved({ name: output.name })),
+            : Effect.fail(new FolderBucketsLinkNotResolved({ resourceName: output.name })),
         ),
         Effect.retry({
           while: (error) => error._tag === "GCP.Logging.FolderBucketsLinkNotResolved",

@@ -182,7 +182,7 @@ const toAttrs = (association: networksecurity.FirewallEndpointAssociation, proje
 const getByName = (name: string) =>
   networksecurity
     .getProjectsLocationsFirewallEndpointAssociations({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const FirewallEndpointAssociationProvider = () =>
   Provider.succeed(FirewallEndpointAssociation, {
@@ -297,7 +297,7 @@ export const FirewallEndpointAssociationProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -348,7 +348,7 @@ export const FirewallEndpointAssociationProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

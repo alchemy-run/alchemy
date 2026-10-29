@@ -263,7 +263,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   networkconnectivity
     .getProjectsLocationsServiceConnectionMaps({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ServiceConnectionMapProvider = () =>
   Provider.succeed(ServiceConnectionMap, {
@@ -362,7 +362,7 @@ export const ServiceConnectionMapProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -371,7 +371,7 @@ export const ServiceConnectionMapProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new NetworkConnectivityNotResolved({ name });
+        return yield* new NetworkConnectivityNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -430,7 +430,7 @@ export const ServiceConnectionMapProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

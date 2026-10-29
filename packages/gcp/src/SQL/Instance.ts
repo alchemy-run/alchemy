@@ -517,7 +517,7 @@ const toAttrs = (instance: sqladmin.DatabaseInstance, project: string, defaultRe
 const getByName = (project: string, instance: string) =>
   sqladmin
     .getInstances({ project, instance })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Instance create, patch, and delete operations routinely run 5–15
@@ -528,11 +528,7 @@ const LONG_OPERATION_POLL = {
   schedule: Schedule.spaced("10 seconds"),
 };
 
-const waitForOperation = (
-  project: string,
-  operation: sqladmin.Operation,
-  options?: { notFoundOk?: boolean },
-) =>
+const waitForOperation = (project: string, operation: sqladmin.Operation) =>
   waitForSqlOperation(project, operation, {
     budget: "30 minutes",
     notFoundOk: true,
@@ -783,7 +779,7 @@ export const InstanceProvider = () =>
               desiredLabels,
             ),
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(env.project, created);
         }
@@ -965,9 +961,9 @@ export const InstanceProvider = () =>
             settingsVersion: existing.settings.settingsVersion,
             deletionProtectionEnabled: false,
           },
-        }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
         if (patched !== undefined) {
-          yield* waitForOperation(env.project, patched, { notFoundOk: true });
+          yield* waitForOperation(env.project, patched);
         }
       }
 
@@ -977,7 +973,7 @@ export const InstanceProvider = () =>
           instance: instanceName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,
@@ -985,7 +981,7 @@ export const InstanceProvider = () =>
           }),
         );
       if (operation !== undefined) {
-        yield* waitForOperation(env.project, operation, { notFoundOk: true });
+        yield* waitForOperation(env.project, operation);
       }
       yield* waitUntilGone(env.project, instanceName);
     }),

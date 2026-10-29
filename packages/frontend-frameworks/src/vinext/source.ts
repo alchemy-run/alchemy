@@ -46,7 +46,7 @@ import {
   DEFAULT_WORKER_ENTRY,
   makeVinextPluginOptions,
 } from "./cloudflare.ts";
-import { resolveVinextRoot, runVinextPrerenderIfConfigured } from "./Prerender.ts";
+import { runVinextPrerenderIfConfigured } from "./Prerender.ts";
 import { VINEXT_CACHE_BINDING, VINEXT_KV_CACHE_BINDING } from "./PrerenderCache.ts";
 
 const PROVIDER = "@alchemy.run/frontend-frameworks/vinext/source";
@@ -422,7 +422,7 @@ const maybeReadString = Effect.fn(function* (file: string) {
   return yield* fs.readFileString(file).pipe(
     Effect.catchIf(
       (error) => error._tag === "PlatformError" && error.reason._tag === "NotFound",
-      () => Effect.succeed(undefined),
+      () => Effect.undefined,
     ),
   );
 });
@@ -834,7 +834,7 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
         [
           output.clientDirectory !== undefined
             ? readClientAssets(output.clientDirectory, assetsConfigOf(ctx.assets))
-            : Effect.succeed(undefined),
+            : Effect.undefined,
           hashVinextInput({
             rootDir,
             memo: options.memo,

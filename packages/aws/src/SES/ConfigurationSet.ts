@@ -274,7 +274,7 @@ export const ConfigurationSetProvider = () =>
       const getConfigurationSet = Effect.fn(function* (name: string) {
         return yield* sesv2
           .getConfigurationSet({ ConfigurationSetName: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
       });
 
       return ConfigurationSet.Provider.of({

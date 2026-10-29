@@ -108,7 +108,7 @@ export const SchemaProvider = () =>
       const describe = Effect.fn(function* (schemaArn: string) {
         const response = yield* personalize
           .describeSchema({ schemaArn })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         return response?.schema;
       });
 

@@ -230,7 +230,7 @@ export const AliasProvider = () =>
           const alias = yield* Lambda.getAlias({
             FunctionName: functionName,
             Name: aliasName,
-          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           const attrs = alias ? snapshotAlias(functionName, alias, region) : undefined;
           if (!attrs) return undefined;
           return {
@@ -281,7 +281,7 @@ export const AliasProvider = () =>
           const getAlias = Lambda.getAlias({
             FunctionName: functionName,
             Name: aliasName,
-          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           let alias = yield* getAlias;
 

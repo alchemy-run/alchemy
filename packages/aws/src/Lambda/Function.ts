@@ -69,10 +69,17 @@ import {
 } from "./HttpServer.ts";
 import {
   HandlerContext,
-  TIMEOUT_MARGIN_ENV,
-  toTimeoutMarginMillis,
+  InvocationDeadlineState,
+  lambdaTimeoutOf,
+  TIMEOUT_GRACE_ENV,
+  toDurationMillis,
   withInvocationDeadline,
 } from "./InvocationDeadline.ts";
+
+export class LambdaFunctionInvalidProps extends Data.TaggedError("LambdaFunctionInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type { FunctionImageSource } from "./FunctionImage.ts";
 export {
@@ -309,29 +316,42 @@ export interface FunctionCommonProps extends PlatformProps {
     localMountPath: string;
   }[];
   /**
-   * Maximum execution time before the function is forcibly terminated.
-   * Rounded up to whole seconds.
+   * Maximum execution time of an invocation.
+   *
+   * At the timeout the runtime interrupts the handler, like `runMain` does on
+   * SIGTERM: `acquireRelease`, `ensuring` and scope finalizers run, every
+   * open span ends with an `AWS.Lambda.InvocationTimeoutError`. Lambda
+   * itself is configured with `timeout + timeoutMargin`, rounded up to whole
+   * seconds, so the cleanup and the telemetry flush run in that margin
+   * instead of being cut off. The invocation is then held until Lambda's own
+   * timeout ends it, so Lambda still logs, counts and retries a timeout and
+   * resets the sandbox, and work that ignored the interruption cannot leak
+   * into the next invocation.
+   *
+   * Functions alchemy's runtime does not run (`image`, `isExternal`,
+   * `bundle: false`) and durable functions are never interrupted: Lambda is
+   * configured with the timeout as-is, rounded up to whole seconds.
    *
    * @default 3 seconds (AWS Lambda default)
    */
   timeout?: Duration.Duration;
   /**
-   * How long before {@link timeout} telemetry is flushed for an invocation
-   * that is still running. A Lambda that hits its timeout is killed
-   * mid-flight and its buffered spans and logs are lost; at
-   * `timeout - timeoutMargin` the runtime ends the invocation's root span
-   * with an `AWS.Lambda.InvocationTimeoutError`, logs a warning and drains
-   * the exporters, so the trace of the slow invocation is exported instead.
+   * Extra time Lambda gives an invocation after {@link timeout} interrupts
+   * it, for finalizers and the telemetry flush. Lambda's timeout is
+   * configured as `timeout + timeoutMargin`, rounded up to whole seconds;
+   * the margin is billed only when an invocation actually runs past its
+   * timeout. `timeout + timeoutMargin` must fit in Lambda's 900-second
+   * maximum.
    *
-   * The handler is never interrupted and the invocation's outcome is never
-   * changed. If it does finish inside the margin, its response goes out
-   * as normal; the root span is still exported once, as the timeout error
-   * marked `aws.lambda.timeout.imminent`.
+   * If cleanup is still running 500 ms before Lambda's own timeout, the
+   * runtime ends the invocation's root span, logs a warning and drains the
+   * exporters, so the trace is exported even if Lambda kills the process.
    *
-   * Size it for one export round-trip to your telemetry backend. Set to
-   * `Duration.zero` to disable.
+   * Set to `Duration.zero` to never interrupt the handler: Lambda kills the
+   * invocation at {@link timeout} and the runtime only flushes telemetry
+   * 500 ms before that.
    *
-   * @default 500 millis
+   * @default 1 second
    */
   timeoutMargin?: Duration.Duration;
   /**
@@ -474,9 +494,9 @@ export const validateFunctionPackageProps = Effect.fn("AWS.Lambda.validateFuncti
   function* (id: string, props: FunctionPackageValidationProps) {
     if (props.image === undefined) {
       if (props.main === undefined) {
-        return yield* Effect.fail(
-          new Error(`Function(${id}): declare exactly one of main or image`),
-        );
+        return yield* new LambdaFunctionInvalidProps({
+          message: `Function(${id}): declare exactly one of main or image`,
+        });
       }
       return;
     }
@@ -492,11 +512,9 @@ export const validateFunctionPackageProps = Effect.fn("AWS.Lambda.validateFuncti
       ["durableConfig", props.durableConfig],
     ].flatMap(([name, value]) => (value === undefined ? [] : [name]));
     if (incompatible.length > 0) {
-      return yield* Effect.fail(
-        new Error(
-          `Function(${id}): image functions cannot use ZIP/runtime options: ${incompatible.join(", ")}`,
-        ),
-      );
+      return yield* new LambdaFunctionInvalidProps({
+        message: `Function(${id}): image functions cannot use ZIP/runtime options: ${incompatible.join(", ")}`,
+      });
     }
   },
 );
@@ -525,6 +543,18 @@ const toLambdaImageConfig = (
  */
 const imageConfigForUpdate = (props: FunctionProps): Lambda.ImageConfig | undefined =>
   isFunctionImageProps(props) ? (toLambdaImageConfig(props.image) ?? {}) : undefined;
+
+/**
+ * Whether alchemy's runtime interrupts the function's invocations at its
+ * `timeout` (see `withInvocationDeadline`). Images, external handlers and
+ * prebuilt bundles run the user's own entrypoint; durable invocations are
+ * replayed from checkpoints and never interrupted.
+ */
+const interruptsAtTimeout = (props: FunctionProps): boolean =>
+  !isFunctionImageProps(props) &&
+  !props.isExternal &&
+  props.bundle !== false &&
+  props.durableConfig === undefined;
 
 /**
  * The Lambda `Handler` string for a function's props: `<file>.<export>`.
@@ -1411,17 +1441,18 @@ export const Function: Platform<
                 // finalizer is logged and ignored so it can't mask the
                 // invocation's outcome.
                 //
-                // The scope is ALSO what a timeout would take with it: Lambda
-                // kills the invocation mid-flight and the buffered telemetry
-                // never flushes. `withInvocationDeadline` flushes it
-                // `timeoutMargin` before that happens — without touching the
-                // handler or the invocation's outcome.
+                // `withInvocationDeadline` interrupts the handler at the
+                // Function's `timeout`, so its finalizers run and its spans
+                // end inside Lambda's `timeoutMargin`, before this scope
+                // flushes the telemetry.
                 const scope = Scope.makeUnsafe();
+                const deadline = { fired: false };
                 const exit = await eff.pipe(
-                  withInvocationDeadline,
+                  withInvocationDeadline(),
                   Effect.provide(
                     Layer.mergeAll(
                       Layer.succeed(HandlerContext, context),
+                      Layer.succeed(InvocationDeadlineState, deadline),
                       Layer.succeed(Scope.Scope, scope),
                       // Runtime readers (e.g. bindings that read their
                       // values through `RuntimeContext.get`) run in the
@@ -1452,6 +1483,15 @@ export const Function: Platform<
                     }),
                     Effect.runPromise,
                   );
+                }
+                if (deadline.fired) {
+                  // The handler ran past its `timeout`: it was interrupted,
+                  // its finalizers ran and its telemetry flushed. Hold the
+                  // invocation until Lambda's own timeout ends it, so Lambda
+                  // reports and retries a real timeout and resets the
+                  // sandbox — work that ignored the interruption can never
+                  // resume in the next invocation.
+                  await new Promise<never>(() => {});
                 }
                 if (Exit.isSuccess(exit)) {
                   return exit.value;
@@ -1634,7 +1674,7 @@ export const FunctionProvider = () =>
         // EntityAlreadyExists exception (important under high concurrency).
         let role = yield* iam
           .getRole({ RoleName: roleName })
-          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.undefined));
         if (role === undefined) {
           // Engine has cleared us via `read` or `observe` — foreign-tagged
           // functions are surfaced as `Unowned` and require `--adopt`. On a race between
@@ -1715,7 +1755,7 @@ export const FunctionProvider = () =>
           .getRolePolicy({ RoleName: roleName, PolicyName: logGroupGuardPolicyName })
           .pipe(
             Effect.map((policy) => decodeURIComponent(policy.PolicyDocument)),
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           );
         if (observed !== document) {
           yield* iam.putRolePolicy({
@@ -1772,13 +1812,11 @@ export const FunctionProvider = () =>
         };
       };
 
-      // The runtime reads the invocation deadline margin per invocation
-      // (see `withInvocationDeadline`); only written when set so the
-      // runtime default applies otherwise.
-      const timeoutMarginEnv = (margin: Duration.Duration | undefined): Record<string, string> => {
-        const ms = toTimeoutMarginMillis(margin);
-        return ms === undefined ? {} : { [TIMEOUT_MARGIN_ENV]: String(ms) };
-      };
+      // The runtime reads the grace between the Function's `timeout` and
+      // Lambda's per invocation (see `withInvocationDeadline`); only
+      // written when the handler is interrupted at all.
+      const timeoutGraceEnv = (graceMs: number): Record<string, string> =>
+        graceMs > 0 ? { [TIMEOUT_GRACE_ENV]: String(graceMs) } : {};
 
       // A `RESPONSE_STREAM` Function URL tells the runtime to export its
       // handler through `awslambda.streamifyResponse`.
@@ -1847,7 +1885,7 @@ export const FunctionProvider = () =>
           FunctionName: functionName,
         }).pipe(
           Effect.map((config) => config.ReservedConcurrentExecutions),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -1860,7 +1898,7 @@ export const FunctionProvider = () =>
             while: (e: any) => e._tag === "ResourceConflictException",
             schedule: Schedule.exponential(100),
           }),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       // AWS managed policies Alchemy attaches to the execution role. Other
@@ -1896,14 +1934,14 @@ export const FunctionProvider = () =>
         const readInlinePolicy = (PolicyName: string) =>
           iam.getRolePolicy({ RoleName: roleName, PolicyName }).pipe(
             Effect.map((policy) => JSON.parse(decodeURIComponent(policy.PolicyDocument))),
-            Effect.catchTag("NoSuchEntityException", () => Effect.succeed(undefined)),
+            Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           );
         const [urlConfig, logRetentionInDays, attached, bindingPolicy, guardPolicy, invokeConfig] =
           yield* Effect.all(
             [
               readFunctionUrlConfig(functionName, qualifier),
               logging?.retention === undefined
-                ? Effect.succeed(undefined)
+                ? Effect.undefined
                 : logs
                     .describeLogGroups({ logGroupNamePrefix: `/aws/lambda/${functionName}` })
                     .pipe(
@@ -2219,6 +2257,12 @@ export const FunctionProvider = () =>
         });
         const codeLocation = yield* resolveCodeLocation;
         const runtimeEnv = isFunctionImageProps(news) ? env : withNodeSourceMaps(env, news);
+        const lambdaTimeout = yield* lambdaTimeoutOf({
+          id,
+          timeout: news.timeout,
+          timeoutMargin: news.timeoutMargin,
+          interrupt: interruptsAtTimeout(news),
+        });
 
         const createFunctionRequest: CreateFunctionRequest = {
           FunctionName: functionName,
@@ -2255,12 +2299,12 @@ export const FunctionProvider = () =>
             Variables: {
               ...runtimeEnv,
               ...alchemyEnv,
-              ...timeoutMarginEnv(news.timeoutMargin),
+              ...timeoutGraceEnv(lambdaTimeout.graceMs),
               ...responseStreamEnv(news.functionUrl),
             },
           },
           Tags: tags,
-          Timeout: toTimeoutSeconds(news.timeout) ?? 3,
+          Timeout: lambdaTimeout.timeoutSeconds,
           // Always explicit so removing the `tracing` prop converges back to
           // the AWS default on update.
           TracingConfig: { Mode: news.tracing ?? "PassThrough" },
@@ -2278,7 +2322,6 @@ export const FunctionProvider = () =>
 
         // Update an existing function in place. Only an engine-admitted
         // function reaches this directly — see `preferUpdate`.
-        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const update = Effect.gen(function* () {
           yield* Effect.logDebug(`updating function code ${id}`);
           yield* Lambda.updateFunctionCode({
@@ -2336,7 +2379,6 @@ export const FunctionProvider = () =>
           }
         }) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
-        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const getAndUpdate = Lambda.getFunction({
           FunctionName: functionName,
         }).pipe(
@@ -2360,10 +2402,9 @@ export const FunctionProvider = () =>
               // TODO(sam): add custom
               new Error("Function tags do not match expected values"),
           ),
-          Effect.flatMap(() => update),
+          Effect.andThen(update),
         ) as Effect.Effect<any, any, Credentials | Region | HttpClient>;
 
-        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- erases SDK error/requirement unions; the services are ambient in the lifecycle op
         const create = Lambda.createFunction(createFunctionRequest).pipe(
           Effect.tapError((e) => Effect.logDebug(e)),
           Effect.retry({
@@ -2581,7 +2622,7 @@ export const FunctionProvider = () =>
           RoutingConfig: { AdditionalVersionWeights: {} },
         };
         const observed = yield* Lambda.getAlias({ FunctionName: functionName, Name: alias }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         if (observed === undefined) {
           yield* Lambda.createAlias({
@@ -2766,12 +2807,10 @@ export const FunctionProvider = () =>
               return { action: "update" };
             }
           }
-          if (toTimeoutSeconds(olds.timeout) !== toTimeoutSeconds(news.timeout)) {
+          if (toDurationMillis(olds.timeout) !== toDurationMillis(news.timeout)) {
             return { action: "update" };
           }
-          if (
-            toTimeoutMarginMillis(olds.timeoutMargin) !== toTimeoutMarginMillis(news.timeoutMargin)
-          ) {
+          if (toDurationMillis(olds.timeoutMargin) !== toDurationMillis(news.timeoutMargin)) {
             return { action: "update" };
           }
           if (olds.architecture !== news.architecture) {
@@ -2805,7 +2844,7 @@ export const FunctionProvider = () =>
           yield* Effect.logDebug(`reading function ${functionName}`);
           const result = yield* Lambda.getFunction({
             FunctionName: functionName,
-          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           const fn = result?.Configuration;
           if (!fn?.FunctionArn || !fn.FunctionName || !fn.Role) {
             return undefined;
@@ -2821,7 +2860,7 @@ export const FunctionProvider = () =>
           const aliasName = olds?.alias ?? output?.aliasName;
           const alias = aliasName
             ? yield* Lambda.getAlias({ FunctionName: fn.FunctionName, Name: aliasName }).pipe(
-                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
               )
             : undefined;
           const roleName = output?.roleName ?? fn.Role.split("/").pop()!;
@@ -2887,7 +2926,7 @@ export const FunctionProvider = () =>
                     // No URL config (or the function vanished between the
                     // list and the hydrate) — surface `undefined`, matching
                     // `read`.
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                   );
                   const reservedConcurrentExecutions = yield* getReservedConcurrentExecutions(
                     fn.FunctionName,
@@ -2918,7 +2957,7 @@ export const FunctionProvider = () =>
           if (!isResolved(news.functionName)) return Unresolved;
           const functionName = yield* createFunctionName(id, news.functionName);
           const result = yield* Lambda.getFunction({ FunctionName: functionName }).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
           const functionArn = result?.Configuration?.FunctionArn;
           if (functionArn === undefined) return undefined;
@@ -3248,18 +3287,18 @@ export const FunctionProvider = () =>
             })
             .pipe(
               Effect.flatMap((policies) =>
-                Effect.all(
+                Effect.forEach(
                   // The log-group guard stays until the function is deleted.
-                  (policies.PolicyNames ?? [])
-                    .filter((policyName) => policyName !== logGroupGuardPolicyName)
-                    .map((policyName) =>
-                      iam
-                        .deleteRolePolicy({
-                          RoleName: output.roleName,
-                          PolicyName: policyName,
-                        })
-                        .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
-                    ),
+                  (policies.PolicyNames ?? []).filter(
+                    (policyName) => policyName !== logGroupGuardPolicyName,
+                  ),
+                  (policyName) =>
+                    iam
+                      .deleteRolePolicy({
+                        RoleName: output.roleName,
+                        PolicyName: policyName,
+                      })
+                      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
                 ),
               ),
               Effect.catchTag("NoSuchEntityException", () => Effect.void),
@@ -3271,15 +3310,13 @@ export const FunctionProvider = () =>
             })
             .pipe(
               Effect.flatMap((policies) =>
-                Effect.all(
-                  (policies.AttachedPolicies ?? []).map((policy) =>
-                    iam
-                      .detachRolePolicy({
-                        RoleName: output.roleName,
-                        PolicyArn: policy.PolicyArn!,
-                      })
-                      .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
-                  ),
+                Effect.forEach(policies.AttachedPolicies ?? [], (policy) =>
+                  iam
+                    .detachRolePolicy({
+                      RoleName: output.roleName,
+                      PolicyArn: policy.PolicyArn!,
+                    })
+                    .pipe(Effect.catchTag("NoSuchEntityException", () => Effect.void)),
                 ),
               ),
               Effect.catchTag("NoSuchEntityException", () => Effect.void),

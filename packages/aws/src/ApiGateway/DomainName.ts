@@ -203,7 +203,7 @@ export const DomainNameProvider = () =>
           if (!output?.domainName) return undefined;
           const d = yield* ag
             .getDomainName({ domainName: output.domainName })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
           if (!d?.domainName) return undefined;
           return {
             domainName: d.domainName,
@@ -231,7 +231,7 @@ export const DomainNameProvider = () =>
           // diffing, only re-read the cloud state.
           let observed = yield* ag
             .getDomainName({ domainName })
-            .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
           // Ensure — create the domain name if it's missing.
           if (!observed?.domainName) {

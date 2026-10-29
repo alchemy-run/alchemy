@@ -102,7 +102,7 @@ export const EndpointAttachment = Resource<EndpointAttachment>("GCP.Apigee.Endpo
 export class EndpointAttachmentNotResolved extends Data.TaggedError(
   "GCP.Apigee.EndpointAttachmentNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const normalizeLocation = (location: string | undefined, defaultLocation: string) =>
@@ -146,7 +146,7 @@ const toAttrs = (
 const getByName = (name: string) =>
   apigee
     .getOrganizationsEndpointAttachments({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const isAlchemyId = (endpointAttachmentId: string) => endpointAttachmentId.startsWith("alc");
 
@@ -248,7 +248,7 @@ export const EndpointAttachmentProvider = () =>
               serviceAttachment: news.serviceAttachment,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (operation !== undefined) {
           yield* waitForOperation(operation);
         }
@@ -256,7 +256,7 @@ export const EndpointAttachmentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EndpointAttachmentNotResolved({ name });
+        return yield* new EndpointAttachmentNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, organization, env.region);
@@ -265,9 +265,7 @@ export const EndpointAttachmentProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* apigee
         .deleteOrganizationsEndpointAttachments({ name: output.name })
-        .pipe(
-          Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
-        );
+        .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

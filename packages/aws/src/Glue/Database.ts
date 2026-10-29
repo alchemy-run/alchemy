@@ -126,7 +126,7 @@ export const DatabaseProvider = () =>
       const observe = Effect.fn(function* (name: string, catalogId: string | undefined) {
         return yield* glue.getDatabase({ Name: name, CatalogId: catalogId }).pipe(
           Effect.map((r) => r.Database),
-          Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("EntityNotFoundException", () => Effect.undefined),
         );
       });
 

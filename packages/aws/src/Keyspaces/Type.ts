@@ -3,9 +3,15 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
+
+export class TypeNotReady extends Data.TaggedError("TypeNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * A field of a user-defined type. `type` is a CQL data type such as `text`,
@@ -114,7 +120,7 @@ export const TypeProvider = () =>
       const readType = Effect.fn(function* (keyspaceName: string, typeName: string) {
         return yield* keyspaces
           .getType({ keyspaceName, typeName })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const toAttributes = (found: keyspaces.GetTypeResponse) => ({
@@ -178,7 +184,9 @@ export const TypeProvider = () =>
             observed = yield* readType(keyspaceName, typeName).pipe(
               Effect.flatMap((t) =>
                 t === undefined
-                  ? Effect.fail(new Error(`Type '${keyspaceName}.${typeName}' not found`))
+                  ? Effect.fail(
+                      new TypeNotReady({ message: `Type '${keyspaceName}.${typeName}' not found` }),
+                    )
                   : Effect.succeed(t),
               ),
               Effect.retry({
@@ -211,7 +219,7 @@ export const TypeProvider = () =>
             Effect.flatMap((t) =>
               t === undefined
                 ? Effect.void
-                : Effect.fail(new Error(`Type '${typeName}' still deleting`)),
+                : Effect.fail(new TypeNotReady({ message: `Type '${typeName}' still deleting` })),
             ),
             Effect.retry({
               schedule: Schedule.max([Schedule.fixed("3 seconds"), Schedule.recurs(20)]),

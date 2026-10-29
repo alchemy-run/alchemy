@@ -146,7 +146,7 @@ export const Customer = Resource<Customer>("GCP.CloudControlsPartner.Customer");
 export class CustomerNotResolved extends Data.TaggedError(
   "GCP.CloudControlsPartner.CustomerNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (
@@ -290,7 +290,7 @@ export const CustomerProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CustomerNotResolved({ name });
+        return yield* new CustomerNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

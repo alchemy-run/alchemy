@@ -74,7 +74,9 @@ export const make =
     ) as Schema.Codec<unknown, unknown>;
     registry.set(key, {
       tag: Tag as unknown as EffectContext.Key<unknown, unknown>,
+      // oxlint-disable-next-line effecttsgo/schema-sync -- context codecs are sync by contract
       encode: Schema.encodeUnknownSync(codec),
+      // oxlint-disable-next-line effecttsgo/schema-sync -- context codecs are sync by contract
       decode: Schema.decodeUnknownSync(codec),
     });
     return class extends Tag {

@@ -274,7 +274,7 @@ export const Variable: typeof VariableResource = Object.assign(
 export class VariableNotCreated extends Data.TaggedError("Railway.VariableNotCreated")<{
   projectId: string;
   environmentId: string;
-  name: string;
+  variableName: string;
 }> {}
 
 export class VariableProjectRequired extends Data.TaggedError("Railway.VariableProjectRequired")<{
@@ -526,7 +526,7 @@ export const VariableProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new VariableNotCreated({ projectId, environmentId, name });
+        return yield* new VariableNotCreated({ projectId, environmentId, variableName: name });
       }
 
       if (!createdThisRun && current !== desiredPlain) {

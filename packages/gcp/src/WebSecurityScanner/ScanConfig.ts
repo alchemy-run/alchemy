@@ -277,7 +277,7 @@ export const ScanConfig = Resource<ScanConfig>("GCP.WebSecurityScanner.ScanConfi
 export class ScanConfigNotResolved extends Data.TaggedError(
   "GCP.WebSecurityScanner.ScanConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toSchedule = (
@@ -495,7 +495,7 @@ export const ScanConfigProvider = () =>
 
       if (current === undefined) {
         return yield* new ScanConfigNotResolved({
-          name: lookupName.length > 0 ? lookupName : displayName,
+          resourceName: lookupName.length > 0 ? lookupName : displayName,
         });
       }
 

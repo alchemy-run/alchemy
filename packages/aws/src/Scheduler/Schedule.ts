@@ -4,10 +4,18 @@ import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule_ from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class SchedulerScheduleUnexpectedResponse extends Data.TaggedError(
+  "SchedulerScheduleUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * EventBridge Scheduler validates that the target's execution role is
@@ -192,7 +200,7 @@ export const ScheduleProvider = () =>
               Name: scheduleName,
               GroupName: groupName !== "default" ? groupName : undefined,
             })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           if (!described?.Arn || !described.Name) {
             return undefined;
@@ -232,7 +240,7 @@ export const ScheduleProvider = () =>
           // Observe — fetch live schedule.
           let observed = yield* scheduler
             .getSchedule({ Name: scheduleName, GroupName: groupNameParam })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // Ensure — create if missing. EventBridge Scheduler does not support
           // tagging individual schedules (only schedule groups), so ownership
@@ -252,13 +260,13 @@ export const ScheduleProvider = () =>
               );
             observed = yield* scheduler
               .getSchedule({ Name: scheduleName, GroupName: groupNameParam })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           }
 
           if (!observed?.Arn) {
-            return yield* Effect.fail(
-              new Error(`Failed to read created Schedule '${scheduleName}'`),
-            );
+            return yield* new SchedulerScheduleUnexpectedResponse({
+              message: `Failed to read created Schedule '${scheduleName}'`,
+            });
           }
 
           const scheduleArn = observed.Arn;
@@ -327,7 +335,7 @@ export const ScheduleProvider = () =>
                           }
                         : undefined,
                     ),
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                    Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                   );
               },
               { concurrency: 10 },

@@ -36,7 +36,8 @@ export interface FlagshipAuth {
  */
 const targetingKeyOf = (context: EvaluationContext | undefined): string | undefined => {
   const value = context?.["targetingKey"];
-  return value === undefined ? undefined : String(value);
+  if (value === undefined) return undefined;
+  return typeof value === "string" ? value : JSON.stringify(value);
 };
 
 /**

@@ -3,7 +3,6 @@ import * as ecs from "@distilled.cloud/aws/ecs";
 import * as elbv2 from "@distilled.cloud/aws/elastic-load-balancing-v2";
 import * as iam from "@distilled.cloud/aws/iam";
 import type { Region } from "@distilled.cloud/aws/Region";
-import * as route53 from "@distilled.cloud/aws/route-53";
 import { deepEqual, isResolved } from "alchemy/Diff";
 import type { DnsConfig } from "alchemy/DNS/Adapter";
 import * as Namespace from "alchemy/Namespace";
@@ -23,7 +22,6 @@ import type { HttpClient } from "effect/http/HttpClient";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { Certificate } from "../ACM/Certificate.ts";
 import { ScalableTarget } from "../ApplicationAutoScaling/ScalableTarget.ts";
 import { ScalingPolicy } from "../ApplicationAutoScaling/ScalingPolicy.ts";
 import { Service as CloudMapService } from "../CloudMap/Service.ts";
@@ -1542,7 +1540,7 @@ interface ManagedSgPort {
  */
 const managedSgIngress = (
   staticPorts: ManagedSgPort[],
-  dynamicPort: number | unknown | undefined,
+  dynamicPort: unknown,
 ): SecurityGroupRuleData[] => {
   const rulesOf = (entries: ManagedSgPort[]): SecurityGroupRuleData[] => {
     const seen = new Set<string>();
@@ -2527,7 +2525,7 @@ const observeServiceConvergence = (input: {
         cluster: input.clusterArn,
         services: [input.serviceName],
       })
-      .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
     const service = described?.services?.find(
       (candidate) => candidate.serviceName === input.serviceName && candidate.status !== "INACTIVE",
     );
@@ -2798,7 +2796,7 @@ export const ServiceProvider = () =>
           .describeLoadBalancers({
             LoadBalancerArns: [ingress.loadBalancerArn],
           })
-          .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
         const dnsName = described?.LoadBalancers?.[0]?.DNSName;
         if (!dnsName) {
           return undefined;
@@ -2954,13 +2952,13 @@ export const ServiceProvider = () =>
         // already-attached ARNs; a `LimitExceededException` means the
         // policy was NOT attached, so it propagates and fails the deploy
         // rather than silently shipping a role with missing permissions.
-        yield* Effect.all(
-          (news.taskRoleManagedPolicyArns ?? []).map((policyArn) =>
+        yield* Effect.forEach(
+          news.taskRoleManagedPolicyArns ?? [],
+          (policyArn) =>
             iam.attachRolePolicy({
               RoleName: taskRoleName,
               PolicyArn: policyArn,
             }),
-          ),
           { concurrency: "unbounded" },
         );
 
@@ -3233,7 +3231,7 @@ export const ServiceProvider = () =>
               services: [serviceName],
               include: ["TAGS"],
             })
-            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
           const service = described?.services?.[0];
           if (!service?.serviceArn) {
             return undefined;
@@ -3360,7 +3358,7 @@ export const ServiceProvider = () =>
               services: [serviceName],
               include: ["TAGS"],
             })
-            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ClusterNotFoundException", () => Effect.undefined));
           const observed = described?.services?.find(
             (s) =>
               s.serviceName === serviceName && s.status !== "INACTIVE" && s.status !== "DRAINING",

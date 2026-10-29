@@ -164,7 +164,7 @@ export const SubscriptionFilterProvider = () =>
             ),
             Stream.runHead,
             Effect.map(Option.getOrUndefined),
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
       });
 

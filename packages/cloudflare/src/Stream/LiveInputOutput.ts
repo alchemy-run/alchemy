@@ -277,7 +277,7 @@ type ObservedOutput = {
 const findOutput = (accountId: string, liveInputId: string, outputId: string) =>
   stream.listLiveInputOutputs({ accountId, liveInputIdentifier: liveInputId }).pipe(
     Effect.map((page) => page.result.find((candidate) => candidate.uid === outputId)),
-    Effect.catchTag("LiveInputNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("LiveInputNotFound", () => Effect.undefined),
   );
 
 const toAttributes = (

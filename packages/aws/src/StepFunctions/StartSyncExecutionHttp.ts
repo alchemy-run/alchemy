@@ -20,7 +20,7 @@ const startSyncExecutionOnSyncEndpoint = Effect.gen(function* () {
   // No region: no pin; the call itself then fails with MissingRegion.
   const syncStatesEndpoint: Effect.Effect<string | undefined, SourceError> = regionEffect.pipe(
     Effect.map((region): string | undefined => `https://sync-states.${region}.amazonaws.com`),
-    Effect.catchTag("Alchemy::AWS::MissingRegion", () => Effect.succeed(undefined)),
+    Effect.catchTag("Alchemy::AWS::MissingRegion", () => Effect.undefined),
   );
   const op = yield* sfn.startSyncExecution;
   // The endpoint must be pinned per call, not around the yield: the

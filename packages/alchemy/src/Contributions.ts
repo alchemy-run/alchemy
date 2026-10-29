@@ -222,7 +222,7 @@ const Manifest = Schema.Struct({
   dependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   devDependencies: Schema.optional(Schema.Record(Schema.String, Schema.String)),
   alchemy: Schema.optional(
-    Schema.Struct({ contributes: Schema.optional(Schema.Array(Schema.String)) }),
+    Schema.Struct({ contributes: Schema.String.pipe(Schema.Array, Schema.optional) }),
   ),
 });
 

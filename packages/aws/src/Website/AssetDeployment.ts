@@ -184,8 +184,9 @@ export const AssetDeploymentProvider = () =>
         const root = path.resolve(initialCwd, news.sourcePath);
         const files = yield* walkFiles(root);
         const observed = yield* listObjects(bucketName, prefix ? `${prefix}/` : prefix);
-        const prepared = yield* Effect.all(
-          files.map((relativePath) =>
+        const prepared = yield* Effect.forEach(
+          files,
+          (relativePath) =>
             Effect.gen(function* () {
               const body = yield* fs.readFile(path.join(root, relativePath));
               const normalizedRelativePath = toPosix(relativePath);
@@ -203,7 +204,6 @@ export const AssetDeploymentProvider = () =>
                 cacheControl: options.cacheControl,
               };
             }),
-          ),
           { concurrency: "unbounded" },
         );
         const version = yield* Effect.sync(() => {
@@ -410,14 +410,14 @@ const walkFiles = Effect.fn(function* (root: string) {
   const path = yield* Path.Path;
   if (!(yield* fs.exists(root))) return [] as string[];
   const names = yield* fs.readDirectory(root, { recursive: true });
-  const files = yield* Effect.all(
-    names.map((name) =>
+  const files = yield* Effect.forEach(
+    names,
+    (name) =>
       Effect.gen(function* () {
         const full = path.join(root, name);
         const stat = yield* fs.stat(full);
         return stat.type === "File" ? toPosix(name) : undefined;
       }),
-    ),
     { concurrency: "unbounded" },
   );
   return files

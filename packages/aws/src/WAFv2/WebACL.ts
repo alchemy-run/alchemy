@@ -6,6 +6,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
@@ -19,6 +20,11 @@ import {
   type WafScope,
   withWafScope,
 } from "./internal.ts";
+
+export class WebACLUnexpectedResponse extends Data.TaggedError("WebACLUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface WebACLProps {
   /**
@@ -271,9 +277,7 @@ export const WebACLProvider = () =>
             scope,
             wafv2
               .getWebACL({ Name: name, Scope: scope, Id: cachedId })
-              .pipe(
-                Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-              ),
+              .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
           );
           if (byId?.WebACL) {
             return byId;
@@ -291,9 +295,7 @@ export const WebACLProvider = () =>
               scope,
               wafv2
                 .getWebACL({ Name: name, Scope: scope, Id: summary.Id })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
           }
           if (!listed.NextMarker || (listed.WebACLs?.length ?? 0) === 0) {
@@ -404,16 +406,16 @@ export const WebACLProvider = () =>
                     ...desired,
                     Tags: createTagsList(desiredTags),
                   })
-                  .pipe(
-                    Effect.catchTag("WAFDuplicateItemException", () => Effect.succeed(undefined)),
-                  ),
+                  .pipe(Effect.catchTag("WAFDuplicateItemException", () => Effect.undefined)),
               ),
             );
             observed = yield* findWebACL(scope, name, undefined);
           }
 
           if (!observed?.WebACL) {
-            return yield* Effect.fail(new Error(`Failed to observe WebACL '${name}' after create`));
+            return yield* new WebACLUnexpectedResponse({
+              message: `Failed to observe WebACL '${name}' after create`,
+            });
           }
 
           const acl = observed.WebACL;
@@ -504,9 +506,7 @@ export const WebACLProvider = () =>
                   Scope: scope,
                   Id: output.webAclId,
                 })
-                .pipe(
-                  Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined)),
-                ),
+                .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
             );
             if (!found?.WebACL || found.LockToken === undefined) {
               return;

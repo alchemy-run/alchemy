@@ -123,7 +123,7 @@ export const GroupProvider = () =>
         xray.getGroup({ GroupName: groupName }).pipe(
           Effect.map((r) => r.Group),
           // Typed synthetic tag for a missing group.
-          Effect.catchTag("GroupNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("GroupNotFound", () => Effect.undefined),
         );
 
       const observedTags = (groupArn: string) =>
