@@ -163,6 +163,46 @@ describe("Domain.Cluster on SQLite", () => {
     }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
   );
 
+  it.live(
+    "a timer stored without its message (a crash in between) fires when the sweep starts",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const dir = yield* fs.makeTempDirectoryScoped({ prefix: "domain-cluster-timer-" });
+        const file = path.join(dir, "domain.db");
+        const host = () =>
+          hosted(
+            Domain.Cluster.layerSingleRunner({ runnerStorage: "memory" }).pipe(
+              Layer.provideMerge(SqliteClient.layer({ filename: file })),
+            ),
+          );
+        yield* Effect.gen(function* () {
+          const holds = yield* Hold;
+          yield* holds.schedule("h-1", new ExpireHold(), { after: "1 hour", commandId: "x" });
+        }).pipe(Effect.scoped, Effect.provide(host()));
+        // What a crash between the schedule's commit and its message leaves: the
+        // row, due soon, and no message.
+        yield* Effect.gen(function* () {
+          const sql = yield* SqlClient.SqlClient;
+          yield* sql`UPDATE domain_schedules SET due = ${Date.now() + 1_500}`;
+          yield* sql`DELETE FROM cluster_messages WHERE tag = 'Fire'`;
+        }).pipe(Effect.provide(SqliteClient.layer({ filename: file })));
+        yield* Effect.gen(function* () {
+          const holds = yield* Hold;
+          yield* eventually(
+            holds.state("h-1").pipe(
+              Effect.filterOrFail(
+                (s) => s.status === "expired",
+                () => "not yet" as const,
+              ),
+            ),
+            5,
+          );
+        }).pipe(Effect.scoped, Effect.provide(host()));
+      }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
+  );
+
   it.live("state, pending deliveries and timers survive a restart on the same file", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
