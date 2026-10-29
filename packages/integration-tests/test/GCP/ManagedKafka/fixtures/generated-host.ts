@@ -4,15 +4,6 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
-import {
-  Brokers,
-  Connect,
-  ProbeAcl,
-  ProbeConnector,
-  ProbeContextSchemaVersion,
-  ProbeSchemaVersion,
-  Schemas,
-} from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated ManagedKafka binding as its own
@@ -24,248 +15,23 @@ export default class ManagedKafkaGeneratedHost extends GCP.Function<ManagedKafka
   "ManagedKafkaGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.ManagedKafka.AddAclEntry(ProbeAcl);
-    const p1 = yield* GCP.ManagedKafka.CheckCompatibility(Schemas);
-    const p2 = yield* GCP.ManagedKafka.DeleteClusterConsumerGroup(Brokers);
-    const p3 = yield* GCP.ManagedKafka.DeleteSchemaRegistryConfig(Schemas);
-    const p4 = yield* GCP.ManagedKafka.DeleteSchemaRegistryContextConfig(Schemas);
-    const p5 = yield* GCP.ManagedKafka.DeleteSchemaRegistryContextMode(Schemas);
-    const p6 = yield* GCP.ManagedKafka.DeleteSchemaRegistryContextSubject(Schemas);
-    const p7 = yield* GCP.ManagedKafka.DeleteSchemaRegistryMode(Schemas);
-    const p8 = yield* GCP.ManagedKafka.DeleteSchemaRegistrySubject(Schemas);
-    const p9 = yield* GCP.ManagedKafka.GetAcl(ProbeAcl);
-    const p10 = yield* GCP.ManagedKafka.GetClusterConsumerGroup(Brokers);
-    const p11 = yield* GCP.ManagedKafka.GetConnector(ProbeConnector);
-    const p12 = yield* GCP.ManagedKafka.GetSchema(Schemas);
-    const p13 = yield* GCP.ManagedKafka.GetSchemaRegistryConfig(Schemas);
-    const p14 = yield* GCP.ManagedKafka.GetSchemaRegistryContext(Schemas);
-    const p15 = yield* GCP.ManagedKafka.GetSchemaRegistryContextConfig(Schemas);
-    const p16 = yield* GCP.ManagedKafka.GetSchemaRegistryContextMode(Schemas);
-    const p17 = yield* GCP.ManagedKafka.GetSchemaRegistryContextSchema(Schemas);
-    const p18 = yield* GCP.ManagedKafka.GetSchemaRegistryMode(Schemas);
-    const p19 = yield* GCP.ManagedKafka.GetSchemaRegistrySchema(Schemas);
-    const p20 = yield* GCP.ManagedKafka.GetVersion(ProbeSchemaVersion);
-    const p21 = yield* GCP.ManagedKafka.GetVersion(ProbeContextSchemaVersion);
-    const p22 = yield* GCP.ManagedKafka.GetVersionSchema(ProbeSchemaVersion);
-    const p23 = yield* GCP.ManagedKafka.GetVersionSchema(ProbeContextSchemaVersion);
-    const p24 = yield* GCP.ManagedKafka.ListClusterAcls(Brokers);
-    const p25 = yield* GCP.ManagedKafka.ListClusterConsumerGroups(Brokers);
-    const p26 = yield* GCP.ManagedKafka.ListClusters();
-    const p27 = yield* GCP.ManagedKafka.ListClusterTopics(Brokers);
-    const p28 = yield* GCP.ManagedKafka.ListConnectClusterConnectors(Connect);
-    const p29 = yield* GCP.ManagedKafka.ListConnectClusters();
-    const p30 = yield* GCP.ManagedKafka.ListSchemaRegistries();
-    const p31 = yield* GCP.ManagedKafka.ListSchemaRegistryContexts(Schemas);
-    const p32 = yield* GCP.ManagedKafka.ListSchemaRegistryContextSchemaSubjects(Schemas);
-    const p33 = yield* GCP.ManagedKafka.ListSchemaRegistryContextSchemaTypes(Schemas);
-    const p34 = yield* GCP.ManagedKafka.ListSchemaRegistryContextSchemaVersions(Schemas);
-    const p35 = yield* GCP.ManagedKafka.ListSchemaRegistryContextSubjects(Schemas);
-    const p36 = yield* GCP.ManagedKafka.ListSchemaRegistryContextSubjectVersions(Schemas);
-    const p37 = yield* GCP.ManagedKafka.ListSchemaRegistrySchemaSubjects(Schemas);
-    const p38 = yield* GCP.ManagedKafka.ListSchemaRegistrySchemaTypes(Schemas);
-    const p39 = yield* GCP.ManagedKafka.ListSchemaRegistrySchemaVersions(Schemas);
-    const p40 = yield* GCP.ManagedKafka.ListSchemaRegistrySubjects(Schemas);
-    const p41 = yield* GCP.ManagedKafka.ListSchemaRegistrySubjectVersions(Schemas);
-    const p42 = yield* GCP.ManagedKafka.ListVersionReferencedby(ProbeSchemaVersion);
-    const p43 = yield* GCP.ManagedKafka.ListVersionReferencedby(ProbeContextSchemaVersion);
-    const p44 = yield* GCP.ManagedKafka.LookupSubjectVersion(Schemas);
-    const p45 = yield* GCP.ManagedKafka.PatchClusterConsumerGroup(Brokers);
-    const p46 = yield* GCP.ManagedKafka.PauseConnector(ProbeConnector);
-    const p47 = yield* GCP.ManagedKafka.RemoveAclEntry(ProbeAcl);
-    const p48 = yield* GCP.ManagedKafka.RestartConnector(ProbeConnector);
-    const p49 = yield* GCP.ManagedKafka.ResumeConnector(ProbeConnector);
-    const p50 = yield* GCP.ManagedKafka.StopConnector(ProbeConnector);
-    const p51 = yield* GCP.ManagedKafka.UpdateSchemaRegistryConfig(Schemas);
-    const p52 = yield* GCP.ManagedKafka.UpdateSchemaRegistryContextConfig(Schemas);
-    const p53 = yield* GCP.ManagedKafka.UpdateSchemaRegistryContextMode(Schemas);
-    const p54 = yield* GCP.ManagedKafka.UpdateSchemaRegistryMode(Schemas);
+    const p0 = yield* GCP.ManagedKafka.ListClusters();
+    const p1 = yield* GCP.ManagedKafka.ListConnectClusters();
+    const p2 = yield* GCP.ManagedKafka.ListSchemaRegistries();
     return {
       fetch: serveProbes({
-        AddAclEntry: probeOutcome(
-          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
-        ),
-        CheckCompatibility: probeOutcome(
-          Retry.none(p1({ compatibility: "alchemy-missing" } as never)),
-        ),
-        DeleteClusterConsumerGroup: probeOutcome(
-          Retry.none(p2({ consumerGroup: "alchemy-missing" } as never)),
-        ),
-        DeleteSchemaRegistryConfig: probeOutcome(
-          Retry.none(p3({ config: "alchemy-missing" } as never)),
-        ),
-        DeleteSchemaRegistryContextConfig: probeOutcome(
-          Retry.none(p4({ context: "alchemy-missing", config: "alchemy-missing" } as never)),
-        ),
-        DeleteSchemaRegistryContextMode: probeOutcome(
-          Retry.none(p5({ context: "alchemy-missing", mode: "alchemy-missing" } as never)),
-        ),
-        DeleteSchemaRegistryContextSubject: probeOutcome(
-          Retry.none(p6({ context: "alchemy-missing", subject: "alchemy-missing" } as never)),
-        ),
-        DeleteSchemaRegistryMode: probeOutcome(
-          Retry.none(p7({ mode: "alchemy-missing" } as never)),
-        ),
-        DeleteSchemaRegistrySubject: probeOutcome(
-          Retry.none(p8({ subject: "alchemy-missing" } as never)),
-        ),
-        GetAcl: probeOutcome(Retry.none(p9({} as never))),
-        GetClusterConsumerGroup: probeOutcome(
-          Retry.none(p10({ consumerGroup: "alchemy-missing" } as never)),
-        ),
-        GetConnector: probeOutcome(Retry.none(p11({} as never))),
-        GetSchema: probeOutcome(Retry.none(p12({ schema: "alchemy-missing" } as never))),
-        GetSchemaRegistryConfig: probeOutcome(
-          Retry.none(p13({ config: "alchemy-missing" } as never)),
-        ),
-        GetSchemaRegistryContext: probeOutcome(
-          Retry.none(p14({ context: "alchemy-missing" } as never)),
-        ),
-        GetSchemaRegistryContextConfig: probeOutcome(
-          Retry.none(p15({ context: "alchemy-missing", config: "alchemy-missing" } as never)),
-        ),
-        GetSchemaRegistryContextMode: probeOutcome(
-          Retry.none(p16({ context: "alchemy-missing", mode: "alchemy-missing" } as never)),
-        ),
-        GetSchemaRegistryContextSchema: probeOutcome(
-          Retry.none(p17({ context: "alchemy-missing", schema: "alchemy-missing" } as never)),
-        ),
-        GetSchemaRegistryMode: probeOutcome(Retry.none(p18({ mode: "alchemy-missing" } as never))),
-        GetSchemaRegistrySchema: probeOutcome(
-          Retry.none(p19({ schema: "alchemy-missing" } as never)),
-        ),
-        "GetVersion@SchemaRegistriesSubjectsVersion": probeOutcome(Retry.none(p20({} as never))),
-        "GetVersion@SchemaRegistriesContextsSubjectsVersion": probeOutcome(
-          Retry.none(p21({} as never)),
-        ),
-        "GetVersionSchema@SchemaRegistriesSubjectsVersion": probeOutcome(
-          Retry.none(p22({} as never)),
-        ),
-        "GetVersionSchema@SchemaRegistriesContextsSubjectsVersion": probeOutcome(
-          Retry.none(p23({} as never)),
-        ),
-        ListClusterAcls: probeOutcome(Retry.none(p24({} as never))),
-        ListClusterConsumerGroups: probeOutcome(Retry.none(p25({} as never))),
-        ListClusters: probeOutcome(Retry.none(p26({ location: "us-central1" } as never))),
-        ListClusterTopics: probeOutcome(Retry.none(p27({} as never))),
-        ListConnectClusterConnectors: probeOutcome(Retry.none(p28({} as never))),
-        ListConnectClusters: probeOutcome(Retry.none(p29({ location: "us-central1" } as never))),
-        ListSchemaRegistries: probeOutcome(Retry.none(p30({ location: "us-central1" } as never))),
-        ListSchemaRegistryContexts: probeOutcome(Retry.none(p31({} as never))),
-        ListSchemaRegistryContextSchemaSubjects: probeOutcome(
-          Retry.none(p32({ context: "alchemy-missing", schema: "alchemy-missing" } as never)),
-        ),
-        ListSchemaRegistryContextSchemaTypes: probeOutcome(
-          Retry.none(p33({ context: "alchemy-missing" } as never)),
-        ),
-        ListSchemaRegistryContextSchemaVersions: probeOutcome(
-          Retry.none(p34({ context: "alchemy-missing", schema: "alchemy-missing" } as never)),
-        ),
-        ListSchemaRegistryContextSubjects: probeOutcome(
-          Retry.none(p35({ context: "alchemy-missing" } as never)),
-        ),
-        ListSchemaRegistryContextSubjectVersions: probeOutcome(
-          Retry.none(p36({ context: "alchemy-missing", subject: "alchemy-missing" } as never)),
-        ),
-        ListSchemaRegistrySchemaSubjects: probeOutcome(
-          Retry.none(p37({ schema: "alchemy-missing" } as never)),
-        ),
-        ListSchemaRegistrySchemaTypes: probeOutcome(Retry.none(p38({} as never))),
-        ListSchemaRegistrySchemaVersions: probeOutcome(
-          Retry.none(p39({ schema: "alchemy-missing" } as never)),
-        ),
-        ListSchemaRegistrySubjects: probeOutcome(Retry.none(p40({} as never))),
-        ListSchemaRegistrySubjectVersions: probeOutcome(
-          Retry.none(p41({ subject: "alchemy-missing" } as never)),
-        ),
-        "ListVersionReferencedby@SchemaRegistriesSubjectsVersion": probeOutcome(
-          Retry.none(p42({} as never)),
-        ),
-        "ListVersionReferencedby@SchemaRegistriesContextsSubjectsVersion": probeOutcome(
-          Retry.none(p43({} as never)),
-        ),
-        LookupSubjectVersion: probeOutcome(
-          Retry.none(p44({ subject: "alchemy-missing" } as never)),
-        ),
-        PatchClusterConsumerGroup: probeOutcome(
-          Retry.none(p45({ consumerGroup: "alchemy-missing" } as never)),
-        ),
-        PauseConnector: probeOutcome(Retry.none(p46({} as never))),
-        RemoveAclEntry: probeOutcome(Retry.none(p47({} as never))),
-        RestartConnector: probeOutcome(Retry.none(p48({} as never))),
-        ResumeConnector: probeOutcome(Retry.none(p49({} as never))),
-        StopConnector: probeOutcome(Retry.none(p50({} as never))),
-        UpdateSchemaRegistryConfig: probeOutcome(
-          Retry.none(p51({ config: "alchemy-missing" } as never)),
-        ),
-        UpdateSchemaRegistryContextConfig: probeOutcome(
-          Retry.none(p52({ context: "alchemy-missing", config: "alchemy-missing" } as never)),
-        ),
-        UpdateSchemaRegistryContextMode: probeOutcome(
-          Retry.none(p53({ context: "alchemy-missing", mode: "alchemy-missing" } as never)),
-        ),
-        UpdateSchemaRegistryMode: probeOutcome(
-          Retry.none(p54({ mode: "alchemy-missing" } as never)),
-        ),
+        ListClusters: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
+        ListConnectClusters: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        ListSchemaRegistries: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
-          GCP.ManagedKafka.AddAclEntryHttp,
-          GCP.ManagedKafka.CheckCompatibilityHttp,
-          GCP.ManagedKafka.DeleteClusterConsumerGroupHttp,
-          GCP.ManagedKafka.DeleteSchemaRegistryConfigHttp,
-          GCP.ManagedKafka.DeleteSchemaRegistryContextConfigHttp,
-          GCP.ManagedKafka.DeleteSchemaRegistryContextModeHttp,
-          GCP.ManagedKafka.DeleteSchemaRegistryContextSubjectHttp,
-          GCP.ManagedKafka.DeleteSchemaRegistryModeHttp,
-          GCP.ManagedKafka.DeleteSchemaRegistrySubjectHttp,
-          GCP.ManagedKafka.GetAclHttp,
-          GCP.ManagedKafka.GetClusterConsumerGroupHttp,
-          GCP.ManagedKafka.GetConnectorHttp,
-          GCP.ManagedKafka.GetSchemaHttp,
-          GCP.ManagedKafka.GetSchemaRegistryConfigHttp,
-          GCP.ManagedKafka.GetSchemaRegistryContextHttp,
-          GCP.ManagedKafka.GetSchemaRegistryContextConfigHttp,
-          GCP.ManagedKafka.GetSchemaRegistryContextModeHttp,
-          GCP.ManagedKafka.GetSchemaRegistryContextSchemaHttp,
-          GCP.ManagedKafka.GetSchemaRegistryModeHttp,
-          GCP.ManagedKafka.GetSchemaRegistrySchemaHttp,
-          GCP.ManagedKafka.GetVersionHttp,
-          GCP.ManagedKafka.GetVersionSchemaHttp,
-          GCP.ManagedKafka.ListClusterAclsHttp,
-          GCP.ManagedKafka.ListClusterConsumerGroupsHttp,
           GCP.ManagedKafka.ListClustersHttp,
-          GCP.ManagedKafka.ListClusterTopicsHttp,
-          GCP.ManagedKafka.ListConnectClusterConnectorsHttp,
           GCP.ManagedKafka.ListConnectClustersHttp,
           GCP.ManagedKafka.ListSchemaRegistriesHttp,
-          GCP.ManagedKafka.ListSchemaRegistryContextsHttp,
-          GCP.ManagedKafka.ListSchemaRegistryContextSchemaSubjectsHttp,
-          GCP.ManagedKafka.ListSchemaRegistryContextSchemaTypesHttp,
-          GCP.ManagedKafka.ListSchemaRegistryContextSchemaVersionsHttp,
-          GCP.ManagedKafka.ListSchemaRegistryContextSubjectsHttp,
-          GCP.ManagedKafka.ListSchemaRegistryContextSubjectVersionsHttp,
-          GCP.ManagedKafka.ListSchemaRegistrySchemaSubjectsHttp,
-          GCP.ManagedKafka.ListSchemaRegistrySchemaTypesHttp,
-          GCP.ManagedKafka.ListSchemaRegistrySchemaVersionsHttp,
-          GCP.ManagedKafka.ListSchemaRegistrySubjectsHttp,
-          GCP.ManagedKafka.ListSchemaRegistrySubjectVersionsHttp,
-        ),
-        Layer.mergeAll(
-          GCP.ManagedKafka.ListVersionReferencedbyHttp,
-          GCP.ManagedKafka.LookupSubjectVersionHttp,
-          GCP.ManagedKafka.PatchClusterConsumerGroupHttp,
-          GCP.ManagedKafka.PauseConnectorHttp,
-          GCP.ManagedKafka.RemoveAclEntryHttp,
-          GCP.ManagedKafka.RestartConnectorHttp,
-          GCP.ManagedKafka.ResumeConnectorHttp,
-          GCP.ManagedKafka.StopConnectorHttp,
-          GCP.ManagedKafka.UpdateSchemaRegistryConfigHttp,
-          GCP.ManagedKafka.UpdateSchemaRegistryContextConfigHttp,
-          GCP.ManagedKafka.UpdateSchemaRegistryContextModeHttp,
-          GCP.ManagedKafka.UpdateSchemaRegistryModeHttp,
         ),
       ),
     ),
