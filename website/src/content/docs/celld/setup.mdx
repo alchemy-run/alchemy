@@ -133,27 +133,60 @@ the declared entrypoint. Background and service Workers belong in
 
 ## Choose where management runs
 
-Deploys reach the nodes' private operator listener through a management runner
-inside the fleet's network. `Celld.EcsFleet` needs a Layer that hosts it, and
-only that Layer's runner code is imported.
+A deploy calls the fleet's nodes to activate a revision, reload Workers and run
+D1 migrations. The nodes accept those calls only on a private operator listener,
+so the deploy sends them through a management runner inside the fleet's network.
 
-`Celld.EcsTaskManagement()` runs it as a small Fargate task that starts with the
-first management call of a deploy and stops after five idle minutes. Nothing
-runs, or is billed, between deploys, but that first call waits about a minute
-for the task to start. Destroying the fleet takes a few minutes.
+`Celld.EcsFleet()` requires a Layer that decides how that runner is hosted.
+Leaving it out is a type error, and only the Layer you provide, with its runner
+code, ends up in your program:
 
-Keep the task running to skip that wait. An always-on runner costs about $11 a
-month in us-east-1 (Fargate plus its public IPv4 address):
+```ts
+Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement()));
+```
+
+### Start a task on demand
+
+`Celld.EcsTaskManagement()` runs the runner as a small Fargate task that reads
+requests from an SQS queue. The deploy's first management call starts the task
+and waits for it, typically about a minute. Later calls reuse it, and it stops
+after `idleSeconds` without work (five minutes by default):
+
+```ts
+Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement({ idleSeconds: 900 })));
+```
+
+Nothing runs between deploys, and a running task costs under two cents an hour.
+A task releases its network interface as soon as it stops, so destroying the
+fleet takes a few minutes. This is the right default for most stacks.
+
+### Keep a task running
+
+`Celld.EcsServiceManagement()` keeps one runner task up with an ECS service, so
+management calls never wait for it to start:
 
 ```ts
 Celld.EcsFleet().pipe(Layer.provide(Celld.EcsServiceManagement()));
 ```
 
-`Celld.EcsLambdaManagement()` runs it as a VPC Lambda instead. It costs nothing
-between deploys and calls only wait for a Lambda cold start, but AWS releases a
-VPC Lambda's network interfaces slowly, so destroying the fleet takes around 20
-minutes. In your own VPC it also adds an S3 gateway endpoint to the subnets'
-route tables when they don't have one.
+The task (0.25 vCPU, 0.5 GB, ARM) and its public IPv4 address cost about $11 a
+month in us-east-1. Choose it when you deploy often enough, from CI for example,
+that a minute per deploy matters more than the bill.
+
+### Invoke a VPC Lambda
+
+`Celld.EcsLambdaManagement()` runs the runner as a Lambda inside the fleet's
+subnets, invoked directly over IAM:
+
+```ts
+Celld.EcsFleet().pipe(Layer.provide(Celld.EcsLambdaManagement()));
+```
+
+It costs nothing between deploys, and calls wait only for a Lambda cold start.
+AWS releases a VPC Lambda's network interfaces slowly, though, so destroying the
+fleet takes around 20 minutes. The Lambda reaches the fleet bucket privately: in
+your own VPC it adds an S3 gateway endpoint to the subnets' route tables when
+they don't have one. Choose it for a long-lived fleet you rarely destroy.
 
 ## Upgrade an existing fleet
 
