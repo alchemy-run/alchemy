@@ -48,38 +48,38 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Product", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetProduct (vision.projects.locations.products.get): Product: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetProduct (vision.projects.locations.products.get): Product: Product Search is closed to new projects: creates fail with BadRequest \"Product Search doesn't onboard new projects. For image search, please use (GCP_TEST_VISION_PRODUCT_SEARCH)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListProductReferenceImages (vision.projects.locations.products.referenceImages.list): Product: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListProductReferenceImages (vision.projects.locations.products.referenceImages.list): Product: Product Search is closed to new projects: creates fail with BadRequest \"Product Search doesn't onboard new projects. For image search, please use (GCP_TEST_VISION_PRODUCT_SEARCH)",
         () => Effect.void,
       );
     });
 
     describe("ProductSet", { concurrent: true }, () => {
-      test.provider.todo(
-        "AddProductSetProduct (vision.projects.locations.productSets.addProduct): ProductSet: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "AddProductSetProduct (vision.projects.locations.productSets.addProduct): ProductSet: Product Search is closed to new projects: creates fail with BadRequest \"Product Search doesn't onboard new projects. For image search, please use (GCP_TEST_VISION_PRODUCT_SEARCH)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetProductSet (vision.projects.locations.productSets.get): ProductSet: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetProductSet (vision.projects.locations.productSets.get): ProductSet: Product Search is closed to new projects: creates fail with BadRequest \"Product Search doesn't onboard new projects. For image search, please use (GCP_TEST_VISION_PRODUCT_SEARCH)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListProductSetProducts (vision.projects.locations.productSets.products.list): ProductSet: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListProductSetProducts (vision.projects.locations.productSets.products.list): ProductSet: Product Search is closed to new projects: creates fail with BadRequest \"Product Search doesn't onboard new projects. For image search, please use (GCP_TEST_VISION_PRODUCT_SEARCH)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RemoveProductSetProduct (vision.projects.locations.productSets.removeProduct): ProductSet: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RemoveProductSetProduct (vision.projects.locations.productSets.removeProduct): ProductSet: Product Search is closed to new projects: creates fail with BadRequest \"Product Search doesn't onboard new projects. For image search, please use (GCP_TEST_VISION_PRODUCT_SEARCH)",
         () => Effect.void,
       );
     });
 
     describe("ProductsReferenceImage", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetReferenceImage (vision.projects.locations.products.referenceImages.get): ProductsReferenceImage: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetReferenceImage (vision.projects.locations.products.referenceImages.get): ProductsReferenceImage: Product Search is closed to new projects: creates fail with BadRequest \"Product Search doesn't onboard new projects. For image search, please use (GCP_TEST_VISION_PRODUCT_SEARCH)",
         () => Effect.void,
       );
     });

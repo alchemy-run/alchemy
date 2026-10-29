@@ -48,12 +48,12 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("BrandsIdentityAwareProxyClient", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetIdentityAwareProxyClient (iap.projects.brands.identityAwareProxyClients.get): BrandsIdentityAwareProxyClient: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetIdentityAwareProxyClient (iap.projects.brands.identityAwareProxyClients.get): BrandsIdentityAwareProxyClient: IAP OAuth clients hang off an OAuth brand, which only an org-internal project with a Workspace support email can create (createProjectsBrands otherwise (GCP_TEST_IAP_BRAND)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ResetIdentityAwareProxyClientSecret (iap.projects.brands.identityAwareProxyClients.resetSecret): BrandsIdentityAwareProxyClient: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ResetIdentityAwareProxyClientSecret (iap.projects.brands.identityAwareProxyClients.resetSecret): BrandsIdentityAwareProxyClient: IAP OAuth clients hang off an OAuth brand, which only an org-internal project with a Workspace support email can create (createProjectsBrands otherwise (GCP_TEST_IAP_BRAND)",
         () => Effect.void,
       );
     });

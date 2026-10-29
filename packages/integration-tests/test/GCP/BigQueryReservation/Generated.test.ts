@@ -48,12 +48,12 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("CapacityCommitment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetCapacityCommitment (bigqueryreservation.projects.locations.capacityCommitments.get): CapacityCommitment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetCapacityCommitment (bigqueryreservation.projects.locations.capacityCommitments.get): CapacityCommitment: Flex commitments are end of sale (create fails with BadRequest, asserted by the probe below) and any commitment bills slot-hours. Set (GCP_TEST_BIGQUERY_CAPACITY_COMMITMENT)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "SplitCapacityCommitment (bigqueryreservation.projects.locations.capacityCommitments.split): CapacityCommitment: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "SplitCapacityCommitment (bigqueryreservation.projects.locations.capacityCommitments.split): CapacityCommitment: Flex commitments are end of sale (create fails with BadRequest, asserted by the probe below) and any commitment bills slot-hours. Set (GCP_TEST_BIGQUERY_CAPACITY_COMMITMENT)",
         () => Effect.void,
       );
     });
@@ -94,40 +94,72 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Reservation", { concurrent: true }, () => {
-      test.provider.todo(
-        "CreateReservationAssignment (bigqueryreservation.projects.locations.reservations.assignments.create): Reservation: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CreateReservationAssignment (bigqueryreservation.projects.locations.reservations.assignments.create)",
+        () => probe("CreateReservationAssignment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "DeleteReservationAssignment (bigqueryreservation.projects.locations.reservations.assignments.delete): Reservation: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DeleteReservationAssignment (bigqueryreservation.projects.locations.reservations.assignments.delete)",
+        () => probe("DeleteReservationAssignment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "FailoverReservation (bigqueryreservation.projects.locations.reservations.failoverReservation): Reservation: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "FailoverReservation (bigqueryreservation.projects.locations.reservations.failoverReservation)",
+        () => probe("FailoverReservation", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetReservation (bigqueryreservation.projects.locations.reservations.get): Reservation: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetReservation (bigqueryreservation.projects.locations.reservations.get)",
+        () => probe("GetReservation", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListReservationAssignments (bigqueryreservation.projects.locations.reservations.assignments.list): Reservation: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListReservationAssignments (bigqueryreservation.projects.locations.reservations.assignments.list)",
+        () => probe("ListReservationAssignments", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "MoveReservationAssignment (bigqueryreservation.projects.locations.reservations.assignments.move): Reservation: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "MoveReservationAssignment (bigqueryreservation.projects.locations.reservations.assignments.move)",
+        () => probe("MoveReservationAssignment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "PatchReservationAssignment (bigqueryreservation.projects.locations.reservations.assignments.patch): Reservation: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "PatchReservationAssignment (bigqueryreservation.projects.locations.reservations.assignments.patch)",
+        () => probe("PatchReservationAssignment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ReservationGroup", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetReservationGroup (bigqueryreservation.projects.locations.reservationGroups.get): ReservationGroup: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetReservationGroup (bigqueryreservation.projects.locations.reservationGroups.get)",
+        () => probe("GetReservationGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:bigqueryreservation", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

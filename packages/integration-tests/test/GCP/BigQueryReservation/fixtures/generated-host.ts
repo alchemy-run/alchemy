@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeReservation, ProbeReservationGroup } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated BigQueryReservation binding as its own
@@ -15,26 +16,58 @@ export default class BigQueryReservationGeneratedHost extends GCP.Function<BigQu
   "BigQueryReservationGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.BigQueryReservation.ListCapacityCommitments();
-    const p1 = yield* GCP.BigQueryReservation.ListReservationGroups();
-    const p2 = yield* GCP.BigQueryReservation.ListReservations();
-    const p3 = yield* GCP.BigQueryReservation.MergeCapacityCommitment();
+    const p0 = yield* GCP.BigQueryReservation.CreateReservationAssignment(ProbeReservation);
+    const p1 = yield* GCP.BigQueryReservation.DeleteReservationAssignment(ProbeReservation);
+    const p2 = yield* GCP.BigQueryReservation.FailoverReservation(ProbeReservation);
+    const p3 = yield* GCP.BigQueryReservation.GetReservation(ProbeReservation);
+    const p4 = yield* GCP.BigQueryReservation.GetReservationGroup(ProbeReservationGroup);
+    const p5 = yield* GCP.BigQueryReservation.ListCapacityCommitments();
+    const p6 = yield* GCP.BigQueryReservation.ListReservationAssignments(ProbeReservation);
+    const p7 = yield* GCP.BigQueryReservation.ListReservationGroups();
+    const p8 = yield* GCP.BigQueryReservation.ListReservations();
+    const p9 = yield* GCP.BigQueryReservation.MergeCapacityCommitment();
+    const p10 = yield* GCP.BigQueryReservation.MoveReservationAssignment(ProbeReservation);
+    const p11 = yield* GCP.BigQueryReservation.PatchReservationAssignment(ProbeReservation);
     return {
       fetch: serveProbes({
-        ListCapacityCommitments: outcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListReservationGroups: outcome(Retry.none(p1({ location: "us-central1" } as never))),
-        ListReservations: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        MergeCapacityCommitment: outcome(Retry.none(p3({ location: "us-central1" } as never))),
+        CreateReservationAssignment: outcome(
+          Retry.none(p0({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DeleteReservationAssignment: outcome(
+          Retry.none(p1({ assignment: "alchemy-missing" } as never)),
+        ),
+        FailoverReservation: outcome(Retry.none(p2({} as never))),
+        GetReservation: outcome(Retry.none(p3({} as never))),
+        GetReservationGroup: outcome(Retry.none(p4({} as never))),
+        ListCapacityCommitments: outcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListReservationAssignments: outcome(Retry.none(p6({} as never))),
+        ListReservationGroups: outcome(Retry.none(p7({ location: "us-central1" } as never))),
+        ListReservations: outcome(Retry.none(p8({ location: "us-central1" } as never))),
+        MergeCapacityCommitment: outcome(Retry.none(p9({ location: "us-central1" } as never))),
+        MoveReservationAssignment: outcome(
+          Retry.none(p10({ assignment: "alchemy-missing" } as never)),
+        ),
+        PatchReservationAssignment: outcome(
+          Retry.none(p11({ assignment: "alchemy-missing" } as never)),
+        ),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.BigQueryReservation.CreateReservationAssignmentHttp,
+          GCP.BigQueryReservation.DeleteReservationAssignmentHttp,
+          GCP.BigQueryReservation.FailoverReservationHttp,
+          GCP.BigQueryReservation.GetReservationHttp,
+          GCP.BigQueryReservation.GetReservationGroupHttp,
           GCP.BigQueryReservation.ListCapacityCommitmentsHttp,
+          GCP.BigQueryReservation.ListReservationAssignmentsHttp,
           GCP.BigQueryReservation.ListReservationGroupsHttp,
           GCP.BigQueryReservation.ListReservationsHttp,
           GCP.BigQueryReservation.MergeCapacityCommitmentHttp,
+          GCP.BigQueryReservation.MoveReservationAssignmentHttp,
+          GCP.BigQueryReservation.PatchReservationAssignmentHttp,
         ),
       ),
     ),

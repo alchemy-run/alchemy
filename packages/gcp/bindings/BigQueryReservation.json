@@ -13,7 +13,13 @@
     }
   },
   "probes": {
-    "resources": {}
+    "resources": {
+      "Reservation": "ProbeReservation",
+      "ReservationGroup": "ProbeReservationGroup"
+    },
+    "untestable": {
+      "CapacityCommitment": "Flex commitments are end of sale (create fails with BadRequest, asserted by the probe below) and any commitment bills slot-hours. Set (GCP_TEST_BIGQUERY_CAPACITY_COMMITMENT)"
+    }
   },
   "permissionService": "bigquery",
   "permissionCollections": {

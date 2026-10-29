@@ -48,28 +48,28 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AndroidApp", { concurrent: true }, () => {
-      test.provider.todo(
-        "CreateAndroidAppSha (firebase.projects.androidApps.sha.create): AndroidApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "CreateAndroidAppSha (firebase.projects.androidApps.sha.create): AndroidApp: Android apps need a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none (createAndroidApps: NotFound (GCP_TEST_FIREBASE_PROJECT)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "DeleteAndroidAppSha (firebase.projects.androidApps.sha.delete): AndroidApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "DeleteAndroidAppSha (firebase.projects.androidApps.sha.delete): AndroidApp: Android apps need a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none (createAndroidApps: NotFound (GCP_TEST_FIREBASE_PROJECT)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "GetAndroidApp (firebase.projects.androidApps.get): AndroidApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "GetAndroidApp (firebase.projects.androidApps.get): AndroidApp: Android apps need a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none (createAndroidApps: NotFound (GCP_TEST_FIREBASE_PROJECT)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "ListAndroidAppSha (firebase.projects.androidApps.sha.list): AndroidApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "ListAndroidAppSha (firebase.projects.androidApps.sha.list): AndroidApp: Android apps need a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none (createAndroidApps: NotFound (GCP_TEST_FIREBASE_PROJECT)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "RemoveAndroidApp (firebase.projects.androidApps.remove): AndroidApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "RemoveAndroidApp (firebase.projects.androidApps.remove): AndroidApp: Android apps need a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none (createAndroidApps: NotFound (GCP_TEST_FIREBASE_PROJECT)",
         () => Effect.void,
       );
-      test.provider.todo(
-        "UndeleteAndroidApp (firebase.projects.androidApps.undelete): AndroidApp: the probe fixture doesn't deploy one yet",
+      test.provider.skip(
+        "UndeleteAndroidApp (firebase.projects.androidApps.undelete): AndroidApp: Android apps need a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none (createAndroidApps: NotFound (GCP_TEST_FIREBASE_PROJECT)",
         () => Effect.void,
       );
     });
