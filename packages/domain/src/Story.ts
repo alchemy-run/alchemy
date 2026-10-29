@@ -788,36 +788,39 @@ const make =
           }),
       };
       const systemLayers = (options.stub ?? []).map((system) =>
-        Layer.succeed(
+        Layer.effect(
           system as Context.Key<unknown, unknown>,
-          ExternalSystem.observeOps(
-            system.systemName,
-            // The story's answers are checked like an adapter's.
-            ExternalSystem.validateOps(
-              system.systemName,
-              system.ops,
-              Object.fromEntries(
-                Object.keys(system.ops).map((op) => [
-                  op,
-                  (args: unknown) =>
-                    platform.control.suspended(
-                      Effect.gen(function* () {
-                        const deferred = yield* Deferred.make<unknown, unknown>();
-                        calls.push({
-                          system: system.systemName,
-                          op,
-                          args,
-                          deferred,
-                          tag: undefined,
-                          expected: false,
-                        });
-                        return yield* Deferred.await(deferred);
-                      }),
-                    ),
-                ]),
-              ),
-            ),
-          ) as never,
+          Effect.map(
+            ExternalSystem.compileChecks(system.systemName, system.ops),
+            (checks) =>
+              ExternalSystem.observeOps(
+                system.systemName,
+                // The story's answers are checked like an adapter's.
+                ExternalSystem.validateOps(
+                  checks,
+                  Object.fromEntries(
+                    Object.keys(system.ops).map((op) => [
+                      op,
+                      (args: unknown) =>
+                        platform.control.suspended(
+                          Effect.gen(function* () {
+                            const deferred = yield* Deferred.make<unknown, unknown>();
+                            calls.push({
+                              system: system.systemName,
+                              op,
+                              args,
+                              deferred,
+                              tag: undefined,
+                              expected: false,
+                            });
+                            return yield* Deferred.await(deferred);
+                          }),
+                        ),
+                    ]),
+                  ),
+                ),
+              ) as never,
+          ),
         ),
       );
       const systems = Layer.mergeAll(Layer.empty, ...systemLayers);

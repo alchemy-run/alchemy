@@ -95,55 +95,94 @@ const describePart = {
   error: "failed with an error its error schema rejects",
 } as const;
 
+/** A built check: the value its schema accepts, or an {@link ExternalSystemSchemaError} defect. */
+type Check = (value: unknown) => Exit.Exit<unknown>;
+
+/** One operation's built checks. `args` and `success` are absent when it declares none. */
+interface OpChecks {
+  readonly args: Check | undefined;
+  readonly success: Check | undefined;
+  readonly error: Check;
+}
+
+const makeCheck = (
+  system: string,
+  op: string,
+  part: keyof typeof describePart,
+  schema: Schema.Top,
+): Check => {
+  // Only the type side: it validates values and never re-runs a transformation.
+  const decode = Schema.decodeUnknownExit(Schema.toType(schema) as Schema.Decoder<unknown>) as (
+    value: unknown,
+  ) => Exit.Exit<unknown, Schema.SchemaError>;
+  return (value) => {
+    const exit = decode(value);
+    const found = Exit.findError(exit);
+    // A success, or a defect inside the schema: pass it through as it is.
+    if (found._tag === "Failure") return exit as Exit.Exit<unknown>;
+    return Exit.die(
+      new ExternalSystemSchemaError({
+        system,
+        op,
+        part,
+        message: `${system}.${op} ${describePart[part]}\n${found.success.message}`,
+      }),
+    );
+  };
+};
+
 /**
- * Check every call against the operation's schemas: the arguments before the
- * implementation runs, and its success value or typed error after. A value a
- * schema rejects becomes an {@link ExternalSystemSchemaError} defect. Defects
- * pass through. An operation without `args` or `success` skips that side.
+ * Build the checks for every operation of a system, once: its arguments, its
+ * success value and its typed error.
+ *
+ * @internal
+ */
+export const compileChecks = (
+  system: string,
+  ops: Readonly<Record<string, OpSpec>>,
+): Effect.Effect<Readonly<Record<string, OpChecks>>> =>
+  Effect.sync(() =>
+    Object.fromEntries(
+      Object.entries(ops).map(([op, spec]) => [
+        op,
+        {
+          args:
+            spec.args === undefined
+              ? undefined
+              : makeCheck(system, op, "args", Schema.Struct(spec.args)),
+          success:
+            spec.success === undefined
+              ? undefined
+              : makeCheck(system, op, "success", successSchema(spec)),
+          error: makeCheck(system, op, "error", errorSchema(spec)),
+        } satisfies OpChecks,
+      ]),
+    ),
+  );
+
+/**
+ * Check every call against its operation's built checks: the arguments before
+ * the implementation runs, and its success value or typed error after. A value
+ * a schema rejects becomes an {@link ExternalSystemSchemaError} defect. Defects
+ * pass through.
  *
  * @internal
  */
 export const validateOps = (
-  system: string,
-  ops: Readonly<Record<string, OpSpec>>,
+  checks: Readonly<Record<string, OpChecks>>,
   impl: Readonly<Record<string, OpImpl>>,
 ): Record<string, OpImpl> =>
   Object.fromEntries(
-    Object.entries(impl).map(([op, call]) => {
-      const spec = ops[op] ?? {};
-      const check = (part: keyof typeof describePart, schema: Schema.Top) => {
-        const decode = Schema.decodeUnknownEffect(Schema.toType(schema)) as (
-          value: unknown,
-        ) => Effect.Effect<unknown, Schema.SchemaError>;
-        return (value: unknown) =>
-          decode(value).pipe(
-            Effect.mapError(
-              (error) =>
-                new ExternalSystemSchemaError({
-                  system,
-                  op,
-                  part,
-                  message: `${system}.${op} ${describePart[part]}\n${error.message}`,
-                }),
-            ),
-            Effect.orDie,
-          );
-      };
-      const args = spec.args === undefined ? undefined : check("args", Schema.Struct(spec.args));
-      const success =
-        spec.success === undefined ? undefined : check("success", successSchema(spec));
-      const error = check("error", errorSchema(spec));
-      return [
-        op,
-        (input: unknown) =>
-          (args ? args(input) : Effect.succeed(input)).pipe(
-            Effect.flatMap(call),
-            Effect.matchEffect({
-              onSuccess: (value) => (success ? success(value) : Effect.succeed(value)),
-              onFailure: (failure) => Effect.flatMap(error(failure), Effect.fail),
-            }),
-          ),
-      ];
+    Object.entries(impl).map(([op, call]): [string, OpImpl] => {
+      const check = checks[op];
+      if (check === undefined) return [op, call];
+      const { args, success, error } = check;
+      const checked: OpImpl = (input) =>
+        Effect.matchEffect(args ? Effect.flatMap(args(input), call) : call(input), {
+          onSuccess: success ?? Effect.succeed,
+          onFailure: (failure) => Effect.flatMap(error(failure), Effect.fail),
+        });
+      return [op, checked];
     }),
   );
 
@@ -278,9 +317,10 @@ export const make = <const Name extends string, const Ops extends Record<string,
     ): Layer.Layer<ExternalSystemKey<Name>, E, R> {
       return Layer.effect(
         Tag,
-        Effect.map(build, (built) => {
-          const impl = built as Record<string, OpImpl>;
-          const checked = options?.validate === false ? impl : validateOps(name, ops, impl);
+        Effect.gen(function* () {
+          const checks = options?.validate === false ? undefined : yield* compileChecks(name, ops);
+          const impl = (yield* build) as Record<string, OpImpl>;
+          const checked = checks === undefined ? impl : validateOps(checks, impl);
           return observeOps(name, recordOps(name, checked)) as never;
         }),
       );
