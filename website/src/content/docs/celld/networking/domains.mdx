@@ -1,0 +1,106 @@
+---
+title: Domains & ingress
+description: Expose a Celld fleet's Application on a public load balancer, then on a custom domain with a TLS certificate and DNS records.
+---
+
+A fleet's public ingress serves its Application entrypoint. `ingress: true`
+puts it behind a load balancer; `ingress.domain` adds a custom hostname with
+TLS.
+
+## Add a load balancer
+
+```typescript
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  ingress: true,
+}) {}
+```
+
+The host composes an Application Load Balancer in front of the nodes.
+`app.url` becomes its generated `http://…elb.amazonaws.com` hostname. Use it
+for development; it has no TLS.
+
+## Serve a custom domain
+
+```typescript
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  ingress: { domain: "api.example.com" },
+}) {}
+```
+
+The host requests an ACM certificate, validates it, and points the domain at
+the load balancer. `app.url` becomes `https://api.example.com`. Without a DNS
+option it uses Route 53, so the domain's hosted zone must be in the account.
+
+## Use DNS on another provider
+
+```typescript
+// src/fleet.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  ingress: {
+    domain: { name: "api.example.com", dns: Cloudflare.DNS.Adapter() },
+  },
+}) {}
+```
+
+A [DNS adapter](/infrastructure-as-code/dns-adapters) writes the validation
+and domain records to the zone wherever it is hosted. Add
+`Cloudflare.providers()` to the stack's providers.
+
+## Serve more than one name
+
+```typescript
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  ingress: {
+    domain: {
+      name: "api.example.com",
+      aliases: ["www.api.example.com"],
+    },
+  },
+}) {}
+```
+
+The certificate covers every alias, and each alias points at the same load
+balancer.
+
+## Bring a certificate
+
+```typescript
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  ingress: {
+    domain: {
+      name: "api.example.com",
+      cert: "arn:aws:acm:us-east-1:123456789012:certificate/…",
+    },
+  },
+}) {}
+```
+
+`cert` skips certificate creation and validation; the host still writes the
+domain records.
+
+## Runtime behavior
+
+The load balancer forwards to every node; any node serves the entrypoint and
+forwards Durable Object calls to the object's node. Only the entrypoint is
+public. Other Workers in the Application are reachable only through
+[service bindings](/celld/compute/service-bindings).
+
+## Limitations
+
+Public ingress needs subnets in at least two Availability Zones. A fleet the
+host composes a network for has them; check your own `vpc` before adding
+ingress. Fresh domains can take a few minutes to resolve while DNS and the
+certificate propagate.
+
+## Related guides
+
+- [Private fleets](/celld/fleet/private-fleets)
+- [DNS adapters](/infrastructure-as-code/dns-adapters)
+- [Fleet reference](/providers/celld/reference/celld#fleet)

@@ -1,0 +1,52 @@
+---
+title: Scaling
+description: Run a fixed number of Celld nodes or let the host scale them on CPU, and how requests reach the node that owns a Durable Object.
+---
+
+A fleet's `instances` sets how many nodes run. Workers are stateless, so any
+node serves any request; Durable Objects are spread across the nodes and move
+when nodes come and go.
+
+## Run a fixed count
+
+```typescript
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  instances: 3,
+}) {}
+```
+
+The default is two nodes. One node is enough for development; run at least
+two in production so a node can drain without an outage.
+
+## Scale on CPU
+
+```typescript
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  instances: { min: 2, max: 8, targetCpu: 60 },
+}) {}
+```
+
+The object form adds a target-tracking policy: the host adds nodes when
+average CPU rises above `targetCpu` percent and removes them when it falls,
+staying between `min` and `max`. `targetCpu` defaults to 60.
+
+## Runtime behavior
+
+Each Durable Object is held by one node at a time under a lease stored in the
+fleet bucket. Any node accepts a call for any object and forwards it to the
+lease holder. When a node drains, its objects move to other nodes; the next
+call activates them there from the bucket, which takes a few seconds on first
+touch.
+
+## Limitations
+
+CPU scaling is Fargate-only. EC2 fleets need a fixed count, because each node
+takes a whole host and one spare host covers rolling deployments.
+
+## Related guides
+
+- [Hosting on ECS](/celld/fleet/ecs)
+- [Durable Objects](/celld/compute/durable-objects)
+- [Fleet reference](/providers/celld/reference/celld#fleet)

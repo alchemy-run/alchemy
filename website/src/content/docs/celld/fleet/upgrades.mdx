@@ -1,0 +1,80 @@
+---
+title: Upgrades
+description: Roll a Celld fleet to another release in the 0.6 series, use a mirrored image, and resize nodes without downtime.
+---
+
+The host upgrades a fleet with an ECS rolling deployment: it starts a new
+node, drains an old one, and repeats. A draining node hands its Durable
+Objects to its peers, so the fleet keeps serving throughout.
+
+## Pin the release
+
+```typescript
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  runtimeVersion: "0.6.3",
+}) {}
+```
+
+`runtimeVersion` defaults to the release this version of
+`@alchemy.run/celld` was tested against, currently 0.6.3. Pin it so upgrading
+the package doesn't also upgrade the fleet.
+
+## Roll to another release
+
+```diff lang="typescript"
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+-  runtimeVersion: "0.6.0",
++  runtimeVersion: "0.6.3",
+}) {}
+```
+
+Deploy, and the host replaces the nodes one at a time. Any release in the 0.6
+series is accepted.
+
+## Use a mirrored image
+
+```typescript
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  runtimeVersion: "0.6.3",
+  image: "123456789012.dkr.ecr.us-east-1.amazonaws.com/celld:0.6.3",
+}) {}
+```
+
+By default nodes pull the digest-pinned upstream image. Set `image` to pull
+from your own registry, and keep it on the same release as `runtimeVersion`.
+
+## Resize nodes
+
+```diff lang="typescript"
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+-  cpu: 512,
+-  memory: 1024,
++  cpu: 1024,
++  memory: 2048,
+}) {}
+```
+
+Node size changes roll out the same way as a release change.
+
+## Runtime behavior
+
+During a roll, old and new nodes serve side by side, and each Durable Object
+stays on one node at a time. Storage lives in the fleet bucket, not on the
+nodes, so nothing is copied between releases.
+
+## Limitations
+
+A release from another series changes the bucket format, so the host refuses
+it on an existing fleet; that move needs a stopped-fleet maintenance
+procedure. Switching between Fargate and EC2 capacity, or changing the
+container runtime, replaces every node at once and is refused too.
+
+## Related guides
+
+- [Hosting on ECS](/celld/fleet/ecs)
+- [Storage & retention](/celld/fleet/storage)
+- [Fleet reference](/providers/celld/reference/celld#fleet)

@@ -1,0 +1,149 @@
+---
+title: Queues
+description: Send messages to a Celld queue from a Worker and consume them in batches with retries and a dead-letter queue.
+---
+
+A Celld queue delivers messages to a consumer Worker in batches. Messages that
+fail are retried with a delay and, after the last attempt, moved to a
+dead-letter queue.
+
+## Create a queue
+
+```typescript
+// src/queues.ts
+import * as Celld from "@alchemy.run/celld";
+
+export const Jobs = Celld.Queues.Queue("Jobs");
+```
+
+Pass `name` to choose the queue's name in the fleet; otherwise Alchemy
+generates one.
+
+## Send a message
+
+```typescript
+// src/api.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Jobs } from "./queues.ts";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const jobs = yield* Celld.Queues.WriteQueue(yield* Jobs).pipe(Effect.orDie);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        yield* jobs.send({ id: yield* request.text });
+        return HttpServerResponse.text("queued", { status: 202 });
+      }),
+    };
+  }).pipe(Effect.provide(Celld.Queues.WriteQueueBinding)),
+) {}
+```
+
+Binding a queue fails with `Celld.Queues.ConfigurationError` when its
+settings are invalid; `Effect.orDie` turns that into a failed deploy. `send`
+serializes the body, and a failed send is a typed `Celld.Queues.SendError`.
+
+## Send a batch
+
+```typescript
+yield* jobs.sendBatch([{ body: { id: "a" } }, { body: { id: "b" } }]);
+```
+
+A batch takes up to 100 messages. Pass `{ delaySeconds }` to delay delivery.
+
+## Consume messages
+
+```typescript
+// src/api.ts
+import * as Stream from "effect/Stream";
+
+const jobs = yield* Jobs;
+yield* Celld.Queues.consumeQueueMessages<{ id: string }>(jobs, (messages) =>
+  Stream.runForEach(messages, (message) =>
+    Effect.log(`job ${message.body.id}, attempt ${message.attempts}`),
+  ),
+).pipe(Effect.orDie);
+```
+
+Register the consumer in the Worker's Construction phase and provide
+`Celld.Queues.EventSourceLive`. The handler receives each batch as a
+`Stream`. When it succeeds, every message is acknowledged; when it fails,
+every message is retried.
+
+## Tune delivery
+
+```typescript
+yield* Celld.Queues.consumeQueueMessages<{ id: string }>(
+  jobs,
+  { batchSize: 10, maxRetries: 3, retryDelay: "30 seconds", maxWaitTime: "5 seconds" },
+  (messages) => Stream.runForEach(messages, handle),
+).pipe(Effect.orDie);
+```
+
+`batchSize` caps messages per batch (1–100). `maxWaitTime` delivers a partial
+batch after that long. `maxRetries` (0–100) and `retryDelay` control retries,
+and `maxConcurrency` caps concurrent batches.
+
+## Retry one message
+
+```typescript
+(messages) =>
+  Stream.runForEach(messages, (message) =>
+    message.body.ready
+      ? handle(message.body)
+      : Effect.sync(() => message.retry({ delaySeconds: 60 })),
+  );
+```
+
+`message.retry` and `message.ack` settle one message explicitly. The first
+settlement wins, so the batch-level acknowledgement doesn't undo the retry.
+
+## Add a dead-letter queue
+
+```typescript
+// src/queues.ts
+export const Failed = Celld.Queues.Queue("Failed");
+```
+
+```typescript
+// src/api.ts
+yield* Celld.Queues.consumeQueueMessages(
+  jobs,
+  { maxRetries: 3, deadLetterQueue: yield* Failed },
+  (messages) => Stream.runForEach(messages, handle),
+).pipe(Effect.orDie);
+```
+
+After the last retry, the message moves to `Failed`. Consume that queue like
+any other to inspect or replay it.
+
+## Publish the consumer
+
+The Worker that consumes a queue must be in the Application, as the
+entrypoint or in `workers`. The Application attaches its consumers when it
+activates.
+
+## Runtime behavior
+
+Each batch is leased to one node and delivered to the consumer Worker there.
+Retries and dead-lettering happen in the fleet, not in your handler. Each
+batch runs with its own scope.
+
+## Limitations
+
+A queue has one consumer. The queue, its dead-letter queue and the consumer
+Worker must be in the same fleet.
+
+## Related guides
+
+- [Cron triggers](/celld/messaging/cron)
+- [Workflows](/celld/compute/workflows)
+- [Cloudflare Queues](/cloudflare/messaging/queues)
+- [Queues reference](/providers/celld/queues)

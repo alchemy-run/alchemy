@@ -1,0 +1,168 @@
+---
+title: "Part 4: Add KV and D1"
+description: Store a guestbook in D1 with deploy-time migrations, and remember the last visitor in KV.
+sidebar:
+  order: 4
+---
+
+In [Part 3](/celld/tutorial/part-3) state lived inside one Durable Object.
+Now you add two fleet-wide stores: a D1 database for a guestbook, and a KV
+namespace that remembers the last guest.
+
+## Write the first migration
+
+```sql
+-- migrations/0001_guestbook.sql
+CREATE TABLE guestbook (
+  name TEXT NOT NULL,
+  signed_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+## Declare the database
+
+```typescript
+// src/storage.ts
+import * as Celld from "@alchemy.run/celld";
+
+export const Guestbook = Celld.D1.Database("Guestbook", {
+  migrations: "./migrations",
+});
+```
+
+Alchemy applies pending files in `./migrations` on every deploy, before the
+Application activates. The path is relative to where you run `alchemy`.
+
+## Declare the namespace
+
+```diff lang="typescript"
+// src/storage.ts
+import * as Celld from "@alchemy.run/celld";
+
+export const Guestbook = Celld.D1.Database("Guestbook", {
+  migrations: "./migrations",
+});
++
++export const Cache = Celld.KV.Namespace("Cache");
+```
+
+Both resources live in the fleet's bucket, so they're scoped to the fleet the
+Worker is published to.
+
+## Bind them to the Worker
+
+```diff lang="typescript"
+// src/api.ts
++import { Cache, Guestbook } from "./storage.ts";
+
+  Effect.gen(function* () {
+    const greeter = yield* Celld.Fetch(yield* Greeter);
+    const counters = yield* Counter;
++    const db = yield* Celld.D1.QueryDatabase(yield* Guestbook);
++    const cache = yield* Celld.KV.ReadWriteNamespace(yield* Cache);
+```
+
+`QueryDatabase` and `ReadWriteNamespace` register the bindings on the Worker
+and return typed clients.
+
+## Provide the binding Layers
+
+```diff lang="typescript"
+// src/api.ts
+  }).pipe(
+-    Effect.provide(Layer.mergeAll(Celld.FetchBinding, CounterLive)),
++    Effect.provide(
++      Layer.mergeAll(
++        Celld.FetchBinding,
++        CounterLive,
++        Celld.D1.QueryDatabaseBinding,
++        Celld.KV.ReadWriteNamespaceBinding,
++      ),
++    ),
+  ),
+```
+
+## Sign the guestbook
+
+```diff lang="typescript"
+// src/api.ts
+        if (request.url.startsWith("/count")) {
+          const count = yield* counters.getByName("visits").increment();
+          return HttpServerResponse.text(String(count));
+        }
++        if (request.method === "POST" && request.url.startsWith("/sign")) {
++          const name = yield* request.text;
++          yield* db
++            .prepare("INSERT INTO guestbook (name) VALUES (?)")
++            .bind(name)
++            .run();
++          yield* cache.put("last-guest", name);
++          return HttpServerResponse.text("signed", { status: 201 });
++        }
+```
+
+`prepare(...).bind(...)` builds the statement; `run()` executes it. The same
+request writes the guest's name to KV.
+
+## Read it back
+
+```diff lang="typescript"
+// src/api.ts
++        if (request.url.startsWith("/guestbook")) {
++          const { results } = yield* db
++            .prepare("SELECT name, signed_at FROM guestbook ORDER BY signed_at")
++            .all();
++          const last = yield* cache.get("last-guest");
++          return yield* HttpServerResponse.json({ last, guests: results });
++        }
+        return HttpServerResponse.text("Hello from Celld");
+```
+
+D1 answers the full list from SQL; KV answers the last guest by key.
+
+## Handle storage errors
+
+The handler can now fail with a D1 or KV error. Turn them into a 500 response:
+
+```diff lang="typescript"
+// src/api.ts
+-      }),
++      }).pipe(
++        Effect.catchCause((cause) =>
++          Effect.succeed(
++            HttpServerResponse.text(Cause.pretty(cause), { status: 500 }),
++          ),
++        ),
++      ),
+```
+
+Add `import * as Cause from "effect/Cause";` at the top.
+
+## Deploy and sign
+
+```sh
+bun alchemy deploy
+curl -X POST "$URL/sign" -d "sam"
+curl "$URL/guestbook"
+# {"last":"sam","guests":[{"name":"sam","signed_at":"..."}]}
+```
+
+## Add a second migration
+
+```sql
+-- migrations/0002_message.sql
+ALTER TABLE guestbook ADD COLUMN message TEXT;
+```
+
+Deploy again. Alchemy runs only `0002_message.sql`, and records each applied
+file so later deploys skip it.
+
+## Recap
+
+- `Celld.D1.Database` is a SQL database in the fleet, with deploy-time
+  `migrations`.
+- `Celld.KV.Namespace` is a key-value store in the fleet.
+- `QueryDatabase` and `ReadWriteNamespace` bind them to a Worker; their
+  `*Binding` Layers implement the clients.
+
+Next, [Part 5](/celld/tutorial/part-5) tests the stack.

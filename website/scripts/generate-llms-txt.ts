@@ -447,6 +447,16 @@ const SECTIONS: Section[] = [
     pages: { slugs: ["celld/index", "celld/setup"] },
   },
   {
+    heading: "Celld — Tutorial",
+    pages: { directory: "celld/tutorial" },
+  },
+  {
+    heading: "Celld — Fleet",
+    intro:
+      "Hosting, management, scaling, upgrades, storage and private networking for a Celld fleet.",
+    pages: { directory: "celld/fleet" },
+  },
+  {
     heading: "Celld — Compute",
     pages: { directory: "celld/compute" },
   },
@@ -457,6 +467,18 @@ const SECTIONS: Section[] = [
   {
     heading: "Celld — Data",
     pages: { directory: "celld/data" },
+  },
+  {
+    heading: "Celld — Messaging & events",
+    pages: { directory: "celld/messaging" },
+  },
+  {
+    heading: "Celld — Networking",
+    pages: { directory: "celld/networking" },
+  },
+  {
+    heading: "Celld — Security & secrets",
+    pages: { directory: "celld/security" },
   },
   {
     heading: "PlanetScale",

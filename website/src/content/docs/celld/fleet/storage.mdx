@@ -1,0 +1,58 @@
+---
+title: Storage & retention
+description: Where a Celld fleet keeps its data, and what destroying a fleet or removing an Application deletes.
+---
+
+Everything a fleet stores lives in one S3 bucket: Durable Object storage, KV
+namespaces, D1 databases, R2 buckets, queues, workflow runs, and the published
+Worker bundles. Nodes keep only disposable caches.
+
+## Keep data by default
+
+```typescript
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  instances: 2,
+}) {}
+```
+
+Destroying this fleet removes its nodes, network and load balancer, but keeps
+the bucket and its data. The bucket keeps costing for what it stores.
+
+## Delete data with the fleet
+
+```typescript
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  instances: 2,
+  retainStorage: false,
+}) {}
+```
+
+`retainStorage: false` deletes the bucket, and all of its data, when the fleet
+is destroyed. Use it for previews, tests and tutorials.
+
+## Remove a resource
+
+Removing a `Celld.KV.Namespace`, `Celld.D1.Database`, `Celld.R2.Bucket` or
+`Celld.Queues.Queue` from the stack keeps its data. Alchemy marks it retained
+in the fleet's resource catalog and stops managing it. Removing the
+`Celld.Application` likewise leaves the published Workers and their data in
+place; destroy the fleet to stop serving them.
+
+## Expire abandoned requests
+
+The management runner exchanges requests through the bucket. A lifecycle rule
+expires request objects a lost deploy left behind after one day.
+
+## Limitations
+
+A fleet's data can't be moved to another fleet by changing its logical ID;
+keep `Cells` stable. Neither removing a resource nor destroying a
+fleet purges data, unless the fleet sets `retainStorage: false`.
+
+## Related guides
+
+- [Fleets & Applications](/celld/fleet/fleets-and-applications)
+- [Upgrades](/celld/fleet/upgrades)
+- [Fleet reference](/providers/celld/reference/celld#fleet)

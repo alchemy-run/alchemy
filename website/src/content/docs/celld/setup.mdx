@@ -133,72 +133,15 @@ the declared entrypoint. Background and service Workers belong in
 
 ## Choose where management runs
 
-A deploy calls the fleet's nodes to activate a revision, reload Workers and run
-D1 migrations. The nodes accept those calls only on a private operator listener,
-so the deploy sends them through a management runner inside the fleet's network.
+Deploys reach the nodes through a management runner inside the fleet's
+network. This guide uses `Celld.EcsTaskManagement()`, a Fargate task started
+on demand. [Management runners](/celld/fleet/management) compares it with the
+always-on and Lambda runners.
 
-`Celld.EcsFleet()` requires a Layer that decides how that runner is hosted.
-Leaving it out is a type error, and only the Layer you provide, with its runner
-code, ends up in your program:
+## Upgrade the fleet
 
-```ts
-Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement()));
-```
-
-### Start a task on demand
-
-`Celld.EcsTaskManagement()` runs the runner as a small Fargate task that reads
-requests from an SQS queue. The deploy's first management call starts the task
-and waits for it, typically about a minute. Later calls reuse it, and it stops
-after `idleSeconds` without work (five minutes by default):
-
-```ts
-Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement({ idleSeconds: 900 })));
-```
-
-Nothing runs between deploys, and a running task costs under two cents an hour.
-A task releases its network interface as soon as it stops, so destroying the
-fleet takes a few minutes. This is the right default for most stacks.
-
-### Keep a task running
-
-`Celld.EcsServiceManagement()` keeps one runner task up with an ECS service, so
-management calls never wait for it to start:
-
-```ts
-Celld.EcsFleet().pipe(Layer.provide(Celld.EcsServiceManagement()));
-```
-
-The task (0.25 vCPU, 0.5 GB, ARM) and its public IPv4 address cost about $11 a
-month in us-east-1. Choose it when you deploy often enough, from CI for example,
-that a minute per deploy matters more than the bill.
-
-### Invoke a VPC Lambda
-
-`Celld.EcsLambdaManagement()` runs the runner as a Lambda inside the fleet's
-subnets, invoked directly over IAM:
-
-```ts
-Celld.EcsFleet().pipe(Layer.provide(Celld.EcsLambdaManagement()));
-```
-
-It costs nothing between deploys, and calls wait only for a Lambda cold start.
-AWS releases a VPC Lambda's network interfaces slowly, though, so destroying the
-fleet takes around 20 minutes. The Lambda reaches the fleet bucket privately: in
-your own VPC it adds an S3 gateway endpoint to the subnets' route tables when
-they don't have one. Choose it for a long-lived fleet you rarely destroy.
-
-## Upgrade an existing fleet
-
-Releases within the Celld 0.6 series upgrade with a rolling deployment: set
-`runtimeVersion` (and `image`, for a mirror) on the Fleet and deploy. The host
-replaces nodes one at a time; a draining node hands its cells to its peers.
-Node sizing changes roll out the same way.
-
-A release from another series changes the bucket format, so the host refuses
-it on an existing fleet; plan a stopped-fleet maintenance operation instead.
-Switching between Fargate and EC2 capacity replaces every node at once and is
-refused too.
+New fleets run Celld 0.6.3. [Upgrades](/celld/fleet/upgrades) covers rolling a
+fleet to another release and resizing its nodes.
 
 ## Limitations
 

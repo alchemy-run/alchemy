@@ -1,0 +1,94 @@
+---
+title: Cron triggers
+description: Run an Effect on a schedule in a Celld Worker with Celld.cron.
+---
+
+`Celld.cron` runs an Effect on a cron schedule inside the Application's
+entrypoint Worker.
+
+## Schedule a job
+
+```typescript
+// src/api.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    yield* Celld.cron("0 * * * *", (event) =>
+      Effect.log(`hourly run scheduled for ${event.scheduledTime}`),
+    );
+
+    return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+  }).pipe(Effect.provide(Celld.CronEventSourceLive)),
+) {}
+```
+
+`Celld.cron` registers the trigger at deploy time and the handler at runtime.
+`Celld.CronEventSourceLive` implements it.
+
+## Read the event
+
+```typescript
+yield* Celld.cron("*/5 * * * *", (event) =>
+  Effect.log({ cron: event.cron, scheduledTime: event.scheduledTime }),
+);
+```
+
+`event.cron` is the expression that fired, and `event.scheduledTime` is when
+it was due, in milliseconds since the epoch.
+
+## Run more than one schedule
+
+```typescript
+yield* Celld.cron("0 * * * *", hourly);
+yield* Celld.cron("0 0 * * *", daily);
+```
+
+Each call adds a trigger with its own handler.
+
+## Use bindings in a job
+
+```typescript
+const cache = yield* Celld.KV.ReadWriteNamespace(yield* Cache);
+yield* Celld.cron("* * * * *", (event) =>
+  cache.put("cron:last", String(event.scheduledTime)),
+);
+```
+
+Resolve bindings in the Construction phase and use them in the handler, as in
+`fetch`.
+
+## Skip retries
+
+```typescript
+yield* Celld.cron("0 0 * * *", (event) =>
+  Effect.sync(() => event.noRetry()).pipe(Effect.andThen(sendDailyReport)),
+);
+```
+
+A handler that fails is retried by Celld. Call `event.noRetry()` for jobs that
+must not run twice.
+
+## Runtime behavior
+
+The fleet fires each trigger on one node per schedule. The handler runs with
+its own scope, and a failure is reported to Celld, which retries it unless
+the handler called `noRetry`.
+
+## Limitations
+
+Celld 0.6 runs cron triggers only on the Application entrypoint. It can't yet
+retire a previous entrypoint's triggers, so once the entrypoint has cron
+triggers, the Application refuses to change its entrypoint Worker or remove
+all of its triggers. Changing the expressions is supported.
+
+## Related guides
+
+- [Queues](/celld/messaging/queues)
+- [Workflows](/celld/compute/workflows)
+- [Cloudflare cron triggers](/cloudflare/messaging/cron)
+- [cron reference](/providers/celld/reference/celld#cron)

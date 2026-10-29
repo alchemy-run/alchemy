@@ -26,26 +26,29 @@ export default class Api extends Celld.Worker<Api>()(
 The outer Effect assembles the handler. It can resolve services and register
 bindings; request I/O belongs in `fetch`, not in construction.
 
-## Register a durable object
+## Host a Durable Object
 
-Create the [Counter](/celld/compute/durable-objects) first, then add its class to
-the Worker's construction Effect:
+Create the [Counter](/celld/compute/durable-objects) first, then yield it and
+provide its implementation:
 
 ```diff lang="typescript"
-+import Counter from "./counter.ts";
+// src/worker.ts
++import { Counter, CounterLive } from "./counter.ts";
 
-   Effect.gen(function* () {
+  Effect.gen(function* () {
 +    const counters = yield* Counter;
-     return { fetch: Effect.succeed(HttpServerResponse.text("Hello from Celld")) };
-   }),
+    return { fetch: Effect.succeed(HttpServerResponse.text("Hello from Celld")) };
+-  }),
++  }).pipe(Effect.provide(CounterLive)),
 ```
 
-Yielding the class registers its namespace on this Worker. It does not select
-or activate any particular Counter instance.
+Yielding the class registers its namespace on this Worker. It doesn't select or
+activate any particular Counter instance.
 
 ## Call a named instance
 
 ```diff lang="typescript"
+// src/worker.ts
 -    return { fetch: Effect.succeed(HttpServerResponse.text("Hello from Celld")) };
 +    return {
 +      fetch: Effect.gen(function* () {
@@ -66,30 +69,37 @@ import * as Celld from "@alchemy.run/celld";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 
-export default class Jobs extends Celld.Worker<Jobs>()(
-  "Jobs",
+export class Jobs extends Celld.Worker<Jobs>()("Jobs") {}
+
+export default Jobs.make(
   { main: import.meta.url },
   Effect.gen(function* () {
     return { fetch: Effect.succeed(HttpServerResponse.text("Jobs ready")) };
   }),
-) {}
+);
 ```
 
-This secondary Worker does not request public ingress. Service and queue-consumer
-Workers are separate graph members even though they share a fleet.
+Declaring the class separately from `.make()` lets other Workers import `Jobs`
+to [bind it](/celld/compute/service-bindings) without bundling its code.
 
 ## Publish the Worker graph
 
 Update the Setup stack:
 
 ```diff lang="typescript"
-+import Jobs from "./src/jobs.ts";
+// alchemy.run.ts
++import JobsLive, { Jobs } from "./src/jobs.ts";
 
 -    const app = yield* Celld.Application("App", { entrypoint: Api });
 +    const app = yield* Celld.Application("App", {
 +      entrypoint: Api,
 +      workers: [Jobs],
 +    });
+    return { url: app.url, revision: app.revision };
+-  }).pipe(Effect.provide(Celld.Fleet.layer(Cells))),
++  }).pipe(
++    Effect.provide(JobsLive.pipe(Layer.provideMerge(Celld.Fleet.layer(Cells)))),
++  ),
 ```
 
 Only the entrypoint may request public ingress. List each Worker exactly once,
@@ -104,114 +114,37 @@ initialization is a separate inner Effect, which runs on activation. Provide
 implementation dependencies once with `Effect.provide`; combine independent
 layers with `Layer.mergeAll`.
 
-## Limit dynamically loaded Workers
-
-Register the loader in the Worker's initialization Effect:
+## Configure the bundle
 
 ```typescript
-const loader = yield* Celld.WorkerLoader();
-```
-
-Load the code inside a request, where the runtime supplies the scope that disposes
-an anonymous loaded Worker:
-
-```typescript
-const loaded = yield* loader.load({
-  compatibilityDate: "2026-09-01",
-  mainModule: "main.js",
-  modules: {
-    "main.js": "export default { fetch() { return new Response('ok'); } }",
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    compatibilityDate: "2026-09-01",
+    compatibilityFlags: ["nodejs_compat"],
   },
-  globalOutbound: null,
-  limits: { cpuMs: 50, subRequests: 10 },
-});
-```
-
-`cpuMs` bounds CPU time per invocation. `subRequests` bounds outbound subrequests.
-Celld validates and enforces these limits in the loaded isolate.
-
-## Select stricter invocation limits
-
-```typescript
-const entrypoint = yield* loaded.getEntrypoint(null, {
-  limits: { cpuMs: 20, subRequests: 2 },
-});
-```
-
-The selected limits apply to fetch and direct RPC calls. For each field, Celld
-uses the lower value from the loaded code and the entrypoint selection. Class
-selectors and `ctx.exports` loopbacks accept `props` only.
-
-## Receive loaded Worker reports
-
-A same-fleet Worker can receive completed fetch reports through an Effect-native
-`tail` handler:
-
-```typescript
-// src/logs.ts
-import * as Celld from "@alchemy.run/celld";
-import * as Effect from "effect/Effect";
-
-export default class Logs extends Celld.Worker<Logs>()(
-  "Logs",
-  { main: import.meta.url },
-  Effect.succeed({
-    tail: (events: readonly Celld.TailEvent[]) =>
-      Effect.forEach(
-        events,
-        (event) => Effect.logInfo({
-          outcome: event.outcome,
-          status: event.event.response?.status,
-        }),
-        { discard: true },
-      ),
-  }),
+  impl,
 ) {}
 ```
 
-Each report includes request metadata, response status, console records, uncaught
-exceptions, and an outcome. The handler runs with the usual request scope.
-Request metadata can include sensitive headers and query parameters; choose the
-fields you retain.
-
-## Attach the tail Worker
-
-With `logs` referencing the same-fleet Logs Worker, bind it in the caller's
-initialization Effect and provide `Celld.FetchBinding` on that Effect:
-
-```typescript
-const tail = yield* Celld.Fetch(logs);
-```
-
-Inside the request, pass the original native capability when loading the code:
-
-```typescript
-const loaded = yield* loader.load({ ...source, tails: [tail.raw] });
-```
-
-Include the Logs Worker in `Application.workers`. The `raw` getter preserves the
-native capability identity required by Celld. Tail delivery follows completion
-of the loaded fetch and its background work; a tail-handler failure leaves the
-response unchanged. Native console capture is capped at 256 KiB per invocation.
-Tails currently report fetch invocations; direct RPC calls receive the configured
-limits but produce no tail report.
+`compatibilityDate` defaults to `2025-06-01` and `compatibilityFlags` to
+`["nodejs_compat"]`. `build` overrides bundler options. `env` and `assets`
+are covered in [Secrets & env](/celld/security/secrets-env) and
+[Static assets](/celld/compute/static-assets).
 
 ## Limitations
 
 Celld's Worker surface is provider-owned. Cloudflare-only bindings do not become
-available by changing an import. Public ingress is an application decision;
-management traffic stays on the host's private control path.
-
-Celld 0.6 runs cron triggers only on the Application entrypoint and cannot
-safely retire a previous root's persisted cron cell. Once the root has cron
-triggers, Application rejects changing its script identity or removing all
-triggers before native publication writes. Keep the same root script and a
-nonempty schedule; changing cron expressions remains supported. Replacing that
-root or removing its entire schedule requires verified native cron retirement
-support.
+available by changing an import. Only the Application entrypoint is served by
+the fleet's listener, and only it can run
+[cron triggers](/celld/messaging/cron).
 
 ## Related guides
 
+- [Service bindings](/celld/compute/service-bindings)
+- [Worker Loader](/celld/compute/worker-loader)
+- [Static assets](/celld/compute/static-assets)
 - [Durable Objects](/celld/compute/durable-objects)
 - [Effect RPC](/celld/apis/effect-rpc)
 - [Cloudflare Workers](/cloudflare/compute/workers)

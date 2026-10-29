@@ -1,0 +1,68 @@
+---
+title: Private fleets
+description: Keep a Celld fleet off the internet and reach its Application only from inside its network.
+---
+
+A fleet without `ingress` has no public endpoint. Its Application is reachable
+only on the fleet's private URL, from callers attached to its network.
+
+## Leave out ingress
+
+```typescript
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  instances: 2,
+}) {}
+```
+
+`app.url` is then the fleet's private URL, such as
+`http://fleet.prod-cells.celld.internal:8080`. It resolves only inside the VPC.
+
+## Call it from AWS
+
+```typescript
+// src/backend.ts
+const api = yield* Celld.bindWorker(App, Api);
+const response = yield* api.fetch(HttpClientRequest.get("/hello"));
+```
+
+`Celld.bindWorker` attaches a Lambda Function to the fleet's subnets and
+caller security group, and binds the URL and the Worker's gateway secret into
+it. [Call from AWS Lambda](/celld/networking/call-from-lambda) walks through
+it.
+
+## Join your own VPC
+
+```typescript
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  vpc: {
+    vpcId: "vpc-0123456789abcdef0",
+    subnetIds: ["subnet-aaa", "subnet-bbb"],
+    securityGroupIds: ["sg-0123456789abcdef0"],
+  },
+}) {}
+```
+
+Put the fleet in the VPC your other services already run in. The groups in
+`securityGroupIds` must admit fleet traffic on port 8080.
+
+## Runtime behavior
+
+The Worker's own `fetch` serves any caller that reaches the private URL.
+Durable Object and Worker RPC routes also require the Worker's gateway secret,
+which `bindWorker` supplies. The operator
+listener the management runner uses is on a separate port that callers can't
+reach.
+
+## Limitations
+
+Fargate fleets publish the private URL through Cloud Map DNS, which
+round-robins across nodes; long-lived connections stay on one node. A caller
+outside the VPC needs a VPN, peering or a public ingress.
+
+## Related guides
+
+- [Call from AWS Lambda](/celld/networking/call-from-lambda)
+- [Domains & ingress](/celld/networking/domains)
+- [Hosting on ECS](/celld/fleet/ecs)

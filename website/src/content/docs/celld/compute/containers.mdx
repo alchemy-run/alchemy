@@ -1,0 +1,158 @@
+---
+title: Containers
+description: Attach a container image to a Celld Durable Object, start it, wait for its port and run commands, on EC2 hosts with gVisor isolation.
+---
+
+A Celld container is a Docker container owned by one Durable Object. The
+object starts it, talks to it over TCP, runs commands in it, and stops it.
+Containers need [EC2 capacity](/celld/fleet/ecs#use-dedicated-ec2-hosts); Fargate
+can't run them.
+
+## Prepare the host
+
+```typescript
+// alchemy.run.ts
+Celld.EcsFleet({
+  capacity: { type: "ec2", instanceType: "m7i.large" },
+  containerRuntime: "runsc",
+}).pipe(Layer.provide(Celld.EcsTaskManagement()));
+```
+
+Each host runs Docker, and `containerRuntime: "runsc"` runs containers in
+gVisor's sandbox. Without it, Docker's default runtime is not a VM isolation
+boundary.
+
+## Declare the image
+
+```typescript
+// src/tool.ts
+import * as Celld from "@alchemy.run/celld";
+
+export class Tool extends Celld.Container<Tool>()("Tool", {
+  image: "alpine:3.20",
+  instanceType: "dev",
+  ociRuntime: "runsc",
+  maxInstances: 4,
+}) {}
+```
+
+`image` is a registry image, pulled at deploy time, or a Dockerfile path to
+build. `instanceType` sets CPU and memory, from `"dev"` up to `"standard-4"`.
+`maxInstances` approximately caps how many run across the fleet.
+
+## Attach it to a Durable Object
+
+```typescript
+// src/sandbox.ts
+import * as Celld from "@alchemy.run/celld";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Effect from "effect/Effect";
+import { Tool } from "./tool.ts";
+
+export class Sandbox extends Celld.DurableObject<
+  Sandbox,
+  { run: (script: string) => Effect.Effect<string, never, RuntimeContext> }
+>()("Sandbox") {}
+
+export const SandboxLive = Sandbox.make(
+  Effect.gen(function* () {
+    const tool = yield* Tool;
+    return Effect.succeed({ run: (script: string) => runIn(tool, script) });
+  }).pipe(
+    Effect.provide(
+      Celld.Containers.layer(Tool, { entrypoint: ["sleep", "infinity"] }),
+    ),
+  ),
+);
+```
+
+`Celld.Containers.layer(Tool, startup)` binds the image to this Durable
+Object class. Each object instance gets its own container. Nothing starts until
+a method runs.
+
+## Start it and wait for a port
+
+```typescript
+yield* tool.start({ entrypoint: ["my-server", "--port", "3000"] });
+yield* tool.getTcpPort(3000);
+```
+
+`start` returns once Celld accepts the request, before the container is up.
+`getTcpPort` waits until the port accepts connections, so await it before you
+use the container.
+
+## Run a command
+
+```typescript
+const runIn = (tool: Celld.Containers.ContainerClient, script: string) =>
+  Effect.gen(function* () {
+    const process = yield* tool.exec(["sh", "-c", script]);
+    const result = yield* process.output();
+    return new TextDecoder().decode(result.stdout);
+  }).pipe(Effect.scoped, Effect.orDie);
+```
+
+`exec` runs in the request's scope; a process you don't collect is terminated
+when the scope closes. A failed `exec` is never retried, because it may
+already have run.
+
+## Stop it
+
+```typescript
+yield* tool.destroy();
+```
+
+`destroy` stops the container and discards its writable layer. Call
+`setInactivityTimeout` to let Celld stop an idle container for you.
+
+## Generate an image from Effect code
+
+```typescript
+// src/tool.ts
+export class Tool extends Celld.Container<
+  Tool,
+  { ping: () => Effect.Effect<string> }
+>()("Tool", { runtime: "bun", ociRuntime: "runsc" }) {}
+```
+
+```typescript
+// src/tool.runtime.ts
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Tool } from "./tool.ts";
+
+export default Tool.make(
+  { main: import.meta.url },
+  Effect.succeed(
+    Tool.of({
+      ping: () => Effect.succeed("pong"),
+      fetch: Effect.succeed(HttpServerResponse.text("hello")),
+    }),
+  ),
+);
+```
+
+Without `image`, Alchemy builds an image that runs your program on Bun or
+Node. The Durable Object calls its methods as typed RPC (`tool.ping()`).
+Provide the `make` Layer on the Stack, and import only the `Tool` class into
+the Durable Object.
+
+## Runtime behavior
+
+Containers run on the host's Docker daemon next to the node. A container's
+disk is ephemeral: it's lost when the container is destroyed, the node
+restarts, or its Durable Object moves to another node. With `runsc`, the
+container can't reach the cloud metadata endpoint.
+
+## Limitations
+
+Fargate fleets can't run containers. There are no snapshots, hard timeouts or
+outbound request interception. Changing a container's image or runtime needs
+a quiet fleet, because Celld caches each object's container specification.
+
+## Related guides
+
+- [Hosting on ECS](/celld/fleet/ecs)
+- [Durable Objects](/celld/compute/durable-objects)
+- [Cloudflare Containers](/cloudflare/compute/containers)
+- [Containers reference](/providers/celld/containers)

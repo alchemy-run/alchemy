@@ -1,0 +1,79 @@
+---
+title: "Part 6: CI/CD"
+description: Deploy the Celld stack from GitHub Actions, with a preview fleet per pull request.
+sidebar:
+  order: 6
+---
+
+In [Part 5](/celld/tutorial/part-5) you tested the stack from your machine.
+Now GitHub Actions deploys it: `prod` on every push to `main`, and a preview
+stage per pull request.
+
+## Set up the workflow
+
+Follow [CI](/environments/ci) to create `.github/workflows/deploy.yml`, then
+[AWS with GitHub OIDC](/environments/ci#aws-with-github-oidc-recommended) to
+let the workflow assume an IAM role. Celld needs nothing beyond AWS
+credentials: the fleet, its storage and the management runner are all AWS
+resources in your account.
+
+## Store state remotely
+
+`AWS.state()` already keeps state in S3, so CI and your machine see the same
+deployments. Each stage gets its own state and its own fleet.
+
+## Know what a preview stage costs
+
+A pull request's stage deploys a whole fleet: its network, load balancer,
+nodes and bucket. The first deploy of a stage takes several minutes, and the
+nodes and load balancer are billed while the pull request is open. The
+cleanup job's `alchemy destroy --stage pr-<number>` removes them.
+
+## Keep production data
+
+Part 1 set `retainStorage: false` so destroying the tutorial deleted its
+data. Remove it before a stage holds data you need:
+
+```diff lang="typescript"
+// src/fleet.ts
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  instances: 1,
+  ingress: true,
+-  retainStorage: false,
+}) {}
+```
+
+With the default, destroying a stage keeps its fleet bucket, and every
+Durable Object, KV, D1 and R2 record in it. A preview stage's bucket then
+outlives the preview; delete it yourself, or keep `retainStorage: false` on
+fleets that only ever hold preview data.
+
+## Skip the runner start in busy pipelines
+
+Every deploy that publishes waits about a minute for the management task to
+start. If you deploy many times an hour, keep the runner running:
+
+```diff lang="typescript"
+// alchemy.run.ts
+-      Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
++      Celld.EcsFleet().pipe(Layer.provide(Celld.EcsServiceManagement())),
+```
+
+The always-on runner costs about $11 a month per stage in us-east-1. For
+previews, the on-demand task is usually the better trade.
+[Management runners](/celld/fleet/management) compares the options.
+
+## Recap
+
+- CI only needs AWS credentials; use GitHub OIDC.
+- Each stage is its own fleet, with its own cost and creation time.
+- Drop `retainStorage: false` before a fleet holds data you need.
+
+## What's next
+
+- [Fleets & Applications](/celld/fleet/fleets-and-applications) for how the
+  pieces fit together.
+- [Workers](/celld/compute/workers) and
+  [Durable Objects](/celld/compute/durable-objects) in depth.
+- [Queues](/celld/messaging/queues) and [Cron triggers](/celld/messaging/cron)
+  for background work.

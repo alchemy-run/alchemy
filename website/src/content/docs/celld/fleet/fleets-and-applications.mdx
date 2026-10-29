@@ -1,0 +1,133 @@
+---
+title: Fleets & Applications
+description: How a Celld Fleet, its host, Workers and an Application fit together in a Stack.
+---
+
+A Celld deployment has four parts. The **Fleet** is compute and storage. A
+**host** Layer decides where that compute runs. **Workers** are staged
+bundles of code. An **Application** publishes a graph of Workers to the fleet
+and activates it.
+
+## Declare a fleet
+
+```typescript
+// src/fleet.ts
+import * as Celld from "@alchemy.run/celld";
+
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  instances: 2,
+  ingress: true,
+}) {}
+```
+
+A fleet is infrastructure: nodes, a network and a storage bucket. It holds no
+code. Keep its logical ID stable, because every Durable Object, KV, D1, R2,
+Queue and Workflow record lives in its bucket.
+
+## Choose a host
+
+```typescript
+// alchemy.run.ts
+const providers = Layer.mergeAll(
+  AWS.providers(),
+  Celld.providers(),
+  Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
+);
+```
+
+The host Layer composes the fleet's cloud resources. `Celld.EcsFleet()` is the
+ECS host; [Hosting on ECS](/celld/fleet/ecs) covers its options. It needs a
+[management runner](/celld/fleet/management) Layer, which deploys use to reach
+the nodes.
+
+## Stage a Worker
+
+```typescript
+// src/api.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return { fetch: Effect.succeed(HttpServerResponse.text("ok")) };
+  }),
+) {}
+```
+
+Deploying a Worker bundles it and uploads it to the fleet's bucket. A staged
+Worker serves nothing until an Application selects it.
+
+## Publish an Application
+
+```typescript
+// alchemy.run.ts
+const app = yield* Celld.Application("App", {
+  entrypoint: Api,
+  workers: [Jobs],
+});
+```
+
+The Application publishes every Worker it lists, attaches their queue
+consumers and cron triggers, and activates the result as one revision. The
+`entrypoint` is the only Worker the fleet's listener serves; `workers` lists
+the rest of the graph. `app.url` is returned only after activation succeeds,
+so use it, not a Worker's URL, as the signal that a deploy is live.
+
+## Select the fleet
+
+```typescript
+// alchemy.run.ts
+Effect.gen(function* () {
+  const app = yield* Celld.Application("App", { entrypoint: Api });
+  return { url: app.url };
+}).pipe(Effect.provide(Celld.Fleet.layer(Cells)));
+```
+
+`Fleet.layer(Cells)` selects the fleet for every Celld declaration inside it:
+the Application, its Workers, and the KV, D1, R2 and Queue resources they
+bind. A binding to a resource in another fleet is rejected at deploy time.
+
+## Provide Worker implementations
+
+A Worker declared as a class with `.make()` is provided to the stack as a
+Layer, next to the fleet:
+
+```typescript
+// alchemy.run.ts
+Effect.gen(function* () {
+  const app = yield* Celld.Application("App", {
+    entrypoint: Api,
+    workers: [Jobs],
+  });
+  return { url: app.url };
+}).pipe(
+  Effect.provide(JobsLive.pipe(Layer.provideMerge(Celld.Fleet.layer(Cells)))),
+);
+```
+
+Other Workers import only the `Jobs` class, so its implementation stays out of
+their bundles.
+
+## Runtime behavior
+
+A fleet runs one Application. A deploy that changes any Worker, queue consumer
+or cron trigger publishes a new revision and activates it. If activation
+fails, the deploy fails without returning `app.url`, and a later deploy with a
+corrected graph supersedes the failed revision.
+
+## Limitations
+
+Removing the Application from the stack leaves its publication and data in
+place; it doesn't unpublish the Workers. Destroying the fleet stops serving
+them. Storage follows [`retainStorage`](/celld/fleet/storage).
+
+## Related guides
+
+- [Hosting on ECS](/celld/fleet/ecs)
+- [Management runners](/celld/fleet/management)
+- [Workers](/celld/compute/workers)
+- [Fleet reference](/providers/celld/reference/celld#fleet)
+- [Application reference](/providers/celld/reference/celld#application)
