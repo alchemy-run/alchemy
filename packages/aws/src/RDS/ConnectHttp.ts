@@ -88,14 +88,22 @@ export const ConnectHttp = Layer.effect(
 
     return Effect.fn(function* (resource: ConnectResource, options: ConnectOptions) {
       // Without an explicit `secret`, read the database's RDS-managed master
-      // user secret. Its absence fails the deploy, not the first request.
+      // user secret. The IAM grant checks it exists, so its absence fails the
+      // deploy, not the first request; the runtime reads the plain attribute.
       const secretArn: Output.Output<string, never> | undefined =
         options.auth === "iam"
           ? undefined
           : options.secret
             ? options.secret.secretArn
             : managedSecretArn(resource);
-      const SecretId = secretArn ? yield* secretArn : undefined;
+      const SecretId =
+        options.auth === "iam"
+          ? undefined
+          : options.secret
+            ? yield* options.secret.secretArn
+            : resource.Type === "AWS.RDS.DBCluster" || resource.Type === "AWS.RDS.DBInstance"
+              ? yield* resource.masterUserSecretArn
+              : undefined;
       const Host =
         resource.Type === "AWS.RDS.DBInstance"
           ? yield* resource.endpointAddress
@@ -197,7 +205,14 @@ export const ConnectHttp = Layer.effect(
           };
         }
 
-        const secretId = yield* SecretId!;
+        const secretId = SecretId ? yield* SecretId : undefined;
+        if (!secretId) {
+          return yield* Effect.die(
+            new ManagedMasterSecretNotFound({
+              message: `AWS.RDS.Connect(${resource.LogicalId}) has no \`secret\` and no RDS-managed master user secret`,
+            }),
+          );
+        }
         const value = yield* getSecretValue({
           SecretId: secretId,
         });
