@@ -15,6 +15,7 @@ import {
   OsconfigNotResolved,
   collectOrchestrators,
   defaultOrchestratedResource,
+  ensureOsConfigServiceIdentity,
   fieldMask,
   fingerprint,
   globalParent,
@@ -268,6 +269,7 @@ export const ProjectsLocationsGlobalPolicyOrchestratorProvider = () =>
       let current = yield* getByName(output?.name ?? name);
 
       if (current === undefined) {
+        yield* ensureOsConfigServiceIdentity(env.project);
         const created = yield* osconfig
           .createProjectsLocationsGlobalPolicyOrchestrators({
             parent,

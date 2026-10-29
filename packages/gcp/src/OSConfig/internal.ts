@@ -1,5 +1,6 @@
 import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as osconfig from "@distilled.cloud/gcp/osconfig_v2";
+import * as serviceusage from "@distilled.cloud/gcp/unstable/serviceusage_v1beta1";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import { tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
@@ -382,3 +383,22 @@ export const replaceOnIdentity = (input: {
       !parentChanged && input.previousId !== undefined && input.nextId === input.previousId,
   };
 };
+
+/**
+ * Create OS Config's service agents in the project. Google creates them on
+ * first use of some APIs but not all: an orchestrator fails with "Service
+ * agent ...@gcp-sa-osconfig-rollout... does not exist" until they exist.
+ */
+export const ensureOsConfigServiceIdentity = (project: string) =>
+  Effect.gen(function* () {
+    const operation = yield* serviceusage
+      .generateServiceIdentityServices({
+        parent: `projects/${project}/services/osconfig.googleapis.com`,
+      })
+      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
+    if (operation === undefined) return;
+    yield* waitForGcpOperation(operation, (name) => serviceusage.getOperations({ name }), {
+      budget: "2 minutes",
+      interval: "2 seconds",
+    });
+  });
