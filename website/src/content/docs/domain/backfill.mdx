@@ -1,9 +1,9 @@
 ---
 title: History at scale
-description: How a deploy backfills new views and projections on Cloudflare, how long it takes, and what it costs as your history grows.
+description: How a deploy backfills new views and projections on Cloudflare, how long it takes, what it costs, and how to run a large Domain within Cloudflare's limits.
 ---
 
-When a deploy adds a view or a projection, or bumps a version, the new consumer [receives the history](/domain/model#consumers-added-later-receive-the-history) recorded before it. On Cloudflare the deploy does that work and waits for it. This page explains how long that takes and what it costs, measured on Cloudflare.
+When a deploy adds a view or a projection, or bumps a version, the new consumer [receives the history](/domain/model#consumers-added-later-receive-the-history) recorded before it. On Cloudflare the deploy does that work and waits for it. This page explains how long that takes and what it costs, measured on Cloudflare, and what to keep in mind as a Domain grows.
 
 ## The deploy waits for the history
 
@@ -11,7 +11,7 @@ Alongside your Worker, the Domain declares a backfill run for every consumer the
 
 ```sh
 [DomainBackfillRun] creating
-[DomainBackfillRun] created — Backfilling view:Deposits (11s) ... (15.0s)
+[DomainBackfillRun] created — Backfilling view:Deposits (28s) ... (29.5s)
 ```
 
 When the deploy finishes, `history` is already `complete`, so nothing reads a half-built view. A deploy that changes no consumer waits for nothing.
@@ -20,37 +20,49 @@ The deploy waits up to 30 minutes. Past that it fails, but the backfill keeps ru
 
 ## Width doesn't make the work slower
 
-The history is spread across your instances, and so is the work. Each instance indexes its own events once, and each key of the new consumer pulls from the instances that feed it. Thousands of keys pull at the same time, so indexing and applying the history of a thousand accounts takes about as long as for ten.
+The history is spread across your instances, and so is the work. Each instance reads its own events, and each key of the new consumer pulls from the instances that feed it. Thousands of keys pull at the same time.
 
-What coordinates them is a directory: a tree of Durable Objects that every instance lists itself in on its first commit. Each node has up to 16 children, so the tree's depth grows with the log of your instance count, and no single object sees more than a bounded share of the work. A backfill crosses that tree a few times, discovery, then ready, then complete, and each crossing takes a few hops.
+What coordinates them is a directory: a tree of Durable Objects that every instance lists itself in on its first commit, with one subtree per aggregate and view. Each node has up to 16 children and lists up to 256 instances, so the tree's depth grows with the log of your instance count, and no single object sees more than a bounded share of the work. A backfill walks only the subtrees of the sources the new consumer reads.
 
-On Cloudflare, 1,000 accounts with 10 events each (10,000 events) backfilled in 15 to 47 seconds. With 10,000 accounts (100,000 events), handing every key its history and applying it took 26 seconds.
+A view keyed by its aggregate, like a summary per account, is the cheapest and fastest case. Each of its keys hears from exactly one instance, so the key starts as soon as that instance has read its history, applies what it pulls directly, and nothing waits on the rest of the Domain.
 
-## What makes it take longer
+On Cloudflare, backfilling 1,000 accounts with 10 events each took about 3 seconds of work, and 10,000 accounts about 10.
 
-Two things stretch a backfill.
+## What makes a deploy wait longer
+
+A deploy waits for two things beyond that work.
+
+The new code has to reach your instances. An instance still running the previous deploy's code can't read its history for a consumer it doesn't know yet, and Cloudflare decides when each Durable Object moves to the deployed version: for idle objects that took around 30 seconds in our runs, and for objects that were active at the deploy up to five or eight minutes. The backfill waits for them, retrying after 1 second, then 2, 4 and so on up to every 2 minutes. That made the deploy itself take about 30 seconds for 1,000 accounts and about 6 minutes for 10,000. Restarting an object doesn't move it to the new code sooner.
 
 A long history behind one key takes longer. Each key applies its history in order, a page of 100 events per round trip, so a key with a million events behind it takes a while however wide the rest is. A single key fed by every instance, like a global timeline, is the extreme case: it merges every instance's history alone.
 
-An instance still running the previous deploy's code makes the backfill wait for it. After a deploy, Cloudflare can keep some existing Durable Objects on the old code for several minutes, and an instance on old code can't index its history for a consumer it doesn't know about yet. The backfill retries it after 3 seconds, then 30, 60, and every 120 seconds. The more instances you have, the likelier a few lag: with 10,000 accounts the backfill took 7.5 minutes in total, about 6 of them waiting on a handful of accounts that were still on the old code.
-
 ## What it costs
 
-A backfill is billed like any Durable Object work: requests, rows written and read, and duration. Rows written are almost all of it. Every event is indexed once at its instance, buffered and applied at its key, and cleaned up afterwards.
+A backfill is billed like any Durable Object work: requests, rows written and read, and duration. Rows written are almost all of it.
 
-Measured on Cloudflare with 10,000 accounts, a backfill costs about 2.6 requests, 23 rows written, 66 rows read and 0.15 GB-seconds per event: about $25 per million events at [Workers Paid rates](https://developers.cloudflare.com/durable-objects/platform/pricing/). Recording those events in the first place cost about $5 per million, so backfilling a history costs roughly five times what writing it did.
+Measured on Cloudflare with 10,000 accounts, a backfill costs about 1 request, 12 rows written, 25 rows read and 0.06 GB-seconds per event: about $13 per million events at [Workers Paid rates](https://developers.cloudflare.com/durable-objects/platform/pricing/). Recording those events in the first place cost about $5 per million, so backfilling a history costs roughly three times what writing it did.
 
 | Events in the history | Cost of one backfill |
 | --- | --- |
-| 10 thousand | $0.25 |
-| 1 million | $25 |
-| 100 million | $2,500 |
-| 10 billion | $250,000 |
+| 10 thousand | $0.13 |
+| 1 million | $13 |
+| 100 million | $1,300 |
+| 10 billion | $130,000 |
 
 These figures count every row before the plan's monthly allowance (50 million rows written), so small backfills usually cost nothing extra. Each consumer you add or rebuild in one deploy is its own backfill: adding two views costs twice as much.
 
-## Keep it cheap
-
 Bump a version only when the view's state is really wrong: a rebuild costs a full backfill, and so does every view and projection that reads it.
 
-Keep hot keys rare. A key fed by every instance is fine for a small Domain, but on a large one it is both the slowest and the most expensive part of a backfill.
+## Run a large Domain
+
+Every aggregate instance, view key and projection key is its own Durable Object, and Cloudflare scales them out without limit. What limits a large Domain is how much lands on one of them, and a few platform rules worth knowing before you hit them.
+
+One object handles about 1,000 requests a second. A key that every instance feeds, like a global feed or a counter, tops out there, live as well as during a backfill. Partition it: key it by day, by region or by a hash of the source, and read the parts together.
+
+One object stores up to 10 GB. An aggregate instance keeps its whole event history, so give long-lived streams of events their own instances (an account per period, a ledger per month) rather than one instance that grows forever.
+
+One request runs at most 6 calls at a time. A request that fans out to many instances, say a command sent to every member of a group, runs 6 at a time however many there are. Spread wide fan-out over many requests, or hand it to a saga or a workflow. The backfill itself fans out through its tree for the same reason.
+
+An object lives where it was first created. Cloudflare places each Durable Object near the request that created it, and it never moves. A Domain that grows from your users' traffic spreads across the locations they're in; a bulk import from one machine puts everything it creates in that one location, so import from a Worker near your users.
+
+Deploys roll out over minutes. During a deploy, some objects run the new code while others still run the old, for up to several minutes. The Domain handles this: an instance on older code refuses backfill work for a consumer it doesn't know, and it's retried until the new code arrives. Keep your own changes compatible across one deploy, and expect a deploy that adds a consumer to a busy Domain to wait those minutes.
