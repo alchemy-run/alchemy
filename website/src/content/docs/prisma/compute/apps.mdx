@@ -126,24 +126,40 @@ const domain = yield* Prisma.CustomDomain("api-domain", {
 ```
 
 Prisma also asks the workspace to prove it owns the hostname with a
-`TXT` record. `Prisma.DomainVerification` reads the record to publish;
-publish it before the domain:
+`TXT` record. `Prisma.DomainOwnership` publishes the record through your DNS
+host and proves it; pass it to the domain so the domain is created after
+the proof:
 
 ```typescript
-const verification = yield* Prisma.DomainVerification("api-verification", {
+const ownership = yield* Prisma.DomainOwnership("api-ownership", {
+  project,
+  domain: "api.example.com",
+  dns: Cloudflare.DNS.Adapter(),
+});
+const domain = yield* Prisma.CustomDomain("api-domain", {
   app,
   hostname: "api.example.com",
-});
-yield* Cloudflare.DNS.Record("api-verification-record", {
-  zoneId,
-  name: verification.recordName,
-  type: "TXT",
-  content: verification.recordValue,
+  ownership,
 });
 ```
 
-Without it, the deploy fails with `PrismaDomainOwnershipRequired`,
-which names the record.
+To serve many apps under one domain, prove a wildcard once and attach each
+hostname to it:
+
+```typescript
+const ownership = yield* Prisma.DomainOwnership("example.com", {
+  project,
+  domain: "*.example.com",
+  dns: Cloudflare.DNS.Adapter(),
+});
+yield* Prisma.CustomDomain("api", { app: api, hostname: "api.example.com", ownership });
+yield* Prisma.CustomDomain("admin", { app: admin, hostname: "admin.example.com", ownership });
+```
+
+A wildcard and its apex share one record name
+(`_prisma-verification.example.com`), so prove only one of them per zone.
+Without `dns`, publish the record yourself: the deploy fails with
+`PrismaDomainOwnershipRequired`, which names the record.
 
 Changing the hostname or app in place is intentionally rejected.
 Create a second domain, verify DNS and TLS, cut traffic over, and then

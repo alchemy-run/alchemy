@@ -140,8 +140,8 @@ const ownershipRequiredIn = (errors: ReadonlyArray<unknown>) =>
   );
 
 /** The app's regional switchboard, the CNAME target Prisma verifies. */
-const switchboardOf = (appEndpointDomain: string) =>
-  `switchboard${appEndpointDomain.slice(appEndpointDomain.indexOf("."))}`;
+const switchboardOf = (appEndpointDomain: string | undefined) =>
+  `switchboard${(appEndpointDomain ?? "").slice((appEndpointDomain ?? "").indexOf("."))}`;
 
 test.provider.skipIf(process.env.ALCHEMY_RUN_LIVE_PRISMA_TESTS !== "true")(
   "Cloudflare DNS publishes Prisma's records; the hostname activates and serves HTTPS",
