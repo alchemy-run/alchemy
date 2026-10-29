@@ -64,7 +64,7 @@ export const relayDevBridge = (options: {
           (yield* inCloud(
             s3
               .getObject({ Bucket: options.bucket, Key: request.payloadKey! })
-              .pipe(Effect.flatMap(({ Body }) => Stream.mkString(Stream.decodeText(Body!)))),
+              .pipe(Effect.flatMap(({ Body }) => Body!.pipe(Stream.decodeText, Stream.mkString))),
           ));
         const result = yield* lambda
           .invoke({ FunctionName: options.functionName(), Payload: payload })
@@ -72,7 +72,7 @@ export const relayDevBridge = (options: {
         const output =
           result.Payload === undefined
             ? undefined
-            : yield* Stream.mkString(Stream.decodeText(result.Payload));
+            : yield* result.Payload.pipe(Stream.decodeText, Stream.mkString);
         const response =
           result.FunctionError !== undefined
             ? { error: errorOf(result.FunctionError, output) }
