@@ -1,0 +1,15 @@
+{
+  "discovery": "memcache-v1",
+  "module": "memcache_v1",
+  "resources": {
+    "Instance": {
+      "pattern": "projects/*/locations/*/instances/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "Instance": "needs Private Service Access peering on the network (GCP_TEST_PRIVATE_SERVICE_ACCESS)"
+    }
+  }
+}

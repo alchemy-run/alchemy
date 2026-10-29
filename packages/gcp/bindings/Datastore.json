@@ -1,0 +1,31 @@
+{
+  "discovery": "datastore-v1",
+  "module": "datastore_v1",
+  "resources": {
+    "Index": {
+      "pattern": "projects/*/indexes/*",
+      "attributes": ["project", "indexId"],
+      "file": "Indexes"
+    }
+  },
+  "permissions": {
+    "datastore.projects.import": "datastore.databases.import",
+    "datastore.projects.export": "datastore.databases.export",
+    "datastore.projects.rollback": "datastore.entities.get",
+    "datastore.projects.beginTransaction": "datastore.entities.get",
+    "datastore.projects.runAggregationQuery": "datastore.entities.get",
+    "datastore.projects.allocateIds": "datastore.entities.allocateIds",
+    "datastore.projects.reserveIds": "datastore.entities.allocateIds",
+    "datastore.projects.indexes.get": "datastore.databases.getMetadata",
+    "datastore.projects.indexes.list": "datastore.databases.getMetadata"
+  },
+  "roles": {
+    "datastore.projects.indexes.get": "roles/datastore.viewer",
+    "datastore.projects.indexes.list": "roles/datastore.viewer"
+  },
+  "probes": {
+    "resources": {
+      "Index": "ProbeIndex"
+    }
+  }
+}

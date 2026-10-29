@@ -1,0 +1,15 @@
+{
+  "discovery": "apikeys-v2",
+  "module": "apikeys_v2",
+  "resources": {
+    "Key": {
+      "pattern": "projects/*/locations/*/keys/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Key": "Maps"
+    },
+    "location": "global"
+  }
+}

@@ -188,7 +188,9 @@ export const makeGcpBinding = <Shape>(options: {
         let target = name === undefined ? "" : yield* name;
         if (variant.append) target = `${target}/${variant.append}`;
         for (const [collection, field] of variant.children ?? []) {
-          target = `${target}/${collection}/${input[field]}`;
+          // A trailing singleton (`…/certificateAuthority`) has no field.
+          target =
+            field === "" ? `${target}/${collection}` : `${target}/${collection}/${input[field]}`;
           delete input[field];
         }
         if (variant.suffix) {
@@ -217,6 +219,13 @@ export interface GcpProjectBindingVariant {
   readonly projectField?: string;
   /** The scope is a location: the request's `location` field names it. */
   readonly location?: boolean;
+  /**
+   * Child segments under the scope, as `[collection, field]`, for a
+   * resource Alchemy doesn't manage: `[["clusters", "cluster"]]` turns
+   * `{ location: "us-central1", cluster: "c" }` into
+   * `projects/p/locations/us-central1/clusters/c`.
+   */
+  readonly children?: ReadonlyArray<readonly [collection: string, field: string]>;
   /** Role the host gets on the project. */
   readonly role: string;
 }
@@ -272,9 +281,15 @@ export const makeGcpProjectBinding = <Shape>(options: {
         const run = runs[index] as (input: unknown) => Effect.Effect<unknown, unknown>;
         if (variant.location) delete input.location;
         if (variant.param !== undefined) {
-          input[variant.param] = variant.location
+          let target = variant.location
             ? `projects/${project}/locations/${location}`
             : `projects/${project}`;
+          for (const [collection, field] of variant.children ?? []) {
+            target =
+              field === "" ? `${target}/${collection}` : `${target}/${collection}/${input[field]}`;
+            delete input[field];
+          }
+          input[variant.param] = target;
         }
         if (variant.projectField !== undefined) input[variant.projectField] = project;
         return yield* run(input);

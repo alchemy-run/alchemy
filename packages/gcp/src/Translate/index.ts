@@ -12,3 +12,4 @@ export * from "./Model.ts";
 export * from "./TranslateText.ts";
 export * from "./TranslateTextHttp.ts";
 export { waitForOperation } from "./operations.ts";
+export * from "./generated.ts";

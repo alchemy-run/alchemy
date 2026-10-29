@@ -13,3 +13,4 @@ export * from "./Instance.ts";
 export * from "./SslCert.ts";
 export * from "./User.ts";
 export type { MigrationsTransport } from "./Migrations.ts";
+export * from "./generated.ts";

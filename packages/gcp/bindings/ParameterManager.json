@@ -1,0 +1,18 @@
+{
+  "discovery": "parametermanager-v1",
+  "module": "parametermanager_v1",
+  "resources": {
+    "Parameter": {
+      "pattern": "projects/*/locations/*/parameters/*"
+    },
+    "ParametersVersion": {
+      "pattern": "projects/*/locations/*/parameters/*/versions/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Parameter": "AppConfig",
+      "ParametersVersion": "V1"
+    }
+  }
+}

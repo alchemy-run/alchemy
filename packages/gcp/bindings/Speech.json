@@ -1,0 +1,18 @@
+{
+  "discovery": "speech-v1",
+  "module": "speech_v1",
+  "resources": {
+    "CustomClass": {
+      "pattern": "projects/*/locations/*/customClasses/*"
+    },
+    "PhraseSet": {
+      "pattern": "projects/*/locations/*/phraseSets/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "CustomClass": "Ships",
+      "PhraseSet": "Hints"
+    }
+  }
+}

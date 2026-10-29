@@ -1,0 +1,46 @@
+{
+  "discovery": "managedkafka-v1",
+  "module": "managedkafka_v1",
+  "resources": {
+    "Cluster": {
+      "pattern": "projects/*/locations/*/clusters/*"
+    },
+    "ClustersAcl": {
+      "pattern": "projects/*/locations/*/clusters/*/acls/*"
+    },
+    "ClustersTopic": {
+      "pattern": "projects/*/locations/*/clusters/*/topics/*"
+    },
+    "ConnectCluster": {
+      "pattern": "projects/*/locations/*/connectClusters/*"
+    },
+    "ConnectClustersConnector": {
+      "pattern": "projects/*/locations/*/connectClusters/*/connectors/*"
+    },
+    "SchemaRegistriesContextsSubjectsVersion": {
+      "pattern": "projects/*/locations/*/schemaRegistries/*/contexts/*/subjects/*/versions/*"
+    },
+    "SchemaRegistriesSubjectsVersion": {
+      "pattern": "projects/*/locations/*/schemaRegistries/*/subjects/*/versions/*"
+    },
+    "SchemaRegistry": {
+      "pattern": "projects/*/locations/*/schemaRegistries/*"
+    }
+  },
+  "skip": {
+    "managedkafka.projects.locations.schemaRegistries.contexts.schemas.getSchema": "the registry-level GetSchema reads the same schemas; contexts add a prefix only",
+    "managedkafka.projects.locations.schemaRegistries.contexts.subjects.lookupVersion": "the registry-level LookupSubjectVersion reads the same subjects; contexts add a prefix only"
+  },
+  "permissions": {
+    "managedkafka.projects.locations.schemaRegistries.compatibility.checkCompatibility": "managedkafka.schemaRegistries.get",
+    "managedkafka.projects.locations.schemaRegistries.contexts.compatibility.checkCompatibility": "managedkafka.schemaRegistries.get"
+  },
+  "probes": {
+    "resources": {
+      "Cluster": "Brokers",
+      "ClustersTopic": "Events",
+      "ConnectCluster": "Connect",
+      "SchemaRegistry": "Schemas"
+    }
+  }
+}

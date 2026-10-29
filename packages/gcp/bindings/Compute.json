@@ -1,0 +1,644 @@
+{
+  "discovery": "compute-v1",
+  "module": "compute_v1",
+  "resources": {
+    "Address": {
+      "pattern": "projects/*/regions/*/addresses/*",
+      "attributes": ["project", "region", "addressName"]
+    },
+    "Autoscaler": {
+      "pattern": "projects/*/zones/*/autoscalers/*",
+      "attributes": ["project", "zone", "autoscalerName"]
+    },
+    "BackendBucket": {
+      "pattern": "projects/*/global/backendBuckets/*",
+      "attributes": ["project", "name"]
+    },
+    "BackendService": {
+      "pattern": "projects/*/global/backendServices/*",
+      "attributes": ["project", "name"]
+    },
+    "CrossSiteNetwork": {
+      "pattern": "projects/*/global/crossSiteNetworks/*",
+      "attributes": ["project", "crossSiteNetworkName"]
+    },
+    "Disk": {
+      "pattern": "projects/*/zones/*/disks/*",
+      "attributes": ["project", "zone", "diskName"]
+    },
+    "ExternalVpnGateway": {
+      "pattern": "projects/*/global/externalVpnGateways/*",
+      "attributes": ["project", "externalVpnGatewayName"]
+    },
+    "Firewall": {
+      "pattern": "projects/*/global/firewalls/*",
+      "attributes": ["project", "firewallName"]
+    },
+    "FirewallPolicy": {
+      "pattern": "locations/global/firewallPolicies/*",
+      "lifecycleOnly": true
+    },
+    "ForwardingRule": {
+      "pattern": "projects/*/regions/*/forwardingRules/*",
+      "attributes": ["project", "region", "forwardingRuleName"]
+    },
+    "FutureReservation": {
+      "pattern": "projects/*/zones/*/futureReservations/*",
+      "attributes": ["project", "zone", "futureReservationName"]
+    },
+    "GlobalAddress": {
+      "pattern": "projects/*/global/addresses/*",
+      "attributes": ["project", "addressName"],
+      "collection": "globalAddresses"
+    },
+    "GlobalForwardingRule": {
+      "pattern": "projects/*/global/forwardingRules/*",
+      "attributes": ["project", "forwardingRuleName"],
+      "collection": "globalForwardingRules"
+    },
+    "GlobalNetworkEndpointGroup": {
+      "pattern": "projects/*/global/networkEndpointGroups/*",
+      "attributes": ["project", "networkEndpointGroupName"],
+      "collection": "globalNetworkEndpointGroups"
+    },
+    "GlobalPublicDelegatedPrefix": {
+      "pattern": "projects/*/global/publicDelegatedPrefixes/*",
+      "attributes": ["project", "prefixName"],
+      "collection": "globalPublicDelegatedPrefixes"
+    },
+    "GlobalVmExtensionPolicy": {
+      "pattern": "projects/*/global/vmExtensionPolicies/*",
+      "attributes": ["project", "policyName"],
+      "collection": "globalVmExtensionPolicies"
+    },
+    "HealthCheck": {
+      "pattern": "projects/*/global/healthChecks/*",
+      "attributes": ["project", "healthCheckName"]
+    },
+    "HttpHealthCheck": {
+      "pattern": "projects/*/global/httpHealthChecks/*",
+      "attributes": ["project", "httpHealthCheckName"]
+    },
+    "HttpsHealthCheck": {
+      "pattern": "projects/*/global/httpsHealthChecks/*",
+      "attributes": ["project", "httpsHealthCheckName"],
+      "typeName": "HttpsHealthCheckResource"
+    },
+    "Image": {
+      "pattern": "projects/*/global/images/*",
+      "attributes": ["project", "imageName"]
+    },
+    "Instance": {
+      "pattern": "projects/*/zones/*/instances/*",
+      "attributes": ["project", "zone", "instanceName"],
+      "iamKind": "compute.instance",
+      "nameAttribute": "selfLink"
+    },
+    "InstanceGroup": {
+      "pattern": "projects/*/zones/*/instanceGroups/*",
+      "attributes": ["project", "zone", "instanceGroupName"]
+    },
+    "InstanceGroupManager": {
+      "pattern": "projects/*/zones/*/instanceGroupManagers/*",
+      "attributes": ["project", "zone", "managerName"]
+    },
+    "InstanceGroupManagerResizeRequest": {
+      "pattern": "projects/*/zones/*/instanceGroupManagers/*/resizeRequests/*",
+      "lifecycleOnly": true,
+      "collection": "instanceGroupManagerResizeRequests"
+    },
+    "InstanceTemplate": {
+      "pattern": "projects/*/global/instanceTemplates/*",
+      "attributes": ["project", "templateName"]
+    },
+    "InstantSnapshot": {
+      "pattern": "projects/*/zones/*/instantSnapshots/*",
+      "attributes": ["project", "zone", "instantSnapshotName"]
+    },
+    "InstantSnapshotGroup": {
+      "pattern": "projects/*/zones/*/instantSnapshotGroups/*",
+      "attributes": ["project", "zone", "instantSnapshotGroupName"]
+    },
+    "Interconnect": {
+      "pattern": "projects/*/global/interconnects/*",
+      "attributes": ["project", "interconnectName"]
+    },
+    "InterconnectAttachment": {
+      "pattern": "projects/*/regions/*/interconnectAttachments/*",
+      "attributes": ["project", "region", "interconnectAttachmentName"]
+    },
+    "InterconnectAttachmentGroup": {
+      "pattern": "projects/*/global/interconnectAttachmentGroups/*",
+      "attributes": ["project", "interconnectAttachmentGroupName"]
+    },
+    "InterconnectGroup": {
+      "pattern": "projects/*/global/interconnectGroups/*",
+      "attributes": ["project", "interconnectGroupName"]
+    },
+    "License": {
+      "pattern": "projects/*/global/licenses/*",
+      "attributes": ["project", "licenseName"]
+    },
+    "MachineImage": {
+      "pattern": "projects/*/global/machineImages/*",
+      "attributes": ["project", "machineImageName"]
+    },
+    "Network": {
+      "pattern": "projects/*/global/networks/*",
+      "attributes": ["project", "networkName"]
+    },
+    "NetworkAttachment": {
+      "pattern": "projects/*/regions/*/networkAttachments/*",
+      "attributes": ["project", "region", "networkAttachmentName"]
+    },
+    "NetworkEdgeSecurityService": {
+      "pattern": "projects/*/regions/*/networkEdgeSecurityServices/*",
+      "attributes": ["project", "region", "networkEdgeSecurityServiceName"]
+    },
+    "NetworkEndpointGroup": {
+      "pattern": "projects/*/zones/*/networkEndpointGroups/*",
+      "attributes": ["project", "zone", "networkEndpointGroupName"]
+    },
+    "NetworkFirewallPolicy": {
+      "pattern": "projects/*/global/firewallPolicies/*",
+      "attributes": ["project", "networkFirewallPolicyName"],
+      "collection": "networkFirewallPolicies"
+    },
+    "NodeGroup": {
+      "pattern": "projects/*/zones/*/nodeGroups/*",
+      "attributes": ["project", "zone", "nodeGroupName"]
+    },
+    "NodeTemplate": {
+      "pattern": "projects/*/regions/*/nodeTemplates/*",
+      "attributes": ["project", "region", "nodeTemplateName"]
+    },
+    "OrganizationSecurityPolicy": {
+      "pattern": "locations/global/securityPolicies/*",
+      "lifecycleOnly": true,
+      "collection": "organizationSecurityPolicies"
+    },
+    "PacketMirroring": {
+      "pattern": "projects/*/regions/*/packetMirrorings/*",
+      "attributes": ["project", "region", "packetMirroringName"]
+    },
+    "PublicAdvertisedPrefix": {
+      "pattern": "projects/*/global/publicAdvertisedPrefixes/*",
+      "attributes": ["project", "prefixName"]
+    },
+    "PublicDelegatedPrefix": {
+      "pattern": "projects/*/regions/*/publicDelegatedPrefixes/*",
+      "attributes": ["project", "region", "prefixName"]
+    },
+    "RegionAutoscaler": {
+      "pattern": "projects/*/regions/*/autoscalers/*",
+      "attributes": ["project", "region", "autoscalerName"],
+      "collection": "regionAutoscalers"
+    },
+    "RegionBackendBucket": {
+      "pattern": "projects/*/regions/*/backendBuckets/*",
+      "attributes": ["project", "region", "name"],
+      "collection": "regionBackendBuckets"
+    },
+    "RegionBackendService": {
+      "pattern": "projects/*/regions/*/backendServices/*",
+      "attributes": ["project", "region", "name"],
+      "collection": "regionBackendServices"
+    },
+    "RegionCompositeHealthCheck": {
+      "pattern": "projects/*/regions/*/compositeHealthChecks/*",
+      "attributes": ["project", "region", "healthCheckName"],
+      "collection": "regionCompositeHealthChecks"
+    },
+    "RegionDisk": {
+      "pattern": "projects/*/regions/*/disks/*",
+      "attributes": ["project", "region", "diskName"],
+      "collection": "regionDisks"
+    },
+    "RegionHealthAggregationPolicy": {
+      "pattern": "projects/*/regions/*/healthAggregationPolicies/*",
+      "attributes": ["project", "region", "policyName"],
+      "collection": "regionHealthAggregationPolicies"
+    },
+    "RegionHealthCheck": {
+      "pattern": "projects/*/regions/*/healthChecks/*",
+      "attributes": ["project", "region", "healthCheckName"],
+      "collection": "regionHealthChecks"
+    },
+    "RegionHealthCheckService": {
+      "pattern": "projects/*/regions/*/healthCheckServices/*",
+      "attributes": ["project", "region", "serviceName"],
+      "collection": "regionHealthCheckServices"
+    },
+    "RegionHealthSource": {
+      "pattern": "projects/*/regions/*/healthSources/*",
+      "attributes": ["project", "region", "sourceName"],
+      "collection": "regionHealthSources"
+    },
+    "RegionInstanceGroupManager": {
+      "pattern": "projects/*/regions/*/instanceGroupManagers/*",
+      "attributes": ["project", "region", "managerName"],
+      "collection": "regionInstanceGroupManagers"
+    },
+    "RegionInstanceGroupManagerResizeRequest": {
+      "pattern": "projects/*/regions/*/instanceGroupManagers/*/resizeRequests/*",
+      "lifecycleOnly": true,
+      "collection": "regionInstanceGroupManagerResizeRequests"
+    },
+    "RegionInstanceTemplate": {
+      "pattern": "projects/*/regions/*/instanceTemplates/*",
+      "attributes": ["project", "region", "templateName"],
+      "collection": "regionInstanceTemplates"
+    },
+    "RegionInstantSnapshot": {
+      "pattern": "projects/*/regions/*/instantSnapshots/*",
+      "attributes": ["project", "region", "instantSnapshotName"],
+      "collection": "regionInstantSnapshots"
+    },
+    "RegionInstantSnapshotGroup": {
+      "pattern": "projects/*/regions/*/instantSnapshotGroups/*",
+      "attributes": ["project", "region", "instantSnapshotGroupName"],
+      "collection": "regionInstantSnapshotGroups"
+    },
+    "RegionNetworkEndpointGroup": {
+      "pattern": "projects/*/regions/*/networkEndpointGroups/*",
+      "attributes": ["project", "region", "networkEndpointGroupName"],
+      "collection": "regionNetworkEndpointGroups"
+    },
+    "RegionNetworkFirewallPolicy": {
+      "pattern": "projects/*/regions/*/firewallPolicies/*",
+      "attributes": ["project", "region", "firewallPolicyName"],
+      "collection": "regionNetworkFirewallPolicies"
+    },
+    "RegionNotificationEndpoint": {
+      "pattern": "projects/*/regions/*/notificationEndpoints/*",
+      "attributes": ["project", "region", "notificationEndpointName"],
+      "collection": "regionNotificationEndpoints"
+    },
+    "RegionSecurityPolicy": {
+      "pattern": "projects/*/regions/*/securityPolicies/*",
+      "attributes": ["project", "region", "securityPolicyName"],
+      "collection": "regionSecurityPolicies"
+    },
+    "RegionSnapshot": {
+      "pattern": "projects/*/regions/*/snapshots/*",
+      "attributes": ["project", "region", "snapshotName"],
+      "collection": "regionSnapshots"
+    },
+    "RegionSslCertificate": {
+      "pattern": "projects/*/regions/*/sslCertificates/*",
+      "attributes": ["project", "region", "sslCertificateName"],
+      "collection": "regionSslCertificates"
+    },
+    "RegionSslPolicy": {
+      "pattern": "projects/*/regions/*/sslPolicies/*",
+      "attributes": ["project", "region", "sslPolicyName"],
+      "collection": "regionSslPolicies"
+    },
+    "RegionTargetHttpProxy": {
+      "pattern": "projects/*/regions/*/targetHttpProxies/*",
+      "attributes": ["project", "region", "targetHttpProxyName"],
+      "collection": "regionTargetHttpProxies"
+    },
+    "RegionTargetHttpsProxy": {
+      "pattern": "projects/*/regions/*/targetHttpsProxies/*",
+      "attributes": ["project", "region", "targetHttpsProxyName"],
+      "collection": "regionTargetHttpsProxies"
+    },
+    "RegionTargetTcpProxy": {
+      "pattern": "projects/*/regions/*/targetTcpProxies/*",
+      "attributes": ["project", "region", "targetTcpProxyName"],
+      "collection": "regionTargetTcpProxies"
+    },
+    "RegionUrlMap": {
+      "pattern": "projects/*/regions/*/urlMaps/*",
+      "attributes": ["project", "region", "urlMapName"],
+      "collection": "regionUrlMaps"
+    },
+    "Reservation": {
+      "pattern": "projects/*/zones/*/reservations/*",
+      "attributes": ["project", "zone", "reservationName"]
+    },
+    "ResourcePolicy": {
+      "pattern": "projects/*/regions/*/resourcePolicies/*",
+      "attributes": ["project", "region", "resourcePolicyName"]
+    },
+    "RolloutPlan": {
+      "pattern": "projects/*/global/rolloutPlans/*",
+      "attributes": ["project", "rolloutPlanName"]
+    },
+    "Route": {
+      "pattern": "projects/*/global/routes/*",
+      "attributes": ["project", "routeName"]
+    },
+    "Router": {
+      "pattern": "projects/*/regions/*/routers/*",
+      "attributes": ["project", "region", "routerName"]
+    },
+    "SecurityPolicy": {
+      "pattern": "projects/*/global/securityPolicies/*",
+      "attributes": ["project", "securityPolicyName"]
+    },
+    "ServiceAttachment": {
+      "pattern": "projects/*/regions/*/serviceAttachments/*",
+      "attributes": ["project", "region", "serviceAttachmentName"]
+    },
+    "Snapshot": {
+      "pattern": "projects/*/global/snapshots/*",
+      "attributes": ["project", "snapshotName"]
+    },
+    "SslCertificate": {
+      "pattern": "projects/*/global/sslCertificates/*",
+      "attributes": ["project", "sslCertificateName"]
+    },
+    "SslPolicy": {
+      "pattern": "projects/*/global/sslPolicies/*",
+      "attributes": ["project", "sslPolicyName"]
+    },
+    "StoragePool": {
+      "pattern": "projects/*/zones/*/storagePools/*",
+      "attributes": ["project", "zone", "storagePoolName"]
+    },
+    "Subnetwork": {
+      "pattern": "projects/*/regions/*/subnetworks/*",
+      "attributes": ["project", "region", "subnetworkName"]
+    },
+    "TargetGrpcProxy": {
+      "pattern": "projects/*/global/targetGrpcProxies/*",
+      "attributes": ["project", "targetGrpcProxyName"]
+    },
+    "TargetHttpProxy": {
+      "pattern": "projects/*/global/targetHttpProxies/*",
+      "attributes": ["project", "targetHttpProxyName"]
+    },
+    "TargetHttpsProxy": {
+      "pattern": "projects/*/global/targetHttpsProxies/*",
+      "attributes": ["project", "targetHttpsProxyName"]
+    },
+    "TargetInstance": {
+      "pattern": "projects/*/zones/*/targetInstances/*",
+      "attributes": ["project", "zone", "targetInstanceName"]
+    },
+    "TargetPool": {
+      "pattern": "projects/*/regions/*/targetPools/*",
+      "attributes": ["project", "region", "targetPoolName"]
+    },
+    "TargetSslProxy": {
+      "pattern": "projects/*/global/targetSslProxies/*",
+      "attributes": ["project", "targetSslProxyName"]
+    },
+    "TargetTcpProxy": {
+      "pattern": "projects/*/global/targetTcpProxies/*",
+      "attributes": ["project", "targetTcpProxyName"]
+    },
+    "TargetVpnGateway": {
+      "pattern": "projects/*/regions/*/targetVpnGateways/*",
+      "attributes": ["project", "region", "targetVpnGatewayName"]
+    },
+    "UrlMap": {
+      "pattern": "projects/*/global/urlMaps/*",
+      "attributes": ["project", "urlMapName"]
+    },
+    "VpnGateway": {
+      "pattern": "projects/*/regions/*/vpnGateways/*",
+      "attributes": ["project", "region", "vpnGatewayName"]
+    },
+    "VpnTunnel": {
+      "pattern": "projects/*/regions/*/vpnTunnels/*",
+      "attributes": ["project", "region", "vpnTunnelName"]
+    },
+    "WireGroup": {
+      "pattern": "projects/*/global/crossSiteNetworks/*/wireGroups/*",
+      "lifecycleOnly": true
+    },
+    "ZoneVmExtensionPolicy": {
+      "pattern": "projects/*/zones/*/vmExtensionPolicies/*",
+      "attributes": ["project", "zone", "vmExtensionPolicyName"],
+      "collection": "zoneVmExtensionPolicies"
+    }
+  },
+  "permissionCollections": {
+    "regionDisks": "disks",
+    "regionAutoscalers": "autoscalers",
+    "regionInstanceGroupManagers": "instanceGroupManagers",
+    "regionInstanceTemplates": "instanceTemplates",
+    "regionInstantSnapshots": "instantSnapshots",
+    "regionInstantSnapshotGroups": "instantSnapshotGroups",
+    "regionSnapshots": "snapshots",
+    "regionInstanceGroups": "instanceGroups",
+    "networkFirewallPolicies": "firewallPolicies",
+    "regionNetworkFirewallPolicies": "regionFirewallPolicies",
+    "globalVmExtensionPolicies": "vmExtensionPolicies",
+    "zoneVmExtensionPolicies": "vmExtensionPolicies",
+    "regionInstances": "instances",
+    "regionCommitments": "commitments",
+    "regionNetworkEndpointGroups": "networkEndpointGroups",
+    "instanceGroupManagerResizeRequests": "instanceGroupManagers",
+    "regionInstanceGroupManagerResizeRequests": "instanceGroupManagers",
+    "regionSnapshotSettings": "snapshotSettings",
+    "regionZones": "zones",
+    "storagePoolTypes": "storagePools",
+    "regionDiskTypes": "diskTypes"
+  },
+  "verbPermissions": {
+    "setEdgeSecurityPolicy": "update",
+    "patchPacketMirroringRule": "update",
+    "addPacketMirroringRule": "update",
+    "removePacketMirroringRule": "update",
+    "patchRule": "update",
+    "addRule": "update",
+    "removeRule": "update",
+    "addAssociation": "update",
+    "removeAssociation": "update",
+    "patchAssociation": "update",
+    "cancel": "update",
+    "updatePerInstanceConfigs": "update",
+    "patchPerInstanceConfigs": "update",
+    "deletePerInstanceConfigs": "update",
+    "resumeInstances": "update",
+    "setTargetPools": "update",
+    "resize": "update",
+    "abandonInstances": "update",
+    "recreateInstances": "update",
+    "startInstances": "update",
+    "stopInstances": "update",
+    "suspendInstances": "update",
+    "deleteInstances": "update",
+    "setInstanceTemplate": "update",
+    "createInstances": "update",
+    "applyUpdatesToInstances": "update",
+    "addInstances": "update",
+    "removeInstances": "update",
+    "setNamedPorts": "update",
+    "patchNamedSet": "update",
+    "updateNamedSet": "update",
+    "deleteNamedSet": "update",
+    "patchRoutePolicy": "update",
+    "requestRemovePeering": "update",
+    "cancelRequestRemovePeering": "update",
+    "setBackup": "update",
+    "createMembers": "update",
+    "withdraw": "update",
+    "announce": "update",
+    "setProxyHeader": "update",
+    "setBackendService": "update",
+    "getHealth": "get",
+    "getEffectiveSecurityPolicies": "get",
+    "getPacketMirroringRule": "get",
+    "getRule": "get",
+    "getAssociation": "get",
+    "getEffectiveFirewalls": "get",
+    "listPerInstanceConfigs": "get",
+    "listManagedInstances": "get",
+    "listErrors": "get",
+    "listNetworkEndpoints": "get",
+    "listNodes": "get",
+    "getNatMappingInfo": "get",
+    "getNatIpInfo": "get",
+    "listNamedSets": "get",
+    "getNamedSet": "get",
+    "getRouterStatus": "get",
+    "preview": "get",
+    "getStatus": "get",
+    "getOperationalStatus": "get",
+    "getDiagnostics": "get",
+    "listDisks": "get",
+    "listUsable": "list",
+    "listPreconfiguredExpressionSets": "list",
+    "listInstances": "list",
+    "bulkInsert": "create",
+    "bulkSetLabels": "setLabels"
+  },
+  "skip": {
+    "compute.projects.disableXpnResource": "Shared VPC administration: organization setup, not a runtime call",
+    "compute.projects.enableXpnResource": "Shared VPC administration: organization setup, not a runtime call",
+    "compute.projects.enableXpnHost": "Shared VPC administration: organization setup, not a runtime call",
+    "compute.projects.disableXpnHost": "Shared VPC administration: organization setup, not a runtime call",
+    "compute.projects.listXpnHosts": "Shared VPC administration: organization setup, not a runtime call",
+    "compute.projects.getXpnResources": "Shared VPC administration: organization setup, not a runtime call",
+    "compute.projects.getXpnHost": "Shared VPC administration: organization setup, not a runtime call",
+    "compute.projects.moveInstance": "deprecated: use instances.insert with a source machine image",
+    "compute.projects.moveDisk": "deprecated: use disks.insert with a source snapshot",
+    "compute.addresses.move": "moves the address to another project: infrastructure, not a runtime call",
+    "compute.globalAddresses.move": "moves the address to another project: infrastructure, not a runtime call",
+    "compute.instances.reportHostAsFaulty": "reports a hardware fault to Google: an operator action, not an application call",
+    "compute.globalOperations.delete": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.globalOperations.aggregatedList": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.globalOperations.get": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.globalOperations.wait": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.globalOperations.list": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.zoneOperations.delete": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.zoneOperations.wait": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.zoneOperations.list": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.zoneOperations.get": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.regionOperations.list": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.regionOperations.delete": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.regionOperations.wait": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.regionOperations.get": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.globalOrganizationOperations.list": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.globalOrganizationOperations.delete": "long-running operation polling: Alchemy waits on operations itself",
+    "compute.globalOrganizationOperations.get": "long-running operation polling: Alchemy waits on operations itself"
+  },
+  "probes": {
+    "resources": {
+      "Address": "Address",
+      "GlobalAddress": "GlobalAddress",
+      "Network": "Network",
+      "Subnetwork": "Subnetwork",
+      "Firewall": "Firewall",
+      "Route": "Route",
+      "Router": "Router",
+      "NetworkAttachment": "NetworkAttachment",
+      "NetworkFirewallPolicy": "NetworkFirewallPolicy",
+      "RegionNetworkFirewallPolicy": "RegionNetworkFirewallPolicy",
+      "ExternalVpnGateway": "ExternalVpnGateway",
+      "VpnGateway": "VpnGateway",
+      "TargetVpnGateway": "TargetVpnGateway",
+      "VpnTunnel": "VpnTunnel",
+      "CrossSiteNetwork": "CrossSiteNetwork",
+      "Disk": "Disk",
+      "RegionDisk": "RegionDisk",
+      "Snapshot": "Snapshot",
+      "RegionSnapshot": "RegionSnapshot",
+      "InstantSnapshot": "InstantSnapshot",
+      "RegionInstantSnapshot": "RegionInstantSnapshot",
+      "Image": "Image",
+      "ResourcePolicy": "ResourcePolicy",
+      "Instance": "Instance",
+      "MachineImage": "MachineImage",
+      "TargetInstance": "TargetInstance",
+      "InstanceTemplate": "InstanceTemplate",
+      "RegionInstanceTemplate": "RegionInstanceTemplate",
+      "InstanceGroup": "InstanceGroup",
+      "InstanceGroupManager": "InstanceGroupManager",
+      "RegionInstanceGroupManager": "RegionInstanceGroupManager",
+      "Autoscaler": "Autoscaler",
+      "RegionAutoscaler": "RegionAutoscaler",
+      "NetworkEndpointGroup": "NetworkEndpointGroup",
+      "RegionNetworkEndpointGroup": "RegionNetworkEndpointGroup",
+      "GlobalNetworkEndpointGroup": "GlobalNetworkEndpointGroup",
+      "ZoneVmExtensionPolicy": "ZoneVmExtensionPolicy",
+      "GlobalVmExtensionPolicy": "GlobalVmExtensionPolicy",
+      "RolloutPlan": "RolloutPlan",
+      "Reservation": "Reservation",
+      "License": "License",
+      "NodeTemplate": "NodeTemplate",
+      "HealthCheck": "HealthCheck",
+      "HttpHealthCheck": "HttpHealthCheck",
+      "HttpsHealthCheck": "HttpsHealthCheck",
+      "RegionHealthCheck": "RegionHealthCheck",
+      "RegionHealthAggregationPolicy": "RegionHealthAggregationPolicy",
+      "RegionBackendService": "RegionBackendService",
+      "RegionHealthSource": "RegionHealthSource",
+      "BackendService": "BackendService",
+      "BackendBucket": "BackendBucket",
+      "RegionBackendBucket": "RegionBackendBucket",
+      "UrlMap": "UrlMap",
+      "RegionUrlMap": "RegionUrlMap",
+      "SslCertificate": "SslCertificate",
+      "RegionSslCertificate": "RegionSslCertificate",
+      "SslPolicy": "SslPolicy",
+      "RegionSslPolicy": "RegionSslPolicy",
+      "SecurityPolicy": "SecurityPolicy",
+      "RegionSecurityPolicy": "RegionSecurityPolicy",
+      "TargetHttpProxy": "TargetHttpProxy",
+      "TargetHttpsProxy": "TargetHttpsProxy",
+      "RegionTargetHttpProxy": "RegionTargetHttpProxy",
+      "RegionTargetHttpsProxy": "RegionTargetHttpsProxy",
+      "RegionTargetTcpProxy": "RegionTargetTcpProxy",
+      "TargetTcpProxy": "TargetTcpProxy",
+      "TargetSslProxy": "TargetSslProxy",
+      "TargetGrpcProxy": "TargetGrpcProxy",
+      "TargetPool": "TargetPool",
+      "ForwardingRule": "ForwardingRule",
+      "GlobalForwardingRule": "GlobalForwardingRule"
+    },
+    "untestable": {
+      "FutureReservation": "the testing project is not eligible (412 FutureReservationsNotEligible)",
+      "GlobalPublicDelegatedPrefix": "needs a bring-your-own-IP range verified to the project",
+      "PublicDelegatedPrefix": "needs a bring-your-own-IP range verified to the project",
+      "PublicAdvertisedPrefix": "needs a bring-your-own-IP range verified to the project",
+      "Interconnect": "needs a physical Dedicated Interconnect cross-connect",
+      "InterconnectAttachment": "needs a Partner or Dedicated Interconnect",
+      "InterconnectAttachmentGroup": "needs Interconnect attachments",
+      "InterconnectGroup": "needs physical Interconnects",
+      "NetworkEdgeSecurityService": "needs Cloud Armor Managed Protection Plus",
+      "NodeGroup": "a sole-tenant node bills for a whole host (several dollars per hour)",
+      "StoragePool": "a Hyperdisk storage pool bills for its provisioned capacity (10 TiB minimum)",
+      "RegionHealthCheckService": "Health Check as a Service is allowlisted; the testing project is not",
+      "RegionNotificationEndpoint": "Health Check as a Service is allowlisted; the testing project is not"
+    },
+    "args": {
+      "SetInstanceDeletionProtection": "{ deletionProtection: false }",
+      "ResizeInstanceGroupManager": "{ size: 0 }",
+      "ResizeRegionInstanceGroupManager": "{ size: 0 }",
+      "SetProjectDefaultNetworkTier": "{ body: { networkTier: \"NOT_A_TIER\" } }",
+      "SetProjectCloudArmorTier": "{ body: { cloudArmorTier: \"NOT_A_TIER\" } }",
+      "PatchInstanceSetting": "{ zone: \"us-central1-a\", body: { fingerprint: \"AAAAAAAAAAA=\" } }"
+    },
+    "skip": {
+      "InsertRegionCommitment": "a commitment is a 1- or 3-year billing contract that can't be cancelled",
+      "SetProjectUsageExportBucket": "would point the shared testing project's usage reports at another bucket",
+      "SetProjectCommonInstanceMetadata": "also needs iam.serviceAccounts.actAs on the project, which would let the host act as every service account"
+    }
+  }
+}

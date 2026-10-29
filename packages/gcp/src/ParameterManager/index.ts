@@ -6,3 +6,4 @@ export * from "./Parameter.ts";
 export * from "./ParametersVersion.ts";
 export * from "./RenderParameterVersion.ts";
 export * from "./RenderParameterVersionHttp.ts";
+export * from "./generated.ts";

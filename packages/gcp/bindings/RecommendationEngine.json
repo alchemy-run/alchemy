@@ -1,0 +1,15 @@
+{
+  "discovery": "recommendationengine-v1beta1",
+  "module": "recommendationengine_v1beta1",
+  "resources": {
+    "CatalogsCatalogItem": {
+      "pattern": "projects/*/locations/*/catalogs/*/catalogItems/.*"
+    }
+  },
+  "permissionService": "automlrecommendations",
+  "probes": {
+    "resources": {
+      "CatalogsCatalogItem": "Shirt"
+    }
+  }
+}

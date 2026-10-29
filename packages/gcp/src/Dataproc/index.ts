@@ -10,3 +10,4 @@ export * from "./SessionTemplate.ts";
 export * from "./SubmitJob.ts";
 export * from "./SubmitJobHttp.ts";
 export * from "./WorkflowTemplate.ts";
+export * from "./generated.ts";

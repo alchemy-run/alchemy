@@ -1,0 +1,21 @@
+{
+  "discovery": "recaptchaenterprise-v1",
+  "module": "recaptchaenterprise_v1",
+  "resources": {
+    "Firewallpolicy": {
+      "pattern": "projects/*/firewallpolicies/*"
+    },
+    "Key": {
+      "pattern": "projects/*/keys/*"
+    }
+  },
+  "permissions": {
+    "recaptchaenterprise.projects.relatedaccountgroups.memberships.list": "recaptchaenterprise.relatedaccountgroupmemberships.list",
+    "recaptchaenterprise.projects.relatedaccountgroupmemberships.search": "recaptchaenterprise.relatedaccountgroupmemberships.list"
+  },
+  "probes": {
+    "resources": {
+      "Key": "Signup"
+    }
+  }
+}

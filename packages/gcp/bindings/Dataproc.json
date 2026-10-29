@@ -1,0 +1,37 @@
+{
+  "discovery": "dataproc-v1",
+  "module": "dataproc_v1",
+  "resources": {
+    "AutoscalingPolicy": {
+      "pattern": "projects/*/locations/*/autoscalingPolicies/*"
+    },
+    "Batch": {
+      "pattern": "projects/*/locations/*/batches/*"
+    },
+    "Cluster": {
+      "pattern": "projects/*/regions/*/clusters/*",
+      "iamKind": "dataproc.cluster",
+      "attributes": ["project", "region", "clusterName"]
+    },
+    "RegionsAutoscalingPolicy": {
+      "pattern": "projects/*/regions/*/autoscalingPolicies/*"
+    },
+    "RegionsWorkflowTemplate": {
+      "pattern": "projects/*/regions/*/workflowTemplates/*"
+    },
+    "Session": {
+      "pattern": "projects/*/locations/*/sessions/*"
+    },
+    "SessionTemplate": {
+      "pattern": "projects/*/locations/*/sessionTemplates/*"
+    },
+    "WorkflowTemplate": {
+      "pattern": "projects/*/locations/*/workflowTemplates/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Cluster": "Jobs"
+    }
+  }
+}

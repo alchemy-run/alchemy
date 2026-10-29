@@ -1,0 +1,22 @@
+{
+  "discovery": "ml-v1",
+  "module": "ml_v1",
+  "resources": {
+    "Model": {
+      "pattern": "projects/*/models/*",
+      "iamKind": "ml.model"
+    },
+    "ModelsVersion": {
+      "pattern": "projects/*/models/*/versions/*"
+    }
+  },
+  "permissions": {
+    "ml.projects.explain": "ml.models.predict"
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "Cloud AI Platform (ml v1) is deprecated; new projects get AiPlatformDeprecated"
+    }
+  }
+}

@@ -9,3 +9,4 @@ export * from "./GetUserWorkloadsConfigMap.ts";
 export * from "./GetUserWorkloadsConfigMapHttp.ts";
 export * from "./GetUserWorkloadsSecret.ts";
 export * from "./GetUserWorkloadsSecretHttp.ts";
+export * from "./generated.ts";

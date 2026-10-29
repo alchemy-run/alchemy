@@ -13,3 +13,4 @@ export * from "./StopWorkstationHttp.ts";
 export * from "./WorkstationCluster.ts";
 export * from "./WorkstationClustersWorkstationConfig.ts";
 export * from "./WorkstationClustersWorkstationConfigsWorkstation.ts";
+export * from "./generated.ts";

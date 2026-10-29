@@ -8,3 +8,4 @@ export * from "./GetNodePool.ts";
 export * from "./GetNodePoolHttp.ts";
 export * from "./KubernetesAdapter.ts";
 export * from "./NodePool.ts";
+export * from "./generated.ts";

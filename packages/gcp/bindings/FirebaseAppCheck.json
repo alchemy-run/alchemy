@@ -1,0 +1,39 @@
+{
+  "discovery": "firebaseappcheck-v1",
+  "module": "firebaseappcheck_v1",
+  "resources": {
+    "AppsDebugToken": {
+      "pattern": "projects/*/apps/*/debugTokens/*"
+    },
+    "ServicesResourcePolicy": {
+      "pattern": "projects/*/services/*/resourcePolicies/*"
+    }
+  },
+  "skip": {
+    "firebaseappcheck.projects.apps.exchangeRecaptchaV3Token": "called by client apps with an attestation, not by a service account",
+    "firebaseappcheck.projects.apps.exchangeAppAttestAttestation": "called by client apps with an attestation, not by a service account",
+    "firebaseappcheck.projects.apps.generatePlayIntegrityChallenge": "called by client apps with an attestation, not by a service account",
+    "firebaseappcheck.projects.apps.exchangeDeviceCheckToken": "called by client apps with an attestation, not by a service account",
+    "firebaseappcheck.projects.apps.generateAppAttestChallenge": "called by client apps with an attestation, not by a service account",
+    "firebaseappcheck.projects.apps.exchangeAppAttestAssertion": "called by client apps with an attestation, not by a service account",
+    "firebaseappcheck.projects.apps.exchangeCustomToken": "called by client apps with an attestation, not by a service account",
+    "firebaseappcheck.projects.apps.exchangePlayIntegrityToken": "called by client apps with an attestation, not by a service account",
+    "firebaseappcheck.projects.apps.exchangeRecaptchaEnterpriseToken": "called by client apps with an attestation, not by a service account",
+    "firebaseappcheck.projects.apps.exchangeSafetyNetToken": "called by client apps with an attestation, not by a service account",
+    "firebaseappcheck.projects.apps.exchangeDebugToken": "called by client apps with an attestation, not by a service account",
+    "firebaseappcheck.jwks.get": "a public endpoint client apps call; it takes no project credentials",
+    "firebaseappcheck.oauthClients.generateAppAttestChallenge": "a public endpoint client apps call; it takes no project credentials",
+    "firebaseappcheck.oauthClients.exchangeAppAttestAssertion": "a public endpoint client apps call; it takes no project credentials",
+    "firebaseappcheck.oauthClients.exchangeDebugToken": "a public endpoint client apps call; it takes no project credentials",
+    "firebaseappcheck.oauthClients.exchangeAppAttestAttestation": "a public endpoint client apps call; it takes no project credentials"
+  },
+  "permissions": {
+    "firebaseappcheck.projects.apps.mintAppCheckToken": "firebaseappcheck.tokens.mint"
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "the testing project has no Firebase app, so App Check answers ServiceDisabled"
+    }
+  }
+}

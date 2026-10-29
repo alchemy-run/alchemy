@@ -1,0 +1,22 @@
+{
+  "discovery": "privateca-v1",
+  "module": "privateca_v1",
+  "resources": {
+    "CaPool": {
+      "pattern": "projects/*/locations/*/caPools/*",
+      "iamKind": "privateca.caPool"
+    },
+    "CertificateAuthority": {
+      "pattern": "projects/*/locations/*/caPools/*/certificateAuthorities/*"
+    },
+    "CertificateTemplate": {
+      "pattern": "projects/*/locations/*/certificateTemplates/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "CaPool": "Pool",
+      "CertificateAuthority": "Root"
+    }
+  }
+}

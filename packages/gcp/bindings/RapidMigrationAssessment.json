@@ -1,0 +1,9 @@
+{
+  "discovery": "rapidmigrationassessment-v1",
+  "module": "rapidmigrationassessment_v1",
+  "resources": {
+    "Collector": {
+      "pattern": "projects/*/locations/*/collectors/*"
+    }
+  }
+}

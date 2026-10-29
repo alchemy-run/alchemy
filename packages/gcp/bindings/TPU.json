@@ -1,0 +1,22 @@
+{
+  "discovery": "tpu-v2",
+  "module": "tpu_v2",
+  "resources": {
+    "Node": {
+      "pattern": "projects/*/locations/*/nodes/*"
+    },
+    "QueuedResource": {
+      "pattern": "projects/*/locations/*/queuedResources/*"
+    }
+  },
+  "permissions": {
+    "tpu.projects.locations.queuedResources.list": "tpu.nodes.list",
+    "tpu.projects.locations.queuedResources.reset": "tpu.nodes.reset"
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "Cloud TPU is disabled on the testing project and TPU VMs bill by the hour"
+    }
+  }
+}

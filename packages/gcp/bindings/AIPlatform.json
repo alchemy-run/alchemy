@@ -1,0 +1,188 @@
+{
+  "discovery": "aiplatform-v1",
+  "module": "aiplatform_v1",
+  "resources": {
+    "Agent": {
+      "pattern": "projects/*/locations/*/agents/*"
+    },
+    "BatchPredictionJob": {
+      "pattern": "projects/*/locations/*/batchPredictionJobs/*"
+    },
+    "CachedContent": {
+      "pattern": "projects/*/locations/*/cachedContents/*"
+    },
+    "CustomJob": {
+      "pattern": "projects/*/locations/*/customJobs/*"
+    },
+    "DataLabelingJob": {
+      "pattern": "projects/*/locations/*/dataLabelingJobs/*"
+    },
+    "Dataset": {
+      "pattern": "datasets/*"
+    },
+    "DatasetsDatasetVersion": {
+      "pattern": "datasets/*/datasetVersions/*"
+    },
+    "DeploymentResourcePool": {
+      "pattern": "projects/*/locations/*/deploymentResourcePools/*"
+    },
+    "Endpoint": {
+      "pattern": "projects/*/locations/*/endpoints/*"
+    },
+    "EvaluationItem": {
+      "pattern": "projects/*/locations/*/evaluationItems/*"
+    },
+    "EvaluationRun": {
+      "pattern": "projects/*/locations/*/evaluationRuns/*"
+    },
+    "EvaluationSet": {
+      "pattern": "projects/*/locations/*/evaluationSets/*"
+    },
+    "FeatureGroup": {
+      "pattern": "projects/*/locations/*/featureGroups/*"
+    },
+    "FeatureGroupsFeature": {
+      "pattern": "projects/*/locations/*/featureGroups/*/features/*"
+    },
+    "FeatureOnlineStore": {
+      "pattern": "projects/*/locations/*/featureOnlineStores/*"
+    },
+    "FeatureOnlineStoresFeatureView": {
+      "pattern": "projects/*/locations/*/featureOnlineStores/*/featureViews/*"
+    },
+    "Featurestore": {
+      "pattern": "projects/*/locations/*/featurestores/*"
+    },
+    "FeaturestoresEntityType": {
+      "pattern": "projects/*/locations/*/featurestores/*/entityTypes/*"
+    },
+    "FeaturestoresEntityTypesFeature": {
+      "pattern": "projects/*/locations/*/featurestores/*/entityTypes/*/features/*"
+    },
+    "HyperparameterTuningJob": {
+      "pattern": "projects/*/locations/*/hyperparameterTuningJobs/*"
+    },
+    "Index": {
+      "pattern": "projects/*/locations/*/indexes/*",
+      "file": "Indexes"
+    },
+    "IndexEndpoint": {
+      "pattern": "projects/*/locations/*/indexEndpoints/*"
+    },
+    "MetadataStore": {
+      "pattern": "projects/*/locations/*/metadataStores/*"
+    },
+    "MetadataStoresArtifact": {
+      "pattern": "projects/*/locations/*/metadataStores/*/artifacts/*"
+    },
+    "MetadataStoresContext": {
+      "pattern": "projects/*/locations/*/metadataStores/*/contexts/*"
+    },
+    "MetadataStoresExecution": {
+      "pattern": "projects/*/locations/*/metadataStores/*/executions/*"
+    },
+    "ModelDeploymentMonitoringJob": {
+      "pattern": "projects/*/locations/*/modelDeploymentMonitoringJobs/*"
+    },
+    "NasJob": {
+      "pattern": "projects/*/locations/*/nasJobs/*"
+    },
+    "NotebookExecutionJob": {
+      "pattern": "projects/*/locations/*/notebookExecutionJobs/*"
+    },
+    "NotebookRuntimeTemplate": {
+      "pattern": "projects/*/locations/*/notebookRuntimeTemplates/*"
+    },
+    "OnlineEvaluator": {
+      "pattern": "projects/*/locations/*/onlineEvaluators/*"
+    },
+    "PersistentResource": {
+      "pattern": "projects/*/locations/*/persistentResources/*"
+    },
+    "PipelineJob": {
+      "pattern": "projects/*/locations/*/pipelineJobs/*"
+    },
+    "RagCorpora": {
+      "pattern": "projects/*/locations/*/ragCorpora/*"
+    },
+    "ReasoningEngine": {
+      "pattern": "projects/*/locations/*/reasoningEngines/*"
+    },
+    "ReasoningEnginesMemory": {
+      "pattern": "projects/*/locations/*/reasoningEngines/*/memories/*"
+    },
+    "ReasoningEnginesSandboxEnvironment": {
+      "pattern": "reasoningEngines/*/sandboxEnvironments/*"
+    },
+    "ReasoningEnginesSandboxEnvironmentTemplate": {
+      "pattern": "projects/*/locations/*/reasoningEngines/*/sandboxEnvironmentTemplates/*"
+    },
+    "ReasoningEnginesSession": {
+      "pattern": "projects/*/locations/*/reasoningEngines/*/sessions/*"
+    },
+    "Schedule": {
+      "pattern": "projects/*/locations/*/schedules/*"
+    },
+    "SemanticGovernancePolicy": {
+      "pattern": "projects/*/locations/*/semanticGovernancePolicies/*"
+    },
+    "SpecialistPool": {
+      "pattern": "projects/*/locations/*/specialistPools/*"
+    },
+    "StudiesTrial": {
+      "pattern": "projects/*/locations/*/studies/*/trials/*"
+    },
+    "Study": {
+      "pattern": "projects/*/locations/*/studies/*"
+    },
+    "Tensorboard": {
+      "pattern": "projects/*/locations/*/tensorboards/*"
+    },
+    "TensorboardsExperiment": {
+      "pattern": "projects/*/locations/*/tensorboards/*/experiments/*"
+    },
+    "TensorboardsExperimentsRun": {
+      "pattern": "projects/*/locations/*/tensorboards/*/experiments/*/runs/*"
+    },
+    "TensorboardsExperimentsRunsTimeSeries": {
+      "pattern": "projects/*/locations/*/tensorboards/*/experiments/*/runs/*/timeSeries/*"
+    },
+    "TrainingPipeline": {
+      "pattern": "projects/*/locations/*/trainingPipelines/*"
+    },
+    "TuningJob": {
+      "pattern": "projects/*/locations/*/tuningJobs/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "ReasoningEngine": "Agent",
+      "TrainingPipeline": "Train",
+      "ReasoningEnginesSandboxEnvironment": "Code",
+      "ReasoningEnginesSandboxEnvironmentTemplate": "Browser",
+      "Dataset": "ProbeDataset",
+      "Endpoint": "ProbeEndpoint",
+      "IndexEndpoint": "ProbeIndexEndpoint",
+      "MetadataStore": "ProbeMetadataStore",
+      "MetadataStoresArtifact": "ProbeArtifact",
+      "MetadataStoresContext": "ProbeContext",
+      "MetadataStoresExecution": "ProbeExecution",
+      "Tensorboard": "ProbeTensorboard",
+      "TensorboardsExperiment": "ProbeExperiment",
+      "TensorboardsExperimentsRun": "ProbeRun",
+      "Study": "ProbeStudy",
+      "NotebookRuntimeTemplate": "ProbeNotebookTemplate",
+      "EvaluationSet": "ProbeEvaluationSet",
+      "ReasoningEnginesSession": "ProbeSession"
+    }
+  },
+  "permissions": {
+    "aiplatform.projects.getCacheConfig": "aiplatform.cacheConfigs.get",
+    "aiplatform.projects.updateCacheConfig": "aiplatform.cacheConfigs.update"
+  },
+  "skip": {
+    "aiplatform.projects.locations.reasoningEngines.get": "the hand-written binding of the same name reaches the same resource",
+    "aiplatform.projects.locations.reasoningEngines.sandboxEnvironmentTemplates.get": "the hand-written binding of the same name reaches the same resource",
+    "aiplatform.projects.locations.reasoningEngines.query": "the hand-written binding of the same name reaches the same resource"
+  }
+}

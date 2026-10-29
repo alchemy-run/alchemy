@@ -1,0 +1,47 @@
+{
+  "discovery": "bigquerydatatransfer-v1",
+  "module": "bigquerydatatransfer_v1",
+  "resources": {
+    "TransferConfig": {
+      "pattern": "projects/*/locations/*/transferConfigs/*"
+    }
+  },
+  "permissionService": "bigquery",
+  "permissionCollections": {
+    "transferConfigs": "transfers",
+    "runs": "transfers",
+    "transferLogs": "transfers",
+    "transferResources": "transfers",
+    "dataSources": "transfers"
+  },
+  "verbPermissions": {
+    "list": "get",
+    "scheduleRuns": "update",
+    "startManualRuns": "update",
+    "checkValidCreds": "get",
+    "enrollDataSources": "update",
+    "unenrollDataSources": "update",
+    "delete": "update",
+    "patch": "update"
+  },
+  "permissions": {
+    "bigquerydatatransfer.projects.enrollDataSources": "bigquery.transfers.update"
+  },
+  "skip": {
+    "bigquerydatatransfer.projects.transferConfigs.scheduleRuns": "the location-scoped method reaches the same transfer configs and is the one GCP documents",
+    "bigquerydatatransfer.projects.transferConfigs.get": "the location-scoped method reaches the same transfer configs and is the one GCP documents",
+    "bigquerydatatransfer.projects.transferConfigs.transferResources.get": "the location-scoped method reaches the same transfer configs and is the one GCP documents",
+    "bigquerydatatransfer.projects.transferConfigs.transferResources.list": "the location-scoped method reaches the same transfer configs and is the one GCP documents",
+    "bigquerydatatransfer.projects.transferConfigs.runs.get": "the location-scoped method reaches the same transfer configs and is the one GCP documents",
+    "bigquerydatatransfer.projects.transferConfigs.runs.list": "the location-scoped method reaches the same transfer configs and is the one GCP documents",
+    "bigquerydatatransfer.projects.transferConfigs.runs.delete": "the location-scoped method reaches the same transfer configs and is the one GCP documents",
+    "bigquerydatatransfer.projects.transferConfigs.runs.transferLogs.list": "the location-scoped method reaches the same transfer configs and is the one GCP documents",
+    "bigquerydatatransfer.projects.transferConfigs.patch": "the location-scoped method reaches the same transfer configs and is the one GCP documents",
+    "bigquerydatatransfer.projects.transferConfigs.delete": "the location-scoped method reaches the same transfer configs and is the one GCP documents"
+  },
+  "probes": {
+    "resources": {
+      "TransferConfig": "Nightly"
+    }
+  }
+}

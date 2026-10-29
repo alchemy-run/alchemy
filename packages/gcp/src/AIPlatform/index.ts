@@ -67,3 +67,4 @@ export * from "./TensorboardsExperiment.ts";
 export * from "./TensorboardsExperimentsRun.ts";
 export * from "./TensorboardsExperimentsRunsTimeSeries.ts";
 export * from "./TrainingPipeline.ts";
+export * from "./generated.ts";

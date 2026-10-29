@@ -1,0 +1,29 @@
+{
+  "discovery": "binaryauthorization-v1",
+  "module": "binaryauthorization_v1",
+  "resources": {
+    "Attestor": {
+      "pattern": "projects/*/attestors/*",
+      "iamKind": "binaryauthorization.attestor"
+    },
+    "PlatformsPolicy": {
+      "pattern": "projects/*/platforms/*/policies/*"
+    }
+  },
+  "permissions": {
+    "binaryauthorization.projects.updatePolicy": "binaryauthorization.policy.update",
+    "binaryauthorization.projects.getPolicy": "binaryauthorization.policy.get",
+    "binaryauthorization.projects.platforms.policies.replacePlatformPolicy": "binaryauthorization.platformPolicies.replace",
+    "binaryauthorization.projects.platforms.policies.list": "binaryauthorization.platformPolicies.list"
+  },
+  "skip": {
+    "binaryauthorization.systempolicy.getPolicy": "Google's system policy for a location, not a project resource",
+    "binaryauthorization.projects.updatePolicy": "replaces the project's whole Binary Authorization policy; declare it with GCP.BinaryAuthorization.Policy"
+  },
+  "probes": {
+    "resources": {
+      "Attestor": "Viewed",
+      "PlatformsPolicy": "GkePolicy"
+    }
+  }
+}

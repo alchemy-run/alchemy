@@ -5,3 +5,4 @@ export * from "./Lookup.ts";
 export * from "./LookupHttp.ts";
 export * from "./RunQuery.ts";
 export * from "./RunQueryHttp.ts";
+export * from "./generated.ts";

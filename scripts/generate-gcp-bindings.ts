@@ -96,6 +96,8 @@ interface ResourceConfig {
    * `HttpsHealthCheck` resource's type `HttpsHealthCheckResource`.
    */
   typeName?: string;
+  /** The module defining the resource when it isn't `<key>.ts` (Datastore's `Indexes.ts`). */
+  file?: string;
   /** Why the resource gets no `consume<Resource>AuditLogs` source. */
   noAuditLogs?: string;
   /**
@@ -185,6 +187,32 @@ interface ServiceConfig extends Partial<ApiConfig> {
    * as `compute.instanceGroupManagers.update`.
    */
   verbPermissions?: Record<string, string>;
+  /**
+   * Live probes: when set, the generator also writes a Cloud Run host that
+   * calls every binding (`test/GCP/<Service>/fixtures/generated-host.ts`)
+   * and a test per binding (`test/GCP/<Service>/Generated.test.ts`).
+   */
+  probes?: ProbeConfig;
+}
+
+interface ProbeConfig {
+  /**
+   * Resource key → the export of `fixtures/generated-resources.ts` that
+   * deploys one for the probes to bind.
+   */
+  resources: Record<string, string>;
+  /**
+   * Resource key → why its bindings can't run live (each becomes a
+   * `test.skip`). `"project"` covers the project-scoped bindings, `"*"`
+   * every binding of the service.
+   */
+  untestable?: Record<string, string>;
+  /** Binding name → the request it is called with, replacing the placeholder. */
+  args?: Record<string, string>;
+  /** Binding name → why it isn't called (a `test.skip`). */
+  skip?: Record<string, string>;
+  /** The location probes call in, when the service has no `us-central1` (API Keys: `global`). */
+  location?: string;
 }
 
 // ============ Discovery ============
@@ -253,7 +281,11 @@ const singular = (word: string) =>
  * Trailing literal segments and `:verb` suffixes name the action, not the target.
  */
 const flatTarget = (path: string) => {
-  const parts = path.replace(/:[A-Za-z]+$/, "").split("/");
+  // A leading API version (`v1/projects/{projectId}`) isn't part of the target.
+  const parts = path
+    .replace(/:[A-Za-z]+$/, "")
+    .split("/")
+    .filter((part, i) => i !== 0 || !/^v\d+((alpha|beta)\d*)?$/.test(part));
   const segments: string[] = [];
   const params: string[] = [];
   for (const part of parts) {
@@ -294,6 +326,40 @@ const requiredMembers = (source: string, name: string): string[] => {
   const end = source.indexOf("\n}", start);
   return [...source.slice(start, end).matchAll(/^ {2}"?([\w.$]+)"?: /gm)].map((m) => m[1]!);
 };
+
+/** The text of an interface declaration, or "" when it isn't there. */
+const interfaceBody = (source: string, name: string) => {
+  const start = source.indexOf(`export interface ${name} {`);
+  return start === -1 ? "" : source.slice(start, source.indexOf("\n}", start));
+};
+
+/** Required members of a request interface with their declared types. */
+const requiredFieldTypes = (source: string, name: string): [string, string][] => {
+  const start = source.indexOf(`export interface ${name} {`);
+  if (start === -1) return [];
+  const end = source.indexOf("\n}", start);
+  return [...source.slice(start, end).matchAll(/^ {2}"?([\w.$]+)"?: ([^;]+);/gm)].map((m) => [
+    m[1]!,
+    m[2]!.trim(),
+  ]);
+};
+
+/**
+ * Request fields a name-style binding fills from the bound resource besides
+ * its name: a Storage Transfer job is addressed `transferJobs/{id}` with the
+ * project in `projectId`.
+ */
+const nameStyleFields = (resource: object, method: DiscoveryMethod) => {
+  const fields = "fields" in resource ? (resource.fields as Record<string, string>) : undefined;
+  const filled = Object.entries(fields ?? {}).filter(
+    ([field]) => method.parameters?.[field] !== undefined,
+  );
+  return filled.length ? Object.fromEntries(filled) : undefined;
+};
+
+/** Children the request names (a trailing singleton segment has no field). */
+const childFieldsOf = (variant: { children: [string, string][] }) =>
+  variant.children.filter(([, field]) => field !== "");
 
 // ============ Classification ============
 
@@ -454,6 +520,27 @@ const classify = (options: {
           : target.param !== undefined && target.segments.join("/") === "projects/*/locations/*"
             ? ("location" as const)
             : undefined;
+    // A resource Alchemy doesn't manage (a Redis cluster, a backup) under the
+    // project or one of its locations: a project-scoped binding whose
+    // request names it, `{ location, cluster }` → `…/clusters/{cluster}`.
+    const unmanaged =
+      scope === undefined && matched === undefined && !created && target.param !== undefined
+        ? target.segments[0] === "projects" &&
+          target.segments[1] === "*" &&
+          target.segments[2] === "locations" &&
+          target.segments[3] === "*"
+          ? { scope: "location" as const, prefix: target.segments.slice(0, 4) }
+          : target.segments[0] === "projects" && target.segments[1] === "*"
+            ? { scope: "project" as const, prefix: target.segments.slice(0, 2) }
+            : undefined
+        : undefined;
+    const unmanagedRest = unmanaged ? target.segments.slice(unmanaged.prefix.length) : [];
+    const unmanagedOk =
+      unmanaged !== undefined &&
+      unmanagedRest.length > 0 &&
+      // Collection/id pairs, optionally ending in a singleton
+      // (`clusters/*/certificateAuthority`).
+      unmanagedRest.every((s, i) => (i % 2 === 1) === (s === "*"));
     const resource =
       (projectCall ? undefined : matched) ??
       (scope !== undefined && !config.noProjectBindings
@@ -462,7 +549,14 @@ const classify = (options: {
             pattern: target.segments.join("/"),
             segments: target.segments,
           }
-        : undefined);
+        : unmanagedOk && !config.noProjectBindings
+          ? {
+              key: `@${unmanaged!.scope}`,
+              pattern: unmanaged!.prefix.join("/"),
+              segments: unmanaged!.prefix,
+            }
+          : undefined);
+    const effectiveScope = scope ?? (unmanagedOk ? unmanaged!.scope : undefined);
     if (resource === undefined) {
       results.push(
         created
@@ -476,7 +570,8 @@ const classify = (options: {
     // target's further path parameters are already request fields.
     const children: [string, string][] = [];
     for (let i = 0; target.param !== undefined && i < extra.length; i += 2) {
-      children.push([extra[i]!, singular(extra[i]!)]);
+      // A trailing singleton (`…/certificateAuthority`) is a fixed segment.
+      children.push([extra[i]!, extra[i + 1] === undefined ? "" : singular(extra[i]!)]);
     }
     // Flat target: the method parameter at each of the resource's wildcards,
     // filled from the matching attribute.
@@ -488,7 +583,7 @@ const classify = (options: {
               ([field]) => method.parameters?.[field] !== undefined,
             ),
           ])
-        : undefined;
+        : nameStyleFields(resource, method);
     const ownCollection = "collection" in resource ? resource.collection : resource.segments.at(-2);
     if (
       (LIFECYCLE_VERBS.has(verb) && extra.length === 0 && cols.at(-1) === ownCollection) ||
@@ -525,6 +620,23 @@ const classify = (options: {
                 scoped.at(-1)!.toLowerCase(),
               ].map((c) => `${permissionService}.${c}.${v}`),
         )
+        .find((p) => roles[p] !== undefined) ??
+      // No permission named after the verb: services check custom verbs and
+      // child collections as a read (`get`) or a write (`update`) of the
+      // collection or its parent. The live probes confirm the grant.
+      [...scoped]
+        .reverse()
+        .filter((c): c is string => c !== undefined)
+        .map(
+          (c) =>
+            `${permissionService}.${config.permissionCollections?.[c] ?? c}.${
+              /^(get|list|search|fetch|lookup|query|batchGet|aggregatedList|access|summarize|check|validate|describe|view|preview|compute|retrieve|read|count)/.test(
+                verb,
+              )
+                ? "get"
+                : "update"
+            }`,
+        )
         .find((p) => roles[p] !== undefined);
     if (permission === undefined || roles[permission] === undefined) {
       results.push({ id, kind: "needs-permission", reason: permission });
@@ -556,7 +668,13 @@ const classify = (options: {
         : verb.toLowerCase().includes(resourceNoun.toLowerCase())
           ? capitalize(verb)
           : capitalize(words[0]!) + resourceNoun + words.slice(1).join("");
-    const name = config.names?.[derived] ?? derived;
+    // Collections like `.well-known/openid-configuration` aren't identifiers.
+    const name =
+      config.names?.[derived] ??
+      derived
+        .split(/[^A-Za-z0-9]+/)
+        .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+        .join("");
     const binding = bindings.get(name) ?? {
       name,
       verb,
@@ -565,7 +683,7 @@ const classify = (options: {
     };
     if (
       binding.variants.some((v) => v.resource === resource.key) ||
-      binding.variants.some((v) => (v.scope === undefined) !== (scope === undefined))
+      binding.variants.some((v) => (v.scope === undefined) !== (effectiveScope === undefined))
     ) {
       results.push({ id, kind: "project", reason: `name collision on ${name}` });
       continue;
@@ -577,9 +695,9 @@ const classify = (options: {
       fn,
       param: target.param,
       params,
-      scope,
+      scope: effectiveScope,
       projectField:
-        scope !== undefined && target.param === undefined ? target.params![0] : undefined,
+        effectiveScope !== undefined && target.param === undefined ? target.params![0] : undefined,
       children,
       suffix: config.suffix?.[id],
       append: config.append?.[id],
@@ -634,16 +752,28 @@ const emitProjectContract = (service: string, binding: Binding) => {
   const required = requiredMembers(first.api.moduleSource, first.types.request).filter(
     (m) => !omitted.includes(m),
   );
-  const optional = required.length === 0 && (!located || global);
-  const locationField = located
-    ? ` {\n  /** Location to call in (\`projects/{project}/locations/{location}\`)${global ? "; the project itself when omitted" : ""}. */\n  location${global ? "?" : ""}: string;\n}`
-    : " {}";
+  const optional =
+    required.length === 0 && (!located || global) && childFieldsOf(first).length === 0;
+  const childLines = childFieldsOf(first).map(
+    ([collection, field]) =>
+      `  /** Id of the ${field} (\`${collection}/{${field}}\`). */\n  ${field}: string;`,
+  );
+  const fieldLines = [
+    ...(located
+      ? [
+          `  /** Location to call in (\`projects/{project}/locations/{location}\`)${global ? "; the project itself when omitted" : ""}. */\n  location${global ? "?" : ""}: string;`,
+        ]
+      : []),
+    ...childLines,
+  ];
+  const locationField = fieldLines.length ? ` {\n${fieldLines.join("\n")}\n}` : " {}";
   const responses = [...new Set(binding.variants.map((v) => `${v.api.ns}.${v.types.response}`))];
   const errors = [...new Set(binding.variants.map((v) => `${v.api.ns}.${v.types.error}`))];
-  const variable = binding.name[0]!.toLowerCase() + binding.name.slice(1);
+  const variable = variableName(binding.name);
   const grants = [...new Set(binding.variants.map((v) => `\`${v.role}\``))].join(", ");
   const exampleFields = [
     ...(located && !global ? ['location: "us-central1"'] : []),
+    ...childFieldsOf(first).map(([, field]) => `${field}: "..."`),
     ...required.map((f) => `${f}: ${f === "body" ? "{}" : `"..."`}`),
   ];
   return `${HEADER(service)}${apiImports(binding, true)}
@@ -687,7 +817,7 @@ const emitProjectHttp = (service: string, binding: Binding) => {
   const variants = binding.variants.map(
     (v) => `    {
       operation: ${v.api.ns}.${v.fn},
-      ${v.param !== undefined ? `param: "${v.param}",` : `projectField: "${v.projectField}",`}${v.scope === "location" ? "\n      location: true," : ""}
+      ${v.param !== undefined ? `param: "${v.param}",` : `projectField: "${v.projectField}",`}${v.scope === "location" ? "\n      location: true," : ""}${v.children.length ? `\n      children: [${v.children.map(([c, f]) => `["${c}", "${f}"]`).join(", ")}],` : ""}
       role: "${v.role}",
     },`,
   );
@@ -714,6 +844,36 @@ ${variants.join("\n")}
 `;
 };
 
+const RESERVED = new Set([
+  "function",
+  "class",
+  "delete",
+  "default",
+  "new",
+  "import",
+  "export",
+  "package",
+  "interface",
+  "enum",
+  "return",
+  "switch",
+  "case",
+  "this",
+  "var",
+  "let",
+  "const",
+  "in",
+  "do",
+  "for",
+  "while",
+]);
+
+/** A camelCase variable for a type or binding name, avoiding reserved words. */
+const variableName = (name: string) => {
+  const variable = name[0]!.toLowerCase() + name.slice(1);
+  return RESERVED.has(variable) ? `${variable}Resource` : variable;
+};
+
 /** Import a resource's type under its key. */
 const importName = (resource: ResourceConfig, key: string) =>
   resource.typeName ? `${resource.typeName} as ${key}` : key;
@@ -724,16 +884,19 @@ const emitContract = (service: string, config: ServiceConfig, binding: Binding) 
   const moduleSource = first.api.moduleSource;
   const resourceTypes = [...new Set(binding.variants.map((v) => v.resource))];
   const childFields = [
-    ...first.children.map(([, field]) => field),
+    ...childFieldsOf(first).map(([, field]) => field),
     ...(first.suffix ? [first.suffix[1]] : []),
   ];
-  const omitted = first.param !== undefined ? [first.param] : Object.keys(first.params ?? {});
+  const omitted = [
+    ...(first.param !== undefined ? [first.param] : []),
+    ...Object.keys(first.params ?? {}),
+  ];
   const required = requiredMembers(moduleSource, first.types.request).filter(
     (m) => !omitted.includes(m),
   );
   const optional = required.length === 0 && childFields.length === 0;
   const fieldDocs = [
-    ...first.children.map(([collection, field]) => [
+    ...childFieldsOf(first).map(([collection, field]) => [
       field,
       `Id of the ${field} under the bound resource (\`${collection}/{${field}}\`).`,
     ]),
@@ -747,13 +910,13 @@ const emitContract = (service: string, config: ServiceConfig, binding: Binding) 
   const responses = [...new Set(binding.variants.map((v) => `${v.api.ns}.${v.types.response}`))];
   const errors = [...new Set(binding.variants.map((v) => `${v.api.ns}.${v.types.error}`))];
   const resourceDocs = resourceTypes.map((r) => `{@link ${r}}`).join(" or ");
-  const variable = binding.name[0]!.toLowerCase() + binding.name.slice(1);
+  const variable = variableName(binding.name);
   const grants = [...new Set(binding.variants.map((v) => `\`${v.role}\``))].join(", ");
   return `${HEADER(service)}${apiImports(binding, true)}
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-${resourceTypes.map((r) => `import type { ${importName(config.resources[r]!, r)} } from "./${r}.ts";`).join("\n")}
+${resourceTypes.map((r) => `import type { ${importName(config.resources[r]!, r)} } from "./${config.resources[r]!.file ?? r}.ts";`).join("\n")}
 
 export interface ${binding.name}Request
   extends Omit<${first.api.ns}.${first.types.request}, ${omitted.map((o) => `"${o}"`).join(" | ")}>${childType}
@@ -775,7 +938,7 @@ export type ${binding.name}Shape = (
  * ### Usage
  * **Example:** Call \`${first.methodId.split(".").slice(-2).join(".")}\`
  * \`\`\`typescript
- * const ${variable} = yield* GCP.${service}.${binding.name}(${resourceTypes[0]![0]!.toLowerCase() + resourceTypes[0]!.slice(1)});
+ * const ${variable} = yield* GCP.${service}.${binding.name}(${variableName(resourceTypes[0]!)});
  * const response = yield* ${variable}(${optional ? "" : `{ ${[...childFields.map((f) => `${f}: "..."`), ...required.map((f) => `${f}: ${f === "body" ? "{}" : `"..."`}`)].join(", ")} }`});
  * \`\`\`
  *
@@ -814,7 +977,7 @@ const emitHttp = (service: string, config: ServiceConfig, binding: Binding) => {
     return `    {
       resource: "${type}",
       operation: ${v.api.ns}.${v.fn},
-      ${v.param !== undefined ? `param: "${v.param}",` : `params: ${JSON.stringify(v.params)},`}${children}
+      ${v.param !== undefined ? `param: "${v.param}",${v.params ? `\n      params: ${JSON.stringify(v.params)},` : ""}` : `params: ${JSON.stringify(v.params)},`}${children}
       iam: ${iam},
     },`;
   });
@@ -868,7 +1031,7 @@ const emitAuditLogs = (
   resource: ResourceConfig,
   serviceNames: readonly string[],
 ) => {
-  const variable = key[0]!.toLowerCase() + key.slice(1);
+  const variable = variableName(key);
   const type = resource.type ?? `GCP.${service}.${key}`;
   return `${HEADER(service)}import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
@@ -878,7 +1041,7 @@ import {
   type AuditLogEventSourceProps,
   type AuditLogEventsHandler,
 } from "../Logging/AuditLogEventSource.ts";
-import type { ${importName(resource, key)} } from "./${key}.ts";
+import type { ${importName(resource, key)} } from "./${resource.file ?? key}.ts";
 
 export interface ${key}AuditLogsProps extends Omit<AuditLogEventSourceProps, "filter"> {
   /**
@@ -1098,6 +1261,17 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
   if (!index.includes(`"./generated.ts"`)) {
     yield* fs.writeFileString(indexPath, `${index.trimEnd()}\nexport * from "./generated.ts";\n`);
   }
+  const probeFiles: string[] = [];
+  if (config.probes) {
+    const probes = probesOf(config, bindings);
+    const testDir = path.join(root, "packages/integration-tests/test/GCP", service);
+    yield* fs.makeDirectory(path.join(testDir, "fixtures"), { recursive: true });
+    const hostFile = path.join(testDir, "fixtures/generated-host.ts");
+    const testFile = path.join(testDir, "Generated.test.ts");
+    yield* fs.writeFileString(hostFile, emitProbeHost(service, config, probes));
+    yield* fs.writeFileString(testFile, emitProbeTest(service, probes));
+    probeFiles.push(hostFile, testFile);
+  }
   // Format what was written, so regenerating is a no-op diff.
   const spawner = yield* ChildProcessSpawner;
   yield* spawner.string(
@@ -1107,11 +1281,247 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
         "exec",
         "oxfmt",
         ...[...written, "generated.ts", "index.ts"].map((f) => path.join(serviceDir, f)),
+        ...probeFiles,
       ],
       { cwd: root, stdin: "ignore", stderr: "ignore" },
     ),
   );
 });
+
+// ============ Probes ============
+
+const PLACEHOLDER = "alchemy-missing";
+
+/** A placeholder for a required request field: valid where the name says what it is. */
+const placeholder = (field: string, type: string, location = "us-central1") => {
+  if (/^"/.test(type)) return type.split("|")[0]!.trim();
+  if (type === "string") {
+    if (field === "zone") return `"us-central1-a"`;
+    if (field === "region") return `"us-central1"`;
+    if (field === "location") return `"${location}"`;
+    return `"${PLACEHOLDER}"`;
+  }
+  if (type === "number") return "1";
+  if (type === "boolean") return "false";
+  if (type.endsWith("[]") || type.startsWith("Array<") || type.endsWith("List")) return "[]";
+  return "{}";
+};
+
+/** Fields a placeholder fills with a real value, so a read can still succeed. */
+const KNOWN_FIELDS = new Set(["zone", "region", "location"]);
+
+interface Probe {
+  name: string;
+  binding: Binding;
+  variant: Variant;
+  /** The resource key it binds, or undefined for a project-scoped binding. */
+  key: string | undefined;
+  args: string;
+  /** A plain read of the bound resource (or project): it must succeed. */
+  expectSuccess: boolean;
+  skip: string | undefined;
+}
+
+const probesOf = (config: ServiceConfig, bindings: Binding[]): Probe[] => {
+  const probes = config.probes!;
+  return bindings.flatMap((binding) => {
+    const project = binding.variants[0]!.scope !== undefined;
+    const variants = project
+      ? [binding.variants[0]!]
+      : [...new Map(binding.variants.map((v) => [v.resource, v])).values()];
+    return variants.map((variant): Probe => {
+      const key = project ? undefined : variant.resource;
+      const omitted = project
+        ? [variant.param ?? variant.projectField!]
+        : [
+            ...(variant.param !== undefined ? [variant.param] : []),
+            ...Object.keys(variant.params ?? {}),
+          ];
+      const fields: [string, string][] = [
+        ...childFieldsOf(variant).map(([, field]): [string, string] => [field, "string"]),
+        ...(variant.suffix ? [[variant.suffix[1], "string"] as [string, string]] : []),
+        ...requiredFieldTypes(variant.api.moduleSource, variant.types.request).filter(
+          ([field]) => !omitted.includes(field),
+        ),
+        ...(project &&
+        !binding.variants.some((v) => v.scope === "project") &&
+        binding.variants.some((v) => v.scope === "location")
+          ? [["location", "string"] as [string, string]]
+          : []),
+      ];
+      // A call that creates something gets a body with an unknown field:
+      // the API rejects it (after the IAM check), so a probe never creates
+      // a resource the stack doesn't own.
+      const creates = /^(create|insert|bulkInsert|clone|duplicate|copy|import|restore|add)/.test(
+        binding.verb,
+      );
+      const hasBody = interfaceBody(variant.api.moduleSource, variant.types.request).includes(
+        "\n  body",
+      );
+      const entries = fields
+        .filter(([field]) => !(creates && hasBody && field === "body"))
+        .map(
+          ([field, type]) =>
+            `${JSON.stringify(field)}: ${placeholder(field, type, probes.location)}`,
+        );
+      if (creates && hasBody) entries.push(`"body": { alchemyProbe: "${PLACEHOLDER}" }`);
+      const args = probes.args?.[binding.name] ?? `{ ${entries.join(", ")} }`;
+      const name = variants.length > 1 ? `${binding.name}@${key}` : binding.name;
+      return {
+        name,
+        binding,
+        variant,
+        key,
+        args,
+        expectSuccess:
+          /^(get|list|aggregatedList)$/.test(binding.verb) &&
+          probes.args?.[binding.name] === undefined &&
+          fields.every(([field]) => KNOWN_FIELDS.has(field)),
+        skip:
+          probes.skip?.[binding.name] ??
+          probes.untestable?.["*"] ??
+          (key === undefined ? probes.untestable?.["project"] : undefined) ??
+          (key !== undefined && probes.untestable?.[key] !== undefined
+            ? `${key}: ${probes.untestable[key]}`
+            : key !== undefined && probes.resources[key] === undefined
+              ? `${key}: no deployable fixture`
+              : undefined),
+      };
+    });
+  });
+};
+
+const chunk = <A>(items: A[], size: number): A[][] =>
+  Array.from({ length: Math.ceil(items.length / size) }, (_, i) =>
+    items.slice(i * size, i * size + size),
+  );
+
+const PROBE_HEADER = (service: string) =>
+  `// @generated by scripts/generate-gcp-bindings.ts from packages/gcp/bindings/${service}.json. Do not edit.\n`;
+
+const emitProbeHost = (service: string, config: ServiceConfig, probes: Probe[]) => {
+  const live = probes.filter((p) => p.skip === undefined);
+  const layers = [...new Set(live.map((p) => `GCP.${service}.${p.binding.name}Http`))];
+  const exports = [
+    ...new Set(live.flatMap((p) => (p.key ? [config.probes!.resources[p.key]!] : []))),
+  ];
+  return `${PROBE_HEADER(service)}import * as GCP from "@alchemy.run/gcp";
+import * as Retry from "@distilled.cloud/gcp/Retry";
+import * as Effect from "effect/Effect";
+${layers.length ? 'import * as Layer from "effect/Layer";\n' : ""}import { outcome, serveProbes } from "../../bindingHost.ts";
+${exports.length ? `import { ${exports.sort().join(", ")} } from "./generated-resources.ts";` : ""}
+
+/**
+ * Cloud Run service calling every generated ${service} binding as its own
+ * runtime service account. Deployed from {@link ../Generated.test.ts}.
+ * Each call reports its first answer (\`Retry.none\`): a probe checks the
+ * call is authorized, not that a transient error clears.
+ */
+export default class ${service}GeneratedHost extends GCP.Function<${service}GeneratedHost>()(
+  "${service}GeneratedHost",
+  { main: import.meta.url, invokerIamDisabled: true },
+  Effect.gen(function* () {
+${live.map((p, i) => `    const p${i} = yield* GCP.${service}.${p.binding.name}(${p.key ? config.probes!.resources[p.key] : ""});`).join("\n")}
+    return {
+      fetch: serveProbes({
+${live.map((p, i) => `        ${JSON.stringify(p.name)}: outcome(Retry.none(p${i}(${p.args} as never))),`).join("\n")}
+      }),
+    };
+  })${
+    layers.length
+      ? `.pipe(
+    Effect.provide(
+      Layer.mergeAll(
+${chunk(layers, 40)
+  .map(
+    (group) =>
+      `        Layer.mergeAll(\n${group.map((l) => `          ${l},`).join("\n")}\n        ),`,
+  )
+  .join("\n")}
+      ),
+    ),
+  )`
+      : ""
+  },
+) {}
+`;
+};
+
+const emitProbeTest = (service: string, probes: Probe[]) => {
+  const groups = new Map<string, Probe[]>();
+  for (const probe of probes) {
+    const group = probe.key ?? "project";
+    groups.set(group, [...(groups.get(group) ?? []), probe]);
+  }
+  const tags = `["provider:gcp", "provider:gcp:${service.toLowerCase()}", "live"]`;
+  return `${PROBE_HEADER(service)}import * as GCP from "@alchemy.run/gcp";
+import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
+import * as Effect from "effect/Effect";
+import { callProbe } from "../bindingHost.ts";
+import ${service}GeneratedHost from "./fixtures/generated-host.ts";
+
+const testOptions = { providers: GCP.providers() };
+const { test, beforeAll, afterAll } = Test.make(testOptions);
+const sharedStack = Core.scratchStack(testOptions, "${service}Generated");
+
+let baseUrl: string;
+
+/**
+ * Call one binding on the deployed host. \`callProbe\` retries while the
+ * binding's IAM grant propagates, so a result means the call was authorized
+ * and reached the API; a plain read of the bound resource must succeed.
+ */
+const probe = (name: string, expectSuccess: boolean) =>
+  Effect.gen(function* () {
+    const result = yield* callProbe<string>(baseUrl, name);
+    const outcome = result.ok ? result.value : result.error._tag;
+    if (expectSuccess) expect(outcome).toEqual("succeeded");
+    else expect(typeof outcome).toEqual("string");
+  });
+
+// Deploys one of every bindable resource: slow, so \`--fast\` skips it.
+describe.skipIf(!!process.env.FAST)(
+  "${service} generated bindings",
+  { tags: ${tags}, concurrent: true },
+  () => {
+  beforeAll(
+    Effect.gen(function* () {
+      yield* sharedStack.destroy();
+      const out = yield* sharedStack.deploy(
+        Effect.gen(function* () {
+          const host = yield* ${service}GeneratedHost;
+          return { uri: host.uri };
+        }),
+      );
+      baseUrl = out.uri!;
+    }),
+    { timeout: 1_800_000 },
+  );
+
+  afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+${[...groups.entries()]
+  .sort(([a], [b]) => a.localeCompare(b))
+  .map(
+    ([group, items]) => `
+  describe(${JSON.stringify(group)}, { concurrent: true }, () => {
+${items
+  .map((p) =>
+    p.skip !== undefined
+      ? `    test.provider.skip(${JSON.stringify(`${p.name} (${p.variant.methodId}): ${p.skip}`)}, () => Effect.void);`
+      : `    test.provider(${JSON.stringify(`${p.name} (${p.variant.methodId})`)}, () => probe(${JSON.stringify(p.name)}, ${p.expectSuccess}), {
+      tags: ${tags},
+      timeout: 600_000,
+    });`,
+  )
+  .join("\n")}
+  });`,
+  )
+  .join("\n")}
+});
+`;
+};
 
 // ============ Roles ============
 
@@ -1230,10 +1640,14 @@ const command = Command.make(
       // Regenerated in place: anything git now sees as changed was stale.
       const spawner = yield* ChildProcessSpawner;
       const status = yield* spawner.string(
-        ChildProcess.make("git", ["status", "--porcelain", "--", "packages/gcp"], {
-          cwd: root,
-          stdin: "ignore",
-        }),
+        ChildProcess.make(
+          "git",
+          ["status", "--porcelain", "--", "packages/gcp", "packages/integration-tests/test/GCP"],
+          {
+            cwd: root,
+            stdin: "ignore",
+          },
+        ),
       );
       if (status.trim().length > 0) {
         yield* Console.error(

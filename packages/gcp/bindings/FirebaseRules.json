@@ -1,0 +1,18 @@
+{
+  "discovery": "firebaserules-v1",
+  "module": "firebaserules_v1",
+  "resources": {
+    "Release": {
+      "pattern": "projects/*/releases/*"
+    },
+    "Ruleset": {
+      "pattern": "projects/*/rulesets/*"
+    }
+  },
+  "probes": {
+    "resources": {
+      "Ruleset": "DenyAll",
+      "Release": "Live"
+    }
+  }
+}

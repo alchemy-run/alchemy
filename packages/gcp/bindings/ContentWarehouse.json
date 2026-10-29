@@ -1,0 +1,28 @@
+{
+  "discovery": "contentwarehouse-v1",
+  "module": "contentwarehouse_v1",
+  "resources": {
+    "Document": {
+      "pattern": "projects/*/locations/*/documents/*"
+    },
+    "DocumentSchema": {
+      "pattern": "projects/*/locations/*/documentSchemas/*"
+    },
+    "RuleSet": {
+      "pattern": "projects/*/locations/*/ruleSets/*"
+    },
+    "SynonymSet": {
+      "pattern": "projects/*/locations/*/synonymSets/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "Document AI Warehouse is disabled on the testing project and needs per-project provisioning"
+    }
+  },
+  "permissions": {
+    "contentwarehouse.projects.fetchAcl": "contentwarehouse.documents.getIamPolicy",
+    "contentwarehouse.projects.setAcl": "contentwarehouse.documents.setIamPolicy"
+  }
+}

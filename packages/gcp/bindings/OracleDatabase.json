@@ -1,0 +1,45 @@
+{
+  "discovery": "oracledatabase-v1",
+  "module": "oracledatabase_v1",
+  "resources": {
+    "AutonomousDatabase": {
+      "pattern": "projects/*/locations/*/autonomousDatabases/*"
+    },
+    "CloudExadataInfrastructure": {
+      "pattern": "projects/*/locations/*/cloudExadataInfrastructures/*"
+    },
+    "CloudVmCluster": {
+      "pattern": "projects/*/locations/*/cloudVmClusters/*"
+    },
+    "DbSystem": {
+      "pattern": "projects/*/locations/*/dbSystems/*"
+    },
+    "ExadbVmCluster": {
+      "pattern": "projects/*/locations/*/exadbVmClusters/*"
+    },
+    "ExascaleDbStorageVault": {
+      "pattern": "projects/*/locations/*/exascaleDbStorageVaults/*"
+    },
+    "GoldengateConnection": {
+      "pattern": "projects/*/locations/*/goldengateConnections/*"
+    },
+    "GoldengateConnectionAssignment": {
+      "pattern": "projects/*/locations/*/goldengateConnectionAssignments/*"
+    },
+    "GoldengateDeployment": {
+      "pattern": "projects/*/locations/*/goldengateDeployments/*"
+    },
+    "OdbNetwork": {
+      "pattern": "projects/*/locations/*/odbNetworks/*"
+    },
+    "OdbNetworksOdbSubnet": {
+      "pattern": "projects/*/locations/*/odbNetworks/*/odbSubnets/*"
+    }
+  },
+  "probes": {
+    "resources": {},
+    "untestable": {
+      "*": "Oracle Database@Google Cloud is not enabled on the testing project"
+    }
+  }
+}

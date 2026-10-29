@@ -6,3 +6,4 @@ export * from "./Connection.ts";
 export * from "./FetchGitRefs.ts";
 export * from "./FetchGitRefsHttp.ts";
 export * from "./Repository.ts";
+export * from "./generated.ts";

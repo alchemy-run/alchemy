@@ -13,3 +13,4 @@ export * from "./GetSubscription.ts";
 export * from "./GetSubscriptionHttp.ts";
 export * from "./GetTopic.ts";
 export * from "./GetTopicHttp.ts";
+export * from "./generated.ts";

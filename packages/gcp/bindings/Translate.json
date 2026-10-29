@@ -1,0 +1,34 @@
+{
+  "discovery": "translate-v3",
+  "module": "translate_v3",
+  "resources": {
+    "AdaptiveMtDataset": {
+      "pattern": "projects/*/locations/*/adaptiveMtDatasets/*"
+    },
+    "GlossariesGlossaryEntry": {
+      "pattern": "projects/*/locations/*/glossaries/*/glossaryEntries/*"
+    },
+    "Model": {
+      "pattern": "projects/*/locations/*/models/*"
+    }
+  },
+  "permissionService": "cloudtranslate",
+  "permissions": {
+    "translate.projects.romanizeText": "cloudtranslate.generalModels.predict",
+    "translate.projects.detectLanguage": "cloudtranslate.languageDetectionModels.predict",
+    "translate.projects.getSupportedLanguages": "cloudtranslate.generalModels.get",
+    "translate.projects.locations.adaptiveMtDatasets.importAdaptiveMtFile": "cloudtranslate.adaptiveMtFiles.list",
+    "translate.projects.locations.models.list": "cloudtranslate.customModels.list",
+    "translate.projects.locations.datasets.exportData": "cloudtranslate.datasets.export",
+    "translate.projects.locations.datasets.importData": "cloudtranslate.datasets.import"
+  },
+  "probes": {
+    "resources": {
+      "AdaptiveMtDataset": "Dataset"
+    },
+    "untestable": {
+      "Model": "a custom model trains for hours from a prepared dataset (GCP_TEST_TRANSLATE_MODEL_DATASET)",
+      "GlossariesGlossaryEntry": "needs an existing glossary built from a CSV in Cloud Storage (GCP_TEST_TRANSLATE_GLOSSARY)"
+    }
+  }
+}

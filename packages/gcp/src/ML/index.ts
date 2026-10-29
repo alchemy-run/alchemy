@@ -6,3 +6,4 @@ export * from "./Model.ts";
 export * from "./ModelsVersion.ts";
 export * from "./Predict.ts";
 export * from "./PredictHttp.ts";
+export * from "./generated.ts";

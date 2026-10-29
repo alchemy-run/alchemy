@@ -10,3 +10,4 @@ export * from "./Processor.ts";
 export * from "./Schema.ts";
 export * from "./SchemasSchemaVersion.ts";
 export { waitForOperation } from "./operations.ts";
+export * from "./generated.ts";
