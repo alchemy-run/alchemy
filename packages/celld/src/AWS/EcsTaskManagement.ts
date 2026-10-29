@@ -146,7 +146,7 @@ const queuedManagement = (make: (transport: ManagementTransport) => EcsManagemen
  *
  * @layer
  * @provides CelldAWS.EcsManagement
- * @product Celld
+ * @product AWS
  */
 export const EcsTaskManagement = (
   options: EcsTaskManagementOptions = {},
@@ -167,7 +167,7 @@ export const EcsTaskManagement = (
  *
  * @layer
  * @provides CelldAWS.EcsManagement
- * @product Celld
+ * @product AWS
  */
 export const EcsServiceManagement = (): Layer.Layer<EcsManagement, never, StackServices> =>
   queuedManagement(makeEcsServiceManagement);

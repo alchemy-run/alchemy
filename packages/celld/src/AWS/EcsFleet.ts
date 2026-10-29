@@ -491,7 +491,7 @@ export const composeEcsFleet = (
  * @layer
  * @provides Celld.Host
  * @provides Celld.FleetManagement
- * @product Celld
+ * @product AWS
  */
 export const EcsFleet = (
   options: EcsFleetOptions = {},

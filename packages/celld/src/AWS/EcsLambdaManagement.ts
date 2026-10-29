@@ -230,7 +230,7 @@ const collectNetworkPages = <A, E>(
  *
  * @layer
  * @provides CelldAWS.EcsManagement
- * @product Celld
+ * @product AWS
  */
 export const EcsLambdaManagement = (): Layer.Layer<EcsManagement, never, StackServices> =>
   Layer.effect(
