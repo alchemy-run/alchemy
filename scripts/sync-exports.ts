@@ -46,6 +46,8 @@ const command = Command.make(
     const packages = path.join(root, "packages");
 
     const directories = (yield* fs.readDirectory(packages)).sort();
+    // Packages whose published export maps block everything named `internal`.
+    const blocking: Array<string> = [];
     for (const name of directories) {
       const directory = path.join(packages, name);
       if (!(yield* fs.exists(path.join(directory, "scripts", "build.ts")))) continue;
@@ -54,6 +56,12 @@ const command = Command.make(
         return yield* Effect.fail(
           new Error(`packages/${name}: export sync exited with ${exitCode}`),
         );
+      }
+      const manifest = JSON.parse(
+        yield* fs.readFileString(path.join(directory, "package.json")),
+      ) as { name: string; publishConfig?: { exports?: Record<string, unknown> } };
+      if (Object.values(manifest.publishConfig?.exports ?? {}).includes(null)) {
+        blocking.push(manifest.name.replaceAll(".", String.raw`\.`));
       }
     }
 
@@ -76,9 +84,9 @@ const command = Command.make(
         [
           "grep",
           "-nE",
-          String.raw`"@alchemy\.run/[a-z-]+/([^"]*/)?internal[/"]`,
+          `"(${blocking.join("|")})/([^"]*/)?internal[/"]`,
           "--",
-          "packages/*/src",
+          "packages/*/src/**",
           "examples",
         ],
         root,
