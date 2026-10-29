@@ -6,13 +6,17 @@ import * as Test from "@alchemy.run/test/Alchemy";
 import * as d1 from "@distilled.cloud/cloudflare/d1";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import { State } from "alchemy/State";
+import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Ref from "effect/Ref";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
@@ -295,7 +299,95 @@ test.provider(
 );
 
 /**
- * Adopting a drizzle-kit-migrated database: the user ran `drizzle-kit
+ * D1 can run a migration batch and still fail its reply (#1889). The deploy
+ * must not resend the batch, which would run its DDL twice and fail with
+ * "table lost_reply_notes already exists"; it fails once, and the next deploy
+ * resumes from `__alchemy_migrations`.
+ */
+class LostReply extends Context.Service<LostReply, { batches: Ref.Ref<number> }>()(
+  "test/D1/LostReply",
+) {}
+
+// Forward every request to Cloudflare, but answer the first batch that
+// creates `lost_reply_notes` with a 503 after D1 has already run it.
+const LostReplyHttpClient = Layer.effect(
+  HttpClient.HttpClient,
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const { batches } = yield* LostReply;
+    return HttpClient.transform(client, (response, request) =>
+      Effect.gen(function* () {
+        const real = yield* response;
+        const body =
+          request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : "";
+        if (!request.url.endsWith("/query") || !body.includes("CREATE TABLE lost_reply_notes")) {
+          return real;
+        }
+        return (yield* Ref.updateAndGet(batches, (n) => n + 1)) === 1
+          ? HttpClientResponse.fromWeb(
+              request,
+              new Response("Service Unavailable", { status: 503 }),
+            )
+          : real;
+      }),
+    );
+  }),
+);
+
+const lostReply = Test.make({
+  providers: Cloudflare.providers().pipe(
+    Layer.provide(LostReplyHttpClient),
+    Layer.provideMerge(
+      Layer.effect(
+        LostReply,
+        Effect.map(Ref.make(0), (batches) => ({ batches })),
+      ),
+    ),
+  ),
+});
+
+lostReply.test.provider(
+  "a migration batch whose reply is lost is not resent",
+  (stack) =>
+    Effect.gen(function* () {
+      const { accountId } = yield* yield* CloudflareEnvironment;
+      const { batches } = yield* LostReply;
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const migrationsDir = yield* fs.makeTempDirectory({ prefix: "alchemy-d1-lost-reply-" });
+      yield* fs.writeFileString(
+        path.join(migrationsDir, "0001_notes.sql"),
+        "CREATE TABLE lost_reply_notes (id INTEGER PRIMARY KEY, body TEXT NOT NULL);",
+      );
+      const program = Effect.gen(function* () {
+        return yield* Cloudflare.D1.Database("LostReplyDb", { migrations: migrationsDir });
+      });
+
+      yield* stack.destroy();
+
+      const failed = yield* stack.deploy(program).pipe(Effect.flip);
+      expect(String(failed)).toContain("D1 migration batch failed");
+      expect(String(failed)).not.toContain("already exists");
+      expect(yield* Ref.get(batches)).toEqual(1);
+
+      const database = yield* stack.deploy(program);
+      expect(yield* listTables(accountId, database.databaseId)).toContain("lost_reply_notes");
+      const applied = yield* queryAll<{ name: string }>(
+        accountId,
+        database.databaseId,
+        "SELECT name FROM __alchemy_migrations ORDER BY id;",
+      );
+      expect(applied.map((row) => row.name)).toEqual(["0001_notes.sql"]);
+      expect(yield* Ref.get(batches)).toEqual(1);
+
+      yield* stack.destroy();
+      yield* waitForDatabaseToBeDeleted(database.databaseId, accountId);
+    }).pipe(logLevel),
+  { tags: ["provider:cloudflare", "provider:cloudflare:d1", "live"], timeout: 180_000 },
+);
+
+/**
+ * Adopting a drizzle-kit-migrated database:the user ran `drizzle-kit
  * migrate` before Alchemy ever saw the database, leaving history in
  * `__drizzle_migrations`. First deploy performs the one-way conversion —
  * history copies into `__alchemy_migrations` (validated against local
