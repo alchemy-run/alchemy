@@ -1371,8 +1371,12 @@ export type Worker<Bindings = any> = Resource<
      * metadata: bound traces/logs fill in when `WorkerProps.observability`
      * omits them, and bound logs are merged over the default logs config.
      * An explicit `observability.traces` / `observability.logs` wins.
+     * Bound logs may set only the fields they care about (e.g.
+     * `destinations`); `enabled` and `invocationLogs` default to `true`.
      */
-    observability?: Pick<WorkerObservability, "traces" | "logs">;
+    observability?: Pick<WorkerObservability, "traces"> & {
+      logs?: Partial<NonNullable<WorkerObservability["logs"]>>;
+    };
     containers?: {
       className: string;
       /** Set when an async `Cloudflare.DurableObject(name, { containers })` binding contributed the row. */

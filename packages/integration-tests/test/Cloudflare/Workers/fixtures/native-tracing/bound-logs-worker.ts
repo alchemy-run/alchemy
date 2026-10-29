@@ -6,7 +6,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 
 /**
- * A binding layer that contributes `observability.logs` to its host Worker,
+ * A binding layer that contributes partial `observability.logs` to its host Worker,
  * the way a Workers Logs export binding would — alongside the traces
  * `Cloudflare.Telemetry()` contributes.
  */
@@ -17,7 +17,7 @@ const BoundLogs = Layer.effectDiscard(
       yield* Namespace.push(
         host.LogicalId,
         host.bind("Test.BoundLogs", {
-          observability: { logs: { enabled: true, persist: false, headSamplingRate: 0.5 } },
+          observability: { logs: { persist: false, headSamplingRate: 0.5 } },
         }),
       );
     }

@@ -814,12 +814,14 @@ export const getCacheBinding = (bindings: ReadonlyArray<ResourceBinding<Worker["
   };
 };
 
+const DEFAULT_LOGS: NonNullable<WorkerObservability["logs"]> = {
+  enabled: true,
+  invocationLogs: true,
+};
+
 const DEFAULT_OBSERVABILITY: WorkerObservability = {
   enabled: true,
-  logs: {
-    enabled: true,
-    invocationLogs: true,
-  },
+  logs: DEFAULT_LOGS,
 };
 
 /**
@@ -841,7 +843,6 @@ export const resolveObservability = (
   return {
     ...observability,
     ...(observability.traces == null && traces != null && { traces }),
-    ...(news.observability?.logs == null &&
-      logs != null && { logs: { ...DEFAULT_OBSERVABILITY.logs, ...logs } }),
+    ...(news.observability?.logs == null && logs != null && { logs: { ...DEFAULT_LOGS, ...logs } }),
   };
 };
