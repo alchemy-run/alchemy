@@ -80,6 +80,9 @@ const runIdOf = (targets: ReadonlyArray<string>, resource: string) => {
 };
 
 const POLL = "1 second";
+/** How many times a run that started before the new version arrived is run again, and how soon. */
+const MAX_RESTARTS = 10;
+const RESTART_DELAY = "2 seconds";
 
 const BackfillLive = () =>
   Provider.succeed(Backfill, {
@@ -135,6 +138,7 @@ const BackfillLive = () =>
           }),
         );
       const started = yield* Effect.sync(() => Date.now());
+      let restarts = 0;
       const timeout = (news.timeoutSeconds ?? 1800) * 1000;
       while (true) {
         const instance = yield* workflows.getInstance({
@@ -150,6 +154,23 @@ const BackfillLive = () =>
             workflowName: news.workflowName,
             instanceId,
           });
+          // Started on an edge that doesn't have the uploaded Worker yet: run it again
+          // once the new version has arrived.
+          if (
+            instance.status === "errored" &&
+            /entrypoint name .* was not found/.test(error?.message ?? "") &&
+            restarts < MAX_RESTARTS
+          ) {
+            restarts += 1;
+            yield* Effect.sleep(RESTART_DELAY);
+            yield* workflows.patchInstanceStatus({
+              accountId,
+              workflowName: news.workflowName,
+              instanceId,
+              status: "restart",
+            });
+            continue;
+          }
           return yield* new BackfillFailed({
             message: `The backfill run ${instanceId} ended ${instance.status}${error?.message ? `: ${error.name}: ${error.message}` : ""}`,
             instanceId,
