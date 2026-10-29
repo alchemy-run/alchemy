@@ -1,21 +1,22 @@
+import * as Command from "effect/cli/Command";
+import * as Flag from "effect/cli/Flag";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import * as Command from "effect/unstable/cli/Command";
-import * as Flag from "effect/unstable/cli/Flag";
-
 import * as Drift from "../../Alchemist/routes/drift.ts";
 import * as Stacks from "../../Alchemist/routes/stack.ts";
+import * as Interaction from "../../Interaction.ts";
 import { Cli } from "../../Report.ts";
-import * as CliKit from "../CliKit/index.ts";
 import { planDecisionScreen } from "../components/view/PlanDecision.tsx";
 import { stackOutputsView } from "../components/view/StackOutputs.tsx";
-
 import { exitDeclined } from "./errors.ts";
 import {
   configPath,
   dryRun as dryRunFlag,
   envFile,
   force,
+  include,
+  exclude,
+  validateSelectionOptions,
   optionalConfig,
   profile,
   resolveStackArgs,
@@ -32,6 +33,8 @@ interface StackCommandOptions {
   readonly profile?: string;
   readonly dryRun?: boolean;
   readonly force?: boolean;
+  readonly include?: ReadonlyArray<string>;
+  readonly exclude?: ReadonlyArray<string>;
   readonly yes?: boolean;
   readonly destroy?: boolean;
   readonly adopt?: boolean;
@@ -65,9 +68,7 @@ const detailed = Flag.Boolean("detailed").pipe(
 );
 
 const detectDrift = Flag.Boolean("detect-drift").pipe(
-  Flag.withDescription(
-    "Detect infrastructure drift and offer to repair it before deploying",
-  ),
+  Flag.withDescription("Detect infrastructure drift and offer to repair it before deploying"),
   Flag.withDefault(false),
 );
 
@@ -98,14 +99,12 @@ const detectAndMaybeRepairDrift = Effect.fn(function* (
     return true;
   }
 
-  let decision: "repair" | "deploy" | "cancel" = options.yes
-    ? "repair"
-    : "cancel";
+  let decision: "repair" | "deploy" | "cancel" = options.yes ? "repair" : "cancel";
   if (!options.yes) {
-    const terminal = yield* CliKit.CliKit;
+    const terminal = yield* Interaction.Interaction;
     if (terminal.terminal.input) {
       decision = yield* terminal.prompt
-        .custom(
+        .screen(
           planDecisionScreen({
             plan: snapshot.repairPlan.native,
             message: "Drift detected",
@@ -126,17 +125,13 @@ const detectAndMaybeRepairDrift = Effect.fn(function* (
             initialValue: "repair" as const,
           }),
         )
-        .pipe(
-          Effect.catchTag("TerminalCancelled", () =>
-            Effect.succeed("cancel" as const),
-          ),
-        );
+        .pipe(Effect.catchTag("TerminalCancelled", () => Effect.succeed("cancel" as const)));
     } else {
       yield* cli.displayPlan(snapshot.repairPlan.native, {
         detailed: options.detailed,
         stage: target.stage,
       });
-      yield* CliKit.accessors.output.warning(
+      yield* Interaction.warning(
         "Drift detected in a non-interactive terminal. Re-run with --yes to repair and deploy.",
       );
     }
@@ -154,6 +149,7 @@ const detectAndMaybeRepairDrift = Effect.fn(function* (
 });
 
 const runStack = Effect.fn(function* (options: StackCommandOptions) {
+  yield* validateSelectionOptions(options);
   const cli = yield* Cli;
   const display = { detailed: options.detailed, stage: options.stage };
   const target = {
@@ -163,11 +159,7 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
     envFile: Option.getOrUndefined(options.envFile),
   };
 
-  const operation = options.destroy
-    ? "Destroy"
-    : options.dryRun
-      ? "Plan"
-      : "Deploy";
+  const operation = options.destroy ? "Destroy" : options.dryRun ? "Plan" : "Deploy";
   const withPlanningProgress = renderPlanning({
     operation,
     stage: options.stage,
@@ -176,9 +168,7 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
   if (options.detectDrift && !options.destroy) {
     const proceed = yield* detectAndMaybeRepairDrift(target, options);
     if (!proceed) {
-      yield* CliKit.accessors.output.info(
-        "Deploy aborted: drift was detected and not approved.",
-      );
+      yield* Interaction.info("Deploy aborted: drift was detected and not approved.");
       return yield* exitDeclined;
     }
   }
@@ -187,6 +177,8 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
     target,
     operation: options.destroy ? "destroy" : "deploy",
     force: options.force,
+    include: options.include,
+    exclude: options.exclude,
     adopt: options.adopt,
     updateStateStore: options.yes,
   }).pipe(withPlanningProgress);
@@ -198,28 +190,20 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
   if (!options.yes && Stacks.hasChanges(snapshot.summary)) {
     const approved = yield* cli.approvePlan(snapshot.native, display).pipe(
       Effect.tap((approved) =>
-        approved
-          ? Effect.void
-          : CliKit.accessors.output.info(
-              `${operation} aborted: plan declined.`,
-            ),
+        approved ? Effect.void : Interaction.info(`${operation} aborted: plan declined.`),
       ),
       Effect.catchTag("NonInteractiveTerminal", () =>
-        CliKit.accessors.output
-          .warning(
-            `Cannot prompt for approval in a non-interactive terminal. Nothing was changed — re-run with --yes to ${operation.toLowerCase()}.`,
-          )
-          .pipe(Effect.as(false)),
+        Interaction.warning(
+          `Cannot prompt for approval in a non-interactive terminal. Nothing was changed — re-run with --yes to ${operation.toLowerCase()}.`,
+        ).pipe(Effect.as(false)),
       ),
     );
     if (!approved) return yield* exitDeclined;
   }
 
-  const result = yield* Stacks.apply(snapshot).pipe(
-    renderApply(snapshot.native, display),
-  );
+  const result = yield* Stacks.apply(snapshot).pipe(renderApply(snapshot.native, display));
   if (result !== undefined) {
-    const kit = yield* CliKit.CliKit;
+    const kit = yield* Interaction.Interaction;
     yield* kit.output.print(stackOutputsView(result));
   }
 });
@@ -229,6 +213,8 @@ export const deployCommand = Command.make(
   {
     dryRun: dryRunFlag,
     force,
+    include,
+    exclude,
     config: optionalConfig,
     configPath,
     envFile,
@@ -248,6 +234,8 @@ export const deployCommand = Command.make(
 export const destroyCommand = Command.make(
   "destroy",
   {
+    include,
+    exclude,
     dryRun: dryRunFlag,
     config: optionalConfig,
     configPath,
@@ -275,11 +263,14 @@ export const destroyCommand = Command.make(
 export const planCommand = Command.make(
   "plan",
   {
+    include,
+    exclude,
     config: optionalConfig,
     configPath,
     envFile,
     stage,
     profile,
+    adopt,
     detailed,
   },
   (args) =>
