@@ -128,7 +128,8 @@ const queuedManagement = (make: (transport: ManagementTransport) => EcsManagemen
  * Host an {@link EcsFleet}'s management runner as an on-demand Fargate task.
  * Nothing runs between deploys: a deploy's first management call (activation,
  * reload, D1 migrations) starts the task and waits for it, typically about a
- * minute; later calls reuse it until it has been idle for `idleSeconds`.
+ * minute; later calls reuse it until it has been idle for `idleSeconds`. It is
+ * billed only while running, and destroying the fleet takes a few minutes.
  *
  * ### Hosting the Runner
  * **Example:** Start the runner on demand
@@ -155,7 +156,8 @@ export const EcsTaskManagement = (
 /**
  * Host an {@link EcsFleet}'s management runner as an always-on Fargate task,
  * kept running by an ECS service, so management calls never wait for one to
- * start.
+ * start. The runner (0.25 vCPU, 0.5 GB, ARM) and its public IPv4 address cost
+ * about $11 a month in us-east-1.
  *
  * ### Hosting the Runner
  * **Example:** Keep the runner running

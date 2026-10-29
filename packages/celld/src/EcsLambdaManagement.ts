@@ -214,9 +214,9 @@ const collectNetworkPages = <A, E>(
 
 /**
  * Host an {@link EcsFleet}'s management runner as a VPC Lambda, invoked
- * synchronously over IAM. Calls never wait for a runner to start, but AWS
- * releases a VPC Lambda's network interfaces slowly, so destroying the fleet
- * takes around 20 minutes.
+ * synchronously over IAM. It costs nothing between deploys and calls only wait
+ * for a Lambda cold start, but AWS releases a VPC Lambda's network interfaces
+ * slowly, so destroying the fleet takes around 20 minutes.
  *
  * In a caller's VPC the runner needs a private route to the fleet bucket:
  * the fleet adds an S3 gateway endpoint to the subnets' route tables unless

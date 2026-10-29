@@ -137,17 +137,23 @@ Deploys reach the nodes' private operator listener through a management runner
 inside the fleet's network. `Celld.EcsFleet` needs a Layer that hosts it, and
 only that Layer's runner code is imported.
 
-`Celld.EcsTaskManagement()` runs it as a Fargate task that starts with the first
-management call of a deploy and stops after five idle minutes, so nothing runs
-between deploys. Keep it running to skip that first call's cold start:
+`Celld.EcsTaskManagement()` runs it as a small Fargate task that starts with the
+first management call of a deploy and stops after five idle minutes. Nothing
+runs, or is billed, between deploys, but that first call waits about a minute
+for the task to start. Destroying the fleet takes a few minutes.
+
+Keep the task running to skip that wait. An always-on runner costs about $11 a
+month in us-east-1 (Fargate plus its public IPv4 address):
 
 ```ts
 Celld.EcsFleet().pipe(Layer.provide(Celld.EcsServiceManagement()));
 ```
 
-`Celld.EcsLambdaManagement()` runs it as a VPC Lambda instead. Calls never wait
-for it to start, but AWS releases a VPC Lambda's network interfaces slowly, so
-destroying the fleet takes around 20 minutes.
+`Celld.EcsLambdaManagement()` runs it as a VPC Lambda instead. It costs nothing
+between deploys and calls only wait for a Lambda cold start, but AWS releases a
+VPC Lambda's network interfaces slowly, so destroying the fleet takes around 20
+minutes. In your own VPC it also adds an S3 gateway endpoint to the subnets'
+route tables when they don't have one.
 
 ## Upgrade an existing fleet
 
