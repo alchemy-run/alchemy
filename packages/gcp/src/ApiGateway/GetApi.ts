@@ -3,17 +3,15 @@ import type * as apigateway from "@distilled.cloud/gcp/apigateway_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Api } from "./Api.ts";
 
-export interface GetApiRequest extends Omit<apigateway.GetProjectsLocationsApisRequest, "name"> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the api (`apis/{api}`). */
-  api: string;
-}
+export interface GetApiRequest extends Omit<apigateway.GetProjectsLocationsApisRequest, "name"> {}
 
-export type GetApiShape = () => Effect.Effect<
+export type GetApiShape = (
+  resource: Api,
+) => Effect.Effect<
   (
-    request: GetApiRequest,
+    request?: GetApiRequest,
   ) => Effect.Effect<
     apigateway.ApigatewayApi,
     apigateway.GetProjectsLocationsApisError,
@@ -24,14 +22,14 @@ export type GetApiShape = () => Effect.Effect<
 /**
  * Gets details of a single Api.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link GetApiHttp}. The host gets `roles/apigateway.viewer` on the project.
+ * Bind it to a {@link Api} and provide {@link GetApiHttp}. The
+ * host gets `roles/apigateway.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `apis.get`
  * ```typescript
- * const getApi = yield* GCP.ApiGateway.GetApi();
- * const response = yield* getApi({ location: "us-central1", api: "..." });
+ * const getApi = yield* GCP.ApiGateway.GetApi(api);
+ * const response = yield* getApi();
  * ```
  *
  * @binding

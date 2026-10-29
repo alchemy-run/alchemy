@@ -228,7 +228,12 @@ import {
   MonetizationSubscriptionsBasePlansOffer,
   MonetizationSubscriptionsBasePlansOfferProvider,
 } from "./AndroidPublisher/MonetizationSubscriptionsBasePlansOffer.ts";
+import { Api, ApiProvider } from "./ApiGateway/Api.ts";
 import { ApisConfig, ApisConfigProvider } from "./ApiGateway/ApisConfig.ts";
+import {
+  Gateway as ApiGatewayGateway,
+  GatewayProvider as ApiGatewayGatewayProvider,
+} from "./ApiGateway/Gateway.ts";
 import { AnalyticsDatastore, AnalyticsDatastoreProvider } from "./Apigee/AnalyticsDatastore.ts";
 import {
   ApimServiceExtension,
@@ -3302,6 +3307,8 @@ const makeProviders = () =>
           ObservationJob,
           ObservationSource,
           ApisConfig,
+          Api,
+          ApiGatewayGateway,
         ]) as unknown as Effect.Effect<{ providers: Record<string, any> }, never, never>).providers,
       );
       Object.assign(
@@ -4459,6 +4466,8 @@ const makeProviders = () =>
                 ObservationJobProvider(),
                 ObservationSourceProvider(),
                 ApisConfigProvider(),
+                ApiProvider(),
+                ApiGatewayGatewayProvider(),
               ),
               Layer.mergeAll(
                 MerchantReviewProvider(),

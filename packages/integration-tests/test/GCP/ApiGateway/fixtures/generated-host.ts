@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeApi, ProbeConfig, ProbeGateway } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated ApiGateway binding as its own
@@ -15,69 +16,32 @@ export default class ApiGatewayGeneratedHost extends GCP.Function<ApiGatewayGene
   "ApiGatewayGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.ApiGateway.CreateApi();
-    const p1 = yield* GCP.ApiGateway.CreateGateway();
-    const p2 = yield* GCP.ApiGateway.DeleteApi();
-    const p3 = yield* GCP.ApiGateway.DeleteGateway();
-    const p4 = yield* GCP.ApiGateway.GetApi();
-    const p5 = yield* GCP.ApiGateway.GetGateway();
-    const p6 = yield* GCP.ApiGateway.ListApiConfigs();
-    const p7 = yield* GCP.ApiGateway.ListApis();
-    const p8 = yield* GCP.ApiGateway.ListGateways();
-    const p9 = yield* GCP.ApiGateway.PatchApi();
-    const p10 = yield* GCP.ApiGateway.PatchGateway();
+    const p0 = yield* GCP.ApiGateway.GetApi(ProbeApi);
+    const p1 = yield* GCP.ApiGateway.GetConfig(ProbeConfig);
+    const p2 = yield* GCP.ApiGateway.GetGateway(ProbeGateway);
+    const p3 = yield* GCP.ApiGateway.ListApiConfigs(ProbeApi);
+    const p4 = yield* GCP.ApiGateway.ListApis();
+    const p5 = yield* GCP.ApiGateway.ListGateways();
     return {
       fetch: serveProbes({
-        CreateApi: outcome(
-          Retry.none(
-            p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
-          ),
-        ),
-        CreateGateway: outcome(
-          Retry.none(
-            p1({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
-          ),
-        ),
-        DeleteApi: outcome(
-          Retry.none(p2({ api: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        DeleteGateway: outcome(
-          Retry.none(p3({ gateway: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        GetApi: outcome(
-          Retry.none(p4({ api: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        GetGateway: outcome(
-          Retry.none(p5({ gateway: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        ListApiConfigs: outcome(
-          Retry.none(p6({ api: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        ListApis: outcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListGateways: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        PatchApi: outcome(
-          Retry.none(p9({ api: "alchemy-missing", location: "us-central1" } as never)),
-        ),
-        PatchGateway: outcome(
-          Retry.none(p10({ gateway: "alchemy-missing", location: "us-central1" } as never)),
-        ),
+        GetApi: outcome(Retry.none(p0({} as never))),
+        GetConfig: outcome(Retry.none(p1({} as never))),
+        GetGateway: outcome(Retry.none(p2({} as never))),
+        ListApiConfigs: outcome(Retry.none(p3({} as never))),
+        ListApis: outcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListGateways: outcome(Retry.none(p5({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
-          GCP.ApiGateway.CreateApiHttp,
-          GCP.ApiGateway.CreateGatewayHttp,
-          GCP.ApiGateway.DeleteApiHttp,
-          GCP.ApiGateway.DeleteGatewayHttp,
           GCP.ApiGateway.GetApiHttp,
+          GCP.ApiGateway.GetConfigHttp,
           GCP.ApiGateway.GetGatewayHttp,
           GCP.ApiGateway.ListApiConfigsHttp,
           GCP.ApiGateway.ListApisHttp,
           GCP.ApiGateway.ListGatewaysHttp,
-          GCP.ApiGateway.PatchApiHttp,
-          GCP.ApiGateway.PatchGatewayHttp,
         ),
       ),
     ),

@@ -64,57 +64,10 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
-    describe("ApisConfig", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetConfig (apigateway.projects.locations.apis.configs.get): ApisConfig: a config lives under an API Gateway API, which Alchemy has no resource for yet; ApisConfig.test.ts creates the parent API through the SDK",
-        () => Effect.void,
-      );
-    });
-
-    describe("project", { concurrent: true }, () => {
-      test.provider(
-        "CreateApi (apigateway.projects.locations.apis.create)",
-        () => probe("CreateApi", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "CreateGateway (apigateway.projects.locations.gateways.create)",
-        () => probe("CreateGateway", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "DeleteApi (apigateway.projects.locations.apis.delete)",
-        () => probe("DeleteApi", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "DeleteGateway (apigateway.projects.locations.gateways.delete)",
-        () => probe("DeleteGateway", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
-          timeout: 600_000,
-        },
-      );
+    describe("Api", { concurrent: true }, () => {
       test.provider(
         "GetApi (apigateway.projects.locations.apis.get)",
-        () => probe("GetApi", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "GetGateway (apigateway.projects.locations.gateways.get)",
-        () => probe("GetGateway", false),
+        () => probe("GetApi", true),
         {
           tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
           timeout: 600_000,
@@ -122,12 +75,37 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListApiConfigs (apigateway.projects.locations.apis.configs.list)",
-        () => probe("ListApiConfigs", false),
+        () => probe("ListApiConfigs", true),
         {
           tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
           timeout: 600_000,
         },
       );
+    });
+
+    describe("ApisConfig", { concurrent: true }, () => {
+      test.provider(
+        "GetConfig (apigateway.projects.locations.apis.configs.get)",
+        () => probe("GetConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("Gateway", { concurrent: true }, () => {
+      test.provider(
+        "GetGateway (apigateway.projects.locations.gateways.get)",
+        () => probe("GetGateway", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("project", { concurrent: true }, () => {
       test.provider(
         "ListApis (apigateway.projects.locations.apis.list)",
         () => probe("ListApis", true),
@@ -139,22 +117,6 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "ListGateways (apigateway.projects.locations.gateways.list)",
         () => probe("ListGateways", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "PatchApi (apigateway.projects.locations.apis.patch)",
-        () => probe("PatchApi", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "PatchGateway (apigateway.projects.locations.gateways.patch)",
-        () => probe("PatchGateway", false),
         {
           tags: ["provider:gcp", "provider:gcp:apigateway", "live"],
           timeout: 600_000,
