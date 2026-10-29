@@ -10,6 +10,7 @@ import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Layer from "effect/Layer";
+import * as Queue from "effect/Queue";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -341,14 +342,17 @@ export const hostContract = (name: string, host: () => HostLayer) =>
             atLeast: { stream: "Counter/c-1", version: 3 },
           });
           expect(total).toEqual({ total: 6 });
-          const feed = yield* api.Totals.events("c-1").pipe(
-            Stream.take(5),
-            Stream.runCollect,
+          const feed = yield* Queue.unbounded<Frame>();
+          yield* api.Totals.events("c-1").pipe(
+            Stream.runForEach((frame) => Queue.offer(feed, frame)),
             Effect.forkChild,
           );
-          yield* Effect.sleep("50 millis");
+          // Commit only once the feed has caught up, so the commit is live.
+          const history = [];
+          for (let i = 0; i < 4; i++) history.push(yield* Queue.take(feed));
           yield* api.Increment("c-1", { by: 4 });
-          expect(frames(yield* Fiber.join(feed))).toEqual([1, 2, 3, "caught up at 3", 4]);
+          history.push(yield* Queue.take(feed).pipe(Effect.timeout("10 seconds")));
+          expect(frames(history)).toEqual([1, 2, 3, "caught up at 3", 4]);
           const resumed = yield* api.Totals.events("c-1", { after: 2 }).pipe(
             Stream.take(3),
             Stream.runCollect,
@@ -363,15 +367,16 @@ export const hostContract = (name: string, host: () => HostLayer) =>
         Effect.gen(function* () {
           const api = yield* ContractApi.Client;
           yield* api.Increment("c-1", { by: 1 });
-          const watched = yield* api.Counter.watch("c-1").pipe(
-            Stream.take(2),
-            Stream.runCollect,
+          const watched = yield* Queue.unbounded<{ readonly cursor: number }>();
+          yield* api.Counter.watch("c-1").pipe(
+            Stream.runForEach((state) => Queue.offer(watched, state)),
             Effect.forkChild,
           );
-          yield* Effect.sleep("50 millis");
+          // Commit only once the watch has its first state, so the commit is live.
+          const first = yield* Queue.take(watched);
           yield* api.Increment("c-1", { by: 2 });
-          const [first, second] = yield* Fiber.join(watched);
-          expect([first!.cursor, second!.cursor]).toEqual([1, 2]);
+          const second = yield* Queue.take(watched).pipe(Effect.timeout("10 seconds"));
+          expect([first.cursor, second.cursor]).toEqual([1, 2]);
           const events = yield* api.Counter.events("c-1").pipe(Stream.take(3), Stream.runCollect);
           expect(frames(events)).toEqual([1, 2, "caught up at 2"]);
         }),
