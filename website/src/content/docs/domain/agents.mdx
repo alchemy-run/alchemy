@@ -12,7 +12,7 @@ An Api already lists what one kind of client may do. `@alchemy.run/domain/Ai` tu
 | Entry     | Tools                 | Kind of tool |
 | --------- | --------------------- | ------------ |
 | Command   | `send`                | write        |
-| View      | `get`, `list`         | read         |
+| View      | `get`, `list`, `snapshot` | read     |
 | Stream    | `peek`, `list`        | read         |
 | Aggregate | `get`                 | read         |
 
@@ -26,10 +26,10 @@ Object.keys(toolkit.tools);
 // ["CustomerApi_DepositMoney_send", "CustomerApi_AccountSummary_get", "CustomerApi_AccountSummary_list", ...]
 ```
 
-- **Name.** `<api>_<entry>_<operation>`. A character other than a letter, a digit, `_` or `-` becomes `_`, because model providers and MCP clients accept only those. A name longer than 64 characters, or two calls with one name, fail when you build the toolkit. `DomainAi.toolName(op)` gives the name of a catalog operation.
-- **Schemas.** The parameters, the success and the failure of a tool are the schemas of its call. They give the same JSON Schemas that [`Domain.Api.describe`](/domain/api#describe-it-for-tools) lists. One difference: MCP requires an object as a tool's output, so a success that is not an object (a view's `state | null`) comes back as `{ value }`.
+- **Name.** `<api>_<entry>_<operation>`. A character other than a letter, a digit, `_` or `-` becomes `_`, because model providers and MCP clients accept only those. A name longer than 64 characters, or two calls with one name, fail the toolkit's Layer with a `DefinitionError`. `DomainAi.toolName({ api, entry, operation })` gives the name of a call.
+- **Schemas.** The parameters, the success and the failure of a tool are the schemas of its call. They are the JSON the Api's RPC server reads and writes. One difference: MCP requires an object as a tool's output, so a success that is not an object (a view's `state | null`) comes back as `{ value }`.
 - **Hints.** A read is marked read-only and idempotent. A command is marked destructive.
-- **Description.** The entry's `description` annotation, or a sentence made from the call ("Send the DepositMoney command.").
+- **Description.** A command's `description` annotation, or a sentence made from the call ("Send the DepositMoney command.").
 
 `layer` holds the tools' handlers. It needs what the Api needs to serve: the hosted model and the Layers of the middleware its entries declare.
 

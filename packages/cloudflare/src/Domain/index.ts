@@ -1,9 +1,10 @@
 import type * as Aggregate from "@alchemy.run/domain/Aggregate";
+import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "@alchemy.run/domain/Aggregate";
 import { isAfter, mergeCheckpoints } from "@alchemy.run/domain/InMemory";
-import { captureContext } from "@alchemy.run/domain/internal";
 import {
   type Accepted,
   type AggregateKit,
+  captureContext,
   type Delivery,
   emptySnapshot,
   emptyStreamMeta,
@@ -18,7 +19,7 @@ import {
   type StreamKit,
   type StreamMeta,
   type StreamWrite,
-  type Subscription,
+  Subscription,
   type ViewEntry,
   type ViewKit,
   type ViewSnapshot,
@@ -33,6 +34,7 @@ import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
 import type { WorkflowEngine } from "effect/workflow";
@@ -80,7 +82,7 @@ const unwrapDefects = <A>(call: Effect.Effect<unknown, unknown>): Effect.Effect<
   call.pipe(
     Effect.catchDefect((defect) => Effect.fail(defect)),
     Effect.retry(TRANSIT_RETRY),
-    Effect.catch((error) => Effect.die(error)),
+    Effect.orDie,
     Effect.flatMap((value) =>
       value !== null && typeof value === "object" && DefectTag in value
         ? Effect.die(new Error(String((value as Record<string, unknown>)[DefectTag])))
@@ -134,6 +136,9 @@ const exclusively = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     return yield* exit;
   });
 
+/** What `scheduled:<commandId>` holds once that command is cancelled; never a job token. */
+const CANCELLED = "cancelled";
+
 /** How long a queue drain may hold its lease before another drain may take over. */
 const LEASE_MS = 60_000;
 
@@ -157,6 +162,7 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
         return true;
       }),
     );
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
     const drain: Effect.Effect<void> = Effect.gen(function* () {
       if (!(yield* acquire)) return;
       yield* Effect.gen(function* () {
@@ -194,10 +200,9 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
 // ---------------------------------------------------------------- live reads
 
 /** What a live read's WebSocket carries across hibernation. */
-interface Attachment {
-  readonly key: string;
-  readonly subscription: Subscription;
-}
+const Attachment = Schema.Struct({ key: Schema.String, subscription: Subscription });
+type Attachment = typeof Attachment.Type;
+const decodeAttachment = Schema.decodeUnknownOption(Schema.fromJsonString(Attachment));
 
 const SUBSCRIPTION_HEADER = "x-domain-subscription";
 
@@ -240,7 +245,11 @@ const accept = (
     if (header === undefined || request.headers.upgrade?.toLowerCase() !== "websocket") {
       return HttpServerResponse.empty({ status: 426, headers: { Upgrade: "websocket" } });
     }
-    const { key, subscription } = JSON.parse(header) as Attachment;
+    const attachment = decodeAttachment(header);
+    if (Option.isNone(attachment)) {
+      return HttpServerResponse.text("Invalid live read", { status: 400 });
+    }
+    const { key, subscription } = attachment.value;
     return yield* exclusively(
       Effect.gen(function* () {
         const [response, socket] = yield* upgrade();
@@ -330,97 +339,143 @@ const aggregateObject = (kit: AggregateKit) =>
     return Effect.gen(function* () {
       const outbox = yield* queue<Delivery>("outbox", kit.deliver);
       const currentMeta = state.storage
-        .get<{ state: Json | null; version: number }>("meta")
+        .get<{ state: Json; version: number }>("meta")
         .pipe(Effect.map((meta) => meta ?? { state: null, version: 0 }));
       const eventsAfter = (after: number) =>
         state.storage
           .list<StoredEvent>({ prefix: "event:", start: `event:${pad(after + 1)}` })
           .pipe(Effect.map((rows) => [...rows.values()]));
-      const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
+      // Callers run it `exclusively`.
+      const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
         Effect.gen(function* () {
-          const { sent, kick } = yield* exclusively(
+          const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
+          if (duplicate) return { sent: duplicate, kick: false };
+          const current = (yield* state.storage.get<{
+            state: Json;
+            version: number;
+          }>("meta")) ?? {
+            state: null,
+            version: 0,
+          };
+          const result = yield* kit.handle({
+            id,
+            state: current.state,
+            version: current.version,
+            command,
+            commandId: meta.commandId,
+            context: meta.context,
+            now: yield* Effect.sync(() => Date.now()),
+            correlationId: meta.correlationId,
+            trace: meta.trace,
+            link: meta.link,
+          });
+          if (result._tag === "Rejected") return { sent: result as SendResult, kick: false };
+          const sent: SendResult = {
+            _tag: "Accepted",
+            receipt: {
+              stream: `${kit.name}/${id}`,
+              version: result.version,
+              events: result.events.map((e) => e.event),
+              reply: result.reply,
+            },
+          };
+          yield* state.storage.transaction(
             Effect.gen(function* () {
-              const duplicate = yield* state.storage.get<SendResult>(`receipt:${meta.commandId}`);
-              if (duplicate) return { sent: duplicate, kick: false };
-              const current = (yield* state.storage.get<{
-                state: Json | null;
-                version: number;
-              }>("meta")) ?? {
-                state: null,
-                version: 0,
-              };
-              const result = yield* kit.handle({
-                id,
-                state: current.state,
-                version: current.version,
-                command,
-                commandId: meta.commandId,
-                context: meta.context,
-                now: yield* Effect.sync(() => Date.now()),
-                correlationId: meta.correlationId,
-                trace: meta.trace,
-                link: meta.link,
+              const events: Record<string, StoredEvent> = {};
+              for (const event of result.events) events[`event:${pad(event.envelope.seq)}`] = event;
+              yield* state.storage.put(events);
+              yield* state.storage.put("meta", {
+                state: result.state,
+                version: result.version,
               });
-              if (result._tag === "Rejected") return { sent: result as SendResult, kick: false };
-              const sent: SendResult = {
-                _tag: "Accepted",
-                receipt: {
-                  stream: `${kit.name}/${id}`,
-                  version: result.version,
-                  events: result.events.map((e) => e.event),
-                  reply: result.reply,
-                },
-              };
-              yield* state.storage.transaction(
-                Effect.gen(function* () {
-                  const events: Record<string, StoredEvent> = {};
-                  for (const event of result.events)
-                    events[`event:${pad(event.envelope.seq)}`] = event;
-                  yield* state.storage.put(events);
-                  yield* state.storage.put("meta", {
-                    state: result.state,
-                    version: result.version,
-                  });
-                  yield* state.storage.put(`receipt:${meta.commandId}`, sent);
-                  yield* outbox.stage(result.deliveries);
-                }),
-              );
-              const committed = { state: result.state, version: result.version };
-              yield* broadcast(({ key, subscription }) =>
-                Effect.gen(function* () {
-                  // A subscriber behind this commit's first event reads the gap from storage.
-                  const first = result.events[0]?.envelope.seq ?? Infinity;
-                  const events =
-                    subscription.mode === "events" && subscription.cursor < first - 1
-                      ? yield* eventsAfter(subscription.cursor)
-                      : result.events;
-                  return yield* kit.push(key, subscription, committed, events);
-                }),
-              );
-              return { sent, kick: result.deliveries.length > 0 };
+              yield* state.storage.put(`receipt:${meta.commandId}`, sent);
+              yield* outbox.stage(result.deliveries);
             }),
           );
+          const committed = { state: result.state, version: result.version };
+          yield* broadcast(({ key, subscription }) =>
+            Effect.gen(function* () {
+              // A subscriber behind this commit's first event reads the gap from storage.
+              const first = result.events[0]?.envelope.seq ?? Infinity;
+              const events =
+                subscription.mode === "events" && subscription.cursor < first - 1
+                  ? yield* eventsAfter(subscription.cursor)
+                  : result.events;
+              return yield* kit.push(key, subscription, committed, events);
+            }),
+          );
+          return { sent, kick: result.deliveries.length > 0 };
+        });
+      const send = (id: string, command: Json, meta: Aggregate.SendMeta) =>
+        Effect.gen(function* () {
+          const { sent, kick } = yield* exclusively(commit(id, command, meta));
           if (kick) yield* outbox.kick;
           return sent;
         });
-      // Scheduled commands: one durable callback job per command id, run here when due.
+      const executed = (commandId: string) =>
+        state.storage
+          .get<SendResult>(`receipt:${commandId}`)
+          .pipe(Effect.map((receipt) => receipt !== undefined));
+      // Scheduled commands: one durable callback job per command id, run here
+      // when due. `scheduled:<commandId>` holds the token of the job that may
+      // run, or `CANCELLED` once it is cancelled, so a job cancelled or
+      // replaced after the alarm claimed it does nothing. It is cleared after
+      // the commit (the receipt takes over), so a retried job still runs.
       const timers = yield* makeCallback(
         "domain:schedule",
-        (job: { readonly id: string; readonly command: Json; readonly meta: Aggregate.SendMeta }) =>
-          send(job.id, job.command, job.meta),
+        (job: {
+          readonly id: string;
+          readonly command: Json;
+          readonly meta: Aggregate.SendMeta;
+          readonly token?: string;
+        }) =>
+          Effect.gen(function* () {
+            const key = `scheduled:${job.meta.commandId}`;
+            const kick = yield* exclusively(
+              Effect.gen(function* () {
+                // A job scheduled before tokens existed has none, and runs.
+                if (
+                  job.token !== undefined &&
+                  (yield* state.storage.get<string>(key)) !== job.token
+                )
+                  return false;
+                const { kick } = yield* commit(job.id, job.command, job.meta);
+                yield* state.storage.delete(key);
+                return kick;
+              }),
+            );
+            if (kick) yield* outbox.kick;
+          }),
       );
       return {
         send: (id: string, command: Json, meta: Aggregate.SendMeta) =>
           reportDefects(send(id, command, meta)),
         schedule: (id: string, command: Json, meta: Aggregate.SendMeta, due: Aggregate.Due) =>
-          reportDefects(
-            timers.schedule(
-              meta.commandId,
-              "at" in due
-                ? { at: due.at, payload: { id, command, meta } }
-                : { after: due.afterMillis, payload: { id, command, meta } },
-            ),
-          ),
+          Effect.gen(function* () {
+            if (yield* executed(meta.commandId)) return "AlreadyExecuted" as const;
+            const token = yield* Effect.sync(() => crypto.randomUUID());
+            const at =
+              "at" in due ? due.at : (yield* Effect.sync(() => Date.now())) + due.afterMillis;
+            yield* state.storage.put(`scheduled:${meta.commandId}`, token);
+            yield* timers.schedule(meta.commandId, {
+              at,
+              payload: { id, command, meta, token },
+            });
+            return { at };
+          }).pipe(exclusively, reportDefects),
+        unschedule: (commandId: string) =>
+          Effect.gen(function* () {
+            if (yield* executed(commandId)) return "AlreadyExecuted" as const;
+            const key = `scheduled:${commandId}`;
+            const token = yield* state.storage.get<string>(key);
+            if (token === CANCELLED) return "AlreadyCancelled" as const;
+            // A job scheduled before tokens existed has a job but no token.
+            if (token === undefined && (yield* timers.getStatus(commandId)) === undefined)
+              return "NotScheduled" as const;
+            yield* state.storage.put(key, CANCELLED);
+            yield* timers.cancel(commandId);
+            return "Cancelled" as const;
+          }).pipe(exclusively, reportDefects),
         state: () => reportDefects(currentMeta),
         after: (after: number) => reportDefects(eventsAfter(after)),
         // A live read of this instance: accept its WebSocket, then push on every commit.
@@ -582,6 +637,7 @@ const projectionObject = (kit: ProjectionKit) =>
       );
       // Re-run the drain later: when a short batch has waited long enough, or after a failure.
       let wake: (at: number) => Effect.Effect<void> = () => Effect.void;
+      // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides its state and RuntimeContext on every event
       const drain: Effect.Effect<void> = Effect.gen(function* () {
         if (!(yield* acquire)) return;
         const exit = yield* Effect.exit(
@@ -628,6 +684,7 @@ const projectionObject = (kit: ProjectionKit) =>
       }) as Effect.Effect<void>;
       const callback = yield* makeCallback("domain:projection", () => drain);
       wake = (at) =>
+        // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the Durable Object provides RuntimeContext on every event
         callback.schedule("drain", { at, payload: {} }).pipe(Effect.ignore) as Effect.Effect<void>;
       return {
         receive: (key: string, delivery: Delivery) =>
@@ -680,76 +737,62 @@ const streamObject = (kit: StreamKit) =>
           .pipe(Effect.map((rows) => [...rows.values()]));
       const latest = (meta: StreamMeta) =>
         meta.seq === 0
-          ? Effect.succeed(undefined)
+          ? Effect.undefined
           : state.storage.get<StreamEntry>(`entry:${pad(meta.seq)}`);
       return {
         append: (key: string, write: StreamWrite) =>
-          reportDefects(
-            exclusively(
-              Effect.gen(function* () {
-                const meta = yield* readMeta;
-                if (!isAfter(write.origin, meta.origin)) return;
-                const added: Array<StreamEntry> = write.events.map((event, index) => {
-                  const seq = meta.seq + index + 1;
-                  return {
-                    seq,
-                    event,
-                    envelope: {
-                      id: key,
-                      stream: `${kit.name}/${key}`,
-                      seq,
-                      at: write.at,
-                      commandId: write.commandId,
-                    },
-                  };
-                });
-                const next: StreamMeta = {
-                  seq: meta.seq + added.length,
-                  origin: write.origin,
-                  checkpoints: mergeCheckpoints(meta.checkpoints, {
-                    [write.source]: write.sourceSeq,
-                  }),
-                };
-                yield* state.storage.transaction(
-                  Effect.gen(function* () {
-                    const rows: Record<string, StreamEntry> = {};
-                    for (const entry of added) rows[`entry:${pad(entry.seq)}`] = entry;
-                    if (added.length > 0) yield* state.storage.put(rows);
-                    yield* state.storage.put("meta", next);
-                  }),
-                );
-                if (added.length === 0) return;
-                yield* broadcast(({ key, subscription }) =>
-                  Effect.gen(function* () {
-                    // A subscriber behind this append's first entry reads the gap from storage.
-                    const entries =
-                      subscription.mode === "events" && subscription.cursor < added[0]!.seq - 1
-                        ? yield* entriesAfter(subscription.cursor)
-                        : added;
-                    return yield* kit.push(
-                      key,
-                      subscription,
-                      next,
-                      entries,
-                      added[added.length - 1],
-                    );
-                  }),
-                );
+          Effect.gen(function* () {
+            const meta = yield* readMeta;
+            if (!isAfter(write.origin, meta.origin)) return;
+            const added: Array<StreamEntry> = write.events.map((event, index) => {
+              const seq = meta.seq + index + 1;
+              return {
+                seq,
+                event,
+                envelope: {
+                  id: key,
+                  stream: `${kit.name}/${key}`,
+                  seq,
+                  at: write.at,
+                  commandId: write.commandId,
+                },
+              };
+            });
+            const next: StreamMeta = {
+              seq: meta.seq + added.length,
+              origin: write.origin,
+              checkpoints: mergeCheckpoints(meta.checkpoints, {
+                [write.source]: write.sourceSeq,
               }),
-            ),
-          ),
+            };
+            yield* state.storage.transaction(
+              Effect.gen(function* () {
+                const rows: Record<string, StreamEntry> = {};
+                for (const entry of added) rows[`entry:${pad(entry.seq)}`] = entry;
+                if (added.length > 0) yield* state.storage.put(rows);
+                yield* state.storage.put("meta", next);
+              }),
+            );
+            if (added.length === 0) return;
+            yield* broadcast(({ key, subscription }) =>
+              Effect.gen(function* () {
+                // A subscriber behind this append's first entry reads the gap from storage.
+                const entries =
+                  subscription.mode === "events" && subscription.cursor < added[0]!.seq - 1
+                    ? yield* entriesAfter(subscription.cursor)
+                    : added;
+                return yield* kit.push(key, subscription, next, entries, added[added.length - 1]);
+              }),
+            );
+          }).pipe(exclusively, reportDefects),
         advance: (checkpoints: Readonly<Record<string, number>>) =>
-          reportDefects(
-            exclusively(
-              Effect.gen(function* () {
-                const meta = yield* readMeta;
-                yield* state.storage.put("meta", {
-                  ...meta,
-                  checkpoints: mergeCheckpoints(meta.checkpoints, checkpoints),
-                } satisfies StreamMeta);
-              }),
-            ),
-          ),
+          Effect.gen(function* () {
+            const meta = yield* readMeta;
+            yield* state.storage.put("meta", {
+              ...meta,
+              checkpoints: mergeCheckpoints(meta.checkpoints, checkpoints),
+            } satisfies StreamMeta);
+          }).pipe(exclusively, reportDefects),
         read: () => reportDefects(readMeta),
         after: (after: number) => reportDefects(entriesAfter(after)),
         // A live read of this key: accept its WebSocket, then push on every append.
@@ -813,15 +856,46 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
             return {
               send: (id, command, meta) =>
                 unwrapDefects(namespace.getByName(id).send(id, command, meta)),
+              // The object answers with a tag (RPC loses typed failures); fail with it here.
               schedule: (id, command, meta, due) =>
-                unwrapDefects(namespace.getByName(id).schedule(id, command, meta, due)),
+                unwrapDefects<{ readonly at: number } | "AlreadyExecuted">(
+                  namespace.getByName(id).schedule(id, command, meta, due),
+                ).pipe(
+                  Effect.flatMap((outcome) =>
+                    outcome === "AlreadyExecuted"
+                      ? Effect.fail(
+                          new AlreadyExecuted({
+                            aggregate: aggregate.aggregateName,
+                            id,
+                            commandId: meta.commandId,
+                          }),
+                        )
+                      : Effect.succeed(outcome.at),
+                  ),
+                ),
+              unschedule: (id, commandId) =>
+                unwrapDefects<
+                  "Cancelled" | "AlreadyCancelled" | "AlreadyExecuted" | "NotScheduled"
+                >(namespace.getByName(id).unschedule(commandId)).pipe(
+                  Effect.flatMap(
+                    (
+                      outcome,
+                    ): Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled> => {
+                      const fields = { aggregate: aggregate.aggregateName, id, commandId };
+                      if (outcome === "AlreadyExecuted")
+                        return Effect.fail(new AlreadyExecuted(fields));
+                      if (outcome === "AlreadyCancelled")
+                        return Effect.fail(new AlreadyCancelled(fields));
+                      if (outcome === "NotScheduled") return Effect.fail(new NotScheduled(fields));
+                      return Effect.void;
+                    },
+                  ),
+                ),
               state: (id) => unwrapDefects(namespace.getByName(id).state()),
               // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
               changes: (id) =>
                 Stream.fromEffectSchedule(
-                  unwrapDefects<{ state: Json | null; version: number }>(
-                    namespace.getByName(id).state(),
-                  ),
+                  unwrapDefects<{ state: Json; version: number }>(namespace.getByName(id).state()),
                   POLL,
                 ).pipe(Stream.changesWith((a, b) => a.version === b.version)),
               tail: (id, from) =>

@@ -97,7 +97,7 @@ export const StreamKeyProvider = () =>
       const getByArn = Effect.fn(function* (arn: string) {
         const response = yield* ivs.getStreamKey({ arn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         return response?.streamKey;
       });
@@ -110,7 +110,7 @@ export const StreamKeyProvider = () =>
       const findByChannel = Effect.fn(function* (channelArn: string) {
         const page = yield* ivs.listStreamKeys({ channelArn }).pipe(
           retryWhileThrottled,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         const arn = page?.streamKeys.find((s) => s.arn !== undefined)?.arn;
         return arn === undefined ? undefined : yield* getByArn(arn);
@@ -140,7 +140,7 @@ export const StreamKeyProvider = () =>
           ) {
             const response = yield* ivs.getChannel({ arn: olds.channelArn }).pipe(
               retryWhileThrottled,
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
             const channelTags = toTagRecord(response?.channel?.tags);
             const channelId = channelTags["alchemy::id"];

@@ -5,6 +5,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, createTagsList, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireDays } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -12,6 +13,18 @@ import * as Stream from "effect/Stream";
 import { reapLogGroupsByPrefix } from "../Logs/reapLogGroups.ts";
 import type { Providers } from "../Providers.ts";
 import { findClusterById, sameStringSet, toTagRecord } from "./internal.ts";
+
+export class CloudHSMV2ClusterNotReady extends Data.TaggedError("CloudHSMV2ClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CloudHSMV2ClusterUnexpectedResponse extends Data.TaggedError(
+  "CloudHSMV2ClusterUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ClusterProps {
   /**
@@ -201,13 +214,17 @@ export const ClusterProvider = () =>
         return yield* findClusterById(clusterId).pipe(
           Effect.flatMap((cluster) => {
             if (cluster === undefined) {
-              return Effect.fail(new Error(`CloudHSM cluster '${clusterId}' not found`));
+              return Effect.fail(
+                new CloudHSMV2ClusterNotReady({
+                  message: `CloudHSM cluster '${clusterId}' not found`,
+                }),
+              );
             }
             if (cluster.State?.endsWith("_IN_PROGRESS")) {
               return Effect.fail(
-                new Error(
-                  `CloudHSM cluster '${clusterId}' still settling (state: ${cluster.State})`,
-                ),
+                new CloudHSMV2ClusterNotReady({
+                  message: `CloudHSM cluster '${clusterId}' still settling (state: ${cluster.State})`,
+                }),
               );
             }
             return Effect.succeed(cluster);
@@ -218,7 +235,9 @@ export const ClusterProvider = () =>
 
       const toAttrs = Effect.fn(function* (cluster: cloudhsm.Cluster) {
         if (!cluster.ClusterId) {
-          return yield* Effect.fail(new Error("CloudHSM cluster is missing its ClusterId"));
+          return yield* new CloudHSMV2ClusterUnexpectedResponse({
+            message: "CloudHSM cluster is missing its ClusterId",
+          });
         }
         return {
           clusterId: cluster.ClusterId,
@@ -310,7 +329,9 @@ export const ClusterProvider = () =>
           }
           const clusterId = observed?.ClusterId;
           if (!clusterId) {
-            return yield* Effect.fail(new Error("CreateCluster returned no ClusterId"));
+            return yield* new CloudHSMV2ClusterUnexpectedResponse({
+              message: "CreateCluster returned no ClusterId",
+            });
           }
 
           // Creation/modification park the cluster in *_IN_PROGRESS; wait

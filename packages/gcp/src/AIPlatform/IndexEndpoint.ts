@@ -132,13 +132,13 @@ export const IndexEndpoint = Resource<IndexEndpoint>("GCP.AIPlatform.IndexEndpoi
 export class IndexEndpointNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.IndexEndpointNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class IndexEndpointStillExists extends Data.TaggedError(
   "GCP.AIPlatform.IndexEndpointStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (endpoint: aiplatform.GoogleCloudAiplatformV1IndexEndpoint, project: string) => {
@@ -165,7 +165,7 @@ const toAttrs = (endpoint: aiplatform.GoogleCloudAiplatformV1IndexEndpoint, proj
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsIndexEndpoints({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listPage = (parent: string, filter?: string) =>
   aiplatform.listProjectsLocationsIndexEndpoints.pages({ parent, pageSize: 100, filter }).pipe(
@@ -204,7 +204,7 @@ const waitUntilExists = (name: string) =>
     Effect.filterOrFail(
       (endpoint): endpoint is aiplatform.GoogleCloudAiplatformV1IndexEndpoint =>
         endpoint !== undefined,
-      () => new IndexEndpointNotResolved({ name }),
+      () => new IndexEndpointNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.IndexEndpointNotResolved",
@@ -217,7 +217,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (endpoint) => endpoint === undefined,
-      () => new IndexEndpointStillExists({ name }),
+      () => new IndexEndpointStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -307,7 +307,7 @@ export const IndexEndpointProvider = () =>
               privateServiceConnectConfig: news.privateServiceConnectConfig,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const name = resourceNameFromOperation(done);
@@ -323,7 +323,7 @@ export const IndexEndpointProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new IndexEndpointNotResolved({
-          name: output?.name ?? `${location}/indexEndpoints`,
+          resourceName: output?.name ?? `${location}/indexEndpoints`,
         });
       }
 
@@ -363,7 +363,7 @@ export const IndexEndpointProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

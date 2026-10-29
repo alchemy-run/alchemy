@@ -187,7 +187,7 @@ export const FirewallProvider = () =>
       const describe = Effect.fn(function* (name: string) {
         return yield* nfw
           .describeFirewall({ FirewallName: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       // Bounded readiness wait. Endpoint provisioning typically completes in
@@ -221,7 +221,7 @@ export const FirewallProvider = () =>
                   Effect.map((r) =>
                     r.Firewall !== undefined ? toAttrs(r.Firewall, r.FirewallStatus) : undefined,
                   ),
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                  Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
                 ),
               { concurrency: 5 },
             );
@@ -377,7 +377,7 @@ export const FirewallProvider = () =>
           const name = output.firewallName;
           const observed = yield* nfw
             .describeFirewall({ FirewallName: name })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (observed === undefined) return;
 
           // Clear delete protection first — DeleteFirewall requires it off.
@@ -404,7 +404,7 @@ export const FirewallProvider = () =>
           yield* Effect.gen(function* () {
             const remaining = yield* nfw
               .describeFirewall({ FirewallName: name })
-              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
             if (remaining !== undefined) {
               return yield* new FirewallNotDeleted({
                 message: `firewall '${name}' still deleting (status: ${remaining.FirewallStatus?.Status})`,

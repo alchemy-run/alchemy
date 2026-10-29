@@ -118,7 +118,7 @@ export const RunGroupProvider = () =>
           if (output?.runGroupId === undefined) return undefined;
           const found = yield* omics
             .getRunGroup({ id: output.runGroupId })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
           if (found === undefined || found.id === undefined) return undefined;
           const attrs = {
             runGroupId: found.id,
@@ -145,9 +145,7 @@ export const RunGroupProvider = () =>
               ? undefined
               : yield* omics
                   .getRunGroup({ id: output.runGroupId })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  );
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
           // ENSURE — create if missing. `requestId` is a client idempotency
           // token; a stable value derived from the logical id keeps a retried

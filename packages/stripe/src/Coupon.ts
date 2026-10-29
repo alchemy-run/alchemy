@@ -268,7 +268,7 @@ const toAttrs = (coupon: StripeCoupon): CouponAttributes => ({
 const isMissingCoupon = isMissingStripeResource;
 
 const getById = (coupon: string) =>
-  GetCoupon({ coupon }).pipe(Effect.catchIf(isMissingCoupon, () => Effect.succeed(undefined)));
+  GetCoupon({ coupon }).pipe(Effect.catchIf(isMissingCoupon, () => Effect.undefined));
 
 const listAllCoupons = Effect.fn(function* () {
   const coupons: StripeCoupon[] = [];

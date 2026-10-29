@@ -4,9 +4,9 @@ import { BackupSelection } from "@alchemy.run/aws/Backup/BackupSelection";
 import { BackupVault } from "@alchemy.run/aws/Backup/BackupVault";
 import { normalizePolicyDocument, type PolicyDocument } from "@alchemy.run/aws/IAM/Policy";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as backup from "@distilled.cloud/aws/backup";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: AWS.providers() });

@@ -176,7 +176,7 @@ export const AppProvider = () =>
 const getApp = (accountId: string, appId: string) =>
   calls
     .getSfu({ accountId, appId })
-    .pipe(Effect.catchTag("CallsAppNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("CallsAppNotFound", () => Effect.undefined));
 
 const createAppName = (id: string, name: string | undefined) =>
   Effect.gen(function* () {

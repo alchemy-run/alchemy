@@ -176,7 +176,7 @@ export const CustomActionProvider = () =>
         chatbot.getCustomAction({ CustomActionArn: arn }).pipe(
           inChatbotRegion,
           Effect.map((r) => r.CustomAction),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
 
       const observedTags = (arn: string) =>

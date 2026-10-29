@@ -9,6 +9,11 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type { Providers } from "../Providers.ts";
 
+export class VpcOriginUnexpectedResponse extends Data.TaggedError("VpcOriginUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 class VpcOriginPendingDeployment extends Data.TaggedError("VpcOriginPendingDeployment")<{
   message: string;
 }> {}
@@ -146,7 +151,7 @@ export const VpcOriginProvider = () =>
       const getById = Effect.fn(function* (id: string) {
         const result = yield* cloudfront
           .getVpcOrigin({ Id: id })
-          .pipe(Effect.catchTag("EntityNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("EntityNotFound", () => Effect.undefined));
         if (!result?.VpcOrigin?.Id) {
           return undefined;
         }
@@ -329,7 +334,9 @@ export const VpcOriginProvider = () =>
               );
 
             if (!created?.vpcOrigin.Id) {
-              return yield* Effect.fail(new Error("createVpcOrigin returned no identifier"));
+              return yield* new VpcOriginUnexpectedResponse({
+                message: "createVpcOrigin returned no identifier",
+              });
             }
 
             yield* session.note(created.vpcOrigin.Id);

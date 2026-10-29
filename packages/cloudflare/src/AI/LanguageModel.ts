@@ -621,8 +621,9 @@ const decodeResponse = (raw: Record<string, unknown>): DecodedResponse => {
 
 const nativeTextOf = (raw: unknown): string | undefined => {
   if (raw == null) return undefined;
-  if (typeof raw === "object") return JSON.stringify(raw);
-  const text = String(raw);
+  // Workers AI responses are JSON-decoded, so JSON.stringify matches
+  // String() for every scalar and serializes objects/arrays.
+  const text = typeof raw === "string" ? raw : JSON.stringify(raw);
   return text.length > 0 ? text : undefined;
 };
 
@@ -926,7 +927,7 @@ const handleNativeText = (
 ): Effect.Effect<StreamState> => {
   const native = chunk.response;
   if (native == null || native === "") return Effect.succeed(state);
-  const text = typeof native === "object" ? JSON.stringify(native) : String(native);
+  const text = typeof native === "string" ? native : JSON.stringify(native);
   if (text.length === 0) return Effect.succeed(state);
   // Some models (e.g. `@cf/meta/llama-3.3-70b`) mirror every text fragment
   // in both the native `response` field and the OpenAI-compatible delta of

@@ -1,9 +1,9 @@
 import { randomBytes } from "node:crypto";
 import * as Fly from "@alchemy.run/fly";
 import { expect } from "@alchemy.run/test";
+import type { ScratchStack } from "@alchemy.run/test/Alchemy";
 import * as machines from "@distilled.cloud/fly-io/machines";
 import * as Output from "alchemy/Output";
-import type { ScratchStack } from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { FileSystem } from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";

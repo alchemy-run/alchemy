@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireMillis, toWireSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
@@ -19,6 +20,16 @@ import {
   syncFleetWiseTags,
   toFleetWiseTagList,
 } from "./internal.ts";
+
+export class CampaignNotReady extends Data.TaggedError("CampaignNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class CampaignUnexpectedResponse extends Data.TaggedError("CampaignUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * Time-based collection: collect the signals on a fixed cadence.
@@ -361,7 +372,7 @@ export const CampaignProvider = () =>
       const readCampaign = Effect.fn(function* (name: string) {
         return yield* iotfleetwise.getCampaign({ name }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -371,10 +382,12 @@ export const CampaignProvider = () =>
         return yield* readCampaign(name).pipe(
           Effect.flatMap((campaign) => {
             if (campaign === undefined) {
-              return Effect.fail(new Error(`Campaign '${name}' not found`));
+              return Effect.fail(new CampaignNotReady({ message: `Campaign '${name}' not found` }));
             }
             if (campaign.status === "CREATING") {
-              return Effect.fail(new Error(`Campaign '${name}' still creating`));
+              return Effect.fail(
+                new CampaignNotReady({ message: `Campaign '${name}' still creating` }),
+              );
             }
             return Effect.succeed(campaign);
           }),
@@ -384,7 +397,9 @@ export const CampaignProvider = () =>
 
       const toAttrs = Effect.fn(function* (campaign: iotfleetwise.GetCampaignResponse) {
         if (campaign.name === undefined || campaign.arn === undefined) {
-          return yield* Effect.fail(new Error(`Campaign '${campaign.name}' is missing its ARN`));
+          return yield* new CampaignUnexpectedResponse({
+            message: `Campaign '${campaign.name}' is missing its ARN`,
+          });
         }
         return {
           campaignName: campaign.name,

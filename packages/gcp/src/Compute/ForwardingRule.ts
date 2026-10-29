@@ -431,7 +431,7 @@ const toInsertBody = (
 const getByName = (project: string, region: string, forwardingRule: string) =>
   compute
     .getForwardingRules({ project, region, forwardingRule })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const requireForwardingRule = (project: string, region: string, forwardingRuleName: string) =>
   getByName(project, region, forwardingRuleName).pipe(

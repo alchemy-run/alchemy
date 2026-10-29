@@ -12,6 +12,7 @@ import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { destroyApp } from "./ComputeLifecycle.ts";
 import { ensureAppImmutableIdentity } from "./internal/AppIdentity.ts";
@@ -29,6 +30,26 @@ import {
 import type { Project } from "./Project.ts";
 import type { Providers } from "./Providers.ts";
 import type { PrismaRegionId } from "./Types.ts";
+
+export class AppConflict extends Data.TaggedError("AppConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class AppInvalidProps extends Data.TaggedError("AppInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class AppOperationFailed extends Data.TaggedError("AppOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class AppUnexpectedResponse extends Data.TaggedError("AppUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface AppProps {
   /**
@@ -179,11 +200,9 @@ const findApp = Effect.fn(function* (
   if (!branch.resolved) return undefined;
   const matches = candidates.filter((app) => app.branchId === branch.id);
   if (matches.length > 1) {
-    return yield* Effect.fail(
-      new Error(
-        `Prisma returned multiple Apps named '${displayName}' on branch '${branch.id}' in project '${projectId}'; refusing an ambiguous ownership match.`,
-      ),
-    );
+    return yield* new AppConflict({
+      message: `Prisma returned multiple Apps named '${displayName}' on branch '${branch.id}' in project '${projectId}'; refusing an ambiguous ownership match.`,
+    });
   }
   return matches[0];
 });
@@ -232,14 +251,15 @@ const branchNeedsSync = Effect.fn(function* (projectId: string, app: ObservedApp
 const validateAppProps = (props: AppProps) =>
   Effect.gen(function* () {
     if (props.branchId !== undefined && props.branchGitName !== undefined) {
-      return yield* Effect.fail(new Error("branchId and branchGitName are mutually exclusive."));
+      return yield* new AppInvalidProps({
+        message: "branchId and branchGitName are mutually exclusive.",
+      });
     }
     if (props.branchId === null || props.branchGitName === null) {
-      return yield* Effect.fail(
-        new Error(
+      return yield* new AppInvalidProps({
+        message:
           "Prisma.App requires an attached branch because the Management API cannot create an unassigned App atomically. Omit both fields to use the project default branch, or provide branchId/branchGitName.",
-        ),
-      );
+      });
     }
   });
 
@@ -265,11 +285,9 @@ const ProviderLive = () =>
           if (isResolved(news.regionId) && news.regionId !== undefined) {
             const currentRegionId = output?.regionId ?? olds.regionId;
             if (currentRegionId !== undefined && news.regionId !== currentRegionId) {
-              return yield* Effect.fail(
-                new Error(
-                  `Prisma App region is immutable and the Management API cannot atomically move an App without deleting its serving endpoint first. Create a second App with a different display name in the target region, cut traffic over, then remove this App.`,
-                ),
-              );
+              return yield* new AppInvalidProps({
+                message: `Prisma App region is immutable and the Management API cannot atomically move an App without deleting its serving endpoint first. Create a second App with a different display name in the target region, cut traffic over, then remove this App.`,
+              });
             }
           }
           if (
@@ -337,7 +355,7 @@ const ProviderLive = () =>
           const app = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : yield* findAppInProject;
           if (!app) return undefined;
@@ -351,19 +369,18 @@ const ProviderLive = () =>
           const logicalId = news.logicalId ?? fqn;
           const branch = yield* desiredBranchId(projectId, news);
           if (!branch.resolved) {
-            return yield* Effect.fail(
-              new Error(
+            return yield* new AppOperationFailed({
+              message:
                 news.branchGitName === undefined
                   ? `Prisma project '${projectId}' has no default branch to attach App '${displayName}'. Create or promote a default branch, or specify branchId/branchGitName.`
                   : `Prisma project '${projectId}' has no branch named '${news.branchGitName}' to attach App '${displayName}'.`,
-              ),
-            );
+            });
           }
           const appId = isPrismaDevId(output?.appId) ? undefined : output?.appId;
           let app: ObservedApp | undefined = appId
             ? yield* getService({ serviceId: appId }).pipe(
                 Effect.map((response) => response.data),
-                Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("NotFound", () => Effect.undefined),
               )
             : undefined;
           if (!app) {
@@ -392,12 +409,10 @@ const ProviderLive = () =>
                   if (app && output?.appId !== undefined && app.id === output.appId) {
                     return { app, created: false };
                   }
-                  return yield* Effect.fail(
-                    new Error(
-                      `Prisma app '${displayName}' already exists on the requested branch but is not owned by this App resource. Import it with explicit adoption or choose a different display name.`,
-                      { cause: conflict },
-                    ),
-                  );
+                  return yield* new AppConflict({
+                    message: `Prisma app '${displayName}' already exists on the requested branch but is not owned by this App resource. Import it with explicit adoption or choose a different display name.`,
+                    cause: conflict,
+                  });
                 }),
               ),
             );
@@ -433,11 +448,9 @@ const ProviderLive = () =>
             );
           }
           if (app.name !== displayName || app.branchId !== branch.id) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma App '${app.id}' did not converge to display name '${displayName}' and branch '${branch.id ?? "null"}'. Refusing to persist mismatched App state.`,
-              ),
-            );
+            return yield* new AppUnexpectedResponse({
+              message: `Prisma App '${app.id}' did not converge to display name '${displayName}' and branch '${branch.id ?? "null"}'. Refusing to persist mismatched App state.`,
+            });
           }
           return attrsFrom(app);
         }),
@@ -445,15 +458,13 @@ const ProviderLive = () =>
           if (isPrismaDevId(output.appId)) return;
           const app = yield* getService({ serviceId: output.appId }).pipe(
             Effect.map((response) => response.data),
-            Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("NotFound", () => Effect.undefined),
           );
           if (!app) return;
           if (app.projectId !== output.projectId || app.region.id !== output.regionId) {
-            return yield* Effect.fail(
-              new Error(
-                `Prisma App '${app.id}' no longer matches its persisted immutable project and region identity. Refusing to delete a mismatched App.`,
-              ),
-            );
+            return yield* new AppConflict({
+              message: `Prisma App '${app.id}' no longer matches its persisted immutable project and region identity. Refusing to delete a mismatched App.`,
+            });
           }
           yield* destroyApp(output.appId);
         }),

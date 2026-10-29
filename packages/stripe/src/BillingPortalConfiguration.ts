@@ -602,13 +602,12 @@ const toWireFeatures = (
             : {}),
           ...(features.subscriptionUpdate.scheduleAtPeriodEnd !== undefined
             ? {
-                schedule_at_period_end: {
-                  ...(features.subscriptionUpdate.scheduleAtPeriodEnd.conditions !== undefined
+                schedule_at_period_end:
+                  features.subscriptionUpdate.scheduleAtPeriodEnd.conditions !== undefined
                     ? {
                         conditions: features.subscriptionUpdate.scheduleAtPeriodEnd.conditions,
                       }
-                    : {}),
-                },
+                    : {},
               }
             : {}),
           ...(features.subscriptionUpdate.trialUpdateBehavior !== undefined
@@ -677,7 +676,7 @@ const isMissingConfiguration = isMissingStripeResource;
 
 const getById = (configuration: string) =>
   GetBillingPortalConfiguration({ configuration }).pipe(
-    Effect.catchIf(isMissingConfiguration, () => Effect.succeed(undefined)),
+    Effect.catchIf(isMissingConfiguration, () => Effect.undefined),
   );
 
 const listByActive = Effect.fn(function* (active: boolean) {

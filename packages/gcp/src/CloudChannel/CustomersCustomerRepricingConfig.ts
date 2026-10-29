@@ -136,7 +136,7 @@ export const CustomersCustomerRepricingConfig = Resource<CustomersCustomerRepric
 export class CustomersCustomerRepricingConfigNotResolved extends Data.TaggedError(
   "GCP.CloudChannel.CustomersCustomerRepricingConfigNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const monthOf = (
@@ -226,7 +226,7 @@ export const CustomersCustomerRepricingConfigProvider = () =>
 
       if (current === undefined) {
         return yield* new CustomersCustomerRepricingConfigNotResolved({
-          name: name || `${parent}/customerRepricingConfigs`,
+          resourceName: name || `${parent}/customerRepricingConfigs`,
         });
       }
 

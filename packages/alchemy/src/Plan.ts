@@ -491,8 +491,9 @@ const makePlan = <A>(
       stack: stackName,
       stage: stage,
     });
-    const oldResources = yield* Effect.all(
-      resourceFqns.map((fqn) => state.get({ stack: stackName, stage: stage, fqn })),
+    const oldResources = yield* Effect.forEach(
+      resourceFqns,
+      (fqn) => state.get({ stack: stackName, stage: stage, fqn }),
       { concurrency: "unbounded" },
     );
 
@@ -812,7 +813,7 @@ const makePlan = <A>(
                     newBindings,
                   })
                   .pipe(providePlanScope(resource, oldState.instanceId))
-              : Effect.succeed(undefined);
+              : Effect.undefined;
 
             // A present `diff.stables` is authoritative for this update and
             // overrides `provider.stables`. We only fall back to the
@@ -929,16 +930,15 @@ const makePlan = <A>(
           }
           const nested = new Set(ancestors).add(input);
           if (Array.isArray(input)) {
-            return yield* Effect.all(
-              input.map((item) => resolveInput(item, nested)),
-              { concurrency: "unbounded" },
-            );
+            return yield* Effect.forEach(input, (item) => resolveInput(item, nested), {
+              concurrency: "unbounded",
+            });
           }
           return Object.fromEntries(
-            yield* Effect.all(
-              Object.entries(input).map(([key, value]) =>
+            yield* Effect.forEach(
+              Object.entries(input),
+              ([key, value]) =>
                 resolveInput(value, nested).pipe(Effect.map((value) => [key, value])),
-              ),
               { concurrency: "unbounded" },
             ),
           );
@@ -1013,7 +1013,7 @@ const makePlan = <A>(
             ? expr
             : yield* resolveOutput(Output.asOutput(expr.f(upstream)) as Output.Expr<any>);
         } else if (Output.isAllExpr(expr)) {
-          return yield* Effect.all(expr.outs.map(resolveOutput), {
+          return yield* Effect.forEach(expr.outs, resolveOutput, {
             concurrency: "unbounded",
           });
         } else if (Output.isLiteralExpr(expr)) {
@@ -1494,13 +1494,15 @@ const makePlan = <A>(
           renamedFrom,
           adoptionBlocked: reusesMigratedFqn ? "migrated-fqn" : undefined,
           deferredAdoption:
-            provider.read &&
+            (provider.read || provider.observe) &&
             !reusesMigratedFqn &&
             // A replacement targets a new physical identity, which may belong
             // to someone else — admit it like a fresh create.
             (node.action === "replace" ||
               (node.action === "create" &&
-                ((oldState === undefined && !isResolved(news)) ||
+                // Plan reads resolved props itself; without `read`, Apply
+                // admits them through `observe`.
+                ((oldState === undefined && (!isResolved(news) || !provider.read)) ||
                   (oldState?.status === "creating" && oldState.attr === undefined))))
               ? { adopt: adoptThis }
               : undefined,
@@ -1833,8 +1835,9 @@ const makePlan = <A>(
     // interrupt-only for any other reason) that can be a bare interruption,
     // hiding the InvalidReferenceError or provider error that actually
     // broke the plan.
-    const diffExits = yield* Effect.all(
-      resources.map((resource) => Effect.exit(Effect.tap(diffResource(resource), resourcePlanned))),
+    const diffExits = yield* Effect.forEach(
+      resources,
+      (resource) => Effect.exit(Effect.tap(diffResource(resource), resourcePlanned)),
       { concurrency: "unbounded" },
     );
     const diffFailures = diffExits.filter(Exit.isFailure);
@@ -1906,7 +1909,7 @@ const makePlan = <A>(
         if (excluded && (bindingEvidence || incompleteHistory)) {
           return yield* Effect.die(
             new UnsafeSelectionBoundary({
-              message: `Cannot replace or collect old generations of '${fqn}' while '${excluded[0]}' is unselected. ${bindingEvidence ? `Historical binding-cycle dependencies recorded on '${bindingEvidence}'` : `Historical dependencies missing from '${incompleteHistory}'`} cannot be proven safe; run a full deployment.`,
+              message: `Cannot replace or collect old generations of '${fqn}' while '${String(excluded[0])}' is unselected. ${bindingEvidence ? `Historical binding-cycle dependencies recorded on '${bindingEvidence}'` : `Historical dependencies missing from '${incompleteHistory}'`} cannot be proven safe; run a full deployment.`,
             }),
           );
         }
@@ -1930,7 +1933,7 @@ const makePlan = <A>(
               new UnsafeSelectionBoundary({
                 message: `Cannot reconcile '${fqn}' with incomplete historical downstream metadata while persisted nodes are unselected: ${excludedRows
                   .map(([id]) => id)
-                  .sort()
+                  .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
                   .join(", ")}. Select them or run a full deployment.`,
               }),
             );
@@ -1963,7 +1966,7 @@ const makePlan = <A>(
             new UnsafeSelectionBoundary({
               message: `Cannot discard the last historical binding evidence while persisted nodes are unselected: ${excludedRows
                 .map(([fqn]) => fqn)
-                .sort()
+                .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0))
                 .join(", ")}. Select them or run a full deployment.`,
             }),
           );
@@ -1987,13 +1990,13 @@ const makePlan = <A>(
       );
 
     const actionGraph = Object.fromEntries(
-      (yield* Effect.all(
-        actions.map((action) =>
+      (yield* Effect.forEach(
+        actions,
+        (action) =>
           diffAction(action).pipe(
             Effect.map((node) => [action.FQN, node] as const),
             Effect.tap(actionPlanned),
           ),
-        ),
         { concurrency: "unbounded" },
       )) as ReadonlyArray<readonly [string, ActionApply]>,
     ) as Plan["actions"];
@@ -2057,10 +2060,11 @@ const makePlan = <A>(
     }
 
     // A delete-first replacement in a cycle deletes its previous generation
-    // before precreate, which runs on unresolved props. While its identity is
-    // unresolved, only the provider's `observe` can check ownership before
-    // that delete. Without it, refuse here — before apply touches anything —
-    // unless adoption is allowed.
+    // before precreate. Apply resolves the props that upstreams outside the
+    // cycle determine first, so only props derived from a cycle peer are
+    // still unresolved then, and only the provider's `observe` can check
+    // ownership before that delete. Without it, refuse here — before apply
+    // touches anything — unless adoption is allowed.
     for (const [fqn, node] of Object.entries(resourceGraph)) {
       if (
         node.action === "replace" &&
@@ -2069,6 +2073,7 @@ const makePlan = <A>(
         !node.provider.observe &&
         node.deferredAdoption?.adopt === false &&
         !isResolved(node.props) &&
+        Object.keys(Output.resolveUpstream(node.props)).some((dep) => cycleMembers.has(dep)) &&
         // A resumed replacement already holds its precreated identity.
         !(node.state.status === "replacing" && !node.restart && node.state.attr !== undefined)
       ) {
@@ -2142,12 +2147,12 @@ const makePlan = <A>(
     });
 
     const actionDeletions: Plan["actionDeletions"] = Object.fromEntries(
-      (yield* Effect.all(
-        persistedFqns.map((fqn) =>
+      (yield* Effect.forEach(
+        persistedFqns,
+        (fqn) =>
           diffActionDeletion(fqn).pipe(
             Effect.tap((entry) => actionDeletionPlanned(entry ?? undefined)),
           ),
-        ),
         { concurrency: "unbounded" },
       )).filter((v): v is NonNullable<typeof v> => !!v),
     );
@@ -2262,10 +2267,9 @@ const makePlan = <A>(
     });
 
     const deletions = Object.fromEntries(
-      (yield* Effect.all(
-        deletionCandidates.map((fqn) =>
-          diffDeletion(fqn).pipe(Effect.tap((entry) => deletionPlanned(entry ?? undefined))),
-        ),
+      (yield* Effect.forEach(
+        deletionCandidates,
+        (fqn) => diffDeletion(fqn).pipe(Effect.tap((entry) => deletionPlanned(entry ?? undefined))),
         { concurrency: "unbounded" },
       )).filter((v) => !!v),
     );

@@ -185,8 +185,7 @@ const site = yield* Prisma.Website.Astro("Web", {
 ```
 
 `domain` creates a [`Prisma.CustomDomain`](/providers/prisma/customdomain)
-and changes `site.url` to `https://app.example.com`. Prisma requires the
-app to be attached to the project's **current default branch**.
+and changes `site.url` to `https://app.example.com`.
 
 Domain provisioning is asynchronous. `site.domain` is the created
 CustomDomain resource. Configure its `dnsRecords` with your DNS provider

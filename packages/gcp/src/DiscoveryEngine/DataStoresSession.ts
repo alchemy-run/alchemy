@@ -125,7 +125,7 @@ export const DataStoresSession = Resource<DataStoresSession>(
 export class DataStoresSessionNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.DataStoresSessionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (dataStore: string, sessionId: string) => `${dataStore}/sessions/${sessionId}`;
@@ -171,10 +171,10 @@ const toAttrs = (session: discoveryengine.GoogleCloudDiscoveryengineV1Session, p
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsDataStoresSessions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAtParent = (parent: string) =>
   discoveryengine.listProjectsLocationsDataStoresSessions.pages({ parent, pageSize: 100 }).pipe(
@@ -271,7 +271,7 @@ export const DataStoresSessionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataStoresSessionNotResolved({ name });
+        return yield* new DataStoresSessionNotResolved({ resourceName: name });
       }
 
       const displayChanged = (current.displayName ?? "") !== (displayName ?? "");

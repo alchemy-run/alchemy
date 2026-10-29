@@ -101,7 +101,10 @@ tool (its `create-workflow` skill), or the equivalent elsewhere. Run a
 workflow only when the user asked for one, since it spends many agents. A workflow runs the whole wave as one
 script with bounded parallelism, enforces an agent budget, and journals
 every finished agent's result, so a crash costs only the agents still
-running. Use plain subagents only when no workflow tool exists. Either way,
+running. Use plain subagents only when no workflow tool exists; in T3 Code
+those are `delegate_task` subagent threads (nested under the coordinator,
+which is notified as each finishes), never top-level `t3_thread_launch`
+threads. Either way,
 each agent gets the task contract from **What every agent task prompt must
 include** in `AGENTS.md`, owns one distilled service, and returns the
 structured result the coordinator turns into index statuses.
@@ -305,7 +308,7 @@ a hosted runtime, websites). A package holds:
 | `scripts/build.ts` | copied verbatim from a sibling package |
 | `src/Contributions.ts` | `Contributions.make({ name, auth, … })` — what the CLI, the Alchemist API, and the test harness load without the user's stack |
 | `src/AuthProvider.ts` | `makeStoredAuthProvider` fields, CI env vars, `<Provider>Auth` layer |
-| `src/Credentials.ts` | `fromAuthProvider()` → the distilled `Credentials` layer |
+| `src/Credentials.ts` | `fromAuthProvider()` = `lazyCredentials<Resolved, ConfigError>()(...)` → the distilled `Credentials` layer |
 | `src/Providers.ts` | `ProviderCollection` + `providers()` layer (provider layers, credentials, `FetchHttpClient`, auth, profile and credential stores) |
 | `src/<Provider>Bindings.ts` | how bindings reach the cloud from any host (step 5) |
 | `src/globals.d.ts` | `import type {} from "alchemy/Phase";` so `globalThis.__ALCHEMY_RUNTIME__` type-checks |
@@ -410,6 +413,15 @@ are the mistakes that most often slip through review (each has a check in
   or parts of `output` are missing, so the next run's opening `destroy`
   removes whatever a crashed run left behind. Prove it once by interrupting
   a create.
+- **SQL databases take `migrations`.** Every resource that hosts a SQL
+  schema applies migrations on deploy through `@alchemy.run/sql/Migrations`;
+  the provider only writes the cloud-specific call, built on its executor
+  helpers (`withPgExecutor`, `makeStatementExecutor`, `splitSqlScript`). Prefer the
+  cloud's HTTPS data API, then a direct or connector connection, then an
+  in-network runner, and take credentials from the platform before asking
+  for `migrationsUser` / `migrationsPassword`. Follow **SQL database
+  migrations** in `AGENTS.md`; a SQL database shipped without migrations is
+  incomplete.
 - **Implement `list`** filtered to Alchemy-owned resources, and declare
   `nuke: { dependsOn: [...] }` where delete order matters, so
   `alchemy unsafe nuke` can clean the test account.
@@ -937,7 +949,7 @@ workspace project with the layout of `examples/gcp-pubsub-worker`:
   `workspace:*` dependencies), `tsconfig.json` referencing
   `packages/alchemy` and the provider package, and a `README.md`.
 - `alchemy.run.ts`, with the runtime and resources in `src/`.
-- `test/integ.test.ts` with `alchemy/Test/Bun`: deploy in `beforeAll`,
+- `test/integ.test.ts` with `@alchemy.run/test/Bun`: deploy in `beforeAll`,
   call the deployed app over HTTP, verify cloud state through distilled,
   destroy in `afterAll`. Websites and `dev`-capable apps also get
   `test/dev.test.ts`.

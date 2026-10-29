@@ -187,10 +187,16 @@ interface SocketActivity {
 const socketActivity = (socket: Duplex): SocketActivity => ({
   written: ((socket as Partial<NodeNet.Socket>).bytesWritten ?? 0) + socket.writableLength,
   listeners: (["data", "error", "close", "end"] as const).reduce(
-    (count, event) => count + socket.listenerCount(event),
+    (count, event) =>
+      count + socket.rawListeners(event).filter((listener) => !isNoop(listener)).length,
     0,
   ),
 });
+
+// An empty listener can't take the socket. Vite 8.3.5's HMR `upgrade` listener
+// attaches `socket.on("error", noop)` to every upgrade it doesn't handle.
+const isNoop = (listener: Function) =>
+  /^(?:function\s*[\w$]*\s*)?\(\s*\)\s*(?:=>\s*)?\{\s*\}$/.test(listener.toString());
 
 // A listener that takes an upgrade writes its handshake or refusal, or
 // subscribes to the socket synchronously, before it answers: `ws` listens for

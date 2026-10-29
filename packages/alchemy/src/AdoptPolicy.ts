@@ -54,7 +54,8 @@ export class OwnedBySomeoneElse extends Data.TaggedError("OwnedBySomeoneElse")<{
  * Engine-raised failure produced when a delete-first replacement in a
  * dependency cycle must delete its previous generation before its new
  * identity is known: precreate runs on unresolved props, and a provider
- * without `observe` cannot check ownership first. Refusing up front keeps the
+ * without `observe`, or whose `observe` reports {@link Unresolved}, cannot
+ * check ownership first. Refusing before the delete keeps the
  * previous generation; re-run with `--adopt` (or `adopt(true)`) to accept
  * whatever the identity resolves to.
  */
@@ -125,6 +126,41 @@ export const Unowned: {
       typeof value === "object" && value !== null && (value as any)[UnownedTag] === true,
   },
 );
+
+/**
+ * A provider's `observe` answer when the identity `precreate` would claim
+ * depends on props that have not resolved yet, so nothing can be checked.
+ * Unlike `undefined`, it does not report the identity as absent: the engine
+ * checks the resolved identity before `reconcile` claims it, and refuses a
+ * delete-first replacement that would delete its previous generation first.
+ *
+ * ```ts
+ * observe: Effect.fn(function* ({ id, news }) {
+ *   if (!isResolved(news.namespace)) return Unresolved;
+ *   // ...
+ * }),
+ * ```
+ *
+ * `precreate` must not write to an identity it cannot resolve.
+ */
+export const Unresolved: unique symbol = Symbol("alchemy/Unresolved");
+export type Unresolved = typeof Unresolved;
+
+/**
+ * Raised by a provider's `precreate` when the identity it must claim is still
+ * {@link Unresolved}. The engine resolves every prop that comes from outside
+ * a dependency cycle before precreate, so the identity depends on a peer in
+ * the resource's own cycle. Name the resource with a literal, or a value from
+ * outside the cycle.
+ */
+export class UnresolvedIdentity extends Data.TaggedError("UnresolvedIdentity")<{
+  /** A human-readable description of the unresolved identity. */
+  message: string;
+  /** The Resource Type (e.g. `AWS.Lambda.Function`). */
+  resourceType?: string;
+  /** The logical ID of the resource. */
+  logicalId?: string;
+}> {}
 
 /**
  * Strip the {@link Unowned} brand from an attributes object before persisting

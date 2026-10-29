@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -12,6 +13,13 @@ import type { SubnetId } from "../EC2/Subnet.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import { applyRedshiftTagDelta, redshiftArn, sameStringSet, toTagRecord } from "./internal.ts";
+
+export class ClusterSubnetGroupUnexpectedResponse extends Data.TaggedError(
+  "ClusterSubnetGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface ClusterSubnetGroupProps {
   /**
@@ -133,16 +141,16 @@ export const ClusterSubnetGroupProvider = () =>
       const readGroup = Effect.fn(function* (name: string) {
         const response = yield* redshift
           .describeClusterSubnetGroups({ ClusterSubnetGroupName: name })
-          .pipe(
-            Effect.catchTag("ClusterSubnetGroupNotFoundFault", () => Effect.succeed(undefined)),
-          );
+          .pipe(Effect.catchTag("ClusterSubnetGroupNotFoundFault", () => Effect.undefined));
         return response?.ClusterSubnetGroups?.[0];
       });
 
       const toAttrs = Effect.fn(function* (group: redshift.ClusterSubnetGroup) {
         const { accountId, region } = yield* AWSEnvironment.current;
         if (!group.ClusterSubnetGroupName) {
-          return yield* Effect.fail(new Error("Cluster subnet group is missing its name"));
+          return yield* new ClusterSubnetGroupUnexpectedResponse({
+            message: "Cluster subnet group is missing its name",
+          });
         }
         return {
           clusterSubnetGroupName: group.ClusterSubnetGroupName,
@@ -205,9 +213,9 @@ export const ClusterSubnetGroupProvider = () =>
               .pipe(Effect.catchTag("ClusterSubnetGroupAlreadyExistsFault", () => Effect.void));
             observed = yield* readGroup(name);
             if (!observed?.ClusterSubnetGroupName) {
-              return yield* Effect.fail(
-                new Error(`Failed to create cluster subnet group '${name}'`),
-              );
+              return yield* new ClusterSubnetGroupUnexpectedResponse({
+                message: `Failed to create cluster subnet group '${name}'`,
+              });
             }
           }
 
@@ -227,9 +235,9 @@ export const ClusterSubnetGroupProvider = () =>
             });
             observed = yield* readGroup(name);
             if (!observed?.ClusterSubnetGroupName) {
-              return yield* Effect.fail(
-                new Error(`Cluster subnet group '${name}' not found after update`),
-              );
+              return yield* new ClusterSubnetGroupUnexpectedResponse({
+                message: `Cluster subnet group '${name}' not found after update`,
+              });
             }
           }
 
@@ -253,9 +261,7 @@ export const ClusterSubnetGroupProvider = () =>
               .deleteClusterSubnetGroup({
                 ClusterSubnetGroupName: output.clusterSubnetGroupName,
               })
-              .pipe(
-                Effect.catchTag("ClusterSubnetGroupNotFoundFault", () => Effect.succeed(undefined)),
-              ),
+              .pipe(Effect.catchTag("ClusterSubnetGroupNotFoundFault", () => Effect.undefined)),
           );
         }),
 

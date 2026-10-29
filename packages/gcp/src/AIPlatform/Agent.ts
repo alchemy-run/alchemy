@@ -158,11 +158,11 @@ export type Agent = Resource<
 export const Agent = Resource<Agent>("GCP.AIPlatform.Agent");
 
 export class AgentNotResolved extends Data.TaggedError("GCP.AIPlatform.AgentNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class AgentStillExists extends Data.TaggedError("GCP.AIPlatform.AgentStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_BASE_AGENT = "antigravity-preview-05-2026";
@@ -217,7 +217,7 @@ const toAttrs = (agent: aiplatform.GoogleCloudAiplatformV1Agent, project: string
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsAgents({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAgents = (project: string, region: string) => {
   const collect = (parent: string) =>
@@ -256,7 +256,7 @@ const findOwned = (id: string, project: string, region: string, hinted?: string)
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((agent) =>
-      agent ? Effect.succeed(agent) : Effect.fail(new AgentNotResolved({ name })),
+      agent ? Effect.succeed(agent) : Effect.fail(new AgentNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.AgentNotResolved",
@@ -268,7 +268,7 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((agent) =>
-      agent === undefined ? Effect.void : Effect.fail(new AgentStillExists({ name })),
+      agent === undefined ? Effect.void : Effect.fail(new AgentStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.AgentStillExists",
@@ -359,7 +359,7 @@ export const AgentProvider = () =>
               base_environment: news.baseEnvironment,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName = resourceNameFromOperation(done) ?? name;
@@ -371,7 +371,7 @@ export const AgentProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AgentNotResolved({ name });
+        return yield* new AgentNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;
@@ -415,7 +415,7 @@ export const AgentProvider = () =>
       if (existing === undefined) return;
       const operation = yield* aiplatform
         .deleteProjectsLocationsAgents({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

@@ -227,3 +227,47 @@ test("never forwards to a host named in the request path", async () => {
   expect(await get(`//${other.host}/marker.txt?x=1`)).toBe(`worker //${other.host}/marker.txt?x=1`);
   expect(await get(`${other.origin}/marker.txt`)).toBe("worker /marker.txt");
 });
+
+test("relays the Worker's status text and repeated Set-Cookie request headers", async () => {
+  const url = new NodeURL(
+    await devServer(`
+      export default {
+        fetch(request) {
+          return Response.json(request.headers.getSetCookie(), {
+            status: 231,
+            statusText: "global-before",
+          });
+        },
+      };
+    `),
+  );
+  // Each cookie carries a comma in `Expires`, so joining them would merge
+  // their boundaries.
+  const cookies = [
+    "a=1; Expires=Wed, 21 Oct 2026 07:28:00 GMT",
+    "b=2; Expires=Thu, 22 Oct 2026 07:28:00 GMT",
+  ];
+  const response = await new Promise<NodeHttp.IncomingMessage & { body: string }>(
+    (resolve, reject) => {
+      NodeHttp.get(
+        {
+          host: url.hostname,
+          port: url.port,
+          path: "/",
+          agent: false,
+          headers: { "set-cookie": cookies },
+        },
+        (response) => {
+          const chunks: Array<Buffer> = [];
+          response.on("data", (chunk: Buffer) => chunks.push(chunk));
+          response.on("end", () =>
+            resolve(Object.assign(response, { body: Buffer.concat(chunks).toString() })),
+          );
+        },
+      ).on("error", reject);
+    },
+  );
+  expect(response.statusCode).toBe(231);
+  expect(response.statusMessage).toBe("global-before");
+  expect(JSON.parse(response.body)).toEqual(cookies);
+});

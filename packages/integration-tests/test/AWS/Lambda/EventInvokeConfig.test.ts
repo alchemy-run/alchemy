@@ -1,10 +1,11 @@
 import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Lambda from "@distilled.cloud/aws/lambda";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
+import { driftActions, repairDrift, waitForDrift } from "../drift.ts";
 
 const timeoutHandlerPath = fileURLToPath(new URL("./timeout-handler.ts", import.meta.url));
 
@@ -216,3 +217,67 @@ const expectNoConfig = Effect.fn(function* (functionName: string, qualifier?: st
     }),
   );
 });
+
+// #2688: Function and Alias `read` must observe the async invocation config,
+// or retries or destinations changed out of band read as `unchanged`.
+test.provider(
+  "drift detects and repairs out-of-band event invoke config on function and alias",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const { fn, live } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const fn = yield* AWS.Lambda.Function("DriftAsyncFn", {
+            main: timeoutHandlerPath,
+            handler: "handler",
+            isExternal: true,
+            functionUrl: false,
+            eventInvokeConfig: { maximumRetryAttempts: 0 },
+          });
+          const version = yield* AWS.Lambda.Version("DriftAsyncVersion", { function: fn });
+          const live = yield* AWS.Lambda.Alias("DriftAsyncAlias", {
+            version,
+            aliasName: "live",
+            eventInvokeConfig: { maximumRetryAttempts: 1 },
+          });
+          return { fn, live };
+        }),
+      );
+      const actions = yield* driftActions(stack);
+      expect(Object.values(actions).every((action) => action === "unchanged")).toBe(true);
+
+      yield* Lambda.putFunctionEventInvokeConfig({
+        FunctionName: fn.functionName,
+        MaximumRetryAttempts: 2,
+      });
+      yield* Lambda.putFunctionEventInvokeConfig({
+        FunctionName: fn.functionName,
+        Qualifier: live.aliasName,
+        MaximumRetryAttempts: 2,
+      });
+
+      const fnDrift = yield* waitForDrift(stack, "DriftAsyncFn", "drifted");
+      expect(fnDrift?.attr?.eventInvokeConfig?.maximumRetryAttempts).toBe(2);
+      const aliasDrift = yield* waitForDrift(stack, "DriftAsyncAlias", "drifted");
+      expect(aliasDrift?.attr?.eventInvokeConfig?.maximumRetryAttempts).toBe(2);
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.DriftAsyncFn?.action).toBe("repaired");
+      expect(repaired.resources.DriftAsyncAlias?.action).toBe("repaired");
+      const after = yield* driftActions(stack);
+      expect(Object.values(after).every((action) => action === "unchanged")).toBe(true);
+      const fnConfig = yield* Lambda.getFunctionEventInvokeConfig({
+        FunctionName: fn.functionName,
+      });
+      expect(fnConfig.MaximumRetryAttempts).toBe(0);
+      const aliasConfig = yield* Lambda.getFunctionEventInvokeConfig({
+        FunctionName: fn.functionName,
+        Qualifier: live.aliasName,
+      });
+      expect(aliasConfig.MaximumRetryAttempts).toBe(1);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 240_000 },
+);

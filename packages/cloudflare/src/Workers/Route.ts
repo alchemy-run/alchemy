@@ -358,7 +358,7 @@ const observeById = (zoneId: string, routeId: string) =>
     // (10007, how some API versions tag a GET on a missing route). Both
     // are in `getRoute`'s typed union; swallow them so the reconciler
     // falls through to the find-by-pattern path.
-    Effect.catchTag(["RouteNotFound", "WorkerNotFound"], () => Effect.succeed(undefined)),
+    Effect.catchTag(["RouteNotFound", "WorkerNotFound"], () => Effect.undefined),
   );
 
 /**

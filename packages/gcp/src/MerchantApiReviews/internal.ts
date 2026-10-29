@@ -249,17 +249,17 @@ const collectPages = <Page, A, E, R>(
 
 export const getMerchantReview = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : reviews
         .getAccountsMerchantReviews({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const getProductReview = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : reviews
         .getAccountsProductReviews({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listMerchantReviewsAt = (account: string) =>
   account.length === 0

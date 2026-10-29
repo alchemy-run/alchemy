@@ -193,13 +193,13 @@ export const CollectionsDataStore = Resource<CollectionsDataStore>(
 export class CollectionsDataStoreNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoreNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CollectionsDataStoreStillExists extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsDataStoreStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const verticalOf = (value: string | undefined) => value ?? "GENERIC";
@@ -229,15 +229,17 @@ const toAttrs = (store: discoveryengine.GoogleCloudDiscoveryengineV1DataStore, p
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : discoveryengine
         .getProjectsLocationsCollectionsDataStores({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((store) =>
-      store ? Effect.succeed(store) : Effect.fail(new CollectionsDataStoreNotResolved({ name })),
+      store
+        ? Effect.succeed(store)
+        : Effect.fail(new CollectionsDataStoreNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsDataStoreNotResolved",
@@ -251,7 +253,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((store) =>
       store === undefined
         ? Effect.void
-        : Effect.fail(new CollectionsDataStoreStillExists({ name })),
+        : Effect.fail(new CollectionsDataStoreStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.DiscoveryEngine.CollectionsDataStoreStillExists",
@@ -361,7 +363,7 @@ export const CollectionsDataStoreProvider = () =>
                   : undefined,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -369,7 +371,7 @@ export const CollectionsDataStoreProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CollectionsDataStoreNotResolved({ name });
+        return yield* new CollectionsDataStoreNotResolved({ resourceName: name });
       }
 
       const resource = current.name ?? name;
@@ -405,7 +407,7 @@ export const CollectionsDataStoreProvider = () =>
       if (existing === undefined) return;
       const operation = yield* discoveryengine
         .deleteProjectsLocationsCollectionsDataStores({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

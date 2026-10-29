@@ -107,10 +107,9 @@ export const Service = <
   const tag = Context.Service<Self, (...args: any[]) => Effect.Effect<any>>(id);
   const callable = (...args: any[]) =>
     tag.use((f: (...a: any[]) => Effect.Effect<any>) =>
-      Effect.all(
-        args.map((arg) => (Effect.isEffect(arg) ? arg : Effect.succeed(arg))),
-        { concurrency: "unbounded" },
-      ).pipe(
+      Effect.forEach(args, (arg) => (Effect.isEffect(arg) ? arg : Effect.succeed(arg)), {
+        concurrency: "unbounded",
+      }).pipe(
         Effect.flatMap((resolved) =>
           f(...resolved).pipe(
             // Deploy-time data-plane routing: the client's calls must target
