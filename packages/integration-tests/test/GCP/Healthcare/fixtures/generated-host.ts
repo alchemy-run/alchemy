@@ -3,7 +3,7 @@ import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { hostProject, probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
   ProbeArtifact,
   ProbeAttribute,
@@ -111,9 +111,33 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
             p10({ type: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        DeidentifyDataset: probeOutcome(Retry.none(p11({} as never))),
-        DeidentifyDicomStore: probeOutcome(Retry.none(p12({} as never))),
-        DeidentifyFhirStore: probeOutcome(Retry.none(p13({} as never))),
+        DeidentifyDataset: probeOutcome(
+          Retry.none(
+            p11({
+              body: {
+                destinationDataset: `projects/${yield* hostProject}/locations/us-central1/datasets/alchemy probe invalid`,
+              },
+            } as never),
+          ),
+        ),
+        DeidentifyDicomStore: probeOutcome(
+          Retry.none(
+            p12({
+              body: {
+                destinationStore: `projects/${yield* hostProject}/locations/us-central1/datasets/alchemy-missing/dicomStores/alchemy-missing`,
+              },
+            } as never),
+          ),
+        ),
+        DeidentifyFhirStore: probeOutcome(
+          Retry.none(
+            p13({
+              body: {
+                destinationStore: `projects/${yield* hostProject}/locations/us-central1/datasets/alchemy-missing/fhirStores/alchemy-missing`,
+              },
+            } as never),
+          ),
+        ),
         DeleteConsentRevision: probeOutcome(Retry.none(p14({} as never))),
         DeleteDicomStoreStudy: probeOutcome(
           Retry.none(p15({ dicomWebPath: "alchemy-missing" } as never)),

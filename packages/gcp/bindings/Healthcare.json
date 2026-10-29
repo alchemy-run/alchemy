@@ -45,6 +45,11 @@
       "DatasetsConsentStoresConsentArtifact": "ProbeArtifact",
       "DatasetsConsentStoresConsent": "ProbeConsent",
       "DatasetsConsentStoresUserDataMapping": "ProbeMapping"
+    },
+    "args": {
+      "DeidentifyDataset": "{ body: { destinationDataset: `projects/${yield* hostProject}/locations/us-central1/datasets/alchemy probe invalid` } }",
+      "DeidentifyDicomStore": "{ body: { destinationStore: `projects/${yield* hostProject}/locations/us-central1/datasets/alchemy-missing/dicomStores/alchemy-missing` } }",
+      "DeidentifyFhirStore": "{ body: { destinationStore: `projects/${yield* hostProject}/locations/us-central1/datasets/alchemy-missing/fhirStores/alchemy-missing` } }"
     }
   },
   "roles": {
