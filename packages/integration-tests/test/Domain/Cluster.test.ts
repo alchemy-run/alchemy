@@ -201,6 +201,51 @@ describe("Domain.Cluster on SQLite", () => {
       }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
   );
 
+  it.live(
+    "the sweeper deletes receipts, cancelled timers and processed messages past retention",
+    () =>
+      Effect.gen(function* () {
+        const api = yield* ContractApi.Client;
+        const counters = yield* Counter;
+        const holds = yield* Hold;
+        const sql = yield* SqlClient.SqlClient;
+        const count = (query: Effect.Effect<ReadonlyArray<{ readonly n: number }>, unknown>) =>
+          Effect.map(query, ([row]) => Number(row!.n));
+        yield* counters.send("c-1", new Increment({ by: 1 }), { commandId: "a" });
+        yield* api.Totals.get("c-1", { atLeast: { stream: "Counter/c-1", version: 1 } });
+        yield* holds.schedule("h-1", new ExpireHold(), { after: "1 hour", commandId: "x" });
+        yield* holds.unschedule("h-1", "x");
+        yield* eventually(
+          Effect.all([
+            count(sql`SELECT COUNT(*) AS n FROM domain_receipts`),
+            count(sql`SELECT COUNT(*) AS n FROM domain_schedules`),
+            count(
+              sql`SELECT COUNT(*) AS n FROM cluster_messages WHERE entity_type LIKE 'Domain.%' AND processed = 1`,
+            ),
+          ]).pipe(
+            Effect.filterOrFail(
+              (counts) => counts.every((n) => n === 0),
+              () => "not yet" as const,
+            ),
+          ),
+        );
+        // Past retention, a cancel is forgotten and a command id is decided again.
+        expect((yield* Effect.flip(holds.unschedule("h-1", "x")))._tag).toBe("NotScheduled");
+        const again = yield* counters.send("c-1", new Increment({ by: 1 }), { commandId: "a" });
+        expect(again.version).toBe(2);
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          hosted(
+            onSqlite({
+              sweep: { intervalMillis: 100, afterMillis: 30_000 },
+              retention: { receipts: 0, cancelled: 0, messages: 0 },
+            }),
+          ),
+        ),
+      ),
+  );
+
   it.live("state, pending deliveries and timers survive a restart on the same file", () =>
     Effect.gen(function* () {
       const fs = yield* FileSystem.FileSystem;
