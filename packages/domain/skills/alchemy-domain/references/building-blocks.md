@@ -337,9 +337,7 @@ Clients call commands as methods (`bank.WithdrawMoney(accountId, { amount }, { c
 
 More: [Api](https://alchemy.run/domain/api).
 
-`Domain.Api.describe(CustomerApi)` lists every call the Api serves as plain JSON: entry, kind, operation (`send`, `get`, `peek`, `watch`, `events`, `list`), RPC tag, `mode` (`read` or `write`), whether it streams, and JSON Schemas for its input, success and typed errors. Build tool lists, CLI help or OpenAPI from it instead of a second hand-written list, and snapshot it in a test to catch a change to the public surface.
-
-`toCli(CustomerApi, { name: "bank", headers })` from `@alchemy.run/domain/Cli` is an Effect CLI `Command` that calls the deployed Api over HTTP (provide `Domain.protocolHttp(url)` and an `HttpClient`). Each entry is a kebab-case subcommand (`bank deposit-money`, `bank account-summary get`); each payload field is a kebab-case flag (`--target`, `--command-id`, `--key`); structs, arrays and dates take JSON, and `--json` takes the whole input. It prints the result's wire JSON on stdout. A rejection or a middleware error goes to stderr as wire JSON with exit code 1. `watch` and `events` are not commands. Pass a session's bearer token in `headers`; the middleware runs on the server.
+`toCli(CustomerApi, { name: "bank", headers })` from `@alchemy.run/domain/Cli` is an Effect CLI `Command` that calls the deployed Api over HTTP (provide `Domain.protocolHttp(url)` and an `HttpClient`). Each entry is a kebab-case subcommand (`bank deposit-money`, `bank account-summary get`); each payload field is a kebab-case flag (`--target`, `--command-id`, `--key`), and a command's input fields are flags too (`--amount`); structs, arrays and dates take JSON, and `--json` takes the flags as one object. It prints the result's wire JSON on stdout. A rejection or a middleware error goes to stderr as wire JSON with exit code 1. `watch` and `events` are not commands. Pass a session's bearer token in `headers`; the middleware runs on the server.
 
 ## Model
 
