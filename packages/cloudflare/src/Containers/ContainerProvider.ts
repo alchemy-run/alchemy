@@ -3,7 +3,7 @@ import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { repositoryFromImageRef } from "@alchemy.run/docker/Registry";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
+import { Unowned, Unresolved, UnresolvedIdentity } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { deepEqual, isResolved } from "alchemy/Diff";
@@ -1337,6 +1337,16 @@ export const LiveContainerProvider = () =>
             : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news = {}, session }) {
+          if (!isResolved(nameOf(news))) {
+            return yield* new UnresolvedIdentity({
+              message:
+                `Container(${id}): its name depends on a resource in this ` +
+                "Container's dependency cycle, so precreate cannot name the application. " +
+                "Use a literal name, or one from outside the cycle.",
+              resourceType: "Cloudflare.Container",
+              logicalId: id,
+            });
+          }
           yield* validateContainerConfiguration(news);
           const name = yield* createApplicationName(id, nameOf(news));
           yield* Effect.logInfo(`Cloudflare Container precreate: starting ${name}`);
