@@ -73,20 +73,32 @@ import * as Cluster from "@alchemy.run/domain/Cluster";
 import { Bank, BankHandlers } from "@bank/domain/Bank.model";
 import { BunClusterSocket } from "@effect/platform-bun";
 import { PgClient } from "@effect/sql-pg";
-import { SqlMessageStorage, SqlRunnerStorage } from "effect/cluster";
+import { ShardingConfig, SqlMessageStorage, SqlRunnerStorage } from "effect/cluster";
 import * as Config from "effect/Config";
+import { Digest } from "effect/crypto";
 import * as Layer from "effect/Layer";
+
+// One configuration for the runner and for its storage (`HOST`, `PORT`, … from the environment).
+const shardingConfig: Partial<ShardingConfig.ShardingConfig["Service"]> = {};
+
+// `byo`: the tables come from the deploy step, not from each runner.
+const ClusterLive = BunClusterSocket.layer({ storage: "byo", shardingConfig }).pipe(
+  Layer.provideMerge(
+    Layer.mergeAll(SqlMessageStorage.layerStorage({}), SqlRunnerStorage.layerStorage({})),
+  ),
+  Layer.provide(
+    Layer.mergeAll(ShardingConfig.layerFromEnv(shardingConfig), Digest.layerWebCrypto),
+  ),
+);
 
 export const BankLive = Bank.layer(BankHandlers).pipe(
   Layer.provide(Cluster.layer({ migrations: false })),
-  // `byo`: the tables come from the deploy step, not from each runner.
-  Layer.provide(BunClusterSocket.layer({ storage: "byo" })),
-  Layer.provide(
-    Layer.mergeAll(SqlMessageStorage.layerStorage({}), SqlRunnerStorage.layerStorage({})),
-  ),
+  Layer.provide(ClusterLive),
   Layer.provide(PgClient.layerConfig({ url: Config.Redacted("DATABASE_URL") })),
 );
 ```
+
+With `byo`, the socket layer neither makes nor exports the storage: merge it in with `provideMerge`, since `Cluster.layer` needs `MessageStorage` too. The storage layers need `ShardingConfig` and `Digest` of their own: `BunClusterSocket` keeps the ones it makes inside.
 
 A command to an instance that another runner owns goes to that runner. When a runner stops, the others take its shards and continue its work.
 
@@ -111,7 +123,13 @@ A command sent again with the same command id returns the stored receipt. A reje
 
 Every event reaches the views, projections and policies that consume it, at least once and in order for each source. Deliveries are persisted cluster messages, so they survive a restart. A view key and a projection key drop a delivery they already applied. A projection that writes through the same `SqlClient` commits its writes and its progress together, so it runs once per input.
 
-Scheduled commands are persisted messages with a due time. They fire when they're due, even after a restart, at most about one second late.
+Scheduled commands are persisted messages with a due time, and fire even after a restart. How late a command fires:
+
+| Case | Late by |
+| --- | --- |
+| The timer's message is stored and a live runner owns its shard | On time when the owner armed it and it is due within a minute. Otherwise up to one storage poll (`entityMessagePollInterval`, 1 second with `layerSingleRunner`) |
+| A process stopped after it stored the timer and before it sent the timer's message | Up to `sweep.afterMillis` plus one `sweep.intervalMillis` (40 seconds by default) on a runner that stays up. The sweep runs on one runner; when it starts there (the first runner, or a new owner), it sends every pending timer again, so a stored timer fires on time. |
+| The runner that owns the shard died | Until another runner takes the shard: at once on a clean stop or a closed database session, up to `shardLockExpiration` (35 seconds) for a frozen runner |
 
 If a process stops after a commit and before its deliveries leave, the next process sends them when it starts. A sweep also sends late deliveries and timers again every 10 seconds (`sweep`).
 
