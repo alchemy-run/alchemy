@@ -43,7 +43,8 @@
       "SchemaRegistry": "Schemas",
       "ClustersAcl": "ProbeAcl",
       "SchemaRegistriesSubjectsVersion": "ProbeSchemaVersion",
-      "ConnectClustersConnector": "ProbeConnector"
+      "ConnectClustersConnector": "ProbeConnector",
+      "SchemaRegistriesContextsSubjectsVersion": "ProbeContextSchemaVersion"
     },
     "untestable": {}
   }

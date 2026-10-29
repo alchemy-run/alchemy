@@ -45,3 +45,22 @@ export const ProbeConnector = Effect.gen(function* () {
     },
   });
 });
+
+export const ProbeContextSchemaVersion = Effect.gen(function* () {
+  const registry = yield* Schemas;
+  return yield* GCP.ManagedKafka.SchemaRegistriesContextsSubjectsVersion(
+    "ProbeContextSchemaVersion",
+    {
+      schemaRegistry: registry.name,
+      context: "probe",
+      subject: "probe",
+      schemaType: "AVRO",
+      schema: JSON.stringify({
+        type: "record",
+        name: "Probe",
+        namespace: "alchemy",
+        fields: [{ name: "id", type: "string" }],
+      }),
+    },
+  );
+});

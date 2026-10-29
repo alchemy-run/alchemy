@@ -207,17 +207,29 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("SchemaRegistriesContextsSubjectsVersion", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetVersion@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.get): SchemaRegistriesContextsSubjectsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetVersion@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.get)",
+        () => probe("GetVersion@SchemaRegistriesContextsSubjectsVersion", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetVersionSchema@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.getSchema): SchemaRegistriesContextsSubjectsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetVersionSchema@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.getSchema)",
+        () => probe("GetVersionSchema@SchemaRegistriesContextsSubjectsVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListVersionReferencedby@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.referencedby.list): SchemaRegistriesContextsSubjectsVersion: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListVersionReferencedby@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.referencedby.list)",
+        () => probe("ListVersionReferencedby@SchemaRegistriesContextsSubjectsVersion", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

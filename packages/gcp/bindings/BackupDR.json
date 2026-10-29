@@ -17,7 +17,8 @@
   },
   "probes": {
     "resources": {
-      "BackupVault": "ProbeBackupVault"
+      "BackupVault": "ProbeBackupVault",
+      "BackupPlan": "ProbeBackupPlan"
     },
     "untestable": {}
   }

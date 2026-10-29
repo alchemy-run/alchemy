@@ -48,17 +48,29 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("BackupPlan", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetBackupPlan (backupdr.projects.locations.backupPlans.get): BackupPlan: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetBackupPlan (backupdr.projects.locations.backupPlans.get)",
+        () => probe("GetBackupPlan", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetBackupPlanRevision (backupdr.projects.locations.backupPlans.revisions.get): BackupPlan: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetBackupPlanRevision (backupdr.projects.locations.backupPlans.revisions.get)",
+        () => probe("GetBackupPlanRevision", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListBackupPlanRevisions (backupdr.projects.locations.backupPlans.revisions.list): BackupPlan: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListBackupPlanRevisions (backupdr.projects.locations.backupPlans.revisions.list)",
+        () => probe("ListBackupPlanRevisions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

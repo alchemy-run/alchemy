@@ -62,3 +62,21 @@ export const ProbeDeployment = Effect.gen(function* () {
     channelProfile: { channelType: "API", profileId: "api" },
   });
 });
+
+export const ProbeToolset = Effect.gen(function* () {
+  const app = yield* ProbeApp;
+  return yield* GCP.CES.AppsToolset("ProbeToolset", {
+    app: app.name,
+    displayName: "ping",
+    openApiToolset: {
+      openApiSchema: JSON.stringify({
+        openapi: "3.0.0",
+        info: { title: "Ping", version: "1.0.0" },
+        servers: [{ url: "https://example.com" }],
+        paths: {
+          "/ping": { get: { operationId: "ping", responses: { "200": { description: "ok" } } } },
+        },
+      }),
+    },
+  });
+});

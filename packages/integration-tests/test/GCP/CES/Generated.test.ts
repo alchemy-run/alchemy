@@ -326,9 +326,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("AppsToolset", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetToolset (ces.projects.locations.apps.toolsets.get): AppsToolset: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetToolset (ces.projects.locations.apps.toolsets.get)",
+        () => probe("GetToolset", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:ces", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

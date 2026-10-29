@@ -4,7 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
-import { App, Queries } from "./generated-resources.ts";
+import { App, ProbeSchema, Queries } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated FirebaseDataConnect binding as its own
@@ -19,25 +19,29 @@ export default class FirebaseDataConnectGeneratedHost extends GCP.Function<Fireb
     const p0 = yield* GCP.FirebaseDataConnect.GenerateServiceQuery(App);
     const p1 = yield* GCP.FirebaseDataConnect.GenerateServiceSchema(App);
     const p2 = yield* GCP.FirebaseDataConnect.GetConnector(Queries);
-    const p3 = yield* GCP.FirebaseDataConnect.GetService(App);
-    const p4 = yield* GCP.FirebaseDataConnect.ImpersonateConnectorMutation(Queries);
-    const p5 = yield* GCP.FirebaseDataConnect.ImpersonateConnectorQuery(Queries);
-    const p6 = yield* GCP.FirebaseDataConnect.IntrospectServiceGraphql(App);
-    const p7 = yield* GCP.FirebaseDataConnect.ListServiceConnectors(App);
-    const p8 = yield* GCP.FirebaseDataConnect.ListServices();
-    const p9 = yield* GCP.FirebaseDataConnect.ListServiceSchemas(App);
+    const p3 = yield* GCP.FirebaseDataConnect.GetSchema(ProbeSchema);
+    const p4 = yield* GCP.FirebaseDataConnect.GetService(App);
+    const p5 = yield* GCP.FirebaseDataConnect.ImpersonateConnectorMutation(Queries);
+    const p6 = yield* GCP.FirebaseDataConnect.ImpersonateConnectorQuery(Queries);
+    const p7 = yield* GCP.FirebaseDataConnect.IntrospectServiceGraphql(App);
+    const p8 = yield* GCP.FirebaseDataConnect.ListServiceConnectors(App);
+    const p9 = yield* GCP.FirebaseDataConnect.ListServices();
+    const p10 = yield* GCP.FirebaseDataConnect.ListServiceSchemas(App);
+    const p11 = yield* GCP.FirebaseDataConnect.MigrateSchema(ProbeSchema);
     return {
       fetch: serveProbes({
         GenerateServiceQuery: outcome(Retry.none(p0({} as never))),
         GenerateServiceSchema: outcome(Retry.none(p1({} as never))),
         GetConnector: outcome(Retry.none(p2({} as never))),
-        GetService: outcome(Retry.none(p3({} as never))),
-        ImpersonateConnectorMutation: outcome(Retry.none(p4({} as never))),
-        ImpersonateConnectorQuery: outcome(Retry.none(p5({} as never))),
-        IntrospectServiceGraphql: outcome(Retry.none(p6({} as never))),
-        ListServiceConnectors: outcome(Retry.none(p7({} as never))),
-        ListServices: outcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListServiceSchemas: outcome(Retry.none(p9({} as never))),
+        GetSchema: outcome(Retry.none(p3({} as never))),
+        GetService: outcome(Retry.none(p4({} as never))),
+        ImpersonateConnectorMutation: outcome(Retry.none(p5({} as never))),
+        ImpersonateConnectorQuery: outcome(Retry.none(p6({} as never))),
+        IntrospectServiceGraphql: outcome(Retry.none(p7({} as never))),
+        ListServiceConnectors: outcome(Retry.none(p8({} as never))),
+        ListServices: outcome(Retry.none(p9({ location: "us-central1" } as never))),
+        ListServiceSchemas: outcome(Retry.none(p10({} as never))),
+        MigrateSchema: outcome(Retry.none(p11({} as never))),
       }),
     };
   }).pipe(
@@ -47,6 +51,7 @@ export default class FirebaseDataConnectGeneratedHost extends GCP.Function<Fireb
           GCP.FirebaseDataConnect.GenerateServiceQueryHttp,
           GCP.FirebaseDataConnect.GenerateServiceSchemaHttp,
           GCP.FirebaseDataConnect.GetConnectorHttp,
+          GCP.FirebaseDataConnect.GetSchemaHttp,
           GCP.FirebaseDataConnect.GetServiceHttp,
           GCP.FirebaseDataConnect.ImpersonateConnectorMutationHttp,
           GCP.FirebaseDataConnect.ImpersonateConnectorQueryHttp,
@@ -54,6 +59,7 @@ export default class FirebaseDataConnectGeneratedHost extends GCP.Function<Fireb
           GCP.FirebaseDataConnect.ListServiceConnectorsHttp,
           GCP.FirebaseDataConnect.ListServicesHttp,
           GCP.FirebaseDataConnect.ListServiceSchemasHttp,
+          GCP.FirebaseDataConnect.MigrateSchemaHttp,
         ),
       ),
     ),

@@ -91,17 +91,29 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("DataExchangesListing", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetListing (analyticshub.projects.locations.dataExchanges.listings.get): DataExchangesListing: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetListing (analyticshub.projects.locations.dataExchanges.listings.get)",
+        () => probe("GetListing", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:analyticshub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListListingSubscriptions (analyticshub.projects.locations.dataExchanges.listings.listSubscriptions): DataExchangesListing: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListListingSubscriptions (analyticshub.projects.locations.dataExchanges.listings.listSubscriptions)",
+        () => probe("ListListingSubscriptions", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:analyticshub", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SubscribeListing (analyticshub.projects.locations.dataExchanges.listings.subscribe): DataExchangesListing: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SubscribeListing (analyticshub.projects.locations.dataExchanges.listings.subscribe)",
+        () => probe("SubscribeListing", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:analyticshub", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

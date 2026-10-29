@@ -35,7 +35,8 @@
       "AppsGuardrail": "ProbeGuardrail",
       "AppsExample": "ProbeExample",
       "AppsVersion": "ProbeVersion",
-      "AppsDeployment": "ProbeDeployment"
+      "AppsDeployment": "ProbeDeployment",
+      "AppsToolset": "ProbeToolset"
     },
     "untestable": {},
     "location": "us"
