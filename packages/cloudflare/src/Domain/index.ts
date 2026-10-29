@@ -422,12 +422,15 @@ const backfillRuntime = (
         const pending = yield* state.storage.get<number>("bf:tick");
         if (pending !== undefined && pending <= due) return;
         const at = yield* now;
+        // A callback ignores a schedule whose progress isn't past the last one's: count
+        // them, rather than use the clock (each event has its own, and they disagree).
+        const progress = ((yield* state.storage.get<number>("bf:tick-progress")) ?? 0) + 1;
         yield* callback.schedule("tick", {
           after: `${Math.max(0, due - at)} millis`,
           payload: {},
-          progress: at,
+          progress,
         });
-        yield* state.storage.put("bf:tick", due);
+        yield* state.storage.put({ "bf:tick": due, "bf:tick-progress": progress });
       }).pipe(Effect.orDie, tickLock.withPermits(1));
     const tick: Effect.Effect<void, never, DurableObjectState | RuntimeContext> = Effect.gen(
       function* () {
@@ -535,6 +538,9 @@ const directoryObject = (net: Backfill.Network, sourcesOf: SourcesOf) =>
       };
     });
   });
+
+/** How long before a key that couldn't list itself in the directory tries again. */
+const REGISTER_RETRY_MS = 2_000;
 
 /** The id an instance was listed under, saved so jobs that fire later find it. */
 const ID_KEY = "bf:id";
@@ -893,14 +899,20 @@ const viewObject = (
       // This key as a backfill consumer (it buffers and merges history) and source.
       let consumer: Backfill.Consumer | undefined;
       let source: Backfill.Source | undefined;
-      const runtime = yield* backfillRuntime((id) =>
-        Effect.flatMap(state.storage.get<string>(ID_KEY), (key) => {
-          if (key === undefined) return Effect.void;
-          if (id === "bf-flush") return sourceFor(key).flush;
-          if (id.startsWith("bf-merge:"))
-            return consumerFor(key).merge(id.slice("bf-merge:".length));
-          return Effect.void;
-        }),
+      const runtime = yield* backfillRuntime(
+        (id): Effect.Effect<void, never, DurableObjectState | RuntimeContext> =>
+          Effect.flatMap(state.storage.get<string>(ID_KEY), (key) => {
+            if (key === undefined) return Effect.void;
+            if (id === "bf-flush") return sourceFor(key).flush;
+            if (id.startsWith("bf-merge:"))
+              // Listed before its first entry, as on the live path, but here in the key's
+              // own job: its sources' messages don't wait on the directory.
+              return ensureRegistered(net, { source: kit.name, id: key }).pipe(
+                Effect.andThen(consumerFor(key).merge(id.slice("bf-merge:".length))),
+                Effect.catchCause(() => runtime.jobs.schedule(id, REGISTER_RETRY_MS)),
+              );
+            return Effect.void;
+          }),
       );
       const consumerFor = (key: string): Backfill.Consumer =>
         (consumer ??= Backfill.makeConsumer(runtime.storage, runtime.jobs, net, {
@@ -982,17 +994,18 @@ const viewObject = (
           reportDefects(sourceFor(key).ready(target, reportTo)),
         bfPull: (key: string, target: string, consumerKey: string, after: number) =>
           reportDefects(sourceFor(key).pull(target, consumerKey, after)),
+        // The key lists itself in its merge job, before its first entry.
         bfFeed: (key: string, target: string, stream: string, ref: Backfill.SourceRef) =>
           reportDefects(
             Effect.gen(function* () {
-              yield* ensureRegistered(net, { source: kit.name, id: key });
+              yield* state.storage.put(ID_KEY, key);
               yield* consumerFor(key).source(target, stream, ref);
             }),
           ),
         bfConsumerReady: (key: string, target: string) =>
           reportDefects(
             Effect.gen(function* () {
-              yield* ensureRegistered(net, { source: kit.name, id: key });
+              yield* state.storage.put(ID_KEY, key);
               yield* consumerFor(key).ready(target);
             }),
           ),

@@ -189,7 +189,7 @@ export const defaultLimits: Limits = {
   concurrency: 5,
   apply: 200,
   staleRetryMillis: 30_000,
-  firstRetryMillis: 3_000,
+  firstRetryMillis: 1_000,
   pollMillis: 5_000,
   leafSize: 256,
   depth: DEPTH,
@@ -282,11 +282,11 @@ const RETRY_MS = 30_000;
 const SAFETY_POLL_MS = 60_000;
 
 /**
- * Run a job again after a refusal or a failure: soon the first time (a deploy's
- * new code may not have reached the object yet), then at the slow pace, doubling
- * up to four times it. Cloudflare moves a Durable Object to new code when it is
- * evicted, after it has sat idle for a while: calls at a fixed pace can keep it on
- * older code indefinitely, so the gaps grow until it can go idle.
+ * Run a job again after a refusal or a failure, waiting twice as long each time:
+ * from `firstRetryMillis`, so a one-off failure (or a deploy's code still on its
+ * way to an object) costs seconds, up to four times the slow pace. Cloudflare moves
+ * a Durable Object to new code when it is evicted after sitting idle: calls at a
+ * short, fixed pace would keep one on older code, so the gaps grow until it can.
  */
 const makeRetry = (storage: Storage, jobs: Jobs, limits: Limits) => {
   const key = (id: string) => `bf:retry:${id}`;
@@ -297,7 +297,7 @@ const makeRetry = (storage: Storage, jobs: Jobs, limits: Limits) => {
         yield* storage.put({ [key(id)]: tries + 1 });
         yield* jobs.schedule(
           id,
-          tries === 0 ? limits.firstRetryMillis : slowMillis * 2 ** Math.min(tries - 1, 2),
+          Math.min(slowMillis * 4, limits.firstRetryMillis * 2 ** Math.min(tries, 20)),
         );
       }),
     /** The job went through: its next failure retries soon again. */
@@ -1003,6 +1003,7 @@ export const makeConsumer = (
     source: (target: string, stream: string, ref: SourceRef) =>
       storage.exclusive(
         Effect.gen(function* () {
+          yield* trace("told-source", { key: host.key, target, stream });
           if (target !== host.target()) return yield* stale(target);
           // A source that joined after this key finished (an instance listed late):
           // take up the backfill again for it, rather than lose its history.
@@ -1030,6 +1031,7 @@ export const makeConsumer = (
     ready: (target: string) =>
       storage.exclusive(
         Effect.gen(function* () {
+          yield* trace("told-ready", { key: host.key, target });
           if (target !== host.target()) return yield* stale(target);
           if (yield* storage.get(doneKey(target))) return;
           const backfill = yield* begin(target);
@@ -1049,6 +1051,7 @@ export const makeConsumer = (
           // rarely, as a safety net. One fed only live has no source to tell it: it asks.
           const pulling =
             (yield* storage.list({ prefix: pullingPrefix(target), limit: 1 })).length > 0;
+          yield* trace("waiting", { key: host.key, target, pulling });
           if (pulling && !(yield* storage.get(`bf:asked:${T(target)}`))) {
             yield* storage.put({ [`bf:asked:${T(target)}`]: true });
             return yield* jobs.schedule(jobId(target), SAFETY_POLL_MS);

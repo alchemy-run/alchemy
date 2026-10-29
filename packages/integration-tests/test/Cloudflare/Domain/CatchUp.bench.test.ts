@@ -204,6 +204,14 @@ for (const instances of sizes) {
           expect(body.amounts).toEqual(expected);
         }
 
+        // DOMAIN_BENCH_TIME_ONLY: report the deploy's time without waiting minutes for analytics.
+        if (process.env.DOMAIN_BENCH_TIME_ONLY) {
+          const deploySeconds = +((deployEnd.getTime() - deployStart.getTime()) / 1000).toFixed(1);
+          yield* Effect.sync(() =>
+            console.log(`BENCH ${JSON.stringify({ instances, deploySeconds })}`),
+          );
+          return yield* stack.destroy();
+        }
         const settleEnd = new Date(deployEnd.getTime() + 2 * 60_000);
         const seed = yield* settledUsage(scriptName, seedStart, seedEnd);
         const backfill = yield* settledUsage(scriptName, deployStart, settleEnd);
