@@ -1,6 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
-import { expect } from "@alchemy.run/test";
+import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { Credentials, formatHeaders } from "@distilled.cloud/cloudflare/Credentials";
 import * as Data from "effect/Data";
@@ -276,71 +276,74 @@ const run = (
 const viewOf = (url: string, key: string) =>
   call(url, "GET", `/view/${key}`).pipe(Effect.map((body) => JSON.parse(body)));
 
-for (const instances of widths) {
-  test.provider.skipIf(!!process.env.FAST)(
-    `live: backfill of ${instances} instances with ${EVENTS} events each`,
-    (stack) =>
-      run(
-        stack,
-        { shape: "width", instances, events: instances * EVENTS },
-        (url) => seedAccounts(url, instances, EVENTS),
-        BenchV2,
-        (url) =>
-          Effect.gen(function* () {
-            const expected = Array.from({ length: EVENTS }, (_, n) => n + 1);
-            for (const i of [0, Math.floor(instances / 2), instances - 1]) {
-              const account = JSON.parse(yield* call(url, "GET", `/account/b${i}`)) as {
-                balance: number;
-              };
-              expect(account.balance).toBe((EVENTS * (EVENTS + 1)) / 2);
-              expect(((yield* viewOf(url, `b${i}`)) as { amounts: Array<number> }).amounts).toEqual(
-                expected,
-              );
-            }
-          }),
-      ),
-    { timeout: 7_200_000 },
-  );
-}
+// Each run has its own Worker and stack: run them at once, or a full sweep takes hours.
+describe.concurrent("live backfill benchmarks", () => {
+  for (const instances of widths) {
+    test.provider.skipIf(!!process.env.FAST)(
+      `live: backfill of ${instances} instances with ${EVENTS} events each`,
+      (stack) =>
+        run(
+          stack,
+          { shape: "width", instances, events: instances * EVENTS },
+          (url) => seedAccounts(url, instances, EVENTS),
+          BenchV2,
+          (url) =>
+            Effect.gen(function* () {
+              const expected = Array.from({ length: EVENTS }, (_, n) => n + 1);
+              for (const i of [0, Math.floor(instances / 2), instances - 1]) {
+                const account = JSON.parse(yield* call(url, "GET", `/account/b${i}`)) as {
+                  balance: number;
+                };
+                expect(account.balance).toBe((EVENTS * (EVENTS + 1)) / 2);
+                expect(
+                  ((yield* viewOf(url, `b${i}`)) as { amounts: Array<number> }).amounts,
+                ).toEqual(expected);
+              }
+            }),
+        ),
+      { timeout: 7_200_000 },
+    );
+  }
 
-for (const events of depths) {
-  test.provider.skipIf(!!process.env.FAST)(
-    `live: backfill of one account with ${events} events`,
-    (stack) =>
-      run(
-        stack,
-        { shape: "depth", instances: 1, events },
-        (url) => seedOne(url, "deep", events),
-        BenchV2Summary,
-        (url) =>
-          Effect.gen(function* () {
-            expect(yield* viewOf(url, "deep")).toEqual({
-              count: events,
-              total: (events * (events + 1)) / 2,
-            });
-          }),
-      ),
-    { timeout: 7_200_000 },
-  );
-}
+  for (const events of depths) {
+    test.provider.skipIf(!!process.env.FAST)(
+      `live: backfill of one account with ${events} events`,
+      (stack) =>
+        run(
+          stack,
+          { shape: "depth", instances: 1, events },
+          (url) => seedOne(url, "deep", events),
+          BenchV2Summary,
+          (url) =>
+            Effect.gen(function* () {
+              expect(yield* viewOf(url, "deep")).toEqual({
+                count: events,
+                total: (events * (events + 1)) / 2,
+              });
+            }),
+        ),
+      { timeout: 7_200_000 },
+    );
+  }
 
-for (const [accounts, events] of totals) {
-  test.provider.skipIf(!!process.env.FAST)(
-    `live: backfill of a bank-wide total over ${accounts} accounts with ${events} events each`,
-    (stack) =>
-      run(
-        stack,
-        { shape: "total", instances: accounts, events: accounts * events },
-        (url) => seedAccounts(url, accounts, events),
-        BenchV2Total,
-        (url) =>
-          Effect.gen(function* () {
-            expect(yield* viewOf(url, "bank")).toEqual({
-              count: accounts * events,
-              total: (accounts * events * (events + 1)) / 2,
-            });
-          }),
-      ),
-    { timeout: 7_200_000 },
-  );
-}
+  for (const [accounts, events] of totals) {
+    test.provider.skipIf(!!process.env.FAST)(
+      `live: backfill of a bank-wide total over ${accounts} accounts with ${events} events each`,
+      (stack) =>
+        run(
+          stack,
+          { shape: "total", instances: accounts, events: accounts * events },
+          (url) => seedAccounts(url, accounts, events),
+          BenchV2Total,
+          (url) =>
+            Effect.gen(function* () {
+              expect(yield* viewOf(url, "bank")).toEqual({
+                count: accounts * events,
+                total: (accounts * events * (events + 1)) / 2,
+              });
+            }),
+        ),
+      { timeout: 7_200_000 },
+    );
+  }
+});
