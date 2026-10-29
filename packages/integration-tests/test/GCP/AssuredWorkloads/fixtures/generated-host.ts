@@ -25,31 +25,22 @@ export default class AssuredWorkloadsGeneratedHost extends GCP.Function<AssuredW
       fetch: serveProbes({
         AggregateDbFrameworkComplianceReport: outcome(
           Retry.none(
-            p0({
-              dbFrameworkComplianceReport: "alchemy-missing",
-              location: "us-central1",
-            } as never),
+            p0({ dbFrameworkComplianceReport: "alchemy-missing", location: "global" } as never),
           ),
         ),
         FetchDbFrameworkComplianceReport: outcome(
           Retry.none(
-            p1({
-              dbFrameworkComplianceReport: "alchemy-missing",
-              location: "us-central1",
-            } as never),
+            p1({ dbFrameworkComplianceReport: "alchemy-missing", location: "global" } as never),
           ),
         ),
-        ListDbFindingSummaries: outcome(Retry.none(p2({ location: "us-central1" } as never))),
+        ListDbFindingSummaries: outcome(Retry.none(p2({ location: "global" } as never))),
         ListDbFrameworkComplianceReportDbControlComplianceSummaries: outcome(
           Retry.none(
-            p3({
-              dbFrameworkComplianceReport: "alchemy-missing",
-              location: "us-central1",
-            } as never),
+            p3({ dbFrameworkComplianceReport: "alchemy-missing", location: "global" } as never),
           ),
         ),
         ListDbFrameworkComplianceSummaries: outcome(
-          Retry.none(p4({ location: "us-central1" } as never)),
+          Retry.none(p4({ location: "global" } as never)),
         ),
       }),
     };

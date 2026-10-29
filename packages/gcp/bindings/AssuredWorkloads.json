@@ -10,6 +10,7 @@
     "resources": {},
     "untestable": {
       "Workload": "Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)"
-    }
+    },
+    "location": "global"
   }
 }
