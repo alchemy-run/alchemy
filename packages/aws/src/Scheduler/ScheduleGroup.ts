@@ -3,7 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import { createInternalTags, createTagsList, diffTags, hasTags, tagRecord } from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
@@ -65,6 +65,11 @@ export interface ScheduleGroup extends Resource<
      * Current state of the schedule group (`ACTIVE` or `DELETING`).
      */
     state: string | undefined;
+    /**
+     * Tags on the schedule group, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    tags?: Record<string, string>;
   },
   never,
   Providers
@@ -99,10 +104,14 @@ export const ScheduleGroupProvider = () =>
             return undefined;
           }
 
+          const { Tags } = yield* scheduler
+            .listTagsForResource({ ResourceArn: described.Arn })
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed({ Tags: [] })));
           return {
             scheduleGroupArn: described.Arn,
             scheduleGroupName: described.Name,
             state: described.State,
+            tags: tagRecord(Tags),
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -194,6 +203,7 @@ export const ScheduleGroupProvider = () =>
             scheduleGroupArn: groupArn,
             scheduleGroupName,
             state: observed?.State,
+            tags: desiredTags,
           };
         }),
         list: () =>

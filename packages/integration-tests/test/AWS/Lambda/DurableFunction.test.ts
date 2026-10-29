@@ -8,6 +8,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
+import { driftActions, repairDrift } from "../drift.ts";
 import DurableFlowLive, { DurableFlow } from "./fixtures/durable-handler";
 
 const testOptions = { providers: AWS.providers() };
@@ -139,4 +140,52 @@ describe(
       );
     });
   },
+);
+
+// #2688: the durable execution timeout and history retention are managed
+// settings, so `read` must observe them.
+test.provider(
+  "drift detects and repairs out-of-band durable config",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { functionName } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const flow = yield* DurableFlow;
+          return { functionName: flow.functionName };
+        }).pipe(Effect.provide(DurableFlowLive)),
+      );
+      const allUnchanged = (actions: Record<string, string | undefined>) =>
+        Object.values(actions).every((action) => action === "unchanged");
+      expect(allUnchanged(yield* driftActions(stack))).toBe(true);
+
+      const config = yield* Lambda.getFunctionConfiguration({ FunctionName: functionName });
+      yield* Lambda.updateFunctionConfiguration({
+        FunctionName: functionName,
+        DurableConfig: { ...config.DurableConfig, RetentionPeriodInDays: 7 },
+      }).pipe(
+        Effect.retry({
+          while: (e) => e._tag === "ResourceConflictException",
+          schedule: Schedule.spaced("2 seconds"),
+          times: 15,
+        }),
+      );
+
+      const drifted = yield* driftActions(stack).pipe(
+        Effect.repeat({
+          until: (actions) => Object.values(actions).includes("drifted"),
+          schedule: Schedule.spaced("2 seconds"),
+          times: 15,
+        }),
+      );
+      expect(Object.values(drifted)).toContain("drifted");
+
+      yield* repairDrift(stack);
+      expect(allUnchanged(yield* driftActions(stack))).toBe(true);
+      const restored = yield* Lambda.getFunctionConfiguration({ FunctionName: functionName });
+      expect(restored.DurableConfig?.RetentionPeriodInDays).toBe(1);
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:lambda", "live"], timeout: 600_000 },
 );

@@ -16,9 +16,18 @@ import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
+import { driftOf, repairDrift, waitForDrift } from "../drift.ts";
 import { QueueSinkFunction, QueueSinkFunctionLive } from "./sink-handler";
 
 const { test } = Test.make({ providers: AWS.providers() });
+
+// A queue's identity. Its other outputs (observed attributes and tags) change
+// with every update.
+const queueIdentity = (queue: { queueName: string; queueUrl: string; queueArn: string }) => ({
+  queueName: queue.queueName,
+  queueUrl: queue.queueUrl,
+  queueArn: queue.queueArn,
+});
 
 const provider = test.provider;
 const { test: adoptingTest } = Test.make({ providers: AWS.providers(), adopt: true });
@@ -114,13 +123,13 @@ for (const fifo of [false, true]) {
         expect(tags.Tags?.phase).toBe("30 seconds");
 
         const updated = yield* deployQueue("sqs:ReceiveMessage", true, "30 seconds");
-        expect(updated).toEqual(created);
+        expect(queueIdentity(updated)).toEqual(queueIdentity(created));
         yield* waitForQueuePolicy(updated.queueUrl, [
           explicit,
           boundStatement(created.queueArn, "sqs:ReceiveMessage"),
         ]);
         const unbound = yield* deployQueue(undefined, true, "60 seconds");
-        expect(unbound).toEqual(created);
+        expect(queueIdentity(unbound)).toEqual(queueIdentity(created));
         yield* waitForQueuePolicy(unbound.queueUrl, [explicit]);
         yield* waitForQueueAttributeMatch(unbound.queueUrl, {
           VisibilityTimeout: "60",
@@ -128,7 +137,7 @@ for (const fifo of [false, true]) {
         });
 
         const cleared = yield* deployQueue(undefined, false, "60 seconds");
-        expect(cleared).toEqual(created);
+        expect(queueIdentity(cleared)).toEqual(queueIdentity(created));
         yield* waitForQueueAttributePredicate(
           cleared.queueUrl,
           (attrs) => !attrs.Policy && !attrs.RedriveAllowPolicy,
@@ -278,7 +287,9 @@ describe.concurrent(
               const replacement = yield* deployQueue(!initialFifo, "30 seconds");
               expect(replacement.queue.queueName).toBe(initialFifo ? baseName : `${baseName}.fifo`);
               expect(replacement.queue.queueArn).not.toBe(original.queue.queueArn);
-              expect(replacement.reference).toEqual(original.reference);
+              expect(queueIdentity(replacement.reference)).toEqual(
+                queueIdentity(original.reference),
+              );
               yield* waitForQueueTags(
                 replacement.reference.queueUrl,
                 (tags) => tags.target === replacement.queue.queueArn,
@@ -302,7 +313,10 @@ describe.concurrent(
               ]);
               yield* assertQueueDeleted(original.queue.queueUrl);
               const updated = yield* deployQueue(!initialFifo, "45 seconds");
-              expect(updated).toEqual(replacement);
+              expect(queueIdentity(updated.queue)).toEqual(queueIdentity(replacement.queue));
+              expect(queueIdentity(updated.reference)).toEqual(
+                queueIdentity(replacement.reference),
+              );
               yield* waitForQueueAttributeMatch(updated.queue.queueUrl, {
                 VisibilityTimeout: "45",
               });
@@ -602,7 +616,7 @@ describe.concurrent(
           yield* SQS.deleteQueue({ QueueUrl: initial.queueUrl });
           yield* assertQueueDeleted(initial.queueUrl);
           const recovered = yield* deployQueue("60 seconds");
-          expect(recovered).toEqual(initial);
+          expect(queueIdentity(recovered)).toEqual(queueIdentity(initial));
           yield* waitForQueueAttributeMatch(recovered.queueUrl, {
             QueueArn: initial.queueArn,
             VisibilityTimeout: "60",
@@ -620,7 +634,7 @@ describe.concurrent(
           expect(tags.Tags?.["alchemy::id"]).toBe("RecoveryQueue");
 
           const unbound = yield* deployQueue("60 seconds", false);
-          expect(unbound).toEqual(recovered);
+          expect(queueIdentity(unbound)).toEqual(queueIdentity(recovered));
           yield* waitForQueueAttributePredicate(unbound.queueUrl, (attrs) => !attrs.Policy);
 
           yield* stack.destroy();
@@ -1328,6 +1342,51 @@ const waitForQueueMessage = (queueUrl: string) =>
   );
 
 // Finalizer for adoption fixtures whose state has deliberately been removed.
+// #2688: `read` must observe the queue attributes and tags reconcile
+// converges, or an out-of-band change reads as `unchanged`.
+provider(
+  "drift detects and repairs out-of-band attribute and tag changes",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const queue = yield* stack.deploy(
+        Queue("DriftQueue", {
+          visibilityTimeout: "45 seconds",
+          messageRetentionPeriod: "2 days",
+          tags: { team: "declared" },
+        }),
+      );
+      expect((yield* driftOf(stack, "DriftQueue"))?.action).toBe("unchanged");
+
+      yield* SQS.setQueueAttributes({
+        QueueUrl: queue.queueUrl,
+        Attributes: { VisibilityTimeout: "90" },
+      });
+      yield* SQS.tagQueue({ QueueUrl: queue.queueUrl, Tags: { team: "out-of-band" } });
+
+      const drifted = yield* waitForDrift(stack, "DriftQueue", "drifted");
+      expect(drifted?.attr?.attributes?.VisibilityTimeout).toBe("90");
+      expect(drifted?.attr?.tags?.team).toBe("out-of-band");
+
+      const repaired = yield* repairDrift(stack);
+      expect(repaired.resources.DriftQueue?.action).toBe("repaired");
+      expect((yield* waitForDrift(stack, "DriftQueue", "unchanged"))?.action).toBe("unchanged");
+
+      const attributes = yield* SQS.getQueueAttributes({
+        QueueUrl: queue.queueUrl,
+        AttributeNames: ["VisibilityTimeout"],
+      });
+      expect(attributes.Attributes?.VisibilityTimeout).toBe("45");
+      const tags = yield* SQS.listQueueTags({ QueueUrl: queue.queueUrl });
+      expect(tags.Tags?.team).toBe("declared");
+
+      yield* stack.destroy();
+      yield* assertQueueDeleted(queue.queueUrl);
+    }),
+  { tags: ["provider:aws", "provider:aws:sqs", "live"], timeout: 180_000 },
+);
+
 const deleteQueueIfExists = (queueName: string) =>
   SQS.getQueueUrl({ QueueName: queueName }).pipe(
     Effect.flatMap((r) =>

@@ -96,6 +96,18 @@ export interface Parameter extends Resource<
      * `kms:Decrypt` for `WithDecryption` reads.
      */
     keyArn: string | undefined;
+    /**
+     * The declared description, tier, allowed pattern and data type, and
+     * the tags, as observed. Lets `alchemy drift` detect out-of-band
+     * changes.
+     */
+    configuration?: {
+      description?: string;
+      tier?: string;
+      allowedPattern?: string;
+      dataType?: string;
+      tags: Record<string, string>;
+    };
   },
   never,
   Providers
@@ -297,16 +309,25 @@ export const ParameterProvider = () =>
             type === "SecureString"
               ? yield* resolveKeyArn(meta?.KeyId).pipe(Effect.orElseSucceed(() => undefined))
               : undefined;
+          const tags = yield* fetchObservedTags(name).pipe(
+            Effect.orElseSucceed(() => ({}) as Record<string, string>),
+          );
+          // Metadata reconcile only writes when declared is only observed
+          // when declared.
           const attrs = {
             parameterName: name,
             parameterArn: found.ARN ?? parameterArnOf(region, accountId, name),
             type,
             version: found.Version ?? 1,
             keyArn,
+            configuration: {
+              description: olds?.description === undefined ? undefined : meta?.Description,
+              tier: olds?.tier === undefined ? undefined : meta?.Tier,
+              allowedPattern: olds?.allowedPattern === undefined ? undefined : meta?.AllowedPattern,
+              dataType: olds?.dataType === undefined ? undefined : (meta?.DataType ?? "text"),
+              tags,
+            },
           };
-          const tags = yield* fetchObservedTags(name).pipe(
-            Effect.orElseSucceed(() => ({}) as Record<string, string>),
-          );
           return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
         }),
 
@@ -466,6 +487,15 @@ export const ParameterProvider = () =>
             type: desiredType,
             version: version ?? 1,
             keyArn,
+            // Either already observed equal, or just written by the put
+            // above (DescribeParameters lags writes, so it is not re-read).
+            configuration: {
+              description: news.description,
+              tier: news.tier,
+              allowedPattern: news.allowedPattern,
+              dataType: news.dataType,
+              tags: desiredTags,
+            },
           };
         }),
 
