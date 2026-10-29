@@ -44,31 +44,30 @@ export default class SQLGeneratedHost extends GCP.Function<SQLGeneratedHost>()(
     const p25 = yield* GCP.SQL.ListInstanceServerCas(ProbeInstance);
     const p26 = yield* GCP.SQL.ListSslCerts(ProbeInstance);
     const p27 = yield* GCP.SQL.ListUsers(ProbeInstance);
-    const p28 = yield* GCP.SQL.ListWorkloadCaptures(ProbeInstance);
-    const p29 = yield* GCP.SQL.PerformInstanceDiskShrink(ProbeInstance);
-    const p30 = yield* GCP.SQL.PointInstanceInTimeRestore();
-    const p31 = yield* GCP.SQL.PreInstanceCheckMajorVersionUpgrade(ProbeInstance);
-    const p32 = yield* GCP.SQL.PromoteInstanceReplica(ProbeInstance);
-    const p33 = yield* GCP.SQL.ReencryptInstance(ProbeInstance);
-    const p34 = yield* GCP.SQL.ReleaseInstanceSsrsLease(ProbeInstance);
-    const p35 = yield* GCP.SQL.RescheduleInstanceMaintenance(ProbeInstance);
-    const p36 = yield* GCP.SQL.ResetInstanceReplicaSize(ProbeInstance);
-    const p37 = yield* GCP.SQL.ResetInstanceSslConfig(ProbeInstance);
-    const p38 = yield* GCP.SQL.RestartInstance(ProbeInstance);
-    const p39 = yield* GCP.SQL.RestoreInstanceBackup(ProbeInstance);
-    const p40 = yield* GCP.SQL.RotateInstanceServerCa(ProbeInstance);
-    const p41 = yield* GCP.SQL.StartInstanceExternalSync(ProbeInstance);
-    const p42 = yield* GCP.SQL.StartInstanceReplica(ProbeInstance);
-    const p43 = yield* GCP.SQL.StartWorkloadCapture(ProbeInstance);
-    const p44 = yield* GCP.SQL.StartWorkloadCaptureReplay(ProbeInstance);
-    const p45 = yield* GCP.SQL.StopInstanceReplica(ProbeInstance);
-    const p46 = yield* GCP.SQL.StopWorkloadCapture(ProbeInstance);
-    const p47 = yield* GCP.SQL.StopWorkloadCaptureReplay(ProbeInstance);
-    const p48 = yield* GCP.SQL.SwitchoverBlueGreenDeployment();
-    const p49 = yield* GCP.SQL.SwitchoverInstance(ProbeInstance);
-    const p50 = yield* GCP.SQL.TruncateInstanceLog(ProbeInstance);
-    const p51 = yield* GCP.SQL.UpdateUser(ProbeInstance);
-    const p52 = yield* GCP.SQL.VerifyInstanceExternalSyncSettings(ProbeInstance);
+    const p28 = yield* GCP.SQL.PerformInstanceDiskShrink(ProbeInstance);
+    const p29 = yield* GCP.SQL.PointInstanceInTimeRestore();
+    const p30 = yield* GCP.SQL.PreInstanceCheckMajorVersionUpgrade(ProbeInstance);
+    const p31 = yield* GCP.SQL.PromoteInstanceReplica(ProbeInstance);
+    const p32 = yield* GCP.SQL.ReencryptInstance(ProbeInstance);
+    const p33 = yield* GCP.SQL.ReleaseInstanceSsrsLease(ProbeInstance);
+    const p34 = yield* GCP.SQL.RescheduleInstanceMaintenance(ProbeInstance);
+    const p35 = yield* GCP.SQL.ResetInstanceReplicaSize(ProbeInstance);
+    const p36 = yield* GCP.SQL.ResetInstanceSslConfig(ProbeInstance);
+    const p37 = yield* GCP.SQL.RestartInstance(ProbeInstance);
+    const p38 = yield* GCP.SQL.RestoreInstanceBackup(ProbeInstance);
+    const p39 = yield* GCP.SQL.RotateInstanceServerCa(ProbeInstance);
+    const p40 = yield* GCP.SQL.StartInstanceExternalSync(ProbeInstance);
+    const p41 = yield* GCP.SQL.StartInstanceReplica(ProbeInstance);
+    const p42 = yield* GCP.SQL.StartWorkloadCapture(ProbeInstance);
+    const p43 = yield* GCP.SQL.StartWorkloadCaptureReplay(ProbeInstance);
+    const p44 = yield* GCP.SQL.StopInstanceReplica(ProbeInstance);
+    const p45 = yield* GCP.SQL.StopWorkloadCapture(ProbeInstance);
+    const p46 = yield* GCP.SQL.StopWorkloadCaptureReplay(ProbeInstance);
+    const p47 = yield* GCP.SQL.SwitchoverBlueGreenDeployment();
+    const p48 = yield* GCP.SQL.SwitchoverInstance(ProbeInstance);
+    const p49 = yield* GCP.SQL.TruncateInstanceLog(ProbeInstance);
+    const p50 = yield* GCP.SQL.UpdateUser(ProbeInstance);
+    const p51 = yield* GCP.SQL.VerifyInstanceExternalSyncSettings(ProbeInstance);
     return {
       fetch: serveProbes({
         AcquireInstanceSsrsLease: probeOutcome(Retry.none(p0({} as never))),
@@ -119,41 +118,40 @@ export default class SQLGeneratedHost extends GCP.Function<SQLGeneratedHost>()(
         ListInstanceServerCas: probeOutcome(Retry.none(p25({} as never))),
         ListSslCerts: probeOutcome(Retry.none(p26({} as never))),
         ListUsers: probeOutcome(Retry.none(p27({} as never))),
-        ListWorkloadCaptures: probeOutcome(Retry.none(p28({} as never))),
-        PerformInstanceDiskShrink: probeOutcome(Retry.none(p29({} as never))),
-        PointInstanceInTimeRestore: probeOutcome(Retry.none(p30({} as never))),
-        PreInstanceCheckMajorVersionUpgrade: probeOutcome(Retry.none(p31({} as never))),
-        PromoteInstanceReplica: probeOutcome(Retry.none(p32({} as never))),
-        ReencryptInstance: probeOutcome(Retry.none(p33({} as never))),
-        ReleaseInstanceSsrsLease: probeOutcome(Retry.none(p34({} as never))),
-        RescheduleInstanceMaintenance: probeOutcome(Retry.none(p35({} as never))),
-        ResetInstanceReplicaSize: probeOutcome(Retry.none(p36({} as never))),
-        ResetInstanceSslConfig: probeOutcome(Retry.none(p37({} as never))),
-        RestartInstance: probeOutcome(Retry.none(p38({} as never))),
+        PerformInstanceDiskShrink: probeOutcome(Retry.none(p28({} as never))),
+        PointInstanceInTimeRestore: probeOutcome(Retry.none(p29({} as never))),
+        PreInstanceCheckMajorVersionUpgrade: probeOutcome(Retry.none(p30({} as never))),
+        PromoteInstanceReplica: probeOutcome(Retry.none(p31({} as never))),
+        ReencryptInstance: probeOutcome(Retry.none(p32({} as never))),
+        ReleaseInstanceSsrsLease: probeOutcome(Retry.none(p33({} as never))),
+        RescheduleInstanceMaintenance: probeOutcome(Retry.none(p34({} as never))),
+        ResetInstanceReplicaSize: probeOutcome(Retry.none(p35({} as never))),
+        ResetInstanceSslConfig: probeOutcome(Retry.none(p36({} as never))),
+        RestartInstance: probeOutcome(Retry.none(p37({} as never))),
         RestoreInstanceBackup: probeOutcome(
-          Retry.none(p39({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+          Retry.none(p38({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        RotateInstanceServerCa: probeOutcome(Retry.none(p40({} as never))),
-        StartInstanceExternalSync: probeOutcome(Retry.none(p41({} as never))),
-        StartInstanceReplica: probeOutcome(Retry.none(p42({} as never))),
-        StartWorkloadCapture: probeOutcome(Retry.none(p43({} as never))),
+        RotateInstanceServerCa: probeOutcome(Retry.none(p39({} as never))),
+        StartInstanceExternalSync: probeOutcome(Retry.none(p40({} as never))),
+        StartInstanceReplica: probeOutcome(Retry.none(p41({} as never))),
+        StartWorkloadCapture: probeOutcome(Retry.none(p42({} as never))),
         StartWorkloadCaptureReplay: probeOutcome(
-          Retry.none(p44({ workloadId: "alchemy-missing" } as never)),
+          Retry.none(p43({ workloadId: "alchemy-missing" } as never)),
         ),
-        StopInstanceReplica: probeOutcome(Retry.none(p45({} as never))),
-        StopWorkloadCapture: probeOutcome(Retry.none(p46({} as never))),
+        StopInstanceReplica: probeOutcome(Retry.none(p44({} as never))),
+        StopWorkloadCapture: probeOutcome(Retry.none(p45({} as never))),
         StopWorkloadCaptureReplay: probeOutcome(
-          Retry.none(p47({ workloadId: "alchemy-missing" } as never)),
+          Retry.none(p46({ workloadId: "alchemy-missing" } as never)),
         ),
         SwitchoverBlueGreenDeployment: probeOutcome(
           Retry.none(
-            p48({ blueGreenDeployment: "alchemy-missing", location: "us-central1" } as never),
+            p47({ blueGreenDeployment: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        SwitchoverInstance: probeOutcome(Retry.none(p49({} as never))),
-        TruncateInstanceLog: probeOutcome(Retry.none(p50({} as never))),
-        UpdateUser: probeOutcome(Retry.none(p51({} as never))),
-        VerifyInstanceExternalSyncSettings: probeOutcome(Retry.none(p52({} as never))),
+        SwitchoverInstance: probeOutcome(Retry.none(p48({} as never))),
+        TruncateInstanceLog: probeOutcome(Retry.none(p49({} as never))),
+        UpdateUser: probeOutcome(Retry.none(p50({} as never))),
+        VerifyInstanceExternalSyncSettings: probeOutcome(Retry.none(p51({} as never))),
       }),
     };
   }).pipe(
@@ -188,7 +186,6 @@ export default class SQLGeneratedHost extends GCP.Function<SQLGeneratedHost>()(
           GCP.SQL.ListInstanceServerCasHttp,
           GCP.SQL.ListSslCertsHttp,
           GCP.SQL.ListUsersHttp,
-          GCP.SQL.ListWorkloadCapturesHttp,
           GCP.SQL.PerformInstanceDiskShrinkHttp,
           GCP.SQL.PointInstanceInTimeRestoreHttp,
           GCP.SQL.PreInstanceCheckMajorVersionUpgradeHttp,
@@ -200,9 +197,9 @@ export default class SQLGeneratedHost extends GCP.Function<SQLGeneratedHost>()(
           GCP.SQL.ResetInstanceSslConfigHttp,
           GCP.SQL.RestartInstanceHttp,
           GCP.SQL.RestoreInstanceBackupHttp,
+          GCP.SQL.RotateInstanceServerCaHttp,
         ),
         Layer.mergeAll(
-          GCP.SQL.RotateInstanceServerCaHttp,
           GCP.SQL.StartInstanceExternalSyncHttp,
           GCP.SQL.StartInstanceReplicaHttp,
           GCP.SQL.StartWorkloadCaptureHttp,

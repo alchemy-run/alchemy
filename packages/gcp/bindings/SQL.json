@@ -4,15 +4,26 @@
   "resources": {
     "Instance": {
       "pattern": "projects/*/instances/*",
-      "attributes": ["project", "instanceName"]
+      "attributes": [
+        "project",
+        "instanceName"
+      ]
     },
     "Database": {
       "pattern": "projects/*/instances/*/databases/*",
-      "attributes": ["project", "instance", "databaseName"]
+      "attributes": [
+        "project",
+        "instance",
+        "databaseName"
+      ]
     },
     "User": {
       "pattern": "projects/*/instances/*/users/*",
-      "attributes": ["project", "instance", "userName"],
+      "attributes": [
+        "project",
+        "instance",
+        "userName"
+      ],
       "fields": {
         "host": "host"
       }
@@ -23,7 +34,11 @@
     },
     "BackupRun": {
       "pattern": "projects/*/instances/*/backupRuns/*",
-      "attributes": ["project", "instance", "backupRunId"]
+      "attributes": [
+        "project",
+        "instance",
+        "backupRunId"
+      ]
     },
     "Backup": {
       "pattern": "projects/*/backups/*"
@@ -54,6 +69,9 @@
     "untestable": {
       "Backup": "a Cloud SQL backup needs an instance with backups enabled; the probe instance runs with them off to stay cheap",
       "BackupRun": "backup runs need an instance with backups enabled"
+    },
+    "skip": {
+      "ListWorkloadCaptures": "workload capture needs a newer maintenance version than a fresh instance gets (\"the maintenance version does not support this feature\"), and moving an instance to it is a maintenance operation"
     }
   }
 }
