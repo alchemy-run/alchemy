@@ -4,7 +4,12 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
-import { ProbeProfile } from "./generated-resources.ts";
+import {
+  ProbePrivateConnection,
+  ProbeProfile,
+  ProbeRoute,
+  ProbeStream,
+} from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Datastream binding as its own
@@ -18,16 +23,36 @@ export default class DatastreamGeneratedHost extends GCP.Function<DatastreamGene
   Effect.gen(function* () {
     const p0 = yield* GCP.Datastream.DiscoverConnectionProfile();
     const p1 = yield* GCP.Datastream.GetConnectionProfile(ProbeProfile);
-    const p2 = yield* GCP.Datastream.ListConnectionProfiles();
-    const p3 = yield* GCP.Datastream.ListPrivateConnections();
-    const p4 = yield* GCP.Datastream.ListStreams();
+    const p2 = yield* GCP.Datastream.GetPrivateConnection(ProbePrivateConnection);
+    const p3 = yield* GCP.Datastream.GetRoute(ProbeRoute);
+    const p4 = yield* GCP.Datastream.GetStream(ProbeStream);
+    const p5 = yield* GCP.Datastream.GetStreamObject(ProbeStream);
+    const p6 = yield* GCP.Datastream.ListConnectionProfiles();
+    const p7 = yield* GCP.Datastream.ListPrivateConnectionRoutes(ProbePrivateConnection);
+    const p8 = yield* GCP.Datastream.ListPrivateConnections();
+    const p9 = yield* GCP.Datastream.ListStreamObjects(ProbeStream);
+    const p10 = yield* GCP.Datastream.ListStreams();
+    const p11 = yield* GCP.Datastream.LookupStreamObject(ProbeStream);
+    const p12 = yield* GCP.Datastream.RunStream(ProbeStream);
+    const p13 = yield* GCP.Datastream.StartObjectBackfillJob(ProbeStream);
+    const p14 = yield* GCP.Datastream.StopObjectBackfillJob(ProbeStream);
     return {
       fetch: serveProbes({
         DiscoverConnectionProfile: outcome(Retry.none(p0({ location: "us-central1" } as never))),
         GetConnectionProfile: outcome(Retry.none(p1({} as never))),
-        ListConnectionProfiles: outcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListPrivateConnections: outcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListStreams: outcome(Retry.none(p4({ location: "us-central1" } as never))),
+        GetPrivateConnection: outcome(Retry.none(p2({} as never))),
+        GetRoute: outcome(Retry.none(p3({} as never))),
+        GetStream: outcome(Retry.none(p4({} as never))),
+        GetStreamObject: outcome(Retry.none(p5({ object: "alchemy-missing" } as never))),
+        ListConnectionProfiles: outcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListPrivateConnectionRoutes: outcome(Retry.none(p7({} as never))),
+        ListPrivateConnections: outcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListStreamObjects: outcome(Retry.none(p9({} as never))),
+        ListStreams: outcome(Retry.none(p10({ location: "us-central1" } as never))),
+        LookupStreamObject: outcome(Retry.none(p11({} as never))),
+        RunStream: outcome(Retry.none(p12({} as never))),
+        StartObjectBackfillJob: outcome(Retry.none(p13({ object: "alchemy-missing" } as never))),
+        StopObjectBackfillJob: outcome(Retry.none(p14({ object: "alchemy-missing" } as never))),
       }),
     };
   }).pipe(
@@ -36,9 +61,19 @@ export default class DatastreamGeneratedHost extends GCP.Function<DatastreamGene
         Layer.mergeAll(
           GCP.Datastream.DiscoverConnectionProfileHttp,
           GCP.Datastream.GetConnectionProfileHttp,
+          GCP.Datastream.GetPrivateConnectionHttp,
+          GCP.Datastream.GetRouteHttp,
+          GCP.Datastream.GetStreamHttp,
+          GCP.Datastream.GetStreamObjectHttp,
           GCP.Datastream.ListConnectionProfilesHttp,
+          GCP.Datastream.ListPrivateConnectionRoutesHttp,
           GCP.Datastream.ListPrivateConnectionsHttp,
+          GCP.Datastream.ListStreamObjectsHttp,
           GCP.Datastream.ListStreamsHttp,
+          GCP.Datastream.LookupStreamObjectHttp,
+          GCP.Datastream.RunStreamHttp,
+          GCP.Datastream.StartObjectBackfillJobHttp,
+          GCP.Datastream.StopObjectBackfillJobHttp,
         ),
       ),
     ),

@@ -17,7 +17,10 @@
   },
   "probes": {
     "resources": {
-      "ConnectionProfile": "ProbeProfile"
+      "ConnectionProfile": "ProbeProfile",
+      "Stream": "ProbeStream",
+      "PrivateConnection": "ProbePrivateConnection",
+      "PrivateConnectionsRoute": "ProbeRoute"
     },
     "untestable": {}
   }

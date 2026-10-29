@@ -62,20 +62,32 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("PrivateConnection", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPrivateConnection (datastream.projects.locations.privateConnections.get): PrivateConnection: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetPrivateConnection (datastream.projects.locations.privateConnections.get)",
+        () => probe("GetPrivateConnection", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListPrivateConnectionRoutes (datastream.projects.locations.privateConnections.routes.list): PrivateConnection: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListPrivateConnectionRoutes (datastream.projects.locations.privateConnections.routes.list)",
+        () => probe("ListPrivateConnectionRoutes", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("PrivateConnectionsRoute", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetRoute (datastream.projects.locations.privateConnections.routes.get): PrivateConnectionsRoute: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetRoute (datastream.projects.locations.privateConnections.routes.get)",
+        () => probe("GetRoute", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -115,33 +127,61 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Stream", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetStream (datastream.projects.locations.streams.get): Stream: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetStream (datastream.projects.locations.streams.get)",
+        () => probe("GetStream", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetStreamObject (datastream.projects.locations.streams.objects.get): Stream: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetStreamObject (datastream.projects.locations.streams.objects.get)",
+        () => probe("GetStreamObject", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListStreamObjects (datastream.projects.locations.streams.objects.list): Stream: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListStreamObjects (datastream.projects.locations.streams.objects.list)",
+        () => probe("ListStreamObjects", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "LookupStreamObject (datastream.projects.locations.streams.objects.lookup): Stream: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "LookupStreamObject (datastream.projects.locations.streams.objects.lookup)",
+        () => probe("LookupStreamObject", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RunStream (datastream.projects.locations.streams.run): Stream: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RunStream (datastream.projects.locations.streams.run)",
+        () => probe("RunStream", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "StartObjectBackfillJob (datastream.projects.locations.streams.objects.startBackfillJob): Stream: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "StartObjectBackfillJob (datastream.projects.locations.streams.objects.startBackfillJob)",
+        () => probe("StartObjectBackfillJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "StopObjectBackfillJob (datastream.projects.locations.streams.objects.stopBackfillJob): Stream: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "StopObjectBackfillJob (datastream.projects.locations.streams.objects.stopBackfillJob)",
+        () => probe("StopObjectBackfillJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datastream", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },
