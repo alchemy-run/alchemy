@@ -34,6 +34,8 @@ import { fileURLToPath } from "node:url";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import type * as Scope from "effect/Scope";
+import * as SemVer from "effect/SemVer";
+import * as SemVerRange from "effect/SemVerRange";
 import { FrameworkError, type FrameworkDevServer } from "./Framework.ts";
 
 /**
@@ -110,12 +112,14 @@ export const isJsonSerializable = (value: unknown): boolean => {
  * runner entry works when running from `src/` under plain Node (Bun handles
  * `.ts` natively). Mirrors `core/BuildChild.ts`.
  */
-const transformTypesFlags = (): Array<string> => {
-  const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
-  return (major === 22 && minor >= 7) || (major >= 23 && major < 26)
+const transformTypesFlags = (): Array<string> =>
+  SemVerRange.matches(
+    SemVerRange.parseUnsafe(">=22.7.0 <26.0.0-0"),
+    SemVer.parseUnsafe(process.versions.node),
+    { includePrerelease: true },
+  )
     ? ["--experimental-transform-types", "--no-warnings=ExperimentalWarning"]
     : [];
-};
 
 export interface DevChildOptions {
   /** Use Node from PATH for toolchains that cannot run under Bun. Requires native TypeScript support when running source modules. */

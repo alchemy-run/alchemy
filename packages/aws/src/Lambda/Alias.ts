@@ -9,7 +9,12 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
-import { syncEventInvokeConfig, type EventInvokeConfig } from "./EventInvokeConfig.ts";
+import {
+  observeEventInvokeConfig,
+  syncEventInvokeConfig,
+  type EventInvokeConfig,
+  type ObservedEventInvokeConfig,
+} from "./EventInvokeConfig.ts";
 import type { Version } from "./Version.ts";
 
 export interface AliasProps {
@@ -75,6 +80,12 @@ export interface Alias extends Resource<
      * Latest Lambda revision id for this alias.
      */
     revisionId?: string;
+    /**
+     * Asynchronous invocation config (retries, maximum event age,
+     * destinations) scoped to the alias, as observed. Lets `alchemy drift`
+     * detect out-of-band changes.
+     */
+    eventInvokeConfig?: ObservedEventInvokeConfig;
   },
   never,
   Providers
@@ -220,7 +231,12 @@ export const AliasProvider = () =>
             FunctionName: functionName,
             Name: aliasName,
           }).pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
-          return alias ? snapshotAlias(functionName, alias, region) : undefined;
+          const attrs = alias ? snapshotAlias(functionName, alias, region) : undefined;
+          if (!attrs) return undefined;
+          return {
+            ...attrs,
+            eventInvokeConfig: yield* observeEventInvokeConfig(functionName, attrs.aliasName),
+          };
         }),
         list: () =>
           Effect.gen(function* () {
@@ -314,7 +330,10 @@ export const AliasProvider = () =>
 
           yield* session.note(`Alias ${attrs.aliasName} on ${attrs.functionName}`);
 
-          return attrs;
+          return {
+            ...attrs,
+            eventInvokeConfig: yield* observeEventInvokeConfig(functionName, attrs.aliasName),
+          };
         }),
         delete: Effect.fn(function* ({ output }) {
           // The alias-scoped async config does not die with the alias — clear

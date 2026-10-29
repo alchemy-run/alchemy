@@ -33,6 +33,8 @@ import * as Path from "effect/Path";
 import type { PlatformError } from "effect/PlatformError";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as Redacted from "effect/Redacted";
+import * as SemVer from "effect/SemVer";
+import * as SemVerRange from "effect/SemVerRange";
 import * as Stream from "effect/Stream";
 import { readBuildOutput } from "./BuildOutput.ts";
 import type { BuildOutput } from "./BuildOutput.ts";
@@ -68,12 +70,14 @@ export interface BuildChildPayload {
  * Node (Bun handles `.ts` natively). Mirrors alchemy's
  * `Util/Node.transformTypesFlags`.
  */
-const transformTypesFlags = (): Array<string> => {
-  const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
-  return (major === 22 && minor >= 7) || (major >= 23 && major < 26)
+const transformTypesFlags = (): Array<string> =>
+  SemVerRange.matches(
+    SemVerRange.parseUnsafe(">=22.7.0 <26.0.0-0"),
+    SemVer.parseUnsafe(process.versions.node),
+    { includePrerelease: true },
+  )
     ? ["--experimental-transform-types", "--no-warnings=ExperimentalWarning"]
     : [];
-};
 
 export interface BuildChildOptions {
   /** Use Node from PATH for toolchains that cannot build under Bun. Requires native TypeScript support when running source modules. */

@@ -57,6 +57,16 @@ export interface Database extends Resource<
     databaseArn: string;
     /** The AWS account ID of the Data Catalog the database lives in. */
     catalogId: string;
+    /**
+     * Description, location and parameters (including the ownership
+     * markers), as observed. Lets `alchemy drift` detect out-of-band
+     * changes.
+     */
+    configuration?: {
+      description?: string;
+      locationUri?: string;
+      parameters: Record<string, string>;
+    };
   },
   {},
   Providers
@@ -89,6 +99,16 @@ export interface Database extends Resource<
  * @resource
  */
 export const Database = Resource<Database>("AWS.Glue.Database");
+
+/**
+ * The settings `read` and `reconcile` both report, so a converged database
+ * reads unchanged.
+ */
+const observeDatabaseConfiguration = (db: glue.Database) => ({
+  description: db.Description || undefined,
+  locationUri: db.LocationUri || undefined,
+  parameters: cleanMap(db.Parameters),
+});
 
 export const DatabaseProvider = () =>
   Provider.effect(
@@ -136,6 +156,7 @@ export const DatabaseProvider = () =>
             databaseName: db.Name,
             databaseArn: databaseArn(region, db.CatalogId ?? catalogId, db.Name),
             catalogId: db.CatalogId ?? catalogId,
+            configuration: observeDatabaseConfiguration(db),
           };
           // Glue databases are not ARN-taggable — ownership markers live in
           // the database Parameters map.
@@ -199,6 +220,7 @@ export const DatabaseProvider = () =>
             databaseName: name,
             databaseArn: databaseArn(region, db?.CatalogId ?? catalogId, name),
             catalogId: db?.CatalogId ?? catalogId,
+            configuration: db && observeDatabaseConfiguration(db),
           };
         }),
 

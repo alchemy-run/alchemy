@@ -147,6 +147,22 @@ export const Unresolved: unique symbol = Symbol("alchemy/Unresolved");
 export type Unresolved = typeof Unresolved;
 
 /**
+ * Raised by a provider's `precreate` when the identity it must claim is still
+ * {@link Unresolved}. The engine resolves every prop that comes from outside
+ * a dependency cycle before precreate, so the identity depends on a peer in
+ * the resource's own cycle. Name the resource with a literal, or a value from
+ * outside the cycle.
+ */
+export class UnresolvedIdentity extends Data.TaggedError("UnresolvedIdentity")<{
+  /** A human-readable description of the unresolved identity. */
+  message: string;
+  /** The Resource Type (e.g. `AWS.Lambda.Function`). */
+  resourceType?: string;
+  /** The logical ID of the resource. */
+  logicalId?: string;
+}> {}
+
+/**
  * Strip the {@link Unowned} brand from an attributes object before persisting
  * it — state should not carry per-deploy ownership-routing metadata.
  *
