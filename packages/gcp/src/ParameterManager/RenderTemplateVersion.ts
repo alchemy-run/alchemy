@@ -30,7 +30,7 @@ export type RenderTemplateVersionShape = () => Effect.Effect<
  * Gets rendered version of a TemplateVersion.
  *
  * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link RenderTemplateVersionHttp}. The host gets `roles/parametermanager.editor` on the project.
+ * Provide {@link RenderTemplateVersionHttp}. The host gets `roles/parametermanager.templateAccessor` on the project.
  *
  * ### Usage
  * **Example:** Call `versions.render`

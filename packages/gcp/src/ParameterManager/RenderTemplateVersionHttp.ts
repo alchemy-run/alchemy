@@ -23,7 +23,7 @@ export const RenderTemplateVersionHttp = Layer.effect(
           ["templates", "template"],
           ["versions", "version"],
         ],
-        role: "roles/parametermanager.editor",
+        role: "roles/parametermanager.templateAccessor",
       },
     ],
   }),

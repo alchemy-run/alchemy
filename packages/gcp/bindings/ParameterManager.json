@@ -14,5 +14,8 @@
       "Parameter": "AppConfig",
       "ParametersVersion": "V1"
     }
+  },
+  "roles": {
+    "parametermanager.projects.locations.templates.versions.render": "roles/parametermanager.templateAccessor"
   }
 }
