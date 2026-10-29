@@ -47,7 +47,7 @@ export default class CertificateManagerGeneratedHost extends GCP.Function<Certif
           Retry.none(p6({ location: "us-central1" } as never)),
         ),
         ListCertificateMapEntries: probeOutcome(Retry.none(p7({} as never))),
-        ListCertificateMaps: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListCertificateMaps: probeOutcome(Retry.none(p8({ location: "global" } as never))),
         ListCertificates: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
         ListDnsAuthorizations: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
         ListTrustConfigs: probeOutcome(Retry.none(p11({ location: "us-central1" } as never))),

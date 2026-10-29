@@ -30,7 +30,10 @@
       "CertificateMapEntry": "ProbeMapEntry",
       "CertificateIssuanceConfig": "ProbeIssuanceConfig"
     },
-    "untestable": {}
+    "untestable": {},
+    "locations": {
+      "ListCertificateMaps": "global"
+    }
   },
   "permissionCollections": {
     "certificates": "certs",
