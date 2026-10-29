@@ -1,3 +1,4 @@
+import { CurrentActivity, makeCurrentActivity } from "alchemy/WorkflowEncoding";
 import * as Arr from "effect/Array";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
@@ -12,7 +13,7 @@ import * as SingleRunner from "effect/cluster/SingleRunner";
 import type { ConfigError } from "effect/Config";
 import * as Digest from "effect/crypto/Digest";
 import * as DateTime from "effect/DateTime";
-import type * as Duration from "effect/Duration";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as PrimaryKey from "effect/PrimaryKey";
@@ -26,7 +27,7 @@ import * as SqlClient from "effect/sql/SqlClient";
 import type { SqlError } from "effect/sql/SqlError";
 import type * as Statement from "effect/sql/Statement";
 import * as Stream from "effect/Stream";
-import type { WorkflowEngine } from "effect/workflow";
+import { WorkflowEngine } from "effect/workflow";
 import type * as Aggregate from "./Aggregate.ts";
 import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "./Aggregate.ts";
 import { isAfter, mergeCheckpoints } from "./InMemory.ts";
@@ -1383,15 +1384,66 @@ export const layer = (
 > => {
   // The same options return the same Layer, so models that each provide it
   // share one platform: the sweeper is one singleton per table prefix.
-  const key = JSON.stringify(options);
+  const key = cacheKey(options);
   let found = layers.get(key);
   if (found === undefined)
-    layers.set(
-      key,
-      (found = Layer.merge(Layer.effect(Platform, make(options)), ClusterWorkflowEngine.layer)),
-    );
+    layers.set(key, (found = Layer.merge(Layer.effect(Platform, make(options)), workflowEngine)));
   return found;
 };
+
+/**
+ * One key for options that mean the same: defaults applied, durations in
+ * nanoseconds (a `Duration.Input` may be a bigint, which JSON cannot hold).
+ */
+const cacheKey = (options: Options): string => {
+  const nanos = (input: Duration.Input | undefined) =>
+    input === undefined
+      ? null
+      : Duration.isFinite(Duration.fromInputUnsafe(input))
+        ? String(Duration.toNanosUnsafe(input))
+        : "infinity";
+  return JSON.stringify([
+    options.tablePrefix ?? "domain",
+    options.migrations !== false,
+    options.watchMillis ?? 250,
+    options.sweep?.intervalMillis ?? 10_000,
+    options.sweep?.afterMillis ?? 30_000,
+    options.viewEntries ?? 50,
+    nanos(options.entityMaxIdleTime),
+  ]);
+};
+
+/**
+ * `ClusterWorkflowEngine`, with the step a saga runs (`CurrentActivity`)
+ * provided to every execution of an activity, as the other engines do. A
+ * command sent inside a step then takes the same id each time the step runs
+ * (a retry, or a replay after a crash), so its receipt dedupes it. The
+ * sequence starts again on every execution.
+ */
+const workflowEngine = Layer.effect(
+  WorkflowEngine.WorkflowEngine,
+  Effect.gen(function* () {
+    const engine = yield* WorkflowEngine.WorkflowEngine;
+    return WorkflowEngine.WorkflowEngine.of({
+      ...engine,
+      activityExecute: (activity, attempt) =>
+        Effect.gen(function* () {
+          const instance = yield* WorkflowEngine.WorkflowInstance;
+          const step = () =>
+            makeCurrentActivity(instance.workflow._tag, instance.executionId, activity.name);
+          return yield* engine.activityExecute(
+            {
+              ...activity,
+              executeEncoded: Effect.suspend(() =>
+                Effect.provideService(activity.executeEncoded, CurrentActivity, step()),
+              ),
+            },
+            attempt,
+          );
+        }),
+    });
+  }),
+).pipe(Layer.provide(ClusterWorkflowEngine.layer));
 
 const layers = new Map<
   string,
