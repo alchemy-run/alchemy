@@ -1,5 +1,4 @@
 import * as Domain from "@alchemy.run/domain";
-import { ExternalSystemSchemaError } from "@alchemy.run/domain/ExternalSystem";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
@@ -75,8 +74,12 @@ describe("Domain ExternalSystem", () => {
         Effect.provide(layer),
       );
       const defect = defectOf(exit);
-      expect(defect).toBeInstanceOf(ExternalSystemSchemaError);
-      expect(defect).toMatchObject({ system: "Payments", op: "refund", part: "args" });
+      expect(defect).toMatchObject({
+        _tag: "ExternalSystemSchemaError",
+        system: "Payments",
+        op: "refund",
+        part: "args",
+      });
       expect(String((defect as Error).message)).toMatch(
         /^Payments\.refund was called with arguments its schema rejects\n.*amount/s,
       );
@@ -109,6 +112,29 @@ describe("Domain ExternalSystem", () => {
       expect(String((defectOf(exit) as Error).message)).toMatch(
         /^Payments\.refund failed with an error its error schema rejects\n/,
       );
+    }),
+  );
+
+  it.effect("keeps every error of a declared list a typed failure", () =>
+    Effect.gen(function* () {
+      class Cards extends Domain.ExternalSystem("Cards", {
+        charge: { args: { amount: Schema.Int }, error: [RefundDeclined, CardFrozen] },
+      }) {}
+      const layer = Cards.toLayer(
+        Effect.succeed({
+          charge: ({ amount }) =>
+            amount > 100
+              ? Effect.fail(new CardFrozen())
+              : Effect.fail(new RefundDeclined({ reason: "low" })),
+        }),
+      );
+      const charge = (amount: number) =>
+        Effect.gen(function* () {
+          const cards = yield* Cards;
+          return yield* cards.charge({ amount });
+        }).pipe(Effect.flip, Effect.provide(layer));
+      expect(yield* charge(500)).toEqual(new CardFrozen());
+      expect(yield* charge(5)).toEqual(new RefundDeclined({ reason: "low" }));
     }),
   );
 

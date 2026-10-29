@@ -132,7 +132,7 @@ export const validateOps = (
       const args = spec.args === undefined ? undefined : check("args", Schema.Struct(spec.args));
       const success =
         spec.success === undefined ? undefined : check("success", successSchema(spec));
-      const error = check("error", spec.error ?? Schema.Never);
+      const error = check("error", errorSchema(spec));
       return [
         op,
         (input: unknown) =>
