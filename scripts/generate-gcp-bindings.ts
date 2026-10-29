@@ -1526,7 +1526,7 @@ const emitProbeHost = (service: string, config: ServiceConfig, probes: Probe[]) 
   return `${PROBE_HEADER(service)}import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
-${layers.length ? 'import * as Layer from "effect/Layer";\n' : ""}import { ${live.some((p) => p.args.includes("hostProject")) ? "hostProject, " : ""}probeOutcome, serveProbes } from "../../bindingHost.ts";
+${layers.length ? 'import * as Layer from "effect/Layer";\n' : ""}import { ${live.some((p) => p.args.includes("yield* hostProject")) ? "hostProject, " : ""}probeOutcome, serveProbes } from "../../bindingHost.ts";
 ${exports.length ? `import { ${exports.sort().join(", ")} } from "./generated-resources.ts";` : ""}
 
 /**
