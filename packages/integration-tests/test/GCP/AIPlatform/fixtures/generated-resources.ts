@@ -146,3 +146,48 @@ export const ProbeFeatureOnlineStore = GCP.AIPlatform.FeatureOnlineStore(
     location: "us-central1",
   },
 );
+
+export const ProbeFeaturestore = GCP.AIPlatform.Featurestore("ProbeFeaturestore", { location });
+export const ProbeEntityType = Effect.gen(function* () {
+  const store = yield* ProbeFeaturestore;
+  return yield* GCP.AIPlatform.FeaturestoresEntityType("ProbeEntityType", {
+    featurestore: store.name,
+    location,
+  });
+});
+export const ProbeEntityFeature = Effect.gen(function* () {
+  const entity = yield* ProbeEntityType;
+  return yield* GCP.AIPlatform.FeaturestoresEntityTypesFeature("ProbeEntityFeature", {
+    entityType: entity.name,
+    valueType: "INT64",
+  });
+});
+export const ProbeTrial = Effect.gen(function* () {
+  const study = yield* ProbeStudy;
+  return yield* GCP.AIPlatform.StudiesTrial("ProbeTrial", {
+    parent: study.name,
+    parameters: [{ parameterId: "lr", value: 0.01 }],
+  });
+});
+export const ProbeTimeSeries = Effect.gen(function* () {
+  const run = yield* ProbeRun;
+  return yield* GCP.AIPlatform.TensorboardsExperimentsRunsTimeSeries("ProbeTimeSeries", {
+    parent: run.name,
+    displayName: "loss",
+    valueType: "SCALAR",
+    pluginName: "scalars",
+  });
+});
+export const ProbeMemory = Effect.gen(function* () {
+  const engine = yield* GCP.AIPlatform.ReasoningEngine("ProbeMemoryEngine", {
+    location,
+    displayName: "alchemy-probe-memory",
+    spec: { agentFramework: "custom" },
+  });
+  return yield* GCP.AIPlatform.ReasoningEnginesMemory("ProbeMemory", {
+    reasoningEngine: engine.name,
+    location,
+    scope: { user_id: "alchemy-probe" },
+    fact: "the user prefers concise answers",
+  });
+});

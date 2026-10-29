@@ -410,63 +410,115 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Featurestore", { concurrent: true }, () => {
-      test.provider.todo(
-        "BatchFeaturestoreReadFeatureValues (aiplatform.projects.locations.featurestores.batchReadFeatureValues): Featurestore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "BatchFeaturestoreReadFeatureValues (aiplatform.projects.locations.featurestores.batchReadFeatureValues)",
+        () => probe("BatchFeaturestoreReadFeatureValues", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetFeaturestore (aiplatform.projects.locations.featurestores.get): Featurestore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetFeaturestore (aiplatform.projects.locations.featurestores.get)",
+        () => probe("GetFeaturestore", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListFeaturestoreEntityTypes (aiplatform.projects.locations.featurestores.entityTypes.list): Featurestore: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListFeaturestoreEntityTypes (aiplatform.projects.locations.featurestores.entityTypes.list)",
+        () => probe("ListFeaturestoreEntityTypes", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("FeaturestoresEntityType", { concurrent: true }, () => {
-      test.provider.todo(
-        "BatchFeatureCreate@FeaturestoresEntityType (aiplatform.projects.locations.featurestores.entityTypes.features.batchCreate): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "BatchFeatureCreate@FeaturestoresEntityType (aiplatform.projects.locations.featurestores.entityTypes.features.batchCreate)",
+        () => probe("BatchFeatureCreate@FeaturestoresEntityType", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "DeleteEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.deleteFeatureValues): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DeleteEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.deleteFeatureValues)",
+        () => probe("DeleteEntityTypeFeatureValues", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ExportEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.exportFeatureValues): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ExportEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.exportFeatureValues)",
+        () => probe("ExportEntityTypeFeatureValues", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetEntityType (aiplatform.projects.locations.featurestores.entityTypes.get): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetEntityType (aiplatform.projects.locations.featurestores.entityTypes.get)",
+        () => probe("GetEntityType", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ImportEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.importFeatureValues): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ImportEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.importFeatureValues)",
+        () => probe("ImportEntityTypeFeatureValues", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListEntityTypeFeatures (aiplatform.projects.locations.featurestores.entityTypes.features.list): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListEntityTypeFeatures (aiplatform.projects.locations.featurestores.entityTypes.features.list)",
+        () => probe("ListEntityTypeFeatures", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ReadEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.readFeatureValues): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ReadEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.readFeatureValues)",
+        () => probe("ReadEntityTypeFeatureValues", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "StreamingEntityTypeReadFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.streamingReadFeatureValues): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "StreamingEntityTypeReadFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.streamingReadFeatureValues)",
+        () => probe("StreamingEntityTypeReadFeatureValues", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "WriteEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.writeFeatureValues): FeaturestoresEntityType: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "WriteEntityTypeFeatureValues (aiplatform.projects.locations.featurestores.entityTypes.writeFeatureValues)",
+        () => probe("WriteEntityTypeFeatureValues", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("FeaturestoresEntityTypesFeature", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetFeature@FeaturestoresEntityTypesFeature (aiplatform.projects.locations.featurestores.entityTypes.features.get): FeaturestoresEntityTypesFeature: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetFeature@FeaturestoresEntityTypesFeature (aiplatform.projects.locations.featurestores.entityTypes.features.get)",
+        () => probe("GetFeature@FeaturestoresEntityTypesFeature", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -1886,21 +1938,37 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ReasoningEnginesMemory", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetMemory (aiplatform.projects.locations.reasoningEngines.memories.get): ReasoningEnginesMemory: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetMemory (aiplatform.projects.locations.reasoningEngines.memories.get)",
+        () => probe("GetMemory", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetMemoryRevision (aiplatform.projects.locations.reasoningEngines.memories.revisions.get): ReasoningEnginesMemory: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetMemoryRevision (aiplatform.projects.locations.reasoningEngines.memories.revisions.get)",
+        () => probe("GetMemoryRevision", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListMemoryRevisions (aiplatform.projects.locations.reasoningEngines.memories.revisions.list): ReasoningEnginesMemory: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListMemoryRevisions (aiplatform.projects.locations.reasoningEngines.memories.revisions.list)",
+        () => probe("ListMemoryRevisions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RollbackMemory (aiplatform.projects.locations.reasoningEngines.memories.rollback): ReasoningEnginesMemory: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RollbackMemory (aiplatform.projects.locations.reasoningEngines.memories.rollback)",
+        () => probe("RollbackMemory", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -1996,25 +2064,45 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("StudiesTrial", { concurrent: true }, () => {
-      test.provider.todo(
-        "AddTrialMeasurement (aiplatform.projects.locations.studies.trials.addTrialMeasurement): StudiesTrial: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "AddTrialMeasurement (aiplatform.projects.locations.studies.trials.addTrialMeasurement)",
+        () => probe("AddTrialMeasurement", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "CheckTrialEarlyStoppingState (aiplatform.projects.locations.studies.trials.checkTrialEarlyStoppingState): StudiesTrial: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CheckTrialEarlyStoppingState (aiplatform.projects.locations.studies.trials.checkTrialEarlyStoppingState)",
+        () => probe("CheckTrialEarlyStoppingState", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "CompleteTrial (aiplatform.projects.locations.studies.trials.complete): StudiesTrial: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CompleteTrial (aiplatform.projects.locations.studies.trials.complete)",
+        () => probe("CompleteTrial", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetTrial (aiplatform.projects.locations.studies.trials.get): StudiesTrial: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTrial (aiplatform.projects.locations.studies.trials.get)",
+        () => probe("GetTrial", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "StopTrial (aiplatform.projects.locations.studies.trials.stop): StudiesTrial: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "StopTrial (aiplatform.projects.locations.studies.trials.stop)",
+        () => probe("StopTrial", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -2167,21 +2255,37 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("TensorboardsExperimentsRunsTimeSeries", { concurrent: true }, () => {
-      test.provider.todo(
-        "ExportTimeSeryTensorboardTimeSeries (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.exportTensorboardTimeSeries): TensorboardsExperimentsRunsTimeSeries: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ExportTimeSeryTensorboardTimeSeries (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.exportTensorboardTimeSeries)",
+        () => probe("ExportTimeSeryTensorboardTimeSeries", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetTimeSery (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.get): TensorboardsExperimentsRunsTimeSeries: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTimeSery (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.get)",
+        () => probe("GetTimeSery", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ReadTimeSery (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.read): TensorboardsExperimentsRunsTimeSeries: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ReadTimeSery (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.read)",
+        () => probe("ReadTimeSery", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ReadTimeSeryBlobData (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.readBlobData): TensorboardsExperimentsRunsTimeSeries: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ReadTimeSeryBlobData (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.readBlobData)",
+        () => probe("ReadTimeSeryBlobData", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

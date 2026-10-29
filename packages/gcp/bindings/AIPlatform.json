@@ -177,7 +177,13 @@
       "CustomJob": "ProbeCustomJob",
       "DeploymentResourcePool": "ProbeDeploymentResourcePool",
       "EvaluationItem": "ProbeEvaluationItem",
-      "FeatureOnlineStore": "ProbeFeatureOnlineStore"
+      "FeatureOnlineStore": "ProbeFeatureOnlineStore",
+      "Featurestore": "ProbeFeaturestore",
+      "FeaturestoresEntityType": "ProbeEntityType",
+      "FeaturestoresEntityTypesFeature": "ProbeEntityFeature",
+      "StudiesTrial": "ProbeTrial",
+      "TensorboardsExperimentsRunsTimeSeries": "ProbeTimeSeries",
+      "ReasoningEnginesMemory": "ProbeMemory"
     },
     "untestable": {
       "Agent": "AgentService is v1beta1-only; the v1 SDK gets \"This API version is not supported by AgentService\"",
