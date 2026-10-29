@@ -5,3 +5,4 @@ export * from "./EnableService.ts";
 export * from "./EnableServiceHttp.ts";
 export * from "./GetService.ts";
 export * from "./GetServiceHttp.ts";
+export * from "./ProjectServiceAuditLogs.ts";
