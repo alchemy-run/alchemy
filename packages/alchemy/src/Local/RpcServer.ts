@@ -156,7 +156,7 @@ const sessionProviders = (resolve: ProviderGroupLoader) =>
           };
           sessions.set(key, session);
           const current = session;
-          Effect.runSync(
+          Effect.runSyncWith(ambient)(
             Scope.addFinalizer(
               current.scope,
               // Calls drain before provider finalizers and artifact disposal.
@@ -195,7 +195,7 @@ const sessionProviders = (resolve: ProviderGroupLoader) =>
           );
         }
         const groupScope = Scope.forkUnsafe(current.resources);
-        const pending = Effect.runPromise(
+        const pending = Effect.runPromiseWith(ambient)(
           resolve(group).pipe(
             Effect.flatMap((providers) =>
               Layer.buildWithMemoMap(
@@ -265,7 +265,7 @@ const sessionProviders = (resolve: ProviderGroupLoader) =>
           lease.closing =
             session === undefined
               ? Promise.resolve()
-              : Effect.runPromise(Scope.close(session.scope, Exit.void));
+              : Effect.runPromiseWith(ambient)(Scope.close(session.scope, Exit.void));
           return lease.closing;
         },
         get: async (sessionEnv, type, group, lease) => {
@@ -370,6 +370,7 @@ export const layerServer = (
     RpcServer,
     Effect.gen(function* () {
       const providers = yield* SessionProviders;
+      const context = yield* Effect.context();
       const connected = yield* Deferred.make<void>();
       const disconnected = yield* Deferred.make<void>();
       const { url } = yield* serve({
@@ -395,7 +396,7 @@ export const layerServer = (
             // deliberately retain their contexts across hot reloads.
             if (testOwned) {
               void providers.release(lease).catch((error) => {
-                Effect.runFork(Effect.logError(error));
+                Effect.runForkWith(context)(Effect.logError(error));
               });
             }
           };

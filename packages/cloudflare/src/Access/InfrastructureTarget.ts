@@ -241,7 +241,7 @@ type ResolvedIp = {
 const getTarget = (accountId: string, targetId: string) =>
   zeroTrust
     .getAccessInfrastructureTarget({ accountId, targetId })
-    .pipe(Effect.catchTag("TargetNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("TargetNotFound", () => Effect.undefined));
 
 /**
  * Find a target by exact hostname + address match. Hostnames are

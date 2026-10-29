@@ -171,7 +171,7 @@ export const WebFunctionPermissionProvider = () =>
 
       const getPolicy = Effect.fn(function* (functionArn: string) {
         const observed = yield* LambdaWeb.getResourcePolicy({ resourceArn: functionArn }).pipe(
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         if (observed === undefined) return undefined;
         const document = yield* Effect.try({

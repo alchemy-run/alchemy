@@ -25,7 +25,7 @@ import { isRailwayHost } from "./MountVolume.ts";
  * NOT exported from `index.ts`.
  */
 export class RailwayS3CredentialsMissing extends Data.TaggedError("Railway.S3CredentialsMissing")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export interface RailwayS3Scope {
@@ -68,7 +68,7 @@ const scopeFromResource = (bucket: Bucket) =>
       endpoint === undefined
     ) {
       return yield* new RailwayS3CredentialsMissing({
-        name: bucketName ?? bucket.LogicalId,
+        resourceName: bucketName ?? bucket.LogicalId,
       });
     }
     return {

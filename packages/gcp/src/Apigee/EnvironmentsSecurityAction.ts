@@ -193,7 +193,7 @@ export const EnvironmentsSecurityAction = Resource<EnvironmentsSecurityAction>(
 export class EnvironmentsSecurityActionNotResolved extends Data.TaggedError(
   "GCP.Apigee.EnvironmentsSecurityActionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organizationId: string, environmentId: string, securityActionId: string) =>
@@ -381,7 +381,7 @@ export const EnvironmentsSecurityActionProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new EnvironmentsSecurityActionNotResolved({ name });
+        return yield* new EnvironmentsSecurityActionNotResolved({ resourceName: name });
       }
 
       const descriptionChanged = !sameText(current.description, desiredDescription);

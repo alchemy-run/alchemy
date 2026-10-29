@@ -125,7 +125,7 @@ export const ApiMappingProvider = () =>
       const getMappingSafe = (domainName: string, apiMappingId: string) =>
         agw2
           .getApiMapping({ DomainName: domainName, ApiMappingId: apiMappingId })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
 
       return ApiMappingResource.Provider.of({
         stables: ["apiMappingId", "domainName"],

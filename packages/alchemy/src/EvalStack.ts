@@ -24,7 +24,7 @@ import { PlatformServices } from "./Util/PlatformServices.ts";
 const platform = Layer.mergeAll(
   PlatformServices,
   FetchHttpClient.layer,
-  Logger.layer([fileLogger("out")], { mergeWithExisting: true }),
+  Layer.provide(Logger.layer([fileLogger("out")], { mergeWithExisting: true }), PlatformServices),
   Layer.provide(ProfileStoreLive, PlatformServices),
   Layer.provide(CredentialsStoreLive, PlatformServices),
 );

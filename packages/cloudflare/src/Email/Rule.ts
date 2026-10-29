@@ -396,7 +396,7 @@ const normalize = (
 const observeById = (zoneId: string, ruleId: string) =>
   emailRouting.getRule({ zoneId, ruleIdentifier: ruleId }).pipe(
     Effect.map((rule) => (isCatchAllRule(rule) ? undefined : normalize(rule, zoneId))),
-    Effect.catchTag(["EmailRoutingRuleNotFound", "Forbidden"], () => Effect.succeed(undefined)),
+    Effect.catchTag(["EmailRoutingRuleNotFound", "Forbidden"], () => Effect.undefined),
   );
 
 /**
@@ -412,7 +412,7 @@ const findByMatchers = (zoneId: string, matchers: Matcher[]) =>
     Stream.runHead,
     Effect.map(Option.getOrUndefined),
     Effect.map((rule) => (rule ? normalize(rule, zoneId) : undefined)),
-    Effect.catchTag("InvalidRoute", () => Effect.succeed(undefined)),
+    Effect.catchTag("InvalidRoute", () => Effect.undefined),
   );
 
 const resolve = Effect.fn(function* (zone: Reference) {

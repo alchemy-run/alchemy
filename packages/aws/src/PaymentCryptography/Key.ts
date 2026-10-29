@@ -266,7 +266,7 @@ export const KeyProvider = () =>
       const observeKey = Effect.fn(function* (keyArn: string) {
         const found = yield* paymentcryptography.getKey({ KeyIdentifier: keyArn }).pipe(
           Effect.map((r) => r.Key),
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
         if (found === undefined || found.KeyState === "DELETE_COMPLETE") {
           return undefined;

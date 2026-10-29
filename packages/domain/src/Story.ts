@@ -6,6 +6,7 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -532,12 +533,15 @@ const clockMillis = (at: string | number | DateTime.DateTime) =>
 const advanceDuration = (by: Duration.Input) =>
   Option.getOrUndefined(Option.filter(Duration.fromInput(by), Duration.isFinite));
 
+const showDurationInput = (by: Duration.Input): string =>
+  typeof by === "string" ? by : Formatter.format(by);
+
 /** A one-line summary of a step, before it runs. */
 const describeStep = (s: Step): string => {
   switch (s._tag) {
     case "Advance": {
       const by = advanceDuration(s.by);
-      if (by === undefined) return String(s.by);
+      if (by === undefined) return showDurationInput(s.by);
       return `${Duration.isNegative(by) ? "" : "+"}${Duration.format(by)}`;
     }
     case "Clock": {
@@ -631,6 +635,7 @@ const renderReport = (
 
 const encodeInstance = (value: { readonly _tag: string }): unknown => {
   const schema = (value as any).constructor as Schema.Top;
+  // oxlint-disable-next-line effecttsgo/schema-sync -- encodes a value for a sync story report
   return Schema.encodeUnknownSync(Schema.toCodecJson(schema as any) as any)(value);
 };
 
@@ -915,7 +920,8 @@ const make =
             }
             case "Advance": {
               const by = advanceDuration(s.by);
-              if (by === undefined) return yield* fail(`${String(s.by)} is not a duration`);
+              if (by === undefined)
+                return yield* fail(`${showDurationInput(s.by)} is not a duration`);
               if (Duration.isNegative(by)) {
                 return yield* fail(`the clock only moves forward, not by ${Duration.format(by)}`);
               }
@@ -1456,11 +1462,11 @@ const make =
 // The steps live on this object rather than as module exports: a module that
 // exports `then` is "thenable", and loaders that await module namespaces
 // would hang on it.
-// oxlint-disable-next-line unicorn/no-thenable -- `Story.then` is the given/when/then vocabulary
 export const Story = {
   make,
   given,
   when,
+  // oxlint-disable-next-line unicorn/no-thenable -- `then` is the given/when/then vocabulary
   then,
   rejected,
   replied,

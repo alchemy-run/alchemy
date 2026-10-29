@@ -95,7 +95,7 @@ export const SitesApicategory = Resource<SitesApicategory>("GCP.Apigee.SitesApic
 export class SitesApicategoryNotResolved extends Data.TaggedError(
   "GCP.Apigee.SitesApicategoryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const siteParent = (org: string, siteId: string) => `${orgParent(org)}/sites/${siteId}`;
@@ -133,7 +133,7 @@ const toAttrs = (category: apigee.GoogleCloudApigeeV1ApiCategory, org: string, s
 const getByName = (name: string) =>
   apigee.getOrganizationsSitesApicategories({ name }).pipe(
     Effect.map((response) => unwrap(response)),
-    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)),
+    Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined),
   );
 
 const listBySite = (org: string, siteId: string) =>
@@ -225,7 +225,7 @@ export const SitesApicategoryProvider = () =>
 
       if (current === undefined || !(current.id ?? "").length) {
         return yield* new SitesApicategoryNotResolved({
-          name: siteParent(org, siteId),
+          resourceName: siteParent(org, siteId),
         });
       }
 

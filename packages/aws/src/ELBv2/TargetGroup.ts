@@ -207,7 +207,7 @@ export const TargetGroupProvider = () =>
             .describeTargetGroups({
               TargetGroupArns: [output.targetGroupArn],
             })
-            .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.undefined));
           const targetGroup = described?.TargetGroups?.[0];
           if (!targetGroup?.TargetGroupArn) {
             return undefined;
@@ -249,11 +249,7 @@ export const TargetGroupProvider = () =>
                 Effect.gen(function* () {
                   const tagDescriptions = yield* elbv2
                     .describeTags({ ResourceArns: [tg.TargetGroupArn] })
-                    .pipe(
-                      Effect.catchTag("TargetGroupNotFoundException", () =>
-                        Effect.succeed(undefined),
-                      ),
-                    );
+                    .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.undefined));
                   const tags = Object.fromEntries(
                     (tagDescriptions?.TagDescriptions?.[0]?.Tags ?? [])
                       .filter(
@@ -287,7 +283,7 @@ export const TargetGroupProvider = () =>
             .describeTargetGroups({
               Names: [name],
             })
-            .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("TargetGroupNotFoundException", () => Effect.undefined));
           let targetGroup = described?.TargetGroups?.[0];
 
           // Ensure — create if missing. Stable axes (vpcId, port, protocol,

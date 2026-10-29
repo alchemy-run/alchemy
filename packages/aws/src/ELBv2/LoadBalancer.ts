@@ -224,9 +224,7 @@ export const LoadBalancerProvider = () =>
             .describeLoadBalancers({
               LoadBalancerArns: [output.loadBalancerArn],
             })
-            .pipe(
-              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
-            );
+            .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
           const loadBalancer = described?.LoadBalancers?.[0];
           if (!loadBalancer?.LoadBalancerArn) {
             return undefined;
@@ -327,9 +325,7 @@ export const LoadBalancerProvider = () =>
             .describeLoadBalancers({
               Names: [name],
             })
-            .pipe(
-              Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
-            );
+            .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined));
           let loadBalancer = described?.LoadBalancers?.[0];
 
           const subnetMappings = news.subnetMappings?.map((m) => ({
@@ -456,9 +452,8 @@ export const LoadBalancerProvider = () =>
           const final =
             (yield* elbv2
               .describeLoadBalancers({ LoadBalancerArns: [loadBalancerArn] })
-              .pipe(
-                Effect.catchTag("LoadBalancerNotFoundException", () => Effect.succeed(undefined)),
-              ))?.LoadBalancers?.[0] ?? loadBalancer;
+              .pipe(Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined)))
+              ?.LoadBalancers?.[0] ?? loadBalancer;
 
           yield* session.note(loadBalancerArn);
           return {

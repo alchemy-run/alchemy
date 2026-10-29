@@ -378,7 +378,7 @@ export const TrailProvider = () =>
       const readTrail = (name: string) =>
         cloudtrail.getTrail({ Name: name }).pipe(
           Effect.map((r) => r.Trail),
-          Effect.catchTag("TrailNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("TrailNotFoundException", () => Effect.undefined),
         );
 
       const toAttributes = Effect.fn(function* (trail: cloudtrail.Trail) {
@@ -586,8 +586,16 @@ export const TrailProvider = () =>
               InsightType: s.insightType,
             }));
             if (
-              JSON.stringify(observedInsights.map((s) => s.InsightType).sort()) !==
-              JSON.stringify(desiredInsights.map((s) => s.InsightType).sort())
+              JSON.stringify(
+                observedInsights
+                  .map((s) => s.InsightType)
+                  .sort((a, b) => ((a ?? "") < (b ?? "") ? -1 : (a ?? "") > (b ?? "") ? 1 : 0)),
+              ) !==
+              JSON.stringify(
+                desiredInsights
+                  .map((s) => s.InsightType)
+                  .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0)),
+              )
             ) {
               yield* session.note(`Updating Insights selectors`);
               yield* retryWhileConflict(

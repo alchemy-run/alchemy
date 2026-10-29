@@ -139,7 +139,7 @@ export const LoggingConfigurationProvider = () =>
           scope,
           wafv2
             .getLoggingConfiguration({ ResourceArn: resourceArn })
-            .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.succeed(undefined))),
+            .pipe(Effect.catchTag("WAFNonexistentItemException", () => Effect.undefined)),
         );
       });
 

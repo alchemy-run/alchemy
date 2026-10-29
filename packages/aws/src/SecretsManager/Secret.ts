@@ -14,6 +14,11 @@ import type { PolicyDocument } from "../IAM/Policy.ts";
 import { normalizePolicyDocument, stringifyPolicyDocument } from "../IAM/Policy.ts";
 import type { Providers } from "../Providers.ts";
 
+export class SecretUnexpectedResponse extends Data.TaggedError("SecretUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export interface GenerateSecretStringProps extends secretsmanager.GetRandomPasswordRequest {
   /**
    * JSON template merged with the generated password.
@@ -287,7 +292,7 @@ export const SecretProvider = () =>
           .describeSecret({
             SecretId: secretId,
           })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         // A secret with `DeletedDate` set is scheduled for deletion (our
         // delete uses `ForceDeleteWithoutRecovery`, which still completes
         // asynchronously). It cannot be updated, so treat it as missing —
@@ -323,7 +328,7 @@ export const SecretProvider = () =>
       const restoreIfPendingDeletion = Effect.fn(function* (id: string, secretId: string) {
         const described = yield* secretsmanager
           .describeSecret({ SecretId: secretId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
         if (!described?.DeletedDate) {
           return;
         }
@@ -426,7 +431,9 @@ export const SecretProvider = () =>
           }
 
           if (!observed?.ARN || !observed.Name) {
-            return yield* Effect.fail(new Error(`Failed to describe Secret '${secretName}'`));
+            return yield* new SecretUnexpectedResponse({
+              message: `Failed to describe Secret '${secretName}'`,
+            });
           }
 
           const secretArn = observed.ARN;
@@ -477,7 +484,7 @@ export const SecretProvider = () =>
             .getResourcePolicy({ SecretId: secretArn })
             .pipe(
               Effect.map((response) => response.ResourcePolicy),
-              Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+              Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
             );
 
           if (desiredPolicy !== undefined) {

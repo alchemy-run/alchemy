@@ -36,7 +36,7 @@ const isMissing = <E extends { readonly _tag: string }>(
 
 export const catchMissing = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
-) => effect.pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+) => effect.pipe(Effect.catchIf(isMissing, () => Effect.undefined));
 
 export const ignoreMissing = <E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<unknown, E, R>,
@@ -142,7 +142,7 @@ export const defaultInappListings = (
   title: string,
   defaultLanguage: string,
 ): androidpublisher.InAppProductListingMap => {
-  const next = { ...(listings ?? {}) };
+  const next = { ...listings };
   const current = next[defaultLanguage] ?? { title };
   next[defaultLanguage] = { ...current, title: current.title ?? title };
   return next;
@@ -183,7 +183,7 @@ export const defaultInappPrice = (): androidpublisher.Price => ({
 
 export const getSubscription = (packageName: string, productId: string) =>
   packageName.length === 0 || productId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         androidpublisher.getMonetizationSubscriptions({
           packageName,
@@ -201,7 +201,7 @@ export const getOffer = (
   productId.length === 0 ||
   basePlanId.length === 0 ||
   offerId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(
         androidpublisher.getMonetizationSubscriptionsBasePlansOffers({
           packageName,
@@ -213,10 +213,10 @@ export const getOffer = (
 
 export const getInappproduct = (packageName: string, sku: string) =>
   packageName.length === 0 || sku.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(androidpublisher.getInappproducts({ packageName, sku }));
 
 export const getEdit = (packageName: string, editId: string) =>
   packageName.length === 0 || editId.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : catchMissing(androidpublisher.getEdits({ packageName, editId }));

@@ -320,7 +320,7 @@ export const DatasetProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         return yield* databrew
           .describeDataset({ Name: name })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const buildDefinition = (props: DatasetProps) => ({
@@ -406,7 +406,7 @@ export const DatasetProvider = () =>
           // A ConflictException surfaces briefly after an associated project
           // or job is deleted (eventual consistency) — retry bounded.
           yield* retryWhileConflict(databrew.deleteDataset({ Name: output.datasetName })).pipe(
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
         }),
       });

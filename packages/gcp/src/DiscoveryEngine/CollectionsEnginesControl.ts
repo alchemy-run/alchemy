@@ -142,7 +142,7 @@ export const CollectionsEnginesControl = Resource<CollectionsEnginesControl>(
 export class CollectionsEnginesControlNotResolved extends Data.TaggedError(
   "GCP.DiscoveryEngine.CollectionsEnginesControlNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (engine: string, controlId: string) => `${engine}/controls/${controlId}`;
@@ -165,7 +165,7 @@ const useCasesOf = (
 const getByName = (name: string) =>
   discoveryengine
     .getProjectsLocationsCollectionsEnginesControls({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const toAttrs = (control: discoveryengine.GoogleCloudDiscoveryengineV1Control, project: string) => {
   const name = control.name ?? "";
@@ -278,7 +278,7 @@ export const CollectionsEnginesControlProvider = () =>
 
       if (current === undefined) {
         return yield* new CollectionsEnginesControlNotResolved({
-          name: fallbackName,
+          resourceName: fallbackName,
         });
       }
 

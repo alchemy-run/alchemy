@@ -22,6 +22,11 @@ import type { AllocationId } from "./EIP.ts";
 import type { SubnetId } from "./Subnet.ts";
 import type { VpcId } from "./Vpc.ts";
 
+export class NatGatewayUnexpectedResponse extends Data.TaggedError("NatGatewayUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type NatGatewayId<ID extends string = string> = `nat-${ID}`;
 export const NatGatewayId = <ID extends string>(id: ID): ID & NatGatewayId<ID> =>
   `nat-${id}` as ID & NatGatewayId<ID>;
@@ -367,7 +372,11 @@ export const NatGatewayProvider = () =>
           Effect.flatMap((gw) =>
             gw
               ? Effect.succeed(gw)
-              : Effect.fail(new Error(`NAT Gateway ${natGatewayId} not found`)),
+              : Effect.fail(
+                  new NatGatewayUnexpectedResponse({
+                    message: `NAT Gateway ${natGatewayId} not found`,
+                  }),
+                ),
           ),
         );
 
@@ -791,7 +800,7 @@ const waitForNatGatewayAddresses = Effect.fn(
   function* (
     natGatewayId: string,
     pending: (address: ec2.NatGatewayAddress) => boolean,
-    session: ScopedPlanStatusSession,
+    _session: ScopedPlanStatusSession,
   ) {
     const result = yield* ec2.describeNatGateways({ NatGatewayIds: [natGatewayId] });
     const gw = result.NatGateways?.[0];

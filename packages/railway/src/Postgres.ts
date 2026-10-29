@@ -326,7 +326,7 @@ export const Postgres: typeof PostgresResource = Object.assign(
 );
 
 export class PostgresNotCreated extends Data.TaggedError("Railway.PostgresNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -341,7 +341,7 @@ export class PostgresDeployFailed extends Data.TaggedError("Railway.PostgresDepl
 }> {}
 
 export class PostgresVolumeNotCreated extends Data.TaggedError("Railway.PostgresVolumeNotCreated")<{
-  name: string;
+  resourceName: string;
   serviceId: string;
 }> {}
 
@@ -601,13 +601,13 @@ const liveEnvironmentIds = (projectId: string) =>
 const getById = (serviceId: string) =>
   readService(serviceId).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const getInstance = (environmentId: string, serviceId: string) =>
   readInstance(environmentId, serviceId).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listProjectServices = (projectId: string) =>
@@ -624,7 +624,7 @@ const findByName = (projectId: string, name: string) =>
 const getVolumeByInstanceId = (volumeInstanceId: string) =>
   readVolumeInstance(volumeInstanceId).pipe(
     Effect.map((instance) => (isGoneVolume(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listVolumeInstances = (environmentId: string, projectId: string) =>
@@ -975,12 +975,12 @@ export const PostgresProvider = () =>
           name,
           source: { image: sourceImage },
           variables,
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         current = created ?? (yield* findByName(projectId, name));
       }
 
       if (current === undefined || isGoneService(current)) {
-        return yield* new PostgresNotCreated({ name, projectId });
+        return yield* new PostgresNotCreated({ resourceName: name, projectId });
       }
 
       if (current.name !== name) {
@@ -1045,7 +1045,10 @@ export const PostgresProvider = () =>
         volume = yield* waitForVolume(environmentId, projectId, created.id);
       }
       if (volume === undefined || isGoneVolume(volume)) {
-        return yield* new PostgresVolumeNotCreated({ name: volumeName, serviceId: current.id });
+        return yield* new PostgresVolumeNotCreated({
+          resourceName: volumeName,
+          serviceId: current.id,
+        });
       }
       if (volume.volume.name !== volumeName) {
         yield* stampVolumeName(volume.volumeId, volumeName);
@@ -1069,7 +1072,7 @@ export const PostgresProvider = () =>
           applicationPort: POSTGRES_PORT,
           environmentId,
           serviceId: current.id,
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         proxy =
           created !== undefined && !isGoneProxy(created)
             ? created

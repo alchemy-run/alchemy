@@ -143,7 +143,7 @@ export const readRpcs = (entry: Readable): ReadRpcs => {
     const key = Key.idSchemaOf(def.key);
     const state = Schema.NullOr(def.state ?? Schema.Null);
     const recorded = Schema.Struct({
-      event: union(outputEvents(entry)),
+      event: entry.pipe(outputEvents, union),
       state,
       envelope: Aggregate.Envelope,
     });

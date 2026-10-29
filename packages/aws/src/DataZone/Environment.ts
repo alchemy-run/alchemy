@@ -181,8 +181,8 @@ export const EnvironmentProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              ResourceNotFoundException: () => Effect.succeed(undefined),
-              AccessDeniedException: () => Effect.succeed(undefined),
+              ResourceNotFoundException: () => Effect.undefined,
+              AccessDeniedException: () => Effect.undefined,
             }),
           );
       });
@@ -196,8 +196,8 @@ export const EnvironmentProvider = () =>
           })
           .pipe(
             Effect.catchTags({
-              ResourceNotFoundException: () => Effect.succeed(undefined),
-              AccessDeniedException: () => Effect.succeed(undefined),
+              ResourceNotFoundException: () => Effect.undefined,
+              AccessDeniedException: () => Effect.undefined,
             }),
           );
         const summary = (found?.items ?? []).find(

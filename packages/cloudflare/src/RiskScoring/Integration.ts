@@ -217,7 +217,7 @@ type ObservedIntegration = {
 const observeIntegration = (accountId: string, integrationId: string) =>
   zeroTrust
     .getRiskScoringIntegration({ accountId, integrationId })
-    .pipe(Effect.catchTag("RiskScoringIntegrationNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("RiskScoringIntegrationNotFound", () => Effect.undefined));
 
 /**
  * Find an integration by exact tenant URL.

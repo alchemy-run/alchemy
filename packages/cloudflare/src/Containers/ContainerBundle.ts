@@ -194,7 +194,7 @@ export const containerEnvPreamble = (
     }
     return Effect.succeed(`FROM ${ref}`);
   }
-  return Effect.succeed(undefined);
+  return Effect.undefined;
 };
 
 /**

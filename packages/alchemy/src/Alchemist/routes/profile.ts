@@ -5,7 +5,7 @@ import { AuthError } from "../../Auth/AuthProvider.ts";
 import { CredentialsStore } from "../../Auth/Credentials.ts";
 import { inspectProvider, type ProviderConnection } from "../../Auth/Inspect.ts";
 import { withProfileCredentialsLock } from "../../Auth/Lock.ts";
-import { ProfileStore } from "../../Auth/Profile.ts";
+import { ProfileStore, reloadProviderConfig } from "../../Auth/Profile.ts";
 import type { Interaction } from "../../Interaction.ts";
 import { AlchemistInvalidInput, AlchemistNotFound } from "../Errors.ts";
 import { Progress } from "../Progress.ts";
@@ -139,7 +139,7 @@ export const get = Effect.fn("Alchemist.profile.get")(function* (input: {
                   }),
                 ),
               ),
-            )
+            ).pipe(Effect.provideService(ProfileStore, profiles))
           : Effect.succeed({
               name: provider,
               method: config.method ?? "unknown",
@@ -369,6 +369,7 @@ export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
             }),
           ),
         ),
+      reloadProviderConfig(profiles, provider, input.profile),
     );
     if (refreshed !== undefined) {
       yield* profiles.setProviderConfig(input.profile, name, refreshed);

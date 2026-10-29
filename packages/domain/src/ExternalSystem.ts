@@ -202,6 +202,7 @@ export const make = <const Name extends string, const Ops extends Record<string,
     if (RESERVED.has(op)) {
       throw new Error(`ExternalSystem '${name}' cannot declare an operation named '${op}'`);
     }
+    // oxlint-disable-next-line effecttsgo/floating-effect -- returns `cls`, which is Effect-able; nothing to run
     Object.defineProperty(cls, op, {
       value: { kind: "ExternalSystemOp", system: name, op } satisfies Op,
       enumerable: true,

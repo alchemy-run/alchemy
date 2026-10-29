@@ -87,7 +87,7 @@ export const ResourceProvider = () =>
       const observe = Effect.fn(function* (resourceArn: string) {
         return yield* lf.describeResource({ ResourceArn: resourceArn }).pipe(
           Effect.map((r) => r.ResourceInfo),
-          Effect.catchTag("EntityNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("EntityNotFoundException", () => Effect.undefined),
         );
       });
 

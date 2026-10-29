@@ -18,6 +18,18 @@ import {
   type PolicyRuleInput,
 } from "./Policy.ts";
 
+export class ApplicationInvalidProps extends Data.TaggedError("ApplicationInvalidProps")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ApplicationUnexpectedResponse extends Data.TaggedError(
+  "ApplicationUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * Application type literal — every value Cloudflare's Access service
  * recognises. Stable across reconciles; changing it triggers a replacement.
@@ -664,13 +676,12 @@ export const ApplicationProvider = () =>
         resolvedPolicies.some((p) => typeof p !== "string" && isInlinePolicy(p)) &&
         resolvedPolicies.some((p) => typeof p === "string" || !isInlinePolicy(p))
       ) {
-        return yield* Effect.fail(
-          new Error(
+        return yield* new ApplicationInvalidProps({
+          message:
             "Cloudflare Access applications cannot mix inline policies with " +
-              "reusable policy references — use one form for the whole " +
-              "`policies` list.",
-          ),
-        );
+            "reusable policy references — use one form for the whole " +
+            "`policies` list.",
+        });
       }
       const body = buildMutableBody(news, resolvedName, resolvedIdps, resolvedPolicies);
       // Destinations contributed through the binding contract (e.g. Workers
@@ -691,12 +702,10 @@ export const ApplicationProvider = () =>
         observed = yield* observeById(accountId, knownId);
       }
       if (!observed && news.applicationId !== undefined) {
-        return yield* Effect.fail(
-          new DeclaredApplicationNotFound({
-            applicationId: news.applicationId,
-            message: `Cloudflare Access application ${news.applicationId} does not exist`,
-          }),
-        );
+        return yield* new DeclaredApplicationNotFound({
+          applicationId: news.applicationId,
+          message: `Cloudflare Access application ${news.applicationId} does not exist`,
+        });
       }
       if (!observed && news.type === "warp") {
         // Warp is a singleton per account — reuse any existing app.
@@ -745,9 +754,9 @@ export const ApplicationProvider = () =>
       // from the body is reset. Start from the live application so settings
       // this resource does not manage survive, then apply the desired body.
       if (!observed.id) {
-        return yield* Effect.fail(
-          new Error("Cloudflare did not return an application id for Access application"),
-        );
+        return yield* new ApplicationUnexpectedResponse({
+          message: "Cloudflare did not return an application id for Access application",
+        });
       }
       if (!bodyEqualsObserved(body, observed)) {
         // Without desired destinations, keep every live hostname unless the
@@ -791,9 +800,9 @@ export const ApplicationProvider = () =>
 
       // 4. Return
       if (!isComplete(observed)) {
-        return yield* Effect.fail(
-          new Error("Cloudflare returned an Access application without id/aud/type"),
-        );
+        return yield* new ApplicationUnexpectedResponse({
+          message: "Cloudflare returned an Access application without id/aud/type",
+        });
       }
       // Keep the provider output cloud-authoritative: if Cloudflare rejects
       // or clears a desired setting, do not mask that drift with the body.
@@ -900,7 +909,7 @@ const observeById = (accountId: string, appId: string) =>
       // observe falls through to recreate. Transient 403 back-pressure is
       // retried; anything else is a real failure and propagates.
       retryTransientAccessError,
-      Effect.catchTag("AccessApplicationNotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("AccessApplicationNotFound", () => Effect.undefined),
     );
     if (r === undefined) return undefined;
     return narrowApp(r as Parameters<typeof narrowApp>[0]);
@@ -1030,7 +1039,7 @@ const narrowApp = (raw: {
   id?: string | null;
   aud?: string | null;
   name?: string | null;
-  type?: ApplicationType | null | string;
+  type?: string | null;
   domain?: string | null;
   destinations?: ReadonlyArray<unknown> | null;
   oauthConfiguration?: RawOAuthConfiguration | null;

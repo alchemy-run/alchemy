@@ -399,7 +399,7 @@ const samePolicy = (
 const getByName = (project: string, region: string, autoscaler: string) =>
   compute
     .getRegionAutoscalers({ project, region, autoscaler })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitPresent = (project: string, region: string, autoscalerName: string) =>
   getByName(project, region, autoscalerName).pipe(
@@ -413,7 +413,7 @@ const waitPresent = (project: string, region: string, autoscalerName: string) =>
       times: 8,
       schedule: Schedule.exponential("250 millis"),
     }),
-    Effect.catchTag("GCP.Compute.RegionAutoscalerNotResolved", () => Effect.succeed(undefined)),
+    Effect.catchTag("GCP.Compute.RegionAutoscalerNotResolved", () => Effect.undefined),
   );
 
 const waitGone = (project: string, region: string, autoscalerName: string) =>
@@ -522,7 +522,7 @@ export const RegionAutoscalerProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((operation) =>
               operation === undefined
                 ? Effect.void
@@ -581,7 +581,7 @@ export const RegionAutoscalerProvider = () =>
           autoscaler: output.autoscalerName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.flatMap((operation) =>
             operation === undefined
               ? Effect.void

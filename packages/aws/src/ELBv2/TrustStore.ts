@@ -120,7 +120,7 @@ export const TrustStoreProvider = () =>
             .describeTrustStores({
               TrustStoreArns: [output.trustStoreArn],
             })
-            .pipe(Effect.catchTag("TrustStoreNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("TrustStoreNotFoundException", () => Effect.undefined));
           const trustStore = described?.TrustStores?.[0];
           if (!trustStore?.TrustStoreArn) {
             return undefined;
@@ -175,7 +175,7 @@ export const TrustStoreProvider = () =>
           // Observe — look up by deterministic name.
           const described = yield* elbv2
             .describeTrustStores({ Names: [name] })
-            .pipe(Effect.catchTag("TrustStoreNotFoundException", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("TrustStoreNotFoundException", () => Effect.undefined));
           let trustStore = described?.TrustStores?.[0];
 
           // Ensure — create if missing.

@@ -16,7 +16,7 @@ import {
   type SqlExecutor,
 } from "./Format.ts";
 import { classifyTable, tableColumns } from "./Introspect.ts";
-import { bookkeepingColumns, quoteIdentifier, sqlLiteral } from "./Utils.ts";
+import { bookkeepingColumns, quoteIdentifier, scalarText, sqlLiteral } from "./Utils.ts";
 
 export const ALCHEMY_DEFAULT_TABLE = "__alchemy_migrations";
 
@@ -242,8 +242,8 @@ const appliedHistory = (executor: SqlExecutor, table: string) =>
         for (const row of rows) {
           if (row.name === null || row.name === undefined) continue;
           byName.set(
-            String(row.name),
-            row.hash === null || row.hash === undefined ? undefined : String(row.hash),
+            scalarText(row.name),
+            row.hash === null || row.hash === undefined ? undefined : scalarText(row.hash),
           );
         }
         return byName;

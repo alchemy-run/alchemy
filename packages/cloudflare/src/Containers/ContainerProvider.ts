@@ -12,6 +12,7 @@ import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { type ResourceBinding } from "alchemy/Resource";
 import { sha256Object } from "alchemy/Util/sha256";
 import { normalizeNulls } from "alchemy/Util/stable";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -49,6 +50,25 @@ import { waitForContainerImage } from "./ContainerImagePreparation.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
 import { retryContainerPublication } from "./ContainerPublication.ts";
 import { retryNamespacePropagation } from "./DurableObjectApplication.ts";
+
+export class ContainerProviderConflict extends Data.TaggedError("ContainerProviderConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ContainerProviderOperationFailed extends Data.TaggedError(
+  "ContainerProviderOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ContainerProviderUnexpectedResponse extends Data.TaggedError(
+  "ContainerProviderUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The image source resolved from a {@link ContainerApplicationProps}. Selects
@@ -348,7 +368,7 @@ export const LiveContainerProvider = () =>
             imageRef,
           });
         }
-        return yield* Schema.decodeUnknownEffect(RegistryDigest)(
+        return yield* Schema.decodeEffect(RegistryDigest)(
           response.headers["docker-content-digest"],
         ).pipe(
           Effect.mapError((cause) =>
@@ -556,7 +576,7 @@ export const LiveContainerProvider = () =>
         if (build.kind !== "remote" || reuseRemotePublication) {
           const digest = yield* resolveRegistryDigest(imageRef, credentials).pipe(
             Effect.catchTag("ContainerRegistryError", (error) =>
-              error.reason === "ImageNotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+              error.reason === "ImageNotFound" ? Effect.undefined : Effect.fail(error),
             ),
           );
           if (digest !== undefined) {
@@ -800,7 +820,7 @@ export const LiveContainerProvider = () =>
 
       /** The build inputs and content hash of a Durable Object Container's image. */
       const computeDurableObjectImage = (id: string, props: DurableObjectContainerProps) =>
-        hasImageSource(props) ? computeImage(id, props, {}) : Effect.succeed(undefined);
+        hasImageSource(props) ? computeImage(id, props, {}) : Effect.undefined;
 
       /**
        * Publish the Container's image to Cloudflare's registry and wait until
@@ -987,11 +1007,9 @@ export const LiveContainerProvider = () =>
           );
           const existing = yield* findApplicationByName(name);
           if (!existing) {
-            return yield* Effect.fail(
-              new Error(
-                `Container application "${name}" already exists but could not be found for adoption.`,
-              ),
-            );
+            return yield* new ContainerProviderUnexpectedResponse({
+              message: `Container application "${name}" already exists but could not be found for adoption.`,
+            });
           }
           return yield* upsertApplication({
             id,
@@ -1023,14 +1041,12 @@ export const LiveContainerProvider = () =>
                     existingName: existing?.name,
                   });
                   if (!recovery.canAdopt) {
-                    return yield* Effect.fail(new Error(recovery.message));
+                    return yield* new ContainerProviderConflict({ message: recovery.message });
                   }
                   if (!existing) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
-                      ),
-                    );
+                    return yield* new ContainerProviderUnexpectedResponse({
+                      message: `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
+                    });
                   }
                   return yield* upsertApplication({
                     id,
@@ -1042,9 +1058,10 @@ export const LiveContainerProvider = () =>
                   });
                 })
               : Effect.fail(
-                  new Error(
-                    "Durable Object namespace already has a container application. Set AdoptPolicy to adopt it.",
-                  ),
+                  new ContainerProviderConflict({
+                    message:
+                      "Durable Object namespace already has a container application. Set AdoptPolicy to adopt it.",
+                  }),
                 ),
           ),
           Effect.catchIf(
@@ -1190,7 +1207,7 @@ export const LiveContainerProvider = () =>
           (d, i, arr) => arr.findIndex((other) => other.namespaceId === d.namespaceId) === i,
         );
         if (uniqueDos.length === 0) {
-          return Effect.succeed(undefined);
+          return Effect.undefined;
         }
         if (uniqueDos.length === 1) {
           return Effect.succeed(uniqueDos[0]);
@@ -1256,7 +1273,7 @@ export const LiveContainerProvider = () =>
           const application = yield* Containers.getContainerApplication({
             accountId: output.accountId,
             applicationId: output.applicationId,
-          }).pipe(Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)));
+          }).pipe(Effect.catchTag("ContainerApplicationNotFound", () => Effect.undefined));
           if (
             application &&
             (application.id !== output.applicationId ||
@@ -1393,7 +1410,7 @@ export const LiveContainerProvider = () =>
                 ...toAttributes(app),
                 hash: output.hash,
               })),
-              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.undefined),
             );
           }
           if (!existing) {
@@ -1423,11 +1440,9 @@ export const LiveContainerProvider = () =>
           // the same apply and the convergence pass attaches it. A missing
           // application is never created without its attachment.
           if (hasUnresolvedAttachment && durableObjectsForRecovery === undefined && !existing) {
-            return yield* Effect.fail(
-              new Error(
-                `Container application "${name}" has an unresolved Durable Object namespace and no recorded attachment. Reconcile its Worker first.`,
-              ),
-            );
+            return yield* new ContainerProviderOperationFailed({
+              message: `Container application "${name}" has an unresolved Durable Object namespace and no recorded attachment. Reconcile its Worker first.`,
+            });
           }
           const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
 
@@ -1451,11 +1466,9 @@ export const LiveContainerProvider = () =>
               });
               if (recovery.canAdopt) {
                 if (!owner) {
-                  return yield* Effect.fail(
-                    new Error(
-                      `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
-                    ),
-                  );
+                  return yield* new ContainerProviderUnexpectedResponse({
+                    message: `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
+                  });
                 }
                 return yield* upsertApplication({
                   id,
@@ -1755,11 +1768,7 @@ const isOwnedApplication = (
 ) => explicitName === undefined || observed.applicationId === previous?.applicationId;
 
 const toAttributes = (
-  application:
-    | Containers.CreateContainerApplicationResponse
-    | Containers.UpdateContainerApplicationResponse
-    | Containers.GetContainerApplicationResponse
-    | Containers.ListContainerApplicationsResponse[number],
+  application: Containers.CreateContainerApplicationResponse,
 ): ContainerApplication["Attributes"] => {
   // Durable Object applications have no scaling, affinities or versions.
   const scheduled = "version" in application ? application : undefined;

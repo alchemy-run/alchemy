@@ -5,11 +5,17 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { arrayEqualsUnordered } from "alchemy/Util/equal";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Stream from "effect/Stream";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
 import type { Providers } from "../Providers.ts";
+
+export class ListUnexpectedResponse extends Data.TaggedError("ListUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 const TypeId = "Cloudflare.Gateway.List" as const;
 type TypeId = typeof TypeId;
@@ -224,9 +230,9 @@ export const ListProvider = () =>
           items: desiredItems,
         });
         if (!created.id) {
-          return yield* Effect.fail(
-            new Error("Cloudflare did not return an id for the Gateway list"),
-          );
+          return yield* new ListUnexpectedResponse({
+            message: "Cloudflare did not return an id for the Gateway list",
+          });
         }
         // Create echoes items without count — re-read for a full shape.
         const fresh = yield* getList(accountId, created.id);
@@ -284,7 +290,7 @@ type ObservedList = zeroTrust.GetGatewayListResponse;
 const getList = (accountId: string, listId: string) =>
   zeroTrust.getGatewayList({ accountId, listId }).pipe(
     Effect.map((l): ObservedList | undefined => l),
-    Effect.catchTag("GatewayListNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("GatewayListNotFound", () => Effect.undefined),
   );
 
 /**

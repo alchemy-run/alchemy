@@ -30,6 +30,13 @@ import {
 } from "./SecurityGroupRule.ts";
 import type { VpcId } from "./Vpc.ts";
 
+export class SecurityGroupUnexpectedResponse extends Data.TaggedError(
+  "SecurityGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type SecurityGroupId<ID extends string = string> = `sg-${ID}`;
 export const SecurityGroupId = <ID extends string>(id: ID): ID & SecurityGroupId<ID> =>
   `sg-${id}` as ID & SecurityGroupId<ID>;
@@ -465,7 +472,13 @@ export const SecurityGroupProvider = () =>
         ec2.describeSecurityGroups({ GroupIds: [groupId] }).pipe(
           Effect.map((r) => r.SecurityGroups?.[0]),
           Effect.flatMap((sg) =>
-            sg ? Effect.succeed(sg) : Effect.fail(new Error(`Security Group ${groupId} not found`)),
+            sg
+              ? Effect.succeed(sg)
+              : Effect.fail(
+                  new SecurityGroupUnexpectedResponse({
+                    message: `Security Group ${groupId} not found`,
+                  }),
+                ),
           ),
         );
 
@@ -684,7 +697,7 @@ export const SecurityGroupProvider = () =>
         read: Effect.fn(function* ({ id, olds, output }) {
           const sg = output
             ? yield* describeSecurityGroup(output.groupId).pipe(
-                Effect.catchTag("InvalidGroup.NotFound", () => Effect.succeed(undefined)),
+                Effect.catchTag("InvalidGroup.NotFound", () => Effect.undefined),
               )
             : yield* findOwnedGroup(id, yield* createGroupName(id, olds?.groupName), olds?.vpcId);
           if (!sg?.GroupId) return undefined;
@@ -748,7 +761,7 @@ export const SecurityGroupProvider = () =>
 
           if (output) {
             const group = yield* describeSecurityGroup(output.groupId).pipe(
-              Effect.catchTag("InvalidGroup.NotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("InvalidGroup.NotFound", () => Effect.undefined),
             );
             if (group === undefined) return { action: "update", stables: [] };
             const owned = yield* declaredSecurityGroupRuleIds(output.groupId);
