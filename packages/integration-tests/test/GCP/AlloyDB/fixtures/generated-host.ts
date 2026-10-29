@@ -37,7 +37,7 @@ export default class AlloyDBGeneratedHost extends GCP.Function<AlloyDBGeneratedH
       fetch: serveProbes({
         CreatesecondaryCluster: probeOutcome(
           Retry.none(
-            p0({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p0({ location: "us-west1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
         CreatesecondaryClusterInstance: probeOutcome(
@@ -49,23 +49,23 @@ export default class AlloyDBGeneratedHost extends GCP.Function<AlloyDBGeneratedH
           Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         InjectInstanceFault: probeOutcome(Retry.none(p5({} as never))),
-        ListBackups: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
+        ListBackups: probeOutcome(Retry.none(p6({ location: "us-west1" } as never))),
         ListClusterInstances: probeOutcome(Retry.none(p7({} as never))),
-        ListClusters: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListClusters: probeOutcome(Retry.none(p8({ location: "us-west1" } as never))),
         ListClusterUsers: probeOutcome(Retry.none(p9({} as never))),
         ListSupportedDatabaseFlags: probeOutcome(
-          Retry.none(p10({ location: "us-central1" } as never)),
+          Retry.none(p10({ location: "us-west1" } as never)),
         ),
         PromoteCluster: probeOutcome(Retry.none(p11({} as never))),
         RestartInstance: probeOutcome(Retry.none(p12({} as never))),
         RestoreCluster: probeOutcome(
           Retry.none(
-            p13({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p13({ location: "us-west1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
         RestoreClusterFromCloudSQL: probeOutcome(
           Retry.none(
-            p14({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p14({ location: "us-west1", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
         SwitchoverCluster: probeOutcome(Retry.none(p15({} as never))),

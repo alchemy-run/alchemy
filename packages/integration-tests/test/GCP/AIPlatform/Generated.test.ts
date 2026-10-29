@@ -14,7 +14,8 @@ const sharedStack = Core.scratchStack(testOptions, "AIPlatformGenerated");
 
 let baseUrl: string;
 
-const ALLOWED: string[] = [];
+// A plain read may answer DataLabelingJobDeprecated: data labeling is closed to new projects that haven't opted in to Labelbox human labelers.
+const ALLOWED: string[] = ["DataLabelingJobDeprecated"];
 
 const AMBIGUOUS: string[] = [];
 
@@ -63,13 +64,6 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
-
-    describe("Agent", { concurrent: true }, () => {
-      test.provider.skip(
-        'GetAgent (aiplatform.projects.locations.agents.get): Agent: AgentService is v1beta1-only; the v1 SDK gets "This API version is not supported by AgentService"',
-        () => Effect.void,
-      );
-    });
 
     describe("BatchPredictionJob", { concurrent: true }, () => {
       test.provider(
@@ -920,13 +914,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "ListNasJobNasTrialDetails (aiplatform.projects.locations.nasJobs.nasTrialDetails.list)",
-        () => probe("ListNasJobNasTrialDetails", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListNasJobNasTrialDetails (aiplatform.projects.locations.nasJobs.nasTrialDetails.list): trial details exist only once a NAS job runs trials; the probe job is cancelled before it starts any (running one bills accelerator hours)",
+        () => Effect.void,
       );
     });
 
@@ -1303,14 +1293,6 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "ListAgents (aiplatform.projects.locations.agents.list)",
-        () => probe("ListAgents", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "ListBatchPredictionJobs (aiplatform.projects.locations.batchPredictionJobs.list)",
         () => probe("ListBatchPredictionJobs", true),
         {
@@ -1638,13 +1620,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "ListSpecialistPools (aiplatform.projects.locations.specialistPools.list)",
-        () => probe("ListSpecialistPools", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListSpecialistPools (aiplatform.projects.locations.specialistPools.list): specialist pools belong to data labeling, which answers 'Data labeling service is shutdown' to projects without access",
+        () => Effect.void,
       );
       test.provider(
         "ListStudies (aiplatform.projects.locations.studies.list)",
@@ -2533,6 +2511,14 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "aiplatform.projects.locations.reasoningEngines.sandboxEnvironmentTemplates.get: the hand-written binding of the same name reaches the same resource",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.agents.get: no distilled operation getProjectsLocationsAgents",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.agents.list: no distilled operation listProjectsLocationsAgents",
         () => Effect.void,
       );
       test.provider.skip(

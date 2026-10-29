@@ -1,4 +1,6 @@
-import * as aiplatform from "@distilled.cloud/gcp/aiplatform_v1";
+// AgentService serves only v1beta1: v1 answers "This API version is not
+// supported by AgentService".
+import * as aiplatform from "@distilled.cloud/gcp/unstable/aiplatform_v1beta1";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -184,7 +186,7 @@ const toId = (id: string, agentId: string | undefined, existing?: string) =>
   });
 
 const toolsOf = (
-  tools: readonly AgentTool[] | readonly aiplatform.GoogleCloudAiplatformV1AgentTool[] | undefined,
+  tools: readonly AgentTool[] | readonly aiplatform.GoogleCloudAiplatformV1beta1AgentTool[] | undefined,
 ): AgentTool[] =>
   (tools ?? []).map((tool) => ({
     type: tool.type,
@@ -193,7 +195,7 @@ const toolsOf = (
     headers: stringMapOf(tool.headers),
   }));
 
-const toAttrs = (agent: aiplatform.GoogleCloudAiplatformV1Agent, project: string) => {
+const toAttrs = (agent: aiplatform.GoogleCloudAiplatformV1beta1Agent, project: string) => {
   const name = agent.name ?? "";
   const parsed = parseResourceName(name, "agents");
   const ownership = parseOwnership(agent.description);
@@ -233,7 +235,7 @@ const listAgents = (project: string, region: string) => {
   return fallback.pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
 };
 
-const isOwnedAgent = (agent: aiplatform.GoogleCloudAiplatformV1Agent, id: string) =>
+const isOwnedAgent = (agent: aiplatform.GoogleCloudAiplatformV1beta1Agent, id: string) =>
   Effect.gen(function* () {
     if (yield* hasAlchemyLabels(id, tagRecord(agent.metadata))) return true;
     const { labels } = parseOwnership(agent.description);
@@ -250,7 +252,7 @@ const findOwned = (id: string, project: string, region: string, hinted?: string)
     for (const agent of agents) {
       if (yield* isOwnedAgent(agent, id)) return agent;
     }
-    return undefined as aiplatform.GoogleCloudAiplatformV1Agent | undefined;
+    return undefined as aiplatform.GoogleCloudAiplatformV1beta1Agent | undefined;
   });
 
 const waitUntilExists = (name: string) =>

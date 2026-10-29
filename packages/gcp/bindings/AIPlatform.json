@@ -208,6 +208,13 @@
       "TuningJob": "the tuning service agent can't read the public sample dataset (gs://cloud-samples-data/ai-platform/tuning/sft_train.jsonl)",
       "NotebookExecutionJob": "a notebook execution provisions a runtime VM for ~10 minutes (slow-gated in NotebookExecutionJob.test.ts)",
       "PersistentResource": "a persistent resource keeps a VM pool running for ~15 minutes to provision (slow-gated in PersistentResource.test.ts)"
+    },
+    "skip": {
+      "ListNasJobNasTrialDetails": "trial details exist only once a NAS job runs trials; the probe job is cancelled before it starts any (running one bills accelerator hours)",
+      "ListSpecialistPools": "specialist pools belong to data labeling, which answers 'Data labeling service is shutdown' to projects without access"
+    },
+    "allowedOutcomes": {
+      "DataLabelingJobDeprecated": "data labeling is closed to new projects that haven't opted in to Labelbox human labelers"
     }
   },
   "permissions": {
