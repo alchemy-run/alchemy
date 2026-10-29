@@ -49,7 +49,7 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("Agent", { concurrent: true }, () => {
       test.provider.skip(
-        'GetAgent (aiplatform.projects.locations.agents.get): Agent: AgentService is v1beta1-only; the aiplatform_v1 SDK gets BadRequest "This API version is not supported by AgentService. Please use the (GCP_TEST_AIPLATFORM_AGENTS)',
+        'GetAgent (aiplatform.projects.locations.agents.get): Agent: AgentService is v1beta1-only; the v1 SDK gets "This API version is not supported by AgentService"',
         () => Effect.void,
       );
     });
@@ -93,11 +93,11 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("DataLabelingJob", { concurrent: true }, () => {
       test.provider.skip(
-        'CancelDataLabelingJob (aiplatform.projects.locations.dataLabelingJobs.cancel): DataLabelingJob: Vertex AI data labeling is shut down for new projects: create fails with BadRequest "Vertex DataLabelingJob is deprecated, so new project ... will not be able to use the service unless they opt-in to use Labelbox human (GCP_TEST_AIPLATFORM_DATA_LABELING)',
+        "CancelDataLabelingJob (aiplatform.projects.locations.dataLabelingJobs.cancel): DataLabelingJob: Vertex AI data labeling is shut down for new projects",
         () => Effect.void,
       );
       test.provider.skip(
-        'GetDataLabelingJob (aiplatform.projects.locations.dataLabelingJobs.get): DataLabelingJob: Vertex AI data labeling is shut down for new projects: create fails with BadRequest "Vertex DataLabelingJob is deprecated, so new project ... will not be able to use the service unless they opt-in to use Labelbox human (GCP_TEST_AIPLATFORM_DATA_LABELING)',
+        "GetDataLabelingJob (aiplatform.projects.locations.dataLabelingJobs.get): DataLabelingJob: Vertex AI data labeling is shut down for new projects",
         () => Effect.void,
       );
     });
@@ -721,19 +721,19 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("ModelDeploymentMonitoringJob", { concurrent: true }, () => {
       test.provider.skip(
-        'GetModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.get): ModelDeploymentMonitoringJob: Monitoring needs an endpoint with a deployed model: against an empty endpoint create fails with BadRequest "Deployed Model ID: `0` does not (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)',
+        "GetModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.get): ModelDeploymentMonitoringJob: monitoring needs an endpoint with a deployed model (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)",
         () => Effect.void,
       );
       test.provider.skip(
-        'PauseModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.pause): ModelDeploymentMonitoringJob: Monitoring needs an endpoint with a deployed model: against an empty endpoint create fails with BadRequest "Deployed Model ID: `0` does not (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)',
+        "PauseModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.pause): ModelDeploymentMonitoringJob: monitoring needs an endpoint with a deployed model (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)",
         () => Effect.void,
       );
       test.provider.skip(
-        'ResumeModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.resume): ModelDeploymentMonitoringJob: Monitoring needs an endpoint with a deployed model: against an empty endpoint create fails with BadRequest "Deployed Model ID: `0` does not (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)',
+        "ResumeModelDeploymentMonitoringJob (aiplatform.projects.locations.modelDeploymentMonitoringJobs.resume): ModelDeploymentMonitoringJob: monitoring needs an endpoint with a deployed model (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)",
         () => Effect.void,
       );
       test.provider.skip(
-        'SearchModelDeploymentMonitoringJobModelDeploymentMonitoringStatsAnomalies (aiplatform.projects.locations.modelDeploymentMonitoringJobs.searchModelDeploymentMonitoringStatsAnomalies): ModelDeploymentMonitoringJob: Monitoring needs an endpoint with a deployed model: against an empty endpoint create fails with BadRequest "Deployed Model ID: `0` does not (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)',
+        "SearchModelDeploymentMonitoringJobModelDeploymentMonitoringStatsAnomalies (aiplatform.projects.locations.modelDeploymentMonitoringJobs.searchModelDeploymentMonitoringStatsAnomalies): ModelDeploymentMonitoringJob: monitoring needs an endpoint with a deployed model (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)",
         () => Effect.void,
       );
     });
@@ -777,15 +777,15 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("OnlineEvaluator", { concurrent: true }, () => {
       test.provider.skip(
-        'ActivateOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.activate): OnlineEvaluator: Evaluators need an existing evaluation metric; a missing one fails with BadRequest "Request contains an invalid argument." Set (GCP_TEST_AIPLATFORM_EVALUATION_METRIC)',
+        "ActivateOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.activate): OnlineEvaluator: an evaluator needs an existing evaluation metric (GCP_TEST_AIPLATFORM_EVALUATION_METRIC)",
         () => Effect.void,
       );
       test.provider.skip(
-        'GetOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.get): OnlineEvaluator: Evaluators need an existing evaluation metric; a missing one fails with BadRequest "Request contains an invalid argument." Set (GCP_TEST_AIPLATFORM_EVALUATION_METRIC)',
+        "GetOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.get): OnlineEvaluator: an evaluator needs an existing evaluation metric (GCP_TEST_AIPLATFORM_EVALUATION_METRIC)",
         () => Effect.void,
       );
       test.provider.skip(
-        'SuspendOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.suspend): OnlineEvaluator: Evaluators need an existing evaluation metric; a missing one fails with BadRequest "Request contains an invalid argument." Set (GCP_TEST_AIPLATFORM_EVALUATION_METRIC)',
+        "SuspendOnlineEvaluator (aiplatform.projects.locations.onlineEvaluators.suspend): OnlineEvaluator: an evaluator needs an existing evaluation metric (GCP_TEST_AIPLATFORM_EVALUATION_METRIC)",
         () => Effect.void,
       );
     });
@@ -1669,23 +1669,23 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("RagCorpora", { concurrent: true }, () => {
       test.provider.skip(
-        'DeleteRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.delete): RagCorpora: New projects must switch RAG Engine to Serverless mode first; otherwise create fails with BadRequest "For new projects, using Spanner mode with RAG Engine in us-central1, us-east1, and us-east4 is restricted to only (GCP_TEST_AIPLATFORM_RAG)',
+        "DeleteRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.delete): RagCorpora: new projects must switch RAG Engine to Serverless mode first; Spanner mode is restricted in us-central1",
         () => Effect.void,
       );
       test.provider.skip(
-        'GetRagCorpora (aiplatform.projects.locations.ragCorpora.get): RagCorpora: New projects must switch RAG Engine to Serverless mode first; otherwise create fails with BadRequest "For new projects, using Spanner mode with RAG Engine in us-central1, us-east1, and us-east4 is restricted to only (GCP_TEST_AIPLATFORM_RAG)',
+        "GetRagCorpora (aiplatform.projects.locations.ragCorpora.get): RagCorpora: new projects must switch RAG Engine to Serverless mode first; Spanner mode is restricted in us-central1",
         () => Effect.void,
       );
       test.provider.skip(
-        'GetRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.get): RagCorpora: New projects must switch RAG Engine to Serverless mode first; otherwise create fails with BadRequest "For new projects, using Spanner mode with RAG Engine in us-central1, us-east1, and us-east4 is restricted to only (GCP_TEST_AIPLATFORM_RAG)',
+        "GetRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.get): RagCorpora: new projects must switch RAG Engine to Serverless mode first; Spanner mode is restricted in us-central1",
         () => Effect.void,
       );
       test.provider.skip(
-        'ImportRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.import): RagCorpora: New projects must switch RAG Engine to Serverless mode first; otherwise create fails with BadRequest "For new projects, using Spanner mode with RAG Engine in us-central1, us-east1, and us-east4 is restricted to only (GCP_TEST_AIPLATFORM_RAG)',
+        "ImportRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.import): RagCorpora: new projects must switch RAG Engine to Serverless mode first; Spanner mode is restricted in us-central1",
         () => Effect.void,
       );
       test.provider.skip(
-        'ListRagCorporaRagFiles (aiplatform.projects.locations.ragCorpora.ragFiles.list): RagCorpora: New projects must switch RAG Engine to Serverless mode first; otherwise create fails with BadRequest "For new projects, using Spanner mode with RAG Engine in us-central1, us-east1, and us-east4 is restricted to only (GCP_TEST_AIPLATFORM_RAG)',
+        "ListRagCorporaRagFiles (aiplatform.projects.locations.ragCorpora.ragFiles.list): RagCorpora: new projects must switch RAG Engine to Serverless mode first; Spanner mode is restricted in us-central1",
         () => Effect.void,
       );
     });
@@ -1983,14 +1983,14 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("SemanticGovernancePolicy", { concurrent: true }, () => {
       test.provider.skip(
-        "GetSemanticGovernancePolicy (aiplatform.projects.locations.semanticGovernancePolicies.get): SemanticGovernancePolicy: Policies govern an existing Vertex AI Agent (`projects/{p}/locations/{l}/agents/{a}`), which the v1 API cannot create. (GCP_TEST_AGENT)",
+        "GetSemanticGovernancePolicy (aiplatform.projects.locations.semanticGovernancePolicies.get): SemanticGovernancePolicy: a policy governs an existing Vertex AI Agent, which the v1 API cannot create (GCP_TEST_AGENT)",
         () => Effect.void,
       );
     });
 
     describe("SpecialistPool", { concurrent: true }, () => {
       test.provider.skip(
-        "GetSpecialistPool (aiplatform.projects.locations.specialistPools.get): SpecialistPool: Vertex AI data labeling is shut down: create fails with BadRequest (GCP_TEST_AIPLATFORM_DATA_LABELING)",
+        'GetSpecialistPool (aiplatform.projects.locations.specialistPools.get): SpecialistPool: Vertex AI data labeling is shut down ("Data labeling service is shutdown")',
         () => Effect.void,
       );
     });

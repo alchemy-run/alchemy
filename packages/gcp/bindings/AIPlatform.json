@@ -181,14 +181,14 @@
       "TuningJob": "ProbeTuningJob"
     },
     "untestable": {
-      "Agent": "AgentService is v1beta1-only; the aiplatform_v1 SDK gets BadRequest \"This API version is not supported by AgentService. Please use the (GCP_TEST_AIPLATFORM_AGENTS)",
-      "DataLabelingJob": "Vertex AI data labeling is shut down for new projects: create fails with BadRequest \"Vertex DataLabelingJob is deprecated, so new project ... will not be able to use the service unless they opt-in to use Labelbox human (GCP_TEST_AIPLATFORM_DATA_LABELING)",
+      "Agent": "AgentService is v1beta1-only; the v1 SDK gets \"This API version is not supported by AgentService\"",
+      "DataLabelingJob": "Vertex AI data labeling is shut down for new projects",
       "DatasetsDatasetVersion": "needs GCP_TEST_AIPLATFORM_DATASET_VERSION (an external prerequisite the testing project lacks)",
-      "ModelDeploymentMonitoringJob": "Monitoring needs an endpoint with a deployed model: against an empty endpoint create fails with BadRequest \"Deployed Model ID: `0` does not (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)",
-      "OnlineEvaluator": "Evaluators need an existing evaluation metric; a missing one fails with BadRequest \"Request contains an invalid argument.\" Set (GCP_TEST_AIPLATFORM_EVALUATION_METRIC)",
-      "RagCorpora": "New projects must switch RAG Engine to Serverless mode first; otherwise create fails with BadRequest \"For new projects, using Spanner mode with RAG Engine in us-central1, us-east1, and us-east4 is restricted to only (GCP_TEST_AIPLATFORM_RAG)",
-      "SemanticGovernancePolicy": "Policies govern an existing Vertex AI Agent (`projects/{p}/locations/{l}/agents/{a}`), which the v1 API cannot create. (GCP_TEST_AGENT)",
-      "SpecialistPool": "Vertex AI data labeling is shut down: create fails with BadRequest (GCP_TEST_AIPLATFORM_DATA_LABELING)"
+      "ModelDeploymentMonitoringJob": "monitoring needs an endpoint with a deployed model (GCP_TEST_AIPLATFORM_DEPLOYED_ENDPOINT)",
+      "OnlineEvaluator": "an evaluator needs an existing evaluation metric (GCP_TEST_AIPLATFORM_EVALUATION_METRIC)",
+      "RagCorpora": "new projects must switch RAG Engine to Serverless mode first; Spanner mode is restricted in us-central1",
+      "SemanticGovernancePolicy": "a policy governs an existing Vertex AI Agent, which the v1 API cannot create (GCP_TEST_AGENT)",
+      "SpecialistPool": "Vertex AI data labeling is shut down (\"Data labeling service is shutdown\")"
     }
   },
   "permissions": {

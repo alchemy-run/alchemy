@@ -35,7 +35,9 @@
       "AssetsExportJob": "ProbeAssetsExportJob",
       "Group": "ProbeGroup",
       "PreferenceSet": "ProbePreferenceSet",
-      "Source": "ProbeSource"
+      "Source": "ProbeSource",
+      "ImportJob": "ProbeImportJob",
+      "ReportConfig": "ProbeReportConfig"
     },
     "untestable": {}
   }

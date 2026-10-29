@@ -62,9 +62,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("EndpointPolicy", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetEndpointPolicy (networkservices.projects.locations.endpointPolicies.get): EndpointPolicy: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetEndpointPolicy (networkservices.projects.locations.endpointPolicies.get)",
+        () => probe("GetEndpointPolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -311,9 +315,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("TcpRoute", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetTcpRoute (networkservices.projects.locations.tcpRoutes.get): TcpRoute: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetTcpRoute (networkservices.projects.locations.tcpRoutes.get)",
+        () => probe("GetTcpRoute", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

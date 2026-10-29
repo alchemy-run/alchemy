@@ -105,21 +105,37 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ImportJob", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetImportJob (migrationcenter.projects.locations.importJobs.get): ImportJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetImportJob (migrationcenter.projects.locations.importJobs.get)",
+        () => probe("GetImportJob", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListImportJobImportDataFiles (migrationcenter.projects.locations.importJobs.importDataFiles.list): ImportJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListImportJobImportDataFiles (migrationcenter.projects.locations.importJobs.importDataFiles.list)",
+        () => probe("ListImportJobImportDataFiles", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RunImportJob (migrationcenter.projects.locations.importJobs.run): ImportJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RunImportJob (migrationcenter.projects.locations.importJobs.run)",
+        () => probe("RunImportJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ValidateImportJob (migrationcenter.projects.locations.importJobs.validate): ImportJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ValidateImportJob (migrationcenter.projects.locations.importJobs.validate)",
+        () => probe("ValidateImportJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -281,13 +297,21 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ReportConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetReportConfig (migrationcenter.projects.locations.reportConfigs.get): ReportConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetReportConfig (migrationcenter.projects.locations.reportConfigs.get)",
+        () => probe("GetReportConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListReportConfigReports (migrationcenter.projects.locations.reportConfigs.reports.list): ReportConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListReportConfigReports (migrationcenter.projects.locations.reportConfigs.reports.list)",
+        () => probe("ListReportConfigReports", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:migrationcenter", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

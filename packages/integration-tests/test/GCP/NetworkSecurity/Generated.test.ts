@@ -168,9 +168,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("GatewaySecurityPoliciesRule", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetRule (networksecurity.projects.locations.gatewaySecurityPolicies.rules.get): GatewaySecurityPoliciesRule: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetRule (networksecurity.projects.locations.gatewaySecurityPolicies.rules.get)",
+        () => probe("GetRule", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

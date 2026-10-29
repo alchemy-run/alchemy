@@ -45,7 +45,9 @@
   "probes": {
     "resources": {
       "Hub": "ProbeHub",
-      "MulticloudDataTransferConfig": "ProbeMulticloudDataTransferConfig"
+      "MulticloudDataTransferConfig": "ProbeMulticloudDataTransferConfig",
+      "InternalRange": "ProbeInternalRange",
+      "PolicyBasedRoute": "ProbePolicyRoute"
     },
     "untestable": {
       "AutomatedDnsRecord": "Consumer-created DNS records need `networkconnectivity.serviceClasses.use` on the Google producer's service class, which the testing project lacks (Forbidden \"Permission 'networkconnectivity.serviceClasses.use'\u2026 (GCP_TEST_NCC_AUTOMATED_DNS_RECORD)",

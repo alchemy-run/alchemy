@@ -163,9 +163,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("InternalRange", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetInternalRange (networkconnectivity.projects.locations.internalRanges.get): InternalRange: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetInternalRange (networkconnectivity.projects.locations.internalRanges.get)",
+        () => probe("GetInternalRange", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -196,9 +200,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("PolicyBasedRoute", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPolicyBasedRoute (networkconnectivity.projects.locations.global.policyBasedRoutes.get): PolicyBasedRoute: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetPolicyBasedRoute (networkconnectivity.projects.locations.global.policyBasedRoutes.get)",
+        () => probe("GetPolicyBasedRoute", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

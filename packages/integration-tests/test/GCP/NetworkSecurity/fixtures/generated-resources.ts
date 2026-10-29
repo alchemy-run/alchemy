@@ -1,4 +1,5 @@
 import * as GCP from "@alchemy.run/gcp";
+import * as Effect from "effect/Effect";
 
 /** NetworkSecurity resources the generated bindings bind, mirroring each resource suite's smallest shape. */
 
@@ -61,4 +62,16 @@ export const ProbeUrlList = GCP.NetworkSecurity.UrlList("ProbeUrlList", {
   location: "us-central1",
   description: "url list a",
   values: ["malware.example.com"],
+});
+
+export const ProbeGatewayRule = Effect.gen(function* () {
+  const policy = yield* ProbeGatewaySecurityPolicy;
+  return yield* GCP.NetworkSecurity.GatewaySecurityPoliciesRule("ProbeGatewayRule", {
+    gatewaySecurityPolicy: policy.name,
+    location: "us-central1",
+    basicProfile: "ALLOW",
+    priority: 1000,
+    enabled: true,
+    sessionMatcher: "true",
+  });
 });

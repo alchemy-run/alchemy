@@ -1,4 +1,5 @@
 import * as GCP from "@alchemy.run/gcp";
+import * as Effect from "effect/Effect";
 
 /** MigrationCenter resources the generated bindings bind, mirroring each resource suite's smallest shape. */
 
@@ -22,4 +23,25 @@ export const ProbeSource = GCP.MigrationCenter.Source("ProbeSource", {
   displayName: "custom assets",
   description: "inventory feed",
   priority: 1,
+});
+
+export const ProbeImportJob = Effect.gen(function* () {
+  const source = yield* GCP.MigrationCenter.Source("ProbeUploadSource", {
+    location: "us-central1",
+    type: "SOURCE_TYPE_UPLOAD",
+    displayName: "probe-upload",
+  });
+  return yield* GCP.MigrationCenter.ImportJob("ProbeImportJob", {
+    location: "us-central1",
+    assetSource: source.name,
+  });
+});
+export const ProbeReportConfig = Effect.gen(function* () {
+  const group = yield* ProbeGroup;
+  const prefs = yield* ProbePreferenceSet;
+  return yield* GCP.MigrationCenter.ReportConfig("ProbeReportConfig", {
+    location: "us-central1",
+    displayName: "probe-tco",
+    groupPreferencesetAssignments: [{ group: group.name, preferenceSet: prefs.name }],
+  });
 });

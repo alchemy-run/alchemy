@@ -64,7 +64,9 @@
       "HttpRoute": "ProbeHttpRoute",
       "Mesh": "ProbeMesh",
       "ServiceBinding": "ProbeServiceBinding",
-      "ServiceLbPolicy": "ProbeServiceLbPolicy"
+      "ServiceLbPolicy": "ProbeServiceLbPolicy",
+      "EndpointPolicy": "ProbeEndpointPolicy",
+      "TcpRoute": "ProbeTcpRoute"
     },
     "untestable": {
       "LbEdgeExtension": "Edge extensions need a WasmPlugin with a main version; the fixture's bare plugin makes create fail with BadRequest \"MAIN_VERSION_ID_EMPTY: Main (GCP_TEST_LB_EDGE_EXTENSION)",

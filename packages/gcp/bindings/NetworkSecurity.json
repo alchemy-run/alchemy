@@ -101,7 +101,8 @@
       "SacRealm": "ProbeSacRealm",
       "SecurityProfile": "ProbeSecurityProfile",
       "ServerTlsPolicy": "ProbeServerTlsPolicy",
-      "UrlList": "ProbeUrlList"
+      "UrlList": "ProbeUrlList",
+      "GatewaySecurityPoliciesRule": "ProbeGatewayRule"
     },
     "untestable": {
       "AuthzPolicy": "Needs an existing application load balancer forwarding rule; set (GCP_TEST_AUTHZ_POLICY_TARGET)",
