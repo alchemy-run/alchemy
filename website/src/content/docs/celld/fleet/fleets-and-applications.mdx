@@ -1,17 +1,51 @@
 ---
 title: Fleets & Applications
-description: How a Celld Fleet, its host, Workers and an Application fit together in a Stack.
+description: What a Celld fleet is, why its nodes are disposable, and how an Application puts your Workers on it.
 ---
 
-A Celld deployment has four parts. The **Fleet** is compute and storage. A
-**host** Layer decides where that compute runs. **Workers** are staged
-bundles of code. An **Application** publishes a graph of Workers to the fleet
-and activates it.
+import DAG from "../../../../components/DAG.astro";
 
-## Declare a fleet
+On Cloudflare, your Workers run on machines you never see. Celld gives you
+the same programming model on machines you own. The **fleet** is those
+machines: a group of nodes that run Workers and Durable Objects, and one
+bucket that holds everything they store.
 
-```typescript
-// src/fleet.ts
+This chapter explains what a fleet is made of, why its nodes can come and go
+without losing anything, and how your Workers get onto it. The rest of this
+section builds on it: where the nodes run, how deploys reach them, and how
+the fleet scales, upgrades and keeps its data.
+
+## A fleet is nodes and a bucket
+
+Each node is a process running Celld, which embeds V8 to run Workers. Nodes
+keep nothing of their own. Every Durable Object, KV namespace, D1 database,
+R2 bucket, queue and workflow run lives in the fleet's bucket, and so does
+the code of every Worker you publish.
+
+<DAG
+  nodes={[
+    { id: "a", label: "node 1", type: "runs Workers", layer: 0 },
+    { id: "b", label: "node 2", type: "runs Workers", layer: 0 },
+    { id: "bucket", label: "fleet bucket", type: "code and data", layer: 1, tone: "accent" },
+  ]}
+  edges={[
+    { from: "a", to: "bucket" },
+    { from: "b", to: "bucket" },
+  ]}
+  caption="Nodes do the work. The bucket remembers it."
+/>
+
+That split is what makes a fleet easy to operate. A Durable Object writes its
+SQLite changes to the bucket before it acknowledges them, so a node can stop
+at any moment and another node picks up where it left off. Adding a node,
+replacing one, or upgrading all of them never moves data.
+
+## Declare it
+
+A fleet is a class, like a Worker, but it carries no code. Its props describe
+the nodes: how many, how big, and whether the internet can reach them.
+
+```typescript title="src/fleet.ts"
 import * as Celld from "@alchemy.run/celld";
 
 export class Cells extends Celld.Fleet<Cells>()("Cells", {
@@ -20,34 +54,18 @@ export class Cells extends Celld.Fleet<Cells>()("Cells", {
 }) {}
 ```
 
-A fleet is infrastructure: nodes, a network and a storage bucket. It holds no
-code. Keep its logical ID stable, because every Durable Object, KV, D1, R2,
-Queue and Workflow record lives in its bucket.
+The declaration says nothing about AWS. Where the nodes actually run is
+decided by a host Layer you provide next to your providers, which the next
+chapter, [Hosting on ECS](/celld/fleet/ecs), covers.
 
-## Choose a host
+Keep the logical ID, `Cells`, stable. It names the bucket, and a new ID means
+a new, empty fleet.
 
-```typescript
-// alchemy.run.ts
-const providers = Layer.mergeAll(
-  AWS.providers(),
-  Celld.providers(),
-  CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
-);
-```
+## Workers are staged, not served
 
-The host Layer composes the fleet's cloud resources. `CelldAWS.EcsFleet()` is the
-ECS host; [Hosting on ECS](/celld/fleet/ecs) covers its options. It needs a
-[management runner](/celld/fleet/management) Layer, which deploys use to reach
-the nodes.
+A Celld Worker is declared the same way as a Cloudflare one.
 
-## Stage a Worker
-
-```typescript
-// src/api.ts
-import * as Celld from "@alchemy.run/celld";
-import * as Effect from "effect/Effect";
-import * as HttpServerResponse from "effect/http/HttpServerResponse";
-
+```typescript title="src/api.ts"
 export default class Api extends Celld.Worker<Api>()(
   "Api",
   { main: import.meta.url },
@@ -57,77 +75,72 @@ export default class Api extends Celld.Worker<Api>()(
 ) {}
 ```
 
-Deploying a Worker bundles it and uploads it to the fleet's bucket. A staged
-Worker serves nothing until an Application selects it.
+Deploying it bundles the code and uploads it to the fleet's bucket. That's
+all. Nothing serves it yet, because a fleet doesn't serve Workers one at a
+time. It serves one graph of Workers at a time: the one that answers HTTP
+requests, and every Worker, queue consumer and cron trigger behind it.
 
-## Publish an Application
+## An Application is what the fleet serves
 
-```typescript
-// alchemy.run.ts
+The Application names that graph and turns it on.
+
+```typescript title="alchemy.run.ts"
 const app = yield* Celld.Application("App", {
   entrypoint: Api,
   workers: [Jobs],
 });
 ```
 
-The Application publishes every Worker it lists, attaches their queue
-consumers and cron triggers, and activates the result as one revision. The
-`entrypoint` is the only Worker the fleet's listener serves; `workers` lists
-the rest of the graph. `app.url` is returned only after activation succeeds,
-so use it, not a Worker's URL, as the signal that a deploy is live.
+`entrypoint` is the Worker the fleet's listener sends requests to. `workers`
+lists the rest. The Application publishes all of them, attaches their queue
+consumers and cron triggers, and activates the result as one revision.
 
-## Select the fleet
+<DAG
+  nodes={[
+    { id: "api", label: "Api", type: "staged", layer: 0 },
+    { id: "jobs", label: "Jobs", type: "staged", layer: 0 },
+    { id: "app", label: "App", type: "revision 7", layer: 1, tone: "accent" },
+    { id: "fleet", label: "Cells", type: "serves revision 7", layer: 2 },
+  ]}
+  edges={[
+    { from: "api", to: "app" },
+    { from: "jobs", to: "app" },
+    { from: "app", to: "fleet" },
+  ]}
+  caption="Workers are staged one by one, then activated together."
+/>
 
-```typescript
-// alchemy.run.ts
+Activating them together means a deploy changes the whole graph in one
+revision, and the deploy waits until the nodes have loaded it. If they can't,
+the deploy fails, `app.url` is never returned, and your next deploy with a
+fixed graph replaces the failed revision. So use `app.url`, not a Worker's
+URL, as the sign that a deploy is live.
+
+A fleet runs one Application.
+
+## Select the fleet for everything inside
+
+Celld declarations don't take a fleet as a prop. Instead, `Fleet.layer`
+selects one for everything in its scope.
+
+```typescript title="alchemy.run.ts"
 Effect.gen(function* () {
   const app = yield* Celld.Application("App", { entrypoint: Api });
   return { url: app.url };
 }).pipe(Effect.provide(Celld.Fleet.layer(Cells)));
 ```
 
-`Fleet.layer(Cells)` selects the fleet for every Celld declaration inside it:
-the Application, its Workers, and the KV, D1, R2 and Queue resources they
-bind. A binding to a resource in another fleet is rejected at deploy time.
+The Application, its Workers, and the KV namespaces, D1 databases, R2 buckets
+and queues they bind all land in `Cells`. A binding that reaches for a
+resource in another fleet is refused when you deploy, because the two
+buckets can't see each other.
 
-## Provide Worker implementations
+A Worker implemented with `.make()` is provided in the same Layer, so other
+Workers can import its class without bundling its code.
 
-A Worker declared as a class with `.make()` is provided to the stack as a
-Layer, next to the fleet:
-
-```typescript
-// alchemy.run.ts
-Effect.gen(function* () {
-  const app = yield* Celld.Application("App", {
-    entrypoint: Api,
-    workers: [Jobs],
-  });
-  return { url: app.url };
-}).pipe(
-  Effect.provide(JobsLive.pipe(Layer.provideMerge(Celld.Fleet.layer(Cells)))),
-);
+```typescript title="alchemy.run.ts"
+Effect.provide(JobsLive.pipe(Layer.provideMerge(Celld.Fleet.layer(Cells))));
 ```
 
-Other Workers import only the `Jobs` class, so its implementation stays out of
-their bundles.
-
-## Runtime behavior
-
-A fleet runs one Application. A deploy that changes any Worker, queue consumer
-or cron trigger publishes a new revision and activates it. If activation
-fails, the deploy fails without returning `app.url`, and a later deploy with a
-corrected graph supersedes the failed revision.
-
-## Limitations
-
-Removing the Application from the stack leaves its publication and data in
-place; it doesn't unpublish the Workers. Destroying the fleet stops serving
-them. Storage follows [`retainStorage`](/celld/fleet/storage).
-
-## Related guides
-
-- [Hosting on ECS](/celld/fleet/ecs)
-- [Management runners](/celld/fleet/management)
-- [Workers](/celld/compute/workers)
-- [Fleet reference](/providers/celld/reference/celld#fleet)
-- [Application reference](/providers/celld/reference/celld#application)
+Next, [Hosting on ECS](/celld/fleet/ecs): where the nodes and the bucket
+actually run.

@@ -1,40 +1,71 @@
 ---
 title: Private fleets
-description: Keep a Celld fleet off the internet and reach its Application only from inside its network.
+description: Keep a Celld fleet off the internet and call its Workers only from services in the same network.
 ---
 
-A fleet without `ingress` has no public endpoint. Its Application is reachable
-only on the fleet's private URL, from callers attached to its network.
+import DAG from "../../../../components/DAG.astro";
+
+Not every Worker should face the internet. An internal API, or a backend for
+your other services, should be reachable only from inside your network. A
+fleet without `ingress` is exactly that: it has no public endpoint at all.
+
+This chapter covers how a private fleet is reached, how a Lambda Function
+calls into it, and how to put it in the VPC your services already use.
 
 ## Leave out ingress
 
-```typescript
-// src/fleet.ts
+A fleet is private unless you ask for `ingress`.
+
+```typescript title="src/fleet.ts"
 export class Cells extends Celld.Fleet<Cells>()("Cells", {
   instances: 2,
 }) {}
 ```
 
 `app.url` is then the fleet's private URL, such as
-`http://fleet.prod-cells.celld.internal:8080`. It resolves only inside the VPC.
+`http://fleet.prod-cells.celld.internal:8080`. Its name only resolves inside
+the fleet's VPC, so nothing outside can even look it up.
 
-## Call it from AWS
+## Call it from your other services
 
-```typescript
-// src/backend.ts
+A service in the VPC needs three things to call in: a route to the nodes, a
+security group the nodes accept, and the Worker's gateway secret.
+`Celld.bindWorker` gives a Lambda Function all three.
+
+```typescript title="src/backend.ts"
 const api = yield* Celld.bindWorker(App, Api);
 const response = yield* api.fetch(HttpClientRequest.get("/hello"));
 ```
 
-`Celld.bindWorker` attaches a Lambda Function to the fleet's subnets and
-caller security group, and binds the URL and the Worker's gateway secret into
-it. [Call from AWS Lambda](/celld/networking/call-from-lambda) walks through
-it.
+<DAG
+  nodes={[
+    { id: "lambda", label: "Backend", type: "Lambda Function", layer: 0 },
+    { id: "fleet", label: "Cells", type: "private URL", layer: 1, tone: "accent" },
+    { id: "api", label: "Api", type: "Worker", layer: 2 },
+  ]}
+  edges={[
+    { from: "lambda", to: "fleet", label: "inside the VPC" },
+    { from: "fleet", to: "api" },
+  ]}
+  caption="The Function joins the fleet's subnets and calls the Worker directly."
+/>
 
-## Join your own VPC
+The Function joins the fleet's subnets and its callers' security group, and
+receives the URL and secret in its environment.
+[Call from AWS Lambda](/celld/networking/call-from-lambda) walks through it.
 
-```typescript
-// src/fleet.ts
+The secret matters for more than `fetch`. Any caller that reaches the private
+URL can call a Worker's `fetch`, but its Durable Object and RPC routes need
+the gateway secret too. The operator port the
+[management runner](/celld/fleet/management) uses is on a separate port that
+callers can't reach.
+
+## Share your existing VPC
+
+A fleet in its own network can only be called by services that join it. To
+let the services you already run call it, put the fleet in their VPC.
+
+```typescript title="src/fleet.ts"
 export class Cells extends Celld.Fleet<Cells>()("Cells", {
   vpc: {
     vpcId: "vpc-0123456789abcdef0",
@@ -44,25 +75,11 @@ export class Cells extends Celld.Fleet<Cells>()("Cells", {
 }) {}
 ```
 
-Put the fleet in the VPC your other services already run in. The groups in
-`securityGroupIds` must admit fleet traffic on port 8080.
+The groups in `securityGroupIds` must allow fleet traffic on port 8080.
 
-## Runtime behavior
+On Fargate, the private name round-robins across nodes through DNS, so a
+long-lived connection stays on one node. Reaching a private fleet from
+outside the VPC takes a VPN, peering, or switching on public
+[ingress](/celld/networking/domains).
 
-The Worker's own `fetch` serves any caller that reaches the private URL.
-Durable Object and Worker RPC routes also require the Worker's gateway secret,
-which `bindWorker` supplies. The operator
-listener the management runner uses is on a separate port that callers can't
-reach.
-
-## Limitations
-
-Fargate fleets publish the private URL through Cloud Map DNS, which
-round-robins across nodes; long-lived connections stay on one node. A caller
-outside the VPC needs a VPN, peering or a public ingress.
-
-## Related guides
-
-- [Call from AWS Lambda](/celld/networking/call-from-lambda)
-- [Domains & ingress](/celld/networking/domains)
-- [Hosting on ECS](/celld/fleet/ecs)
+Next, [Workers](/celld/compute/workers): writing the code the fleet runs.

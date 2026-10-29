@@ -1,55 +1,88 @@
 ---
 title: Upgrades
-description: Roll a Celld fleet to another release in the 0.6 series, use a mirrored image, and resize nodes without downtime.
+description: How a Celld fleet rolls to a new release or node size one node at a time, and which changes it refuses.
 ---
 
-The host upgrades a fleet with an ECS rolling deployment: it starts a new
-node, drains an old one, and repeats. A draining node hands its Durable
-Objects to its peers, so the fleet keeps serving throughout.
+import DAG from "../../../../components/DAG.astro";
+
+A fleet runs one Celld release on every node. Upgrading it, or resizing its
+nodes, replaces the nodes. This chapter explains how that happens without
+downtime, how to choose the release, and which changes can't roll.
+
+## Nodes are replaced one at a time
+
+Changing the release, the image or the node size starts a rolling
+deployment. A new node starts, an old node drains and hands its Durable
+Objects to its peers, and the host repeats until every node is new.
+
+<DAG
+  nodes={[
+    { id: "old", label: "node 1", type: "0.6.2, draining", layer: 0 },
+    { id: "peer", label: "node 2", type: "0.6.2, serving", layer: 1 },
+    { id: "new", label: "node 3", type: "0.6.3, serving", layer: 1, tone: "accent" },
+  ]}
+  edges={[
+    { from: "old", to: "peer", label: "objects" },
+    { from: "old", to: "new", label: "objects" },
+  ]}
+  caption="Old and new nodes serve side by side while the fleet rolls."
+/>
+
+For a few minutes, old and new nodes serve side by side. Each Durable Object
+is still held by one node at a time, and its storage is in the bucket, so
+nothing moves between releases except the leases.
+[Scaling](/celld/fleet/scaling#when-a-node-leaves-its-objects-move) explains
+the handoff.
 
 ## Pin the release
 
-```typescript
-// src/fleet.ts
+`runtimeVersion` is the Celld release the nodes run. It defaults to the
+release your version of `@alchemy.run/celld` was tested against, currently
+0.6.3.
+
+```typescript title="src/fleet.ts"
 export class Cells extends Celld.Fleet<Cells>()("Cells", {
   runtimeVersion: "0.6.3",
 }) {}
 ```
 
-`runtimeVersion` defaults to the release this version of
-`@alchemy.run/celld` was tested against, currently 0.6.3. Pin it so upgrading
-the package doesn't also upgrade the fleet.
+Pin it. Otherwise upgrading the package also upgrades the fleet, on
+whichever deploy happens next.
 
 ## Roll to another release
 
-```diff lang="typescript"
-// src/fleet.ts
+Change the version and deploy.
+
+```diff lang="typescript" title="src/fleet.ts"
 export class Cells extends Celld.Fleet<Cells>()("Cells", {
--  runtimeVersion: "0.6.0",
+-  runtimeVersion: "0.6.2",
 +  runtimeVersion: "0.6.3",
 }) {}
 ```
 
-Deploy, and the host replaces the nodes one at a time. Any release in the 0.6
-series is accepted.
+Any release in the 0.6 series rolls this way. A release from another series
+stores data in the bucket differently, so old and new nodes can't share it,
+and the host refuses the change on an existing fleet. Moving across series
+needs the fleet stopped.
 
-## Use a mirrored image
+## Pull from your own registry
 
-```typescript
-// src/fleet.ts
+Nodes pull the official Celld image, pinned by digest. To pull from your own
+registry instead, set `image`, and keep it on the same release as
+`runtimeVersion`.
+
+```typescript title="src/fleet.ts"
 export class Cells extends Celld.Fleet<Cells>()("Cells", {
   runtimeVersion: "0.6.3",
   image: "123456789012.dkr.ecr.us-east-1.amazonaws.com/celld:0.6.3",
 }) {}
 ```
 
-By default nodes pull the digest-pinned upstream image. Set `image` to pull
-from your own registry, and keep it on the same release as `runtimeVersion`.
+## Resize the nodes
 
-## Resize nodes
+A new node size rolls out exactly like a new release.
 
-```diff lang="typescript"
-// src/fleet.ts
+```diff lang="typescript" title="src/fleet.ts"
 export class Cells extends Celld.Fleet<Cells>()("Cells", {
 -  cpu: 512,
 -  memory: 1024,
@@ -58,23 +91,8 @@ export class Cells extends Celld.Fleet<Cells>()("Cells", {
 }) {}
 ```
 
-Node size changes roll out the same way as a release change.
+Switching between Fargate and EC2, or changing the container runtime, can't
+roll: every node would change at once. The host refuses those too.
 
-## Runtime behavior
-
-During a roll, old and new nodes serve side by side, and each Durable Object
-stays on one node at a time. Storage lives in the fleet bucket, not on the
-nodes, so nothing is copied between releases.
-
-## Limitations
-
-A release from another series changes the bucket format, so the host refuses
-it on an existing fleet; that move needs a stopped-fleet maintenance
-procedure. Switching between Fargate and EC2 capacity, or changing the
-container runtime, replaces every node at once and is refused too.
-
-## Related guides
-
-- [Hosting on ECS](/celld/fleet/ecs)
-- [Storage & retention](/celld/fleet/storage)
-- [Fleet reference](/providers/celld/reference/celld#fleet)
+Next, [Storage & retention](/celld/fleet/storage): what the bucket holds, and
+what happens to it when you remove things.

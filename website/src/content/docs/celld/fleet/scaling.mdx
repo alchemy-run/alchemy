@@ -1,52 +1,80 @@
 ---
 title: Scaling
-description: Run a fixed number of Celld nodes or let the host scale them on CPU, and how requests reach the node that owns a Durable Object.
+description: How a Celld fleet spreads Workers and Durable Objects across its nodes, and how to run a fixed count or scale on CPU.
 ---
 
-A fleet's `instances` sets how many nodes run. Workers are stateless, so any
-node serves any request; Durable Objects are spread across the nodes and move
-when nodes come and go.
+import DAG from "../../../../components/DAG.astro";
+
+Scaling a fleet means changing how many nodes it runs. Because nodes keep
+nothing of their own, that's safe to do at any time. This chapter explains
+how requests are shared across nodes, what happens to a Durable Object when
+the node holding it goes away, and how to set the count.
+
+## Any node serves any Worker
+
+Workers keep no state between requests, so every node can run every Worker.
+The load balancer, or the private URL, sends each request to whichever node
+it picks, and more nodes means more requests served at once.
+
+## Each Durable Object lives on one node
+
+A Durable Object is different. It keeps state in memory and in its own
+storage, so it must run in exactly one place. Each object is held by one
+node at a time, under a lease kept in the fleet's bucket.
+
+A request can still land on any node. If that node doesn't hold the object,
+it forwards the call to the one that does.
+
+<DAG
+  nodes={[
+    { id: "req", label: "request", type: "visits", layer: 0 },
+    { id: "a", label: "node 1", type: "forwards", layer: 1 },
+    { id: "b", label: "node 2", type: "holds visits", layer: 2, tone: "accent" },
+  ]}
+  edges={[
+    { from: "req", to: "a" },
+    { from: "a", to: "b" },
+  ]}
+  caption="The request lands anywhere. The object answers from one node."
+/>
+
+Your code never sees this. A stub from `counters.getByName("visits")` reaches the
+same object whichever node your Worker runs on.
+
+## When a node leaves, its objects move
+
+When a node drains, during a scale-in or an upgrade, its leases are released
+and other nodes take its objects over. The object's storage is already in
+the bucket, so nothing is copied. The next call to a moved object starts it
+on its new node, which takes a few seconds the first time.
+
+That's why one node is fine for development but production wants at least
+two: with one, a drain leaves no other node to take over.
 
 ## Run a fixed count
 
-```typescript
-// src/fleet.ts
+`instances` sets how many nodes run. The default is two.
+
+```typescript title="src/fleet.ts"
 export class Cells extends Celld.Fleet<Cells>()("Cells", {
   instances: 3,
 }) {}
 ```
 
-The default is two nodes. One node is enough for development; run at least
-two in production so a node can drain without an outage.
-
 ## Scale on CPU
 
-```typescript
-// src/fleet.ts
+Give `instances` a range, and the host adds nodes when average CPU climbs
+above `targetCpu` percent and removes them when it falls.
+
+```typescript title="src/fleet.ts"
 export class Cells extends Celld.Fleet<Cells>()("Cells", {
   instances: { min: 2, max: 8, targetCpu: 60 },
 }) {}
 ```
 
-The object form adds a target-tracking policy: the host adds nodes when
-average CPU rises above `targetCpu` percent and removes them when it falls,
-staying between `min` and `max`. `targetCpu` defaults to 60.
+`targetCpu` defaults to 60. CPU scaling works on Fargate only. On EC2 each
+node takes a whole instance and one spare instance covers rollouts, so EC2
+fleets need a fixed count.
 
-## Runtime behavior
-
-Each Durable Object is held by one node at a time under a lease stored in the
-fleet bucket. Any node accepts a call for any object and forwards it to the
-lease holder. When a node drains, its objects move to other nodes; the next
-call activates them there from the bucket, which takes a few seconds on first
-touch.
-
-## Limitations
-
-CPU scaling is Fargate-only. EC2 fleets need a fixed count, because each node
-takes a whole host and one spare host covers rolling deployments.
-
-## Related guides
-
-- [Hosting on ECS](/celld/fleet/ecs)
-- [Durable Objects](/celld/compute/durable-objects)
-- [Fleet reference](/providers/celld/reference/celld#fleet)
+Next, [Upgrades](/celld/fleet/upgrades): moving every node to a new Celld
+release without downtime.
