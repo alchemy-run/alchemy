@@ -96,18 +96,21 @@ describe.sequential.skipIf(!emailRoutingScoped)(
         yield* stack.destroy();
         const before = yield* getEmailRouting(zoneId);
 
-        const deploy = (subaddressing: boolean) =>
-          stack.deploy(
-            Effect.gen(function* () {
-              return yield* Cloudflare.Email.Routing("Routing", { zone: zoneId, subaddressing });
-            }),
-          );
+        const routing = (subaddressing?: boolean) =>
+          Effect.gen(function* () {
+            return yield* Cloudflare.Email.Routing("Routing", { zone: zoneId, subaddressing });
+          });
 
-        const on = yield* deploy(true);
+        const on = yield* stack.deploy(routing(true));
         expect(on.subaddressing).toEqual(true);
         expect((yield* getEmailRouting(zoneId)).supportSubaddress).toEqual(true);
 
-        const off = yield* deploy(false);
+        // Unchanged, or omitted (keep the zone's setting), plans no update.
+        expect((yield* stack.plan(routing(true))).resources.Routing?.action).toBe("noop");
+        expect((yield* stack.plan(routing())).resources.Routing?.action).toBe("noop");
+        expect((yield* stack.plan(routing(false))).resources.Routing?.action).toBe("update");
+
+        const off = yield* stack.deploy(routing(false));
         expect(off.subaddressing).toEqual(false);
         expect((yield* getEmailRouting(zoneId)).supportSubaddress).toEqual(false);
 

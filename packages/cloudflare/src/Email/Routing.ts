@@ -145,7 +145,9 @@ export const RoutingProvider = () =>
       if (news.subaddressing !== undefined && news.subaddressing !== output.subaddressing) {
         return { action: "update" } as const;
       }
-      return undefined;
+      // Every prop is compared above against the observed output, so an
+      // omitted `subaddressing` (keep the zone's setting) is not a change.
+      return { action: "noop" } as const;
     }),
     read: Effect.fn(function* ({ output }) {
       if (!output?.zoneId) return undefined;
