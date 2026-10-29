@@ -47,7 +47,7 @@ import type { VersionMetadataBinding } from "./VersionMetadataBinding.ts";
 import type { Self, Worker } from "./Worker.ts";
 import type { WorkerEntrypointBinding } from "./WorkerEntrypoint.ts";
 import type { WorkerLoader as WorkerLoaderResource } from "./WorkerLoader.ts";
-import type { ExportedHandlerMethod, RpcMethods } from "./WorkerRuntime.ts";
+import type { RpcMethods } from "./WorkerRuntime.ts";
 
 export type InferEnv<W> =
   W extends Effect.Effect<infer A, infer _E, infer _R>
@@ -180,7 +180,7 @@ export type GetBindingType<T> =
  * the raw binding actually resolves to. `fetch` is dropped from the user
  * shape and re-introduced via `Service` so callers get the standard
  * `(input, init?) => Promise<Response>` signature. Other
- * {@link ExportedHandlerMethod}s (`scheduled`, `email`, `queue`, …) are
+ * `ExportedHandler` methods (`scheduled`, `email`, `queue`, …) are
  * dropped too — they are event listeners, not RPC methods.
  *
  * Use {@link toRpcAsync} to wrap a binding into a Promise<T>-flavored view

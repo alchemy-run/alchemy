@@ -14,7 +14,6 @@ import { WebhookHostLive } from "./WebhookHost.ts";
 import {
   ExportedHandlerMethods,
   isExportedHandlerMethod,
-  isWorkerEvent,
   WorkerEnvironment,
   WorkerTypeId,
   type WorkerEvent,
@@ -32,6 +31,11 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
   const exports: Record<string, WorkerExport> = {};
   const env: Record<string, any> = {};
   let userShape: Record<string, unknown> | undefined;
+  // `ExportedHandler` methods returned on the user's shape (`scheduled`,
+  // `email`, `queue`, …), keyed by event type. Their channels are unknown
+  // (the shape is untyped), so they are dispatched next to `listeners`
+  // rather than registered as `FunctionListener`s.
+  const shapeHandlers = new Map<WorkerEvent["type"], unknown>();
 
   const ctx = {
     Type: WorkerTypeId,
@@ -69,33 +73,13 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
           Object.entries(shape).filter(([key]) => !isExportedHandlerMethod(key)),
         );
       }
-      const registerFetch = ctx.listen(makeRequestHandler(handler));
-
-      const nonFetchMethods = ExportedHandlerMethods.filter(
-        (method) => method !== "fetch" && shape?.[method] != null,
-      );
-      if (nonFetchMethods.length === 0) return registerFetch;
-
-      return Effect.all(
-        [
-          registerFetch,
-          ...nonFetchMethods.map((method) =>
-            ctx.listen(((event: any) => {
-              if (!isWorkerEvent(event) || event.type !== method) return;
-              const methodHandler = shape![method];
-              if (typeof methodHandler === "function") {
-                // A failing handler Effect rejects the WorkerEntrypoint
-                // promise (Cloudflare may retry scheduled/queue).
-                return methodHandler(event.input) as Effect.Effect<unknown, never, never>;
-              }
-              if (Effect.isEffect(methodHandler)) {
-                return methodHandler as Effect.Effect<unknown, never, never>;
-              }
-            }) as FunctionListener),
-          ),
-        ],
-        { discard: true },
-      );
+      for (const method of ExportedHandlerMethods) {
+        const methodHandler = shape?.[method];
+        if (method !== "fetch" && methodHandler != null) {
+          shapeHandlers.set(method, methodHandler);
+        }
+      }
+      return ctx.listen(makeRequestHandler(handler));
     },
     listen: ((handler: FunctionListener | Effect.Effect<FunctionListener>) =>
       Effect.sync(() =>
@@ -126,12 +110,21 @@ export const makeWorkerRuntimeContext = (id: string): WorkerRuntimeContext => {
             env,
             context,
           };
-          const effects: Effect.Effect<unknown>[] = [];
+          const effects: Effect.Effect<unknown, unknown, unknown>[] = [];
           for (const handler of handlers) {
             const eff = handler(event);
             if (Effect.isEffect(eff)) {
               effects.push(eff);
             }
+          }
+          // A shape method is either `(input) => Effect` or a bare Effect.
+          // A failure rejects the WorkerEntrypoint promise, so Cloudflare
+          // can retry scheduled and queue events.
+          const shapeHandler = shapeHandlers.get(type);
+          const shapeEffect =
+            typeof shapeHandler === "function" ? shapeHandler(request) : shapeHandler;
+          if (Effect.isEffect(shapeEffect)) {
+            effects.push(shapeEffect);
           }
           if (effects.length === 1) {
             return [effects[0], services];

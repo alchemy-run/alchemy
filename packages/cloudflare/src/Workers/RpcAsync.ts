@@ -2,11 +2,7 @@ import type { Rpc } from "alchemy/Rpc";
 import type * as Effect from "effect/Effect";
 import type * as Stream from "effect/Stream";
 import { isRpcErrorEnvelope, isRpcStreamEnvelope } from "./Rpc.ts";
-import {
-  isExportedHandlerMethod,
-  type ExportedHandlerMethod,
-  type RpcMethods,
-} from "./WorkerRuntime.ts";
+import { isExportedHandlerMethod, type RpcMethods } from "./WorkerRuntime.ts";
 
 export type RpcAsync<Shape> = {
   [K in keyof RpcMethods<Shape>]: RpcMethods<Shape>[K] extends (
@@ -30,7 +26,7 @@ export type RpcAsync<Shape> = {
  * test code) can `await` RPC methods directly.
  *
  * The proxy:
- * - leaves `fetch` / other {@link ExportedHandlerMethod}s / `connect` /
+ * - leaves `fetch` / other `ExportedHandler` methods / `connect` /
  *   `Symbol.dispose` and other non-string keys passing through to the
  *   underlying binding unchanged (event handlers are not RPC methods),
  * - turns each `Effect<T>` / `Stream<T>` method into a `Promise<T>` /
