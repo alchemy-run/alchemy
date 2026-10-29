@@ -26,6 +26,7 @@
     },
     "enable": [
       "cloudnumberregistry.googleapis.com"
-    ]
+    ],
+    "location": "global"
   }
 }

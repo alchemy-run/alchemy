@@ -31,20 +31,20 @@ export default class CloudNumberRegistryGeneratedHost extends GCP.Function<Cloud
     return {
       fetch: serveProbes({
         CheckIpamAdminScopeAvailability: probeOutcome(
-          Retry.none(p0({ location: "us-central1" } as never)),
+          Retry.none(p0({ location: "global" } as never)),
         ),
         FindCustomRangeFreeIpRanges: probeOutcome(Retry.none(p1({} as never))),
         GetCustomRange: probeOutcome(Retry.none(p2({} as never))),
         GetDiscoveredRange: probeOutcome(
-          Retry.none(p3({ discoveredRange: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p3({ discoveredRange: "alchemy-missing", location: "global" } as never)),
         ),
         GetRealm: probeOutcome(Retry.none(p4({} as never))),
         GetRegistryBook: probeOutcome(Retry.none(p5({} as never))),
-        ListCustomRanges: probeOutcome(Retry.none(p6({ location: "us-central1" } as never))),
-        ListDiscoveredRanges: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListIpamAdminScopes: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListRealms: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
-        ListRegistryBooks: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListCustomRanges: probeOutcome(Retry.none(p6({ location: "global" } as never))),
+        ListDiscoveredRanges: probeOutcome(Retry.none(p7({ location: "global" } as never))),
+        ListIpamAdminScopes: probeOutcome(Retry.none(p8({ location: "global" } as never))),
+        ListRealms: probeOutcome(Retry.none(p9({ location: "global" } as never))),
+        ListRegistryBooks: probeOutcome(Retry.none(p10({ location: "global" } as never))),
         SearchRegistryBookIpResources: probeOutcome(Retry.none(p11({} as never))),
       }),
     };
