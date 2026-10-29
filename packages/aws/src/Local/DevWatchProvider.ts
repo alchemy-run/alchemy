@@ -311,10 +311,18 @@ export const makeDevWatchProvider = <
         string,
         { functionName: string; fiber: Fiber.Fiber<unknown, unknown> }
       >();
-      const bridgeEvents = Effect.fn(function* (news: unknown, attrs: unknown) {
-        const env = (news as { env?: Record<string, unknown> } | undefined)?.env;
-        const queueUrl = env?.[DEV_BRIDGE_ENV.queueUrl];
-        const bucket = env?.[DEV_BRIDGE_ENV.bucket];
+      const bridgeEvents = Effect.fn(function* (input: any, attrs: unknown) {
+        const env: Record<string, unknown> = {
+          ...(stripEffects(input.news) as { env?: Record<string, unknown> } | undefined)?.env,
+          ...Object.assign(
+            {},
+            ...((input.bindings ?? []) as Array<{ data?: { env?: Record<string, unknown> } }>).map(
+              (binding) => binding?.data?.env ?? {},
+            ),
+          ),
+        };
+        const queueUrl = env[DEV_BRIDGE_ENV.queueUrl];
+        const bucket = env[DEV_BRIDGE_ENV.bucket];
         const functionName = (attrs as { functionName?: unknown } | undefined)?.functionName;
         if (
           typeof queueUrl !== "string" ||
@@ -595,7 +603,7 @@ export const makeDevWatchProvider = <
                 wrapped.reconcile(withSafeSession({ ...input, news: reconcileNews }) as any),
               );
               yield* ensureWatch(input, attrs);
-              yield* bridgeEvents(stripEffects(input.news), attrs);
+              yield* bridgeEvents(input, attrs);
               if (spec.onReconciled !== undefined) {
                 yield* spec
                   .onReconciled({

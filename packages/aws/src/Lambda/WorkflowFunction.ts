@@ -1,5 +1,6 @@
 import type { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as Lambda from "@distilled.cloud/aws/lambda";
+import * as Binding from "alchemy/Binding";
 import type { InputProps } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import {
@@ -209,10 +210,12 @@ export const DurableFunctionEngine = <
       WorkflowEngine.WorkflowEngine,
       Effect.gen(function* () {
         const bind = yield* AWSBindings.Bind;
-        const context = yield* Effect.context<LambdaServices>();
         const routes = new Map<string, Calls>();
         for (const host of hosts) {
           const fn = yield* host;
+          // Not a Binding.Service, so name the bound host for the credential
+          // routing (e.g. an emulated caller reaching a real-cloud host in dev).
+          const targeting = Effect.provideService(Binding.Targets, [fn]);
           if (!globalThis.__ALCHEMY_RUNTIME__) {
             yield* bind`AWS.Lambda.DurableFunctionEngine(${fn})`({
               policyStatements: [
@@ -236,15 +239,24 @@ export const DurableFunctionEngine = <
                   Resource: ["*"],
                 },
               ],
-            });
+            }).pipe(targeting);
           }
           const functionName = yield* fn.functionName;
           // Runs start on the host's alias when it sets one.
           const qualifier = yield* qualifierOf(fn).bind(
             `${fn.LogicalId}.qualifier`,
           ) as Effect.Effect<Effect.Effect<string>>;
+          // The engine's calls, resolved with the caller's AWS credentials.
+          const withContext = yield* AWSBindings.withCredentials(
+            Effect.map(
+              Effect.context<LambdaServices>(),
+              (context) =>
+                <A, E>(effect: Effect.Effect<A, E, LambdaServices>) =>
+                  Effect.provideContext(effect, context),
+            ),
+          ).pipe(targeting);
           const calls = makeCalls(
-            (effect) => effect.pipe(Effect.provide(context)),
+            (effect) => withContext(effect).pipe(targeting),
             functionName,
             qualifier,
           );

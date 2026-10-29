@@ -2,8 +2,10 @@ import { createHash } from "node:crypto";
 import * as Effect from "effect/Effect";
 import type { Cluster } from "../ECS/Cluster.ts";
 import * as IAM from "../IAM/index.ts";
+import { requireSameSide } from "../Lambda/DevBridge.ts";
 import type { EventBus } from "./EventBus.ts";
 import { Rule, type RuleProps, type RuleTarget } from "./Rule.ts";
+import { originOf } from "./ToLambda.ts";
 
 interface EventDescriptor {
   id?: string;
@@ -55,6 +57,7 @@ export const toEcsTask = (
   props: EcsRouteTargetProps,
 ) =>
   Effect.gen(function* () {
+    yield* requireSameSide(originOf(descriptor), cluster);
     const routeId = descriptor.id ?? createRouteId(descriptor, `${cluster.LogicalId}Ecs`);
 
     const role = yield* IAM.Role(`${routeId}${cluster.LogicalId}Role`, {

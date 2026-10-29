@@ -4,7 +4,6 @@ import * as Output from "alchemy/Output";
 import { isEmulated } from "alchemy/Provider";
 import { remote, UnbridgedDevEdge } from "alchemy/ProviderMode";
 import type { ResourceLike } from "alchemy/Resource";
-import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import { DEV_BRIDGE_ENV } from "../Local/DevBridgeEnv.ts";
 import { Bucket } from "../S3/Bucket.ts";
@@ -100,11 +99,41 @@ const devStub = (host: Function) =>
           { Effect: "Allow", Action: ["s3:ListBucket"], Resource: [bucket.bucketArn] },
         ],
       });
-      const runtime = yield* CurrentRuntimeContext;
-      if (runtime !== undefined) {
-        yield* runtime.set(DEV_BRIDGE_ENV.queueUrl, queue.queueUrl);
-        yield* runtime.set(DEV_BRIDGE_ENV.bucket, bucket.bucketName);
-      }
+      // Tells the dev sidecar hosting the emulated Function what to consume.
+      // A binding rather than the runtime env: some wiring (Pipes) is
+      // declared outside the host.
+      yield* host.bind`AWS.Lambda.DevBridge(${host})`({
+        env: {
+          [DEV_BRIDGE_ENV.queueUrl]: queue.queueUrl,
+          [DEV_BRIDGE_ENV.bucket]: bucket.bucketName,
+        },
+      });
       return stub;
     }),
   ).pipe(remote());
+
+/**
+ * Reject event routing between an emulated end and a real-cloud end that no
+ * bridge carries, e.g. a real-cloud bus delivering to an emulated queue.
+ * Only Lambda targets are bridged (see {@link wireEventSource}).
+ */
+export const requireSameSide = (origin: EventOrigin, target: ResourceLike) =>
+  Effect.gen(function* () {
+    if (origin === undefined) return;
+    const targetEmulated = yield* isEmulated(target);
+    const originEmulated = origin === "aws" ? false : yield* isEmulated(origin);
+    if (targetEmulated === originEmulated) return;
+    const from = typeof origin === "object" ? origin.FQN : "the AWS platform";
+    return yield* Effect.die(
+      new UnbridgedDevEdge({
+        message:
+          `${from} ${originEmulated ? "is emulated by `alchemy dev`" : "is in the real cloud"}, ` +
+          `but its events go to ${target.FQN}, which ${targetEmulated ? "is emulated" : "is in the real cloud"}. ` +
+          "Only Lambda targets are bridged. Make both ends agree: pipe both through " +
+          "Alchemy.remote(), or neither.",
+        from: target.FQN,
+        to: from,
+        edge: "event",
+      }),
+    );
+  });

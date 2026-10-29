@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import type { Table } from "../DynamoDB/Table.ts";
 import * as IAM from "../IAM/index.ts";
 import type { Stream } from "../Kinesis/Stream.ts";
+import { requireSameSide, wireEventSource } from "../Lambda/DevBridge.ts";
 import type { Function } from "../Lambda/Function.ts";
 import type { Queue } from "../SQS/Queue.ts";
 import { Pipe, type PipeDesiredState } from "./Pipe.ts";
@@ -130,52 +131,59 @@ const makePipeBuilder = (state: PipeBuilderState) => ({
    * Deliver batches to a Lambda function target.
    */
   toLambda: (fn: Function, options: LambdaTargetOptions = {}) =>
-    materializePipe(
-      state,
-      fn.LogicalId,
-      [
+    // An emulated Function fed by a real-cloud source is reached through a stub.
+    wireEventSource(fn, state.source, (fn) =>
+      materializePipe(
+        state,
+        fn.LogicalId,
+        [
+          {
+            Effect: "Allow",
+            Action: ["lambda:InvokeFunction"],
+            Resource: [fn.functionArn],
+          },
+        ],
+        fn.functionArn,
         {
-          Effect: "Allow",
-          Action: ["lambda:InvokeFunction"],
-          Resource: [fn.functionArn],
+          InputTemplate: options.inputTemplate,
+          LambdaFunctionParameters: options.invocationType
+            ? { InvocationType: options.invocationType }
+            : undefined,
         },
-      ],
-      fn.functionArn,
-      {
-        InputTemplate: options.inputTemplate,
-        LambdaFunctionParameters: options.invocationType
-          ? { InvocationType: options.invocationType }
-          : undefined,
-      },
-      options,
+        options,
+      ),
     ),
 
   /**
    * Deliver batches to an SQS queue target.
    */
   toQueue: (queue: Queue, options: QueueTargetOptions = {}) =>
-    materializePipe(
-      state,
-      queue.LogicalId,
-      [
-        {
-          Effect: "Allow",
-          Action: ["sqs:SendMessage"],
-          Resource: [queue.queueArn],
-        },
-      ],
-      queue.queueArn,
-      {
-        InputTemplate: options.inputTemplate,
-        SqsQueueParameters:
-          options.messageGroupId !== undefined || options.messageDeduplicationId !== undefined
-            ? {
-                MessageGroupId: options.messageGroupId,
-                MessageDeduplicationId: options.messageDeduplicationId,
-              }
-            : undefined,
-      },
-      options,
+    requireSameSide(state.source, queue).pipe(
+      Effect.andThen(
+        materializePipe(
+          state,
+          queue.LogicalId,
+          [
+            {
+              Effect: "Allow",
+              Action: ["sqs:SendMessage"],
+              Resource: [queue.queueArn],
+            },
+          ],
+          queue.queueArn,
+          {
+            InputTemplate: options.inputTemplate,
+            SqsQueueParameters:
+              options.messageGroupId !== undefined || options.messageDeduplicationId !== undefined
+                ? {
+                    MessageGroupId: options.messageGroupId,
+                    MessageDeduplicationId: options.messageDeduplicationId,
+                  }
+                : undefined,
+          },
+          options,
+        ),
+      ),
     ),
 });
 

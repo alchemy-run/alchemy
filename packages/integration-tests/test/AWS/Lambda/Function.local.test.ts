@@ -39,8 +39,10 @@ import type { RegionName } from "@distilled.cloud/aws/Region";
 import * as S3 from "@distilled.cloud/aws/s3";
 import * as SQS from "@distilled.cloud/aws/sqs";
 import * as SSM from "@distilled.cloud/aws/ssm";
+import * as Alchemy from "alchemy";
 import { Stack } from "alchemy/Stack";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
@@ -57,6 +59,12 @@ import RemoteBindingFunctionLive, {
 import RemoteEventsFunctionLive, {
   RemoteEventsFunction,
 } from "./fixtures/floci-remote-events/handler.ts";
+import UnbridgedConnectFunctionLive, {
+  UnbridgedConnectFunction,
+} from "./fixtures/floci-unbridged/connect.ts";
+import UnbridgedEventFunctionLive, {
+  UnbridgedEventFunction,
+} from "./fixtures/floci-unbridged/event.ts";
 
 const { test } = Test.make({ providers: AWS.providers(), dev: true });
 
@@ -618,4 +626,49 @@ test.provider(
     tags: ["provider:aws", "provider:aws:lambda", "provider:aws:s3", "provider:aws:sqs", "local"],
     timeout: 540_000,
   },
+);
+
+test.provider(
+  "dev rejects the edges no bridge carries, by name, before creating anything",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const edgeOf = (exit: Exit.Exit<unknown, unknown>) =>
+        Exit.isFailure(exit)
+          ? exit.cause.reasons.flatMap((reason) =>
+              reason._tag === "Die" ? [reason.defect as { _tag?: string }] : [],
+            )
+          : [];
+
+      // A deployed Function cannot receive an emulated queue's events.
+      const event = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* UnbridgedEventFunction;
+          }).pipe(Effect.provide(UnbridgedEventFunctionLive), Alchemy.remote()),
+        )
+        .pipe(Effect.exit);
+      expect(edgeOf(event)).toContainEqual(
+        expect.objectContaining({
+          _tag: "UnbridgedDevEdge",
+          from: "UnbridgedEventFunction",
+          to: "UnbridgedQueue",
+        }),
+      );
+
+      // This machine cannot reach a cache that only has a private endpoint.
+      const connect = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            return yield* UnbridgedConnectFunction;
+          }).pipe(Effect.provide(UnbridgedConnectFunctionLive)),
+        )
+        .pipe(Effect.exit);
+      expect(edgeOf(connect)).toContainEqual(
+        expect.objectContaining({ _tag: "UnbridgedDevEdge", edge: "connect" }),
+      );
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 120_000 },
 );

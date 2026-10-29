@@ -54,7 +54,7 @@ export const toLambda = (
  * (`aws.*`), which only the real cloud emits. The app's own events on the
  * default bus follow the run mode.
  */
-const originOf = (descriptor: EventDescriptor) => {
+export const originOf = (descriptor: { bus?: EventBus; pattern: Record<string, any> }) => {
   if (descriptor.bus !== undefined) return descriptor.bus;
   const sources: unknown = descriptor.pattern.source;
   return Array.isArray(sources) &&
