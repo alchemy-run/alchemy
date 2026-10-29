@@ -24,7 +24,7 @@ export default class NetworkManagementGeneratedHost extends GCP.Function<Network
       fetch: serveProbes({
         GetConnectivityTest: probeOutcome(Retry.none(p0({} as never))),
         "GetVpcFlowLogsConfig@VpcFlowLogsConfig": probeOutcome(Retry.none(p1({} as never))),
-        ListVpcFlowLogsConfigs: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
+        ListVpcFlowLogsConfigs: probeOutcome(Retry.none(p2({ location: "global" } as never))),
         RerunConnectivityTest: probeOutcome(Retry.none(p3({} as never))),
       }),
     };

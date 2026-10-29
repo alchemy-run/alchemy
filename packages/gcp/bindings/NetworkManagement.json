@@ -23,6 +23,9 @@
     "untestable": {
       "NetworkMonitoringProvider": "Monitoring providers (AppNeta) need the provider's Terms of Service accepted for the project; otherwise the create operation fails with \"Terms of Service (GCP_TEST_NETWORKMANAGEMENT_APPNETA)",
       "OrganizationsVpcFlowLogsConfig": "Organization flow-log configs need Network Management admin on the org; the (GOOGLE_ORGANIZATION_ID)"
+    },
+    "locations": {
+      "ListVpcFlowLogsConfigs": "global"
     }
   }
 }
