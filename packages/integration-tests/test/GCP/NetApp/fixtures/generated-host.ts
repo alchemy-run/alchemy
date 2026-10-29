@@ -40,14 +40,13 @@ export default class NetAppGeneratedHost extends GCP.Function<NetAppGeneratedHos
     const p14 = yield* GCP.NetApp.ListBackupVaults();
     const p15 = yield* GCP.NetApp.ListHostGroups();
     const p16 = yield* GCP.NetApp.ListKmsConfigs();
-    const p17 = yield* GCP.NetApp.ListStoragePoolBackupConfigs(ProbeStoragePool);
-    const p18 = yield* GCP.NetApp.ListStoragePools();
-    const p19 = yield* GCP.NetApp.ListVolumes();
-    const p20 = yield* GCP.NetApp.RestoreStoragePoolVolume(ProbeStoragePool);
-    const p21 = yield* GCP.NetApp.SwitchStoragePool(ProbeStoragePool);
-    const p22 = yield* GCP.NetApp.UpdateStoragePoolBackupConfig(ProbeStoragePool);
-    const p23 = yield* GCP.NetApp.ValidateStoragePoolDirectoryService(ProbeStoragePool);
-    const p24 = yield* GCP.NetApp.VerifyKmsConfig(ProbeKmsConfig);
+    const p17 = yield* GCP.NetApp.ListStoragePools();
+    const p18 = yield* GCP.NetApp.ListVolumes();
+    const p19 = yield* GCP.NetApp.RestoreStoragePoolVolume(ProbeStoragePool);
+    const p20 = yield* GCP.NetApp.SwitchStoragePool(ProbeStoragePool);
+    const p21 = yield* GCP.NetApp.UpdateStoragePoolBackupConfig(ProbeStoragePool);
+    const p22 = yield* GCP.NetApp.ValidateStoragePoolDirectoryService(ProbeStoragePool);
+    const p23 = yield* GCP.NetApp.VerifyKmsConfig(ProbeKmsConfig);
     return {
       fetch: serveProbes({
         EncryptKmsConfig: probeOutcome(Retry.none(p0({} as never))),
@@ -67,16 +66,15 @@ export default class NetAppGeneratedHost extends GCP.Function<NetAppGeneratedHos
         ListBackupVaults: probeOutcome(Retry.none(p14({ location: "us-central1" } as never))),
         ListHostGroups: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
         ListKmsConfigs: probeOutcome(Retry.none(p16({ location: "us-central1" } as never))),
-        ListStoragePoolBackupConfigs: probeOutcome(Retry.none(p17({} as never))),
-        ListStoragePools: probeOutcome(Retry.none(p18({ location: "us-central1" } as never))),
-        ListVolumes: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
+        ListStoragePools: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
+        ListVolumes: probeOutcome(Retry.none(p18({ location: "us-central1" } as never))),
         RestoreStoragePoolVolume: probeOutcome(
-          Retry.none(p20({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+          Retry.none(p19({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        SwitchStoragePool: probeOutcome(Retry.none(p21({} as never))),
-        UpdateStoragePoolBackupConfig: probeOutcome(Retry.none(p22({} as never))),
-        ValidateStoragePoolDirectoryService: probeOutcome(Retry.none(p23({} as never))),
-        VerifyKmsConfig: probeOutcome(Retry.none(p24({} as never))),
+        SwitchStoragePool: probeOutcome(Retry.none(p20({} as never))),
+        UpdateStoragePoolBackupConfig: probeOutcome(Retry.none(p21({} as never))),
+        ValidateStoragePoolDirectoryService: probeOutcome(Retry.none(p22({} as never))),
+        VerifyKmsConfig: probeOutcome(Retry.none(p23({} as never))),
       }),
     };
   }).pipe(
@@ -100,7 +98,6 @@ export default class NetAppGeneratedHost extends GCP.Function<NetAppGeneratedHos
           GCP.NetApp.ListBackupVaultsHttp,
           GCP.NetApp.ListHostGroupsHttp,
           GCP.NetApp.ListKmsConfigsHttp,
-          GCP.NetApp.ListStoragePoolBackupConfigsHttp,
           GCP.NetApp.ListStoragePoolsHttp,
           GCP.NetApp.ListVolumesHttp,
           GCP.NetApp.RestoreStoragePoolVolumeHttp,

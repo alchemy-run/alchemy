@@ -250,13 +250,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "ListStoragePoolBackupConfigs (netapp.projects.locations.storagePools.backupConfigs.list)",
-        () => probe("ListStoragePoolBackupConfigs", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'ListStoragePoolBackupConfigs (netapp.projects.locations.storagePools.backupConfigs.list): backup configs exist only on ONTAP-mode storage pools ("ListBackupConfigs is only supported for ONTAP mode storage pools"); the probe pool is a standard pool',
+        () => Effect.void,
       );
       test.provider(
         "RestoreStoragePoolVolume (netapp.projects.locations.storagePools.restoreVolume)",
