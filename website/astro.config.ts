@@ -1625,6 +1625,7 @@ export default defineConfig({
               label: "Hosting",
               items: [
                 { label: "Cloudflare Durable Objects", link: "/domain/cloudflare" },
+                { label: "History at scale", link: "/domain/backfill" },
                 { label: "In memory", link: "/domain/in-memory" },
                 { label: "Observability", link: "/domain/observability" },
               ],

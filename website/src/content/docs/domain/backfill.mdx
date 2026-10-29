@@ -1,0 +1,56 @@
+---
+title: History at scale
+description: How a deploy backfills new views and projections on Cloudflare, how long it takes, and what it costs as your history grows.
+---
+
+When a deploy adds a view or a projection, or bumps a version, the new consumer [receives the history](/domain/model#consumers-added-later-receive-the-history) recorded before it. On Cloudflare the deploy does that work and waits for it. This page explains how long that takes and what it costs, measured on Cloudflare.
+
+## The deploy waits for the history
+
+Alongside your Worker, the Domain declares a backfill run for every consumer the model has. A deploy that adds or rebuilds one starts the run and waits until every new consumer has its history:
+
+```sh
+[DomainBackfillRun] creating
+[DomainBackfillRun] created — Backfilling view:Deposits (11s) ... (15.0s)
+```
+
+When the deploy finishes, `history` is already `complete`, so nothing reads a half-built view. A deploy that changes no consumer waits for nothing.
+
+The deploy waits up to 30 minutes. Past that it fails, but the backfill keeps running on Cloudflare, and the next deploy waits on the same run instead of starting over. `alchemy dev` has nothing to wait for: the local Domain backfills itself on its first call.
+
+## Width doesn't make the work slower
+
+The history is spread across your instances, and so is the work. Each instance indexes its own events once, and each key of the new consumer pulls from the instances that feed it. Thousands of keys pull at the same time, so indexing and applying the history of a thousand accounts takes about as long as for ten.
+
+What coordinates them is a directory: a tree of Durable Objects that every instance lists itself in on its first commit. Each node has up to 16 children, so the tree's depth grows with the log of your instance count, and no single object sees more than a bounded share of the work. A backfill crosses that tree a few times, discovery, then ready, then complete, and each crossing takes a few hops.
+
+On Cloudflare, 1,000 accounts with 10 events each (10,000 events) backfilled in 15 to 47 seconds. With 10,000 accounts (100,000 events), handing every key its history and applying it took 26 seconds.
+
+## What makes it take longer
+
+Two things stretch a backfill.
+
+A long history behind one key takes longer. Each key applies its history in order, a page of 100 events per round trip, so a key with a million events behind it takes a while however wide the rest is. A single key fed by every instance, like a global timeline, is the extreme case: it merges every instance's history alone.
+
+An instance still running the previous deploy's code makes the backfill wait for it. After a deploy, Cloudflare can keep some existing Durable Objects on the old code for several minutes, and an instance on old code can't index its history for a consumer it doesn't know about yet. The backfill retries it after 3 seconds, then 30, 60, and every 120 seconds. The more instances you have, the likelier a few lag: with 10,000 accounts the backfill took 7.5 minutes in total, about 6 of them waiting on a handful of accounts that were still on the old code.
+
+## What it costs
+
+A backfill is billed like any Durable Object work: requests, rows written and read, and duration. Rows written are almost all of it. Every event is indexed once at its instance, buffered and applied at its key, and cleaned up afterwards.
+
+Measured on Cloudflare with 10,000 accounts, a backfill costs about 2.6 requests, 23 rows written, 66 rows read and 0.15 GB-seconds per event: about $25 per million events at [Workers Paid rates](https://developers.cloudflare.com/durable-objects/platform/pricing/). Recording those events in the first place cost about $5 per million, so backfilling a history costs roughly five times what writing it did.
+
+| Events in the history | Cost of one backfill |
+| --- | --- |
+| 10 thousand | $0.25 |
+| 1 million | $25 |
+| 100 million | $2,500 |
+| 10 billion | $250,000 |
+
+These figures count every row before the plan's monthly allowance (50 million rows written), so small backfills usually cost nothing extra. Each consumer you add or rebuild in one deploy is its own backfill: adding two views costs twice as much.
+
+## Keep it cheap
+
+Bump a version only when the view's state is really wrong: a rebuild costs a full backfill, and so does every view and projection that reads it.
+
+Keep hot keys rare. A key fed by every instance is fine for a small Domain, but on a large one it is both the slowest and the most expensive part of a backfill.
