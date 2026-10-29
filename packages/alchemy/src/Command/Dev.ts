@@ -159,12 +159,15 @@ export const DevProviderLocal = () =>
               Stream.tap((text) =>
                 Effect.sync(() => {
                   if (Deferred.isDoneUnsafe(deferred)) return;
-                  // Scan only a bounded tail: rescanning everything printed so
-                  // far on every chunk is quadratic for a chatty server that
-                  // never prints a URL. A URL resolves (or is held as the
-                  // fallback) on the chunk that completes it.
-                  buffer = (buffer + text).slice(-URL_SCAN_WINDOW);
-                  const url = extractUrl(buffer);
+                  // Scan the new chunk plus a bounded tail of earlier output
+                  // (for a URL split across chunks): rescanning everything
+                  // printed so far on every chunk is quadratic for a chatty
+                  // server that never prints a URL. The whole chunk is
+                  // scanned before trimming, so a URL followed by more than
+                  // the window in the same chunk is still found.
+                  const scanned = buffer + text;
+                  buffer = scanned.slice(-URL_SCAN_WINDOW);
+                  const url = extractUrl(scanned);
                   if (!url) return;
                   if (isLocalUrl(url)) {
                     // The dev server's own address — resolve immediately.
