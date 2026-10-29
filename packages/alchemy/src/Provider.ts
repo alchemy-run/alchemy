@@ -593,15 +593,15 @@ export const collection = <
     const context = yield* Effect.context();
 
     const providers = Object.fromEntries(
-      yield* Effect.all(
-        resources.map((resource) =>
+      yield* Effect.forEach(
+        resources,
+        (resource) =>
           "Provider" in resource
             ? resource.Provider.pipe(Effect.map((provider) => [resource.Type, provider] as const))
             : Effect.succeed([
                 (resource as { key: string }).key,
                 context.mapUnsafe.get((resource as { key: string }).key),
               ] as const),
-        ),
         { concurrency: "unbounded" },
       ),
     );

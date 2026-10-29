@@ -100,11 +100,11 @@ export type Lien = Resource<
 export const Lien = Resource<Lien>("GCP.ResourceManager.Lien");
 
 export class LienNotResolved extends Data.TaggedError("GCP.ResourceManager.LienNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class LienStillExists extends Data.TaggedError("GCP.ResourceManager.LienStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const unique = (values: string[]) => [...new Set(values.filter((value) => value.length > 0))];
@@ -141,9 +141,7 @@ const toAttrs = (lien: resourcemanager.Lien, project: string) => ({
 });
 
 const getByName = (name: string) =>
-  resourcemanager
-    .getLiens({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  resourcemanager.getLiens({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnParent = (parent: string) =>
   collectPages(
@@ -220,7 +218,7 @@ const waitUntilExists = (
   findMatching(parent, origin, reason, restrictions, project, projectNumber).pipe(
     Effect.filterOrFail(
       (lien): lien is resourcemanager.Lien => lien !== undefined,
-      () => new LienNotResolved({ name: parent }),
+      () => new LienNotResolved({ resourceName: parent }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.LienNotResolved",
@@ -232,7 +230,7 @@ const waitUntilExists = (
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((lien) =>
-      lien === undefined ? Effect.void : Effect.fail(new LienStillExists({ name })),
+      lien === undefined ? Effect.void : Effect.fail(new LienStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.ResourceManager.LienStillExists",
@@ -344,7 +342,7 @@ export const LienProvider = () =>
               restrictions,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined && created.name !== undefined) {
           current = created;
         } else {
@@ -360,7 +358,7 @@ export const LienProvider = () =>
       }
 
       if (current === undefined || current.name === undefined) {
-        return yield* new LienNotResolved({ name: parent });
+        return yield* new LienNotResolved({ resourceName: parent });
       }
 
       return toAttrs(current, env.project);

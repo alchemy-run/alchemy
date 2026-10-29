@@ -382,14 +382,14 @@ export const syncOwnedAppAddresses = Effect.fn(function* (
   if (!observed.some(isDesiredFlycast)) {
     yield* machines
       .createAppIPAssignment({ app_name: appName, type: "private_v6", network })
-      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
   }
   if (isPublic) {
     for (const type of ["shared_v4", "v6"] as const) {
       if (observed.some((item) => inferType(item) === type)) continue;
       yield* machines
         .createAppIPAssignment({ app_name: appName, type })
-        .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     }
   }
   // Release public addresses of a private Service and Flycast addresses
@@ -415,7 +415,7 @@ export const ensureFlycastAddress = Effect.fn(function* (appName: string, networ
     return;
   yield* machines
     .createAppIPAssignment({ app_name: appName, type: "private_v6", network })
-    .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
 });
 
 export const IpAssignmentProvider = () =>
@@ -495,7 +495,7 @@ export const IpAssignmentProvider = () =>
             org_slug: props.orgSlug,
             service_name: props.serviceName,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined && created.ip !== undefined) {
           current = created;
         } else {

@@ -271,7 +271,7 @@ export {
 } from "@alchemy.run/redis/Errors";
 
 export class RedisNotCreated extends Data.TaggedError("Railway.RedisNotCreated")<{
-  name: string;
+  resourceName: string;
   projectId: string;
 }> {}
 
@@ -388,13 +388,13 @@ const serviceDelete = Query.fn((id: string) => Railway.serviceDelete({ id }));
 const getById = (serviceId: string) =>
   readService(serviceId).pipe(
     Effect.map((service) => (isGoneService(service) ? undefined : service)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const getInstance = (environmentId: string, serviceId: string) =>
   readInstance(environmentId, serviceId).pipe(
     Effect.map((instance) => (isGoneInstance(instance) ? undefined : instance)),
-    Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("RailwayNotFound", () => Effect.undefined),
   );
 
 const listProjectServices = (projectId: string) =>
@@ -685,12 +685,12 @@ export const RedisProvider = () =>
           name,
           source: { image },
           variables: env,
-        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("RailwayValidationError", () => Effect.undefined));
         current = created ?? (yield* findByName(projectId, name));
       }
 
       if (current === undefined || isGoneService(current)) {
-        return yield* new RedisNotCreated({ name, projectId });
+        return yield* new RedisNotCreated({ resourceName: name, projectId });
       }
 
       if (current.name !== name) {

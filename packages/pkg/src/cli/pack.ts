@@ -425,7 +425,7 @@ const PnpmPackOutput = Schema.fromJsonString(Schema.Struct({ filename: Schema.St
  */
 export const rewriteDependencies = (manifestText: string, links: ReadonlyMap<string, string>) =>
   Effect.gen(function* () {
-    const manifest = yield* Schema.decodeUnknownEffect(
+    const manifest = yield* Schema.decodeEffect(
       Schema.fromJsonString(
         Schema.StructWithRest(DependencySections, [Schema.Record(Schema.String, Schema.Unknown)]),
       ),
@@ -507,7 +507,7 @@ export const packPackage = Effect.fn("packPackage")(function* (options: {
   }
   // pnpm may print progress lines before the JSON document.
   const json = stdout.slice(stdout.indexOf("{"));
-  const { filename } = yield* Schema.decodeUnknownEffect(PnpmPackOutput)(json);
+  const { filename } = yield* Schema.decodeEffect(PnpmPackOutput)(json);
 
   const packed = yield* fs.readFile(path.join(tmp, path.basename(filename)));
   const inflated = yield* Effect.sync(() => gunzipSync(packed));

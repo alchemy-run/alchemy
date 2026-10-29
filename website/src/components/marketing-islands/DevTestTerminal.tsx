@@ -268,7 +268,7 @@ export default function DevTestTerminal() {
       }
     };
 
-    loop();
+    void loop();
     return () => {
       cancelRef.current = true;
     };

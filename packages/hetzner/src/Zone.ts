@@ -184,7 +184,7 @@ const toAttrs = (zone: CloudZone): ZoneAttributes => ({
 const getZoneBy = (idOrName: string) =>
   Hetzner.zones.getZone({ id_or_name: idOrName }).pipe(
     Effect.map(({ zone }) => zone),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 class ZoneStillExists extends Data.TaggedError("ZoneStillExists")<{ idOrName: string }> {}
@@ -339,7 +339,7 @@ export const ZoneProvider = () =>
       const deleted = yield* retryLocked(
         Hetzner.zones
           .deleteZone({ id_or_name: idOrName })
-          .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined))),
+          .pipe(Effect.catchTag("NotFound", () => Effect.undefined)),
       );
       if (deleted !== undefined) {
         yield* waitForZoneAction(deleted.action);

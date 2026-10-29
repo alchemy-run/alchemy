@@ -194,7 +194,7 @@ export const ExtensionProvider = () =>
       const readExtension = Effect.fn(function* (extensionId: string) {
         return yield* appconfig
           .getExtension({ ExtensionIdentifier: extensionId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const findByName = Effect.fn(function* (name: string) {

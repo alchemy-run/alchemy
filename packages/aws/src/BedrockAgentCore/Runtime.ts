@@ -175,7 +175,7 @@ export const RuntimeProvider = () =>
       const getRuntimeOrUndefined = Effect.fn(function* (agentRuntimeId: string) {
         return yield* control
           .getAgentRuntime({ agentRuntimeId })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       const findByName = Effect.fn(function* (name: string) {
@@ -282,7 +282,7 @@ export const RuntimeProvider = () =>
               })
               .pipe(
                 retryWhileValidation,
-                Effect.catchTag("ConflictException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ConflictException", () => Effect.undefined),
               );
             runtime =
               created === undefined
@@ -354,7 +354,7 @@ export const RuntimeProvider = () =>
         delete: Effect.fn(function* ({ output }) {
           yield* control.deleteAgentRuntime({ agentRuntimeId: output.agentRuntimeId }).pipe(
             retryWhileConflict,
-            Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+            Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
           );
           yield* control.getAgentRuntime({ agentRuntimeId: output.agentRuntimeId }).pipe(
             Effect.map((r) => r.status as string),

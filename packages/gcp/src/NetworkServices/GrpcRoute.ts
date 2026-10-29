@@ -371,7 +371,7 @@ const toAttrs = (route: networkservices.GrpcRoute, project: string) => {
 const getByName = (name: string) =>
   networkservices
     .getProjectsLocationsGrpcRoutes({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const GrpcRouteProvider = () =>
   Provider.succeed(GrpcRoute, {
@@ -471,7 +471,7 @@ export const GrpcRouteProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -527,7 +527,7 @@ export const GrpcRouteProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

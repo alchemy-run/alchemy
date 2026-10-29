@@ -106,13 +106,13 @@ export const DatasetsDatasetVersion = Resource<DatasetsDatasetVersion>(
 export class DatasetsDatasetVersionNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.DatasetsDatasetVersionNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class DatasetsDatasetVersionStillExists extends Data.TaggedError(
   "GCP.AIPlatform.DatasetsDatasetVersionStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const parentDataset = (name: string) => {
@@ -133,10 +133,10 @@ const parseVersionName = (name: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : aiplatform
         .getDatasetsDatasetVersions({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /**
  * Dataset versions carry ownership only in their display name, which
@@ -232,7 +232,7 @@ const waitUntilExists = (name: string) =>
     Effect.flatMap((version) =>
       version
         ? Effect.succeed(version)
-        : Effect.fail(new DatasetsDatasetVersionNotResolved({ name })),
+        : Effect.fail(new DatasetsDatasetVersionNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.DatasetsDatasetVersionNotResolved",
@@ -246,7 +246,7 @@ const waitUntilGone = (name: string) =>
     Effect.flatMap((version) =>
       version === undefined
         ? Effect.void
-        : Effect.fail(new DatasetsDatasetVersionStillExists({ name })),
+        : Effect.fail(new DatasetsDatasetVersionStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.DatasetsDatasetVersionStillExists",
@@ -311,7 +311,7 @@ export const DatasetsDatasetVersionProvider = () =>
             parent: news.dataset,
             body: { displayName: desiredDisplayName },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           const done = yield* waitForOperation(created);
           const createdName =
@@ -327,7 +327,7 @@ export const DatasetsDatasetVersionProvider = () =>
 
       if (current === undefined) {
         return yield* new DatasetsDatasetVersionNotResolved({
-          name: output?.name ?? `${news.dataset}/datasetVersions/-`,
+          resourceName: output?.name ?? `${news.dataset}/datasetVersions/-`,
         });
       }
 
@@ -348,7 +348,7 @@ export const DatasetsDatasetVersionProvider = () =>
       if (existing === undefined) return;
       const operation = yield* aiplatform
         .deleteDatasetsDatasetVersions({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

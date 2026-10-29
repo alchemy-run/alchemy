@@ -170,7 +170,7 @@ export type Queue = Resource<
 export const Queue = Resource<Queue>("GCP.CloudTasks.Queue");
 
 export class QueueNotResolved extends Data.TaggedError("GCP.CloudTasks.QueueNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -307,7 +307,7 @@ const toAttrs = (queue: cloudtasks.Queue, project: string): Queue["Attributes"] 
 const getByName = (name: string) =>
   cloudtasks
     .getProjectsLocationsQueues({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const sameHttpTarget = (left: cloudtasks.HttpTarget, right: cloudtasks.HttpTarget | undefined) => {
   const normalize = (target: cloudtasks.HttpTarget | undefined) => {
@@ -391,7 +391,7 @@ export const QueueProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new QueueNotResolved({ name });
+        return yield* new QueueNotResolved({ resourceName: name });
       }
 
       const mask: string[] = [];

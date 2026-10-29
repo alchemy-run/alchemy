@@ -182,7 +182,7 @@ export type Report = Resource<
 export const Report = Resource<Report>("GCP.Apigee.Report");
 
 export class ReportNotResolved extends Data.TaggedError("GCP.Apigee.ReportNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (organization: string, reportId: string) =>
@@ -237,7 +237,7 @@ const toAttrs = (report: apigee.GoogleCloudApigeeV1CustomReport, organization: s
 const getByName = (name: string) =>
   apigee
     .getOrganizationsReports({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 const toBody = (
   news: ReportProps,
@@ -333,7 +333,7 @@ export const ReportProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ReportNotResolved({ name });
+        return yield* new ReportNotResolved({ resourceName: name });
       }
 
       const desired = toBody(news, reportId, desiredComments);

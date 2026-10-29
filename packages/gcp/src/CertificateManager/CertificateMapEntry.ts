@@ -184,13 +184,13 @@ export const CertificateMapEntry = Resource<CertificateMapEntry>(
 export class CertificateMapEntryNotResolved extends Data.TaggedError(
   "GCP.CertificateManager.CertificateMapEntryNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class CertificateMapEntryStillExists extends Data.TaggedError(
   "GCP.CertificateManager.CertificateMapEntryStillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 type Match = { kind: "hostname"; hostname: string } | { kind: "matcher"; matcher: string };
@@ -362,17 +362,19 @@ const isUsableEntryName = (name: string) =>
 
 const getByName = (name: string) => {
   if (!isUsableEntryName(name)) {
-    return Effect.succeed(undefined);
+    return Effect.undefined;
   }
   return certificatemanager
     .getProjectsLocationsCertificateMapsCertificateMapEntries({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 };
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((entry) =>
-      entry ? Effect.succeed(entry) : Effect.fail(new CertificateMapEntryNotResolved({ name })),
+      entry
+        ? Effect.succeed(entry)
+        : Effect.fail(new CertificateMapEntryNotResolved({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateMapEntryNotResolved",
@@ -384,7 +386,9 @@ const waitUntilExists = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((entry) =>
-      entry === undefined ? Effect.void : Effect.fail(new CertificateMapEntryStillExists({ name })),
+      entry === undefined
+        ? Effect.void
+        : Effect.fail(new CertificateMapEntryStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.CertificateManager.CertificateMapEntryStillExists",
@@ -599,7 +603,7 @@ export const CertificateMapEntryProvider = () =>
               times: 5,
               schedule: Schedule.spaced("2 seconds"),
             }),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         if (created !== undefined) {
           yield* waitForOperation(created);
@@ -608,7 +612,7 @@ export const CertificateMapEntryProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new CertificateMapEntryNotResolved({ name });
+        return yield* new CertificateMapEntryNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -659,7 +663,7 @@ export const CertificateMapEntryProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

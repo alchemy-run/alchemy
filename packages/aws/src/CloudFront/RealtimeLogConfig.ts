@@ -215,7 +215,7 @@ export const RealtimeLogConfigProvider = () =>
       const observe = Effect.fn(function* (name: string) {
         const response = yield* cloudfront
           .getRealtimeLogConfig({ Name: name })
-          .pipe(Effect.catchTag("NoSuchRealtimeLogConfig", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchRealtimeLogConfig", () => Effect.undefined));
         return response?.RealtimeLogConfig;
       });
 

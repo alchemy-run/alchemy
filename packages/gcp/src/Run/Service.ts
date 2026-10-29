@@ -637,17 +637,17 @@ export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRu
   });
 
 export class ServiceNotResolved extends Data.TaggedError("GCP.Run.ServiceNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class ServiceNotReady extends Data.TaggedError("GCP.Run.ServiceNotReady")<{
-  name: string;
+  resourceName: string;
   state: string;
   message: string;
 }> {}
 
 export class ServiceReconciling extends Data.TaggedError("GCP.Run.ServiceReconciling")<{
-  name: string;
+  resourceName: string;
   state: string;
 }> {}
 
@@ -664,7 +664,7 @@ export class ServiceRpcPublic extends Data.TaggedError("GCP.Run.ServiceRpcPublic
 }
 
 export class ServiceStillExists extends Data.TaggedError("GCP.Run.ServiceStillExists")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const lastSegment = (value: string) => {
@@ -1095,7 +1095,7 @@ const sourceOf = (news: ServiceProps, main: string) => ({
 const getByName = (name: string) =>
   cloudrun
     .getProjectsLocationsServices({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 /** Waits on a Cloud Run long-running operation (revisions roll out in minutes). */
 const waitForOperation = (
@@ -1147,13 +1147,13 @@ const waitUntilReady = (name: string) =>
     Effect.filterOrFail(
       (service): service is cloudrun.GoogleCloudRunV2Service =>
         service !== undefined && service.deleteTime === undefined,
-      () => new ServiceNotResolved({ name }),
+      () => new ServiceNotResolved({ resourceName: name }),
     ),
     Effect.filterOrFail(
       (service) => (service.terminalCondition?.state ?? "") !== "CONDITION_FAILED",
       (service) =>
         new ServiceNotReady({
-          name,
+          resourceName: name,
           state: service.terminalCondition?.state ?? "",
           message: service.terminalCondition?.message ?? "revision failed",
         }),
@@ -1162,7 +1162,7 @@ const waitUntilReady = (name: string) =>
       (service) => !isPendingService(service),
       (service) =>
         new ServiceReconciling({
-          name,
+          resourceName: name,
           state: service.terminalCondition?.state || "reconciling",
         }),
     ),
@@ -1177,7 +1177,9 @@ const waitUntilReady = (name: string) =>
 const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.flatMap((service) =>
-      service === undefined ? Effect.void : Effect.fail(new ServiceStillExists({ name })),
+      service === undefined
+        ? Effect.void
+        : Effect.fail(new ServiceStillExists({ resourceName: name })),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.Run.ServiceStillExists",
@@ -1392,7 +1394,7 @@ export const ServiceProvider = () =>
           })
           .pipe(
             retryActAs,
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.onError(() => identity.cleanup),
           );
         if (created !== undefined) {
@@ -1402,7 +1404,7 @@ export const ServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ServiceNotResolved({ name });
+        return yield* new ServiceNotResolved({ resourceName: name });
       }
 
       const observedLabels = tagRecord(current.labels);
@@ -1483,7 +1485,7 @@ export const ServiceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new ServiceNotResolved({ name });
+        return yield* new ServiceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region, {
@@ -1500,7 +1502,7 @@ export const ServiceProvider = () =>
           times: 8,
           schedule: Schedule.spaced("2 seconds"),
         }),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

@@ -219,7 +219,7 @@ const toAttrs = (proxy: compute.TargetTcpProxy, project: string) => {
 const getByName = (project: string, targetTcpProxy: string) =>
   compute
     .getTargetTcpProxies({ project, targetTcpProxy })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const TargetTcpProxyProvider = () =>
   Provider.succeed(TargetTcpProxy, {
@@ -312,7 +312,7 @@ export const TargetTcpProxyProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitGlobalOperation(env.project, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* getByName(env.project, targetTcpProxyName);
       }
@@ -363,7 +363,7 @@ export const TargetTcpProxyProvider = () =>
           project: env.project,
           targetTcpProxy: output.targetTcpProxyName,
         })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitGlobalOperation(env.project, operation).pipe(
           Effect.catchTag("NotFound", () => Effect.void),

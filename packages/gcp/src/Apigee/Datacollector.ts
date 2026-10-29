@@ -107,7 +107,7 @@ export const Datacollector = Resource<Datacollector>("GCP.Apigee.Datacollector")
 export class DatacollectorNotResolved extends Data.TaggedError(
   "GCP.Apigee.DatacollectorNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const DEFAULT_TYPE = "STRING";
@@ -132,7 +132,7 @@ const toAttrs = (collector: apigee.GoogleCloudApigeeV1DataCollector, organizatio
 const getByName = (name: string) =>
   apigee
     .getOrganizationsDatacollectors({ name })
-    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["NotFound", "ApigeeResourceNotFound"], () => Effect.undefined));
 
 export const DatacollectorProvider = () =>
   Provider.succeed(Datacollector, {
@@ -233,7 +233,7 @@ export const DatacollectorProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DatacollectorNotResolved({ name });
+        return yield* new DatacollectorNotResolved({ resourceName: name });
       }
 
       if ((current.description ?? "") !== desiredDescription) {

@@ -255,13 +255,13 @@ export const TaxonomiesPolicyTagProvider = () =>
               parentPolicyTag,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         current = created ?? (yield* observe(id, undefined, taxonomy));
       }
 
       if (current === undefined) {
         return yield* new DatacatalogNotResolved({
-          name: output?.name ?? `${taxonomy}/policyTags`,
+          resourceName: output?.name ?? `${taxonomy}/policyTags`,
         });
       }
 

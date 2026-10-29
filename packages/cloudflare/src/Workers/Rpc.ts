@@ -35,7 +35,7 @@ export * from "alchemy/Rpc";
  * its methods are called at exec, even though it's *defined* at init).
  */
 export const makeRpcStub = <Shape>(
-  stubSource: unknown | Effect.Effect<unknown, never, never>,
+  stubSource: unknown,
   options?: {
     /**
      * Declared error classes (see {@link RpcErrorClass}): failed method

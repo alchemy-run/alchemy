@@ -107,9 +107,7 @@ export const InstanceRegistrationProvider = () =>
             .getInstance({ ServiceId: serviceId, InstanceId: instanceId })
             .pipe(
               Effect.map((r) => r.Instance),
-              Effect.catchTag(["InstanceNotFound", "ServiceNotFound"], () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag(["InstanceNotFound", "ServiceNotFound"], () => Effect.undefined),
             );
           if (instance === undefined) {
             return undefined;
@@ -137,9 +135,7 @@ export const InstanceRegistrationProvider = () =>
             })
             .pipe(
               Effect.map((r) => r.Instance),
-              Effect.catchTag(["InstanceNotFound", "ServiceNotFound"], () =>
-                Effect.succeed(undefined),
-              ),
+              Effect.catchTag(["InstanceNotFound", "ServiceNotFound"], () => Effect.undefined),
             );
 
           const observedAttributes = observed?.Attributes ?? undefined;

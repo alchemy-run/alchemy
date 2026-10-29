@@ -289,7 +289,7 @@ export const TcpProxyProvider = () =>
             id: service.id,
             name: service.name,
             deletedAt: service.deletedAt,
-          })).pipe(Effect.catchTag("RailwayNotFound", () => Effect.succeed(undefined)));
+          })).pipe(Effect.catchTag("RailwayNotFound", () => Effect.undefined));
           const services = (live ?? []).filter(
             (service) => service.deletedAt == null && matchesAlchemyPhysicalName(service.name),
           );
@@ -352,7 +352,7 @@ export const TcpProxyProvider = () =>
 
       if (current === undefined) {
         const created = yield* tcpProxyCreate({ applicationPort, environmentId, serviceId }).pipe(
-          Effect.catchTag("RailwayValidationError", () => Effect.succeed(undefined)),
+          Effect.catchTag("RailwayValidationError", () => Effect.undefined),
         );
         current =
           created !== undefined && !isGone(created)

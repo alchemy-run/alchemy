@@ -57,7 +57,7 @@ export const deepMerge = <T>(base: T, override: unknown): T => {
  */
 export const imagePlatformOf = (
   architecture: "amd64" | "arm64" | undefined,
-  connection?: Connection | undefined,
+  connection?: Connection,
 ): string =>
   (architecture ?? connection?.architecture) === "arm64" ? "linux/arm64" : "linux/amd64";
 
@@ -320,6 +320,7 @@ export const workloadImageHash = Effect.fn(function* (options: {
 });
 
 /** The identity-adapter state persisted on workload attributes. */
+// oxlint-disable-next-line typescript/no-redundant-type-constituents -- registry type is `never` until cloud packages augment it
 export type PersistedIdentityState = IdentityState | undefined;
 
 /**

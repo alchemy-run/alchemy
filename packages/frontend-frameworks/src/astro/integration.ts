@@ -168,7 +168,7 @@ type SessionConfigLike =
   | {
       // Astro types `entrypoint` as optional `any` (it comes from a
       // `z.instanceof(URL)` schema), though its config validation requires it.
-      driver?: string | { entrypoint?: unknown } | undefined;
+      driver?: string | { entrypoint?: string | URL } | undefined;
       cookie?: unknown;
       ttl?: unknown;
     }

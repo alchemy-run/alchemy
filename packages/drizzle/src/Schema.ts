@@ -38,8 +38,8 @@ const Snapshot = S.StructWithRest(
     version: S.optional(S.String),
     dialect: S.optional(S.String),
     id: S.optional(S.String),
-    prevIds: S.optional(S.Array(S.String)),
-    ddl: S.optional(S.Array(DdlEntry)),
+    prevIds: S.String.pipe(S.Array, S.optional),
+    ddl: DdlEntry.pipe(S.Array, S.optional),
   }),
   [S.Record(S.String, S.Unknown)],
 );
@@ -103,7 +103,7 @@ class DrizzleKitLoadFailed extends Data.TaggedError("DrizzleKitLoadFailed")<{
   readonly cause: unknown;
 }> {
   override get message() {
-    return `Failed to load ${this.module} (is drizzle-kit installed?): ${this.cause}`;
+    return `Failed to load ${this.module} (is drizzle-kit installed?): ${this.cause instanceof Error ? this.cause.message : String(this.cause)}`;
   }
 }
 
@@ -121,7 +121,7 @@ class SchemaImportFailed extends Data.TaggedError("SchemaImportFailed")<{
   readonly cause: unknown;
 }> {
   override get message() {
-    return `Failed to import schema at ${this.schema}: ${this.cause}`;
+    return `Failed to import schema at ${this.schema}: ${this.cause instanceof Error ? this.cause.message : String(this.cause)}`;
   }
 }
 
@@ -266,6 +266,7 @@ const exitTrap = Semaphore.makeUnsafe(1);
 const callDrizzleKit = <A>(command: string, run: () => Promise<A>) =>
   Effect.acquireUseRelease(
     Effect.sync(() => {
+      // oxlint-disable-next-line typescript/unbound-method -- saved only to restore `process.exit` verbatim, never called unbound
       const trap = { exit: process.exit, exited: false };
       process.exit = () => {
         trap.exited = true;
@@ -293,7 +294,7 @@ const callDrizzleKit = <A>(command: string, run: () => Promise<A>) =>
       Effect.sync(() => {
         process.exit = trap.exit;
       }),
-  ).pipe(exitTrap.withPermit);
+  ).pipe((effect) => exitTrap.withPermit(effect));
 
 // A `drizzle-kit/cli` command as an Effect, failing on a thrown or reported error.
 const command = <K extends keyof Commands>(name: K) =>

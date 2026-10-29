@@ -225,7 +225,7 @@ const toAttrs = (
 const getByName = (project: string, crossSiteNetwork: string, wireGroup: string) =>
   compute
     .getWireGroups({ project, crossSiteNetwork, wireGroup })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitGroupGone = (project: string, crossSiteNetwork: string, wireGroupName: string) =>
   getByName(project, crossSiteNetwork, wireGroupName).pipe(
@@ -361,7 +361,7 @@ export const WireGroupProvider = () =>
             crossSiteNetwork,
             body: desired,
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (inserted !== undefined) {
           yield* waitGlobalOperation(env.project, inserted, {
             ignore: ["RESOURCE_ALREADY_EXISTS"],
@@ -429,7 +429,7 @@ export const WireGroupProvider = () =>
           wireGroup: output.wireGroupName,
         })
         .pipe(
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
           Effect.retry({
             while: (error) => error._tag === "Conflict",
             times: 8,

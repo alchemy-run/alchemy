@@ -4,6 +4,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
@@ -440,7 +441,7 @@ type ObservedCertificate = customCertificates.GetCustomCertificateResponse;
 const getCertificate = (zoneId: string, customCertificateId: string) =>
   customCertificates.getCustomCertificate({ zoneId, customCertificateId }).pipe(
     Effect.map((cert): ObservedCertificate | undefined => cert),
-    Effect.catchTag("CustomCertificateNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("CustomCertificateNotFound", () => Effect.undefined),
   );
 
 /**
@@ -466,13 +467,22 @@ const findByExpiry = (zoneId: string, expiresAtMs: number) =>
  * wrapped in `Effect.try` so a malformed PEM surfaces as a typed failure
  * instead of a thrown exception.
  */
+class CertificateParseError extends Data.TaggedError("CertificateParseError")<{
+  message: string;
+  cause?: unknown;
+}> {}
+
 const parseCertificate = (pem: string) =>
   Effect.try({
     try: () => {
       const x509 = new crypto.X509Certificate(pem);
       return { expiresAtMs: Date.parse(x509.validTo) };
     },
-    catch: (cause) => new Error(`failed to parse certificate PEM: ${cause}`, { cause }),
+    catch: (cause) =>
+      new CertificateParseError({
+        message: `failed to parse certificate PEM: ${cause instanceof Error ? cause.message : String(cause)}`,
+        cause,
+      }),
   });
 
 /**

@@ -269,7 +269,7 @@ const getById = (bucketName: string, notificationId: string) =>
       bucket: bucketName,
       notification: notificationId,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnBucket = (bucketName: string) =>
   storage.listNotifications({ bucket: bucketName }).pipe(
@@ -317,7 +317,7 @@ const ensureGcsServiceIdentity = (project: string, email: string) =>
       .generateServiceIdentityServices({
         parent: `projects/${projectNumber}/services/storage.googleapis.com`,
       })
-      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (operation === undefined) return;
     yield* waitForOperation(operation, (name) => serviceusage.getOperations({ name }), {
       budget: "2 minutes",
@@ -442,7 +442,7 @@ export const NotificationProvider = () =>
         return pages.flat();
       }),
 
-    reconcile: Effect.fn(function* ({ id, news, output }) {
+    reconcile: Effect.fn(function* ({ news, output }) {
       const env = yield* GcpEnvironment.current;
       const bucketName = news.bucketName;
       const payloadFormat = news.payloadFormat ?? DEFAULT_PAYLOAD_FORMAT;

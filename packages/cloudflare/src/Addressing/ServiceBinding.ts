@@ -217,7 +217,7 @@ type ObservedBinding = addressing.GetPrefixServiceBindingResponse;
 const getBinding = (accountId: string, prefixId: string, bindingId: string) =>
   addressing
     .getPrefixServiceBinding({ accountId, prefixId, bindingId })
-    .pipe(Effect.catchTag(["BindingNotFound", "PrefixNotFound"], () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag(["BindingNotFound", "PrefixNotFound"], () => Effect.undefined));
 
 /**
  * Find a service binding by exact CIDR — unique within a parent prefix.
@@ -227,7 +227,7 @@ const findByCidr = (accountId: string, prefixId: string, cidr: string) =>
   addressing.listPrefixServiceBindings.items({ accountId, prefixId }).pipe(
     Stream.runCollect,
     Effect.map((chunk) => Array.from(chunk).find((b) => b.cidr === cidr)),
-    Effect.catchTag("PrefixNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("PrefixNotFound", () => Effect.undefined),
   );
 
 const toAttributes = (

@@ -4,9 +4,15 @@ import { deepEqual, isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import { organization } from "./Credentials.ts";
 import type { Providers } from "./Providers.ts";
+
+export class GroupUnexpectedResponse extends Data.TaggedError("GroupUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * A Turso location code, e.g. `"aws-us-east-1"`. List the locations
@@ -125,7 +131,7 @@ export const GroupProvider = () =>
       const observe = (org: string, name: string) =>
         turso.getGroup({ organizationSlug: org, groupName: name }).pipe(
           Effect.map((res) => res.group),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
 
       const toAttrs = (
@@ -195,7 +201,9 @@ export const GroupProvider = () =>
                 Effect.catchTag("Conflict", () => observe(org, name)),
               );
             if (!group) {
-              return yield* Effect.fail(new Error(`Turso group ${name} vanished after create`));
+              return yield* new GroupUnexpectedResponse({
+                message: `Turso group ${name} vanished after create`,
+              });
             }
           }
 

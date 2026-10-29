@@ -84,7 +84,7 @@ export const ApplicationProvider = () =>
       const observe = Effect.fn(function* (specifier: string) {
         return yield* appregistry
           .getApplication({ application: specifier })
-          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
       });
 
       return Application.Provider.of({

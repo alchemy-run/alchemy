@@ -342,7 +342,7 @@ const hashDirectory = Effect.fnUntraced(function* (
             ]),
             (file) => (file ? NodePath.relative(cwd, file) : undefined),
           )
-        : Effect.succeed(undefined),
+        : Effect.undefined,
     ],
     { concurrency: "unbounded" },
   );
@@ -421,7 +421,7 @@ const maybeReadString = (fs: FileSystem.FileSystem, file: string) =>
     .readFileString(file)
     .pipe(
       Effect.catchTag("PlatformError", (error) =>
-        error.reason._tag === "NotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+        error.reason._tag === "NotFound" ? Effect.undefined : Effect.fail(error),
       ),
     );
 

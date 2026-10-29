@@ -126,7 +126,7 @@ export const RagCorpora = Resource<RagCorpora>("GCP.AIPlatform.RagCorpora");
 export class RagCorporaNotResolved extends Data.TaggedError(
   "GCP.AIPlatform.RagCorporaNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (corpus: aiplatform.GoogleCloudAiplatformV1RagCorpus, project: string) => {
@@ -149,13 +149,13 @@ const toAttrs = (corpus: aiplatform.GoogleCloudAiplatformV1RagCorpus, project: s
 const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsRagCorpora({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitUntilExists = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (corpus): corpus is aiplatform.GoogleCloudAiplatformV1RagCorpus => corpus !== undefined,
-      () => new AiPlatformNotResolved({ name }),
+      () => new AiPlatformNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AIPlatform.NotResolved",
@@ -168,7 +168,7 @@ const waitUntilGone = (name: string) =>
   getByName(name).pipe(
     Effect.filterOrFail(
       (corpus) => corpus === undefined,
-      () => new AiPlatformStillExists({ name }),
+      () => new AiPlatformStillExists({ resourceName: name }),
     ),
     Effect.asVoid,
     Effect.retry({
@@ -178,7 +178,7 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-const findOwned = (parent: string, id: string, project: string) =>
+const findOwned = (parent: string, id: string) =>
   Effect.gen(function* () {
     const expected = yield* createInternalLabels(id);
     const pages = yield* collectPages(
@@ -223,9 +223,7 @@ export const RagCorporaProvider = () =>
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const parent = locationParent(env.project, location);
       const existing =
-        output?.name !== undefined
-          ? yield* getByName(output.name)
-          : yield* findOwned(parent, id, env.project);
+        output?.name !== undefined ? yield* getByName(output.name) : yield* findOwned(parent, id);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       const parsed = parseDescription(existing.description);
@@ -259,9 +257,7 @@ export const RagCorporaProvider = () =>
       const displayName = news.displayName ?? "rag-corpus";
 
       let current =
-        output?.name !== undefined
-          ? yield* getByName(output.name)
-          : yield* findOwned(parent, id, env.project);
+        output?.name !== undefined ? yield* getByName(output.name) : yield* findOwned(parent, id);
 
       if (current === undefined) {
         const created = yield* aiplatform.createProjectsLocationsRagCorpora({
@@ -279,12 +275,12 @@ export const RagCorporaProvider = () =>
         current =
           createdName !== undefined
             ? yield* waitUntilExists(createdName)
-            : yield* findOwned(parent, id, env.project);
+            : yield* findOwned(parent, id);
       }
 
       if (current === undefined || current.name === undefined) {
         return yield* new RagCorporaNotResolved({
-          name: output?.name ?? parent,
+          resourceName: output?.name ?? parent,
         });
       }
 
@@ -307,7 +303,7 @@ export const RagCorporaProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RagCorporaNotResolved({ name: observedName });
+        return yield* new RagCorporaNotResolved({ resourceName: observedName });
       }
       return toAttrs(current, env.project);
     }),
@@ -315,7 +311,7 @@ export const RagCorporaProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* aiplatform
         .deleteProjectsLocationsRagCorpora({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });
       }

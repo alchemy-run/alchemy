@@ -19,13 +19,13 @@ export type ApiOperation = assuredworkloads.GoogleLongrunningOperation;
 export class AssuredworkloadsNotResolved extends Data.TaggedError(
   "GCP.AssuredWorkloads.NotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class AssuredworkloadsStillExists extends Data.TaggedError(
   "GCP.AssuredWorkloads.StillExists",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export class OrganizationNotResolved extends Data.TaggedError(
@@ -201,7 +201,7 @@ export const waitUntilExists = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value): value is NonNullable<A> => value !== undefined,
-      () => new AssuredworkloadsNotResolved({ name }),
+      () => new AssuredworkloadsNotResolved({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AssuredWorkloads.NotResolved",
@@ -217,7 +217,7 @@ export const waitUntilGone = <A, E extends { readonly _tag: string }, R>(
   get.pipe(
     Effect.filterOrFail(
       (value) => value === undefined,
-      () => new AssuredworkloadsStillExists({ name }),
+      () => new AssuredworkloadsStillExists({ resourceName: name }),
     ),
     Effect.retry({
       while: (error) => error._tag === "GCP.AssuredWorkloads.StillExists",
@@ -231,14 +231,14 @@ const ancestryParent = (name: string) =>
   name.startsWith("projects/")
     ? resourcemanager.getProjects({ name }).pipe(
         Effect.map((resource) => resource.parent),
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       )
     : name.startsWith("folders/")
       ? resourcemanager.getFolders({ name }).pipe(
           Effect.map((folder) => folder.parent),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         )
-      : Effect.succeed(undefined);
+      : Effect.undefined;
 
 export const tryResolveOrganization = () =>
   Effect.gen(function* () {

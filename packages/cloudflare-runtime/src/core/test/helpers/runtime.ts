@@ -54,7 +54,9 @@ export const makeLocalRuntimeLayer = (options: { fileSystemSupportsWatcher?: boo
     Layer.provideMerge(RuntimeServices.layerProxy()),
     Layer.provide(Globals.GlobalsLive),
     Layer.provideMerge(RuntimeServices.layerLoopback()),
-    Layer.provide(
+    // Merged (not just provided) so suites can locate the storage directory,
+    // e.g. to write files the runtime serves.
+    Layer.provideMerge(
       Layer.effect(
         Storage.Storage,
         Effect.suspend(() => makeTempDirectory()).pipe(Effect.map(Storage.make)),

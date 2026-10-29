@@ -87,7 +87,7 @@ const createRoleName = (id: string, name: string | undefined) =>
 const observeRole = Effect.fn(function* (scope: ResolvedBranchScope, roleName: string) {
   return yield* Neon.getProjectBranchRole({ ...requestScope(scope), role_name: roleName }).pipe(
     Effect.map(({ role }) => role),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 });
 
@@ -99,7 +99,7 @@ const revealPassword = Effect.fn(function* (scope: ResolvedBranchScope, role: Ne
   const request = { ...requestScope(scope), role_name: role.name };
   const stored = yield* Neon.getProjectBranchRolePassword(request).pipe(
     Effect.map(({ password }) => redact(password)),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
   if (stored) return stored;
   const reset = yield* Neon.resetProjectBranchRolePassword(request);
@@ -167,7 +167,7 @@ export const RoleProvider = () =>
         const created = yield* Neon.createProjectBranchRole({
           ...requestScope(scope),
           role: { name: roleName, ...(news.noLogin ? { no_login: true } : {}) },
-        }).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        }).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created) {
           yield* waitForOperations(created.operations);
           return toAttributes(
@@ -194,7 +194,7 @@ export const RoleProvider = () =>
       const deleted = yield* Neon.deleteProjectBranchRole({
         ...requestScope(output),
         role_name: output.roleName,
-      }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+      }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (deleted) yield* waitForOperations(deleted.operations);
     }),
   });

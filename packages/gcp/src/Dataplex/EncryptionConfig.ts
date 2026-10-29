@@ -139,9 +139,9 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : retryQuota(dataplex.getOrganizationsLocationsEncryptionConfigs({ name })).pipe(
-        Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("NotFound", () => Effect.undefined),
       );
 
 export const EncryptionConfigProvider = () =>
@@ -201,7 +201,7 @@ export const EncryptionConfigProvider = () =>
               enableMetastoreEncryption: news.enableMetastoreEncryption === true ? true : undefined,
             },
           }),
-        ).pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+        ).pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           yield* waitForOperation(created);
         }
@@ -209,7 +209,7 @@ export const EncryptionConfigProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DataplexNotResolved({ name });
+        return yield* new DataplexNotResolved({ resourceName: name });
       }
 
       const keyChanged = (current.key ?? "") !== (news.key ?? "");
@@ -251,7 +251,7 @@ export const EncryptionConfigProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitForOperation(operation, { notFoundOk: true });

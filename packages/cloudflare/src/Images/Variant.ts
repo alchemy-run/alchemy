@@ -322,7 +322,7 @@ type ObservedVariant = NonNullable<images.GetV1VariantResponse["variant"]>;
 const getVariant = (accountId: string, variantId: string) =>
   images.getV1Variant({ accountId, variantId }).pipe(
     Effect.map((response) => response.variant ?? undefined),
-    Effect.catchTag("VariantNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("VariantNotFound", () => Effect.undefined),
   );
 
 /**
