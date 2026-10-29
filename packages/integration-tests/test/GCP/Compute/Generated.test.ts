@@ -1407,9 +1407,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("PacketMirroring", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetPacketMirroring (compute.packetMirrorings.get): PacketMirroring: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetPacketMirroring (compute.packetMirrorings.get)",
+        () => probe("GetPacketMirroring", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -4117,9 +4121,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ServiceAttachment", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetServiceAttachment (compute.serviceAttachments.get): ServiceAttachment: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetServiceAttachment (compute.serviceAttachments.get)",
+        () => probe("GetServiceAttachment", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

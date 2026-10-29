@@ -414,3 +414,82 @@ export const GlobalForwardingRule = Effect.gen(function* () {
     loadBalancingScheme: "EXTERNAL",
   });
 });
+
+/** An internal TCP load balancer: the producer behind a service attachment, and a mirroring collector. */
+const IlbCheck = GCP.Compute.RegionHealthCheck("ProbeIlbCheck", {
+  region,
+  type: "TCP",
+  tcpHealthCheck: { port: 80 },
+});
+const IlbBackend = Effect.gen(function* () {
+  const check = yield* IlbCheck;
+  return yield* GCP.Compute.RegionBackendService("ProbeIlbBackend", {
+    region,
+    protocol: "TCP",
+    loadBalancingScheme: "INTERNAL",
+    network: DEFAULT_NETWORK,
+    healthChecks: [check.selfLink.as<string>()],
+  });
+});
+const ProducerSubnet = GCP.Compute.Subnetwork("ProbeProducerSubnet", {
+  network: DEFAULT_NETWORK,
+  region,
+  ipCidrRange: "172.20.92.0/24",
+});
+const NatSubnet = GCP.Compute.Subnetwork("ProbeNatSubnet", {
+  network: DEFAULT_NETWORK,
+  region,
+  ipCidrRange: "172.20.93.0/24",
+  purpose: "PRIVATE_SERVICE_CONNECT",
+});
+const ProducerRule = Effect.gen(function* () {
+  const backend = yield* IlbBackend;
+  const subnet = yield* ProducerSubnet;
+  return yield* GCP.Compute.ForwardingRule("ProbeProducerRule", {
+    region,
+    loadBalancingScheme: "INTERNAL",
+    backendService: backend.selfLink.as<string>(),
+    network: DEFAULT_NETWORK,
+    subnetwork: subnet.selfLink.as<string>(),
+    ipProtocol: "TCP",
+    allPorts: true,
+  });
+});
+export const ServiceAttachment = Effect.gen(function* () {
+  const rule = yield* ProducerRule;
+  const nat = yield* NatSubnet;
+  return yield* GCP.Compute.ServiceAttachment("ProbeServiceAttachment", {
+    region,
+    targetService: rule.selfLink.as<string>(),
+    natSubnets: [nat.selfLink.as<string>()],
+    connectionPreference: "ACCEPT_AUTOMATIC",
+    enableProxyProtocol: false,
+  });
+});
+const CollectorRule = Effect.gen(function* () {
+  const backend = yield* GCP.Compute.RegionBackendService("ProbeCollectorBackend", {
+    region,
+    protocol: "TCP",
+    loadBalancingScheme: "INTERNAL",
+    network: DEFAULT_NETWORK,
+    healthChecks: [(yield* IlbCheck).selfLink.as<string>()],
+  });
+  return yield* GCP.Compute.ForwardingRule("ProbeCollectorRule", {
+    region,
+    loadBalancingScheme: "INTERNAL",
+    backendService: backend.selfLink.as<string>(),
+    network: DEFAULT_NETWORK,
+    ipProtocol: "TCP",
+    allPorts: true,
+    isMirroringCollector: true,
+  });
+});
+export const PacketMirroring = Effect.gen(function* () {
+  const collector = yield* CollectorRule;
+  return yield* GCP.Compute.PacketMirroring("ProbeMirroring", {
+    region,
+    network: DEFAULT_NETWORK,
+    collectorIlb: collector.selfLink.as<string>(),
+    mirroredResources: { tags: ["alchemy-probe-pm"] },
+  });
+});

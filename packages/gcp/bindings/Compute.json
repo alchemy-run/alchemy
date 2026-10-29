@@ -610,7 +610,9 @@
       "TargetGrpcProxy": "TargetGrpcProxy",
       "TargetPool": "TargetPool",
       "ForwardingRule": "ForwardingRule",
-      "GlobalForwardingRule": "GlobalForwardingRule"
+      "GlobalForwardingRule": "GlobalForwardingRule",
+      "ServiceAttachment": "ServiceAttachment",
+      "PacketMirroring": "PacketMirroring"
     },
     "untestable": {
       "FutureReservation": "the testing project is not eligible (412 FutureReservationsNotEligible)",
