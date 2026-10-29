@@ -1,9 +1,11 @@
 import * as NodeHttp from "node:http";
 import type * as NodeStream from "node:stream";
+import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as FiberSet from "effect/FiberSet";
 import * as FileSystem from "effect/FileSystem";
@@ -22,6 +24,7 @@ import {
   mergeSidecarLoopbackHostConfig,
 } from "./DockerLoopback.ts";
 import { makeDockerLoopbackForwarders } from "./internal/docker-loopback-forwarders.ts";
+import { makeDockerUpgradeRouter } from "./internal/docker-upgrade-router.ts";
 import { listenOnLoopback } from "./internal/listen-on-loopback.ts";
 import { ConfigError, SystemError } from "./RuntimeError.shared.ts";
 import type * as WorkerdConfig from "./workerd/Config.ts";
@@ -35,6 +38,8 @@ export class Docker extends Context.Service<
       WorkerdConfig.Worker_ContainerEngine,
       SystemError
     >;
+    /** Docker privileges for every local container (see {@link FUSE_CONTAINER_PRIVILEGES}). */
+    readonly getContainerPrivileges: Effect.Effect<WorkerdConfig.Worker_DurableObjectNamespace_ContainerOptions_ContainerPrivileges>;
     readonly generateImageTag: (className: string, suffix?: string) => string;
     readonly registerImageEnv: (
       className: string,
@@ -59,6 +64,8 @@ export declare namespace ContainerImage {
     readonly dockerfile: string;
     readonly context?: string;
     readonly buildArgs?: Record<string, string>;
+    /** BuildKit secrets by id, handed to `docker build` through its environment. */
+    readonly buildSecrets?: Record<string, string>;
   }
   export interface Pull extends Base {
     readonly imageUri: string;
@@ -81,6 +88,17 @@ const ContainerEgressInterceptorImage = Config.String("CONTAINER_EGRESS_INTERCEP
     ),
   ),
 );
+
+/**
+ * The Docker privileges FUSE filesystems (s3fs, tigrisfs, …) need to mount
+ * inside a container. Deployed Containers can always mount FUSE, so every
+ * local container gets them too.
+ */
+export const FUSE_CONTAINER_PRIVILEGES = {
+  capabilities: ["SYS_ADMIN"],
+  devices: [{ pathOnHost: "/dev/fuse", pathInContainer: "/dev/fuse", cgroupPermissions: "rwm" }],
+  securityOpt: ["apparmor:unconfined"],
+} satisfies WorkerdConfig.Worker_DurableObjectNamespace_ContainerOptions_ContainerPrivileges;
 
 /**
  * Docker's containerd image store rejects combined `repo:tag@digest` pull
@@ -183,6 +201,10 @@ export const DockerLive = Layer.effect(
     const bin = yield* DockerBin;
     const containerEgressInterceptorImage = yield* ContainerEgressInterceptorImage;
     const registeredImages = new Map<string, { tag: string; env: Record<string, string> }>();
+    // Every container created through the proxy carries this runtime's label.
+    // Native containers can start from images nobody prepared (snapshots,
+    // managed `cloudflare/*` images), so per-image cleanup cannot find them.
+    const runtimeLabels = { [RUNTIME_LABEL]: crypto.randomUUID() };
 
     const registeredLoopbackPorts = () => {
       const ports = new Set<number>();
@@ -199,7 +221,7 @@ export const DockerLive = Layer.effect(
         stderr: "pipe",
         detached: false,
       }).pipe(
-        spawner.spawn,
+        (command) => spawner.spawn(command),
         Effect.flatMap((child) =>
           child.stdout.pipe(
             Stream.decodeText,
@@ -259,13 +281,24 @@ export const DockerLive = Layer.effect(
           const isCreateRequest =
             req.method === "POST" && req.url?.startsWith("/containers/create");
           if (isCreateRequest && !req.url!.endsWith("-proxy")) {
-            const original = yield* readJson<{ Image: string; Env: Array<string> }>(req);
+            const original = yield* readJson<{
+              Image: string;
+              Env: Array<string>;
+              Labels?: Record<string, string>;
+            }>(req);
             const image = registeredImages.get(original.Image);
+            // A native `start({ image })` can name an image that was never
+            // prepared (e.g. a managed `cloudflare/*` image): pull it on demand.
+            const pulled = yield* Effect.exit(
+              Cache.get(ensuredImages, image?.tag ?? original.Image),
+            );
+            if (Exit.isFailure(pulled)) return sendError(res, 500, Cause.pretty(pulled.cause));
             return yield* forward(req, res, {
               body: JSON.stringify({
                 ...original,
                 Image: image?.tag ?? original.Image,
                 Env: mergeContainerCreateEnv(original.Env, image?.env),
+                Labels: { ...original.Labels, ...runtimeLabels },
               }),
             });
           }
@@ -278,6 +311,7 @@ export const DockerLive = Layer.effect(
             // 127.0.0.1). Native Linux maps it to 127.0.0.1 in this netns and
             // bind-mounts unix sockets; a SYN to the bridge IP is host INPUT (UFW).
             const original = yield* readJson<{
+              Labels?: Record<string, string>;
               HostConfig?: {
                 ExtraHosts?: Array<string>;
                 Binds?: Array<string>;
@@ -289,6 +323,7 @@ export const DockerLive = Layer.effect(
             return yield* forward(req, res, {
               body: JSON.stringify({
                 ...original,
+                Labels: { ...original.Labels, ...runtimeLabels },
                 HostConfig: {
                   ...mergeSidecarLoopbackHostConfig(original.HostConfig, ports),
                   Sysctls: {
@@ -327,14 +362,19 @@ export const DockerLive = Layer.effect(
       });
     };
 
-    const run = (args: Array<string>, stdin: ChildProcess.CommandInput = "ignore") =>
+    const run = (
+      args: Array<string>,
+      stdin: ChildProcess.CommandInput = "ignore",
+      env?: Record<string, string>,
+    ) =>
       ChildProcess.make(bin, args, {
         stdin,
         stdout: "pipe",
         stderr: "pipe",
         detached: false,
+        ...(env === undefined ? {} : { env, extendEnv: true }),
       }).pipe(
-        spawner.spawn,
+        (command) => spawner.spawn(command),
         Effect.flatMap((child) =>
           Effect.all(
             {
@@ -415,6 +455,25 @@ export const DockerLive = Layer.effect(
     const inspect = (tag: string, format: string) =>
       Effect.map(run(["image", "inspect", tag, "--format", format]), (result) => result.stdout);
 
+    // `docker image inspect` prints the image id when present and empty
+    // stdout when absent, so only pull when the image is genuinely missing.
+    const pullIfMissing = (imageUri: string, platform?: string) =>
+      inspect(imageUri, "{{.Id}}").pipe(
+        Effect.orElseSucceed(() => undefined),
+        Effect.flatMap((id) =>
+          id?.trim() ? Effect.void : Effect.asVoid(pull({ imageUri, platform })),
+        ),
+      );
+    // workerd may create a container from an image nobody prepared, such as a
+    // managed `cloudflare/*` image. Failed pulls are forgotten and retried.
+    const ensuredImages = yield* Cache.makeWith(
+      (image: string) => pullIfMissing(image, "linux/amd64"),
+      {
+        capacity: Number.MAX_SAFE_INTEGER,
+        timeToLive: (exit) => (Exit.isFailure(exit) ? 0 : Infinity),
+      },
+    );
+
     const list = (ancestor: string) =>
       run([
         "ps",
@@ -437,6 +496,25 @@ export const DockerLive = Layer.effect(
         ),
       );
 
+    // Runs after the runtime (and its workerd) has shut down.
+    yield* Effect.addFinalizer(() =>
+      run([
+        "ps",
+        "--all",
+        "--quiet",
+        "--filter",
+        `label=${RUNTIME_LABEL}=${runtimeLabels[RUNTIME_LABEL]}`,
+      ]).pipe(
+        Effect.flatMap(({ stdout }) => {
+          const ids = stdout.split("\n").filter((id) => id.trim() !== "");
+          return ids.length === 0 ? Effect.void : Effect.asVoid(run(["rm", "--force", ...ids]));
+        }),
+        Effect.timeout("30 seconds"),
+        Effect.withLogSpan("docker: remove runtime containers"),
+        Effect.ignore,
+      ),
+    );
+
     const docker = yield* Effect.zipWith(
       DockerHost.pipe(
         Effect.catchTag("ConfigError", getSocketPathFromContext),
@@ -444,8 +522,16 @@ export const DockerLive = Layer.effect(
         Effect.flatMap(
           Effect.fnUntraced(function* (socketPath) {
             const forwarders = yield* makeDockerLoopbackForwarders({ bin, socketPath });
-            const port = yield* listenOnLoopback(makeDockerProxyServer(socketPath, forwarders));
-            return `127.0.0.1:${port}`;
+            const httpProxyPort = yield* listenOnLoopback(
+              makeDockerProxyServer(socketPath, forwarders),
+            );
+            // workerd connects to the router, which forwards `docker exec`
+            // streams to Docker directly and everything else to the proxy.
+            const router = yield* makeDockerUpgradeRouter({
+              dockerSocketPath: socketPath,
+              httpProxyPort,
+            });
+            return `127.0.0.1:${yield* listenOnLoopback(router)}`;
           }),
         ),
       ),
@@ -453,20 +539,13 @@ export const DockerLive = Layer.effect(
       // locally. `CONTAINER_EGRESS_INTERCEPTOR_IMAGE` can point at a
       // local-only tag that exists in the Docker daemon but resolves in no
       // registry (e.g. a locally-built dev image) — an unconditional
-      // `docker pull` there fails, this detached fiber dies, and every
+      // `docker pull` there fails, this startup fiber dies, and every
       // caller of `getWorkerdDockerConfiguration` (joined on first use)
       // fails with it. `docker image inspect` prints the image id when
       // present and empty stdout when absent (`run` reports the non-zero
       // exit rather than failing the effect), so only pull when the image
-      // is genuinely missing. Any failure to even run `inspect` (unlike
-      // `pull`, it doesn't normalize its error channel) falls back to the
-      // pre-existing pull behavior rather than failing here.
-      inspect(containerEgressInterceptorImage, "{{.Id}}").pipe(
-        Effect.orElseSucceed(() => undefined),
-        Effect.flatMap((imageId) =>
-          imageId?.trim() ? Effect.void : pull({ imageUri: containerEgressInterceptorImage }),
-        ),
-      ),
+      // is genuinely missing. The sidecar needs the host-native image.
+      pullIfMissing(containerEgressInterceptorImage),
       (socketPath) => ({
         localDocker: {
           socketPath,
@@ -476,8 +555,22 @@ export const DockerLive = Layer.effect(
       { concurrent: true },
     ).pipe(Effect.forkScoped({ startImmediately: false }));
 
+    // Docker refuses to create a container whose device is missing on the
+    // host, so a Linux host without /dev/fuse gets the capability alone.
+    // VM-based engines (macOS, Windows) always have /dev/fuse in the VM.
+    const getContainerPrivileges = yield* Effect.cached(
+      Effect.gen(function* () {
+        const platform = yield* Effect.sync(() => process.platform);
+        const hasFuse =
+          platform !== "linux" ||
+          (yield* fs.exists("/dev/fuse").pipe(Effect.orElseSucceed(() => false)));
+        return hasFuse ? FUSE_CONTAINER_PRIVILEGES : { ...FUSE_CONTAINER_PRIVILEGES, devices: [] };
+      }),
+    );
+
     return Docker.of({
       getWorkerdDockerConfiguration: Fiber.join(docker),
+      getContainerPrivileges,
       registerImageEnv: (className, tag, env) => {
         const alias = generateImageTag(className);
         return Effect.acquireRelease(
@@ -491,6 +584,13 @@ export const DockerLive = Layer.effect(
       generateImageTag,
       build: (tag, image) =>
         Effect.suspend(() => {
+          // Values ride in generated variables: a secret id is the
+          // Dockerfile's choice and may shadow one Docker reads itself.
+          const secrets = Object.entries(image.buildSecrets ?? {}).map(([id, value], index) => ({
+            id,
+            variable: `ALCHEMY_BUILD_SECRET_${index}`,
+            value,
+          }));
           const args = [
             "build",
             "--load",
@@ -499,9 +599,11 @@ export const DockerLive = Layer.effect(
             "--platform",
             "linux/amd64",
             "--provenance=false",
-            ...Object.entries(image.buildArgs ?? {}).map(
-              ([name, value]) => `--build-arg ${name}=${value}`,
-            ),
+            ...Object.entries(image.buildArgs ?? {}).flatMap(([name, value]) => [
+              "--build-arg",
+              `${name}=${value}`,
+            ]),
+            ...secrets.flatMap(({ id, variable }) => ["--secret", `id=${id},env=${variable}`]),
             "-f",
             "-",
             path.resolve(image.context ?? path.dirname(image.dockerfile)),
@@ -513,6 +615,9 @@ export const DockerLive = Layer.effect(
                 ? path.resolve(image.context, image.dockerfile)
                 : path.resolve(image.dockerfile),
             ),
+            secrets.length === 0
+              ? undefined
+              : Object.fromEntries(secrets.map(({ variable, value }) => [variable, value])),
           ).pipe(
             Effect.withLogSpan(`docker: build ${tag}`),
             Effect.mapError((cause) =>
@@ -617,6 +722,9 @@ export const DockerLive = Layer.effect(
     });
   }),
 );
+
+/** Label identifying the runtime that created a container through the proxy. */
+export const RUNTIME_LABEL = "alchemy.runtime";
 
 const generateImageTag = (className: string, suffix?: string) =>
   `${DEV_CONTAINER_PREFIX}/${className.toLowerCase()}:${suffix ?? crypto.randomUUID().slice(0, 8)}`;

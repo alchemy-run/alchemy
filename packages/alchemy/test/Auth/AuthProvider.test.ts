@@ -1,5 +1,5 @@
+import { expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -11,7 +11,7 @@ import {
   getAuthProvider,
 } from "@/Auth/AuthProvider.ts";
 import { getEnvRedactedRequired } from "@/Auth/Env.ts";
-import { Interaction } from "@/Interaction.ts";
+import { Interaction, makeNonInteractive } from "@/Interaction.ts";
 
 const implementation = {
   configSchema: Schema.Struct({ method: Schema.Literal("custom") }),
@@ -83,14 +83,11 @@ it.effect(
   () =>
     Effect.gen(function* () {
       const answered: string[] = [];
+      const quiet = makeNonInteractive({ stdout: { write: () => true } as never });
       const scripted = (name: string): Interaction["Service"] => ({
-        output: {
-          info: () => Effect.void,
-          success: () => Effect.void,
-          warning: () => Effect.void,
-          error: () => Effect.void,
-        },
+        ...quiet,
         prompt: {
+          ...quiet.prompt,
           text: () =>
             Effect.sync(() => {
               answered.push(name);
@@ -98,9 +95,6 @@ it.effect(
             }),
           password: () => Effect.succeed(name),
           confirm: () => Effect.succeed(true),
-          select: () => Effect.die("unused"),
-          multiSelect: () => Effect.die("unused"),
-          awaitExternal: () => Effect.succeed(name),
         },
         task: (_options, effect) => effect,
       });

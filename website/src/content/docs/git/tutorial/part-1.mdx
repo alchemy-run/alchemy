@@ -25,28 +25,28 @@ Complete [Cloudflare setup](/cloudflare/setup) to connect your account.
     <Code code={`mkdir git-tutorial
 cd git-tutorial
 pnpm init
-pnpm add alchemy effect
+pnpm add alchemy @alchemy.run/cloudflare @alchemy.run/git effect
 mkdir src`} lang="sh" />
   </TabItem>
   <TabItem label="bun" icon="bun">
     <Code code={`mkdir git-tutorial
 cd git-tutorial
 bun init -y
-bun add alchemy effect
+bun add alchemy @alchemy.run/cloudflare @alchemy.run/git effect
 mkdir src`} lang="sh" />
   </TabItem>
   <TabItem label="npm" icon="npm">
     <Code code={`mkdir git-tutorial
 cd git-tutorial
 npm init -y
-npm install alchemy effect
+npm install alchemy @alchemy.run/cloudflare @alchemy.run/git effect
 mkdir src`} lang="sh" />
   </TabItem>
   <TabItem label="yarn" icon="seti:yarn">
     <Code code={`mkdir git-tutorial
 cd git-tutorial
 yarn init -y
-yarn add alchemy effect
+yarn add alchemy @alchemy.run/cloudflare @alchemy.run/git effect
 mkdir src`} lang="sh" />
   </TabItem>
 </Tabs>
@@ -61,7 +61,7 @@ Create `src/git.ts`:
 
 ```typescript
 // src/git.ts
-import * as Git from "alchemy/Git";
+import * as Git from "@alchemy.run/git";
 import * as Layer from "effect/Layer";
 
 export const GitLive = Git.ApiLive.pipe(
@@ -115,8 +115,8 @@ verifies incoming objects in the Worker during a push.
 
 ```diff lang="typescript"
 // src/git.ts
-+import * as Cloudflare from "alchemy/Cloudflare";
-import * as Git from "alchemy/Git";
++import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Git from "@alchemy.run/git";
 import * as Layer from "effect/Layer";
 
 +const GitObjects = Cloudflare.R2.Bucket("GitObjects", { forceDestroy: true });
@@ -146,8 +146,8 @@ Create `src/host.ts`:
 
 ```typescript
 // src/host.ts
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as Git from "alchemy/Git";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Git from "@alchemy.run/git";
 import * as Http from "alchemy/Http";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -162,13 +162,15 @@ export default class GitHost extends Cloudflare.Worker<GitHost>()(
       GitLive.pipe(Layer.provide(Http.Platform)),
     );
     return { fetch };
-  }),
+  }).pipe(Effect.provide(Cloudflare.R2.ReadWriteBucketBinding)),
 ) {}
 ```
 
 `HttpRouter.toHttpEffect` turns the route layer into the Worker's `fetch` handler.
 `Http.Platform` provides its HTTP platform dependencies. `GIT_WORKER_OPTIONS`
 sets the Worker compatibility flags and CPU limit used by Git.
+`Cloudflare.R2.ReadWriteBucketBinding` binds the bucket to the Worker so
+`BlobStoreR2` can read and write it.
 
 ## Declare the stack
 
@@ -177,7 +179,7 @@ Create `alchemy.run.ts`:
 ```typescript
 // alchemy.run.ts
 import * as Alchemy from "alchemy";
-import * as Cloudflare from "alchemy/Cloudflare";
+import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Effect from "effect/Effect";
 import GitHost from "./src/host.ts";
 

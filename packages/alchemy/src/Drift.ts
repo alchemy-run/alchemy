@@ -1,7 +1,9 @@
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
+import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import { stripUnowned } from "./AdoptPolicy.ts";
@@ -13,7 +15,6 @@ import {
   makeScopedArtifacts,
 } from "./Artifacts.ts";
 import { deepEqual } from "./Diff.ts";
-import { InstanceId } from "./InstanceId.ts";
 import type { Apply, Plan } from "./Plan.ts";
 import { findProviderByType, Provider } from "./Provider.ts";
 import { stampedMode } from "./ProviderMode.ts";
@@ -24,6 +25,7 @@ import {
   type ScopedPlanStatusSession,
 } from "./Report.ts";
 import type { ResourceLike } from "./Resource.ts";
+import { ResourceContext } from "./ResourceContext.ts";
 import {
   isActionState,
   State,
@@ -32,6 +34,7 @@ import {
   type UpdatedResourceState,
 } from "./State/index.ts";
 import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
+import { findCycleMembers } from "./Util/scc.ts";
 
 /**
  * The outcome of checking or repairing drift for a single resource.
@@ -113,11 +116,14 @@ export class DriftResourceError extends Data.TaggedError("DriftResourceError")<{
  *    deterministic physical names regenerate identically.
  * 4. **Persist** — write the fresh attributes back to the state store.
  *
- * Resources are checked concurrently and independently — persisted props are
- * fully resolved values, so there are no upstream/downstream data edges to
- * order by. A failure checking one resource does not interrupt the others;
- * all failures are aggregated into a single combined cause after every
- * resource has been attempted.
+ * Resources are observed concurrently. Repairs follow the persisted
+ * `downstream` edges: a recreated topic exists before its subscription is
+ * recreated. Missing resources are recreated without their bindings first and
+ * bound once every missing resource exists again, because binding data (an S3
+ * notification's target topic) can point at a resource recreated later. A
+ * failure checking one resource does not interrupt the others; all failures
+ * are aggregated into a single combined cause after every resource has been
+ * attempted.
  *
  * Resources that cannot be checked are reported as `skipped` rather than
  * failing the run: providers without `read` (nothing to observe), and
@@ -210,13 +216,41 @@ const runDrift = (
         return yield* skip(`provider '${resourceType}' does not implement read`);
       }
 
-      const commit = (value: Omit<ResourceState, "namespace">) =>
-        state.set({
+      // Persist a repaired row. Everything but the status, attributes and
+      // bindings carries over from the persisted row — notably the
+      // `providerMode` stamp, without which a repaired local row would be
+      // treated as live.
+      const commit = (
+        status: "created" | "updated",
+        attr: ResourceState["attr"],
+        bindings: ResourceState["bindings"],
+      ) => {
+        const row = {
+          kind: old.kind,
+          namespace,
+          fqn,
+          logicalId,
+          instanceId,
+          resourceType,
+          props: old.props!,
+          attr: attr!,
+          providerVersion: provider.version ?? 0,
+          bindings,
+          downstream: old.downstream,
+          removalPolicy: old.removalPolicy,
+          providerMode: old.providerMode,
+          adoptionBlocked: old.adoptionBlocked,
+        };
+        return state.set({
           stack: stackName,
           stage,
           fqn,
-          value: { ...value, namespace } as ResourceState,
+          value:
+            status === "created"
+              ? ({ ...row, status } satisfies CreatedResourceState)
+              : ({ ...row, status } satisfies UpdatedResourceState),
         });
+      };
 
       // Paired with the resource-planned completion so renderers can show
       // which rows' cloud reads are actually in flight (the slowest part of
@@ -239,39 +273,11 @@ const runDrift = (
         })
         .pipe(instrumentLifecycle("read", fqn, resourceType, logicalId, instanceId));
 
-      // ── missing — recreate under the same instance id ──
       if (observed === undefined) {
         if (dryRun) {
           return result({ action: "missing" });
         }
-        yield* report("creating");
-        const attr = yield* provider
-          .reconcile({
-            id: logicalId,
-            fqn,
-            instanceId,
-            news: old.props as never,
-            olds: undefined,
-            output: undefined,
-            session: scopedSession,
-            bindings: old.bindings as never,
-          })
-          .pipe(instrumentLifecycle("create", fqn, resourceType, logicalId, instanceId));
-        yield* commit({
-          status: "created",
-          fqn,
-          logicalId,
-          instanceId,
-          resourceType,
-          props: old.props!,
-          attr,
-          providerVersion: provider.version ?? 0,
-          bindings: old.bindings,
-          downstream: old.downstream,
-          removalPolicy: old.removalPolicy,
-        } satisfies Omit<CreatedResourceState, "namespace">);
-        yield* report("created");
-        return result({ action: "recreated", attr });
+        return { fqn, old, provider, live: undefined, result, scopedSession, report, commit };
       }
 
       // `read` may brand the attributes as Unowned when ownership markers
@@ -288,9 +294,60 @@ const runDrift = (
       if (dryRun) {
         return result({ action: "drifted", attr: live });
       }
+      return { fqn, old, provider, live, result, scopedSession, report, commit };
+    });
+    type PendingRepair = Extract<
+      Effect.Success<ReturnType<typeof driftResource>>,
+      { old: unknown }
+    >;
+    const isPendingRepair = (
+      observed: DriftResourceResult | PendingRepair | undefined,
+    ): observed is PendingRepair => observed !== undefined && "old" in observed;
 
-      // ── drifted — converge the cloud back to the last-deployed props ──
-      yield* report("updating");
+    // ── missing — recreate under the same instance id, without bindings ──
+    //
+    // Binding data often points at other resources (an S3 notification
+    // targets a topic), and a binding edge inside a cycle is not recorded in
+    // `downstream`. So, like Apply's precreate, missing resources are first
+    // created bare in `downstream` order; their bindings are attached in the
+    // second phase, once every missing resource exists again. The bare
+    // create is committed with no bindings so a crash in between leaves a
+    // row the next deploy re-binds.
+    const recreate = Effect.fn("drift.recreate")(function* (pending: PendingRepair) {
+      const { fqn, old, provider, report, commit, scopedSession, result } = pending;
+      const { logicalId, instanceId, resourceType } = old;
+      const bindings = old.bindings ?? [];
+      yield* report("creating");
+      const attr = yield* provider
+        .reconcile({
+          id: logicalId,
+          fqn,
+          instanceId,
+          news: old.props as never,
+          olds: undefined,
+          output: undefined,
+          session: scopedSession,
+          bindings: [] as never,
+        })
+        .pipe(instrumentLifecycle("create", fqn, resourceType, logicalId, instanceId));
+      yield* commit("created", attr, []);
+      if (bindings.length === 0) {
+        yield* report("created");
+        return { done: result({ action: "recreated", attr }) };
+      }
+      return { rebind: { ...pending, live: attr, recreated: true } };
+    });
+
+    // ── drifted — converge the cloud back to the last-deployed props ──
+    //
+    // Also attaches the bindings of resources recreated bare above.
+    const reconcile = Effect.fn("drift.reconcile")(function* (
+      pending: PendingRepair & { recreated: boolean },
+    ) {
+      const { fqn, old, provider, live, report, commit, scopedSession, result, recreated } =
+        pending;
+      const { logicalId, instanceId, resourceType } = old;
+      if (!recreated) yield* report("updating");
       const attr = yield* provider
         .reconcile({
           id: logicalId,
@@ -304,22 +361,18 @@ const runDrift = (
           session: scopedSession,
           bindings: old.bindings as never,
         })
-        .pipe(instrumentLifecycle("update", fqn, resourceType, logicalId, instanceId));
-      yield* commit({
-        status: "updated",
-        fqn,
-        logicalId,
-        instanceId,
-        resourceType,
-        props: old.props!,
-        attr,
-        providerVersion: provider.version ?? 0,
-        bindings: old.bindings,
-        downstream: old.downstream,
-        removalPolicy: old.removalPolicy,
-      } satisfies Omit<UpdatedResourceState, "namespace">);
-      yield* report("updated");
-      return result({ action: "repaired", attr });
+        .pipe(
+          instrumentLifecycle(
+            recreated ? "create" : "update",
+            fqn,
+            resourceType,
+            logicalId,
+            instanceId,
+          ),
+        );
+      yield* commit(recreated ? "created" : "updated", attr, old.bindings);
+      yield* report(recreated ? "created" : "updated");
+      return result({ action: recreated ? "recreated" : "repaired", attr });
     });
 
     const fqns = yield* state.list({ stack: stackName, stage });
@@ -330,22 +383,27 @@ const runDrift = (
     // slowest planning path). Failed or action rows advance the count
     // without an event, so progress stays monotonic.
     const observedCount = yield* Ref.make(0);
-    const resourceObserved = (result: DriftResourceResult | undefined) =>
+    const resourceObserved = (observed: DriftResourceResult | PendingRepair | undefined) =>
       Ref.updateAndGet(observedCount, (count) => count + 1).pipe(
         Effect.flatMap((completed) =>
-          result === undefined
+          observed === undefined
             ? Effect.void
             : reportPlanned({
                 _tag: "plan.resource.completed",
-                fqn: result.fqn,
-                logicalId: result.logicalId,
-                resourceType: result.resourceType,
+                fqn: observed.fqn,
+                logicalId: isPendingRepair(observed) ? observed.old.logicalId : observed.logicalId,
+                resourceType: isPendingRepair(observed)
+                  ? observed.old.resourceType
+                  : observed.resourceType,
                 // Drift observation compares attributes, not binding rows.
                 bindings: [],
-                action:
-                  result.action === "drifted" || result.action === "repaired"
+                action: isPendingRepair(observed)
+                  ? observed.live === undefined
+                    ? "create"
+                    : "update"
+                  : observed.action === "drifted"
                     ? "update"
-                    : result.action === "missing"
+                    : observed.action === "missing"
                       ? "create"
                       : "noop",
                 completed,
@@ -357,32 +415,116 @@ const runDrift = (
     // Drift every resource even if some fail, then surface all failures as
     // one combined cause (mirrors Apply's failure aggregation).
     const failures: Cause.Cause<unknown>[] = [];
-    const results = yield* Effect.all(
-      fqns.map((fqn) =>
+    const recordFailure = (fqn: string) => (cause: Cause.Cause<unknown>) =>
+      Effect.gen(function* () {
+        failures.push(cause);
+        const persisted = yield* state
+          .get({ stack: stackName, stage, fqn })
+          .pipe(Effect.orElseSucceed(() => undefined));
+        if (persisted && !isActionState(persisted)) {
+          yield* session.emit({
+            _tag: "apply.resource.status",
+            fqn,
+            id: persisted.logicalId,
+            type: persisted.resourceType,
+            status: "fail",
+          });
+        }
+        return undefined;
+      });
+
+    const observed = yield* Effect.forEach(
+      fqns,
+      (fqn) =>
         driftResource(fqn).pipe(
-          Effect.catchCause((cause) =>
-            Effect.gen(function* () {
-              failures.push(cause);
-              const persisted = yield* state
-                .get({ stack: stackName, stage, fqn })
-                .pipe(Effect.orElseSucceed(() => undefined));
-              if (persisted && !isActionState(persisted)) {
-                yield* session.emit({
-                  _tag: "apply.resource.status",
-                  fqn,
-                  id: persisted.logicalId,
-                  type: persisted.resourceType,
-                  status: "fail",
-                });
-              }
-              return undefined;
-            }),
-          ),
+          Effect.catchCause(recordFailure(fqn)),
           Effect.tap(resourceObserved),
         ),
-      ),
       { concurrency: "unbounded" },
     );
+
+    const pending = observed.filter(isPendingRepair);
+
+    // Upstreams per the persisted `downstream` edges, among the resources
+    // being repaired (an unchanged or skipped upstream never blocks). Edges
+    // inside a cycle — only possible through merged historical edges — are
+    // dropped.
+    const upstream: Record<string, string[]> = Object.fromEntries(
+      pending.map((node) => [node.fqn, [] as string[]]),
+    );
+    for (const node of pending) {
+      for (const down of node.old.downstream ?? []) {
+        if (down !== node.fqn) upstream[down]?.push(node.fqn);
+      }
+    }
+    const cyclic = findCycleMembers(upstream);
+    const upstreamOf = (fqn: string) =>
+      upstream[fqn]!.filter((up) => !(cyclic.has(up) && cyclic.has(fqn)));
+
+    // Resources whose repair failed, or was skipped because an upstream's
+    // did. Like Apply, a dependent never runs against a failed upstream.
+    const failed = new Set<string>();
+
+    // Run `run` over `nodes`, each node after its upstreams in `nodes` have
+    // settled. Upstreams outside `nodes` settled in an earlier phase.
+    const inDependencyOrder = Effect.fn(function* <N extends PendingRepair, A>(
+      nodes: ReadonlyArray<N>,
+      run: (node: N) => Effect.Effect<A, unknown>,
+    ) {
+      const settled = new Map<string, Deferred.Deferred<void>>();
+      for (const node of nodes) settled.set(node.fqn, yield* Deferred.make<void>());
+      return yield* Effect.forEach(
+        nodes,
+        (node) =>
+          Effect.gen(function* () {
+            const ups = upstreamOf(node.fqn);
+            yield* Effect.all(
+              ups.flatMap((up) => {
+                const deferred = settled.get(up);
+                return deferred ? [Deferred.await(deferred)] : [];
+              }),
+            );
+            const blocked = ups.filter((up) => failed.has(up));
+            if (blocked.length > 0) {
+              failed.add(node.fqn);
+              yield* node.scopedSession.note(
+                `not repaired: upstream ${blocked.map((up) => `'${up}'`).join(", ")} failed`,
+              );
+              yield* node.report("skipped");
+              return undefined;
+            }
+            return yield* run(node).pipe(
+              Effect.catchCause((cause) =>
+                Effect.sync(() => failed.add(node.fqn)).pipe(
+                  Effect.andThen(recordFailure(node.fqn)(cause)),
+                ),
+              ),
+            );
+          }).pipe(Effect.ensuring(Deferred.succeed(settled.get(node.fqn)!, undefined))),
+        { concurrency: "unbounded" },
+      );
+    });
+
+    const recreated = yield* inDependencyOrder(
+      pending.filter((node) => node.live === undefined),
+      recreate,
+    );
+    const rebind = recreated.flatMap((node) => (node?.rebind ? [node.rebind] : []));
+    const repaired = yield* inDependencyOrder(
+      [
+        ...pending
+          .filter((node) => node.live !== undefined)
+          .map((node) => ({ ...node, recreated: false })),
+        ...rebind,
+      ],
+      reconcile,
+    );
+
+    const results = [
+      ...observed.filter((r) => !isPendingRepair(r)),
+      ...recreated.map((r) => r?.done),
+      ...repaired,
+    ].filter((r): r is DriftResourceResult => r !== undefined);
 
     yield* session.done(failures.length === 0 ? "success" : "failure");
 
@@ -415,20 +557,22 @@ export const repair = (stack: { name: string; stage: string }, options: DriftOpt
 
 /**
  * Same shape as Apply's lifecycle instrumentation: scoped artifacts +
- * instance id, the resource op metrics, and a `provider.<op>` span.
+ * resource context, the resource op metrics, and a `provider.<op>` span.
  */
 const instrumentLifecycle =
   (op: ResourceOp, fqn: string, resourceType: string, logicalId: string, instanceId: string) =>
   <A, E, R>(
     effect: Effect.Effect<A, E, R>,
-  ): Effect.Effect<A, E | DriftResourceError, Exclude<R, InstanceId | Artifacts>> =>
+  ): Effect.Effect<A, E | DriftResourceError, Exclude<R, ResourceContext | Artifacts>> =>
     // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- generic Exclude on R can't be proven statically
     Effect.serviceOption(ArtifactStore).pipe(
       Effect.map(Option.getOrElse(createArtifactStore)),
       Effect.flatMap((store) =>
         effect.pipe(
-          Effect.provideService(Artifacts, makeScopedArtifacts(store, fqn)),
-          Effect.provideService(InstanceId, instanceId),
+          Effect.provide([
+            Layer.succeed(Artifacts, makeScopedArtifacts(store, fqn)),
+            Layer.succeed(ResourceContext, { logicalId, fqn, instanceId, type: resourceType }),
+          ]),
           Effect.catchCauseIf(
             (cause: Cause.Cause<E>) => !Cause.hasInterruptsOnly(cause),
             (cause) =>
@@ -455,7 +599,7 @@ const instrumentLifecycle =
           "alchemy.resource.op": op,
         },
       }),
-    ) as Effect.Effect<A, E | DriftResourceError, Exclude<R, InstanceId | Artifacts>>;
+    ) as Effect.Effect<A, E | DriftResourceError, Exclude<R, ResourceContext | Artifacts>>;
 
 export interface DriftPlan {
   /** Per-resource detection outcome (a dry-run {@link DriftResult}). */

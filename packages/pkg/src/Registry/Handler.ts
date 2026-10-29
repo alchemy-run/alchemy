@@ -1,5 +1,5 @@
-import * as Cloudflare from "alchemy/Cloudflare";
-import * as SQL from "alchemy/SQL/D1";
+import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as SQL from "@alchemy.run/cloudflare/D1/SQL";
 import { sha256 } from "alchemy/Util/sha256";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
@@ -189,7 +189,7 @@ const publish = Effect.fn("publish")(function* (run: Run, manifestText: string) 
   const base = yield* origin;
 
   yield* requireVouched(run, manifestText);
-  const manifest = yield* Schema.decodeUnknownEffect(ManifestJson)(manifestText).pipe(
+  const manifest = yield* Schema.decodeEffect(ManifestJson)(manifestText).pipe(
     Effect.mapError((e) => BadRequest.make({ message: `invalid manifest: ${String(e)}` })),
   );
   // The run vouched for the manifest, but the tags come from the run's

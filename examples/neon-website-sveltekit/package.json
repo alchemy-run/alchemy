@@ -19,11 +19,13 @@
     "build": "vite build"
   },
   "dependencies": {
+    "@alchemy.run/neon": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@alchemy.run/frontend-frameworks": "workspace:*",
+    "@alchemy.run/test": "workspace:*",
     "@effect/platform-node": "catalog:",
     "@sveltejs/kit": "catalog:",
     "@sveltejs/vite-plugin-svelte": "catalog:",

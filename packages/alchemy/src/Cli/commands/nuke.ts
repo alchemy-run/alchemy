@@ -5,7 +5,7 @@ import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Nuke from "../../Alchemist/routes/nuke.ts";
-import * as CliKit from "../../Cli/CliKit/index.ts";
+import * as Interaction from "../../Interaction.ts";
 import { renderNukeScan, renderNukeDelete, reviewNuke } from "../components/view/Nuke.tsx";
 import { formatElapsed } from "../Format.ts";
 import { exitDeclined, UserInputError } from "./errors.ts";
@@ -58,12 +58,13 @@ const dryRunFlag = Flag.Boolean("dry-run").pipe(
 const compileFilter = (expression: string) =>
   Effect.try({
     try: () =>
+      // oxlint-disable-next-line typescript/no-implied-eval -- --filter is a user-supplied JS expression by design
       new Function("scope", `with (scope) { return (${expression}); }`) as (scope: {
         resource: Record<string, unknown>;
       }) => unknown,
     catch: (cause) =>
       new UserInputError({
-        message: `--filter expression ${JSON.stringify(expression)} failed to compile: ${cause}`,
+        message: `--filter expression ${JSON.stringify(expression)} failed to compile: ${cause instanceof Error ? cause.message : String(cause)}`,
       }),
   }).pipe(
     Effect.map(
@@ -72,7 +73,7 @@ const compileFilter = (expression: string) =>
           try: () => Boolean(predicate({ resource })),
           catch: (cause) =>
             new UserInputError({
-              message: `--filter expression ${JSON.stringify(expression)} threw while evaluating a resource: ${cause}`,
+              message: `--filter expression ${JSON.stringify(expression)} threw while evaluating a resource: ${cause instanceof Error ? cause.message : String(cause)}`,
             }),
         }),
     ),
@@ -127,7 +128,7 @@ const nukeCommand = Command.make(
               if (!matches.some(Boolean)) targets.push(resource);
             }
             if (targets.length === 0) {
-              yield* CliKit.accessors.output.info("Nothing to delete.");
+              yield* Interaction.info("Nothing to delete.");
               return;
             }
             const approved = yield* reviewNuke(targets, {
@@ -136,7 +137,7 @@ const nukeCommand = Command.make(
               dryRun: args.dryRun,
             });
             if (!approved) {
-              yield* CliKit.accessors.output.info("Aborted.");
+              yield* Interaction.info("Aborted.");
               return yield* exitDeclined;
             }
             if (args.dryRun) {
@@ -154,18 +155,14 @@ const nukeCommand = Command.make(
               providerTimeoutSeconds: Duration.toSeconds(args.timeout),
             }).pipe(renderNukeDelete(targets, scan.mode));
             const deleteElapsed = (yield* Clock.currentTimeMillis) - deleteStartedAt;
-            yield* CliKit.accessors.output.success(
+            yield* Interaction.success(
               `Deleted ${result.deleted.length} resource(s) over ${result.passes} pass(es) (${formatElapsed(deleteElapsed)}).`,
             );
             if (result.held.length > 0) {
-              yield* CliKit.accessors.output.warning(
-                `${result.held.length} resource(s) were held back.`,
-              );
+              yield* Interaction.warning(`${result.held.length} resource(s) were held back.`);
             }
             if (result.failed.length > 0) {
-              yield* CliKit.accessors.output.error(
-                `${result.failed.length} resource(s) could not be deleted.`,
-              );
+              yield* Interaction.error(`${result.failed.length} resource(s) could not be deleted.`);
             }
           }),
         ),

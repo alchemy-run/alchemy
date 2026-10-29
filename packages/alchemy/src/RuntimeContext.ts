@@ -32,6 +32,12 @@ export interface BaseRuntimeContext {
   /** additional services to provide to the plan  */
   planServices?: Layer.Layer<any>;
   /**
+   * Services the host provides its init in every phase, built over the
+   * instance (e.g. a Cloudflare Worker's `WebhookHost`), so user code
+   * doesn't provide them itself.
+   */
+  hostServices?: Layer.Layer<any, never, any>;
+  /**
    * Telemetry exporter Layer registered during init via
    * `Telemetry.layer(...)` / `Telemetry.layerOtlp(...)` (see Telemetry.ts).
    * The runtime bridges build it into every event's request scope,
@@ -136,6 +142,9 @@ export const packEnvValue = (value: unknown): string =>
 export const packEnvValueKeepRedacted = (value: unknown): string | Redacted.Redacted<string> =>
   Redacted.isRedacted(value) ? value.pipe(packEnvValue, Redacted.make) : packEnvValue(value);
 
+// Only JSON's four whitespace characters may precede a valid JSON value.
+const possibleJson = /^[\x20\t\r\n]*["{[0-9tfn-]/;
+
 /**
  * Parse an env-var string produced by {@link packEnvValue} back into its
  * value: rebuild `Redacted` from the marker, return other JSON values
@@ -155,6 +164,9 @@ export const packEnvValueKeepRedacted = (value: unknown): string | Redacted.Reda
 export const unpackEnvValue = <T>(raw: string | undefined): T | undefined => {
   if (raw === undefined) {
     return undefined;
+  }
+  if (typeof raw === "string" && !possibleJson.test(raw)) {
+    return raw as unknown as T;
   }
   try {
     const parsed: unknown = JSON.parse(raw);

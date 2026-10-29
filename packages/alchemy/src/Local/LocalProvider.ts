@@ -112,7 +112,7 @@ export interface LocalProviderSpec<
    * records it on the registry entry, and passes it to {@link start} so a
    * restart consumes exactly what was compared.
    *
-   * Lifecycle-scoped services (`Stack`, `Stage`, `InstanceId`, `Artifacts`)
+   * Lifecycle-scoped services (`Stack`, `Stage`, `ResourceContext`, `Artifacts`)
    * are available ambiently (e.g. for `createPhysicalName`); resolve
    * anything else in the spec effect and close over it.
    *
@@ -165,7 +165,7 @@ export interface LocalProviderSpec<
 /**
  * {@link ProviderService} with every requirement channel widened to `any` —
  * passthrough spec hooks may use lifecycle-scoped services (`Stack`,
- * `InstanceId`, ...) that the RpcProvider wrapper provides per call.
+ * `ResourceContext`, ...) that the RpcProvider wrapper provides per call.
  */
 type AnyReqProviderService<R extends ResourceLike> = ProviderService<
   R,
@@ -349,8 +349,12 @@ export const make = <
           Effect.onExit((exit) =>
             exit._tag === "Failure"
               ? // A failed start must not linger as "running" — the next
-                // plan should report `update` and try again.
-                invalidate
+                // plan should report `update` and try again — nor keep what
+                // it acquired: the instance scope would otherwise hold a
+                // process that outlived its start (one still waiting for
+                // its URL when the deploy was interrupted, say) until the
+                // provider shut down.
+                invalidate.pipe(Effect.andThen(Scope.close(scope, exit)))
               : Effect.void,
           ),
         );

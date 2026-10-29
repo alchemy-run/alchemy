@@ -1,6 +1,5 @@
 export { Action, isAction, type Action as ActionInstance, type ActionLike } from "./Action.ts";
 export * as AdoptPolicy from "./AdoptPolicy.ts";
-export * from "./AI/index.ts";
 export * from "./AlchemyContext.ts";
 export * from "./Apply.ts";
 export * from "./Callback.ts";
@@ -28,10 +27,9 @@ export * from "./Ref.ts";
 export * as RemovalPolicy from "./RemovalPolicy.ts";
 export { renamedFrom } from "./Rename.ts";
 export * from "./Resource.ts";
+export * from "./ResourceContext.ts";
 export * as Schema from "./Schema.ts";
 export * as Secrets from "./Secrets/index.ts";
-export * as Server from "./Server/index.ts";
-export * as Serverless from "./Serverless/index.ts";
 export { Stack, type SecretProviders, type StackSecrets } from "./Stack.ts";
 export * from "./Stage.ts";
 export { inMemoryState, localState } from "./State/index.ts";
