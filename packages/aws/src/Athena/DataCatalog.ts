@@ -117,7 +117,7 @@ export const DataCatalogProvider = () =>
         // reports even existing catalogs as not-found, so scope to `primary`.
         athena.getDataCatalog({ Name: name, WorkGroup: "primary" }).pipe(
           Effect.map((res) => res.DataCatalog),
-          Effect.catchTag("DataCatalogNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("DataCatalogNotFound", () => Effect.undefined),
         );
 
       const fetchTags = (arn: string) =>

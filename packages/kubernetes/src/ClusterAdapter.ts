@@ -210,6 +210,7 @@ export interface WorkloadIdentityResult {
   /** Annotations to stamp on the workload's ServiceAccount object. */
   serviceAccountAnnotations?: Record<string, string>;
   /** Serializable state persisted on the workload's attributes. */
+  // oxlint-disable-next-line typescript/no-redundant-type-constituents -- registry type is `never` until cloud packages augment it
   state: IdentityState | undefined;
 }
 

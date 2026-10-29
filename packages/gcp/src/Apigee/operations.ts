@@ -164,7 +164,7 @@ export const userAttributes = (record: Record<string, string> | undefined) =>
 export const desiredAttributes = (
   user: Record<string, string> | undefined,
   ownership: Record<string, string>,
-) => ({ ...(user ?? {}), ...ownership });
+) => ({ ...user, ...ownership });
 
 export const propertiesToRecord = (
   properties: apigee.GoogleCloudApigeeV1Properties | undefined,

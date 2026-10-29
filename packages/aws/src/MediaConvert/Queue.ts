@@ -123,7 +123,7 @@ export const QueueProvider = () =>
       const getQueue = Effect.fn(function* (name: string) {
         const response = yield* mediaconvert
           .getQueue({ Name: name })
-          .pipe(Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NotFoundException", () => Effect.undefined));
         return response?.Queue;
       });
 

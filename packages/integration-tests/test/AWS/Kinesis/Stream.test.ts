@@ -1,11 +1,11 @@
 import * as AWS from "@alchemy.run/aws";
 import { Stream } from "@alchemy.run/aws/Kinesis";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Kinesis from "@distilled.cloud/aws/kinesis";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Provider from "alchemy/Provider";
 import { State } from "alchemy/State";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";

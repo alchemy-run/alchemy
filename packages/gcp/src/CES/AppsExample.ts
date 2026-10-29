@@ -128,7 +128,7 @@ export type AppsExample = Resource<
 export const AppsExample = Resource<AppsExample>("GCP.CES.AppsExample");
 
 export class AppsExampleNotResolved extends Data.TaggedError("GCP.CES.AppsExampleNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (app: string, exampleId: string) => `${app}/examples/${exampleId}`;
@@ -155,10 +155,10 @@ const toAttrs = (example: ces.Example, project: string, region: string, appHint?
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ces
         .getProjectsLocationsAppsExamples({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, project: string, region: string) =>
   collectPages(
@@ -237,7 +237,7 @@ export const AppsExampleProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new AppsExampleNotResolved({ name });
+        return yield* new AppsExampleNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

@@ -181,5 +181,5 @@ export const SubdomainProvider = () =>
 const getSubdomain = (accountId: string) =>
   workers.getSubdomain({ accountId }).pipe(
     Effect.map((r) => r.subdomain),
-    Effect.catchTag("SubdomainNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("SubdomainNotFound", () => Effect.undefined),
   );

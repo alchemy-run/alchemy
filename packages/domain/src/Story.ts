@@ -6,6 +6,7 @@ import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
@@ -532,12 +533,15 @@ const clockMillis = (at: string | number | DateTime.DateTime) =>
 const advanceDuration = (by: Duration.Input) =>
   Option.getOrUndefined(Option.filter(Duration.fromInput(by), Duration.isFinite));
 
+const showDurationInput = (by: Duration.Input): string =>
+  typeof by === "string" ? by : Formatter.format(by);
+
 /** A one-line summary of a step, before it runs. */
 const describeStep = (s: Step): string => {
   switch (s._tag) {
     case "Advance": {
       const by = advanceDuration(s.by);
-      if (by === undefined) return String(s.by);
+      if (by === undefined) return showDurationInput(s.by);
       return `${Duration.isNegative(by) ? "" : "+"}${Duration.format(by)}`;
     }
     case "Clock": {
@@ -615,7 +619,12 @@ const renderReport = (
     }
     if (failure.detail !== undefined) lines.push(indent + failure.detail);
   }
-  if (failure.atEnd) lines.push(`  ✗ ${" ".repeat(width)} end`);
+  if (failure.atEnd) {
+    const head = `  ✗ ${" ".repeat(width)} ${"end".padEnd(10)} `;
+    const detail = failure.detail?.split("\n") ?? [];
+    lines.push(detail.length > 0 ? head + detail[0] : head.trimEnd());
+    for (const line of detail.slice(1)) lines.push(" ".repeat(head.length) + line);
+  }
   lines.push("  events so far");
   const streams = Object.entries(events);
   if (streams.length === 0) lines.push("    nothing");
@@ -626,6 +635,7 @@ const renderReport = (
 
 const encodeInstance = (value: { readonly _tag: string }): unknown => {
   const schema = (value as any).constructor as Schema.Top;
+  // oxlint-disable-next-line effecttsgo/schema-sync -- encodes a value for a sync story report
   return Schema.encodeUnknownSync(Schema.toCodecJson(schema as any) as any)(value);
 };
 
@@ -819,6 +829,12 @@ const make =
       const run = Effect.gen(function* () {
         const internals = yield* Model.Internals;
         const cursors = new Map<string, number>();
+        // The step that committed each event, by `Aggregate/id#index`.
+        const committedAt = new Map<string, number>();
+        const attribute = (step: number) => {
+          for (const { aggregate, id, index } of platform.control.commits.slice(committedAt.size))
+            committedAt.set(`${aggregate}/${id}#${index}`, step);
+        };
         let last:
           | { readonly _tag: "Accepted"; readonly receipt: Aggregate.Receipt }
           | { readonly _tag: "Rejected"; readonly rejection: { readonly _tag: string } }
@@ -871,6 +887,7 @@ const make =
 
         for (const [index, s] of steps.entries()) {
           const step = index + 1;
+          attribute(index);
           const fail = (
             message: string,
             compared?: {
@@ -903,7 +920,8 @@ const make =
             }
             case "Advance": {
               const by = advanceDuration(s.by);
-              if (by === undefined) return yield* fail(`${String(s.by)} is not a duration`);
+              if (by === undefined)
+                return yield* fail(`${showDurationInput(s.by)} is not a duration`);
               if (Duration.isNegative(by)) {
                 return yield* fail(`the clock only moves forward, not by ${Duration.format(by)}`);
               }
@@ -1290,6 +1308,32 @@ const make =
             message: `unanswered external system calls at the end of the story: ${show(calls.map((c) => `${c.system}.${c.op}(${show(c.args)})`))}`,
           });
         }
+        attribute(steps.length);
+        // Every committed event past its stream's cursor is one no `then` asserts.
+        const unasserted: Array<string> = [];
+        const streams = new Map<string, Aggregate.Ref>();
+        for (const { aggregate, id } of platform.control.commits)
+          streams.set(`${aggregate}/${id}`, { aggregate, id } as Aggregate.Ref);
+        for (const [stream, ref] of streams) {
+          const events = yield* committed(ref);
+          const from = cursors.get(stream) ?? 0;
+          if (events.length <= from) continue;
+          touched.set(stream, ref);
+          // Decoded, so redacted fields stay redacted in the message.
+          const rest = events.slice(from).map((e) => internals.kernel.decodeEvent(e.event));
+          const first = committedAt.get(`${stream}#${from}`);
+          unasserted.push(
+            `${stream}: ${summarizeAll(rest)}${first === undefined ? "" : ` (from step ${first})`}`,
+          );
+        }
+        if (unasserted.length > 0) {
+          return yield* new StepFailed({
+            step: steps.length,
+            atEnd: true,
+            message: `committed events no step asserts (assert them with then): ${unasserted.join("; ")}`,
+            detail: unasserted.join("\n"),
+          });
+        }
       });
 
       // Turn a failed step into a failure that shows the whole story.
@@ -1344,8 +1388,8 @@ const make =
  * model in memory: policies run for real, calls to stubbed external systems
  * wait until you answer them, calls to the others run through their adapters
  * while the story records them, and a clock you control stamps commands and
- * fires scheduled ones. A story fails on any rejection, external system call
- * or saga defect it doesn't account for.
+ * fires scheduled ones. A story fails on any committed event, rejection,
+ * external system call or saga defect it doesn't account for.
  *
  * ### Writing a story
  * **Example:** A withdrawal and an overdraft
@@ -1418,11 +1462,11 @@ const make =
 // The steps live on this object rather than as module exports: a module that
 // exports `then` is "thenable", and loaders that await module namespaces
 // would hang on it.
-// oxlint-disable-next-line unicorn/no-thenable -- `Story.then` is the given/when/then vocabulary
 export const Story = {
   make,
   given,
   when,
+  // oxlint-disable-next-line unicorn/no-thenable -- `then` is the given/when/then vocabulary
   then,
   rejected,
   replied,

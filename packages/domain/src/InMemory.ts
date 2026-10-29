@@ -57,6 +57,16 @@ export interface Control {
     readonly executionId: string;
     readonly defect: unknown;
   }>;
+  /**
+   * Every event a command committed (seeded events excluded), in commit
+   * order: its aggregate, instance id, and position in the instance's
+   * events, from 0.
+   */
+  readonly commits: ReadonlyArray<{
+    readonly aggregate: string;
+    readonly id: string;
+    readonly index: number;
+  }>;
 }
 
 /** A scheduled command: when it is due, and how to send it. */
@@ -82,6 +92,7 @@ export const make = (
   let suspended = 0;
   const failures: Array<unknown> = [];
   const deaths: Array<{ saga: string; executionId: string; defect: unknown }> = [];
+  const commits: Array<{ aggregate: string; id: string; index: number }> = [];
   // Scheduled commands by `aggregate/id/commandId`, so rescheduling replaces.
   const timers = new Map<string, Timer>();
 
@@ -174,6 +185,7 @@ export const make = (
       }),
     failures,
     deaths,
+    commits,
   };
 
   const platform = Platform.of({
@@ -182,7 +194,7 @@ export const make = (
         const instances = new Map<
           string,
           {
-            state: Json | null;
+            state: Json;
             version: number;
             readonly receipts: Map<string, SendResult>;
             /** Ids cancelled and not scheduled again since. */
@@ -242,6 +254,8 @@ export const make = (
             if (result._tag === "Rejected") return result satisfies SendResult;
             current.state = result.state;
             current.version = result.version;
+            for (let i = 0; i < result.events.length; i++)
+              commits.push({ aggregate: kit.name, id, index: current.events.length + i });
             current.events.push(...result.events);
             const sent: SendResult = {
               _tag: "Accepted",
@@ -617,18 +631,18 @@ export const make = (
           receive: (delivery) =>
             Effect.suspend(() => {
               running++;
-              return Effect.forkDetach(
-                lockFor(delivery.key)
-                  .withPermits(1)(kit.run(delivery))
-                  .pipe(
-                    Effect.catchCause((cause) =>
-                      Effect.sync(() => failures.push(cause)).pipe(
-                        Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
-                      ),
+              return lockFor(delivery.key)
+                .withPermits(1)(kit.run(delivery))
+                .pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.sync(() => failures.push(cause)).pipe(
+                      Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
                     ),
-                    Effect.ensuring(Effect.sync(() => running--)),
                   ),
-              ).pipe(Effect.asVoid);
+                  Effect.ensuring(Effect.sync(() => running--)),
+                  Effect.forkDetach,
+                  Effect.asVoid,
+                );
             }),
         };
       }),

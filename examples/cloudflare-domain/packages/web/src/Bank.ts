@@ -123,8 +123,7 @@ export const Register = Command.define("Register", {
   execute: ({ customerId }) =>
     Effect.gen(function* () {
       const bank = yield* CustomerApi.Client;
-      yield* bank.RegisterCustomer({
-        target: customerId,
+      yield* bank.RegisterCustomer(customerId, {
         name: customerId,
         username: Username.make(customerId),
       });
@@ -144,8 +143,8 @@ const deliver = (accountId: AccountId, intent: Intent) =>
     const { commandId, amount } = intent;
     const send =
       intent.kind === "deposit"
-        ? bank.DepositMoney({ target: accountId, amount, commandId })
-        : bank.WithdrawMoney({ target: accountId, amount, commandId }, mfa);
+        ? bank.DepositMoney(accountId, { amount }, { commandId })
+        : bank.WithdrawMoney(accountId, { amount }, { commandId, ...mfa });
     return yield* send.pipe(
       Effect.retry({
         while: (error) => error._tag === "RpcClientError",

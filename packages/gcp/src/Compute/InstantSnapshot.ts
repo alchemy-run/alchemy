@@ -222,7 +222,7 @@ const toAttrs = (
 const getByName = (project: string, zone: string, instantSnapshot: string) =>
   compute
     .getInstantSnapshots({ project, zone, instantSnapshot })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const waitReady = (project: string, zone: string, name: string) =>
   getByName(project, zone, name).pipe(
@@ -392,7 +392,7 @@ export const InstantSnapshotProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             Effect.flatMap((inserted) =>
               inserted === undefined
                 ? Effect.void
@@ -462,7 +462,7 @@ export const InstantSnapshotProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitZoneOperation(project, zone, operation).pipe(

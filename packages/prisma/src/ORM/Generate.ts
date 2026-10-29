@@ -78,7 +78,9 @@ export const generate = Effect.fn(function* (configFile: string) {
       return Effect.fail(
         Option.isSome(diagnostics)
           ? new CliError({
-              ...error,
+              code: error.code,
+              fix: error.fix,
+              meta: error.meta,
               message: [
                 error.message,
                 ...diagnostics.value.diagnostics.map((diagnostic) => diagnostic.message),

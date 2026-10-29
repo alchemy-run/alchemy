@@ -1,10 +1,10 @@
 import * as GitHub from "@alchemy.run/github";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Issues from "@distilled.cloud/github/issues";
 import * as Output from "alchemy/Output";
 import * as Provider from "alchemy/Provider";
 import { destroy } from "alchemy/RemovalPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { scopedToOwner } from "./scope.ts";

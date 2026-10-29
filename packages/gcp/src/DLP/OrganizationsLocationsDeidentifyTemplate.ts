@@ -165,10 +165,10 @@ const toAttrs = (
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dlp
         .getOrganizationsLocationsDeidentifyTemplates({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listAt = (parent: string, organization: string, project: string) =>
   dlp.listOrganizationsLocationsDeidentifyTemplates.pages({ parent, pageSize: 100 }).pipe(
@@ -263,7 +263,7 @@ export const OrganizationsLocationsDeidentifyTemplateProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new DlpNotResolved({ name });
+        return yield* new DlpNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

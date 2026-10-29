@@ -1,7 +1,12 @@
 import * as Data from "effect/Data";
 import type * as Effect from "effect/Effect";
 
-export type MigrationDialect = "postgres" | "mysql" | "sqlite";
+/**
+ * `googlesql` is Cloud Spanner's GoogleSQL dialect. Spanner's PostgreSQL
+ * dialect is `postgres` with `migrationTableId: "spanner"` and
+ * `defaultSchema: "public"`.
+ */
+export type MigrationDialect = "postgres" | "mysql" | "sqlite" | "googlesql";
 
 /**
  * A single migration read from disk, normalized across directory layouts.
@@ -34,8 +39,17 @@ export interface MigrationRecord {
  */
 export interface SqlExecutor {
   readonly dialect: MigrationDialect;
-  /** PostgreSQL targets without SERIAL can use UUID bookkeeping IDs. */
-  readonly migrationTableId?: "uuid";
+  /**
+   * PostgreSQL targets without SERIAL key bookkeeping rows by UUID:
+   * `uuid` generates a native uuid, `spanner` a varchar from
+   * `spanner.generate_uuid()` (Spanner has neither SERIAL nor a uuid type).
+   */
+  readonly migrationTableId?: "uuid" | "spanner";
+  /**
+   * Schema to introspect when the target has no `current_schema()`
+   * (Spanner's PostgreSQL dialect).
+   */
+  readonly defaultSchema?: string;
   /** False when DDL cannot commit atomically with history conversion. */
   readonly transactionalDdl?: boolean;
   /** Override atomic batches for targets requiring durable statement progress. */

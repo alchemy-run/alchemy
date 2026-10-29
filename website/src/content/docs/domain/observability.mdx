@@ -50,13 +50,11 @@ const Tracing = OtlpTracer.layer({
 
 ## Collect it through your Worker
 
-`Telemetry.relay` receives the browser's spans in your own Worker and forwards them to wherever the Worker's telemetry goes, with the Worker's credentials. No ingest token reaches a browser, and only signed-in users may send:
+`Telemetry.relay` receives the browser's spans in your own Worker and forwards them to wherever the Worker's telemetry goes, with the Worker's credentials. No ingest token reaches a browser, and only signed-in users may send. `signedIn` is the Worker's check of the request's session (see [Sessions and middleware](/domain/sessions#sign-the-session)):
 
 ```typescript title="packages/server/src/BankWorker.ts"
 const telemetry = Telemetry.relay({
-  authorize: Effect.map(HttpServerRequest, (request) =>
-    Option.isSome(actorOf(request.headers)),
-  ),
+  authorize: HttpServerRequest.pipe(Effect.flatMap(signedIn), Effect.map(Option.isSome)),
 });
 ```
 

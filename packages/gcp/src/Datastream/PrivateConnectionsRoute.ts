@@ -154,10 +154,10 @@ const toAttrs = (item: ds.Route, project: string, region: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : ds
         .getProjectsLocationsPrivateConnectionsRoutes({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listRoutes = (parent: string) =>
   collectPages(
@@ -266,13 +266,13 @@ export const PrivateConnectionsRouteProvider = () =>
               destinationPort: news.destinationPort,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         yield* settleOperation(created);
         current = yield* waitUntilExists(getByName(name), name);
       }
 
       if (current === undefined) {
-        return yield* new ResourceNotResolved({ name });
+        return yield* new ResourceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);
@@ -289,7 +289,7 @@ export const PrivateConnectionsRouteProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       yield* settleOperation(operation, { notFoundOk: true });
       yield* waitUntilGone(getByName(output.name), output.name);

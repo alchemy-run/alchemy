@@ -38,7 +38,7 @@ export const makeCollectorHttpBinding = <I extends { name?: string }, A, E>(opti
       ) {
         const collectorName = yield* name;
         return yield* run({
-          ...(request ?? {}),
+          ...request,
           name: collectorName,
         } as I);
       });

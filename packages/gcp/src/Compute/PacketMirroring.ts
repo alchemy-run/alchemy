@@ -430,7 +430,7 @@ const toAttrs = (policy: compute.PacketMirroring, project: string) => {
 const getByName = (project: string, region: string, packetMirroring: string) =>
   compute
     .getPacketMirrorings({ project, region, packetMirroring })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const requirePolicy = (project: string, region: string, packetMirroringName: string) =>
   getByName(project, region, packetMirroringName).pipe(
@@ -560,7 +560,7 @@ export const PacketMirroringProvider = () =>
             },
           })
           .pipe(
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
             // A just-created collector forwarding rule is briefly not ready.
             Effect.retry({
               while: (error) => error._tag === "CollectorIlbNotReady",
@@ -644,7 +644,7 @@ export const PacketMirroringProvider = () =>
             times: 8,
             schedule: Schedule.spaced("2 seconds"),
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitRegionOperation(env.project, region, operation, {

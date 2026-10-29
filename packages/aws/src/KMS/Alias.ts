@@ -10,7 +10,7 @@ import * as Stream from "effect/Stream";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
-import type { KeyArn, KeyId } from "./Key.ts";
+import type { KeyId } from "./Key.ts";
 
 export type AliasName = `alias/${string}`;
 export type AliasArn = `arn:aws:kms:${RegionID}:${AccountID}:${AliasName}`;
@@ -23,7 +23,7 @@ export interface AliasProps {
   /**
    * Target KMS key ID or ARN for this alias.
    */
-  targetKeyId: KeyId | KeyArn;
+  targetKeyId: KeyId;
 }
 
 export interface Alias extends Resource<

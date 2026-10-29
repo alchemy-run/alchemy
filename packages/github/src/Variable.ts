@@ -247,7 +247,7 @@ const getVariable = Effect.fn(
       environment !== undefined
         ? Actions.getEnvironmentVariable({ ...scope, environment_name: environment })
         : Actions.getRepoVariable(scope)
-    ).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    ).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   },
   (effect, props) => effect.pipe(withBaseUrl(props.baseUrl)),
 );

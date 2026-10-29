@@ -643,15 +643,16 @@ describe("Domain Story", () => {
       const counters = yield* Counter;
       yield* counters.send(c1, new Increment({ by: 3 }));
       const reset = yield* client.ResetCounter(
-        { target: "c-1" },
+        "c-1",
+        {},
         { headers: Headers.fromInput({ "x-operator": "sam" }) },
       );
       expect(reset).toEqual({ reply: { total: 0 }, stream: "Counter/c-1", version: 2 });
       const denied = yield* client
-        .ResetCounter({ target: "c-1" }, { headers: Headers.fromInput({ "x-operator": "guest" }) })
+        .ResetCounter("c-1", {}, { headers: Headers.fromInput({ "x-operator": "guest" }) })
         .pipe(Effect.flip);
       expect(denied._tag).toBe("NotAnOperator");
-      const anonymous = yield* client.ResetCounter({ target: "c-1" }).pipe(Effect.flip);
+      const anonymous = yield* client.ResetCounter("c-1").pipe(Effect.flip);
       expect(anonymous._tag).toBe("Unauthenticated");
     }).pipe(
       Effect.scoped,
@@ -892,6 +893,60 @@ describe("Domain Story", () => {
       }),
     );
   });
+
+  it.effect("fails on a committed event no step asserts", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 2, total: 2 })),
+      Story.when(c1, new Increment({ by: 3 })),
+      Story.replied({ total: 5 }),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.step).toBe(3);
+        expect(failure.reason).toBe(
+          "committed events no step asserts (assert them with then): Counter/c-1: Incremented { by: 3, total: 5 } (from step 2)",
+        );
+        expect(failure.message.split("\n\n")[1]).toBe(
+          [
+            "  ✓ 1 Given      Counter/c-1: Incremented { by: 2, total: 2 }",
+            "  ✓ 2 When       Counter/c-1: Increment { by: 3 }",
+            "  ✓ 3 Replied    { total: 5 }",
+            "  ✗   end        Counter/c-1: Incremented { by: 3, total: 5 } (from step 2)",
+            "  events so far",
+            "    Counter/c-1: Incremented → Incremented",
+          ].join("\n"),
+        );
+      }),
+    ),
+  );
+
+  it.effect("fails on the events after the ones a then names", () =>
+    story(
+      Story.given(c1, new Incremented({ by: 10, total: 10 })),
+      Story.when(c1, new Increment({ by: 6 })),
+      Story.call(Approval.check, { total: 16 }),
+      Story.succeed(Approval.check, { ok: true }),
+      Story.then(c1, new Incremented({ by: 6, total: 16 })),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) =>
+        expect(failure.reason).toContain("Counter/c-1: Capped (from step 4)"),
+      ),
+    ),
+  );
+
+  it.effect("fails on events a policy commits on a stream no step names", () =>
+    story(
+      Story.when(m1, new MakeMove({ from: "c-1", to: "c-2", amount: 30 })),
+      Story.then(m1, new Moved({ from: "c-1", to: "c-2", amount: 30 })),
+    ).pipe(
+      Effect.flip,
+      Effect.map((failure) => {
+        expect(failure.reason).toContain("Counter/c-1: Capped (from step 1)");
+        expect(failure.events).toEqual({ "Move/m-1": ["Moved"], "Counter/c-1": ["Capped"] });
+      }),
+    ),
+  );
 
   it.effect("a scheduled command fires when the clock reaches it", () =>
     story(

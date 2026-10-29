@@ -3,6 +3,7 @@ import * as Cloudflare from "@alchemy.run/cloudflare";
 import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnvironment";
 import * as R2 from "@alchemy.run/cloudflare/R2";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers_for_platforms";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
@@ -14,7 +15,6 @@ import * as Provider from "alchemy/Provider";
 import { Stack } from "alchemy/Stack";
 import { State } from "alchemy/State";
 import { isResourceState } from "alchemy/State/State";
-import * as Test from "alchemy/Test/Alchemy";
 import { initialCwd } from "alchemy/Util/Node";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
@@ -1741,6 +1741,57 @@ describe.concurrent(
           yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
         }).pipe(logLevel),
       { tags: ["live"], timeout: 360_000 },
+    );
+
+    // Cloudflare keeps a `secret_text` binding that a script upload omits, so
+    // a secret removed from `env` stayed bound to the deployed Worker. The
+    // cleanup must not touch a secret set outside Alchemy.
+    test.provider(
+      "a secret removed from env is unbound; one set outside Alchemy is kept",
+      (stack) =>
+        Effect.gen(function* () {
+          const { accountId } = yield* yield* CloudflareEnvironment;
+
+          yield* stack.destroy();
+
+          const program = (env: Record<string, Redacted.Redacted<string>>) =>
+            Cloudflare.Worker("RemovedSecretWorker", { main, env });
+          const secretBindings = (scriptName: string) =>
+            workers.getScriptScriptAndVersionSetting({ accountId, scriptName }).pipe(
+              Effect.map((settings) =>
+                (settings.bindings ?? [])
+                  .filter((binding) => binding.type === "secret_text")
+                  .map((binding) => binding.name)
+                  .sort(),
+              ),
+            );
+
+          const v1 = yield* stack.deploy(
+            program({ DROPPED: Redacted.make("dropped"), KEPT: Redacted.make("kept") }),
+          );
+          expect(yield* secretBindings(v1.workerName)).toEqual(["DROPPED", "KEPT"]);
+          yield* workers.putScriptSecret({
+            accountId,
+            scriptName: v1.workerName,
+            name: "OUTSIDE",
+            text: "set-outside-alchemy",
+            type: "secret_text",
+          });
+
+          const v2 = yield* stack.deploy(program({ KEPT: Redacted.make("kept") }));
+          expect(yield* secretBindings(v2.workerName)).toEqual(["KEPT", "OUTSIDE"]);
+          expect(v2.secretNames).toEqual(["KEPT"]);
+
+          const settledPlan = yield* stack.plan(program({ KEPT: Redacted.make("kept") }));
+          const action = Object.values(settledPlan.resources).find(
+            (node) => node.resource.LogicalId === "RemovedSecretWorker",
+          )?.action;
+          expect(action).toBe("noop");
+
+          yield* stack.destroy();
+          yield* waitForWorkerToBeDeleted(v1.workerName, accountId);
+        }).pipe(logLevel),
+      { tags: ["live"], timeout: 240_000 },
     );
 
     test.provider(

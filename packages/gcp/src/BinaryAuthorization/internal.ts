@@ -14,7 +14,7 @@ export const LIST_PLATFORMS = ["gke", "cloudRun"] as const;
 export class ResourceNotResolved extends Data.TaggedError(
   "GCP.BinaryAuthorization.ResourceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 export const lastSegment = (value: string) => {
@@ -190,8 +190,8 @@ export const missingGet =
   ) =>
   (name: string) =>
     name.length === 0
-      ? Effect.succeed(undefined)
-      : effect({ name }).pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+      ? Effect.undefined
+      : effect({ name }).pipe(Effect.catchIf(isNotFound, () => Effect.undefined));
 
 const emptyList = <A>() => Effect.succeed<A[]>([]);
 

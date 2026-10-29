@@ -75,7 +75,9 @@ interface JsonCodec {
 const jsonCodec = (schema: Schema.Top): JsonCodec => {
   const codec = Schema.toCodecJson(schema as any) as any;
   return {
+    // oxlint-disable-next-line effecttsgo/schema-sync -- JsonCodec is sync by contract
     encode: Schema.encodeUnknownSync(codec),
+    // oxlint-disable-next-line effecttsgo/schema-sync -- JsonCodec is sync by contract
     decode: Schema.decodeUnknownSync(codec),
   };
 };
@@ -155,7 +157,7 @@ export interface Kernel {
     commandTag: string,
     json: ReceiptJson,
   ) => Aggregate.Receipt;
-  readonly decodeState: (aggregate: Aggregate.Any, json: Json | null) => unknown;
+  readonly decodeState: (aggregate: Aggregate.Any, json: Json) => unknown;
   readonly decodeViewState: (view: View.Any, json: Json) => unknown;
   readonly decodeViewEntry: (view: View.Any, entry: ViewEntry) => View.Entry<unknown, unknown>;
   readonly decodeEvent: (json: Json) => unknown;
@@ -586,7 +588,7 @@ const build = (
     return codec;
   };
   /** Decode the state a delivery carries from a view source. */
-  const sourceState = (entry: SourceEntry, json: Json | null | undefined) =>
+  const sourceState = (entry: SourceEntry, json: Json) =>
     json === undefined || json === null || entry.kind !== "view" || !entry.view.definition.state
       ? json
       : viewCodec(entry.view).decode(json);
@@ -598,6 +600,7 @@ const build = (
   ): Omit<AggregateKit, "push"> => {
     const def = aggregate.definition;
     const codecs = codecsOf(aggregate);
+    // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
     const decodeId = Schema.decodeUnknownSync(def.id as any) as (u: unknown) => unknown;
     const commit = (
       id: string,
@@ -714,8 +717,8 @@ const build = (
             const settled = settle(
               yield* Effect.exit(
                 Effect.provideContext(
-                  decision as Effect.Effect<unknown, unknown, never>,
-                  RequestContext.restore(input.context),
+                  decision,
+                  RequestContext.restore(input.context) as Context.Context<unknown>,
                 ),
               ),
             );
@@ -837,7 +840,7 @@ const build = (
       name: view.viewName,
       deliver,
       observe: (key, batch) => (effect) => {
-        if (!telemetry.views || batch.length === 0 || batch.every((d) => d.history)) return effect;
+        if (!telemetry.views || batch.every((d) => d.history)) return effect;
         const traces = batch.flatMap((d) => (d.envelope.trace ? [d.envelope.trace] : []));
         const single = batch.length === 1 && traces.length === 1;
         const attributes = {

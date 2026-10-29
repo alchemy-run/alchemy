@@ -1,10 +1,10 @@
 import * as GCP from "@alchemy.run/gcp";
 import { decodeFields, encodeFields } from "@alchemy.run/gcp/Firestore/Values";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as crm from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as firestore from "@distilled.cloud/gcp/firestore_v1";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Effect from "effect/Effect";
 import { expectProbe } from "../bindingHost.ts";
 import FirestoreBindingsHost, {

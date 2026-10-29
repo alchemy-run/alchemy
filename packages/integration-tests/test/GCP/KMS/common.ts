@@ -1,4 +1,4 @@
-import * as Core from "alchemy/Test/Core";
+import * as Core from "@alchemy.run/test/Core";
 
 /**
  * Cloud KMS never deletes key rings, and keeps destroyed keys for at least

@@ -238,7 +238,7 @@ const observeAssociation = (zoneId: string, hostname: string) =>
     Effect.map((assoc) =>
       assoc.enabled === null || assoc.enabled === undefined ? undefined : assoc,
     ),
-    Effect.catchTag("HostnameAssociationNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("HostnameAssociationNotFound", () => Effect.undefined),
   );
 
 type AssociationShape = {

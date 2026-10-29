@@ -29,7 +29,12 @@ export class WaitTimeout extends Data.TaggedError("WaitTimeout")<{
  */
 export class ConsistencyTimeout extends Schema.TaggedError<ConsistencyTimeout>()(
   "ConsistencyTimeout",
-  { view: Schema.String, key: Schema.String, stream: Schema.String, version: Schema.Number },
+  {
+    view: Schema.String,
+    key: Schema.String,
+    stream: Schema.String,
+    version: Schema.Number,
+  },
 ) {}
 
 /** A handler, or one handler per named route. */

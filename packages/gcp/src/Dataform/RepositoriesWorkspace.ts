@@ -107,7 +107,7 @@ export const RepositoriesWorkspace = Resource<RepositoriesWorkspace>(
 export class RepositoriesWorkspaceNotResolved extends Data.TaggedError(
   "GCP.Dataform.RepositoriesWorkspaceNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (repository: string, workspaceId: string) =>
@@ -130,10 +130,10 @@ const toAttrs = (workspace: dataform.Workspace, project: string, region: string)
 
 const getByName = (name: string) =>
   name.length === 0 || name.includes("//")
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : dataform
         .getProjectsLocationsRepositoriesWorkspaces({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const RepositoriesWorkspaceProvider = () =>
   Provider.succeed(RepositoriesWorkspace, {
@@ -180,7 +180,7 @@ export const RepositoriesWorkspaceProvider = () =>
       const attrs = toAttrs(existing, env.project, env.region);
       const parent = yield* dataform
         .getProjectsLocationsRepositories({ name: attrs.repository })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (parent === undefined) return Unowned(attrs);
       return hasAlchemyLabelMap(parent.labels) ? attrs : Unowned(attrs);
     }),
@@ -220,7 +220,7 @@ export const RepositoriesWorkspaceProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new RepositoriesWorkspaceNotResolved({ name });
+        return yield* new RepositoriesWorkspaceNotResolved({ resourceName: name });
       }
 
       return toAttrs(current, env.project, env.region);

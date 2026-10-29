@@ -101,9 +101,7 @@ export const deregisterAllInstances = Effect.fn("AWS.CloudMap.deregisterAllInsta
         .pipe(
           // already gone / a deregistration already in flight — both mean
           // the instance is on its way out
-          Effect.catchTag(["InstanceNotFound", "DuplicateRequest"], () =>
-            Effect.succeed(undefined),
-          ),
+          Effect.catchTag(["InstanceNotFound", "DuplicateRequest"], () => Effect.undefined),
         );
       if (response?.OperationId !== undefined) {
         operationIds.push(response.OperationId);
@@ -144,7 +142,7 @@ export const observeNamespace = Effect.fn("AWS.CloudMap.observeNamespace")(funct
   if (namespaceId !== undefined) {
     const byId = yield* sd.getNamespace({ Id: namespaceId }).pipe(
       Effect.map((r) => r.Namespace),
-      Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("NamespaceNotFound", () => Effect.undefined),
     );
     if (byId !== undefined) {
       return byId;
@@ -158,7 +156,7 @@ export const observeNamespace = Effect.fn("AWS.CloudMap.observeNamespace")(funct
   // type; also tolerates a delete race between list and get)
   return yield* sd.getNamespace({ Id: summary.Id }).pipe(
     Effect.map((r) => r.Namespace),
-    Effect.catchTag("NamespaceNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NamespaceNotFound", () => Effect.undefined),
   );
 });
 

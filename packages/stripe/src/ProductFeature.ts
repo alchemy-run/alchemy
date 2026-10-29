@@ -108,9 +108,7 @@ const toAttrs = (product: string, feature: StripeProductFeature): ProductFeature
 const isMissing = isMissingStripeResource;
 
 const getById = (product: string, id: string) =>
-  GetProductFeature({ product, id }).pipe(
-    Effect.catchIf(isMissing, () => Effect.succeed(undefined)),
-  );
+  GetProductFeature({ product, id }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
 
 const listFeatures = Effect.fn(function* (product: string) {
   const features: StripeProductFeature[] = [];
@@ -120,7 +118,7 @@ const listFeatures = Effect.fn(function* (product: string) {
       product,
       limit: LIST_PAGE_SIZE,
       ...(startingAfter !== undefined ? { starting_after: startingAfter } : {}),
-    }).pipe(Effect.catchIf(isMissing, () => Effect.succeed(undefined)));
+    }).pipe(Effect.catchIf(isMissing, () => Effect.undefined));
     if (response === undefined) {
       break;
     }

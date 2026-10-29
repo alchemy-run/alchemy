@@ -26,6 +26,7 @@ wrangler.jsonc
 smoke
 .svelte-kit
 .astro
+.vinext
 .wrangler
 
 *.tgz

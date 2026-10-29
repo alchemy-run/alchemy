@@ -79,7 +79,7 @@ export const ReceiptRuleSetProvider = () =>
       const describe = Effect.fn(function* (name: string) {
         return yield* ses
           .describeReceiptRuleSet({ RuleSetName: name })
-          .pipe(Effect.catchTag("RuleSetDoesNotExistException", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("RuleSetDoesNotExistException", () => Effect.undefined));
       });
 
       return ReceiptRuleSet.Provider.of({

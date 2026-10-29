@@ -16,6 +16,18 @@ import { durationToDays, unwrapRedactedString } from "../IAM/common.ts";
 import type { Providers } from "../Providers.ts";
 import { applyRedshiftTagDelta, redshiftArn, sameStringSet, toTagRecord } from "./internal.ts";
 
+export class RedshiftClusterNotReady extends Data.TaggedError("RedshiftClusterNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class RedshiftClusterUnexpectedResponse extends Data.TaggedError(
+  "RedshiftClusterUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 /**
  * Creating a provisioned Redshift cluster requires either a
  * `masterUserPassword` or `manageMasterPassword: true`.
@@ -313,7 +325,7 @@ export const ClusterProvider = () =>
       const readCluster = Effect.fn(function* (identifier: string) {
         const response = yield* redshift
           .describeClusters({ ClusterIdentifier: identifier })
-          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.undefined));
         return response?.Clusters?.[0];
       });
 
@@ -322,13 +334,15 @@ export const ClusterProvider = () =>
           readCluster(identifier).pipe(
             Effect.flatMap((cluster) => {
               if (cluster === undefined) {
-                return Effect.fail(new Error(`Cluster '${identifier}' not found`));
+                return Effect.fail(
+                  new RedshiftClusterNotReady({ message: `Cluster '${identifier}' not found` }),
+                );
               }
               if (cluster.ClusterStatus !== "available") {
                 return Effect.fail(
-                  new Error(
-                    `Cluster '${identifier}' not available (status: ${cluster.ClusterStatus})`,
-                  ),
+                  new RedshiftClusterNotReady({
+                    message: `Cluster '${identifier}' not available (status: ${cluster.ClusterStatus})`,
+                  }),
                 );
               }
               return Effect.succeed(cluster);
@@ -349,9 +363,9 @@ export const ClusterProvider = () =>
                 cluster.ClusterStatus !== "deleting"
               ) {
                 return Effect.fail(
-                  new Error(
-                    `Cluster '${identifier}' still settling (status: ${cluster.ClusterStatus})`,
-                  ),
+                  new RedshiftClusterNotReady({
+                    message: `Cluster '${identifier}' still settling (status: ${cluster.ClusterStatus})`,
+                  }),
                 );
               }
               return Effect.succeed(cluster);
@@ -363,7 +377,9 @@ export const ClusterProvider = () =>
       const toAttrs = Effect.fn(function* (cluster: redshift.Cluster) {
         const { accountId, region } = yield* AWSEnvironment.current;
         if (!cluster.ClusterIdentifier) {
-          return yield* Effect.fail(new Error("Cluster is missing its identifier"));
+          return yield* new RedshiftClusterUnexpectedResponse({
+            message: "Cluster is missing its identifier",
+          });
         }
         return {
           clusterIdentifier: cluster.ClusterIdentifier,
@@ -478,7 +494,7 @@ export const ClusterProvider = () =>
                   Value,
                 })),
               })
-              .pipe(Effect.catchTag("ClusterAlreadyExistsFault", () => Effect.succeed(undefined)));
+              .pipe(Effect.catchTag("ClusterAlreadyExistsFault", () => Effect.undefined));
           }
 
           // Provisioning and in-flight modifications both surface as a
@@ -615,7 +631,7 @@ export const ClusterProvider = () =>
                 ClusterIdentifier: identifier,
                 SkipFinalClusterSnapshot: true,
               })
-              .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.succeed(undefined))),
+              .pipe(Effect.catchTag("ClusterNotFoundFault", () => Effect.undefined)),
           ).pipe(Effect.catchTag("InvalidClusterStateFault", () => Effect.void));
         }),
 

@@ -163,7 +163,7 @@ export type ArrayExpr<A extends any[], Req = any> = Output<A, Req> & {
 };
 
 export const isResourceExpr = <Value = any, Req = any>(
-  node: Expr<Value, Req> | any,
+  node: any,
 ): node is ResourceExpr<Value, Req> => exprKind(node) === "ResourceExpr";
 
 export class ResourceExpr<Value, Req = never> extends BaseExpr<Value, Req> {
@@ -629,7 +629,7 @@ export const evaluate: <A, Req = never>(
         const value = yield* evaluate(expr.expr, upstream);
         return yield* evaluate(expr.f(value), upstream);
       } else if (isAllExpr(expr)) {
-        return yield* Effect.all(expr.outs.map((out) => evaluate(out, upstream)));
+        return yield* Effect.forEach(expr.outs, (out) => evaluate(out, upstream));
       } else if (isPropExpr(expr)) {
         return (yield* evaluate(expr.expr, upstream))?.[expr.identifier];
       } else if (isNamedExpr(expr)) {
@@ -682,13 +682,11 @@ export const evaluate: <A, Req = never>(
       }
       const nested = new Set(ancestors).add(expr);
       if (Array.isArray(expr)) {
-        return yield* Effect.all(expr.map((item) => evaluate(item, upstream, nested)));
+        return yield* Effect.forEach(expr, (item) => evaluate(item, upstream, nested));
       }
       return Object.fromEntries(
-        yield* Effect.all(
-          Object.entries(expr).map(([key, value]) =>
-            evaluate(value, upstream, nested).pipe(Effect.map((value) => [key, value])),
-          ),
+        yield* Effect.forEach(Object.entries(expr), ([key, value]) =>
+          evaluate(value, upstream, nested).pipe(Effect.map((value) => [key, value])),
         ),
       );
     }

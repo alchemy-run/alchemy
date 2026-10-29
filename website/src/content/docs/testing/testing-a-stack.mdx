@@ -14,7 +14,7 @@ import * as Alchemy from "alchemy";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as Drizzle from "@alchemy.run/drizzle";
 import * as Neon from "@alchemy.run/neon";
-import * as Test from "alchemy/Test/Bun";
+import * as Test from "@alchemy.run/test/Bun";
 import { expect } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -64,9 +64,9 @@ const stack = beforeAll(deploy(Stack), { timeout: 600_000 });
 Run the suite with your runner:
 
 ```sh
-bun test test/integ.test.ts            # alchemy/Test/Bun
-bunx alchemy-test test/integ.test.ts   # alchemy/Test/Alchemy
-npx vitest run test/integ.test.ts      # alchemy/Test/Vitest
+bun test test/integ.test.ts            # @alchemy.run/test/Bun
+bunx alchemy-test test/integ.test.ts   # @alchemy.run/test/Alchemy
+npx vitest run test/integ.test.ts      # @alchemy.run/test/Vitest
 ```
 
 The first run deploys; re-runs diff and skip unchanged Resources, and tests default to the isolated `test_$USER` [stage](/environments/stages) so they never clobber your `live_$USER` / `dev_$USER` deployments.

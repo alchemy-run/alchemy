@@ -1,9 +1,9 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Kubernetes from "@alchemy.run/kubernetes";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Core from "@alchemy.run/test/Core";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
-import * as Core from "alchemy/Test/Core";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";

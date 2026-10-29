@@ -43,7 +43,7 @@ export const retryRolePropagation =
 export const getConnector = (identifier: string) =>
   lambdacore
     .getNetworkConnector({ Identifier: identifier })
-    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
 export const normalizeList = (values: readonly string[] | undefined): string[] =>
   [...(values ?? [])].sort();
@@ -218,7 +218,7 @@ export const waitForDeleted = (identifier: string, session: ScopedPlanStatusSess
   Effect.gen(function* () {
     const connector = yield* lambdacore
       .getNetworkConnector({ Identifier: identifier })
-      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
     // A missing connector is the success signal — it has been deleted.
     if (!connector) return;
     if (connector.State === "DELETE_FAILED") {

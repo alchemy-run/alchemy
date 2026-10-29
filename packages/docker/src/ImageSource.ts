@@ -460,7 +460,7 @@ export const makeContainerImageSource = Effect.gen(function* () {
       envFrom !== undefined
         ? `FROM ${envFrom}`
         : source.dockerfile !== undefined && isInlineDockerfile(source.dockerfile)
-          ? String(source.dockerfile.content).trimEnd()
+          ? (source.dockerfile.content as string).trimEnd()
           : `FROM ${source.image ?? "oven/bun:1"}`;
     const lines = [
       preamble,

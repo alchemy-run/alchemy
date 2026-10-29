@@ -188,9 +188,7 @@ export const EventBusProvider = () =>
                 .describeEventBus({
                   Name: eventBusName,
                 })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
               if (!described?.Arn || !described.Name) {
                 return undefined;
@@ -261,9 +259,7 @@ export const EventBusProvider = () =>
                 .describeEventBus({
                   Name: eventBusName,
                 })
-                .pipe(
-                  Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                );
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
 
               // Ensure — create the bus if missing. Tolerate
               // `ResourceAlreadyExistsException` as a race with a peer
@@ -287,9 +283,7 @@ export const EventBusProvider = () =>
                   .describeEventBus({
                     Name: eventBusName,
                   })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  );
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined));
               }
 
               // Sync mutable bus configuration — `updateEventBus` overwrites

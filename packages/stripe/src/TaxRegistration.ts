@@ -491,9 +491,7 @@ const toAttrs = (registration: StripeTaxRegistration): TaxRegistrationAttributes
 const isMissingRegistration = isMissingStripeResource;
 
 const getById = (id: string) =>
-  GetTaxRegistration({ id }).pipe(
-    Effect.catchIf(isMissingRegistration, () => Effect.succeed(undefined)),
-  );
+  GetTaxRegistration({ id }).pipe(Effect.catchIf(isMissingRegistration, () => Effect.undefined));
 
 const listByStatus = Effect.fn(function* (status: "active" | "all" | "expired" | "scheduled") {
   const registrations: StripeTaxRegistration[] = [];

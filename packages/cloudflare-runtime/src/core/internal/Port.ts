@@ -222,7 +222,7 @@ export const make = (options: PortsOptions) =>
           socket.destroy();
           resume(effect);
         };
-        socket.once("connect", () => settle(Effect.fail(addressInUseError(port))));
+        socket.once("connect", () => addressInUseError(port).pipe(Effect.fail, settle));
         socket.once("error", () => settle(Effect.succeed(port)));
         socket.once("timeout", () => settle(Effect.succeed(port)));
         return Effect.sync(() => socket.destroy());
