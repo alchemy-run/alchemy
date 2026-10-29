@@ -15,7 +15,7 @@ export class After extends Domain.Model("Ledger", { aggregates: [Account], views
 /**
  * The benchmark Worker's routes: `POST /seed/<from>/<count>/<events>` writes
  * `events` deposits to each of accounts `b<from>` to `b<from + count - 1>`;
- * `GET /deposits/<account>`, `GET /history` and `GET /version`.
+ * `GET /account/<account>`, `GET /deposits/<account>`, `GET /history` and `GET /version`.
  */
 export const benchWorker = (version: string, view?: typeof Deposits) =>
   Effect.gen(function* () {
@@ -30,6 +30,9 @@ export const benchWorker = (version: string, view?: typeof Deposits) =>
           const state = yield* deposits.query(Account.ref(path[2]!));
           return yield* HttpServerResponse.json(Option.getOrNull(state));
         }
+        if (path[1] === "account") {
+          return yield* HttpServerResponse.json(yield* accounts.state(path[2]!));
+        }
         if (path[1] === "history" && deposits) {
           return yield* HttpServerResponse.json(yield* deposits.history);
         }
@@ -40,7 +43,11 @@ export const benchWorker = (version: string, view?: typeof Deposits) =>
           (account) =>
             Effect.forEach(
               Array.from({ length: events }, (_, n) => n + 1),
-              (amount) => accounts.send(account, new Deposit({ amount })),
+              // Idempotent: a retried seed request doesn't deposit twice.
+              (amount) =>
+                accounts.send(account, new Deposit({ amount }), {
+                  commandId: `seed-${account}-${amount}`,
+                }),
               { discard: true },
             ),
           { concurrency: 50, discard: true },

@@ -254,17 +254,22 @@ const SAFETY_POLL_MS = 60_000;
 
 /**
  * Run a job again after a refusal or a failure: soon the first time (a deploy's
- * new code may not have reached the object yet), then at the slow pace (an
- * object kept busy on older code stays on it, so it must be left idle).
+ * new code may not have reached the object yet), then at the slow pace, doubling
+ * up to four times it. Cloudflare moves a Durable Object to new code when it is
+ * evicted, after it has sat idle for a while: calls at a fixed pace can keep it on
+ * older code indefinitely, so the gaps grow until it can go idle.
  */
 const makeRetry = (storage: Storage, jobs: Jobs, limits: Limits) => {
   const key = (id: string) => `bf:retry:${id}`;
   return {
     later: (id: string, slowMillis: number) =>
       Effect.gen(function* () {
-        const retried = (yield* storage.get<boolean>(key(id))) === true;
-        if (!retried) yield* storage.put({ [key(id)]: true });
-        yield* jobs.schedule(id, retried ? slowMillis : limits.firstRetryMillis);
+        const tries = (yield* storage.get<number>(key(id))) ?? 0;
+        yield* storage.put({ [key(id)]: tries + 1 });
+        yield* jobs.schedule(
+          id,
+          tries === 0 ? limits.firstRetryMillis : slowMillis * 2 ** Math.min(tries - 1, 2),
+        );
       }),
     /** The job went through: its next failure retries soon again. */
     clear: (id: string) =>

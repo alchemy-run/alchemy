@@ -193,6 +193,10 @@ for (const instances of sizes) {
         expect(history.complete).toBe(true);
         const expected = Array.from({ length: EVENTS }, (_, n) => n + 1);
         for (const i of [0, Math.floor(instances / 2), instances - 1]) {
+          const account = JSON.parse(yield* call(url, "GET", `/account/b${i}`)) as {
+            balance: number;
+          };
+          expect(account.balance).toBe((EVENTS * (EVENTS + 1)) / 2);
           const body = JSON.parse(yield* call(url, "GET", `/deposits/b${i}`)) as {
             amounts: ReadonlyArray<number>;
           };
