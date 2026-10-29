@@ -457,11 +457,16 @@ const make = (options: Options) =>
     const announce = (key: string) => PubSub.publish(commits, key).pipe(Effect.asVoid);
     /** Fires now, then on every local commit of `key` and every `watchMillis`. */
     const ticks = (key: string): Stream.Stream<void> =>
-      Stream.merge(
-        Stream.tick(watchMillis),
-        Stream.fromPubSub(commits).pipe(
-          Stream.filter((committed) => committed === key),
-          Stream.as(undefined),
+      // Subscribe before the first read, so no commit falls between the two.
+      Stream.unwrap(
+        Effect.map(PubSub.subscribe(commits), (subscription) =>
+          Stream.merge(
+            Stream.tick(watchMillis),
+            Stream.fromSubscription(subscription).pipe(
+              Stream.filter((committed) => committed === key),
+              Stream.as(undefined),
+            ),
+          ),
         ),
       );
     /** The current value, then every new one, by `version`. */
