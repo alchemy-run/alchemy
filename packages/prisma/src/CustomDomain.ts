@@ -1,3 +1,12 @@
+import {
+  type CreateServiceDomainResponseData,
+  createDomainRetry,
+  createServiceDomain,
+  deleteDomain,
+  getDomain,
+  getServiceDomains,
+  getServices,
+} from "@distilled.cloud/prisma/management";
 import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -5,22 +14,19 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import type { App } from "./App.ts";
-import {
-  PrismaApiError,
-  PrismaClient,
-  isConflict,
-  isNotFound,
-  type PrismaManagementClient,
-} from "./Client.ts";
 import type { Compute } from "./Compute.ts";
+import type { DomainOwnership } from "./DomainOwnership.ts";
+import { waitForAuthoritativeRecord } from "./internal/AuthoritativeDns.ts";
 import { DEV_TIMESTAMP, attrOrString, devId, devProvider } from "./internal/DevStub.ts";
 import { ownershipRequiredOf } from "./internal/DomainOwnership.ts";
+import { PrismaPaginationError } from "./internal/Pagination.ts";
 import { concreteIdOf, concreteIdsChanged, isInputObject, isPrismaDevId } from "./internal/Refs.ts";
 import type { Providers } from "./Providers.ts";
-import type { CustomDomain as ApiCustomDomain } from "./Types.ts";
+
+/** A custom domain as the Management API returns it. */
+type ApiCustomDomain = CreateServiceDomainResponseData;
 
 export class CustomDomainConflict extends Data.TaggedError("CustomDomainConflict")<{
   readonly message: string;
@@ -55,9 +61,12 @@ export interface CustomDomainProps {
    * Hostname to attach to the app.
    */
   hostname: string;
+  /**
+   * Ownership that proves the workspace owns the hostname, exact or
+   * wildcard. Passing it creates the domain after the proof.
+   */
+  ownership?: DomainOwnership;
 }
-
-export { PrismaDomainOwnershipRequired } from "./internal/DomainOwnership.ts";
 
 export interface CustomDomain extends Resource<
   "Prisma.CustomDomain",
@@ -117,11 +126,11 @@ export interface CustomDomain extends Resource<
  *
  * Prisma verifies the hostname's `CNAME` to the app's regional switchboard
  * (`switchboard.{region}.prisma.build`, listed in `dnsRecords`) when the
- * domain is created, so publish it first. Prisma also requires a workspace
- * ownership `TXT` record on the hostname, which
- * `Prisma.DomainVerification` reads; until it exists, the deploy fails with
- * {@link PrismaDomainOwnershipRequired}, whose `recordName` and
- * `recordValue` name the record to publish. Creation then starts asynchronous
+ * domain is created, so publish it first. Prisma also requires the workspace
+ * to own the hostname (`Prisma.DomainOwnership`, exact or wildcard); until it
+ * does, the deploy fails with `PrismaDomainOwnershipRequired`, whose
+ * `recordName` and `recordValue` name the record to publish. Creation then
+ * starts asynchronous
  * certificate provisioning; inspect `status`, `foundryStatus`, and
  * `failureReason` before routing production traffic.
  *
@@ -139,17 +148,17 @@ export interface CustomDomain extends Resource<
  * ```
  *
  * ### Proving Ownership of a Hostname
- * **Example:** Publish the ownership record before the domain
+ * **Example:** Attach hostnames under a wildcard the workspace owns
  * ```typescript
- * const verification = yield* Prisma.DomainVerification("api-verification", {
- *   app,
- *   hostname: "api.example.com",
+ * const ownership = yield* Prisma.DomainOwnership("example.com", {
+ *   project,
+ *   domain: "*.example.com",
+ *   dns: Cloudflare.DNS.Adapter(),
  * });
- * yield* Cloudflare.DNS.Record("api-verification-record", {
- *   zoneId,
- *   name: verification.recordName,
- *   type: "TXT",
- *   content: verification.recordValue,
+ * const domain = yield* Prisma.CustomDomain("api-domain", {
+ *   app: api,
+ *   hostname: "api.example.com",
+ *   ownership,
  * });
  * ```
  *
@@ -178,9 +187,9 @@ const sameHostname = (left: string, right: string) =>
   normalizeHostname(left) === normalizeHostname(right);
 
 const adoptionRequiredError = (hostname: string, appId: string, detail: string) =>
-  new Error(
-    `Prisma custom domain '${hostname}' ${detail} on App '${appId}' but is not owned by this resource. Import it with explicit adoption instead of silently taking it over.`,
-  );
+  new CustomDomainConflict({
+    message: `Prisma custom domain '${hostname}' ${detail} on App '${appId}' but is not owned by this resource. Import it with explicit adoption instead of silently taking it over.`,
+  });
 
 const appIdValue = (app: AppReference | undefined) => (typeof app === "string" ? app : app?.appId);
 
@@ -193,9 +202,10 @@ const resolveAppId = (app: AppReference) => {
     : Effect.fail(new CustomDomainOperationFailed({ message: "Unable to resolve Prisma app id." }));
 };
 
-const findDomain = (client: PrismaManagementClient, appId: string, hostname: string) =>
-  client.listAppDomains(appId).pipe(
-    Effect.catchIf(isNotFound, () => Effect.succeed([])),
+const findDomain = (appId: string, hostname: string) =>
+  getServiceDomains({ serviceId: appId }).pipe(
+    Effect.map((response) => response.data),
+    Effect.catchTag("NotFound", () => Effect.succeed([])),
     Effect.flatMap((domains) => {
       const matches = domains.filter((domain) => sameHostname(domain.hostname, hostname));
       return matches.length > 1
@@ -208,97 +218,43 @@ const findDomain = (client: PrismaManagementClient, appId: string, hostname: str
     }),
   );
 
-/**
- * Registration verifies the hostname's CNAME; a record published moments
- * earlier may not be visible to Prisma's resolver yet.
- */
-const isDnsNotConfigured = (error: unknown): boolean =>
-  error instanceof PrismaApiError &&
-  error.status === 400 &&
-  error.body !== undefined &&
-  Redacted.value(error.body).includes("DNS is not configured");
+const getCustomDomain = (domainId: string) =>
+  getDomain({ domainId }).pipe(
+    Effect.map((response) => response.data),
+    Effect.catchTag("NotFound", () => Effect.undefined),
+  );
 
-interface NodeDns {
-  readonly resolveNs: (name: string) => Promise<string[]>;
-  readonly resolve4: (name: string) => Promise<string[]>;
-  readonly Resolver: new () => {
-    setServers(servers: string[]): void;
-    resolveCname(name: string): Promise<string[]>;
-  };
-}
-
-/**
- * Prisma verifies the CNAME on registration through a caching resolver: a
- * lookup that races a just-published record caches NXDOMAIN for the zone's
- * SOA minimum (30 minutes on Cloudflare), failing every retry. Wait
- * (bounded) until every authoritative nameserver answers a CNAME, plus a
- * margin for anycast edges. Proceeds regardless, so an unpublished record
- * still surfaces Prisma's own error.
- */
-const waitForAuthoritativeCname = (hostname: string) =>
-  Effect.gen(function* () {
-    const dns = yield* Effect.tryPromise(
-      () => import("node:dns/promises") as unknown as Promise<NodeDns>,
-    ).pipe(Effect.orElseSucceed(() => undefined));
-    if (dns === undefined || typeof dns.Resolver !== "function") return;
-    const labels = hostname.split(".");
-    let servers: string[] = [];
-    for (let i = 1; i < labels.length - 1 && servers.length === 0; i++) {
-      const names = yield* Effect.tryPromise(() => dns.resolveNs(labels.slice(i).join("."))).pipe(
-        Effect.orElseSucceed(() => [] as string[]),
-      );
-      const addresses = yield* Effect.forEach(
-        names,
-        (name) =>
-          Effect.tryPromise(() => dns.resolve4(name)).pipe(
-            Effect.orElseSucceed(() => [] as string[]),
-          ),
-        { concurrency: "unbounded" },
-      );
-      servers = addresses.flat();
+const listAllApps = Effect.gen(function* () {
+  const apps: { readonly id: string }[] = [];
+  let cursor: string | undefined;
+  while (true) {
+    const page = yield* getServices({ limit: 100, ...(cursor === undefined ? {} : { cursor }) });
+    apps.push(...page.data);
+    if (!page.pagination.hasMore) return apps;
+    if (page.pagination.nextCursor === null) {
+      return yield* new PrismaPaginationError({
+        message: "Prisma listed more apps without a next cursor.",
+      });
     }
-    if (servers.length === 0) return;
-    const answeredBy = (server: string) =>
-      Effect.gen(function* () {
-        const resolver = yield* Effect.sync(() => {
-          const instance = new dns.Resolver();
-          instance.setServers([server]);
-          return instance;
-        });
-        const answers = yield* Effect.tryPromise(() => resolver.resolveCname(hostname));
-        return answers.length > 0;
-      }).pipe(
-        Effect.timeout("3 seconds"),
-        Effect.orElseSucceed(() => false),
-      );
-    const visible = yield* Effect.forEach(servers, answeredBy, {
-      concurrency: "unbounded",
-    }).pipe(
-      Effect.map((seen) => seen.every(Boolean)),
-      Effect.repeat({
-        schedule: Schedule.spaced("3 seconds"),
-        until: (seen) => seen,
-        times: 20,
-      }),
-    );
-    if (visible) yield* Effect.sleep("10 seconds");
-  });
+    cursor = page.pagination.nextCursor;
+  }
+});
 
 const ProviderLive = () =>
   Provider.effect(
     CustomDomain,
     Effect.gen(function* () {
-      const client = yield* PrismaClient;
       return {
         stables: ["customDomainId"],
         list: Effect.fn(function* () {
-          const apps = yield* client.listApps();
+          const apps = yield* listAllApps;
           const domains = yield* Effect.forEach(
             apps,
             (app) =>
-              client
-                .listAppDomains(app.id)
-                .pipe(Effect.catchIf(isNotFound, () => Effect.succeed([]))),
+              getServiceDomains({ serviceId: app.id }).pipe(
+                Effect.map((response) => response.data),
+                Effect.catchTag("NotFound", () => Effect.succeed([])),
+              ),
             { concurrency: 8 },
           );
           return domains.flat().map(attrsFrom);
@@ -337,12 +293,10 @@ const ProviderLive = () =>
             : output?.customDomainId;
           const findDomainInApp = Effect.gen(function* () {
             const appId = unresolvedAppIdOf(olds.app);
-            return appId ? yield* findDomain(client, appId, olds.hostname) : undefined;
+            return appId ? yield* findDomain(appId, olds.hostname) : undefined;
           });
           const domain = customDomainId
-            ? yield* client
-                .getCustomDomain(customDomainId)
-                .pipe(Effect.catchIf(isNotFound, () => Effect.undefined))
+            ? yield* getCustomDomain(customDomainId)
             : yield* findDomainInApp;
           if (!domain) return undefined;
           const attrs = attrsFrom(domain);
@@ -355,10 +309,8 @@ const ProviderLive = () =>
             ? undefined
             : output?.customDomainId;
           const domain = customDomainId
-            ? yield* client
-                .getCustomDomain(customDomainId)
-                .pipe(Effect.catchIf(isNotFound, () => Effect.undefined))
-            : yield* findDomain(client, appId, hostname);
+            ? yield* getCustomDomain(customDomainId)
+            : yield* findDomain(appId, hostname);
           const identityMatches = (domain: ApiCustomDomain) =>
             domain.appId === appId && sameHostname(domain.hostname, hostname);
           if (domain && !identityMatches(domain)) {
@@ -370,39 +322,33 @@ const ProviderLive = () =>
             return yield* Effect.fail(adoptionRequiredError(hostname, appId, "already exists"));
           }
           if (!domain) {
-            yield* waitForAuthoritativeCname(hostname);
+            yield* waitForAuthoritativeRecord(
+              { type: "CNAME", name: hostname },
+              { margin: "if-unseen" },
+            );
           }
           const reconciled = domain
             ? domain.status === "failed"
-              ? yield* client.retryCustomDomain(domain.id)
+              ? (yield* createDomainRetry({ domainId: domain.id })).data
               : domain
-            : yield* client.createAppDomain(appId, { hostname }).pipe(
+            : yield* createServiceDomain({ serviceId: appId, hostname }).pipe(
+                Effect.map((response) => response.data),
                 // A CNAME or ownership TXT published moments earlier, e.g. in
                 // the same deploy, may not be visible to Prisma's resolver yet.
                 Effect.retry({
                   while: (error) =>
-                    isDnsNotConfigured(error) || ownershipRequiredOf(error, hostname) !== undefined,
+                    error._tag === "DomainDnsNotConfigured" ||
+                    error._tag === "DomainOwnershipRequired",
                   schedule: Schedule.spaced("5 seconds"),
                   times: 6,
                 }),
-                Effect.catchTag("PrismaApiError", (error) =>
-                  Effect.fail(ownershipRequiredOf(error, hostname) ?? error),
+                Effect.catchTag("DomainOwnershipRequired", (error) =>
+                  Effect.fail(ownershipRequiredOf(error, hostname)),
                 ),
-                Effect.catchIf(isConflict, () =>
+                Effect.catchTag("Conflict", () =>
                   Effect.fail(
                     adoptionRequiredError(hostname, appId, "appeared after the adoption check"),
                   ),
-                ),
-                Effect.flatMap((result) =>
-                  result.status === 201
-                    ? Effect.succeed(result.domain)
-                    : Effect.fail(
-                        adoptionRequiredError(
-                          hostname,
-                          appId,
-                          "was returned as already registered by the create request",
-                        ),
-                      ),
                 ),
               );
           if (!identityMatches(reconciled)) {
@@ -415,18 +361,16 @@ const ProviderLive = () =>
         delete: Effect.fn(function* ({ output }) {
           const customDomainId = concreteIdOf(output.customDomainId);
           if (customDomainId === undefined) return;
-          const domain = yield* client
-            .getCustomDomain(customDomainId)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.undefined));
+          const domain = yield* getCustomDomain(customDomainId);
           if (!domain) return;
           if (domain.appId !== output.appId || !sameHostname(domain.hostname, output.hostname)) {
             return yield* new CustomDomainConflict({
               message: `Prisma custom domain '${customDomainId}' no longer matches app '${output.appId}' and hostname '${output.hostname}'. Refusing to delete a mismatched domain.`,
             });
           }
-          yield* client
-            .deleteCustomDomain(customDomainId)
-            .pipe(Effect.catchIf(isNotFound, () => Effect.void));
+          yield* deleteDomain({ domainId: customDomainId }).pipe(
+            Effect.catchTag("NotFound", () => Effect.void),
+          );
         }),
       };
     }),

@@ -11,7 +11,7 @@ import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import { Compute, type ComputeProps } from "../Compute.ts";
 import { CustomDomain } from "../CustomDomain.ts";
-import { DomainVerification } from "../DomainVerification.ts";
+import { DomainOwnership } from "../DomainOwnership.ts";
 import { Project } from "../Project.ts";
 import type { Providers } from "../Providers.ts";
 import type { PrismaRegionId } from "../Types.ts";
@@ -50,10 +50,11 @@ export type WebsiteDomain =
       name: string;
       /**
        * DNS host that publishes the hostname's `CNAME` to the app's regional
-       * switchboard (`switchboard.{region}.prisma.build`) before the domain
-       * is registered — Prisma verifies it on registration (see
+       * switchboard (`switchboard.{region}.prisma.build`) and the workspace's
+       * `_prisma-verification` ownership `TXT` record before the domain is
+       * registered — Prisma checks both on registration (see
        * [DNS Adapters](/infrastructure-as-code/dns-adapters)), e.g.
-       * `Cloudflare.DNS.Adapter()`. Omitted: publish it yourself first.
+       * `Cloudflare.DNS.Adapter()`. Omitted: publish them yourself first.
        */
       dns?: DNS.DnsConfig;
     };
@@ -180,17 +181,14 @@ export const deployWebsite = Effect.fn(function* (
     },
   });
   const domainName = websiteDomainName(props.domain);
-  // Prisma verifies the CNAME and the workspace's ownership TXT when the
-  // domain is registered, so both records must exist first: the
+  // Prisma checks the workspace's ownership of the hostname, then its CNAME,
+  // when the domain is registered: both must exist first, so the
   // CustomDomain's hostname depends on them.
-  const dns =
-    domainName && typeof props.domain === "object" && props.domain.dns
-      ? yield* DNS.resolve(props.domain.dns)
-      : undefined;
-  const published =
-    dns && domainName
+  const dnsConfig = domainName && typeof props.domain === "object" ? props.domain.dns : undefined;
+  const ready =
+    dnsConfig && domainName
       ? [
-          yield* dns.alias("DomainAlias", {
+          yield* (yield* DNS.resolve(dnsConfig)).alias("DomainAlias", {
             name: domainName,
             target: {
               hostname: Output.map(
@@ -199,14 +197,10 @@ export const deployWebsite = Effect.fn(function* (
               ) as unknown as string,
             },
           }),
-          yield* dns.records("DomainOwnership", {
-            records: Output.map(
-              (yield* DomainVerification("DomainVerification", {
-                app: compute,
-                hostname: domainName,
-              })).recordValue,
-              (value) => [{ name: `_prisma-verification.${domainName}`, type: "TXT", value }],
-            ) as unknown as Input<DNS.DnsRecord[]>,
+          yield* DomainOwnership("DomainOwnership", {
+            project,
+            domain: domainName,
+            dns: dnsConfig,
           }),
         ]
       : undefined;
@@ -214,10 +208,10 @@ export const deployWebsite = Effect.fn(function* (
     ? yield* CustomDomain("Domain", {
         app: compute,
         hostname:
-          published === undefined
+          ready === undefined
             ? domainName
             : (Output.map(
-                Output.all(...published.map((record) => Output.of(record as ResourceLike))),
+                Output.all(...ready.map((resource) => Output.of(resource as ResourceLike))),
                 () => domainName,
               ) as unknown as string),
       })
