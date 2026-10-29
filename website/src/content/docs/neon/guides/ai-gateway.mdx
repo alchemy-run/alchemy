@@ -22,7 +22,7 @@ can access. The examples use the supported `aws-us-east-2` region.
 Inside your stack, using an existing `branch`:
 
 ```typescript
-import * as Neon from "alchemy/Neon";
+import * as Neon from "@alchemy.run/neon";
 
 const gateway = yield* Neon.AIGateway("AI", { branch });
 ```
@@ -54,7 +54,7 @@ configured string:
 
 ```typescript
 import * as Effect from "effect/Effect";
-import { LanguageModel } from "effect/unstable/ai";
+import { LanguageModel } from "effect/ai";
 
 const reply = yield* LanguageModel.generateText({
   prompt: "Reply with hello.",

@@ -1,11 +1,11 @@
-import * as Command from "@/Command/index.ts";
-import * as Provider from "@/Provider.ts";
-import * as Test from "@/Test/Alchemy";
-import { assert, describe, expect, it } from "alchemy-test";
+import { assert, describe, expect, it } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import * as Command from "@/Command/index.ts";
+import * as Provider from "@/Provider.ts";
 import { assertDead, lifecycleFixture } from "./fixture/lifecycle-support.ts";
 
 const { test } = Test.make({
@@ -68,29 +68,17 @@ const waitForPidFile = (path: string, marker: string) =>
     }
     const parsed = yield* readPidFile(path);
     if (parsed.marker !== marker) {
-      return yield* Effect.fail(
-        new Error(`pid file marker ${parsed.marker} !== ${marker}`),
-      );
+      return yield* Effect.fail(new Error(`pid file marker ${parsed.marker} !== ${marker}`));
     }
     return parsed;
-  }).pipe(
-    Effect.retry({
-      schedule: Schedule.spaced("100 millis"),
-      times: 100,
-    }),
-  );
+  }).pipe(Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 100 }));
 
 const waitForDeath = (pid: number) =>
   isAlive(pid).pipe(
     Effect.flatMap((alive) =>
-      alive
-        ? Effect.fail(new Error(`pid ${pid} still alive`))
-        : Effect.succeed(undefined),
+      alive ? Effect.fail(new Error(`pid ${pid} still alive`)) : Effect.succeed(undefined),
     ),
-    Effect.retry({
-      schedule: Schedule.spaced("100 millis"),
-      times: 50,
-    }),
+    Effect.retry({ schedule: Schedule.spaced("100 millis"), times: 50 }),
   );
 
 test.provider(
@@ -303,18 +291,13 @@ test.provider(
 
       // Vite-style colored output: "  ➜  Local:   http://localhost:5173/"
       // with green + cyan SGR sequences around the URL.
-      const ansi = (open: string, body: string) =>
-        `\x1b[${open}m${body}\x1b[0m`;
+      const ansi = (open: string, body: string) => `\x1b[${open}m${body}\x1b[0m`;
       const line = `  ➜  ${ansi("32", "Local:")}   ${ansi("36", "http://localhost:5173/")}`;
 
       const output = yield* stack.deploy(
         Command.Dev("Dev", {
           command: `node ${urlServerScript}`,
-          env: {
-            PID_FILE: pidFile,
-            MARKER: "url-ansi",
-            URL_LINE: line,
-          },
+          env: { PID_FILE: pidFile, MARKER: "url-ansi", URL_LINE: line },
         }),
       );
 
@@ -379,9 +362,7 @@ test.provider(
         }),
       );
 
-      expect(output.url).toBe(
-        "https://docs.astro.build/en/guides/content-collections/",
-      );
+      expect(output.url).toBe("https://docs.astro.build/en/guides/content-collections/");
 
       const { pid } = yield* waitForPidFile(pidFile, "url-fallback");
       yield* stack.destroy();
@@ -422,6 +403,110 @@ test.provider(
 );
 
 test.provider(
+  "waitForUrl waits past the default 5 seconds for the URL",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const output = yield* stack.deploy(
+        Command.Dev("Dev", {
+          command: `node ${urlServerScript}`,
+          env: {
+            PID_FILE: pidFile,
+            MARKER: "wait-for-url",
+            URL_LINE: "Local: http://localhost:5173/",
+            // Printed after the 5 seconds the resource waits by default.
+            URL_DELAY_MS: "6000",
+          },
+          waitForUrl: true,
+        }),
+      );
+
+      expect(output.url).toBe("http://localhost:5173/");
+
+      const { pid } = yield* waitForPidFile(pidFile, "wait-for-url");
+      yield* stack.destroy();
+      yield* waitForDeath(pid);
+    }),
+  { tags: ["local"], timeout: 30_000 },
+);
+
+test.provider(
+  "waitForUrl settles with a late non-local URL when no localhost URL follows",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const output = yield* stack.deploy(
+        Command.Dev("Dev", {
+          command: `node ${urlServerScript}`,
+          env: {
+            PID_FILE: pidFile,
+            MARKER: "wait-for-url-fallback",
+            URL_LINE: "https://docs.astro.build/en/guides/content-collections/",
+            URL_DELAY_MS: "6000",
+          },
+          waitForUrl: true,
+        }),
+      );
+
+      expect(output.url).toBe("https://docs.astro.build/en/guides/content-collections/");
+
+      const { pid } = yield* waitForPidFile(pidFile, "wait-for-url-fallback");
+      yield* stack.destroy();
+      yield* waitForDeath(pid);
+    }),
+  { tags: ["local"], timeout: 30_000 },
+);
+
+inProcessTest.provider(
+  "waitForUrl keeps waiting for a command that prints no URL",
+  (stack) =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const tmp = yield* fs.makeTempDirectoryScoped({ prefix: "devcmd-" });
+      const pidFile = pathe.join(tmp, "pid.json");
+
+      const result = yield* stack
+        .deploy(
+          Command.Dev("Dev", {
+            command: `node ${urlServerScript}`,
+            // URL_LINE intentionally unset — the process stays silent.
+            env: { PID_FILE: pidFile, MARKER: "wait-for-url-none" },
+            waitForUrl: true,
+          }),
+        )
+        // Well past the 5 seconds the resource waits by default.
+        .pipe(Effect.timeoutOption("8 seconds"));
+      expect(result._tag).toBe("None");
+
+      // Interrupting the deploy (Ctrl+C) leaves no process behind.
+      const { pid } = yield* waitForPidFile(pidFile, "wait-for-url-none");
+      yield* waitForDeath(pid);
+      yield* stack.destroy();
+    }),
+  { tags: ["local"], timeout: 30_000 },
+);
+
+inProcessTest.provider(
+  "waitForUrl fails with UnexpectedExit when the command exits first",
+  (stack) =>
+    Effect.gen(function* () {
+      const error = yield* stack
+        .deploy(Command.Dev("Dev", { command: `node ${dieScript}`, waitForUrl: true }))
+        .pipe(Effect.flip);
+      assert(Command.isCommandError(error));
+      assert(error.reason._tag === "UnexpectedExit");
+      expect(error.reason.exitCode).toBe(1);
+    }),
+  { tags: ["local"], timeout: 30_000 },
+);
+
+test.provider(
   "stops the process on destroy",
   (stack) =>
     Effect.gen(function* () {
@@ -450,11 +535,7 @@ inProcessTest.provider(
   (stack) =>
     Effect.gen(function* () {
       const error = yield* stack
-        .deploy(
-          Command.Dev("Dev", {
-            command: `node ${dieScript}`,
-          }),
-        )
+        .deploy(Command.Dev("Dev", { command: `node ${dieScript}` }))
         .pipe(Effect.flip);
       assert(Command.isCommandError(error));
       assert(error.reason._tag === "UnexpectedExit");
@@ -466,9 +547,7 @@ inProcessTest.provider(
 
 describe("extractUrl", { tags: ["unit", "local"] }, () => {
   it("returns a plain URL when it is the only match", () => {
-    expect(Command.extractUrl("Local: http://localhost:5173/")).toBe(
-      "http://localhost:5173/",
-    );
+    expect(Command.extractUrl("Local: http://localhost:5173/")).toBe("http://localhost:5173/");
   });
 
   it("favors a localhost URL over an unrelated URL printed first", () => {
@@ -488,20 +567,16 @@ describe("extractUrl", { tags: ["unit", "local"] }, () => {
   });
 
   it("falls back to a non-local URL when no local URL is present", () => {
-    expect(
-      Command.extractUrl("docs https://docs.astro.build/en/guides/x/"),
-    ).toBe("https://docs.astro.build/en/guides/x/");
+    expect(Command.extractUrl("docs https://docs.astro.build/en/guides/x/")).toBe(
+      "https://docs.astro.build/en/guides/x/",
+    );
   });
 
   it("normalizes a bind-all address to localhost", () => {
     // Nuxt prints its *bind* address (`0.0.0.0`), which is not a
     // connectable host — consumers of `url` must be able to dial it.
-    expect(Command.extractUrl("Listening on http://0.0.0.0:3000/")).toBe(
-      "http://localhost:3000/",
-    );
-    expect(Command.extractUrl("Listening on http://[::]:3000/")).toBe(
-      "http://localhost:3000/",
-    );
+    expect(Command.extractUrl("Listening on http://0.0.0.0:3000/")).toBe("http://localhost:3000/");
+    expect(Command.extractUrl("Listening on http://[::]:3000/")).toBe("http://localhost:3000/");
   });
 
   it("strips ANSI escapes before matching", () => {

@@ -1,13 +1,11 @@
+/** @jsxRuntime automatic */
 /** @jsxImportSource @alchemy.run/sigil */
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import { Interaction } from "../../../Interaction.ts";
 import type { Result as NukeResult, Target } from "../../../Nuke.ts";
 import type { ProviderMode } from "../../../ProviderMode.ts";
-import { Plan, PlanTree } from "./PlanView.tsx";
-import type { PlanTreeData } from "./PlanTree.ts";
-import { planDecisionScreen } from "./PlanDecision.tsx";
 import { Progress, type ProgressEvent } from "../../../Report.ts";
-import { CliKit } from "../../CliKit/index.ts";
 import {
   LiveStore,
   ProgressBar,
@@ -17,6 +15,9 @@ import {
   Text,
   useLiveStore,
 } from "../ui/index.ts";
+import { planDecisionScreen } from "./PlanDecision.tsx";
+import type { PlanTreeData } from "./PlanTree.ts";
+import { Plan, PlanTree } from "./PlanView.tsx";
 
 interface NukeProgressState {
   readonly total: number;
@@ -93,14 +94,10 @@ export function NukeProgress({ store }: { store: NukeProgressStore }) {
 
 const logNukeEvent = (event: ProgressEvent, interactive: boolean) => {
   if (event._tag === "nuke.scan.provider.completed") {
-    if (event.error !== undefined)
-      return Effect.logWarning(`${event.provider}: ${event.error}`);
-    if (!interactive)
-      return Effect.logInfo(`scanned ${event.provider} (${event.resources})`);
+    if (event.error !== undefined) return Effect.logWarning(`${event.provider}: ${event.error}`);
+    if (!interactive) return Effect.logInfo(`scanned ${event.provider} (${event.resources})`);
   } else if (event._tag === "nuke.resource.failed") {
-    return Effect.logWarning(
-      `${event.provider} ${event.resource}: ${event.message}`,
-    );
+    return Effect.logWarning(`${event.provider} ${event.resource}: ${event.message}`);
   } else if (!interactive && event._tag === "nuke.resource.deleted") {
     return Effect.logInfo(`deleted ${event.provider} ${event.resource}`);
   }
@@ -112,11 +109,11 @@ export const renderNukeScan =
   () =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
-      const cli = yield* CliKit;
+      const cli = yield* Interaction;
       const store = new NukeProgressStore();
       const live =
         cli.terminal.input && !process.env.DEBUG
-          ? yield* cli.live.open(<NukeProgress store={store} />)
+          ? yield* cli.live(<NukeProgress store={store} />)
           : undefined;
       return yield* effect.pipe(
         Effect.provideService(Progress, (event) =>
@@ -131,13 +128,10 @@ export const renderNukeScan =
 
 /** Drive the same resource rows used by the preview through their deletion lifecycle. */
 export const renderNukeDelete =
-  (
-    targets: ReadonlyArray<Pick<Target, "providerId" | "displayName">>,
-    mode: ProviderMode,
-  ) =>
+  (targets: ReadonlyArray<Pick<Target, "providerId" | "displayName">>, mode: ProviderMode) =>
   <A extends NukeResult, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
-      const cli = yield* CliKit;
+      const cli = yield* Interaction;
       const tree = new PlanTree(nukePlan(targets, { mode }), {
         mode: "apply",
         label: "Deleting resources",
@@ -145,15 +139,12 @@ export const renderNukeDelete =
       });
       const live =
         cli.terminal.input && !process.env.DEBUG
-          ? yield* cli.live.open(<Plan tree={tree} />, { persistOnClose: true })
+          ? yield* cli.live(<Plan tree={tree} />, { persistOnClose: true })
           : undefined;
       return yield* effect.pipe(
         Effect.provideService(Progress, (event) =>
           Effect.gen(function* () {
-            if (
-              event._tag === "apply.resource.status" ||
-              event._tag === "apply.resource.note"
-            )
+            if (event._tag === "apply.resource.status" || event._tag === "apply.resource.note")
               tree.emit(event);
             else if (event._tag === "nuke.pass.started")
               tree.setLabel(`Deleting resources · pass ${event.pass}`);
@@ -181,43 +172,35 @@ export const renderNukeDelete =
 export const nukePlan = (
   targets: ReadonlyArray<Pick<Target, "providerId" | "displayName">>,
   options: { mode: ProviderMode },
-): PlanTreeData => {
-  return {
-    defaultMode: options.mode,
-    rows: targets
-      .map((target, index) => ({
-        key: `nuke/${index}`,
-        type: "resource" as const,
-        id: target.providerId,
-        resourceType: target.providerId,
-        detail:
-          target.displayName && target.displayName !== "unknown"
-            ? target.displayName
-            : undefined,
-        depth: 0,
-        action: "delete" as const,
-        providerMode: options.mode,
-      }))
-      .sort(
-        (a, b) =>
-          a.id.localeCompare(b.id) ||
-          (a.detail ?? "").localeCompare(b.detail ?? ""),
-      ),
-    summary: {
-      counts: {
-        create: 0,
-        update: 0,
-        adopted: 0,
-        delete: targets.length,
-        orphaned: 0,
-        replace: 0,
-        noop: 0,
-      },
-      taskCounts: { run: 0, delete: 0, noop: 0 },
-      bindingChanges: 0,
+): PlanTreeData => ({
+  defaultMode: options.mode,
+  rows: targets
+    .map((target, index) => ({
+      key: `nuke/${index}`,
+      type: "resource" as const,
+      id: target.providerId,
+      resourceType: target.providerId,
+      detail:
+        target.displayName && target.displayName !== "unknown" ? target.displayName : undefined,
+      depth: 0,
+      action: "delete" as const,
+      providerMode: options.mode,
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id) || (a.detail ?? "").localeCompare(b.detail ?? "")),
+  summary: {
+    counts: {
+      create: 0,
+      update: 0,
+      adopted: 0,
+      delete: targets.length,
+      orphaned: 0,
+      replace: 0,
+      noop: 0,
     },
-  };
-};
+    taskCounts: { run: 0, delete: 0, noop: 0 },
+    bindingChanges: 0,
+  },
+});
 
 export const reviewNuke = Effect.fn(function* (
   targets: ReadonlyArray<Pick<Target, "providerId" | "displayName">>,
@@ -227,7 +210,7 @@ export const reviewNuke = Effect.fn(function* (
     dryRun: boolean;
   },
 ) {
-  const cli = yield* CliKit;
+  const cli = yield* Interaction;
   const plan = nukePlan(targets, options);
   if (options.yes || options.dryRun) {
     yield* cli.output.print(
@@ -243,7 +226,7 @@ export const reviewNuke = Effect.fn(function* (
     );
     return true;
   }
-  return yield* cli.prompt.custom(
+  return yield* cli.prompt.screen(
     planDecisionScreen({
       plan,
       label: "Nuke",

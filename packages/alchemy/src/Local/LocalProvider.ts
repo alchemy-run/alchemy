@@ -6,15 +6,11 @@ import * as Fiber from "effect/Fiber";
 import * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
-import type { ScopedPlanStatusSession } from "../Report.ts";
 import { isResolved, stripEffects, type Diff } from "../Diff.ts";
 import type { Platform } from "../Platform.ts";
 import type { ProviderService } from "../Provider.ts";
-import type {
-  ResourceBinding,
-  ResourceClassLike,
-  ResourceLike,
-} from "../Resource.ts";
+import type { ScopedPlanStatusSession } from "../Report.ts";
+import type { ResourceBinding, ResourceClassLike, ResourceLike } from "../Resource.ts";
 import { sha256 } from "../Util/sha256.ts";
 import * as RpcProvider from "./RpcProvider.ts";
 
@@ -57,10 +53,7 @@ export interface LocalProviderInput<R extends ResourceLike> {
   bindings: ResourceBinding<R["Binding"]>[];
 }
 
-export interface StartContext<
-  R extends ResourceLike,
-  Config,
-> extends LocalProviderInput<R> {
+export interface StartContext<R extends ResourceLike, Config> extends LocalProviderInput<R> {
   /**
    * The value produced by {@link LocalProviderSpec.resolveConfig} for this
    * reconcile — the same value whose canonical hash decided that a
@@ -93,10 +86,7 @@ export interface StopContext {
   instanceId: string;
 }
 
-export interface StablesContext<
-  R extends ResourceLike,
-  Config,
-> extends LocalProviderInput<R> {
+export interface StablesContext<R extends ResourceLike, Config> extends LocalProviderInput<R> {
   config: Config;
   output: R["Attributes"] | undefined;
 }
@@ -122,15 +112,13 @@ export interface LocalProviderSpec<
    * records it on the registry entry, and passes it to {@link start} so a
    * restart consumes exactly what was compared.
    *
-   * Lifecycle-scoped services (`Stack`, `Stage`, `InstanceId`, `Artifacts`)
+   * Lifecycle-scoped services (`Stack`, `Stage`, `ResourceContext`, `Artifacts`)
    * are available ambiently (e.g. for `createPhysicalName`); resolve
    * anything else in the spec effect and close over it.
    *
    * @default `{ news: stripEffects(news), bindings }`
    */
-  resolveConfig?: (
-    ctx: LocalProviderInput<R>,
-  ) => Effect.Effect<Config, any, any>;
+  resolveConfig?: (ctx: LocalProviderInput<R>) => Effect.Effect<Config, any, any>;
   /**
    * Boot one instance: acquire the long-running process in the ambient
    * `Scope` and return the resource's Attributes once it is *ready* (URL
@@ -163,11 +151,7 @@ export interface LocalProviderSpec<
    */
   stables?: (
     ctx: StablesContext<R, Config>,
-  ) => Effect.Effect<
-    Extract<keyof R["Attributes"], string>[] | undefined,
-    any,
-    any
-  >;
+  ) => Effect.Effect<Extract<keyof R["Attributes"], string>[] | undefined, any, any>;
   precreate?: AnyReqProviderService<R>["precreate"];
   tail?: AnyReqProviderService<R>["tail"];
   logs?: AnyReqProviderService<R>["logs"];
@@ -181,7 +165,7 @@ export interface LocalProviderSpec<
 /**
  * {@link ProviderService} with every requirement channel widened to `any` —
  * passthrough spec hooks may use lifecycle-scoped services (`Stack`,
- * `InstanceId`, ...) that the RpcProvider wrapper provides per call.
+ * `ResourceContext`, ...) that the RpcProvider wrapper provides per call.
  */
 type AnyReqProviderService<R extends ResourceLike> = ProviderService<
   R,
@@ -225,7 +209,7 @@ export const canonicalHash = (value: unknown): Effect.Effect<string> => {
     if (typeof input === "bigint") return `bigint:${input.toString()}`;
     if (input === null || typeof input !== "object") return input;
     if (Redacted.isRedacted(input)) {
-      return { __redacted: normalize(Redacted.value(input)) };
+      return { __redacted: input.pipe(Redacted.value, normalize) };
     }
     if (seen.has(input)) return "[circular]";
     seen.add(input);
@@ -234,10 +218,7 @@ export const canonicalHash = (value: unknown): Effect.Effect<string> => {
     return Object.fromEntries(
       Object.keys(input)
         .sort()
-        .map((key) => [
-          key,
-          normalize((input as Record<string, unknown>)[key]),
-        ]),
+        .map((key) => [key, normalize((input as Record<string, unknown>)[key])]),
     );
   };
   return sha256(JSON.stringify(normalize(value)));
@@ -285,6 +266,7 @@ export const make = <
   RpcProvider.effect(
     cls,
     providersUrl,
+    // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- StartR is re-provided by the RpcProvider wrapper, see comment at the cast below
     Effect.gen(function* () {
       const {
         resolveConfig = defaultResolveConfig<R, Config>,
@@ -322,22 +304,16 @@ export const make = <
         }
         return semaphore;
       };
-      const withLock = <A, E, RR>(
-        key: string,
-        effect: Effect.Effect<A, E, RR>,
-      ) => Semaphore.withPermits(lock(key), 1)(effect);
+      const withLock = <A, E, RR>(key: string, effect: Effect.Effect<A, E, RR>) =>
+        Semaphore.withPermits(lock(key), 1)(effect);
 
-      const resolveDesired = Effect.fn(function* (
-        input: LocalProviderInput<R>,
-      ) {
+      const resolveDesired = Effect.fn(function* (input: LocalProviderInput<R>) {
         const config = yield* resolveConfig(input);
         const configHash = yield* canonicalHash(config);
         return { config, configHash };
       });
 
-      const teardown = Effect.fn(function* (
-        instance: Instance<R["Attributes"]>,
-      ) {
+      const teardown = Effect.fn(function* (instance: Instance<R["Attributes"]>) {
         yield* Fiber.interrupt(instance.fiber);
         yield* Scope.close(instance.scope, Exit.void);
       });
@@ -373,8 +349,12 @@ export const make = <
           Effect.onExit((exit) =>
             exit._tag === "Failure"
               ? // A failed start must not linger as "running" — the next
-                // plan should report `update` and try again.
-                invalidate
+                // plan should report `update` and try again — nor keep what
+                // it acquired: the instance scope would otherwise hold a
+                // process that outlived its start (one still waiting for
+                // its URL when the deploy was interrupted, say) until the
+                // provider shut down.
+                invalidate.pipe(Effect.andThen(Scope.close(scope, exit)))
               : Effect.void,
           ),
         );
@@ -423,9 +403,7 @@ export const make = <
           }
           return {
             action: "update",
-            stables: stables
-              ? yield* stables({ ...input, config, output })
-              : undefined,
+            stables: stables ? yield* stables({ ...input, config, output }) : undefined,
           } satisfies Diff;
         }),
         reconcile: Effect.fn(function* ({
@@ -457,17 +435,13 @@ export const make = <
               const existing = instances.get(fqn);
               if (existing) {
                 if (existing.configHash === configHash) {
-                  yield* Effect.log(
-                    `[${fqn}] No changes, using existing instance`,
-                  );
+                  yield* Effect.log(`[${fqn}] No changes, using existing instance`);
                   // Adopt the newest instanceId so a later replacement's
                   // old-generation delete cannot tear this instance down.
                   existing.instanceId = instanceId;
                   return yield* Fiber.join(existing.fiber);
                 }
-                yield* Effect.log(
-                  `[${fqn}] Changes detected, restarting instance`,
-                );
+                yield* Effect.log(`[${fqn}] Changes detected, restarting instance`);
                 yield* teardown(existing);
                 instances.delete(fqn);
               }
@@ -517,11 +491,7 @@ export const make = <
       // requirement: the RpcProvider wrapper captures the layer-build
       // context and provides it to every lifecycle call, so services the
       // layer demanded at build are available to `start` at runtime.
-    }) as Effect.Effect<
-      ProviderService<R>,
-      never,
-      Req | Exclude<StartR, Scope.Scope>
-    >,
+    }) as Effect.Effect<ProviderService<R>, never, Req | Exclude<StartR, Scope.Scope>>,
   );
 
 const defaultResolveConfig = <R extends ResourceLike, Config>(
