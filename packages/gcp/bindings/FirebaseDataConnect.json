@@ -16,7 +16,7 @@
     "resources": {
       "Service": "App",
       "ServicesConnector": "Queries",
-      "ServicesSchema": "ProbeSchema"
+      "ServicesSchema": "Main"
     },
     "untestable": {}
   }

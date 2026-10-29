@@ -4,7 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
-import { App, ProbeSchema, Queries } from "./generated-resources.ts";
+import { App, Main, Queries } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated FirebaseDataConnect binding as its own
@@ -19,7 +19,7 @@ export default class FirebaseDataConnectGeneratedHost extends GCP.Function<Fireb
     const p0 = yield* GCP.FirebaseDataConnect.GenerateServiceQuery(App);
     const p1 = yield* GCP.FirebaseDataConnect.GenerateServiceSchema(App);
     const p2 = yield* GCP.FirebaseDataConnect.GetConnector(Queries);
-    const p3 = yield* GCP.FirebaseDataConnect.GetSchema(ProbeSchema);
+    const p3 = yield* GCP.FirebaseDataConnect.GetSchema(Main);
     const p4 = yield* GCP.FirebaseDataConnect.GetService(App);
     const p5 = yield* GCP.FirebaseDataConnect.ImpersonateConnectorMutation(Queries);
     const p6 = yield* GCP.FirebaseDataConnect.ImpersonateConnectorQuery(Queries);
@@ -27,7 +27,7 @@ export default class FirebaseDataConnectGeneratedHost extends GCP.Function<Fireb
     const p8 = yield* GCP.FirebaseDataConnect.ListServiceConnectors(App);
     const p9 = yield* GCP.FirebaseDataConnect.ListServices();
     const p10 = yield* GCP.FirebaseDataConnect.ListServiceSchemas(App);
-    const p11 = yield* GCP.FirebaseDataConnect.MigrateSchema(ProbeSchema);
+    const p11 = yield* GCP.FirebaseDataConnect.MigrateSchema(Main);
     return {
       fetch: serveProbes({
         GenerateServiceQuery: probeOutcome(Retry.none(p0({} as never))),

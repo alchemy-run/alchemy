@@ -8,15 +8,20 @@ export const App = GCP.FirebaseDataConnect.Service("App", {
   labels: { env: "test" },
 });
 
-/** Service + schema + connector (list query, insert mutation). */
-export const Queries = Effect.gen(function* () {
+/** The service's schema (a service has one, `main`). */
+export const Main = Effect.gen(function* () {
   const service = yield* App;
-  const schema = yield* GCP.FirebaseDataConnect.ServicesSchema("Main", {
+  return yield* GCP.FirebaseDataConnect.ServicesSchema("Main", {
     service: service.name,
     source: schemaSource(),
     datasources: unlinkedDatasources,
     labels: { env: "test" },
   });
+});
+
+/** Service + schema + connector (list query, insert mutation). */
+export const Queries = Effect.gen(function* () {
+  const schema = yield* Main;
   return yield* GCP.FirebaseDataConnect.ServicesConnector("Queries", {
     service: schema.service,
     source: {
