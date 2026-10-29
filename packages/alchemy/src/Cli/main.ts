@@ -1,31 +1,31 @@
-import * as Cause from "effect/Cause";
-import * as ConfigProvider from "effect/ConfigProvider";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Command from "effect/unstable/cli/Command";
-import * as CliConfig from "effect/unstable/cli/CliConfig";
-import * as CliError from "effect/unstable/cli/CliError";
-import * as Flag from "effect/unstable/cli/Flag";
-import * as GlobalFlag from "effect/unstable/cli/GlobalFlag";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
-
 import { AlchemyContextLive } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import * as Contributions from "alchemy/Contributions";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
+import { moduleExtension } from "alchemy/Util/Node";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
+import * as Cause from "effect/Cause";
+import * as CliConfig from "effect/cli/CliConfig";
+import * as CliError from "effect/cli/CliError";
+import * as Command from "effect/cli/Command";
+import * as Flag from "effect/cli/Flag";
+import * as GlobalFlag from "effect/cli/GlobalFlag";
+import * as ConfigProvider from "effect/ConfigProvider";
+import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as Layer from "effect/Layer";
 import packageJson from "../../package.json" with { type: "json" };
-
-import * as CliKit from "./CliKit/index.ts";
+import * as Interaction from "../Interaction.ts";
 import { checkLatestVersion } from "./checkVersion.ts";
-import { GlobalLogLive, logRunHeader } from "./GlobalLog.ts";
-import { handleCliErrors } from "./commands/errors.ts";
 import {
   compatibilityCommand,
   compatibilityCommands,
   type CompatibilityCommand,
 } from "./commands/compat.ts";
+import { handleCliErrors } from "./commands/errors.ts";
+import { GlobalLogLive, logRunHeader } from "./GlobalLog.ts";
 import { selectCliServices } from "./selectCli.ts";
 
 const commandMetadata = [
@@ -49,10 +49,21 @@ const placeholderCommand = (name: CommandName, description: string) =>
     name === "unsafe" ? Command.unlisted : (command) => command,
   );
 
+// A broken provider shouldn't take the whole CLI down: warn and run without
+// providers. Commands that need them (auth, `state --backend`) fail with the
+// provider error when they load them again.
+const loadContributions = () =>
+  Effect.runPromise(
+    Contributions.load().pipe(
+      Effect.catch((error) => Effect.as(Effect.logWarning(error.message), [])),
+      Effect.provide(PlatformServices),
+    ),
+  );
+
 const loadCommand = async (name: CommandName) => {
   switch (name) {
     case "provider":
-      return (await import("./commands/provider.ts")).providerCommand;
+      return (await import("./commands/provider.ts")).providerCommand(await loadContributions());
     case "deploy":
       return (await import("./commands/deploy.ts")).deployCommand;
     case "dev":
@@ -87,9 +98,7 @@ if (compatibilityName !== undefined) {
   process.argv.splice(index + 1);
 }
 
-const commandNames = new Set<CommandName>(
-  commandMetadata.map(([name]) => name),
-);
+const commandNames = new Set<CommandName>(commandMetadata.map(([name]) => name));
 const requestedCommand = argv.find((value): value is CommandName =>
   commandNames.has(value as CommandName),
 );
@@ -98,7 +107,7 @@ const commands = await Promise.all(
   commandMetadata.map(([name, description]) =>
     loadEveryCommand || name === requestedCommand
       ? loadCommand(name)
-      : placeholderCommand(name, description),
+      : Promise.resolve(placeholderCommand(name, description)),
   ),
 );
 
@@ -117,8 +126,23 @@ const NoInput = GlobalFlag.Setting("no-input")({
   ),
 });
 
+/**
+ * `--fast-distilled` loads distilled SDKs through their lazy service stubs
+ * under Node. The launcher (`bin/cli.js`) reads it from argv before any
+ * module loads and passes it on as `ALCHEMY_FAST_DISTILLED=1`; this
+ * registration exists so the parser accepts the flag.
+ */
+const FastDistilled = GlobalFlag.Setting("fast-distilled")({
+  flag: Flag.Boolean("fast-distilled").pipe(
+    Flag.withDescription(
+      "Load distilled SDK operations on first use (Node only; lowers startup memory)",
+    ),
+    Flag.withDefault(false),
+  ),
+});
+
 const root = Command.make("alchemy", {}, () =>
-  Effect.fail(new CliError.ShowHelp({ commandPath: ["alchemy"], errors: [] })),
+  Effect.fail(CliError.ShowHelp.make({ commandPath: ["alchemy"], errors: [] })),
 ).pipe(
   Command.withDescription(
     "Define, deploy, and operate cloud infrastructure with type-safe Effect programs.",
@@ -135,7 +159,7 @@ const root = Command.make("alchemy", {}, () =>
       compatibilityCommand(name as CompatibilityCommand),
     ),
   ]),
-  Command.withGlobalFlags([NoInput]),
+  Command.withGlobalFlags([NoInput, FastDistilled]),
 );
 
 /**
@@ -152,23 +176,16 @@ const devRunMode = import.meta.url.includes("/node_modules/")
       typeof globalThis.Bun !== "undefined"
         ? `bun ${globalThis.Bun.version}`
         : `node ${process.versions.node}`
-    }, ${import.meta.url.endsWith(".ts") ? "src" : "lib"}`;
+    }, ${moduleExtension(import.meta.url) === ".ts" ? "src" : "lib"}`;
 
 const cli = Command.run(root, {
   version:
-    devRunMode === undefined
-      ? packageJson.version
-      : `${packageJson.version} (${devRunMode})`,
+    devRunMode === undefined ? packageJson.version : `${packageJson.version} (${devRunMode})`,
 });
 
 const services = Layer.mergeAll(
   CliConfig.layer({
-    builtIns: [
-      GlobalFlag.Help,
-      GlobalFlag.Version,
-      GlobalFlag.Completions,
-      GlobalFlag.LogLevel,
-    ],
+    builtIns: [GlobalFlag.Help, GlobalFlag.Version, GlobalFlag.Completions, GlobalFlag.LogLevel],
   }),
   Layer.provideMerge(AlchemyContextLive, PlatformServices),
   Layer.provide(ProfileStoreLive, PlatformServices),
@@ -179,13 +196,7 @@ const services = Layer.mergeAll(
   Layer.succeed(ArtifactStore, createArtifactStore()),
   FetchHttpClient.layer,
   ConfigProvider.layer(ConfigProvider.fromEnv()),
-  Layer.provide(
-    Layer.provideMerge(
-      Layer.mergeAll(selectCliServices(), CliKit.CliKitInteraction),
-      CliKit.layer(),
-    ),
-    PlatformServices,
-  ),
+  Layer.provide(Layer.provideMerge(selectCliServices(), Interaction.layer()), PlatformServices),
   // Debug run log under ~/.alchemy/logs — the console noise floor stays at
   // Info, but full causes and auth-flow breadcrumbs land in the file so
   // support can ask users for it.
@@ -193,10 +204,7 @@ const services = Layer.mergeAll(
   // Telemetry sits on top of the console/file loggers so its OTLP logger
   // merges with them. Listed as `mergeAll` siblings, whichever came last
   // would win the `CurrentLoggers` slot and silently drop the other.
-  Layer.provideMerge(
-    TelemetryLive,
-    Layer.provide(GlobalLogLive, PlatformServices),
-  ),
+  Layer.provideMerge(TelemetryLive, Layer.provide(GlobalLogLive, PlatformServices)),
 );
 
 const program = Effect.gen(function* () {
@@ -211,9 +219,7 @@ const program = Effect.gen(function* () {
   // The terminal shows the friendly message; the run log keeps the full
   // cause chain. Must sit inside the service provision so the file logger
   // is still installed.
-  Effect.tapCause((cause) =>
-    Effect.logDebug(`command failed:\n${Cause.pretty(cause)}`),
-  ),
+  Effect.tapCause((cause) => Effect.logDebug(`command failed:\n${Cause.pretty(cause)}`)),
 );
 
 const mainEffect = program.pipe(
@@ -224,7 +230,4 @@ const mainEffect = program.pipe(
 );
 
 /** Fully wired CLI program. */
-export const main = mainEffect as Effect.Effect<
-  void,
-  Effect.Error<typeof mainEffect>
->;
+export const main = mainEffect as Effect.Effect<void, Effect.Error<typeof mainEffect>>;
