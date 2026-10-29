@@ -54,7 +54,7 @@
     font-size: 15px;
   }
   .dd-step.in {
-    animation: ddin 0.3s ease both;
+    animation: ddin 0.6s ease both;
   }
   .dd-count {
     font: 600 13px var(--alc-font-mono);
@@ -104,15 +104,12 @@
       background 0.5s,
       border-color 0.5s;
   }
-  .dd-blk.new {
-    animation: ddin 0.4s ease both;
-  }
   .dd-blk.stable {
-    animation: ddstable 0.8s ease;
+    animation: ddstable 1.6s ease;
   }
   @keyframes ddstable {
     50% {
-      background: color-mix(in srgb, var(--c) 28%, transparent);
+      background: color-mix(in srgb, var(--c) 16%, transparent);
     }
   }
   .dd-ln {
@@ -122,9 +119,9 @@
     white-space: pre;
     color: var(--alc-fg-3);
     transition:
-      height 0.5s ease,
-      opacity 0.35s,
-      background 0.3s;
+      height 0.9s ease,
+      opacity 0.7s,
+      background 0.6s;
   }
   .dd-ln.bad {
     background: color-mix(in srgb, var(--alc-fg-1) 10%, transparent);
@@ -147,18 +144,18 @@
     color: var(--r);
     border-radius: 3px;
     transition:
-      color 0.5s,
-      box-shadow 0.3s;
+      color 0.9s,
+      box-shadow 0.6s;
   }
   .dd-ln.bad .dd-ref {
     box-shadow: 0 0 0 2px var(--alc-fg-1);
   }
   .dd-ref.ping {
-    animation: ddping 0.9s ease 2;
+    animation: ddping 1.6s ease 1;
   }
   @keyframes ddping {
     50% {
-      background: color-mix(in srgb, var(--r) 35%, transparent);
+      background: color-mix(in srgb, var(--r) 22%, transparent);
     }
   }
   .dd-also {
@@ -336,7 +333,7 @@
     const blockEl = (color: number) => {
       if (!block.has(color)) {
         const el = document.createElement("div");
-        el.className = "dd-blk new";
+        el.className = "dd-blk";
         el.style.setProperty("--c", colorOf(color));
         block.set(color, el);
       }
@@ -352,11 +349,18 @@
       const blocks = p.map((grp) => {
         const b = blockEl(grp.color);
         used.add(grp.color);
-        b.replaceChildren(...grp.ids.map((id) => line.get(id)!));
+        // Only move lines that aren't already in place: re-inserting restarts animations.
+        grp.ids.forEach((id, i) => {
+          const el = line.get(id)!;
+          if (b.children[i] !== el) b.insertBefore(el, b.children[i] ?? null);
+        });
         return b;
       });
       for (const [c, b] of block) if (!used.has(c)) (b.remove(), block.delete(c));
-      stage.replaceChildren(...blocks);
+      blocks.forEach((b, i) => {
+        if (stage.children[i] !== b) stage.insertBefore(b, stage.children[i] ?? null);
+      });
+      while (stage.children.length > blocks.length) stage.lastElementChild!.remove();
       for (const [id, el] of line) {
         el.style.setProperty("--c", colorOf(p[g.get(id)!]!.color));
         el.querySelectorAll<HTMLElement>(".dd-ref").forEach((r) => {
@@ -377,7 +381,7 @@
         const dy = a.top - b.top;
         if (Math.abs(dx) + Math.abs(dy) > 1)
           el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }], {
-            duration: 650,
+            duration: 1100,
             easing: "cubic-bezier(.4,0,.2,1)",
           });
       }
@@ -420,25 +424,25 @@
       const me = ++run;
       const go = async (ms: number) => (await wait(ms), me === run);
       reset();
-      if (!(await go(1200))) return;
+      if (!(await go(2200))) return;
 
       step("Group the ones that look alike");
       render(P1);
-      if (!(await go(1600))) return;
+      if (!(await go(2800))) return;
 
       for (const [i, pass] of PASSES.entries()) {
         if (!pass.moved.length) {
           step("Nothing left to split");
           block.forEach((b) => (b.classList.remove("stable"), void b.offsetWidth, b.classList.add("stable")));
-          if (!(await go(1100))) return;
+          if (!(await go(2000))) return;
           break;
         }
         step(i === 0 ? "A reference doesn't match, so it splits off" : "That split ripples up a level");
         pass.moved.forEach((id) => line.get(id)!.classList.add("bad"));
-        if (!(await go(1000))) return;
+        if (!(await go(2000))) return;
         pass.moved.forEach((id) => line.get(id)!.classList.remove("bad"));
         render(pass.p);
-        if (!(await go(1500))) return;
+        if (!(await go(2800))) return;
       }
 
       // Fold each block into its first line.
@@ -453,7 +457,7 @@
         }
       }
       setCount(FINAL.length, true);
-      if (!(await go(4500))) return;
+      if (!(await go(7000))) return;
       void play();
     }
 
