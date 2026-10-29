@@ -456,7 +456,7 @@ export const toHttpApi = <A extends Publishable>(
         : new DefinitionError(
             `${httpApi.identifier} does not hold the ${name} group: add it first`,
           ));
-    if (problem) return Layer.effectDiscard(Effect.die(problem));
+    if (problem) return problem.pipe(Effect.die, Layer.effectDiscard);
     return HttpApiBuilder.group(httpApi as never, name as never, (handlers: any) => {
       // The Api's in-process client: its handlers and middleware, nothing
       // serialized. One per request, as `yield* Api` builds one server per request.
