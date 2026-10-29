@@ -4,6 +4,8 @@
 import { spawn } from "node:child_process";
 import * as NodeModule from "node:module";
 import { pathToFileURL } from "node:url";
+import * as SemVer from "effect/SemVer";
+import * as SemVerRange from "effect/SemVerRange";
 import path from "pathe";
 
 const binDir = path.dirname(import.meta.filename);
@@ -135,11 +137,9 @@ async function runUnderNode() {
  * launcher must run before any TypeScript can be loaded.
  */
 function supportsModuleHooks() {
-  const [major = 0, minor = 0, patch = 0] = process.versions.node.split(".").map(Number);
-  return (
-    (major === 22 && (minor > 22 || (minor === 22 && patch >= 3))) ||
-    (major === 24 && (minor > 11 || (minor === 11 && patch >= 1))) ||
-    (major === 25 && minor >= 1) ||
-    major >= 26
+  return SemVerRange.matches(
+    SemVerRange.parseUnsafe(">=22.22.3 <23.0.0-0 || >=24.11.1 <25.0.0-0 || >=25.1.0"),
+    SemVer.parseUnsafe(process.versions.node),
+    { includePrerelease: true },
   );
 }
