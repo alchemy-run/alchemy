@@ -131,4 +131,34 @@ export interface StateService {
     stage: string;
     value: unknown;
   }): Effect.Effect<unknown, StateStoreError, never>;
+  /**
+   * Move stages into this store from the one it replaces, or back with
+   * `rollback`, for stores that replace another. Idempotent: run it again
+   * to finish what a failure or a blocked stage left.
+   */
+  migrate?(
+    request: StateMigrationRequest,
+  ): Effect.Effect<ReadonlyArray<StateMigration>, StateStoreError, never>;
+}
+
+/** Which stages {@link StateService.migrate} moves. */
+export interface StateMigrationRequest {
+  /** Only this stack's stages. */
+  readonly stack?: string;
+  /** Only stages of this name. */
+  readonly stage?: string;
+  /** Move stages back to the store this one replaces. */
+  readonly rollback?: boolean;
+}
+
+/** What {@link StateService.migrate} did with one stage. */
+export interface StateMigration {
+  readonly stack: string;
+  readonly stage: string;
+  /** e.g. `migrated`, `already-migrated`, `rolled-back`, `blocked` or `failed`. */
+  readonly status: string;
+  /** Records moved. */
+  readonly records?: number;
+  /** Why a stage was not moved. */
+  readonly reason?: string;
 }
