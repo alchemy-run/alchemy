@@ -13,6 +13,8 @@ export * from "./ListWorkflowExecutionStepEntries.ts";
 export * from "./ListWorkflowExecutionStepEntriesHttp.ts";
 export * from "./ListWorkflowRevisions.ts";
 export * from "./ListWorkflowRevisionsHttp.ts";
+export * from "./ListWorkflows.ts";
+export * from "./ListWorkflowsHttp.ts";
 export * from "./TriggerWorkflowPubsubExecution.ts";
 export * from "./TriggerWorkflowPubsubExecutionHttp.ts";
 export * from "./WorkflowAuditLogs.ts";

@@ -51,6 +51,8 @@ export * from "./ImportRepositoryGoogetArtifact.ts";
 export * from "./ImportRepositoryGoogetArtifactHttp.ts";
 export * from "./ImportRepositoryYumArtifact.ts";
 export * from "./ImportRepositoryYumArtifactHttp.ts";
+export * from "./ListRepositories.ts";
+export * from "./ListRepositoriesHttp.ts";
 export * from "./ListRepositoryAttachments.ts";
 export * from "./ListRepositoryAttachmentsHttp.ts";
 export * from "./ListRepositoryFiles.ts";

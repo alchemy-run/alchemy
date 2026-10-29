@@ -33,6 +33,8 @@ export * from "./ListInstanceLogicalViews.ts";
 export * from "./ListInstanceLogicalViewsHttp.ts";
 export * from "./ListInstanceMaterializedViews.ts";
 export * from "./ListInstanceMaterializedViewsHttp.ts";
+export * from "./ListInstances.ts";
+export * from "./ListInstancesHttp.ts";
 export * from "./ListInstanceTables.ts";
 export * from "./ListInstanceTablesHttp.ts";
 export * from "./ListTableAuthorizedViews.ts";

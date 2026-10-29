@@ -55,6 +55,7 @@
     "spanner.projects.instances.databases.sessions.adapter": "the Cassandra adapter's wire protocol, not a REST call",
     "spanner.projects.instances.databases.sessions.adaptMessage": "the Cassandra adapter's wire protocol, not a REST call",
     "spanner.projects.instances.databases.dropDatabase": "drops the database, which its provider owns",
-    "spanner.projects.instances.databases.getScans": "Key Visualizer scans; no predefined role grants the permission it checks"
+    "spanner.projects.instances.databases.getScans": "Key Visualizer scans; no predefined role grants the permission it checks",
+    "spanner.projects.instanceConfigs.create": "creates long-lived infrastructure that belongs in a resource, not a runtime call"
   }
 }

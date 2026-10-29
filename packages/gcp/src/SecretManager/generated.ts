@@ -7,6 +7,8 @@ export * from "./GetSecret.ts";
 export * from "./GetSecretHttp.ts";
 export * from "./GetSecretVersion.ts";
 export * from "./GetSecretVersionHttp.ts";
+export * from "./ListSecrets.ts";
+export * from "./ListSecretsHttp.ts";
 export * from "./ListSecretVersions.ts";
 export * from "./ListSecretVersionsHttp.ts";
 export * from "./RotateSecret.ts";

@@ -1,7 +1,10 @@
 import type { GcpOpContext } from "@distilled.cloud/gcp/Protocol";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
+import { CurrentRuntimeContext } from "alchemy/RuntimeContext";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import { GcpEnvironment } from "./Environment.ts";
 import * as GCPBindings from "./GCPBindings.ts";
 import { type GcpIamGrant } from "./Host.ts";
 import type { GcpIamResourceKind } from "./IamPolicy.ts";
@@ -110,7 +113,13 @@ export interface GcpBindingVariant {
   readonly resource: string;
   readonly operation: GcpHttpOp<any, any, any>;
   /** Request field that carries the target's full name, e.g. `name`. */
-  readonly param: string;
+  readonly param?: string;
+  /**
+   * For APIs addressed by separate path parameters: request field → the
+   * bound resource's attribute that fills it, e.g.
+   * `{ projectId: "project", datasetId: "datasetId" }`.
+   */
+  readonly params?: Readonly<Record<string, string>>;
   /** IAM the host gets on the bound resource. */
   readonly iam: BindingIam;
   /**
@@ -167,6 +176,10 @@ export const makeGcpBinding = <Shape>(options: {
         });
       }
       const name = yield* resourceName;
+      const filled: [string, Effect.Effect<string>][] = [];
+      for (const [field, attribute] of Object.entries(variant.params ?? {})) {
+        filled.push([field, yield* attributes[attribute]!]);
+      }
       return Effect.fn(`${options.tag}(${resource.LogicalId})`)(function* (
         request?: Record<string, unknown>,
       ) {
@@ -182,10 +195,90 @@ export const makeGcpBinding = <Shape>(options: {
           target = `${target}${separator}${input[field]}`;
           delete input[field];
         }
-        input[variant.param] = target;
+        if (variant.param !== undefined) input[variant.param] = target;
+        for (const [field, value] of filled) input[field] = yield* value;
         return yield* run(input);
       });
     });
     // The generated contract declares the precise request/response types.
     return bindResource as unknown as Shape;
+  });
+
+/** One way a project-scoped binding calls its operation. */
+export interface GcpProjectBindingVariant {
+  readonly operation: GcpHttpOp<any, any, any>;
+  /**
+   * Request field the scope's name goes in (`projects/{project}`, or
+   * `projects/{project}/locations/{location}` when `location`), e.g. `parent`.
+   */
+  readonly param?: string;
+  /** For APIs addressed by separate path parameters: the project-id field, e.g. `projectId`. */
+  readonly projectField?: string;
+  /** The scope is a location: the request's `location` field names it. */
+  readonly location?: boolean;
+  /** Role the host gets on the project. */
+  readonly role: string;
+}
+
+/** The project a project-scoped binding was deployed against was not handed to the host. */
+export class GcpBindingProjectMissing extends Data.TaggedError("GCP.BindingProjectMissing")<{
+  tag: string;
+}> {}
+
+const PROJECT_KEY = "ALCHEMY_GCP_BINDING_PROJECT";
+
+/**
+ * Runtime of a generated binding for an operation on the project itself
+ * (`topics.list`, `jobs.insert`), which has no resource to bind to: the
+ * host gets each variant's role on the stack's project, and the project id
+ * is handed to the host at deploy. A variant with `location` runs when the
+ * request names a `location`, the others when it doesn't.
+ */
+export const makeGcpProjectBinding = <Shape>(options: {
+  tag: string;
+  variants: ReadonlyArray<GcpProjectBindingVariant>;
+}): Effect.Effect<Shape> =>
+  Effect.gen(function* () {
+    const bind = yield* GCPBindings.Bind;
+    const ctx = yield* CurrentRuntimeContext;
+    const runs = yield* Effect.forEach(options.variants, (variant) =>
+      GCPBindings.withCredentials(variant.operation as Effect.Effect<any, never, any>),
+    );
+    const bindProject = Effect.fn(function* () {
+      if (!globalThis.__ALCHEMY_RUNTIME__) {
+        const { project } = yield* GcpEnvironment.current;
+        yield* bind`${options.tag}(${{ LogicalId: "project" }})`({
+          iam: [...new Set(options.variants.map((variant) => variant.role))].map((role) => ({
+            role,
+          })),
+          env: { [PROJECT_KEY]: project },
+        });
+      }
+      return Effect.fn(options.tag)(function* (request?: Record<string, unknown>) {
+        const project = ctx === undefined ? undefined : yield* ctx.get<string>(PROJECT_KEY);
+        if (project === undefined) {
+          return yield* new GcpBindingProjectMissing({ tag: options.tag });
+        }
+        const input: Record<string, unknown> = { ...request };
+        const location = input.location as string | undefined;
+        const index = Math.max(
+          0,
+          options.variants.findIndex(
+            (variant) => (variant.location ?? false) === (location !== undefined),
+          ),
+        );
+        const variant = options.variants[index]!;
+        const run = runs[index] as (input: unknown) => Effect.Effect<unknown, unknown>;
+        if (variant.location) delete input.location;
+        if (variant.param !== undefined) {
+          input[variant.param] = variant.location
+            ? `projects/${project}/locations/${location}`
+            : `projects/${project}`;
+        }
+        if (variant.projectField !== undefined) input[variant.projectField] = project;
+        return yield* run(input);
+      });
+    });
+    // The generated contract declares the precise request/response types.
+    return bindProject as unknown as Shape;
   });

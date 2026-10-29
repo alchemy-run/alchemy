@@ -1,0 +1,44 @@
+{
+  "discovery": "bigquery-v2",
+  "module": "bigquery_v2",
+  "resources": {
+    "Dataset": {
+      "pattern": "projects/*/datasets/*",
+      "attributes": ["project", "datasetId"],
+      "iamKind": "bigquery.dataset"
+    },
+    "Table": {
+      "pattern": "projects/*/datasets/*/tables/*",
+      "attributes": ["project", "datasetId", "tableId"],
+      "iamKind": "bigquery.table"
+    },
+    "Job": {
+      "pattern": "projects/*/jobs/*",
+      "attributes": ["project", "jobId"]
+    },
+    "Routine": {
+      "pattern": "projects/*/datasets/*/routines/*",
+      "lifecycleOnly": true
+    },
+    "RowAccessPolicy": {
+      "pattern": "projects/*/datasets/*/tables/*/rowAccessPolicies/*",
+      "lifecycleOnly": true
+    }
+  },
+  "permissions": {
+    "bigquery.models.get": "bigquery.models.getMetadata",
+    "bigquery.models.patch": "bigquery.models.updateMetadata",
+    "bigquery.rowAccessPolicies.batchDelete": "bigquery.rowAccessPolicies.delete",
+    "bigquery.datasets.undelete": "bigquery.datasets.create",
+    "bigquery.jobs.cancel": "bigquery.jobs.update",
+    "bigquery.datasets.list": "bigquery.datasets.get",
+    "bigquery.jobs.insert": "bigquery.jobs.create"
+  },
+  "names": {
+    "BatchRowAccessPolicyDelete": "BatchDeleteRowAccessPolicies"
+  },
+  "projectCalls": ["bigquery.jobs.insert"],
+  "skip": {
+    "bigquery.projects.getServiceAccount": "returns BigQuery's service agent for the project: setup information, not a runtime call"
+  }
+}

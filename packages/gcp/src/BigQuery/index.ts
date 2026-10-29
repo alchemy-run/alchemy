@@ -15,3 +15,4 @@ export * from "./WriteTable.ts";
 export * from "./WriteTableHttp.ts";
 export * from "./ReadWriteTable.ts";
 export * from "./ReadWriteTableHttp.ts";
+export * from "./generated.ts";

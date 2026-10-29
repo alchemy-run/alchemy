@@ -68,6 +68,13 @@ interface ResourceConfig {
    * resources with no IAM policy of their own (Spanner backup schedules).
    */
   lifecycleOnly?: boolean;
+  /**
+   * For APIs that address resources by separate path parameters
+   * (`projects/{projectId}/datasets/{datasetId}`) instead of one name: the
+   * resource attribute that fills each `*` in `pattern`, in order. The
+   * binding fills those parameters; any further ones stay request fields.
+   */
+  attributes?: string[];
 }
 
 interface ApiConfig {
@@ -129,6 +136,14 @@ interface ServiceConfig extends Partial<ApiConfig> {
    * of the bound resource.
    */
   projectGrant?: Record<string, string>;
+  /**
+   * Method ids that are calls on the project even though they create a
+   * configured resource's kind: `jobs.insert` starts a load or extract job
+   * at runtime, while the `Job` resource is a job run at deploy.
+   */
+  projectCalls?: string[];
+  /** Don't generate bindings for calls on the project itself (`topics.list`). */
+  noProjectBindings?: boolean;
 }
 
 // ============ Discovery ============
@@ -188,6 +203,28 @@ const singular = (word: string) =>
         ? word.slice(0, -1)
         : word;
 
+/**
+ * A path with one parameter per segment, e.g.
+ * `projects/{+projectId}/datasets/{+datasetId}/tables/{+tableId}/insertAll`
+ * → segments `projects/*\/datasets/*\/tables/*` and the parameter of each `*`.
+ * Trailing literal segments and `:verb` suffixes name the action, not the target.
+ */
+const flatTarget = (path: string) => {
+  const parts = path.replace(/:[A-Za-z]+$/, "").split("/");
+  const segments: string[] = [];
+  const params: string[] = [];
+  for (const part of parts) {
+    const param = /^\{\+?(\w+)\}$/.exec(part)?.[1];
+    if (param) {
+      segments.push("*");
+      params.push(param);
+    } else if (/^[a-zA-Z][a-zA-Z0-9]*$/.test(part)) segments.push(part);
+    else return undefined;
+  }
+  while (segments.length > 0 && segments.at(-1) !== "*") segments.pop();
+  return segments.length > 0 ? { param: undefined, segments, params } : undefined;
+};
+
 const SCOPE_COLLECTIONS = new Set(["projects", "locations", "organizations", "folders"]);
 const LIFECYCLE_VERBS = new Set(["create", "delete", "patch", "update"]);
 const IAM_VERBS = new Set(["getIamPolicy", "setIamPolicy", "testIamPermissions"]);
@@ -222,7 +259,14 @@ interface Variant {
   api: Api;
   methodId: string;
   fn: string;
-  param: string;
+  /** Request field the target's full name goes in (name-style APIs). */
+  param: string | undefined;
+  /** Request field → resource attribute (flat-path APIs). */
+  params: Record<string, string> | undefined;
+  /** A call on the project or one of its locations: no resource to bind. */
+  scope: "project" | "location" | undefined;
+  /** Flat-path project-scoped calls: the project-id request field. */
+  projectField: string | undefined;
   children: [string, string][];
   suffix?: [string, string];
   append?: string;
@@ -307,8 +351,13 @@ const classify = (options: {
     const vars = [...method.path.matchAll(/\{\+?(\w+)\}/g)].map((m) => m[1]!);
     const targets = vars
       .map((v) => ({ param: v, segments: patternSegments(method.parameters?.[v]?.pattern ?? "") }))
-      .filter((t): t is { param: string; segments: string[] } => t.segments !== undefined);
-    const target = targets.sort((a, b) => b.segments.length - a.segments.length)[0];
+      .filter((t): t is { param: string; segments: string[] } => t.segments !== undefined)
+      // A full name has a collection in it; `^[^/]+$` is one segment of a flat path.
+      .filter((t) => t.segments.length > 1);
+    // Otherwise the method's own path, for APIs with one parameter per segment.
+    const flat = flatTarget(method.path);
+    const target: { param: string | undefined; segments: string[]; params?: string[] } | undefined =
+      targets.sort((a, b) => b.segments.length - a.segments.length)[0] ?? flat;
     if (target === undefined) {
       results.push({ id, kind: "project", reason: "no resource-name path parameter" });
       continue;
@@ -323,18 +372,43 @@ const classify = (options: {
       results.push({ id, kind: "lifecycle" });
       continue;
     }
-    const resource = resources
+    const matched = resources
       .filter(
         (r) =>
           !r.lifecycleOnly &&
+          // A flat target only matches resources configured with `attributes`.
+          (target.param === undefined) === (r.attributes !== undefined) &&
           r.segments.length <= target.segments.length &&
           r.segments.every((s, i) => s === target.segments[i]) &&
           (config.append?.[id] !== undefined ||
             (target.segments.length - r.segments.length) % 2 === 0),
       )
       .sort((a, b) => b.segments.length - a.segments.length)[0];
+    const projectCall = config.projectCalls?.includes(id) ?? false;
+    const created =
+      !projectCall &&
+      (verb === "create" || verb === "insert") &&
+      resources.some((r) => r.segments.at(-2) === cols.at(-1));
+    // Nothing to bind to: a call on the project (or one of its locations)
+    // itself becomes a project-scoped binding.
+    const scope =
+      (matched !== undefined && !projectCall) || created
+        ? undefined
+        : target.segments.join("/") === "projects/*"
+          ? ("project" as const)
+          : target.param !== undefined && target.segments.join("/") === "projects/*/locations/*"
+            ? ("location" as const)
+            : undefined;
+    const resource =
+      (projectCall ? undefined : matched) ??
+      (scope !== undefined && !config.noProjectBindings
+        ? {
+            key: `@${scope}`,
+            pattern: target.segments.join("/"),
+            segments: target.segments,
+          }
+        : undefined);
     if (resource === undefined) {
-      const created = verb === "create" && resources.some((r) => r.segments.at(-2) === cols.at(-1));
       results.push(
         created
           ? { id, kind: "lifecycle" }
@@ -343,15 +417,25 @@ const classify = (options: {
       continue;
     }
     const extra = config.append?.[id] ? [] : target.segments.slice(resource.segments.length);
+    // Name-style targets assemble child segments from request fields; a flat
+    // target's further path parameters are already request fields.
     const children: [string, string][] = [];
-    for (let i = 0; i < extra.length; i += 2) {
+    for (let i = 0; target.param !== undefined && i < extra.length; i += 2) {
       children.push([extra[i]!, singular(extra[i]!)]);
     }
+    // Flat target: the method parameter at each of the resource's wildcards,
+    // filled from the matching attribute.
+    const params: Record<string, string> | undefined =
+      target.param === undefined && resource.attributes
+        ? Object.fromEntries(
+            resource.attributes.map((attribute, i) => [target.params![i]!, attribute]),
+          )
+        : undefined;
     const ownCollection = resource.segments.at(-2);
     if (
-      (LIFECYCLE_VERBS.has(verb) && children.length === 0 && cols.at(-1) === ownCollection) ||
+      (LIFECYCLE_VERBS.has(verb) && extra.length === 0 && cols.at(-1) === ownCollection) ||
       // Creating a child that is itself a configured resource is its provider's job.
-      (verb === "create" && ownCollections.has(cols.at(-1)))
+      (!projectCall && (verb === "create" || verb === "insert") && ownCollections.has(cols.at(-1)))
     ) {
       results.push({ id, kind: "lifecycle" });
       continue;
@@ -364,9 +448,11 @@ const classify = (options: {
         // (`databases.create` for creating an index) is a different action.
         // Some services lowercase it (`artifactregistry.dockerimages.get`).
         .flatMap((v) =>
-          [scoped.at(-1)!, scoped.at(-1)!.toLowerCase()].map(
-            (c) => `${permissionService}.${c}.${v}`,
-          ),
+          scoped.length === 0
+            ? []
+            : [scoped.at(-1)!, scoped.at(-1)!.toLowerCase()].map(
+                (c) => `${permissionService}.${c}.${v}`,
+              ),
         )
         .find((p) => roles[p] !== undefined);
     if (permission === undefined || roles[permission] === undefined) {
@@ -405,7 +491,10 @@ const classify = (options: {
       description: (method.description ?? "").split(/(?<=\.)\s/)[0] ?? "",
       variants: [],
     };
-    if (binding.variants.some((v) => v.resource === resource.key)) {
+    if (
+      binding.variants.some((v) => v.resource === resource.key) ||
+      binding.variants.some((v) => (v.scope === undefined) !== (scope === undefined))
+    ) {
       results.push({ id, kind: "project", reason: `name collision on ${name}` });
       continue;
     }
@@ -415,6 +504,10 @@ const classify = (options: {
       methodId: id,
       fn,
       param: target.param,
+      params,
+      scope,
+      projectField:
+        scope !== undefined && target.param === undefined ? target.params![0] : undefined,
       children,
       suffix: config.suffix?.[id],
       append: config.append?.[id],
@@ -460,7 +553,97 @@ const grantScope = (config: ServiceConfig, variant: Variant) => {
   return "the project (the service has no per-resource IAM policy)";
 };
 
+/** A binding for a call on the project (or a location) itself: no resource argument. */
+const emitProjectContract = (service: string, binding: Binding) => {
+  const first = binding.variants[0]!;
+  const located = binding.variants.some((v) => v.scope === "location");
+  const global = binding.variants.some((v) => v.scope === "project");
+  const omitted = [first.param ?? first.projectField!];
+  const required = requiredMembers(first.api.moduleSource, first.types.request).filter(
+    (m) => !omitted.includes(m),
+  );
+  const optional = required.length === 0 && (!located || global);
+  const locationField = located
+    ? ` {\n  /** Location to call in (\`projects/{project}/locations/{location}\`)${global ? "; the project itself when omitted" : ""}. */\n  location${global ? "?" : ""}: string;\n}`
+    : " {}";
+  const responses = [...new Set(binding.variants.map((v) => `${v.api.ns}.${v.types.response}`))];
+  const errors = [...new Set(binding.variants.map((v) => `${v.api.ns}.${v.types.error}`))];
+  const variable = binding.name[0]!.toLowerCase() + binding.name.slice(1);
+  const grants = [...new Set(binding.variants.map((v) => `\`${v.role}\``))].join(", ");
+  const exampleFields = [
+    ...(located && !global ? ['location: "us-central1"'] : []),
+    ...required.map((f) => `${f}: ${f === "body" ? "{}" : `"..."`}`),
+  ];
+  return `${HEADER(service)}${apiImports(binding, true)}
+import * as Binding from "alchemy/Binding";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
+import type * as Effect from "effect/Effect";
+
+export interface ${binding.name}Request
+  extends Omit<${first.api.ns}.${first.types.request}, ${omitted.map((o) => `"${o}"`).join(" | ")}>${locationField}
+
+export type ${binding.name}Shape = () => Effect.Effect<
+  (
+    request${optional ? "?" : ""}: ${binding.name}Request,
+  ) => Effect.Effect<${responses.join(" | ")}, ${errors.join(" | ")}, RuntimeContext>
+>;
+
+/**
+ * ${binding.description.replace(/\*\//g, "*\\/") || `Runtime binding for \`${first.methodId}\`.`}
+ *
+ * A call on the stack's project${located ? " or one of its locations" : ""}, so it takes no resource.
+ * Provide {@link ${binding.name}Http}. The host gets ${grants} on the project.
+ *
+ * ### Usage
+ * **Example:** Call \`${first.methodId.split(".").slice(-2).join(".")}\`
+ * \`\`\`typescript
+ * const ${variable} = yield* GCP.${service}.${binding.name}();
+ * const response = yield* ${variable}(${exampleFields.length ? `{ ${exampleFields.join(", ")} }` : ""});
+ * \`\`\`
+ *
+ * @binding
+ * @category ${service}
+ */
+export interface ${binding.name}
+  extends Binding.Service<${binding.name}, "GCP.${service}.${binding.name}", ${binding.name}Shape> {}
+
+export const ${binding.name} = Binding.Service<${binding.name}>("GCP.${service}.${binding.name}");
+`;
+};
+
+const emitProjectHttp = (service: string, binding: Binding) => {
+  const variants = binding.variants.map(
+    (v) => `    {
+      operation: ${v.api.ns}.${v.fn},
+      ${v.param !== undefined ? `param: "${v.param}",` : `projectField: "${v.projectField}",`}${v.scope === "location" ? "\n      location: true," : ""}
+      role: "${v.role}",
+    },`,
+  );
+  return `${HEADER(service)}${apiImports(binding, false)}
+import * as Layer from "effect/Layer";
+import { makeGcpProjectBinding } from "../HttpBinding.ts";
+import { ${binding.name}, type ${binding.name}Shape } from "./${binding.name}.ts";
+
+/**
+ * HTTP implementation of {@link ${binding.name}}.
+ *
+ * @layer
+ * @provides GCP.${service}.${binding.name}
+ */
+export const ${binding.name}Http = Layer.effect(
+  ${binding.name},
+  makeGcpProjectBinding<${binding.name}Shape>({
+    tag: "GCP.${service}.${binding.name}",
+    variants: [
+${variants.join("\n")}
+    ],
+  }),
+);
+`;
+};
+
 const emitContract = (service: string, config: ServiceConfig, binding: Binding) => {
+  if (binding.variants[0]!.scope !== undefined) return emitProjectContract(service, binding);
   const first = binding.variants[0]!;
   const moduleSource = first.api.moduleSource;
   const resourceTypes = [...new Set(binding.variants.map((v) => v.resource))];
@@ -468,7 +651,7 @@ const emitContract = (service: string, config: ServiceConfig, binding: Binding) 
     ...first.children.map(([, field]) => field),
     ...(first.suffix ? [first.suffix[1]] : []),
   ];
-  const omitted = [first.param];
+  const omitted = first.param !== undefined ? [first.param] : Object.keys(first.params ?? {});
   const required = requiredMembers(moduleSource, first.types.request).filter(
     (m) => !omitted.includes(m),
   );
@@ -531,6 +714,7 @@ export const ${binding.name} = Binding.Service<${binding.name}>("GCP.${service}.
 };
 
 const emitHttp = (service: string, config: ServiceConfig, binding: Binding) => {
+  if (binding.variants[0]!.scope !== undefined) return emitProjectHttp(service, binding);
   const variants = binding.variants.map((v) => {
     const resource = config.resources[v.resource]!;
     const type = resource.type ?? `GCP.${service}.${v.resource}`;
@@ -550,7 +734,7 @@ const emitHttp = (service: string, config: ServiceConfig, binding: Binding) => {
     return `    {
       resource: "${type}",
       operation: ${v.api.ns}.${v.fn},
-      param: "${v.param}",${children}
+      ${v.param !== undefined ? `param: "${v.param}",` : `params: ${JSON.stringify(v.params)},`}${children}
       iam: ${iam},
     },`;
   });

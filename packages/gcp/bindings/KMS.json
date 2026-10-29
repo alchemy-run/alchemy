@@ -29,7 +29,13 @@
   "skip": {
     "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.import": "imports wrapped key material through an ImportJob; a deploy-time concern, not a runtime call",
     "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.importTrustedKeyWrappedCryptoKeyVersion": "single-tenant HSM key transfer",
-    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.exportTrustedKeyWrappedCryptoKeyVersion": "single-tenant HSM key transfer"
+    "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.exportTrustedKeyWrappedCryptoKeyVersion": "single-tenant HSM key transfer",
+    "cloudkms.projects.locations.ekmConnections.create": "creates long-lived infrastructure that belongs in a resource, not a runtime call",
+    "cloudkms.projects.locations.singleTenantHsmInstances.create": "creates long-lived infrastructure that belongs in a resource, not a runtime call (a dedicated HSM, billed per month)",
+    "cloudkms.projects.locations.keyHandles.create": "needs Autokey enabled on a folder (an organization-level setup)",
+    "cloudkms.projects.showEffectiveKeyAccessJustificationsPolicyConfig": "organization-level Key Access Justifications configuration",
+    "cloudkms.projects.showEffectiveKeyAccessJustificationsEnrollmentConfig": "organization-level Key Access Justifications configuration",
+    "cloudkms.projects.showEffectiveAutokeyConfig": "organization-level Autokey configuration"
   },
   "names": {
     "AsymmetricCryptoKeyVersionDecrypt": "AsymmetricDecrypt",

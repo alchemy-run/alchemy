@@ -11,6 +11,8 @@ export * from "./GetQueue.ts";
 export * from "./GetQueueHttp.ts";
 export * from "./GetQueueTask.ts";
 export * from "./GetQueueTaskHttp.ts";
+export * from "./ListQueues.ts";
+export * from "./ListQueuesHttp.ts";
 export * from "./ListQueueTasks.ts";
 export * from "./ListQueueTasksHttp.ts";
 export * from "./PauseQueue.ts";
