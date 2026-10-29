@@ -6,6 +6,7 @@ import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
+import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import {
@@ -99,6 +100,19 @@ export interface Listener extends Resource<
      * attributes are left out so AWS defaults never register as drift.
      */
     attributes?: Record<string, string>;
+    /**
+     * Default actions, default certificate, TLS/ALPN policy, mutual TLS and
+     * (when `certificates` is declared) the SNI certificates, as observed.
+     * Lets `alchemy drift` detect out-of-band changes.
+     */
+    configuration?: {
+      defaultActions: unknown[];
+      certificateArn?: string;
+      sslPolicy?: string;
+      alpnPolicy?: string[];
+      mutualAuthentication?: unknown;
+      sniCertificateArns?: string[];
+    };
   },
   never,
   Providers
@@ -252,6 +266,38 @@ const readListenerAttributes = Effect.fn(function* (
   return observedAttributes(declared, observed.Attributes);
 });
 
+/**
+ * The configuration `read` and `reconcile` both report, so a converged
+ * listener reads unchanged.
+ */
+const observeListenerConfiguration = (
+  listener: elbv2.Listener,
+  sniCertificateArns: string[] | undefined,
+): NonNullable<Listener["Attributes"]["configuration"]> =>
+  plainJson({
+    defaultActions: [...(listener.DefaultActions ?? [])].sort(
+      (a, b) => (a.Order ?? 0) - (b.Order ?? 0),
+    ),
+    certificateArn: listener.Certificates?.[0]?.CertificateArn,
+    sslPolicy: listener.SslPolicy,
+    alpnPolicy: listener.AlpnPolicy?.length ? listener.AlpnPolicy : undefined,
+    mutualAuthentication: listener.MutualAuthentication,
+    sniCertificateArns: sniCertificateArns && [...sniCertificateArns].sort(),
+  });
+
+// The non-default certificates on a listener; only observed when the props
+// declare the full `certificates` list.
+const readSniCertificates = Effect.fn(function* (
+  listenerArn: string,
+  props: ListenerProps | undefined,
+) {
+  if (props?.certificates === undefined) return undefined;
+  const observed = yield* elbv2.describeListenerCertificates({ ListenerArn: listenerArn });
+  return (observed.Certificates ?? []).flatMap((c) =>
+    !c.IsDefault && c.CertificateArn ? [c.CertificateArn] : [],
+  );
+});
+
 export const ListenerProvider = () =>
   Provider.succeed(Listener, {
     stables: ["listenerArn", "loadBalancerArn"],
@@ -280,6 +326,12 @@ export const ListenerProvider = () =>
       if (attributes === null) {
         return undefined;
       }
+      const sni = yield* readSniCertificates(output.listenerArn, olds).pipe(
+        Effect.catchTag("ListenerNotFoundException", () => Effect.succeed(null)),
+      );
+      if (sni === null) {
+        return undefined;
+      }
       return {
         listenerArn: listener.ListenerArn as ListenerArn,
         loadBalancerArn: listener.LoadBalancerArn as LoadBalancerArn,
@@ -287,6 +339,7 @@ export const ListenerProvider = () =>
         port: listener.Port!,
         protocol: listener.Protocol!,
         attributes,
+        configuration: observeListenerConfiguration(listener, sni),
       };
     }),
     // Listeners belong to a load balancer; describeListeners requires a
@@ -450,6 +503,10 @@ export const ListenerProvider = () =>
         port: listener.Port ?? news.port,
         protocol: listener.Protocol ?? desiredProtocol,
         attributes,
+        configuration: observeListenerConfiguration(
+          listener,
+          news.certificates === undefined ? undefined : certs.slice(1),
+        ),
       };
     }),
     delete: Effect.fn(function* ({ output }) {

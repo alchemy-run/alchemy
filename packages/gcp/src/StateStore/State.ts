@@ -195,6 +195,7 @@ export const makeGcsState = (options: GcsStateOptions = {}) =>
               backend: "gcp",
               name: options.name,
               label: `Cloud Storage state bucket '${bucketName}'`,
+              configured: options.bucketName !== undefined,
             },
             ensure,
           );

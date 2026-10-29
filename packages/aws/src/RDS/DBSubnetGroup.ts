@@ -110,6 +110,16 @@ export const DBSubnetGroupProvider = () =>
           ? Effect.succeed(props.dbSubnetGroupName)
           : createPhysicalName({ id, maxLength: 255 });
 
+      const readTags = Effect.fn(function* (arn: string | undefined) {
+        if (!arn) return {} as Record<string, string>;
+        const response = yield* rds.listTagsForResource({ ResourceName: arn });
+        return Object.fromEntries(
+          (response.TagList ?? []).flatMap(({ Key, Value }) =>
+            Key !== undefined && Value !== undefined ? [[Key, Value]] : [],
+          ),
+        ) as Record<string, string>;
+      });
+
       const readGroup = Effect.fn(function* (groupName: string) {
         const response = yield* rds
           .describeDBSubnetGroups({
@@ -145,7 +155,7 @@ export const DBSubnetGroupProvider = () =>
             ),
             status: group.SubnetGroupStatus,
             supportedNetworkTypes: group.SupportedNetworkTypes,
-            tags: output?.tags ?? {},
+            tags: yield* readTags(group.DBSubnetGroupArn),
           };
         }),
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -196,9 +206,9 @@ export const DBSubnetGroupProvider = () =>
 
           const dbSubnetGroupArn = observed.DBSubnetGroupArn;
 
-          // Sync tags — diff prior recorded tags against desired (describe
+          // Sync tags — diff observed cloud tags against desired (describe
           // does not surface tags inline).
-          const observedTags = output?.tags ?? {};
+          const observedTags = yield* readTags(dbSubnetGroupArn);
           const { removed, upsert } = diffTags(observedTags, desiredTags);
           if (upsert.length > 0 && dbSubnetGroupArn) {
             yield* rds.addTagsToResource({
@@ -229,10 +239,8 @@ export const DBSubnetGroupProvider = () =>
         list: () =>
           // AWS account/region collection: `describeDBSubnetGroups` is
           // paginated (items field `DBSubnetGroups`). Collect every page and
-          // map each group into the exact `read` Attributes shape. `read` does
-          // not hydrate tags from the cloud (it returns the cached
-          // `output.tags`), so we mirror that here with an empty tag map rather
-          // than issuing a per-item `listTagsForResource` call.
+          // map each group into the `read` Attributes shape, with an empty
+          // tag map rather than a per-item `listTagsForResource` call.
           rds.describeDBSubnetGroups.pages({}).pipe(
             Stream.runCollect,
             Effect.map((chunk) =>

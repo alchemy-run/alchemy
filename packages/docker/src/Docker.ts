@@ -130,6 +130,12 @@ export class Docker extends Context.Service<
           platform?: string;
           target?: string;
           "build-arg"?: Record<string, string>;
+          /**
+           * BuildKit secrets, keyed by id (`RUN --mount=type=secret,id=<id>`).
+           * Values reach `docker` through its environment, never its argv,
+           * and are not written to the image.
+           */
+          secrets?: Record<string, string | Redacted.Redacted<string>>;
           "cache-from"?: Array<string>;
           "cache-to"?: Array<string>;
           args?: Array<string>;
@@ -844,17 +850,21 @@ const makeDocker = (options: DockerOptions) =>
       },
       image: {
         build: Effect.fn("Docker.image.build")(function* (
-          { context: buildContext, engineContext, args, credentials, ...options },
+          { context: buildContext, engineContext, args, credentials, secrets, ...options },
           session,
           registry,
         ) {
           const tap = outputTap(session);
-          const buildArgs = [buildContext, ...formatArgs(options), ...(args ?? [])];
+          const secret = buildSecrets(secrets);
+          const buildArgs = [buildContext, ...formatArgs(options), ...secret.args, ...(args ?? [])];
           const engine = formatArgs({ context: engineContext });
           if (registry === undefined) {
             return yield* run(
               [...engine, "image", "build", ...buildArgs],
-              credentials ? yield* registryEnvironment(credentials) : undefined,
+              {
+                ...(credentials ? yield* registryEnvironment(credentials) : undefined),
+                ...secret.env,
+              },
               tap,
             );
           }
@@ -865,7 +875,7 @@ const makeDocker = (options: DockerOptions) =>
             const env = yield* registryEnvironment(registry);
             return yield* run(
               [...engine, "buildx", "build", "--push", ...buildArgs],
-              env,
+              { ...env, ...secret.env },
               tap,
             ).pipe(Effect.mapError(classifyDockerRegistryError));
           }
@@ -881,7 +891,7 @@ const makeDocker = (options: DockerOptions) =>
               ...(mode === "load" ? ["buildx", "build", "--load"] : ["image", "build"]),
               ...buildArgs,
             ],
-            undefined,
+            secret.env,
             tap,
           );
           const [tag, ...tags] =
@@ -1059,6 +1069,22 @@ const systemError = (input: {
       cause: input.cause,
     }),
   );
+
+/**
+ * `--secret id=<id>,env=<var>` per secret, with each value under a generated
+ * variable name: an id is the Dockerfile author's choice and may collide with
+ * the environment Docker itself reads (`PATH`, `DOCKER_HOST`).
+ */
+const buildSecrets = (secrets: Record<string, string | Redacted.Redacted<string>> | undefined) => {
+  const args: Array<string> = [];
+  const env: Record<string, string> = {};
+  Object.entries(secrets ?? {}).forEach(([id, value], index) => {
+    const variable = `ALCHEMY_BUILD_SECRET_${index}`;
+    args.push("--secret", `id=${id},env=${variable}`);
+    env[variable] = Redacted.isRedacted(value) ? Redacted.value(value) : value;
+  });
+  return { args, env };
+};
 
 /** Formats a set of options into a list of command-line arguments. */
 const formatArgs = (

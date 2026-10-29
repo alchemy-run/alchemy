@@ -2060,10 +2060,11 @@ const makePlan = <A>(
     }
 
     // A delete-first replacement in a cycle deletes its previous generation
-    // before precreate, which runs on unresolved props. While its identity is
-    // unresolved, only the provider's `observe` can check ownership before
-    // that delete. Without it, refuse here — before apply touches anything —
-    // unless adoption is allowed.
+    // before precreate. Apply resolves the props that upstreams outside the
+    // cycle determine first, so only props derived from a cycle peer are
+    // still unresolved then, and only the provider's `observe` can check
+    // ownership before that delete. Without it, refuse here — before apply
+    // touches anything — unless adoption is allowed.
     for (const [fqn, node] of Object.entries(resourceGraph)) {
       if (
         node.action === "replace" &&
@@ -2072,6 +2073,7 @@ const makePlan = <A>(
         !node.provider.observe &&
         node.deferredAdoption?.adopt === false &&
         !isResolved(node.props) &&
+        Object.keys(Output.resolveUpstream(node.props)).some((dep) => cycleMembers.has(dep)) &&
         // A resumed replacement already holds its precreated identity.
         !(node.state.status === "replacing" && !node.restart && node.state.attr !== undefined)
       ) {

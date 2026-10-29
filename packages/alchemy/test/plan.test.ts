@@ -3458,11 +3458,17 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
     state: freshState,
   });
 
-  /** `Subject`'s name comes from `Name`, which is updated in the same deploy. */
+  /**
+   * `Subject`'s name comes from `Name`, which is updated in the same deploy.
+   * In a cycle, `Name` is a peer bound back to `Subject`, so the name is
+   * still unresolved when `Subject` precreates; with `outside`, or outside a
+   * cycle, `Name` is an ordinary upstream.
+   */
   const subject = (
     name: string,
     opts: {
       cycle?: boolean;
+      outside?: boolean;
       resolved?: boolean;
       unread?: boolean;
       observed?: boolean;
@@ -3470,7 +3476,10 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
     } = {},
   ) =>
     Effect.gen(function* () {
-      const source = yield* TestResource("Name", { string: name });
+      const cycle = opts.cycle ?? true;
+      const peer =
+        cycle && !opts.outside ? yield* BindingTarget("Name", { string: name }) : undefined;
+      const source = peer ?? (yield* TestResource("Name", { string: name }));
       const props = { name: opts.resolved ? name : source.string };
       const scoped = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
         opts.adopt === undefined ? effect : effect.pipe(adopt(opts.adopt));
@@ -3479,7 +3488,8 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
         : opts.observed
           ? yield* scoped(Observed("Subject", props))
           : yield* scoped(Cyclic("Subject", props));
-      if (opts.cycle ?? true) yield* resource.bind("Self", { self: resource.name });
+      if (cycle) yield* resource.bind("Self", { self: resource.name });
+      if (peer) yield* peer.bind("Subject", { env: { SUBJECT: resource.name } });
       return resource;
     });
 
@@ -3559,6 +3569,12 @@ describe("cyclic delete-first admission", { tags: ["unit", "local"] }, () => {
       label: "a resolved name, admitted in apply before the delete",
       prepare: () => {},
       program: subject("fresh", { resolved: true }),
+      deleteFirst: true,
+    },
+    {
+      label: "a name from outside the cycle, admitted in apply before the delete",
+      prepare: () => {},
+      program: subject("fresh", { outside: true }),
       deleteFirst: true,
     },
     {

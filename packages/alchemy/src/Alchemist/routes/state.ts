@@ -160,10 +160,44 @@ export const bootstrap = Effect.fn("Alchemist.state.bootstrap")(function* (
   );
 });
 
+/**
+ * Provision (or upgrade) the store a project's entrypoint configures, with
+ * every option it sets, such as a custom name, a pinned account or a domain.
+ */
+export const bootstrapConfigured = Effect.fn("Alchemist.state.bootstrapConfigured")(function* (
+  source: Extract<StateSource, { readonly _tag: "Configured" }>,
+) {
+  const session = yield* open(source, { updateStateStore: true });
+  const store = yield* Effect.provide(Effect.flatten(State.State), session.context);
+  return { version: yield* store.getVersion() };
+});
+
 /** Delete a state store and its backing resources. */
 export const teardown = Effect.fn("Alchemist.state.teardown")(function* (source: ProviderSource) {
   const { run, context } = yield* lifecycleOperation(source, "teardown");
   return yield* run({ name: source.name }).pipe(Effect.provide(context), isolated);
+});
+
+/**
+ * Move stages into a state store from the one it replaces, or back. The
+ * configured source migrates exactly the store the project's entrypoint
+ * configures, options included.
+ */
+export const migrate = Effect.fn("Alchemist.state.migrate")(function* (
+  source: StateSource,
+  request: State.StateMigrationRequest = {},
+) {
+  return yield* Effect.scoped(
+    Effect.gen(function* () {
+      const resolved = yield* store(source);
+      if (resolved.migrate === undefined) {
+        return yield* new State.StateStoreError({
+          message: `The ${source._tag === "Provider" ? `'${source.backend}'` : "configured"} state store does not replace another store, so it has nothing to migrate`,
+        });
+      }
+      return { stages: yield* resolved.migrate(request) };
+    }),
+  );
 });
 
 /** Past log entries from a state store, oldest first. */

@@ -1,3 +1,5 @@
+import type { DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
+import type * as Bundle from "alchemy/Bundle/Bundle";
 import { isResolved } from "alchemy/Diff";
 import type { Input } from "alchemy/Input";
 import { createPhysicalName } from "alchemy/PhysicalName";
@@ -174,7 +176,7 @@ export interface BundledDeploymentProps extends DeploymentPropsBase {
   /** Named export to load from `main`. @default "default" */
   handler?: string;
   /** Bundler configuration for the entrypoint. */
-  build?: WorkloadImageSource["build"];
+  build?: Bundle.BundleConfig;
   /** Environment Dockerfile (path or inline content). */
   dockerfile?: WorkloadImageSource["dockerfile"];
   /** Build context for a path {@link dockerfile} environment. */
@@ -182,7 +184,7 @@ export interface BundledDeploymentProps extends DeploymentPropsBase {
 }
 
 /** Build the user's own Dockerfile (`context` + optional `dockerfile` path). */
-export interface DockerfileDeploymentProps extends DeploymentPropsBase {
+export interface DockerfileDeploymentProps extends DeploymentPropsBase, DockerfileBuildOptions {
   /** Docker build context directory. */
   context?: string;
   /**
@@ -318,6 +320,23 @@ export interface DeploymentRuntimeContext extends HostRuntimeContext {
  *   cluster,
  *   context: "./legacy",
  *   replicas: 2,
+ *   port: 8080,
+ * });
+ * ```
+ *
+ * **Example:** Build args and secrets
+ * ```typescript
+ * // Dockerfile:
+ * //   ARG NODE_ENV
+ * //   RUN --mount=type=secret,id=NPM_TOKEN,env=NPM_TOKEN npm ci
+ * const api = yield* Kubernetes.Deployment("Api", {
+ *   cluster,
+ *   context: "./api",
+ *   build: {
+ *     args: { NODE_ENV: "production" },
+ *     // Mounted only into the RUN step that asks for it; never in the image.
+ *     secrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
+ *   },
  *   port: 8080,
  * });
  * ```
