@@ -158,6 +158,59 @@ describe("Domain backfill (simulated)", () => {
       }),
   );
 
+  /** Commit `count` events, each to the key named after its instance: a view keyed by its source. */
+  const own = (sim: Sim, sources: number, count: number, prefix = "s") =>
+    Array.from({ length: count }, (_, i) => () => {
+      sim.now += 1;
+      return sim.commit(`A/${prefix}${i % sources}`, [`${prefix}${i % sources}`]);
+    });
+
+  scenario("keyed by its source: each key takes its history as soon as its source has it", (sim) =>
+    Effect.gen(function* () {
+      sim.singleSource = true;
+      for (const commit of own(sim, 8, 60)) yield* commit();
+      yield* sim.deploy();
+      yield* sim.run();
+    }),
+  );
+
+  scenario("keyed by its source, with commits during the backfill and new instances", (sim) =>
+    Effect.gen(function* () {
+      sim.singleSource = true;
+      for (const commit of own(sim, 6, 40)) yield* commit();
+      yield* sim.deploy();
+      yield* sim.run([...own(sim, 6, 20), ...own(sim, 3, 9, "new")]);
+    }),
+  );
+
+  scenario("keyed by its source, with instances still on older code", (sim) =>
+    Effect.gen(function* () {
+      sim.singleSource = true;
+      for (let i = 0; i < 24; i++) {
+        sim.now += 1;
+        yield* sim.commit(`A/s${i % 6}`, [`s${i % 6}`], i % 3 === 0 ? sim.now + 120_000 : 0);
+      }
+      yield* sim.deploy({ running: true });
+      const traffic = Array.from({ length: 12 }, (_, i) => () => {
+        sim.now += 10_000;
+        return sim.commit(`A/s${i % 2}`, [`s${i % 2}`]);
+      });
+      yield* sim.run(traffic);
+    }),
+  );
+
+  scenario(
+    "keyed by its source, with faults",
+    (sim) =>
+      Effect.gen(function* () {
+        sim.singleSource = true;
+        for (const commit of own(sim, 8, 60)) yield* commit();
+        yield* sim.deploy();
+        yield* sim.run(own(sim, 8, 16));
+      }),
+    { faults: { callBefore: 0.08, callAfter: 0.08, crash: 0.08 }, seeds: 60 },
+  );
+
   scenario("an event routed to several keys", (sim) =>
     Effect.gen(function* () {
       for (let i = 0; i < 30; i++) {

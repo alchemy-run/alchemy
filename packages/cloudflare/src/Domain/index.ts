@@ -569,6 +569,7 @@ const aggregateObject = (
         (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
           ref: { source: kit.name, id },
           targets: () => kit.targets,
+          singleSource: kit.consumerSingleSource,
           model,
           version: runtime.provide(Effect.map(currentMeta, (meta) => meta.version)),
           routed: runtime.provide(state.storage.get<Routed>("routed")),
@@ -888,6 +889,7 @@ const viewObject = (kit: ViewKit, net: Backfill.Network, model: () => ReadonlyAr
         (consumer ??= Backfill.makeConsumer(runtime.storage, runtime.jobs, net, {
           key,
           target: () => target,
+          singleSource: () => kit.singleSource,
           apply: (deliveries) => runtime.provide(Effect.orDie(apply(key, deliveries))),
           after: runtime.provide(flushAfter),
         }));
@@ -895,6 +897,7 @@ const viewObject = (kit: ViewKit, net: Backfill.Network, model: () => ReadonlyAr
         (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
           ref: { source: kit.name, id: key },
           targets: () => kit.targets,
+          singleSource: kit.consumerSingleSource,
           model,
           version: runtime.provide(Effect.map(read, (snapshot) => snapshot.seq)),
           routed: runtime.provide(state.storage.get<Routed>("routed")),
@@ -1178,6 +1181,7 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network) =>
         (consumer ??= Backfill.makeConsumer(runtime.storage, runtime.jobs, net, {
           key,
           target: () => target,
+          singleSource: () => kit.singleSource,
           apply: (deliveries) =>
             runtime.provide(
               Effect.orDie(Effect.forEach(deliveries, (d) => intake(key, d), { discard: true })),

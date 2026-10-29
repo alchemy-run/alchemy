@@ -180,6 +180,8 @@ export interface AggregateKit {
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
   /** The views and projections that consume this aggregate, by `CatchUp.targetId`. */
   readonly targets: ReadonlyArray<string>;
+  /** Whether each key of a consumer it feeds hears only from the instance with its own id. */
+  readonly consumerSingleSource: (target: string) => boolean;
   /** Route stored events to the consumers lagging behind them (see `CatchUp`). */
   readonly replay: (input: ReplayInput<StoredEvent>) => ReplayResult;
   /**
@@ -339,11 +341,15 @@ export interface ViewKit {
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
   /** The views and projections that consume this view, by `CatchUp.targetId`. */
   readonly targets: ReadonlyArray<string>;
+  /** Whether each key of a consumer it feeds hears only from the instance with its own id. */
+  readonly consumerSingleSource: (target: string) => boolean;
   /**
    * This view's generation. A stored key built by an earlier one is reset
    * (state, entries, input log and cursors) before it is read or applied to.
    */
   readonly generation: number;
+  /** Whether each key hears only from the source instance with its own id (see `Kernel.singleSource`). */
+  readonly singleSource: boolean;
   /** Route emitted entries to the consumers lagging behind them (see `CatchUp`). */
   readonly replay: (input: ReplayInput<ViewEntry>) => ReplayResult;
   /** Trace an `apply` of these deliveries to `key` (wrap the work that applies and persists them). */
@@ -431,6 +437,8 @@ export interface ProjectionKit {
    * deliveries for an earlier one are dropped.
    */
   readonly generation: number;
+  /** Whether each key hears only from the source instance with its own id (see `Kernel.singleSource`). */
+  readonly singleSource: boolean;
   /**
    * Run the handler for a run of one key's input log, in order. Succeeds only
    * when every write the handler made succeeded; the platform then records

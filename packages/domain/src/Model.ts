@@ -442,6 +442,7 @@ const build = <A, E, R>(
           name: projection.projectionName,
           options: { batch: Projection.batchMillis(implementation.options) },
           generation: kernel.generationOf("projection", projection.projectionName),
+          singleSource: kernel.singleSource(`projection:${projection.projectionName}`),
           run: (key, batch) =>
             Effect.gen(function* () {
               // Platforms run handlers inside their runtime (a Durable Object, or this process).

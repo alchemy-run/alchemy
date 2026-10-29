@@ -391,6 +391,7 @@ export const make = (
             {
               ref: { source: kit.name, id },
               targets: () => kit.targets,
+              singleSource: kit.consumerSingleSource,
               model: () => model,
               version: Effect.sync(() => instance(id).version),
               routed: Effect.sync(() => instance(id).routed),
@@ -657,7 +658,12 @@ export const make = (
             memoryStorage(address, lock),
             memoryJobs(address, (id) => role.merge(id.slice("bf-merge:".length))),
             net,
-            { key, target: () => target, apply: (deliveries) => apply(key, deliveries) },
+            {
+              key,
+              target: () => target,
+              singleSource: () => kit.singleSource,
+              apply: (deliveries) => apply(key, deliveries),
+            },
             limits,
           );
           return role;
@@ -676,6 +682,7 @@ export const make = (
             {
               ref: { source: kit.name, id: key },
               targets: () => kit.targets,
+              singleSource: kit.consumerSingleSource,
               model: () => model,
               version: Effect.flatMap(get(key), (current) =>
                 Effect.map(SubscriptionRef.get(current.snapshot), (snapshot) => snapshot.seq),
@@ -871,6 +878,7 @@ export const make = (
             {
               key,
               target: () => target,
+              singleSource: () => kit.singleSource,
               apply: (deliveries) => Effect.forEach(deliveries, intake, { discard: true }),
             },
             limits,

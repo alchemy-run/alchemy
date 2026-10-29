@@ -114,6 +114,11 @@ export interface Pulled {
   readonly deliveries: ReadonlyArray<Delivery>;
   /** The source switched the key to live delivery: nothing more to pull. */
   readonly live: boolean;
+  /**
+   * The last seq the source read for this page: the key's cursor moves past it,
+   * even when those rows held nothing for the key.
+   */
+  readonly through?: number;
 }
 
 export interface ConsumerRpc {
@@ -401,6 +406,12 @@ export interface SourceHost {
     seqs: ReadonlyArray<number>,
     target: string,
   ) => Effect.Effect<ReadonlyArray<Delivery>>;
+  /**
+   * Whether each key of `target` hears only from the instance with its own id:
+   * then its keys can start once this instance has indexed its history, with no
+   * need to wait for discovery to finish everywhere.
+   */
+  readonly singleSource?: (target: string) => boolean;
 }
 
 /** What a source answers to `ready`. */
@@ -443,6 +454,51 @@ export const makeSource = (
     });
 
   /** Every key is live: the target is live here. Callers hold the exclusive section. */
+  /**
+   * Tell this instance's pending keys of `target` to start pulling, and settle once
+   * they're all live. `reportTo` is the leaf asking, if a leaf asked.
+   */
+  const markReady = (target: string, reportTo: string | undefined) =>
+    storage.exclusive(
+      Effect.gen(function* () {
+        const state = yield* getState(target);
+        if (state === undefined) return "settled" as const;
+        const messages: Array<Message> = [];
+        if (!state.ready) {
+          let after: string | undefined;
+          while (true) {
+            const rows = yield* storage.list<"pending" | "live">({
+              prefix: keysPrefix(target),
+              ...(after === undefined ? {} : { startAfter: after }),
+              limit: 128,
+            });
+            if (rows.length === 0) break;
+            for (const [row, status] of rows) {
+              if (status !== "pending") continue;
+              const key = decodeURIComponent(row.slice(keysPrefix(target).length));
+              messages.push({ kind: "ready", target, key });
+            }
+            after = rows[rows.length - 1]![0];
+          }
+        }
+        if (state.pending === 0) {
+          yield* settle(target, messages);
+          yield* queue.stage(messages);
+          return "settled" as const;
+        }
+        const to = state.reportTo ?? [];
+        yield* storage.put({
+          [stateKey(target)]: {
+            ...state,
+            ready: true,
+            reportTo: reportTo === undefined || to.includes(reportTo) ? to : [...to, reportTo],
+          },
+        });
+        yield* queue.stage(messages);
+        return "pending" as const;
+      }),
+    );
+
   const settle = (target: string, messages: Array<Message>) =>
     Effect.gen(function* () {
       const state = yield* getState(target);
@@ -461,15 +517,18 @@ export const makeSource = (
       const send: Array<Delivery> = [];
       const messages: Array<Message> = [];
       let added = 0;
+      // A key fed by this instance alone reads its log directly: no index to write.
+      const indexed = !host.singleSource?.(target);
       for (const delivery of deliveries) {
         const status = yield* storage.get<"pending" | "live">(keyKey(target, delivery.key));
         if (status === "live") send.push(delivery);
-        else if (status === "pending") yield* storage.put(indexRow(target, delivery));
-        else if (discovering) {
+        else if (status === "pending") {
+          if (indexed) yield* storage.put(indexRow(target, delivery));
+        } else if (discovering) {
           // Found in history: the key pulls it, once it knows every source it has.
           yield* storage.put({
             [keyKey(target, delivery.key)]: "pending",
-            ...indexRow(target, delivery),
+            ...(indexed ? indexRow(target, delivery) : {}),
           });
           messages.push({
             kind: "source",
@@ -544,52 +603,21 @@ export const makeSource = (
         // Discovered only once every key it feeds has been told: a key's sources are
         // complete when discovery is complete everywhere.
         // Not all could be told yet (one is still on older code, say): back off and ask again.
-        return ((yield* queue.flush) ? "discovered" : "stale") as ScanResult;
+        if (!(yield* queue.flush)) return "stale" as ScanResult;
+        // Its keys hear from no one else: they can start now, not after discovery
+        // has finished everywhere.
+        if (host.singleSource?.(target)) {
+          yield* markReady(target, undefined);
+          yield* queue.flush;
+        }
+        return "discovered" as ScanResult;
       }),
 
     ready: (target: string, reportTo: string) =>
       Effect.gen(function* () {
         if (!host.model().includes(target)) return "stale" as ReadyResult;
         if (!host.targets().includes(target)) return "settled" as ReadyResult;
-        const result = yield* storage.exclusive(
-          Effect.gen(function* () {
-            const state = yield* getState(target);
-            if (state === undefined) return "settled" as const;
-            const messages: Array<Message> = [];
-            if (!state.ready) {
-              let after: string | undefined;
-              while (true) {
-                const rows = yield* storage.list<"pending" | "live">({
-                  prefix: keysPrefix(target),
-                  ...(after === undefined ? {} : { startAfter: after }),
-                  limit: 128,
-                });
-                if (rows.length === 0) break;
-                for (const [row, status] of rows) {
-                  if (status !== "pending") continue;
-                  const key = decodeURIComponent(row.slice(keysPrefix(target).length));
-                  messages.push({ kind: "ready", target, key });
-                }
-                after = rows[rows.length - 1]![0];
-              }
-            }
-            if (state.pending === 0) {
-              yield* settle(target, messages);
-              yield* queue.stage(messages);
-              return "settled" as const;
-            }
-            const to = state.reportTo ?? [];
-            yield* storage.put({
-              [stateKey(target)]: {
-                ...state,
-                ready: true,
-                reportTo: to.includes(reportTo) ? to : [...to, reportTo],
-              },
-            });
-            yield* queue.stage(messages);
-            return "pending" as const;
-          }),
-        );
+        const result = yield* markReady(target, reportTo);
         yield* queue.flush;
         yield* trace("ready", { source: host.ref, target, result });
         return result as ReadyResult;
@@ -608,15 +636,26 @@ export const makeSource = (
             const status = yield* storage.get<"pending" | "live">(keyKey(target, key));
             // Settled, or already live: everything was handed over.
             if (state === undefined || status !== "pending") return { deliveries: [], live: true };
-            const prefix = indexPrefix(target, key);
-            const rows = yield* storage.list({
-              prefix,
-              startAfter: `${prefix}${pad(after, 12)}`,
-              limit: limits.page,
-            });
-            const seqs = rows.map(([row]) => Number(row.slice(prefix.length)));
-            const deliveries = (yield* host.rowsAt(seqs, target)).filter((d) => d.key === key);
-            if (rows.length > 0) return { deliveries, live: false };
+            if (host.singleSource?.(target)) {
+              // Every row of this instance goes to its own key: the log is the index.
+              const rows = yield* host.rows(after, limits.page, target);
+              if (rows.length > 0)
+                return {
+                  deliveries: rows.flatMap((row) => row.deliveries).filter((d) => d.key === key),
+                  live: false,
+                  through: rows[rows.length - 1]!.seq,
+                };
+            } else {
+              const prefix = indexPrefix(target, key);
+              const rows = yield* storage.list({
+                prefix,
+                startAfter: `${prefix}${pad(after, 12)}`,
+                limit: limits.page,
+              });
+              const seqs = rows.map(([row]) => Number(row.slice(prefix.length)));
+              const deliveries = (yield* host.rowsAt(seqs, target)).filter((d) => d.key === key);
+              if (rows.length > 0) return { deliveries, live: false };
+            }
             // Nothing after the key's cursor, so it holds everything: live from now,
             // atomically with this answer. A lost answer is safe to ask again: a live
             // key's pull answers live, and the key had everything up to its cursor.
@@ -626,7 +665,7 @@ export const makeSource = (
             if (pending === 0 && state.ready) yield* settle(target, messages);
             else yield* storage.put({ [stateKey(target)]: { ...state, pending } });
             yield* queue.stage(messages);
-            return { deliveries, live: true };
+            return { deliveries: [], live: true };
           }),
         );
         yield* trace("pull", {
@@ -666,6 +705,12 @@ export interface ConsumerHost {
   readonly key: string;
   /** This consumer's target id in the code this instance runs. */
   readonly target: () => string;
+  /**
+   * Whether each key hears only from the source instance with its own id: then
+   * it starts as soon as that source has indexed its history (no barrier), and
+   * applies what it pulls directly (nothing to merge).
+   */
+  readonly singleSource?: () => boolean;
   /**
    * Apply deliveries in order, as the live path would. Called holding the
    * exclusive section.
@@ -804,11 +849,22 @@ export const makeConsumer = (
               Effect.gen(function* () {
                 const current = yield* storage.get<Feed>(feedKey(target, stream));
                 if (!current || current.cursor !== feed.cursor) return;
-                yield* buffer(target, pulled.deliveries, false);
+                // Its only source, and nothing buffered ahead: the page is already in
+                // order, so apply it rather than buffer it.
+                const direct =
+                  host.singleSource?.() === true &&
+                  (yield* storage.list({ prefix: bufferPrefix(target), limit: 1 })).length === 0;
+                if (direct) {
+                  for (const delivery of pulled.deliveries) yield* host.apply([delivery]);
+                } else yield* buffer(target, pulled.deliveries, false);
                 const after = (yield* storage.get<Feed>(feedKey(target, stream)))!;
                 yield* putFeed(target, stream, {
                   ...after,
-                  cursor: Math.max(after.cursor, ...pulled.deliveries.map((d) => d.seq)),
+                  cursor: Math.max(
+                    after.cursor,
+                    pulled.through ?? 0,
+                    ...pulled.deliveries.map((d) => d.seq),
+                  ),
                   live: pulled.live,
                 });
               }),

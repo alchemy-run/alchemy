@@ -241,6 +241,12 @@ export class Sim {
    */
   interject: ((path: string) => Effect.Effect<void>) | undefined = undefined;
 
+  /**
+   * The consumer is keyed by its source: each key hears only from the instance
+   * with its own id (commit each instance's events to a key named after it).
+   */
+  singleSource = false;
+
   /** The target exists (the consumer is deployed). */
   deployed = false;
   calls = 0;
@@ -541,6 +547,7 @@ export class Sim {
         {
           ref,
           targets: () => (knows() ? this.targets : []),
+          singleSource: () => this.singleSource,
           model: () => (knows() ? this.targets : []),
           version: Effect.sync(() => data.events.length),
           // Kept in the object's storage, so a crashed step rolls it back with the rest.
@@ -597,6 +604,7 @@ export class Sim {
             const target = this.targetOfKey(key);
             return this.now >= keyData.staleUntil ? target : target.replace(/#\d+$/, "");
           },
+          singleSource: () => this.singleSource,
           apply: (deliveries) => Effect.sync(() => this.apply(keyData, deliveries, true)),
         },
         this.limits,

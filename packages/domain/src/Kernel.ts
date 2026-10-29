@@ -149,6 +149,11 @@ export interface Kernel {
   /** Every view and projection in the model, by `CatchUp.targetId`: what catches up. */
   readonly targets: ReadonlyArray<string>;
   /**
+   * Whether every key of a consumer (by `CatchUp.targetId`) hears from exactly one
+   * source instance, the one with its own id: it needs no merge and no barrier.
+   */
+  readonly singleSource: (target: string) => boolean;
+  /**
    * Set a view's or projection's version (`view:Name` or `projection:Name`).
    * Bumping it rebuilds the consumer, and every view or projection that reads
    * it, from the history. Set every version before the platform starts.
@@ -404,6 +409,9 @@ const build = (
     list.push(subscriber);
   };
 
+  /** Routes that key an event by its own source instance: key `x` hears only from instance `x`. */
+  const identityRoutes = new WeakSet<Route>();
+
   /** How a consumer keyed by `def.key` routes `tag` from `source`. */
   const keyRoute = (
     owner: string,
@@ -441,8 +449,11 @@ const build = (
         return [...byKey].map(([key, names]) => ({ key, routes: names }));
       };
     }
-    if (keyOfSource(upstream) === def.key)
-      return (input) => [{ key: Aggregate.targetId(input.source) }];
+    if (keyOfSource(upstream) === def.key) {
+      const route: Route = (input) => [{ key: Aggregate.targetId(input.source) }];
+      identityRoutes.add(route);
+      return route;
+    }
     problem(
       `${owner} consumes '${tag}' from ${source}, which is not keyed by ${Key.isAggregate(def.key) ? def.key.aggregateName : "its key schema"}: add keyOf.${tag}`,
     );
@@ -638,6 +649,27 @@ const build = (
     return [...out].sort();
   };
 
+  /**
+   * Whether every key of a consumer has exactly one source: it hears only from
+   * the instance with its own id, of one source. Such a key has nothing to merge
+   * and nothing to wait for: it can take its history as soon as its source has it.
+   */
+  const singleSource = (target: string): boolean => {
+    const [kind, rest] = target.split(":") as [string, string];
+    const name = rest.replace(/#\d+$/, "");
+    const sources = new Set<string>();
+    for (const [source, byTag] of subscribers) {
+      for (const list of byTag.values()) {
+        for (const subscriber of list) {
+          if (subscriber.kind !== kind || subscriber.name !== name) continue;
+          if (!identityRoutes.has(subscriber.route)) return false;
+          sources.add(source);
+        }
+      }
+    }
+    return sources.size === 1;
+  };
+
   /** Replay stored rows to the consumers lagging behind them, in order. */
   const replay = <Row>(
     targets: ReadonlyArray<string>,
@@ -738,6 +770,7 @@ const build = (
       name: aggregate.aggregateName,
       deliver,
       // Read when used: versions are set once the whole model is built.
+      consumerSingleSource: (target: string) => singleSource(target),
       get targets() {
         return targetsOf(aggregate.aggregateName);
       },
@@ -949,11 +982,15 @@ const build = (
     return {
       name: view.viewName,
       deliver,
+      consumerSingleSource: (target: string) => singleSource(target),
       get targets() {
         return targetsOf(view.viewName);
       },
       get generation() {
         return generationOf("view", view.viewName);
+      },
+      get singleSource() {
+        return singleSource(`view:${view.viewName}`);
       },
       replay: (input) => {
         const targets = targetsOf(view.viewName);
@@ -1262,6 +1299,7 @@ const build = (
         ),
       ].sort();
     },
+    singleSource,
     setVersion: (consumer, version) => {
       versions.set(consumer, version);
       generations.clear();
