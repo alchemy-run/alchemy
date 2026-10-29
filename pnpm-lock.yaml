@@ -1933,13 +1933,13 @@ importers:
         version: link:../../packages/celld
       '@effect/platform-bun':
         specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)
+        version: 4.1.0(effect@4.1.0)
       alchemy:
         specifier: workspace:*
         version: link:../../packages/alchemy
       effect:
-        specifier: 4.0.5
-        version: 4.0.5
+        specifier: 4.1.0
+        version: 4.1.0
     devDependencies:
       '@alchemy.run/test':
         specifier: workspace:*
@@ -8841,10 +8841,10 @@ importers:
         version: link:../../submodules/distilled/packages/aws
       '@effect/platform-bun':
         specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)
+        version: 4.1.0(effect@4.1.0)
       '@effect/platform-node':
         specifier: 'catalog:'
-        version: 4.0.5(effect@4.0.5)(redis@6.2.1)
+        version: 4.1.0(effect@4.1.0)(redis@6.2.1)
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
@@ -8855,8 +8855,8 @@ importers:
         specifier: workspace:*
         version: link:../alchemy
       effect:
-        specifier: 4.0.5
-        version: 4.0.5
+        specifier: 4.1.0
+        version: 4.1.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

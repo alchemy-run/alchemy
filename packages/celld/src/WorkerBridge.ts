@@ -41,10 +41,12 @@ import type { WorkerRuntimeContext } from "alchemy/Workers/Workerd/WorkerRuntime
  * Bundled into the fleet worker: keep it free of node-only APIs.
  */
 import type { WorkerEntrypoint } from "cloudflare:workers";
+import type * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import * as Logger from "effect/Logger";
+import * as Queue from "effect/Queue";
 import * as Terminal from "effect/Terminal";
 import { WorkerExecutionContext, fromExecutionContext } from "./ExecutionContext.ts";
 
@@ -56,6 +58,13 @@ const terminal = Layer.succeed(
   Terminal.make({
     columns: Effect.succeed(0),
     rows: Effect.succeed(0),
+    // A fixed 0×0 size that never changes.
+    size: Effect.gen(function* () {
+      const sizes = yield* Queue.sliding<Terminal.Size, Cause.Done>(1);
+      yield* Queue.offer(sizes, { columns: 0, rows: 0 });
+      yield* Queue.end(sizes);
+      return sizes;
+    }),
     readInput: Effect.die(new Error("Terminal input is unavailable in Celld")),
     readLine: Effect.die(new Error("Terminal input is unavailable in Celld")),
     display: (text) => Effect.sync(() => console.log(text)),

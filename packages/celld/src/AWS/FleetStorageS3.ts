@@ -7,7 +7,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
-import { FleetStorage, FleetStorageError, type Store } from "../FleetStorage.ts";
+import { FleetStorageError, type Store } from "../FleetStorage.ts";
 import type { FleetBucket } from "../Host.ts";
 
 const failure = (message: string, cause: unknown) =>
