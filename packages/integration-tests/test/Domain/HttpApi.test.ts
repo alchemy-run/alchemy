@@ -47,7 +47,8 @@ class Deposited extends Domain.Event("Deposited", {
   at: Schema.DateTimeUtc,
 }) {}
 class OverLimit extends Domain.Rejection("OverLimit", { limit: Schema.Int }) {}
-class NotOwner extends Domain.Rejection("NotOwner") {}
+/** Its status is Effect's own `httpApiStatus` annotation, which every HttpApi reads. */
+class NotOwner extends Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 }) {}
 
 class Deposit extends Domain.Command("Deposit", {
   target: WalletId,
@@ -116,14 +117,11 @@ const RateLimitLive = Layer.succeed(RateLimit, (effect, { headers }) =>
 class LimitedApi extends Domain.Api("LimitedApi", Deposit, Wallet, Balance) {}
 const Limited = LimitedApi.middleware(RateLimit);
 
-/**
- * Publishes the deposit, the balance's reads and the wallet's events; the
- * wallet aggregate's `get` and `watch` and `Balance.list` stay off.
- */
-const WalletHttp = DomainHttp.toHttpApi(WalletApi, {
-  include: ["Deposit", "Balance.get", "Balance.snapshot", "Balance.watch", "Wallet.events"],
-  status: { NotOwner: 403 },
-});
+/** Every call the Api serves. */
+const WalletHttp = DomainHttp.toHttpApi(WalletApi);
+
+/** An Api for HTTP clients that may only deposit: publishing less is a smaller Api. */
+class DepositOnlyApi extends Domain.Api("DepositOnlyApi", Deposit) {}
 
 /** The hosted model, its middleware, and an in-process Bun server with a client for it. */
 const Hosted = Layer.mergeAll(SessionLive, RateLimitLive, Wallets.layer(Layer.empty)).pipe(
@@ -407,9 +405,7 @@ describe("Domain toHttpApi", () => {
     }).pipe(
       Effect.provide(
         (() => {
-          const LimitedHttp = DomainHttp.toHttpApi(Limited, {
-            include: ["Deposit", "Balance.watch"],
-          });
+          const LimitedHttp = DomainHttp.toHttpApi(Limited);
           return serve(LimitedHttp.api, LimitedHttp.layer);
         })(),
       ),
@@ -427,29 +423,37 @@ describe("Domain toHttpApi", () => {
     }).pipe(Effect.provide(serve(AppApi, WalletHttp.layerFor(AppApi)))),
   );
 
-  it.live("an operation left out of include is not served", () =>
+  it.live("a smaller Api publishes only its own calls", () =>
     Effect.gen(function* () {
-      expect((yield* send("GET", "/Wallet/w-1", { owner: "sam" })).status).toBe(404);
-      expect((yield* send("GET", "/Wallet/w-1/watch", { owner: "sam" })).status).toBe(404);
-      expect((yield* send("GET", "/Balance/w-1/list", { owner: "sam" })).status).toBe(404);
-      expect(Object.keys(WalletHttp.group.endpoints)).toEqual([
-        "Deposit",
-        "Wallet.events",
-        "Balance.get",
-        "Balance.watch",
-        "Balance.snapshot",
-      ]);
-    }).pipe(Effect.provide(Served)),
+      const deposit = yield* send("POST", "/Deposit", {
+        owner: "sam",
+        body: { target: "w-10", input: { amount: 2, at } },
+      });
+      expect(deposit.status).toBe(200);
+      expect((yield* send("GET", "/Wallet/w-10", { owner: "sam" })).status).toBe(404);
+      expect((yield* send("GET", "/Balance/w-10/watch", { owner: "sam" })).status).toBe(404);
+    }).pipe(
+      Effect.provide(
+        (() => {
+          const DepositOnlyHttp = DomainHttp.toHttpApi(DepositOnlyApi);
+          return serve(DepositOnlyHttp.api, DepositOnlyHttp.layer);
+        })(),
+      ),
+    ),
   );
 
   it("the OpenAPI document lists each endpoint with its schemas", () => {
     const spec = OpenApi.fromApi(WalletHttp.api);
     expect(Object.keys(spec.paths).sort()).toEqual([
       "/Balance/{key}",
+      "/Balance/{key}/events",
+      "/Balance/{key}/list",
       "/Balance/{key}/snapshot",
       "/Balance/{key}/watch",
       "/Deposit",
+      "/Wallet/{key}",
       "/Wallet/{key}/events",
+      "/Wallet/{key}/watch",
     ]);
 
     const deposit = spec.paths["/Deposit"]!.post!;
@@ -485,23 +489,23 @@ describe("Domain toHttpApi", () => {
     }
   });
 
-  it("publishes every call of an entry, and refuses names it cannot serve", () => {
-    const all = DomainHttp.toHttpApi(WalletApi, { include: ["Wallet", "Balance"] });
-    expect(Object.values(all.group.endpoints).map((e) => [e.identifier, e.method, e.path])).toEqual(
-      [
-        ["Wallet.get", "GET", "/Wallet/:key"],
-        ["Wallet.watch", "GET", "/Wallet/:key/watch"],
-        ["Wallet.events", "GET", "/Wallet/:key/events"],
-        ["Balance.get", "GET", "/Balance/:key"],
-        ["Balance.watch", "GET", "/Balance/:key/watch"],
-        ["Balance.events", "GET", "/Balance/:key/events"],
-        ["Balance.list", "GET", "/Balance/:key/list"],
-        ["Balance.snapshot", "GET", "/Balance/:key/snapshot"],
-      ],
-    );
+  it("publishes every call the Api serves, in the order it lists them", () => {
+    expect(
+      Object.values(WalletHttp.group.endpoints).map((e) => [e.identifier, e.method, e.path]),
+    ).toEqual([
+      ["Deposit", "POST", "/Deposit"],
+      ["Wallet.get", "GET", "/Wallet/:key"],
+      ["Wallet.watch", "GET", "/Wallet/:key/watch"],
+      ["Wallet.events", "GET", "/Wallet/:key/events"],
+      ["Balance.get", "GET", "/Balance/:key"],
+      ["Balance.watch", "GET", "/Balance/:key/watch"],
+      ["Balance.events", "GET", "/Balance/:key/events"],
+      ["Balance.list", "GET", "/Balance/:key/list"],
+      ["Balance.snapshot", "GET", "/Balance/:key/snapshot"],
+    ]);
   });
 
-  it.live("a name the Api cannot serve fails the Layer with a DefinitionError", () =>
+  it.live("layerFor an HttpApi without the group fails the Layer with a DefinitionError", () =>
     Effect.gen(function* () {
       /** The defect building the surface's Layer dies with. */
       const defectOf = (surface: { readonly layer: Layer.Layer<any, never, any> }) =>
@@ -512,26 +516,12 @@ describe("Domain toHttpApi", () => {
           Effect.map((exit) => (Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined)),
         );
 
-      // @ts-expect-error not a call of the view.
-      const peek = yield* defectOf(DomainHttp.toHttpApi(WalletApi, { include: ["Balance.peek"] }));
-      expect(peek).toMatchObject({
-        _tag: "DefinitionError",
-        message: "WalletApi has no entry or call named Balance.peek",
-      });
-      // @ts-expect-error not an entry of the Api.
-      const withdraw = yield* defectOf(DomainHttp.toHttpApi(WalletApi, { include: ["Withdraw"] }));
-      expect(withdraw).toMatchObject({ _tag: "DefinitionError" });
-      // A status for a failure no call declares is a typo.
-      const typo = yield* defectOf(
-        DomainHttp.toHttpApi(WalletApi, { include: ["Deposit"], status: { NotOwnr: 403 } }),
-      );
-      expect(typo).toMatchObject({
-        _tag: "DefinitionError",
-        message: "WalletApi has no typed failure named NotOwnr",
-      });
       // `layerFor` an HttpApi that does not hold the group.
       const elsewhere = yield* defectOf({ layer: WalletHttp.layerFor(HttpApi.make("Elsewhere")) });
-      expect(elsewhere).toMatchObject({ _tag: "DefinitionError" });
+      expect(elsewhere).toMatchObject({
+        _tag: "DefinitionError",
+        message: "Elsewhere does not hold the WalletApi group: add it first",
+      });
     }),
   );
 });

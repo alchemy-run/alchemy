@@ -1,23 +1,20 @@
 ---
 title: Plain HTTP and OpenAPI
-description: Publish chosen calls of an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
+description: Publish an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
 ---
 
-An Api's typed client speaks Effect RPC. A partner, a script or a public API client often wants plain HTTP and JSON instead, with an OpenAPI document to generate its client from. `toHttpApi` from `@alchemy.run/domain/Http` gives you both from the Api you already have: an Effect `HttpApi` group with one endpoint per call you publish, the Layer that serves it, and the OpenAPI document of it.
+An Api's typed client speaks Effect RPC. A partner, a script or a public API client often wants plain HTTP and JSON instead, with an OpenAPI document to generate its client from. `toHttpApi` from `@alchemy.run/domain/Http` gives you both from the Api you already have: an Effect `HttpApi` group with one endpoint per call the Api serves, the Layer that serves it, and the OpenAPI document of it.
 
-## Publish chosen calls
+## Publish an Api
 
 ```typescript title="packages/server/src/BankHttp.ts"
 import * as DomainHttp from "@alchemy.run/domain/Http";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
 
-export const BankHttp = DomainHttp.toHttpApi(CustomerApi, {
-  include: ["DepositMoney", "AccountSummary.get"],
-  status: { NotOwner: 403 },
-});
+export const BankHttp = DomainHttp.toHttpApi(CustomerApi);
 ```
 
-`include` is required. It lists what to publish: an entry's name publishes all of its calls, and `"<entry>.<operation>"` publishes one. Nothing else is served. A name the Api cannot serve is a type error, and serving it dies with a `DefinitionError`, as does a `status` for a failure no call declares. A public path has to stay once a client calls it, so nothing is published unless you list it.
+Every call the Api serves becomes an endpoint. The Api is already the list of what a client may reach, so to publish less over HTTP, give HTTP clients their own, smaller Api, as in [Give each kind of client its own Api](/domain/api#give-each-kind-of-client-its-own-api).
 
 `BankHttp` has:
 
@@ -100,11 +97,13 @@ The response starts once the read has its first value, so a read the middleware 
 
 ## Errors
 
-A typed failure answers with its JSON (its `_tag` and data) and a status:
+A typed failure answers with its JSON (its `_tag` and data), at the status its schema's `httpApiStatus` annotation gives it, as for any Effect HttpApi error. Declare it on the rejection:
 
-1. The status `status` gives its `_tag`, such as `{ NotOwner: 403 }`.
-2. Otherwise, its schema's `httpApiStatus` annotation. Annotate a middleware error where you declare it: `error: Unauthenticated.pipe(HttpApiSchema.status(401))`.
-3. Otherwise, 422.
+```typescript
+export class NotOwner extends Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 }) {}
+```
+
+A middleware error takes it where you declare it: `error: Unauthenticated.pipe(HttpApiSchema.status(401))`. A failure without one answers with 422: a rejection is a refused request, not a server fault.
 
 Each failure is in the OpenAPI document under its status, with its schema. Input that the call's schema refuses is a 400 before it reaches the model. A failure that the call does not declare is a defect, a 500, as on the Api itself.
 

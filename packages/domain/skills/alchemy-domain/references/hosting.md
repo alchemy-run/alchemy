@@ -83,10 +83,8 @@ import * as Etag from "effect/http/Etag";
 import * as HttpPlatform from "effect/http/HttpPlatform";
 import * as HttpRouter from "effect/http/HttpRouter";
 
-const BankHttp = DomainHttp.toHttpApi(CustomerApi, {
-  include: ["DepositMoney", "AccountSummary.get"],   // nothing else is served
-  status: { NotOwner: 403 },                           // other typed failures: their httpApiStatus, else 422
-});
+// every call the Api serves; a typed failure answers at its `httpApiStatus`, else 422
+const BankHttp = DomainHttp.toHttpApi(CustomerApi);
 
 // in the Worker's init, inside `.pipe(Effect.provide(BankLive))`
 return {
@@ -100,7 +98,7 @@ return {
 
 - Paths: a command is `POST /<Command>` with the RPC payload as its JSON body (`target`, `commandId`, `input`). A `get` or `peek` is `GET /<Entry>/{key}`, and a `snapshot` `GET /<Entry>/{key}/snapshot`, with `?stream=&version=` from a receipt to read your own write. A `list` is `GET /<Entry>/{key}/list?order=&take=&after=`.
 - Every call runs through the Api's own handlers in process, with the request's headers: middleware, `validate` and rejections run as for any client, and input is decoded once.
-- `include` is required: a public path has to stay once a client calls it. A read's `where` is not published.
+- To publish less over HTTP, give HTTP clients a smaller Api. Declare statuses on rejections: `Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 })`. A read's `where` is not published.
 - `watch` and `events` are `GET /<Entry>/{key}/watch` and `/events?after=`, answered with Server-Sent Events. A failure before the first value answers with its status; one after ends the stream with a typed failure event.
 - To serve the group with other groups, or under a prefix, add `BankHttp.group` to your own `HttpApi` and provide `BankHttp.layerFor(MyHttpApi)`.
 

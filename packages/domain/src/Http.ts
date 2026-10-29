@@ -20,20 +20,6 @@ import { DefinitionError } from "./internal.ts";
 import { nameOf, readRpcs, type ReadRpcs } from "./ReadRpcs.ts";
 
 /**
- * The names `include` accepts for one entry: the entry's name (all its
- * calls) or one call (`<name>.<operation>`).
- */
-type CallsOf<E> = E extends { readonly kind: "Command"; readonly tag: infer N extends string }
-  ? N
-  : E extends { readonly kind: "View"; readonly viewName: infer N extends string }
-    ? N | `${N}.${"get" | "watch" | "events" | "list" | "snapshot"}`
-    : E extends { readonly kind: "Stream"; readonly streamName: infer N extends string }
-      ? N | `${N}.${"peek" | "watch" | "events" | "list"}`
-      : E extends { readonly kind: "Aggregate"; readonly aggregateName: infer N extends string }
-        ? N | `${N}.${"get" | "watch" | "events"}`
-        : never;
-
-/**
  * What {@link toHttpApi} reads from an Api class: its entries, the RPCs it
  * serves, and its in-process client (`clientInProcess`), which runs every
  * call through the Api's own handlers and middleware.
@@ -82,9 +68,6 @@ const operationsOf = (api: Publishable): ReadonlyArray<Operation> =>
     });
   });
 
-/** The entries and calls of an Api that {@link toHttpApi} can publish. */
-export type Includable<A extends Publishable> = CallsOf<A["entries"][number]>;
-
 /**
  * What serving the HTTP API needs: the hosted model and the Layers of the
  * middleware its entries declare, as for the Api itself.
@@ -93,25 +76,6 @@ export type Requirements<A extends Publishable> = Exclude<
   Effect.Services<A["clientInProcess"]>,
   Scope.Scope
 >;
-
-/** The options of {@link toHttpApi}. */
-export interface Options<A extends Publishable> {
-  /**
-   * What to publish: an entry's name publishes all its calls, and
-   * `"<name>.<operation>"` (`"Balance.get"`) publishes one. Nothing else is
-   * served. A published path is public: plan to keep it. A name the Api
-   * cannot serve is a type error, and the Layer dies with a `DefinitionError`.
-   */
-  readonly include: ReadonlyArray<Includable<A>>;
-  /**
-   * The HTTP status of each typed failure, by `_tag`, such as
-   * `{ NotOwner: 403 }`. A failure not listed here answers with its
-   * `httpApiStatus` annotation if its schema has one, and with 422 if not.
-   * A tag no published call can fail with is a typo: the Layer dies with a
-   * `DefinitionError`.
-   */
-  readonly status?: Readonly<Record<string, number>>;
-}
 
 /** The group, an HttpApi holding only it, and the Layers that serve it. */
 export interface HttpApiSurface<Name extends string, R> {
@@ -150,14 +114,6 @@ const membersOf = (schema: Schema.Top): ReadonlyArray<Schema.Top> => {
   const union = schema as Schema.Top & { readonly members?: ReadonlyArray<Schema.Top> };
   if (SchemaAST.isUnion(schema.ast) && union.members) return union.members.flatMap(membersOf);
   return SchemaAST.isNever(schema.ast) ? [] : [schema];
-};
-
-/** The `_tag` a failure schema admits, if it is a tagged struct or class. */
-const tagOf = (schema: Schema.Top): string | undefined => {
-  const encoded = SchemaAST.toEncoded(schema.ast);
-  if (!SchemaAST.isObjects(encoded)) return undefined;
-  const tag = encoded.propertySignatures.find((property) => property.name === "_tag")?.type;
-  return tag && SchemaAST.isLiteral(tag) ? String(tag.literal) : undefined;
 };
 
 /**
@@ -347,8 +303,10 @@ const endpointOf = (
  *
  * A command answers with its receipt; a read with what the Api's own client
  * gets (`null` for an empty key). A typed failure answers with its `_tag`
- * and data, at the status `status` gives it, else its `httpApiStatus`
- * annotation, else 422. Input its schema refuses is a 400.
+ * and data, at the status its schema's `httpApiStatus` annotation gives it
+ * (`Domain.Rejection("NotOwner", {}, { httpApiStatus: 403 })`), and 422 if it
+ * has none: a rejection is a refused request, not a server fault. Input its
+ * schema refuses is a 400.
  *
  * A live read (`watch`, `events`) answers with a Server-Sent Events stream:
  * each value is one event's JSON `data`. A failure before the first value,
@@ -362,19 +320,16 @@ const endpointOf = (
  * for any client, and its input is decoded once. A read's `where` filter is
  * not published.
  *
- * Only the calls in `include` are published: a public path has to stay once
- * a client calls it, so nothing is published by default.
+ * Every call the Api serves is published. To publish less, give HTTP
+ * clients their own, smaller Api.
  *
- * **Example:** Serve two calls, with their OpenAPI document
+ * **Example:** Serve an Api, with its OpenAPI document
  * ```typescript
  * import * as DomainHttp from "@alchemy.run/domain/Http";
  * import * as HttpApiBuilder from "effect/http-api/HttpApiBuilder";
  * import * as OpenApi from "effect/http-api/OpenApi";
  *
- * const BankHttp = DomainHttp.toHttpApi(CustomerApi, {
- *   include: ["DepositMoney", "AccountSummary.get"],
- *   status: { NotOwner: 403 },
- * });
+ * const BankHttp = DomainHttp.toHttpApi(CustomerApi);
  * const BankHttpLive = HttpApiBuilder.layer(BankHttp.api, { openapiPath: "/openapi.json" }).pipe(
  *   Layer.provide(BankHttp.layer),
  *   Layer.provide(BankLive),
@@ -384,10 +339,6 @@ const endpointOf = (
  *
  * **Example:** Watch a view from a browser
  * ```typescript
- * const BankHttp = DomainHttp.toHttpApi(CustomerApi, {
- *   include: ["AccountSummary.watch"],
- * });
- *
  * // in the browser: one event per change, each `{ state, cursor }`
  * const source = new EventSource(`/AccountSummary/${accountId}/watch`);
  * source.onmessage = (event) => render(JSON.parse(event.data).state);
@@ -395,43 +346,14 @@ const endpointOf = (
  */
 export const toHttpApi = <A extends Publishable>(
   api: A,
-  options: Options<A>,
 ): HttpApiSurface<A["apiName"], Requirements<A>> => {
   const name = api.apiName;
   const calls = operationsOf(api);
-  // Follow-up once `expose` lands (#2585): default `include` to the entries
-  // whose `exposureOf(entry).http` is true.
-  // A name the Api cannot serve fails the Layer, like the model's own definition problems.
-  const problems: Array<DefinitionError> = [];
-  const included = new Set<string>();
-  for (const wanted of options.include as ReadonlyArray<string>) {
-    const matched = calls.filter(
-      (operation) => operation.entry === wanted || operation.rpc === wanted,
-    );
-    if (matched.length === 0) {
-      problems.push(new DefinitionError(`${name} has no entry or call named ${wanted}`));
-    }
-    for (const operation of matched) included.add(operation.rpc);
-  }
-
-  // A status for a tag no call can fail with is a typo.
-  const tags = new Set<string | undefined>();
-  for (const operation of calls) {
-    const rpc = api.group.requests.get(operation.rpc) as Rpc.AnyWithProps;
-    for (const failure of failuresOf(rpc)) tags.add(tagOf(failure));
-  }
-  for (const tag of Object.keys(options.status ?? {})) {
-    if (!tags.has(tag))
-      problems.push(new DefinitionError(`${name} has no typed failure named ${tag}`));
-  }
-  const withStatus = (failure: Schema.Top): Schema.Top => {
-    const tag = tagOf(failure);
-    const status =
-      (tag === undefined ? undefined : options.status?.[tag]) ??
-      resolveStatus(failure.ast) ??
-      DEFAULT_STATUS;
-    return HttpApiSchema.status(status)(failure);
-  };
+  // A failure without a status of its own is a refused request, not a server fault.
+  const withStatus = (failure: Schema.Top): Schema.Top =>
+    resolveStatus(failure.ast) === undefined
+      ? HttpApiSchema.status(DEFAULT_STATUS)(failure)
+      : failure;
 
   const published: Array<Published> = [];
   let group = HttpApiGroup.make(name) as unknown as HttpApiGroup.HttpApiGroup<
@@ -439,7 +361,6 @@ export const toHttpApi = <A extends Publishable>(
     HttpApiEndpoint.Top
   >;
   for (const operation of calls) {
-    if (!included.has(operation.rpc)) continue;
     const rpc = api.group.requests.get(operation.rpc) as Rpc.AnyWithProps;
     const errors = failuresOf(rpc).map(withStatus);
     const endpoint = endpointOf(operation, rpc, errors);
@@ -449,14 +370,11 @@ export const toHttpApi = <A extends Publishable>(
   }
 
   const layerFor = (httpApi: HttpApi.HttpApi<string, HttpApiGroup.Constraint>) => {
-    const problem =
-      problems[0] ??
-      (name in httpApi.groups
-        ? undefined
-        : new DefinitionError(
-            `${httpApi.identifier} does not hold the ${name} group: add it first`,
-          ));
-    if (problem) return problem.pipe(Effect.die, Layer.effectDiscard);
+    if (!(name in httpApi.groups)) {
+      return new DefinitionError(
+        `${httpApi.identifier} does not hold the ${name} group: add it first`,
+      ).pipe(Effect.die, Layer.effectDiscard);
+    }
     return HttpApiBuilder.group(httpApi as never, name as never, (handlers: any) => {
       // The Api's in-process client: its handlers and middleware, nothing
       // serialized. One per request, as `yield* Api` builds one server per request.
