@@ -328,6 +328,8 @@ We didn't set out to write a schema library. The agent tried
 everything else first, on real shapes from EC2, S3, DynamoDB, Stripe
 and Cloudflare Workers. Stripe, after dedupe:
 
+<div class="alc-ours-last">
+
 | Option | Import memory | First-use memory | µs per validation | 1-op bundle gz |
 | --- | ---: | ---: | ---: | ---: |
 | Effect Schema (lazy) | 0.86 MB | 11.3 MB | 24 | 27.5 KB |
@@ -335,6 +337,8 @@ and Cloudflare Workers. Stripe, after dedupe:
 | zod/mini (before dedupe) | 114 MB | 0.7 MB | 40 | 9.3 KB |
 | TypeBox (before dedupe) | 14 MB | 1.9 MB | 206 | 27.9 KB |
 | **schema-lite (ours)** | 2.3 MB | 0.17 MB | 13 | 4.6 KB |
+
+</div>
 
 Every library lost on at least one axis we cared about. Effect's own
 compilers didn't help either: the ahead-of-time compiler can't compile

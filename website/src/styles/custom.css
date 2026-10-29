@@ -238,6 +238,13 @@ body:has(.sl-blog-metadata) .sl-markdown-content h3 {
   line-height: 1.3;
 }
 
+/* Highlight our own row (the last row) in a comparison table. */
+.alc-ours-last tbody tr:last-child td {
+  color: var(--alc-accent-text);
+  font-weight: 700;
+  background: color-mix(in srgb, var(--alc-accent) 12%, transparent);
+}
+
 /* ── Hero "Effects" italic-serif accent ── deep moss, the design-system
    "alc-text-accent" treatment used in the Claude landing variants. */
 .text-gradient {
