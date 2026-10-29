@@ -271,6 +271,6 @@ Story.signal(ExecuteTransfer, transfer, Decision, "approved"),
 
 A step that calls an external system waits until the story answers the call, as a policy does. A run that dies fails the story, unless a step expects it with `Story.saga(ExecuteTransfer, transfer, { _tag: "Died" })`.
 
-A saga runs wherever its model runs: in memory in a story, and on [Cloudflare Durable Objects](/domain/cloudflare) in production, with each run's steps stored durably.
+A saga runs wherever its model runs: in memory in a story, and on [Cloudflare Durable Objects](/domain/cloudflare) or [Effect Cluster](/domain/cluster) (on `ClusterWorkflowEngine`) in production, with each run's steps stored durably.
 
 Next, [External System](/domain/external-system): how the model talks to the world outside it.
