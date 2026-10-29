@@ -167,25 +167,39 @@ const now = Effect.sync(() => new Date());
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
 
+/** Retry a seed request, logging why: a slow seed is otherwise silent. */
+const seedRetry = <A, E extends { readonly _tag: string }, R>(
+  path: string,
+  effect: Effect.Effect<A, E, R>,
+) =>
+  effect.pipe(
+    Effect.tapError((error) =>
+      Effect.sync(() =>
+        console.log(
+          `SEED-RETRY ${path} ${error._tag}${"status" in error ? ` ${String(error.status)}` : ""}${"body" in error ? ` ${String(error.body).slice(0, 120)}` : ""}`,
+        ),
+      ),
+    ),
+    Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
+  );
+
 const seedAccounts = (url: string, accounts: number, events: number) =>
   Effect.forEach(
     Array.from({ length: Math.ceil(accounts / SEED_BATCH) }, (_, i) => i * SEED_BATCH),
-    (from) =>
-      call(url, "POST", `/seed/${from}/${Math.min(SEED_BATCH, accounts - from)}/${events}`).pipe(
-        Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 }),
-      ),
+    (from) => {
+      const path = `/seed/${from}/${Math.min(SEED_BATCH, accounts - from)}/${events}`;
+      return seedRetry(path, call(url, "POST", path));
+    },
     { concurrency: 64, discard: true },
   );
 
 const seedOne = (url: string, account: string, events: number) =>
   Effect.forEach(
     Array.from({ length: Math.ceil(events / DEPOSIT_BATCH) }, (_, i) => i * DEPOSIT_BATCH + 1),
-    (from) =>
-      call(
-        url,
-        "POST",
-        `/deposit/${account}/${from}/${Math.min(DEPOSIT_BATCH, events - from + 1)}`,
-      ).pipe(Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 10 })),
+    (from) => {
+      const path = `/deposit/${account}/${from}/${Math.min(DEPOSIT_BATCH, events - from + 1)}`;
+      return seedRetry(path, call(url, "POST", path));
+    },
     { concurrency: 4, discard: true },
   );
 
