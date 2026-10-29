@@ -19,8 +19,7 @@ const options = {
     Celld.EcsFleet({
       capacity: { type: "ec2", instanceType: "m7i.large" },
       containerRuntime: "runsc",
-      management: "service",
-    }),
+    }).pipe(Layer.provide(Celld.EcsServiceManagement())),
   ),
 };
 const { test } = Test.make(options);

@@ -1,24 +1,18 @@
-import { Function as LambdaFunction } from "@alchemy.run/aws/Lambda/Function";
-import { Credentials, fromEnv } from "@distilled.cloud/aws/Credentials";
-import * as LambdaSdk from "@distilled.cloud/aws/lambda";
-import { Retry } from "@distilled.cloud/aws/Retry";
-import type { Input, InputProps } from "alchemy/Input";
+import { Credentials } from "@distilled.cloud/aws/Credentials";
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import * as Config from "effect/Config";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import * as Stream from "effect/Stream";
 import { FleetStorageError } from "./FleetStorage.ts";
 import { makeS3Store } from "./FleetStorageS3.ts";
 import type { FleetConnection } from "./Host.ts";
 import {
   ActivateEvidence,
-  FleetManagement,
   FleetManagementError,
   ManagementGraph,
   ReloadEvidence,
@@ -240,86 +234,6 @@ export const makeManagementClient = (
   } satisfies FleetManagementService;
 };
 
-/** Synchronous IAM invocation of the fleet's private runner Lambda; no automatic retries. */
-export const makeLambdaTransport = Effect.gen(function* () {
-  const credentials = yield* Credentials;
-  const http = yield* HttpClient.HttpClient;
-  const services = Layer.mergeAll(
-    Layer.succeed(Credentials, credentials),
-    Layer.succeed(HttpClient.HttpClient, http),
-    Layer.succeed(Retry, { while: () => false }),
-  );
-  const transport: ManagementTransport = (connection, payload) =>
-    Effect.gen(function* () {
-      const functionArn = connection.hostState?.managementFunctionArn;
-      if (
-        typeof functionArn !== "string" ||
-        !/^arn:aws(?:-us-gov|-cn)?:lambda:[a-z0-9-]+:\d{12}:function:[a-zA-Z0-9-_]+(?::[a-zA-Z0-9$_-]+)?$/.test(
-          functionArn,
-        )
-      )
-        return yield* new FleetManagementError({
-          reason: "configuration",
-          message: "Fleet hostState must include an IAM managementFunctionArn and backing bucket.",
-        });
-      const response = yield* LambdaSdk.invoke({
-        FunctionName: functionArn,
-        InvocationType: "RequestResponse",
-        LogType: "None",
-        Payload: payload,
-      }).pipe(
-        Effect.provide(services),
-        Effect.mapError(
-          () =>
-            new FleetManagementError({
-              reason: "transport",
-              message:
-                "IAM Celld management invocation failed; do not retry an ambiguous mutation.",
-            }),
-        ),
-      );
-      if (response.StatusCode !== 200 || response.FunctionError || !response.Payload)
-        return yield* new FleetManagementError({
-          reason: "transport",
-          message:
-            "Celld management runner did not return a successful synchronous response; mutation outcome may be ambiguous.",
-        });
-      const chunks = yield* Stream.runCollect(response.Payload).pipe(
-        Effect.mapError(
-          () =>
-            new FleetManagementError({
-              reason: "transport",
-              message:
-                "Celld management response was interrupted; mutation outcome may be ambiguous.",
-            }),
-        ),
-      );
-      return yield* Effect.sync(
-        () => new Uint8Array(Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)))),
-      );
-    }).pipe(
-      Effect.timeoutOrElse({
-        duration: "85 seconds",
-        orElse: () =>
-          Effect.fail(
-            new FleetManagementError({
-              reason: "transport",
-              message: "Celld management invocation timed out; mutation outcome may be ambiguous.",
-            }),
-          ),
-      }),
-    );
-  return transport;
-});
-
-/** Synchronous IAM invocation only. No Function URL and no automatic retries. */
-export const FleetManagementLambda = Layer.effect(
-  FleetManagement,
-  makeLambdaTransport.pipe(
-    Effect.map((lambda) => makeManagementClient(() => Effect.succeed(lambda))),
-  ),
-);
-
 /** Read-only access to the fleet state a management runner observes. */
 export const managementStorePolicy = (partition: string | undefined, bucketName: Input<string>) => {
   const arn = Output.interpolate`arn:${partition ?? "aws"}:s3:::${bucketName}`;
@@ -344,43 +258,6 @@ export const managementStorePolicy = (partition: string | undefined, bucketName:
     },
   ];
 };
-
-export interface ManagementRunnerProps {
-  /** Dedicated existing fleet backing bucket, without s3://. */
-  readonly bucketName: string;
-  /** IAM partition for bucket ARNs. @default aws */
-  readonly partition?: string;
-  /** Private subnets and a management-only security group. */
-  readonly vpc: { subnetIds: string[]; securityGroupIds: string[] };
-  /** Number of live node sessions required. @default 1 */
-  readonly minimumNodes?: number;
-}
-
-/** Compose into EcsFleet and persist only its functionArn in hostState.managementFunctionArn. */
-export const ManagementRunner = (
-  id: string,
-  props: InputProps<Omit<ManagementRunnerProps, "partition" | "minimumNodes">> &
-    Pick<ManagementRunnerProps, "partition" | "minimumNodes">,
-) =>
-  Effect.gen(function* () {
-    const main = yield* Effect.sync(() => import.meta.url);
-    const runner = yield* LambdaFunction(id, {
-      main,
-      functionUrl: false,
-      runtime: "nodejs22.x",
-      memorySize: 256,
-      timeout: Duration.seconds(75),
-      vpc: props.vpc,
-      env: {
-        CELLD_MANAGEMENT_BUCKET: props.bucketName,
-        CELLD_MANAGEMENT_MINIMUM_NODES: String(props.minimumNodes ?? 1),
-      },
-    });
-    yield* runner.bind("CelldManagementStore", {
-      policyStatements: managementStorePolicy(props.partition, props.bucketName),
-    });
-    return runner;
-  });
 
 /**
  * Execute one request envelope as this fleet's trusted runner, wherever the
@@ -446,11 +323,3 @@ export const ManagementRunnerHttp = Layer.mergeAll(
   FetchHttpClient.layer,
   Layer.succeed(FetchHttpClient.RequestInit, { redirect: "manual" }),
 );
-
-const run = (event: unknown) =>
-  executeManagementRequest(event).pipe(
-    Effect.provide(Layer.mergeAll(fromEnv(), ManagementRunnerHttp)),
-  );
-
-/** Standard Lambda boundary; invocation is authorized by IAM, never an HTTP URL. */
-export default (event: unknown) => Effect.runPromise(run(event));

@@ -2,6 +2,7 @@ import { Providers } from "@alchemy.run/aws/Providers";
 import { ApplicationActivation } from "@alchemy.run/celld/Application";
 import { prepareDeployment } from "@alchemy.run/celld/Deployment";
 import { bytes, digest } from "@alchemy.run/celld/Deployment/Objects";
+import { makeLambdaTransport } from "@alchemy.run/celld/EcsLambdaManagement";
 import type { Store } from "@alchemy.run/celld/FleetStorage";
 import {
   FleetManagement,
@@ -9,11 +10,8 @@ import {
   type FleetManagementService,
 } from "@alchemy.run/celld/Management";
 import { ManagementBindings } from "@alchemy.run/celld/ManagementBindings";
-import {
-  FleetManagementLambda,
-  ManagementRunner,
-  handleManagementRequest,
-} from "@alchemy.run/celld/ManagementRunner";
+import { ManagementLambda } from "@alchemy.run/celld/ManagementLambda";
+import { handleManagementRequest, makeManagementClient } from "@alchemy.run/celld/ManagementRunner";
 import { describe, expect, it } from "@alchemy.run/test";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as Output from "alchemy/Output";
@@ -28,6 +26,13 @@ import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 
+// The deployer's client over the Lambda runner, as EcsLambdaManagement builds it.
+const FleetManagementLambda = Layer.effect(
+  FleetManagement,
+  makeLambdaTransport.pipe(
+    Effect.map((transport) => makeManagementClient(() => Effect.succeed(transport))),
+  ),
+);
 const connection = {
   bucket: { uri: "s3://test-cells" },
   hostState: {
@@ -529,7 +534,7 @@ describe("Celld IAM management runner", { tags: ["unit", "local", "provider:cell
           subnetIds: ["subnet-private"],
           securityGroupIds: ["sg-management"],
         };
-        const runner = yield* ManagementRunner("Management", {
+        const runner = yield* ManagementLambda("Management", {
           bucketName: "test-cells",
           vpc,
           minimumNodes: 2,

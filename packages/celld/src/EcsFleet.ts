@@ -1,18 +1,11 @@
-import { AwsAuth } from "@alchemy.run/aws/AuthProvider";
 import * as CloudMap from "@alchemy.run/aws/CloudMap";
-import * as AwsCredentials from "@alchemy.run/aws/Credentials";
 import * as EC2 from "@alchemy.run/aws/EC2";
 import * as ECS from "@alchemy.run/aws/ECS";
-import * as Endpoint from "@alchemy.run/aws/Endpoint";
-import { Default as DefaultEnvironment } from "@alchemy.run/aws/Environment";
 import * as IAM from "@alchemy.run/aws/IAM";
-import * as AwsRegion from "@alchemy.run/aws/Region";
 import * as S3 from "@alchemy.run/aws/S3";
-import * as SQS from "@alchemy.run/aws/SQS";
 import { Credentials } from "@distilled.cloud/aws/Credentials";
 import * as ec2 from "@distilled.cloud/aws/ec2";
 import { Region } from "@distilled.cloud/aws/Region";
-import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { toFqn } from "alchemy/FQN";
 import type { Input } from "alchemy/Input";
 import * as Namespace from "alchemy/Namespace";
@@ -32,26 +25,23 @@ import {
   resolveEc2NodeSizing,
   RUNSC_RELEASE,
 } from "./EcsEc2.ts";
+import { ecsAwsEnvironment } from "./EcsEnvironment.ts";
 import {
-  EcsHostConfigurationError,
   makeEcsDockerfile,
   makeEcsNodeIngress,
   resolveEcsHostConfiguration,
-  resolveManagementRouteTables,
   validateEcsHostTransition,
   type EcsHostConfiguration,
 } from "./EcsHostConfig.ts";
+import {
+  EcsManagement,
+  managementRequestsLifecycleRule,
+  type EcsManagementService,
+  type ManagementQueueState,
+} from "./EcsManagement.ts";
 import { composeEcsPrivateIngress } from "./EcsPrivateIngress.ts";
 import { Host, type HostService } from "./Host.ts";
 import { FleetManagement } from "./Management.ts";
-import {
-  FleetManagementEcs,
-  MANAGEMENT_PREFIX,
-  managementRequestsLifecycleRule,
-  type ManagementQueueState,
-} from "./ManagementQueue.ts";
-import { ManagementRunner, managementStorePolicy } from "./ManagementRunner.ts";
-import ManagementTaskLive, { ManagementTask } from "./ManagementTask.ts";
 
 const FLEET_CIDR = "10.61.0.0/16";
 
@@ -68,28 +58,6 @@ export interface EcsFleetOptions {
       };
   /** Sandbox runtime on dedicated EC2 hosts. Unsupported on Fargate. */
   readonly containerRuntime?: "runsc";
-  /**
-   * Where the trusted management runner — the only caller of the nodes'
-   * private operator listener — runs inside the fleet VPC.
-   *
-   * - `"task"` — a Fargate task started on demand for each deploy and
-   *   stopped after a short idle window. Nothing runs between deploys; the
-   *   first management call of a deploy waits for the task to start.
-   * - `"service"` — the same task kept running by an ECS service, so no call
-   *   waits for a cold start, at the cost of one always-on Fargate task.
-   * - `"lambda"` — a VPC Lambda. Calls never wait for a start, but AWS
-   *   releases a VPC Lambda's network interfaces slowly, so destroying the
-   *   fleet takes around 20 minutes.
-   *
-   * @default "task"
-   */
-  readonly management?: "task" | "service" | "lambda";
-  /**
-   * Seconds an on-demand (`"task"`) runner waits for more work before it
-   * stops.
-   * @default 300
-   */
-  readonly managementIdleSeconds?: number;
 }
 
 interface EcsHostState {
@@ -123,13 +91,7 @@ export const composeEcsFleet = (
   describeInstanceType: (
     instanceType: ec2.InstanceType,
   ) => Effect.Effect<ec2.InstanceTypeInfo | undefined, ec2.DescribeInstanceTypesError>,
-  describeManagementNetwork: (
-    vpcId: string,
-    region: string,
-  ) => Effect.Effect<
-    { routeTables: ec2.RouteTable[]; endpoints: ec2.VpcEndpoint[] },
-    ec2.DescribeRouteTablesError | ec2.DescribeVpcEndpointsError | EcsHostConfigurationError
-  >,
+  management: EcsManagementService,
 ): HostService["compose"] =>
   Effect.fn(
     function* ({ id, props }) {
@@ -200,62 +162,12 @@ export const composeEcsFleet = (
 
       let vpcId: Input<EC2.VpcId>;
       let subnetIds: Input<EC2.SubnetId[]>;
-      let managementSubnetIds: Input<EC2.SubnetId[]>;
-      const managementMode = options.management ?? "task";
-      if (props.vpc !== undefined && managementMode !== "lambda") {
-        // A Fargate runner takes a public IP in the node subnets, like the
-        // nodes themselves: it needs no private S3 route.
+      let network: EC2.Network | undefined;
+      if (props.vpc !== undefined) {
         vpcId = props.vpc.vpcId as EC2.VpcId;
         subnetIds = props.vpc.subnetIds as EC2.SubnetId[];
-        managementSubnetIds = subnetIds;
-      } else if (props.vpc !== undefined) {
-        vpcId = props.vpc.vpcId as EC2.VpcId;
-        subnetIds = props.vpc.subnetIds as EC2.SubnetId[];
-        const observed = yield* describeManagementNetwork(props.vpc.vpcId, regionName);
-        const endpointFqn = toFqn(yield* Namespace.CurrentNamespace, "ManagementS3Endpoint");
-        const persistedEndpoint = yield* state.get({
-          stack: stack.name,
-          stage: stack.stage,
-          fqn: endpointFqn,
-        });
-        const persistedEndpointId =
-          persistedEndpoint && !isActionState(persistedEndpoint)
-            ? persistedEndpoint.attr?.vpcEndpointId
-            : undefined;
-        const routeTableIds = yield* resolveManagementRouteTables({
-          subnetIds: props.vpc.subnetIds,
-          ...observed,
-          ownedEndpointIds: observed.endpoints
-            .filter((endpoint) => {
-              const tags = Object.fromEntries(
-                (endpoint.Tags ?? []).map((tag) => [tag.Key, tag.Value]),
-              );
-              return (
-                endpoint.VpcEndpointId === persistedEndpointId ||
-                (tags["alchemy::stack"] === stack.name &&
-                  tags["alchemy::stage"] === stack.stage &&
-                  tags["alchemy::id"] === "ManagementS3Endpoint" &&
-                  tags["celld:management"] === endpointFqn)
-              );
-            })
-            .flatMap((endpoint) => (endpoint.VpcEndpointId ? [endpoint.VpcEndpointId] : [])),
-        });
-        if (routeTableIds.length > 0) {
-          const endpoint = yield* EC2.VpcEndpoint("ManagementS3Endpoint", {
-            vpcId,
-            serviceName: `com.amazonaws.${regionName}.s3`,
-            vpcEndpointType: "Gateway",
-            routeTableIds,
-            tags: { ...props.tags, "celld:management": endpointFqn },
-          });
-          managementSubnetIds = endpoint.vpcEndpointId.pipe(
-            Output.map(() => props.vpc!.subnetIds as EC2.SubnetId[]),
-          );
-        } else {
-          managementSubnetIds = subnetIds;
-        }
       } else {
-        const network = yield* EC2.Network("Network", {
+        network = yield* EC2.Network("Network", {
           cidrBlock: FLEET_CIDR,
           availabilityZones: 2,
           nat: "none",
@@ -264,23 +176,13 @@ export const composeEcsFleet = (
         });
         vpcId = network.vpcId;
         subnetIds = network.publicSubnetIds;
-        managementSubnetIds =
-          managementMode !== "lambda"
-            ? subnetIds
-            : network.privateSubnets.map((subnet, index) =>
-                Output.all(
-                  subnet.subnetId,
-                  network.privateRouteAssociations[index]!.associationId,
-                  network.gatewayEndpoints[0]!.vpcEndpointId,
-                ).pipe(Output.map(([subnetId]) => subnetId)),
-              );
       }
       const callers = yield* EC2.SecurityGroup("CallerSecurityGroup", {
         vpcId,
         description: `Celld fleet ${id} Worker callers (no operator access)`,
         tags: props.tags,
       });
-      const management = yield* EC2.SecurityGroup("ManagementSecurityGroup", {
+      const managementGroup = yield* EC2.SecurityGroup("ManagementSecurityGroup", {
         vpcId,
         description: `Celld fleet ${id} trusted private management runner`,
         tags: props.tags,
@@ -290,7 +192,7 @@ export const composeEcsFleet = (
         description: `Celld fleet ${id} nodes`,
         ingress: makeEcsNodeIngress(
           callers.groupId,
-          management.groupId,
+          managementGroup.groupId,
           props.vpc?.securityGroupIds,
         ),
         tags: props.tags,
@@ -345,7 +247,7 @@ export const composeEcsFleet = (
             vpcId,
             subnetIds,
             callerGroupId: callers.groupId,
-            managementGroupId: management.groupId,
+            managementGroupId: managementGroup.groupId,
             nodeGroupId: nodes.groupId,
             existingCallers: props.vpc?.securityGroupIds,
             tags: props.tags,
@@ -491,93 +393,26 @@ export const composeEcsFleet = (
           ? "aws-us-gov"
           : "aws";
       const minimumNodes = typeof instances === "number" ? instances : instances.min;
-      let runnerState: Pick<
-        { [K in keyof EcsHostState]: Input<Exclude<EcsHostState[K], undefined>> },
-        "managementFunctionArn" | "managementQueue"
-      >;
-      if (managementMode === "lambda") {
-        const runner = yield* ManagementRunner("Management", {
-          bucketName: bucket.bucketName,
-          minimumNodes,
-          partition,
-          vpc: {
-            subnetIds: managementSubnetIds,
-            securityGroupIds: [management.groupId],
-          },
-        });
-        runnerState = { managementFunctionArn: runner.functionArn };
-      } else {
-        const queue = yield* SQS.Queue("ManagementQueue", {
-          visibilityTimeout: "2 minutes",
-          messageRetentionPeriod: "5 minutes",
-          receiveMessageWaitTime: "20 seconds",
-        });
-        const task = yield* ManagementTask.pipe(Effect.provide(ManagementTaskLive));
-        const managementArn = Output.interpolate`arn:${partition}:s3:::${bucket.bucketName}/${MANAGEMENT_PREFIX}/*`;
-        yield* task.bind("CelldManagement", {
-          env: {
-            CELLD_MANAGEMENT_BUCKET: bucket.bucketName,
-            CELLD_MANAGEMENT_MINIMUM_NODES: String(minimumNodes),
-            CELLD_MANAGEMENT_QUEUE_URL: queue.queueUrl,
-            CELLD_MANAGEMENT_IDLE_SECONDS: String(
-              managementMode === "task" ? (options.managementIdleSeconds ?? 300) : 0,
-            ),
-          },
-          policyStatements: [
-            ...managementStorePolicy(partition, bucket.bucketName),
-            {
-              Effect: "Allow",
-              Action: ["s3:GetObject", "s3:PutObject"],
-              Resource: [managementArn],
-            },
-            {
-              Effect: "Allow",
-              Action: ["sqs:ReceiveMessage", "sqs:DeleteMessage"],
-              Resource: [queue.queueArn],
-            },
-          ],
-        });
-        if (managementMode === "service") {
-          yield* ECS.Service("ManagementService", {
-            cluster,
-            task: {
-              taskDefinitionArn: task.taskDefinitionArn,
-              containerName: task.containerName,
-              // The runner serves no traffic; the port only matters to load balancers.
-              port: CELLD_PUBLIC_PORT,
-            },
-            desiredCount: 1,
-            launchType: "FARGATE",
-            vpcId,
-            subnets: subnetIds,
-            securityGroups: [management.groupId],
-            assignPublicIp: true,
-            tags: props.tags,
-          });
-        }
-        runnerState = {
-          managementQueue: {
-            queueUrl: queue.queueUrl,
-            ...(managementMode === "task"
-              ? {
-                  launch: {
-                    clusterArn: cluster.clusterArn,
-                    taskDefinitionArn: task.taskDefinitionArn,
-                    subnetIds,
-                    securityGroupIds: [management.groupId],
-                  },
-                }
-              : {}),
-          },
-        };
-      }
+      const runnerState = yield* management.compose({
+        id,
+        tags: props.tags,
+        region: regionName,
+        partition,
+        bucketName: bucket.bucketName,
+        minimumNodes,
+        cluster,
+        vpcId,
+        subnetIds,
+        securityGroupId: managementGroup.groupId,
+        vpc: props.vpc,
+        network,
+      });
       const hostState: { [K in keyof EcsHostState]: Input<Exclude<EcsHostState[K], undefined>> } = {
         vpcId,
         subnetIds,
         securityGroupIds: [callers.groupId],
         nodeSecurityGroupIds: [nodes.groupId],
-        managementSecurityGroupIds: [management.groupId],
-        managementSubnetIds,
+        managementSecurityGroupIds: [managementGroup.groupId],
         ...runnerState,
         managementUrl,
         clusterArn: cluster.clusterArn,
@@ -611,34 +446,6 @@ export const composeEcsFleet = (
     (effect, { id }) => effect.pipe(Namespace.push(id)),
   );
 
-const collectNetworkPages = <A, E>(
-  fetch: (token: string | undefined) => Effect.Effect<{ items: A[]; nextToken?: string }, E>,
-) =>
-  Effect.gen(function* () {
-    const items: A[] = [];
-    let token: string | undefined;
-    for (let page = 0; page < 10; page++) {
-      const result = yield* fetch(token);
-      items.push(...result.items);
-      token = result.nextToken;
-      if (!token) return items;
-    }
-    return yield* new EcsHostConfigurationError({
-      message:
-        "Management network discovery exceeded ten pages; refusing an incomplete S3 route inventory.",
-    });
-  });
-
-const awsEnvironment = Layer.mergeAll(
-  AwsRegion.fromEnvironment,
-  AwsCredentials.fromEnvironment,
-  Endpoint.fromEnvironment,
-).pipe(
-  Layer.provideMerge(DefaultEnvironment),
-  Layer.provideMerge(AwsAuth),
-  Layer.provideMerge(CredentialsStoreLive),
-);
-
 /**
  * ECS host with Fargate as the default. Workers use port 8080; only nodes
  * and the trusted management runner can access the private 8081 listener.
@@ -652,20 +459,21 @@ const awsEnvironment = Layer.mergeAll(
  * are required rather than task-CPU autoscaling. The S3 bucket is durable;
  * host scratch and child containers are disposable after graceful drain.
  *
+ * Deploys reach the nodes' private operator listener through a management
+ * runner inside the fleet's network. Provide the Layer that hosts it:
+ * `Celld.EcsTaskManagement` (an on-demand Fargate task),
+ * `Celld.EcsServiceManagement` (an always-on one) or
+ * `Celld.EcsLambdaManagement` (a VPC Lambda). Only the chosen runner's code
+ * is imported.
+ *
  * ### Composing the Host
  * **Example:** Use the default Fargate host
  * ```typescript
- * const providers = Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.EcsFleet());
- * ```
- *
- * ### Hosting the Management Runner
- * Deploys reach the nodes' private operator listener through a runner inside
- * the fleet VPC. By default it is a Fargate task started on demand and
- * stopped when idle; keep it running to skip the first call's cold start.
- *
- * **Example:** Keep the runner running
- * ```typescript
- * const host = Celld.EcsFleet({ management: "service" });
+ * const providers = Layer.mergeAll(
+ *   AWS.providers(),
+ *   Celld.providers(),
+ *   Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
+ * );
  * ```
  *
  * ### Dedicated EC2 Hosts
@@ -674,7 +482,7 @@ const awsEnvironment = Layer.mergeAll(
  * const host = Celld.EcsFleet({
  *   capacity: { type: "ec2", instanceType: "m7i.large" },
  *   containerRuntime: "runsc",
- * });
+ * }).pipe(Layer.provide(Celld.EcsTaskManagement()));
  * ```
  *
  * @layer
@@ -684,17 +492,21 @@ const awsEnvironment = Layer.mergeAll(
  */
 export const EcsFleet = (
   options: EcsFleetOptions = {},
-): Layer.Layer<Host | FleetManagement, never, StackServices> =>
+): Layer.Layer<Host | FleetManagement, never, StackServices | EcsManagement> =>
   Layer.mergeAll(
-    FleetManagementEcs,
+    Layer.effect(
+      FleetManagement,
+      Effect.gen(function* () {
+        return (yield* EcsManagement).client;
+      }),
+    ),
     Layer.effect(
       Host,
       Effect.gen(function* () {
+        const management = yield* EcsManagement;
         const credentials = yield* Credentials;
         const region = yield* Region;
         const describeInstanceTypes = yield* ec2.describeInstanceTypes;
-        const describeRouteTables = yield* ec2.describeRouteTables;
-        const describeVpcEndpoints = yield* ec2.describeVpcEndpoints;
         const storageCredentials: HostService["deployEnv"] = () =>
           Effect.gen(function* () {
             const resolved = yield* credentials;
@@ -715,37 +527,7 @@ export const EcsFleet = (
               describeInstanceTypes({ InstanceTypes: [instanceType] }).pipe(
                 Effect.map((response) => response.InstanceTypes?.[0]),
               ),
-            (vpcId, regionName) =>
-              Effect.all({
-                routeTables: collectNetworkPages((NextToken) =>
-                  describeRouteTables({
-                    Filters: [{ Name: "vpc-id", Values: [vpcId] }],
-                    NextToken,
-                  }).pipe(
-                    Effect.map((response) => ({
-                      items: response.RouteTables ?? [],
-                      nextToken: response.NextToken,
-                    })),
-                  ),
-                ),
-                endpoints: collectNetworkPages((NextToken) =>
-                  describeVpcEndpoints({
-                    Filters: [
-                      { Name: "vpc-id", Values: [vpcId] },
-                      {
-                        Name: "service-name",
-                        Values: [`com.amazonaws.${regionName}.s3`],
-                      },
-                    ],
-                    NextToken,
-                  }).pipe(
-                    Effect.map((response) => ({
-                      items: response.VpcEndpoints ?? [],
-                      nextToken: response.NextToken,
-                    })),
-                  ),
-                ),
-              }),
+            management,
           ),
           deployEnv: storageCredentials,
           storageCredentials,
@@ -753,4 +535,4 @@ export const EcsFleet = (
         } satisfies HostService;
       }),
     ),
-  ).pipe(Layer.provide(Layer.mergeAll(awsEnvironment, FetchHttpClient.layer)), Layer.orDie);
+  ).pipe(Layer.provide(Layer.mergeAll(ecsAwsEnvironment, FetchHttpClient.layer)), Layer.orDie);

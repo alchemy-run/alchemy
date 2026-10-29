@@ -9,6 +9,11 @@ import {
 } from "@alchemy.run/celld/EcsEc2";
 import { composeEcsFleet } from "@alchemy.run/celld/EcsFleet";
 import { makeEcsDockerfile } from "@alchemy.run/celld/EcsHostConfig";
+import { makeEcsLambdaManagement } from "@alchemy.run/celld/EcsLambdaManagement";
+import {
+  makeEcsServiceManagement,
+  makeEcsTaskManagement,
+} from "@alchemy.run/celld/EcsTaskManagement";
 import { Host } from "@alchemy.run/celld/Host";
 import { FleetManagement } from "@alchemy.run/celld/Management";
 import { Providers as CelldProviders } from "@alchemy.run/celld/Providers";
@@ -30,7 +35,13 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as Redacted from "effect/Redacted";
 import * as Result from "effect/Result";
 
-const providers = Layer.mergeAll(AWS.providers(), Celld.providers(), Celld.EcsFleet());
+const providers = Layer.mergeAll(
+  AWS.providers(),
+  Celld.providers(),
+  Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
+);
+// Composition never reaches the runner, so its transport is never called.
+const unreachable = () => Effect.die("composition must not call the management runner");
 const { test } = Test.make({ providers });
 
 const instance: ec2.InstanceTypeInfo = {
@@ -120,52 +131,54 @@ describe(
                 ? {
                     capacity: { type: "ec2", instanceType: "m7i.large" },
                     containerRuntime: "runsc",
-                    management: "lambda",
                   }
-                : { management: "lambda" },
+                : {},
               () => Effect.succeed(instance),
-              () =>
-                Effect.succeed({
-                  routeTables: [
-                    {
-                      RouteTableId: "rtb-public",
-                      Associations: [{ Main: true }],
-                      Routes: [
-                        {
-                          DestinationCidrBlock: "0.0.0.0/0",
-                          GatewayId: "igw-public",
-                          State: "active",
-                        },
-                      ],
-                    },
-                  ],
-                  endpoints:
-                    capacity === "ec2"
-                      ? [
+              makeEcsLambdaManagement(
+                () =>
+                  Effect.succeed({
+                    routeTables: [
+                      {
+                        RouteTableId: "rtb-public",
+                        Associations: [{ Main: true }],
+                        Routes: [
                           {
-                            VpcEndpointId: "vpce-owned",
-                            VpcEndpointType: "Gateway",
-                            State: "available",
-                            RouteTableIds: ["rtb-public"],
-                            Tags: [
-                              {
-                                Key: "alchemy::stack",
-                                Value: "ecs-host-composition",
-                              },
-                              { Key: "alchemy::stage", Value: "test" },
-                              {
-                                Key: "alchemy::id",
-                                Value: "ManagementS3Endpoint",
-                              },
-                              {
-                                Key: "celld:management",
-                                Value: "Cells/ManagementS3Endpoint",
-                              },
-                            ],
+                            DestinationCidrBlock: "0.0.0.0/0",
+                            GatewayId: "igw-public",
+                            State: "active",
                           },
-                        ]
-                      : [],
-                }),
+                        ],
+                      },
+                    ],
+                    endpoints:
+                      capacity === "ec2"
+                        ? [
+                            {
+                              VpcEndpointId: "vpce-owned",
+                              VpcEndpointType: "Gateway",
+                              State: "available",
+                              RouteTableIds: ["rtb-public"],
+                              Tags: [
+                                {
+                                  Key: "alchemy::stack",
+                                  Value: "ecs-host-composition",
+                                },
+                                { Key: "alchemy::stage", Value: "test" },
+                                {
+                                  Key: "alchemy::id",
+                                  Value: "ManagementS3Endpoint",
+                                },
+                                {
+                                  Key: "celld:management",
+                                  Value: "Cells/ManagementS3Endpoint",
+                                },
+                              ],
+                            },
+                          ]
+                        : [],
+                  }),
+                unreachable,
+              ),
             )({ id: "Cells", props: { vpc } });
             const resources = stack.resources;
             const nodes = resources["Cells/Nodes"]!;
@@ -267,9 +280,12 @@ describe(
           const stack = yield* Stack;
           yield* composeEcsFleet(
             Effect.succeed("us-east-1"),
-            { management: "lambda" },
+            {},
             () => Effect.succeed(instance),
-            () => Effect.die("Generated networks must not inspect existing routes"),
+            makeEcsLambdaManagement(
+              () => Effect.die("Generated networks must not inspect existing routes"),
+              unreachable,
+            ),
           )({ id: "Cells", props: {} });
           const resources = stack.resources;
           const runner = resources["Cells/Management"]!;
@@ -328,9 +344,11 @@ describe(
             const stack = yield* Stack;
             const host = yield* composeEcsFleet(
               Effect.succeed("us-east-1"),
-              management === "task" ? {} : { management },
+              {},
               () => Effect.succeed(instance),
-              () => Effect.succeed({ routeTables: [], endpoints: [] }),
+              management === "task"
+                ? makeEcsTaskManagement({}, unreachable)
+                : makeEcsServiceManagement(unreachable),
             )({ id: "Cells", props: { vpc } });
             const resources = stack.resources;
             expect(resources["Cells/Management"]).toBeUndefined();

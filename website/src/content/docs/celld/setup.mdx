@@ -80,7 +80,7 @@ export default Alchemy.Stack(
     providers: Layer.mergeAll(
       AWS.providers(),
       Celld.providers(),
-      Celld.EcsFleet(),
+      Celld.EcsFleet().pipe(Layer.provide(Celld.EcsTaskManagement())),
     ),
     state: AWS.state(),
   },
@@ -134,18 +134,19 @@ the declared entrypoint. Background and service Workers belong in
 ## Choose where management runs
 
 Deploys reach the nodes' private operator listener through a management runner
-inside the fleet's network. By default it is a Fargate task that starts with
-the first management call of a deploy and stops after five idle minutes, so
-nothing runs between deploys.
+inside the fleet's network. `Celld.EcsFleet` needs a Layer that hosts it, and
+only that Layer's runner code is imported.
 
-Keep it running to skip that first call's cold start:
+`Celld.EcsTaskManagement()` runs it as a Fargate task that starts with the first
+management call of a deploy and stops after five idle minutes, so nothing runs
+between deploys. Keep it running to skip that first call's cold start:
 
 ```ts
-Celld.EcsFleet({ management: "service" });
+Celld.EcsFleet().pipe(Layer.provide(Celld.EcsServiceManagement()));
 ```
 
-`management: "lambda"` runs it as a VPC Lambda instead. Calls never wait for
-it to start, but AWS releases a VPC Lambda's network interfaces slowly, so
+`Celld.EcsLambdaManagement()` runs it as a VPC Lambda instead. Calls never wait
+for it to start, but AWS releases a VPC Lambda's network interfaces slowly, so
 destroying the fleet takes around 20 minutes.
 
 ## Upgrade an existing fleet

@@ -21,43 +21,17 @@ import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
+import { MANAGEMENT_PREFIX, type ManagementQueueState } from "./EcsManagement.ts";
 import type { FleetConnection } from "./Host.ts";
-import { FleetManagement, FleetManagementError } from "./Management.ts";
-import {
-  executeManagementRequest,
-  makeLambdaTransport,
-  makeManagementClient,
-  type ManagementTransport,
-} from "./ManagementRunner.ts";
+import { FleetManagementError } from "./Management.ts";
+import { executeManagementRequest, type ManagementTransport } from "./ManagementRunner.ts";
 
-/** Prefix of every queued management object in the fleet bucket. */
-export const MANAGEMENT_PREFIX = "alchemy/management/v1";
 const requestsPrefix = `${MANAGEMENT_PREFIX}/requests/`;
 const requestKey = (id: string) => `${requestsPrefix}${id}/request.json`;
 const claimKey = (id: string) => `${requestsPrefix}${id}/claim`;
 const replyKey = (id: string) => `${requestsPrefix}${id}/reply.json`;
 /** On-demand runners publish how long they stay up here. */
 const heartbeatKey = `${MANAGEMENT_PREFIX}/runner.json`;
-
-/** S3 lifecycle rule expiring request objects a lost deployer left behind. */
-export const managementRequestsLifecycleRule = {
-  ID: "celld-management-requests",
-  Status: "Enabled" as const,
-  Filter: { Prefix: requestsPrefix },
-  Expiration: { Days: 1 },
-};
-
-/** How the deployer reaches the runner: its queue, and how to start one on demand. */
-export interface ManagementQueueState {
-  readonly queueUrl: string;
-  /** Present for on-demand runners: the deployer starts a task when none is up. */
-  readonly launch?: {
-    readonly clusterArn: string;
-    readonly taskDefinitionArn: string;
-    readonly subnetIds: string[];
-    readonly securityGroupIds: string[];
-  };
-}
 
 /** A runner the deployer may still reach must have at least this much time left. */
 const HEARTBEAT_MARGIN_MS = 30_000;
@@ -244,21 +218,6 @@ export const makeQueueTransport = Effect.gen(function* () {
     );
   return transport;
 });
-
-/**
- * The ECS fleet's management client: queued when the fleet hosts its
- * runner as an ECS task or service, the private Lambda otherwise.
- */
-export const FleetManagementEcs = Layer.effect(
-  FleetManagement,
-  Effect.gen(function* () {
-    const queue = yield* makeQueueTransport;
-    const lambda = yield* makeLambdaTransport;
-    return makeManagementClient((connection) =>
-      Effect.succeed(connection.hostState?.managementQueue === undefined ? lambda : queue),
-    );
-  }),
-);
 
 /**
  * The runner half, run inside an ECS task: drain the queue, executing each
