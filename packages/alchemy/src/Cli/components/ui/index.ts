@@ -1,8 +1,8 @@
 /**
  * Composable terminal layouts and interaction widgets.
  *
- * This is a separate entrypoint from `alchemy/Cli/CliKit` so importing the
- * injectable service does not eagerly load React, Sigil or Yoga.
+ * Kept apart from `Interaction` so importing the service does not eagerly
+ * load React, Sigil or Yoga.
  */
 export {
   CliEnvironment,
@@ -42,6 +42,7 @@ export {
   ChoiceGroup,
   CycleList,
   InlineConfirm,
+  Pointer,
   PromptFrame,
   TextField,
   useCycleNavigation,

@@ -4,17 +4,13 @@ import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 import { Progress } from "../../Alchemist/Progress.ts";
+import { Interaction } from "../../Interaction.ts";
 import type { Plan } from "../../Plan.ts";
 import * as Report from "../../Report.ts";
-import { CliKit } from "../CliKit/CliKit.ts";
+import { isPromptCancellation } from "./errors.ts";
 
 export const renderPlanning =
-  (options: {
-    operation: string;
-    stage: string;
-    computingLabel?: string;
-    readyLabel?: string;
-  }) =>
+  (options: { operation: string; stage: string; computingLabel?: string; readyLabel?: string }) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const phaseLabel: Record<Report.PlanningPhase, string> = {
@@ -30,7 +26,7 @@ export const renderPlanning =
         options.stage,
         `${options.operation} · ${options.stage}`,
       );
-      const interactive = (yield* CliKit).terminal.input;
+      const interactive = (yield* Interaction).terminal.input;
       const inFlight = new Set<string>();
       let done = 0;
       let total = 0;
@@ -53,15 +49,9 @@ export const renderPlanning =
                     spinning: event.phase !== "importing-module",
                   });
             case "state.bootstrap.started":
-              return planning.update(
-                `Bootstrapping state store '${event.store}'`,
-                options.stage,
-              );
+              return planning.update(`Bootstrapping state store '${event.store}'`, options.stage);
             case "state.bootstrap.completed":
-              return planning.update(
-                phaseLabel["loading-state"],
-                options.stage,
-              );
+              return planning.update(phaseLabel["loading-state"], options.stage);
             case "plan.resource.started":
               if (!interactive) return Effect.void;
               inFlight.add(event.fqn);
@@ -78,7 +68,11 @@ export const renderPlanning =
               return Effect.void;
           }
         }),
-        Effect.tapError(() => planning.fail("Planning failed")),
+        // A prompt dismissed mid-plan (e.g. a provider asking the user to
+        // resolve an ambiguity) is a cancellation, not a planning failure.
+        Effect.tapError((error) =>
+          planning.fail(isPromptCancellation(error) ? "Planning was canceled" : "Planning failed"),
+        ),
         Effect.ensuring(planning.close),
       );
     });
@@ -100,15 +94,12 @@ export const renderApply =
       }
       return yield* effect.pipe(
         Effect.provideService(Progress, (event) =>
-          event._tag === "apply.resource.status" ||
-          event._tag === "apply.resource.note"
+          event._tag === "apply.resource.status" || event._tag === "apply.resource.note"
             ? session.emit(event)
             : Effect.void,
         ),
         Effect.tap((value) =>
-          options?.dev && session.setOutput !== undefined
-            ? session.setOutput(value)
-            : Effect.void,
+          options?.dev && session.setOutput !== undefined ? session.setOutput(value) : Effect.void,
         ),
         Effect.onExit((exit) =>
           Exit.isSuccess(exit)
