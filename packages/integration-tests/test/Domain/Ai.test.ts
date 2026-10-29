@@ -11,6 +11,7 @@ import * as Headers from "effect/http/Headers";
 import * as HttpRouter from "effect/http/HttpRouter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
+import type * as Rpc from "effect/rpc/Rpc";
 import * as RpcMiddleware from "effect/rpc/RpcMiddleware";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
@@ -115,8 +116,8 @@ describe("Domain Ai: toToolkit", () => {
     ]);
     /** The JSON Schema of the JSON a schema reads and writes on the wire. */
     const wire = (schema: Schema.Top) => Tool.getJsonSchemaFromSchema(Schema.toCodecJson(schema));
-    const depositRpc = WalletApi.group.requests.get("Deposit")!;
-    const getRpc = WalletApi.group.requests.get("Balance.get")!;
+    const depositRpc = WalletApi.group.requests.get("Deposit") as Rpc.AnyWithProps;
+    const getRpc = WalletApi.group.requests.get("Balance.get") as Rpc.AnyWithProps;
     const send = toolkit.tools.WalletApi_Deposit_send!;
     // The tool's parameters are the call's own wire payload.
     expect(Tool.getJsonSchema(send)).toEqual(wire(depositRpc.payloadSchema));
