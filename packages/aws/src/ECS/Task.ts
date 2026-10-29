@@ -340,6 +340,23 @@ export { createContainerRuntimeContext } from "alchemy/Runtime/Process";
  * });
  * ```
  *
+ * **Example:** Build args and secrets
+ * ```typescript
+ * // Dockerfile:
+ * //   ARG NODE_ENV
+ * //   RUN --mount=type=secret,id=NPM_TOKEN,env=NPM_TOKEN npm ci
+ * const api = yield* Task("Api", {
+ *   context: "./api",
+ *   build: {
+ *     args: { NODE_ENV: "production" },
+ *     // Mounted only into the RUN step that asks for it; never in the image.
+ *     secrets: { NPM_TOKEN: Config.Redacted("NPM_TOKEN") },
+ *   },
+ *   cpu: 256,
+ *   memory: 512,
+ * });
+ * ```
+ *
  * **Example:** Inline Effect Program
  * ```typescript
  * const drainer = yield* Task(

@@ -195,6 +195,7 @@ type AdmissionNode = {
  */
 const observeBeforePrecreate = Effect.fn(function* (
   node: AdmissionNode,
+  news: any,
   fqn: string,
   logicalId: string,
   instanceId: string,
@@ -204,7 +205,7 @@ const observeBeforePrecreate = Effect.fn(function* (
     return "unchecked" as const;
   }
   const observed = yield* node.provider
-    .observe({ id: logicalId, fqn, instanceId, news: node.props, previous })
+    .observe({ id: logicalId, fqn, instanceId, news, previous })
     .pipe(instrumentLifecycle("observe", fqn, node.resource.Type, logicalId, instanceId));
   if (observed === Unresolved) return "unresolved" as const;
   if (observed !== undefined && Unowned.is(observed) && !node.deferredAdoption.adopt) {
@@ -561,7 +562,7 @@ const executePlan = Effect.fn(function* (
             stage,
             (fqns) => waitForDeps(fqn, fqns),
             failures,
-            plan.cycleMembers.has(fqn),
+            plan.cycleMembers,
           ),
     { concurrency: "unbounded" },
   );
@@ -643,9 +644,10 @@ const executeNode = (
   stage: string,
   waitForDeps: (fqns: string[]) => Effect.Effect<void[], never, never>,
   failures: LifecycleFailure[],
-  inCycle: boolean,
+  cycleMembers: ReadonlySet<string>,
 ): Effect.Effect<void, never, never> =>
   Effect.gen(function* () {
+    const inCycle = cycleMembers.has(fqn);
     const logicalId = node.resource.LogicalId;
     const namespace = node.resource.Namespace;
 
@@ -821,6 +823,23 @@ const executeNode = (
       return [...new Set([...propDeps, ...bindingDeps])];
     };
 
+    // A cycle precreates before its peers reconcile. An upstream outside the
+    // cycle cannot depend on it, so wait for those upstreams and resolve the
+    // props they determine: only values derived from cycle peers stay
+    // unresolved when precreate and `observe` run.
+    const resolvePrecreateProps = Effect.gen(function* () {
+      const outside = allUpstreamFqns().filter((upstream) => !cycleMembers.has(upstream));
+      yield* waitForDeps(outside);
+      return yield* Output.evaluateAvailable(
+        node.props,
+        Object.fromEntries(
+          outside
+            .filter((upstream) => Object.hasOwn(outputs, upstream))
+            .map((upstream) => [upstream, outputs[upstream]]),
+        ),
+      );
+    });
+
     // ── instance ID ──
 
     const resolveInstanceId = Effect.gen(function* () {
@@ -917,9 +936,10 @@ const executeNode = (
       // Durable Object classes are empty) can serve traffic while the real
       // version propagates.
       if (inCycle && node.provider.precreate && attr === undefined) {
+        const props = yield* resolvePrecreateProps;
         // Without `observe`, precreate and reconcile claim the identity unchecked.
         admitted =
-          (yield* observeBeforePrecreate(node, fqn, logicalId, instanceId)) !== "unresolved";
+          (yield* observeBeforePrecreate(node, props, fqn, logicalId, instanceId)) !== "unresolved";
         // Some resources need a placeholder physical resource before their real
         // create can finish. Persist that stub so downstream evaluation can proceed.
         yield* report("pre-creating");
@@ -927,7 +947,7 @@ const executeNode = (
           .precreate({
             id: logicalId,
             fqn,
-            news: node.props,
+            news: props,
             session: scopedSession,
             instanceId,
             bindings: excludeDeletedBindings(node.bindings),
@@ -1335,8 +1355,12 @@ const executeNode = (
         if (!node.deleteFirst) attr ??= stripUnowned(observed);
       });
 
-      if (!admitted && isResolved(node.props)) {
-        yield* admit(node.props);
+      // A cycle precreates on the props its upstreams outside the cycle
+      // determine; anything else waits for every upstream.
+      const precreateProps = inCycle ? yield* resolvePrecreateProps : node.props;
+
+      if (!admitted && isResolved(precreateProps)) {
+        yield* admit(precreateProps);
       }
 
       // A cycle precreates before its props resolve, so `observe` admits the
@@ -1346,6 +1370,7 @@ const executeNode = (
       if (!admitted && inCycle) {
         const observation = yield* observeBeforePrecreate(
           node,
+          precreateProps,
           fqn,
           logicalId,
           instanceId,
@@ -1389,7 +1414,7 @@ const executeNode = (
           .precreate({
             id: logicalId,
             fqn,
-            news: node.props,
+            news: precreateProps,
             session: scopedSession,
             instanceId,
             bindings: excludeDeletedBindings(node.bindings),
@@ -1789,6 +1814,32 @@ const converge = Effect.fn(function* (
             kind: options?.kind,
           }),
       } satisfies ScopedPlanStatusSession;
+
+      // A cycle peer resolves against its peers' first outputs, so an
+      // identity checked then may resolve differently now. Check the identity
+      // these props resolve to before reconcile claims it.
+      const deferredAdoption = "deferredAdoption" in node ? node.deferredAdoption : undefined;
+      if (propsChanged && deferredAdoption !== undefined) {
+        const observed = yield* observeResolved(
+          node,
+          newProps,
+          fqn,
+          logicalId,
+          instanceId,
+          tracker[fqn].output,
+        );
+        if (observed !== undefined && Unowned.is(observed) && !deferredAdoption.adopt) {
+          return yield* new OwnedBySomeoneElse({
+            message:
+              `Cannot converge resource '${fqn}' (${node.resource.Type}): ` +
+              "its final identity exists in the cloud but is not owned by this " +
+              "stack/stage/logical-id. Re-run with `--adopt` (or " +
+              "wrap the effect in `adopt(true)`) to take it over.",
+            resourceType: node.resource.Type,
+            logicalId,
+          });
+        }
+      }
 
       const attr = yield* node.provider
         .reconcile({

@@ -10,9 +10,11 @@ import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
+import { plainJson } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { attributeDelta, observedAttributes } from "./common.ts";
+import { readElbTags } from "./internal.ts";
 
 export type TargetGroupName = string;
 export type TargetGroupArn =
@@ -90,6 +92,11 @@ export interface TargetGroup extends Resource<
      * attributes are left out so AWS defaults never register as drift.
      */
     attributes?: Record<string, string>;
+    /**
+     * The health-check settings the props declare, as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    healthCheck?: Partial<HealthCheckSettings>;
   },
   never,
   Providers
@@ -146,6 +153,46 @@ export interface TargetGroup extends Resource<
  * @resource
  */
 export const TargetGroup = Resource<TargetGroup>("AWS.ELBv2.TargetGroup");
+
+type HealthCheckSettings = Pick<
+  elbv2.TargetGroup,
+  | "HealthCheckPath"
+  | "HealthCheckPort"
+  | "HealthCheckProtocol"
+  | "HealthCheckEnabled"
+  | "HealthCheckIntervalSeconds"
+  | "HealthCheckTimeoutSeconds"
+  | "HealthyThresholdCount"
+  | "UnhealthyThresholdCount"
+  | "Matcher"
+>;
+
+/**
+ * The health-check settings reconcile converges (those the props declare),
+ * taken from `settings`. `read` and `reconcile` share it so a converged
+ * target group reads unchanged.
+ */
+const observeHealthCheck = (
+  settings: HealthCheckSettings,
+  props: TargetGroupProps | undefined,
+): Partial<HealthCheckSettings> =>
+  plainJson({
+    HealthCheckPath: props?.healthCheckPath === undefined ? undefined : settings.HealthCheckPath,
+    HealthCheckPort: props?.healthCheckPort === undefined ? undefined : settings.HealthCheckPort,
+    HealthCheckProtocol:
+      props?.healthCheckProtocol === undefined ? undefined : settings.HealthCheckProtocol,
+    HealthCheckEnabled:
+      props?.healthCheckEnabled === undefined ? undefined : settings.HealthCheckEnabled,
+    HealthCheckIntervalSeconds:
+      props?.healthCheckInterval === undefined ? undefined : settings.HealthCheckIntervalSeconds,
+    HealthCheckTimeoutSeconds:
+      props?.healthCheckTimeout === undefined ? undefined : settings.HealthCheckTimeoutSeconds,
+    HealthyThresholdCount:
+      props?.healthyThresholdCount === undefined ? undefined : settings.HealthyThresholdCount,
+    UnhealthyThresholdCount:
+      props?.unhealthyThresholdCount === undefined ? undefined : settings.UnhealthyThresholdCount,
+    Matcher: props?.matcher === undefined ? undefined : settings.Matcher,
+  });
 
 export const TargetGroupProvider = () =>
   Provider.effect(
@@ -218,13 +265,21 @@ export const TargetGroupProvider = () =>
           if (attributes === null) {
             return undefined;
           }
+          const tags = yield* readElbTags(output.targetGroupArn).pipe(
+            Effect.catchTag("TargetGroupNotFoundException", () => Effect.undefined),
+          );
+          if (tags === undefined) {
+            return undefined;
+          }
           return {
             ...output,
             port: targetGroup.Port,
             protocol: targetGroup.Protocol,
             targetType: targetGroup.TargetType!,
             vpcId: targetGroup.VpcId,
+            tags,
             attributes,
+            healthCheck: observeHealthCheck(targetGroup, olds),
           };
         }),
         // Target groups are account/region-scoped. Exhaustively paginate
@@ -407,6 +462,7 @@ export const TargetGroupProvider = () =>
             vpcId: targetGroup.VpcId,
             tags: desiredTags,
             attributes,
+            healthCheck: observeHealthCheck(desiredHc, news),
           };
         }),
         delete: Effect.fn(function* ({ output }) {

@@ -3,7 +3,7 @@ import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { repositoryFromImageRef } from "@alchemy.run/docker/Registry";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
+import { Unowned, Unresolved, UnresolvedIdentity } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { deepEqual, isResolved } from "alchemy/Diff";
@@ -48,7 +48,7 @@ import {
 } from "./ContainerConfiguration.ts";
 import { waitForContainerImage } from "./ContainerImagePreparation.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
-import { retryContainerPublication } from "./ContainerPublication.ts";
+import { retryContainerBuild, retryContainerPublication } from "./ContainerPublication.ts";
 import { retryNamespacePropagation } from "./DurableObjectApplication.ts";
 
 export class ContainerProviderConflict extends Data.TaggedError("ContainerProviderConflict")<{
@@ -89,6 +89,8 @@ type ImageBuild =
       readonly kind: "external";
       readonly context: string;
       readonly dockerfile: string;
+      readonly buildArgs?: Record<string, string>;
+      readonly buildSecrets?: Record<string, Redacted.Redacted<string>>;
     }
   | {
       readonly kind: "remote";
@@ -409,7 +411,7 @@ export const LiveContainerProvider = () =>
         const makeRef = (imageHash: string) =>
           `${registryId}/${accountId}/${repositoryName}:${imageHash}`;
 
-        yield* validateContainerImageProps(props);
+        yield* validateContainerImageProps(id, props);
 
         // Preserve serialized imageName keys so existing publication hashes remain valid.
         // Variant 1 — Effect-native program. Bundle `main` and build a
@@ -506,16 +508,26 @@ export const LiveContainerProvider = () =>
           const { context, dockerfile } = yield* materializeInlineDockerfileContext(id, content);
           const imageHash = (yield* sha256Object({
             dockerfile: content,
+            // Absent rather than `{}` when unset, so existing hashes hold.
+            buildArgs: props.build?.args,
             imageName: props.publish?.repository?.toLowerCase(),
           })).slice(0, 16);
           return {
-            build: { kind: "external" as const, context, dockerfile },
+            build: {
+              kind: "external" as const,
+              context,
+              dockerfile,
+              buildArgs: props.build?.args,
+              buildSecrets: props.build?.secrets,
+            },
             imageRef: makeRef(imageHash),
             imageHash,
             // The local runtime builds the same materialized context.
             dev: {
               context: path.relative(process.cwd(), context),
               dockerfile: "Dockerfile",
+              buildArgs: props.build?.args,
+              buildSecrets: props.build?.secrets,
               env,
             },
           };
@@ -530,7 +542,7 @@ export const LiveContainerProvider = () =>
         // Hash what Docker can consume, including gitignored files and file
         // modes, but excluding ancestor lockfiles outside the build context.
         const contextHash = yield* hashDockerBuildInputs(
-          { context, dockerfile, platform: publicationPlatform },
+          { context, dockerfile, platform: publicationPlatform, buildArgs: props.build?.args },
           "effective",
         );
         const imageHash = (yield* sha256Object({
@@ -538,7 +550,13 @@ export const LiveContainerProvider = () =>
           imageName: props.publish?.repository?.toLowerCase(),
         })).slice(0, 16);
         return {
-          build: { kind: "external" as const, context, dockerfile },
+          build: {
+            kind: "external" as const,
+            context,
+            dockerfile,
+            buildArgs: props.build?.args,
+            buildSecrets: props.build?.secrets,
+          },
           imageRef: makeRef(imageHash),
           imageHash,
           // The local runtime builds the user's Dockerfile against the same
@@ -546,6 +564,8 @@ export const LiveContainerProvider = () =>
           dev: {
             context: path.relative(process.cwd(), context),
             dockerfile: path.relative(context, dockerfile),
+            buildArgs: props.build?.args,
+            buildSecrets: props.build?.secrets,
             env,
           },
         };
@@ -627,11 +647,13 @@ export const LiveContainerProvider = () =>
                 context: build.context,
                 platform,
                 file: build.dockerfile,
+                "build-arg": build.buildArgs,
+                secrets: build.buildSecrets,
               },
               session,
               credentials,
             )
-            .pipe(retryContainerPublication);
+            .pipe(retryContainerBuild);
         } else {
           // Effect-native program: materialize the generated Dockerfile and
           // bundled chunks into a stable staging dir, then build.
@@ -670,7 +692,7 @@ export const LiveContainerProvider = () =>
               session,
               credentials,
             )
-            .pipe(retryContainerPublication);
+            .pipe(retryContainerBuild);
         }
 
         // Resolve the pushed manifest digest from the registry itself rather
@@ -1315,6 +1337,16 @@ export const LiveContainerProvider = () =>
             : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news = {}, session }) {
+          if (!isResolved(nameOf(news))) {
+            return yield* new UnresolvedIdentity({
+              message:
+                `Container(${id}): its name depends on a resource in this ` +
+                "Container's dependency cycle, so precreate cannot name the application. " +
+                "Use a literal name, or one from outside the cycle.",
+              resourceType: "Cloudflare.Container",
+              logicalId: id,
+            });
+          }
           yield* validateContainerConfiguration(news);
           const name = yield* createApplicationName(id, nameOf(news));
           yield* Effect.logInfo(`Cloudflare Container precreate: starting ${name}`);
