@@ -16,13 +16,10 @@
     }
   },
   "probes": {
-    "resources": {
-      "Document": "ProbeDocument"
-    },
-    "untestable": {},
-    "enable": [
-      "contentwarehouse.googleapis.com"
-    ]
+    "resources": {},
+    "untestable": {
+      "*": "Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)"
+    }
   },
   "permissions": {
     "contentwarehouse.projects.fetchAcl": "contentwarehouse.documents.getIamPolicy",

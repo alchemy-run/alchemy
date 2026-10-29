@@ -51,19 +51,8 @@ describe.skipIf(!!process.env.FAST)(
     beforeAll(
       Effect.gen(function* () {
         yield* sharedStack.destroy();
-        // The APIs first: the probe resources need them enabled to deploy.
-        yield* sharedStack.deploy(
-          Effect.gen(function* () {
-            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
-              service: "contentwarehouse.googleapis.com",
-            });
-          }),
-        );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
-            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
-              service: "contentwarehouse.googleapis.com",
-            });
             const host = yield* ContentWarehouseGeneratedHost;
             return { uri: host.uri };
           }),
@@ -76,112 +65,60 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Document", { concurrent: true }, () => {
-      test.provider(
-        "CreateDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.create)",
-        () => probe("CreateDocumentLink", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "CreateDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.create): Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)",
+        () => Effect.void,
       );
-      test.provider(
-        "DeleteDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.delete)",
-        () => probe("DeleteDocumentLink", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DeleteDocumentLink (contentwarehouse.projects.locations.documents.documentLinks.delete): Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)",
+        () => Effect.void,
       );
-      test.provider(
-        "FetchDocumentAcl (contentwarehouse.projects.locations.documents.fetchAcl)",
-        () => probe("FetchDocumentAcl", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "FetchDocumentAcl (contentwarehouse.projects.locations.documents.fetchAcl): Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)",
+        () => Effect.void,
       );
-      test.provider(
-        "LinkedDocumentSources (contentwarehouse.projects.locations.documents.linkedSources)",
-        () => probe("LinkedDocumentSources", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "LinkedDocumentSources (contentwarehouse.projects.locations.documents.linkedSources): Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)",
+        () => Effect.void,
       );
-      test.provider(
-        "LinkedDocumentTargets (contentwarehouse.projects.locations.documents.linkedTargets)",
-        () => probe("LinkedDocumentTargets", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "LinkedDocumentTargets (contentwarehouse.projects.locations.documents.linkedTargets): Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)",
+        () => Effect.void,
       );
-      test.provider(
-        "LockDocument (contentwarehouse.projects.locations.documents.lock)",
-        () => probe("LockDocument", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "LockDocument (contentwarehouse.projects.locations.documents.lock): Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)",
+        () => Effect.void,
       );
-      test.provider(
-        "SetDocumentAcl (contentwarehouse.projects.locations.documents.setAcl)",
-        () => probe("SetDocumentAcl", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "SetDocumentAcl (contentwarehouse.projects.locations.documents.setAcl): Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)",
+        () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider(
-        "FetchProjectAcl (contentwarehouse.projects.fetchAcl)",
-        () => probe("FetchProjectAcl", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "FetchProjectAcl (contentwarehouse.projects.fetchAcl): Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)",
+        () => Effect.void,
       );
-      test.provider(
-        "ListDocumentSchemas (contentwarehouse.projects.locations.documentSchemas.list)",
-        () => probe("ListDocumentSchemas", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListDocumentSchemas (contentwarehouse.projects.locations.documentSchemas.list): Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)",
+        () => Effect.void,
       );
-      test.provider(
-        "ListRuleSets (contentwarehouse.projects.locations.ruleSets.list)",
-        () => probe("ListRuleSets", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListRuleSets (contentwarehouse.projects.locations.ruleSets.list): Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)",
+        () => Effect.void,
       );
-      test.provider(
-        "ListSynonymSets (contentwarehouse.projects.locations.synonymSets.list)",
-        () => probe("ListSynonymSets", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListSynonymSets (contentwarehouse.projects.locations.synonymSets.list): Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)",
+        () => Effect.void,
       );
-      test.provider(
-        "SearchDocument (contentwarehouse.projects.locations.documents.search)",
-        () => probe("SearchDocument", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "SearchDocument (contentwarehouse.projects.locations.documents.search): Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)",
+        () => Effect.void,
       );
-      test.provider(
-        "SetProjectAcl (contentwarehouse.projects.setAcl)",
-        () => probe("SetProjectAcl", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:contentwarehouse", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "SetProjectAcl (contentwarehouse.projects.setAcl): Document AI Warehouse is being retired: its endpoint answers every request with an HTML 502 (observed 2026-10-29)",
+        () => Effect.void,
       );
     });
 
