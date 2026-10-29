@@ -563,13 +563,6 @@ env: {
 
 Leave out `entrypoint` to target the default export.
 
-:::caution
-`alchemy dev` delivers `props` to the local workerd today. On deployed
-Workers the Cloudflare API's binding schema does not carry the field
-yet, so `props` are dropped at upload. The binding itself deploys
-correctly either way.
-:::
-
 ## Configure the Worker
 
 Compatibility flags and the compatibility date go on `compatibility`.

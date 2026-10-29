@@ -148,10 +148,8 @@ export type K2WorkerBinding = Extract<DistilledWorkerBinding, { type: "k2" }>;
 /**
  * The `service` metadata binding extended with workerd's `ctx.props`.
  * `props` is what a `Cloudflare.WorkerEntrypoint(worker, { props })` env
- * entry lowers to; the local runtime delivers it to the target entrypoint.
- * The Cloudflare API's binding schema does not carry the field yet, so on
- * live uploads it is dropped at encode until the distilled `workers`
- * service adds it.
+ * entry lowers to. The upload sends it with its keys as written, and both
+ * the local runtime and Cloudflare deliver it to the target entrypoint.
  */
 export type ServiceWorkerBinding = Extract<DistilledWorkerBinding, { type: "service" }> & {
   props?: Record<string, unknown>;

@@ -1723,10 +1723,8 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * **Example:** Entrypoint props
  *
  * The options form attaches properties the target entrypoint reads from
- * `this.ctx.props`. `Output` values resolve at deploy time. `alchemy dev`
- * delivers `props` to the local workerd; the deploy API's binding schema
- * does not carry the field yet, so `props` are dropped at upload while the
- * binding itself deploys correctly.
+ * `this.ctx.props`. `Output` values resolve at deploy time, and both
+ * `alchemy dev` and deployed Workers deliver them with their keys as written.
  * ```typescript
  * env: {
  *   VENDOR: Cloudflare.WorkerEntrypoint(vendorWorker, {

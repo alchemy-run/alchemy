@@ -25,7 +25,7 @@ export const Caller = (target: Cloudflare.Worker) =>
     env: {
       API: Cloudflare.WorkerEntrypoint<Api>(target, {
         entrypoint: "Api",
-        props: { tenant: "acme" },
+        props: { tenant: "acme", className: "Acme" },
       }),
     },
   });
