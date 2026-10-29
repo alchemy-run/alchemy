@@ -1,4 +1,5 @@
 import * as GCP from "@alchemy.run/gcp";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 
 /** DiscoveryEngine resources the generated bindings bind, mirroring each resource suite's smallest shape. */
@@ -178,10 +179,24 @@ export const ProbeLocControl = Effect.gen(function* () {
     synonymsAction: { synonyms: ["hello", "hi"] },
   });
 });
+/** A serving config needs an engine over its data store. */
+const ProbeLocEngine = Effect.gen(function* () {
+  const store = yield* ProbeDataStore;
+  return yield* GCP.DiscoveryEngine.CollectionsEngine("ProbeLocEngine", {
+    location: "global",
+    dataStoreIds: [store.dataStoreId],
+    displayName: "probe docs engine",
+    solutionType: "SOLUTION_TYPE_SEARCH",
+    industryVertical: "GENERIC",
+  });
+});
 export const ProbeLocServing = Effect.gen(function* () {
   const store = yield* ProbeDataStore;
+  const engine = yield* ProbeLocEngine;
   return yield* GCP.DiscoveryEngine.DataStoresServingConfig("ProbeLocServing", {
-    dataStore: store.name,
+    // through the engine, so the config is created once the store has one
+    dataStore: Output.all(store.name, engine.name).pipe(Output.map(([name]) => name)),
     displayName: "preview",
+    solutionType: "SOLUTION_TYPE_SEARCH",
   });
 });

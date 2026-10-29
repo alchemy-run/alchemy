@@ -83,6 +83,7 @@
       "AgentsToolsVersion": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
       "AgentsTransitionRouteGroup": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
       "AgentsWebhook": "Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent"
-    }
+    },
+    "location": "global"
   }
 }
