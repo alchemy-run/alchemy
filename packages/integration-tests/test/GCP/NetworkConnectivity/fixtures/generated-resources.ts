@@ -35,3 +35,26 @@ export const ProbePolicyRoute = GCP.NetworkConnectivity.PolicyBasedRoute("ProbeP
   nextHopOtherRoutes: "DEFAULT_ROUTING",
   virtualMachine: { tags: ["alchemy-probe-pbr"] },
 });
+
+const SpokeVpc = GCP.Compute.Network("ProbeSpokeVpc", { autoCreateSubnetworks: false });
+export const ProbeSpoke = Effect.gen(function* () {
+  const network = yield* SpokeVpc;
+  const hub = yield* ProbeHub;
+  return yield* GCP.NetworkConnectivity.Spoke("ProbeSpoke", {
+    hub: hub.name,
+    linkedVpcNetwork: { uri: network.selfLink.as<string>() },
+  });
+});
+export const ProbeConnectionPolicy = Effect.gen(function* () {
+  const network = yield* SpokeVpc;
+  const subnet = yield* GCP.Compute.Subnetwork("ProbeScpSubnet", {
+    network: network.networkName,
+    ipCidrRange: "10.22.9.0/24",
+    privateIpGoogleAccess: true,
+  });
+  return yield* GCP.NetworkConnectivity.ServiceConnectionPolicy("ProbeConnectionPolicy", {
+    serviceClass: "gcp-memorystore-redis",
+    network: network.selfLink.as<string>(),
+    pscConfig: { subnetworks: [subnet.selfLink.as<string>()] },
+  });
+});

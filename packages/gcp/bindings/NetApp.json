@@ -42,7 +42,8 @@
       "BackupPolicy": "ProbeBackupPolicy",
       "BackupVault": "ProbeBackupVault",
       "HostGroup": "ProbeHostGroup",
-      "StoragePool": "ProbeStoragePool"
+      "StoragePool": "ProbeStoragePool",
+      "KmsConfig": "ProbeKmsConfig"
     },
     "untestable": {
       "BackupVaultsBackup": "Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service\u2026 (GCP_TEST_NETAPP_VOLUMES)",

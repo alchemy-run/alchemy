@@ -5,10 +5,12 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
 import {
+  ProbeConnectionPolicy,
   ProbeHub,
   ProbeInternalRange,
   ProbeMulticloudDataTransferConfig,
   ProbePolicyRoute,
+  ProbeSpoke,
 } from "./generated-resources.ts";
 
 /**
@@ -39,29 +41,32 @@ export default class NetworkConnectivityGeneratedHost extends GCP.Function<Netwo
     const p13 = yield* GCP.NetworkConnectivity.GetPscAuthorizationPolicy();
     const p14 = yield* GCP.NetworkConnectivity.GetRemoteTransportProfile();
     const p15 = yield* GCP.NetworkConnectivity.GetServiceClass();
-    const p16 = yield* GCP.NetworkConnectivity.ListHubGroups(ProbeHub);
-    const p17 = yield* GCP.NetworkConnectivity.ListHubRouteTableRoutes(ProbeHub);
-    const p18 = yield* GCP.NetworkConnectivity.ListHubRouteTables(ProbeHub);
-    const p19 = yield* GCP.NetworkConnectivity.ListHubSpokes(ProbeHub);
-    const p20 = yield* GCP.NetworkConnectivity.ListInternalRanges();
-    const p21 = yield* GCP.NetworkConnectivity.ListMulticloudDataTransferConfigDestinations(
+    const p16 = yield* GCP.NetworkConnectivity.GetServiceConnectionPolicy(ProbeConnectionPolicy);
+    const p17 = yield* GCP.NetworkConnectivity.GetSpoke(ProbeSpoke);
+    const p18 = yield* GCP.NetworkConnectivity.ListHubGroups(ProbeHub);
+    const p19 = yield* GCP.NetworkConnectivity.ListHubRouteTableRoutes(ProbeHub);
+    const p20 = yield* GCP.NetworkConnectivity.ListHubRouteTables(ProbeHub);
+    const p21 = yield* GCP.NetworkConnectivity.ListHubSpokes(ProbeHub);
+    const p22 = yield* GCP.NetworkConnectivity.ListInternalRanges();
+    const p23 = yield* GCP.NetworkConnectivity.ListMulticloudDataTransferConfigDestinations(
       ProbeMulticloudDataTransferConfig,
     );
-    const p22 = yield* GCP.NetworkConnectivity.ListMulticloudDataTransferConfigs();
-    const p23 = yield* GCP.NetworkConnectivity.ListMulticloudDataTransferSupportedServices();
-    const p24 = yield* GCP.NetworkConnectivity.ListPscAuthorizationPolicies();
-    const p25 = yield* GCP.NetworkConnectivity.ListRegionalEndpoints();
-    const p26 = yield* GCP.NetworkConnectivity.ListRemoteTransportProfiles();
-    const p27 = yield* GCP.NetworkConnectivity.ListServiceClasses();
-    const p28 = yield* GCP.NetworkConnectivity.ListServiceConnectionMaps();
-    const p29 = yield* GCP.NetworkConnectivity.ListServiceConnectionPolicies();
-    const p30 = yield* GCP.NetworkConnectivity.ListSpokes();
-    const p31 = yield* GCP.NetworkConnectivity.ListTransports();
-    const p32 = yield* GCP.NetworkConnectivity.PatchHubGroup(ProbeHub);
-    const p33 = yield* GCP.NetworkConnectivity.PatchServiceClass();
-    const p34 = yield* GCP.NetworkConnectivity.QueryHubStatus(ProbeHub);
-    const p35 = yield* GCP.NetworkConnectivity.RejectHubSpoke(ProbeHub);
-    const p36 = yield* GCP.NetworkConnectivity.RejectHubSpokeUpdate(ProbeHub);
+    const p24 = yield* GCP.NetworkConnectivity.ListMulticloudDataTransferConfigs();
+    const p25 = yield* GCP.NetworkConnectivity.ListMulticloudDataTransferSupportedServices();
+    const p26 = yield* GCP.NetworkConnectivity.ListPscAuthorizationPolicies();
+    const p27 = yield* GCP.NetworkConnectivity.ListRegionalEndpoints();
+    const p28 = yield* GCP.NetworkConnectivity.ListRemoteTransportProfiles();
+    const p29 = yield* GCP.NetworkConnectivity.ListServiceClasses();
+    const p30 = yield* GCP.NetworkConnectivity.ListServiceConnectionMaps();
+    const p31 = yield* GCP.NetworkConnectivity.ListServiceConnectionPolicies();
+    const p32 = yield* GCP.NetworkConnectivity.ListSpokeGatewayAdvertisedRoutes(ProbeSpoke);
+    const p33 = yield* GCP.NetworkConnectivity.ListSpokes();
+    const p34 = yield* GCP.NetworkConnectivity.ListTransports();
+    const p35 = yield* GCP.NetworkConnectivity.PatchHubGroup(ProbeHub);
+    const p36 = yield* GCP.NetworkConnectivity.PatchServiceClass();
+    const p37 = yield* GCP.NetworkConnectivity.QueryHubStatus(ProbeHub);
+    const p38 = yield* GCP.NetworkConnectivity.RejectHubSpoke(ProbeHub);
+    const p39 = yield* GCP.NetworkConnectivity.RejectHubSpokeUpdate(ProbeHub);
     return {
       fetch: serveProbes({
         AcceptHubSpoke: outcome(Retry.none(p0({} as never))),
@@ -109,39 +114,42 @@ export default class NetworkConnectivityGeneratedHost extends GCP.Function<Netwo
         GetServiceClass: outcome(
           Retry.none(p15({ serviceClass: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ListHubGroups: outcome(Retry.none(p16({} as never))),
+        GetServiceConnectionPolicy: outcome(Retry.none(p16({} as never))),
+        GetSpoke: outcome(Retry.none(p17({} as never))),
+        ListHubGroups: outcome(Retry.none(p18({} as never))),
         ListHubRouteTableRoutes: outcome(
-          Retry.none(p17({ routeTable: "alchemy-missing" } as never)),
+          Retry.none(p19({ routeTable: "alchemy-missing" } as never)),
         ),
-        ListHubRouteTables: outcome(Retry.none(p18({} as never))),
-        ListHubSpokes: outcome(Retry.none(p19({} as never))),
-        ListInternalRanges: outcome(Retry.none(p20({ location: "us-central1" } as never))),
-        ListMulticloudDataTransferConfigDestinations: outcome(Retry.none(p21({} as never))),
+        ListHubRouteTables: outcome(Retry.none(p20({} as never))),
+        ListHubSpokes: outcome(Retry.none(p21({} as never))),
+        ListInternalRanges: outcome(Retry.none(p22({ location: "us-central1" } as never))),
+        ListMulticloudDataTransferConfigDestinations: outcome(Retry.none(p23({} as never))),
         ListMulticloudDataTransferConfigs: outcome(
-          Retry.none(p22({ location: "us-central1" } as never)),
-        ),
-        ListMulticloudDataTransferSupportedServices: outcome(
-          Retry.none(p23({ location: "us-central1" } as never)),
-        ),
-        ListPscAuthorizationPolicies: outcome(
           Retry.none(p24({ location: "us-central1" } as never)),
         ),
-        ListRegionalEndpoints: outcome(Retry.none(p25({ location: "us-central1" } as never))),
-        ListRemoteTransportProfiles: outcome(Retry.none(p26({ location: "us-central1" } as never))),
-        ListServiceClasses: outcome(Retry.none(p27({ location: "us-central1" } as never))),
-        ListServiceConnectionMaps: outcome(Retry.none(p28({ location: "us-central1" } as never))),
+        ListMulticloudDataTransferSupportedServices: outcome(
+          Retry.none(p25({ location: "us-central1" } as never)),
+        ),
+        ListPscAuthorizationPolicies: outcome(
+          Retry.none(p26({ location: "us-central1" } as never)),
+        ),
+        ListRegionalEndpoints: outcome(Retry.none(p27({ location: "us-central1" } as never))),
+        ListRemoteTransportProfiles: outcome(Retry.none(p28({ location: "us-central1" } as never))),
+        ListServiceClasses: outcome(Retry.none(p29({ location: "us-central1" } as never))),
+        ListServiceConnectionMaps: outcome(Retry.none(p30({ location: "us-central1" } as never))),
         ListServiceConnectionPolicies: outcome(
-          Retry.none(p29({ location: "us-central1" } as never)),
+          Retry.none(p31({ location: "us-central1" } as never)),
         ),
-        ListSpokes: outcome(Retry.none(p30({ location: "us-central1" } as never))),
-        ListTransports: outcome(Retry.none(p31({ location: "us-central1" } as never))),
-        PatchHubGroup: outcome(Retry.none(p32({ group: "alchemy-missing" } as never))),
+        ListSpokeGatewayAdvertisedRoutes: outcome(Retry.none(p32({} as never))),
+        ListSpokes: outcome(Retry.none(p33({ location: "us-central1" } as never))),
+        ListTransports: outcome(Retry.none(p34({ location: "us-central1" } as never))),
+        PatchHubGroup: outcome(Retry.none(p35({ group: "alchemy-missing" } as never))),
         PatchServiceClass: outcome(
-          Retry.none(p33({ serviceClass: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p36({ serviceClass: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        QueryHubStatus: outcome(Retry.none(p34({} as never))),
-        RejectHubSpoke: outcome(Retry.none(p35({} as never))),
-        RejectHubSpokeUpdate: outcome(Retry.none(p36({} as never))),
+        QueryHubStatus: outcome(Retry.none(p37({} as never))),
+        RejectHubSpoke: outcome(Retry.none(p38({} as never))),
+        RejectHubSpokeUpdate: outcome(Retry.none(p39({} as never))),
       }),
     };
   }).pipe(
@@ -164,6 +172,8 @@ export default class NetworkConnectivityGeneratedHost extends GCP.Function<Netwo
           GCP.NetworkConnectivity.GetPscAuthorizationPolicyHttp,
           GCP.NetworkConnectivity.GetRemoteTransportProfileHttp,
           GCP.NetworkConnectivity.GetServiceClassHttp,
+          GCP.NetworkConnectivity.GetServiceConnectionPolicyHttp,
+          GCP.NetworkConnectivity.GetSpokeHttp,
           GCP.NetworkConnectivity.ListHubGroupsHttp,
           GCP.NetworkConnectivity.ListHubRouteTableRoutesHttp,
           GCP.NetworkConnectivity.ListHubRouteTablesHttp,
@@ -178,6 +188,7 @@ export default class NetworkConnectivityGeneratedHost extends GCP.Function<Netwo
           GCP.NetworkConnectivity.ListServiceClassesHttp,
           GCP.NetworkConnectivity.ListServiceConnectionMapsHttp,
           GCP.NetworkConnectivity.ListServiceConnectionPoliciesHttp,
+          GCP.NetworkConnectivity.ListSpokeGatewayAdvertisedRoutesHttp,
           GCP.NetworkConnectivity.ListSpokesHttp,
           GCP.NetworkConnectivity.ListTransportsHttp,
           GCP.NetworkConnectivity.PatchHubGroupHttp,

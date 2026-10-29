@@ -1,4 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
+import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import * as Effect from "effect/Effect";
 
 /** NetApp resources the generated bindings bind, mirroring each resource suite's smallest shape. */
 
@@ -29,4 +31,12 @@ export const ProbeStoragePool = GCP.NetApp.StoragePool("ProbeStoragePool", {
   serviceLevel: "STANDARD",
   capacityGib: 2048,
   description: "alchemy-test-pool",
+});
+
+/** CMEK through the testing project's standing key (the one NetApp's own suite uses). */
+export const ProbeKmsConfig = Effect.gen(function* () {
+  const { project } = yield* GcpEnvironment.current;
+  return yield* GCP.NetApp.KmsConfig("ProbeKmsConfig", {
+    cryptoKeyName: `projects/${project}/locations/us-central1/keyRings/alchemy-test-keyring/cryptoKeys/alchemy-test-cryptokey-enc`,
+  });
 });

@@ -397,20 +397,32 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ServiceConnectionPolicy", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetServiceConnectionPolicy (networkconnectivity.projects.locations.serviceConnectionPolicies.get): ServiceConnectionPolicy: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetServiceConnectionPolicy (networkconnectivity.projects.locations.serviceConnectionPolicies.get)",
+        () => probe("GetServiceConnectionPolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("Spoke", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetSpoke (networkconnectivity.projects.locations.spokes.get): Spoke: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetSpoke (networkconnectivity.projects.locations.spokes.get)",
+        () => probe("GetSpoke", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListSpokeGatewayAdvertisedRoutes (networkconnectivity.projects.locations.spokes.gatewayAdvertisedRoutes.list): Spoke: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListSpokeGatewayAdvertisedRoutes (networkconnectivity.projects.locations.spokes.gatewayAdvertisedRoutes.list)",
+        () => probe("ListSpokeGatewayAdvertisedRoutes", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

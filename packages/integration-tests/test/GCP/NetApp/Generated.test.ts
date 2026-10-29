@@ -124,17 +124,29 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("KmsConfig", { concurrent: true }, () => {
-      test.provider.todo(
-        "EncryptKmsConfig (netapp.projects.locations.kmsConfigs.encrypt): KmsConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "EncryptKmsConfig (netapp.projects.locations.kmsConfigs.encrypt)",
+        () => probe("EncryptKmsConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetKmsConfig (netapp.projects.locations.kmsConfigs.get): KmsConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetKmsConfig (netapp.projects.locations.kmsConfigs.get)",
+        () => probe("GetKmsConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "VerifyKmsConfig (netapp.projects.locations.kmsConfigs.verify): KmsConfig: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "VerifyKmsConfig (netapp.projects.locations.kmsConfigs.verify)",
+        () => probe("VerifyKmsConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

@@ -154,21 +154,37 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("LocationsDlpJob", { concurrent: true }, () => {
-      test.provider.todo(
-        "CancelDlpJob@LocationsDlpJob (dlp.projects.locations.dlpJobs.cancel): LocationsDlpJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "CancelDlpJob@LocationsDlpJob (dlp.projects.locations.dlpJobs.cancel)",
+        () => probe("CancelDlpJob@LocationsDlpJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "FinishDlpJob (dlp.projects.locations.dlpJobs.finish): LocationsDlpJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "FinishDlpJob (dlp.projects.locations.dlpJobs.finish)",
+        () => probe("FinishDlpJob", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetDlpJob@LocationsDlpJob (dlp.projects.locations.dlpJobs.get): LocationsDlpJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetDlpJob@LocationsDlpJob (dlp.projects.locations.dlpJobs.get)",
+        () => probe("GetDlpJob@LocationsDlpJob", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "HybridDlpJobInspect (dlp.projects.locations.dlpJobs.hybridInspect): LocationsDlpJob: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "HybridDlpJobInspect (dlp.projects.locations.dlpJobs.hybridInspect)",
+        () => probe("HybridDlpJobInspect", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dlp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

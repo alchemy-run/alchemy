@@ -94,3 +94,10 @@ export const ProbeLocTrigger = GCP.DLP.LocationsJobTrigger("ProbeLocTrigger", {
   },
   triggers: [{ manual: {} }],
 });
+export const ProbeLocDlpJob = GCP.DLP.LocationsDlpJob("ProbeLocDlpJob", {
+  location: "global",
+  inspectJob: {
+    inspectConfig: { infoTypes: [{ name: "EMAIL_ADDRESS" }], includeQuote: true },
+    storageConfig: { hybridOptions: { description: "probe" } },
+  },
+});

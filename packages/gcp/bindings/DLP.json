@@ -77,7 +77,8 @@
       "JobTrigger": "ProbeTrigger",
       "LocationsDeidentifyTemplate": "ProbeLocDeidentify",
       "LocationsInspectTemplate": "ProbeLocInspect",
-      "LocationsJobTrigger": "ProbeLocTrigger"
+      "LocationsJobTrigger": "ProbeLocTrigger",
+      "LocationsDlpJob": "ProbeLocDlpJob"
     },
     "untestable": {
       "OrganizationStoredInfoType": "needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
