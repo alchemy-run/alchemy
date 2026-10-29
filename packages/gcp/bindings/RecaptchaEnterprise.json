@@ -19,6 +19,14 @@
     },
     "untestable": {
       "Firewallpolicy": "The firewall policy API is allow-listed per project. Set (GCP_TEST_RECAPTCHA_FIREWALL)"
+    },
+    "allowedOutcomes": {
+      "FirewallPolicyApiUnavailable": "the firewall policy API isn't offered to the testing project (\"not provided by this environment\")"
+    },
+    "skip": {
+      "ListRelatedaccountgroups": "needs a reCAPTCHA Enterprise subscription, which only Google sales enables (\"requires an Enterprise subscription\")",
+      "ListRelatedaccountgroupMemberships": "needs a reCAPTCHA Enterprise subscription, which only Google sales enables (\"requires an Enterprise subscription\")",
+      "MigrateKey": "must be called by the Google account that owns the key (\"same Google account which owns the reCAPTCHA Site Key\"); the deployer owns it, not the host"
     }
   }
 }

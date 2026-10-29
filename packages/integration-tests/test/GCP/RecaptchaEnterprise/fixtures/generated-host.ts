@@ -24,13 +24,10 @@ export default class RecaptchaEnterpriseGeneratedHost extends GCP.Function<Recap
     const p5 = yield* GCP.RecaptchaEnterprise.ListFirewallpolicies();
     const p6 = yield* GCP.RecaptchaEnterprise.ListKeyIpOverrides(Signup);
     const p7 = yield* GCP.RecaptchaEnterprise.ListKeys();
-    const p8 = yield* GCP.RecaptchaEnterprise.ListRelatedaccountgroupMemberships();
-    const p9 = yield* GCP.RecaptchaEnterprise.ListRelatedaccountgroups();
-    const p10 = yield* GCP.RecaptchaEnterprise.MigrateKey(Signup);
-    const p11 = yield* GCP.RecaptchaEnterprise.RemoveKeyIpOverride(Signup);
-    const p12 = yield* GCP.RecaptchaEnterprise.ReorderFirewallpolicy();
-    const p13 = yield* GCP.RecaptchaEnterprise.SearchRelatedaccountgroupmembership();
-    const p14 = yield* GCP.RecaptchaEnterprise.UpdateKeyPolicy();
+    const p8 = yield* GCP.RecaptchaEnterprise.RemoveKeyIpOverride(Signup);
+    const p9 = yield* GCP.RecaptchaEnterprise.ReorderFirewallpolicy();
+    const p10 = yield* GCP.RecaptchaEnterprise.SearchRelatedaccountgroupmembership();
+    const p11 = yield* GCP.RecaptchaEnterprise.UpdateKeyPolicy();
     return {
       fetch: serveProbes({
         AddKeyIpOverride: probeOutcome(
@@ -45,15 +42,10 @@ export default class RecaptchaEnterpriseGeneratedHost extends GCP.Function<Recap
         ListFirewallpolicies: probeOutcome(Retry.none(p5({} as never))),
         ListKeyIpOverrides: probeOutcome(Retry.none(p6({} as never))),
         ListKeys: probeOutcome(Retry.none(p7({} as never))),
-        ListRelatedaccountgroupMemberships: probeOutcome(
-          Retry.none(p8({ relatedaccountgroup: "alchemy-missing" } as never)),
-        ),
-        ListRelatedaccountgroups: probeOutcome(Retry.none(p9({} as never))),
-        MigrateKey: probeOutcome(Retry.none(p10({} as never))),
-        RemoveKeyIpOverride: probeOutcome(Retry.none(p11({} as never))),
-        ReorderFirewallpolicy: probeOutcome(Retry.none(p12({} as never))),
-        SearchRelatedaccountgroupmembership: probeOutcome(Retry.none(p13({} as never))),
-        UpdateKeyPolicy: probeOutcome(Retry.none(p14({ key: "alchemy-missing" } as never))),
+        RemoveKeyIpOverride: probeOutcome(Retry.none(p8({} as never))),
+        ReorderFirewallpolicy: probeOutcome(Retry.none(p9({} as never))),
+        SearchRelatedaccountgroupmembership: probeOutcome(Retry.none(p10({} as never))),
+        UpdateKeyPolicy: probeOutcome(Retry.none(p11({ key: "alchemy-missing" } as never))),
       }),
     };
   }).pipe(
@@ -68,9 +60,6 @@ export default class RecaptchaEnterpriseGeneratedHost extends GCP.Function<Recap
           GCP.RecaptchaEnterprise.ListFirewallpoliciesHttp,
           GCP.RecaptchaEnterprise.ListKeyIpOverridesHttp,
           GCP.RecaptchaEnterprise.ListKeysHttp,
-          GCP.RecaptchaEnterprise.ListRelatedaccountgroupMembershipsHttp,
-          GCP.RecaptchaEnterprise.ListRelatedaccountgroupsHttp,
-          GCP.RecaptchaEnterprise.MigrateKeyHttp,
           GCP.RecaptchaEnterprise.RemoveKeyIpOverrideHttp,
           GCP.RecaptchaEnterprise.ReorderFirewallpolicyHttp,
           GCP.RecaptchaEnterprise.SearchRelatedaccountgroupmembershipHttp,
