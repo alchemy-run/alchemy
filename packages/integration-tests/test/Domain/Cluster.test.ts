@@ -1,11 +1,19 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as BunClusterSocket from "@effect/platform-bun/BunClusterSocket";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { SqliteClient } from "@effect/sql-sqlite-bun";
+import * as RunnerAddress from "effect/cluster/RunnerAddress";
+import * as ShardingConfig from "effect/cluster/ShardingConfig";
+import * as SqlMessageStorage from "effect/cluster/SqlMessageStorage";
+import * as SqlRunnerStorage from "effect/cluster/SqlRunnerStorage";
+import * as Digest from "effect/crypto/Digest";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as SqlClient from "effect/sql/SqlClient";
 import * as Stream from "effect/Stream";
@@ -73,6 +81,86 @@ describe("Domain.Cluster on SQLite", () => {
         ),
       );
     }).pipe(Effect.scoped, Effect.provide(hosted(onSqlite()))),
+  );
+
+  it.live(
+    "a live read on the runner that commits sees the commit without waiting for the poll",
+    () =>
+      Effect.gen(function* () {
+        const api = yield* ContractApi.Client;
+        yield* api.Increment("c-1", { by: 1 });
+        const watched = yield* api.Counter.watch("c-1").pipe(
+          Stream.take(2),
+          Stream.runCollect,
+          Effect.forkChild,
+        );
+        yield* Effect.sleep("100 millis");
+        const committed = yield* Effect.sync(() => Date.now());
+        yield* api.Increment("c-1", { by: 2 });
+        const [, second] = yield* Fiber.join(watched).pipe(Effect.timeout("2 seconds"));
+        expect(second!.cursor).toBe(2);
+        // The poll runs once a minute here: only the in-process signal is this fast.
+        expect((yield* Effect.sync(() => Date.now())) - committed).toBeLessThan(1_000);
+      }).pipe(Effect.scoped, Effect.provide(hosted(onSqlite({ watchMillis: 60_000 })))),
+  );
+
+  it.live("accepts every Duration.Input, bigint nanoseconds included", () =>
+    Effect.gen(function* () {
+      const counters = yield* Counter;
+      yield* counters.send("c-1", new Increment({ by: 1 }));
+      expect(yield* counters.state("c-1")).toEqual({ total: 1 });
+      // Options that mean the same share one Layer.
+      expect(Domain.Cluster.layer({ entityMaxIdleTime: "1 second" })).toBe(
+        Domain.Cluster.layer({ entityMaxIdleTime: 1_000_000_000n }),
+      );
+      expect(Domain.Cluster.layer({ entityMaxIdleTime: "1 second" })).not.toBe(
+        Domain.Cluster.layer({ entityMaxIdleTime: "2 seconds" }),
+      );
+    }).pipe(Effect.scoped, Effect.provide(hosted(onSqlite({ entityMaxIdleTime: 1_000_000_000n })))),
+  );
+
+  it.live("the documented several-runner composition builds and serves a command", () =>
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "domain-cluster-byo-" });
+      const Sqlite = SqliteClient.layer({ filename: path.join(dir, "domain.db") });
+      // The deploy step from the docs.
+      yield* Layer.build(
+        Layer.mergeAll(
+          Domain.Cluster.layerMigrations(),
+          SqlMessageStorage.layerMigrations({}),
+          SqlRunnerStorage.layerMigrations({}),
+        ).pipe(Layer.provide(Sqlite)),
+      );
+      // The runner from the docs; only the address differs, for the test.
+      const shardingConfig: Partial<ShardingConfig.ShardingConfig["Service"]> = {
+        runnerAddress: Option.some(RunnerAddress.make("localhost", 34_421)),
+      };
+      const ClusterLive = BunClusterSocket.layer({ storage: "byo", shardingConfig }).pipe(
+        Layer.provideMerge(
+          Layer.mergeAll(SqlMessageStorage.layerStorage({}), SqlRunnerStorage.layerStorage({})),
+        ),
+        Layer.provide(
+          Layer.mergeAll(ShardingConfig.layerFromEnv(shardingConfig), Digest.layerWebCrypto),
+        ),
+      );
+      yield* Effect.gen(function* () {
+        const counters = yield* Counter;
+        yield* counters.send("c-1", new Increment({ by: 1 }));
+        expect(yield* counters.state("c-1")).toEqual({ total: 1 });
+      }).pipe(
+        Effect.scoped,
+        Effect.provide(
+          hosted(
+            Domain.Cluster.layer({ migrations: false }).pipe(
+              Layer.provide(ClusterLive),
+              Layer.provideMerge(Sqlite),
+            ),
+          ),
+        ),
+      );
+    }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
   );
 
   it.live("state, pending deliveries and timers survive a restart on the same file", () =>
