@@ -40,6 +40,7 @@ import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
+import * as Semaphore from "effect/Semaphore";
 import * as Stream from "effect/Stream";
 import type { WorkflowEngine } from "effect/workflow";
 import { DurableObject as CloudflareDurableObject } from "../Workers/DurableObject.ts";
@@ -361,9 +362,9 @@ const clearPrefixes = (prefixes: ReadonlyArray<string>) =>
  * and its jobs as durable callbacks. Each step counts as progress, so a long
  * backfill never exhausts a callback's retry budget.
  */
-/** How many times, and for how long, a backfill job runs again within one alarm. */
-const INLINE_RUNS = 16;
-const INLINE_MILLIS = 2_000;
+/** How many due backfill jobs one tick runs, and for how long, before it hands over to the next. */
+const TICK_RUNS = 64;
+const TICK_MILLIS = 5_000;
 
 const backfillRuntime = (
   run: (id: string) => Effect.Effect<void, never, DurableObjectState | RuntimeContext>,
@@ -401,51 +402,98 @@ const backfillRuntime = (
       exclusive: (effect) =>
         provide(exclusively(state.storage.transaction(effect)).pipe(Effect.orDie)),
     };
-    const durable = (id: string, afterMillis: number) =>
-      provide(
-        Effect.gen(function* () {
-          const step = ((yield* state.storage.get<number>("bf:step")) ?? 0) + 1;
-          yield* state.storage.put("bf:step", step);
-          yield* callback.schedule(id, {
-            after: `${afterMillis} millis`,
-            payload: { id },
-            progress: step,
-          });
-        }).pipe(Effect.orDie),
-      );
-    // A job that asks to run again at once (its next page, its next round) runs again
-    // in the same alarm, a bounded number of times: a durable job costs about ten
-    // written rows. Its row is removed only once the alarm returns, so a crash in
-    // between runs it again.
-    const running = new Map<string, { again: boolean }>();
-    const runInline = (job: {
-      readonly id: string;
-    }): Effect.Effect<void, never, DurableObjectState | RuntimeContext> =>
+    // Jobs are rows here (`bf:job:<id>` holds when it's due and a token), run by one
+    // alarm callback, the tick. A tick runs every due job, and those its jobs schedule
+    // at once, until none is left or its budget is spent: scheduling a job writes one
+    // row, where a callback of its own writes about ten. The tick's callback is
+    // removed only once it returns, so a crash in between runs the tick again; a
+    // job's row is removed only if it wasn't scheduled again while it ran.
+    const jobKey = (id: string) => `bf:job:${id}`;
+    let ticking = false;
+    let dirty = false;
+    /** The job running now: its own row doesn't count as already scheduled. */
+    let current: string | undefined;
+    const now = Clock.currentTimeMillis;
+    // One at a time: the callback is one row, so a later schedule would replace a sooner one.
+    const tickLock = yield* Semaphore.make(1);
+    /** Make sure a tick fires by `due`. */
+    const tickBy = (due: number) =>
       Effect.gen(function* () {
-        const slot = { again: false };
-        running.set(job.id, slot);
-        const started = yield* Clock.currentTimeMillis;
-        for (let runs = 1; ; runs++) {
-          slot.again = false;
-          yield* run(job.id);
-          if (!slot.again) return;
-          const elapsed = (yield* Clock.currentTimeMillis) - started;
-          if (runs >= INLINE_RUNS || elapsed >= INLINE_MILLIS) {
-            yield* durable(job.id, 0);
+        const pending = yield* state.storage.get<number>("bf:tick");
+        if (pending !== undefined && pending <= due) return;
+        const at = yield* now;
+        yield* callback.schedule("tick", {
+          after: `${Math.max(0, due - at)} millis`,
+          payload: {},
+          progress: at,
+        });
+        yield* state.storage.put("bf:tick", due);
+      }).pipe(Effect.orDie, tickLock.withPermits(1));
+    const tick: Effect.Effect<void, never, DurableObjectState | RuntimeContext> = Effect.gen(
+      function* () {
+        yield* state.storage.delete("bf:tick");
+        ticking = true;
+        const started = yield* now;
+        let runs = 0;
+        while (true) {
+          dirty = false;
+          const at = yield* now;
+          const rows = [
+            ...(yield* state.storage.list<{ due: number; token: string }>({
+              prefix: "bf:job:",
+            })).entries(),
+          ];
+          const due = rows.filter(([, job]) => job.due <= at);
+          const spent = runs >= TICK_RUNS || at - started >= TICK_MILLIS;
+          if ((due.length === 0 && !dirty) || spent) {
+            ticking = false;
+            const next = Math.min(...rows.map(([, job]) => job.due));
+            if (Number.isFinite(next)) yield* tickBy(spent ? Math.min(next, at) : next);
             return;
           }
+          for (const [key, job] of due) {
+            runs += 1;
+            current = key.slice("bf:job:".length);
+            yield* run(current);
+            current = undefined;
+            const after = yield* state.storage.get<{ due: number; token: string }>(key);
+            if (after?.token === job.token) yield* state.storage.delete(key);
+          }
         }
-      }).pipe(Effect.ensuring(Effect.sync(() => running.delete(job.id))));
-    const callback = yield* makeCallback("domain:backfill", runInline);
-    const jobs: Backfill.Jobs = {
-      schedule: (id, afterMillis) => {
-        const slot = running.get(id);
-        if (slot !== undefined && afterMillis === 0) {
-          slot.again = true;
-          return Effect.void;
-        }
-        return durable(id, afterMillis);
       },
+    ).pipe(
+      Effect.ensuring(
+        Effect.sync(() => {
+          ticking = false;
+          current = undefined;
+        }),
+      ),
+    );
+    const callback = yield* makeCallback("domain:backfill", (_: unknown) => tick);
+    const jobs: Backfill.Jobs = {
+      schedule: (id, afterMillis) =>
+        provide(
+          Effect.gen(function* () {
+            const due = (yield* now) + afterMillis;
+            const existing =
+              id === current
+                ? undefined
+                : yield* state.storage.get<{ due: number; token: string }>(jobKey(id));
+            // Already due sooner: that run sees this one's cause too.
+            if (existing !== undefined && existing.due <= due && afterMillis > 0) return;
+            const token = yield* Effect.sync(() => crypto.randomUUID());
+            yield* state.storage.put(jobKey(id), {
+              due: existing !== undefined ? Math.min(existing.due, due) : due,
+              token,
+            });
+            // A running tick picks it up.
+            if (ticking) {
+              dirty = true;
+              return;
+            }
+            yield* tickBy(due);
+          }).pipe(Effect.orDie),
+        ),
     };
     return { storage, jobs, provide };
   });
