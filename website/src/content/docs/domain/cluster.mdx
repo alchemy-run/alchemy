@@ -100,7 +100,14 @@ export const BankLive = Bank.layer(BankHandlers).pipe(
 
 With `byo`, the socket layer neither makes nor exports the storage: merge it in with `provideMerge`, since `Cluster.layer` needs `MessageStorage` too. The storage layers need `ShardingConfig` and `Digest` of their own: `BunClusterSocket` keeps the ones it makes inside.
 
-A command to an instance that another runner owns goes to that runner. When a runner stops, the others take its shards and continue its work: in our tests on Postgres 17 and MariaDB 13, commands to the stopped runner's instances were answered again 2 to 3 seconds after it stopped. A runner that freezes keeps its shards until its locks expire (`shardLockExpiration`, 35 seconds).
+A command to an instance that another runner owns goes to that runner, and a live read on one runner follows commits on the others. When a runner stops, the others take its shards and continue its work. Measured on Postgres 17 and MariaDB 13 with two runners and 20 instances:
+
+| Runner B | Commands to B's instances answered again |
+| --- | --- |
+| Stopped cleanly | 0.3 to 3 seconds after the stop returned |
+| Killed (SIGKILL) | 33 to 35 seconds later: B's shard locks must expire first (`shardLockExpiration`, 35 seconds) |
+
+A runner that freezes keeps its shards the same way, until its locks expire.
 
 ## Know what runs where
 
@@ -151,7 +158,7 @@ The sweep deletes rows that only serve dedupe once they pass `retention`:
 | --- | --- | --- |
 | Receipts of accepted commands | `receipts`, 30 days | A command sent again with the same id is decided again. |
 | Cancelled timers | `cancelled`, 7 days | `unschedule` answers `NotScheduled` instead of `AlreadyCancelled`. |
-| Processed cluster messages to the model's entities, and their replies | `messages`, 7 days | Effect keeps them forever otherwise. Saga messages are left to the workflow engine. |
+| Processed cluster messages to this model's entity types, and their replies | `messages`, 7 days | Effect keeps them forever otherwise. Saga messages are left to the workflow engine; another model on the same cluster keeps its own retention. |
 
 ```typescript
 Domain.Cluster.layerSingleRunner({
