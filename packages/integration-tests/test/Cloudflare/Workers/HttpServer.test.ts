@@ -1,16 +1,16 @@
-import * as Tls from "node:tls";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
-import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Cookies from "effect/http/Cookies";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as Schedule from "effect/Schedule";
 import * as Socket from "effect/socket/Socket";
+import * as Stream from "effect/Stream";
 import { expectUrlContains } from "../Utils/Http.ts";
 import { requestWorker, waitUntilStable } from "../Utils/WorkerRequest.ts";
 import HttpServerWorker, { readyMarker, sensitiveContext } from "./fixtures/http-server-worker.ts";
@@ -200,31 +200,25 @@ for (const dev of [false, true]) {
   );
 }
 
-class TlsSocketError extends Data.TaggedError("TlsSocketError")<{ readonly cause: Error }> {}
-
 /**
- * A raw TLS connection. Releasing it destroys the socket, dropping the
- * connection the way a client that went away does.
+ * Holds a raw HTTP/1.1 request open over `openssl s_client`. Closing the
+ * scope SIGKILLs the client, so the kernel drops the connection without a TLS
+ * `close_notify`, the way a client that went away does. (A `close_notify`
+ * reads as an HTTP half-close, which Cloudflare keeps serving, and Bun's
+ * `node:tls` sends one even from `destroy()`.)
  */
-const tlsConnection = (host: string) =>
-  Effect.acquireRelease(
-    Effect.callback<Tls.TLSSocket, TlsSocketError>((resume) => {
-      const socket = Tls.connect(
-        { host, port: 443, servername: host, ALPNProtocols: ["http/1.1"] },
-        () => resume(Effect.succeed(socket)),
-      );
-      socket.on("error", (cause) => resume(Effect.fail(new TlsSocketError({ cause }))));
-      return Effect.sync(() => socket.destroy());
-    }),
-    (socket) => Effect.sync(() => socket.destroy()),
+const rawRequest = (host: string, request: string) =>
+  ChildProcess.make(
+    "openssl",
+    ["s_client", "-connect", `${host}:443`, "-servername", host, "-alpn", "http/1.1", "-quiet"],
+    {
+      // `-quiet` keeps the connection open after stdin ends.
+      stdin: Stream.make(request).pipe(Stream.encodeText),
+      stdout: "ignore",
+      stderr: "ignore",
+      killSignal: "SIGKILL",
+    },
   );
-
-const writeSocket = (socket: Tls.TLSSocket, data: string) =>
-  Effect.callback<void, TlsSocketError>((resume) => {
-    socket.write(data, (cause) =>
-      resume(cause ? Effect.fail(new TlsSocketError({ cause })) : Effect.void),
-    );
-  });
 
 // A client that disconnects interrupts the handler, so its resources are
 // released as an interruption instead of staying open for nobody. Live only:
@@ -254,16 +248,12 @@ test.provider(
         Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
       );
 
-      // Send `/slow` over a raw HTTP/1.1 connection, wait until the handler
-      // has started, then destroy the socket.
+      // Send `/slow` over a raw connection, wait until the handler has
+      // started, then kill the client.
       const host = yield* Effect.sync(() => new URL(worker.url!).host);
       yield* Effect.scoped(
         Effect.gen(function* () {
-          const socket = yield* tlsConnection(host);
-          yield* writeSocket(
-            socket,
-            `GET /slow?id=${id} HTTP/1.1\r\nHost: ${host}\r\nConnection: close\r\n\r\n`,
-          );
+          yield* rawRequest(host, `GET /slow?id=${id} HTTP/1.1\r\nHost: ${host}\r\n\r\n`);
           yield* events.pipe(
             Effect.repeat({
               schedule: Schedule.spaced("500 millis"),
