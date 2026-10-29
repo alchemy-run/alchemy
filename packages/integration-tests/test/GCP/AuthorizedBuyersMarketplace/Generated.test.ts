@@ -46,5 +46,161 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.clients.list: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.clients.activate: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.clients.deactivate: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.clients.patch: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.clients.create: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.clients.get: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.clients.users.deactivate: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.clients.users.list: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.clients.users.activate: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.clients.users.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.publisherProfiles.list: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.publisherProfiles.get: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.finalizedDeals.addCreative: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.finalizedDeals.setReadyToServe: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.finalizedDeals.list: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.finalizedDeals.resume: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.finalizedDeals.get: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.finalizedDeals.pause: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.auctionPackages.subscribeClients: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.auctionPackages.list: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.auctionPackages.unsubscribeClients: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.auctionPackages.get: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.auctionPackages.unsubscribe: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.auctionPackages.subscribe: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.proposals.patch: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.proposals.accept: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.proposals.addNote: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.proposals.sendRfp: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.proposals.cancelNegotiation: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.proposals.list: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.proposals.get: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.proposals.deals.get: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.proposals.deals.patch: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.proposals.deals.batchUpdate: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.buyers.proposals.deals.list: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.bidders.auctionPackages.list: addressed under `bidders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.bidders.finalizedDeals.list: addressed under `bidders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "authorizedbuyersmarketplace.bidders.finalizedDeals.setReadyToServe: addressed under `bidders/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

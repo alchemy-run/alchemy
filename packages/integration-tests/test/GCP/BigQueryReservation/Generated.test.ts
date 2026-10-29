@@ -46,5 +46,65 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "bigqueryreservation.projects.locations.reservations.failoverReservation: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigqueryreservation.projects.locations.reservations.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigqueryreservation.projects.locations.reservations.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigqueryreservation.projects.locations.reservations.assignments.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigqueryreservation.projects.locations.reservations.assignments.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigqueryreservation.projects.locations.reservations.assignments.move: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigqueryreservation.projects.locations.reservations.assignments.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigqueryreservation.projects.locations.reservations.assignments.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigqueryreservation.projects.locations.reservationGroups.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigqueryreservation.projects.locations.reservationGroups.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigqueryreservation.projects.locations.capacityCommitments.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigqueryreservation.projects.locations.capacityCommitments.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigqueryreservation.projects.locations.capacityCommitments.split: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigqueryreservation.projects.locations.capacityCommitments.merge: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

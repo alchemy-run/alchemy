@@ -79,5 +79,37 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "storagetransfer.transferOperations.list: transfer operations are addressed `transferOperations/{id}` with the project inside a JSON filter, not a path",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storagetransfer.transferOperations.pause: transfer operations are addressed `transferOperations/{id}` with the project inside a JSON filter, not a path",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storagetransfer.transferOperations.resume: transfer operations are addressed `transferOperations/{id}` with the project inside a JSON filter, not a path",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storagetransfer.transferOperations.cancel: transfer operations are addressed `transferOperations/{id}` with the project inside a JSON filter, not a path",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storagetransfer.transferOperations.get: transfer operations are addressed `transferOperations/{id}` with the project inside a JSON filter, not a path",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storagetransfer.transferJobs.create: lifecycle of GCP.StorageTransfer.TransferJob",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storagetransfer.transferJobs.list: filters by a JSON expression naming the project, not a path",
+        () => Effect.void,
+      );
+    });
   },
 );

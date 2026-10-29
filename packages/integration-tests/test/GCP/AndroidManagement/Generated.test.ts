@@ -46,5 +46,109 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "androidmanagement.enterprises.generateEnterpriseUpgradeUrl: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.migrationTokens.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.migrationTokens.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.migrationTokens.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.applications.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.enrollmentTokens.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.enrollmentTokens.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.policies.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.policies.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.policies.modifyPolicyApplications: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.policies.removePolicyApplications: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.policies.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.policies.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.devices.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.devices.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.devices.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.devices.issueCommand: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.devices.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.webApps.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.webApps.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.webTokens.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.provisioningInfo.get: addressed under `provisioningInfo/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.enterprises.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidmanagement.signupUrls.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

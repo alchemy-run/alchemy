@@ -104,5 +104,21 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "contentwarehouse.projects.locations.documents.referenceId.patch: `projects/*/locations/*/documents/referenceId/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "contentwarehouse.projects.locations.documents.referenceId.delete: `projects/*/locations/*/documents/referenceId/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "contentwarehouse.projects.locations.documents.referenceId.get: `projects/*/locations/*/documents/referenceId/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+    });
   },
 );

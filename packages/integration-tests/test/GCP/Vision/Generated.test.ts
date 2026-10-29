@@ -46,5 +46,123 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    describe("Product", { concurrent: true }, () => {
+      test.provider.todo(
+        "GetProduct (vision.projects.locations.products.get): Product: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+      test.provider.todo(
+        "ListProductReferenceImages (vision.projects.locations.products.referenceImages.list): Product: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+    });
+
+    describe("ProductSet", { concurrent: true }, () => {
+      test.provider.todo(
+        "AddProductSetProduct (vision.projects.locations.productSets.addProduct): ProductSet: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+      test.provider.todo(
+        "GetProductSet (vision.projects.locations.productSets.get): ProductSet: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+      test.provider.todo(
+        "ListProductSetProducts (vision.projects.locations.productSets.products.list): ProductSet: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+      test.provider.todo(
+        "RemoveProductSetProduct (vision.projects.locations.productSets.removeProduct): ProductSet: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+    });
+
+    describe("ProductsReferenceImage", { concurrent: true }, () => {
+      test.provider.todo(
+        "GetReferenceImage (vision.projects.locations.products.referenceImages.get): ProductsReferenceImage: the probe fixture doesn't deploy one yet",
+        () => Effect.void,
+      );
+    });
+
+    describe("project", { concurrent: true }, () => {
+      test.provider(
+        "AnnotateFile (vision.projects.files.annotate)",
+        () => probe("AnnotateFile", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:vision", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "AnnotateImage (vision.projects.images.annotate)",
+        () => probe("AnnotateImage", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:vision", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "AsyncFileBatchAnnotate (vision.projects.files.asyncBatchAnnotate)",
+        () => probe("AsyncFileBatchAnnotate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:vision", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "AsyncImageBatchAnnotate (vision.projects.images.asyncBatchAnnotate)",
+        () => probe("AsyncImageBatchAnnotate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:vision", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ImportProductSet (vision.projects.locations.productSets.import)",
+        () => probe("ImportProductSet", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:vision", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListProducts (vision.projects.locations.products.list)",
+        () => probe("ListProducts", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:vision", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListProductSets (vision.projects.locations.productSets.list)",
+        () => probe("ListProductSets", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:vision", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "PurgeProduct (vision.projects.locations.products.purge)",
+        () => probe("PurgeProduct", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:vision", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip("vision.images.annotate: its path names no project", () => Effect.void);
+      test.provider.skip(
+        "vision.images.asyncBatchAnnotate: its path names no project",
+        () => Effect.void,
+      );
+      test.provider.skip("vision.files.annotate: its path names no project", () => Effect.void);
+      test.provider.skip(
+        "vision.files.asyncBatchAnnotate: its path names no project",
+        () => Effect.void,
+      );
+    });
   },
 );

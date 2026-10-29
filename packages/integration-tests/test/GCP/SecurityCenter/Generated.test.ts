@@ -151,5 +151,405 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "securitycenter.folders.notificationConfigs.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.notificationConfigs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.locations.muteConfigs.patch: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.locations.muteConfigs.get: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.locations.muteConfigs.delete: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.bigQueryExports.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.assets.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.assets.updateSecurityMarks: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.assets.group: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.sources.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.sources.findings.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.sources.findings.setState: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.sources.findings.patch: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.sources.findings.group: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.sources.findings.updateSecurityMarks: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.sources.findings.setMute: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.sources.findings.externalSystems.patch: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.eventThreatDetectionSettings.validateCustomModule: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.eventThreatDetectionSettings.effectiveCustomModules.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.eventThreatDetectionSettings.effectiveCustomModules.get: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.eventThreatDetectionSettings.customModules.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.eventThreatDetectionSettings.customModules.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.eventThreatDetectionSettings.customModules.listDescendant: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.securityHealthAnalyticsSettings.effectiveCustomModules.get: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.securityHealthAnalyticsSettings.effectiveCustomModules.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.securityHealthAnalyticsSettings.customModules.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.securityHealthAnalyticsSettings.customModules.listDescendant: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.securityHealthAnalyticsSettings.customModules.simulate: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.securityHealthAnalyticsSettings.customModules.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.findings.bulkMute: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.folders.muteConfigs.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.notificationConfigs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.notificationConfigs.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.locations.muteConfigs.get: name collision on GetMuteConfig",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.eventThreatDetectionSettings.validateCustomModule: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.eventThreatDetectionSettings.effectiveCustomModules.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.eventThreatDetectionSettings.effectiveCustomModules.get: `projects/*/eventThreatDetectionSettings/effectiveCustomModules/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.eventThreatDetectionSettings.customModules.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.eventThreatDetectionSettings.customModules.listDescendant: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.eventThreatDetectionSettings.customModules.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.assets.updateSecurityMarks: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.securityHealthAnalyticsSettings.customModules.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.securityHealthAnalyticsSettings.customModules.listDescendant: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.securityHealthAnalyticsSettings.customModules.simulate: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.securityHealthAnalyticsSettings.customModules.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.securityHealthAnalyticsSettings.effectiveCustomModules.get: `projects/*/securityHealthAnalyticsSettings/effectiveCustomModules/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.projects.securityHealthAnalyticsSettings.effectiveCustomModules.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.getOrganizationSettings: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.updateOrganizationSettings: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.securityHealthAnalyticsSettings.effectiveCustomModules.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.securityHealthAnalyticsSettings.effectiveCustomModules.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.securityHealthAnalyticsSettings.customModules.listDescendant: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.securityHealthAnalyticsSettings.customModules.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.securityHealthAnalyticsSettings.customModules.simulate: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.securityHealthAnalyticsSettings.customModules.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.attackPaths.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.findings.bulkMute: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.notificationConfigs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.notificationConfigs.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.simulations.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.simulations.attackExposureResults.attackPaths.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.simulations.attackExposureResults.valuedResources.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.simulations.valuedResources.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.simulations.valuedResources.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.simulations.valuedResources.attackPaths.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.simulations.attackPaths.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.muteConfigs.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.bigQueryExports.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.assets.group: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.assets.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.assets.updateSecurityMarks: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.assets.runDiscovery: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.resourceValueConfigs.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.resourceValueConfigs.delete: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.resourceValueConfigs.batchCreate: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.resourceValueConfigs.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.resourceValueConfigs.patch: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.locations.muteConfigs.delete: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.locations.muteConfigs.patch: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.locations.muteConfigs.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.sources.create: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.sources.patch: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.sources.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.sources.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.sources.findings.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.sources.findings.setMute: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.sources.findings.setState: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.sources.findings.updateSecurityMarks: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.sources.findings.group: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.sources.findings.create: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.sources.findings.patch: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.sources.findings.externalSystems.patch: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.valuedResources.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.eventThreatDetectionSettings.validateCustomModule: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.eventThreatDetectionSettings.effectiveCustomModules.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.eventThreatDetectionSettings.effectiveCustomModules.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.eventThreatDetectionSettings.customModules.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.eventThreatDetectionSettings.customModules.listDescendant: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securitycenter.organizations.eventThreatDetectionSettings.customModules.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

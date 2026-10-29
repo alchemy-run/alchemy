@@ -98,5 +98,45 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "spanner.scans.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "spanner.projects.instanceConfigs.create: creates long-lived infrastructure that belongs in a resource, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "spanner.projects.instances.databases.getScans: Key Visualizer scans; no predefined role grants the permission it checks",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "spanner.projects.instances.databases.dropDatabase: drops the database, which its provider owns",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "spanner.projects.instances.databases.sessions.streamingRead: a streaming RPC (chunked JSON); the request/response client can't consume it",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "spanner.projects.instances.databases.sessions.adapter: the Cassandra adapter's wire protocol, not a REST call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "spanner.projects.instances.databases.sessions.batchWrite: a streaming RPC (chunked JSON); the request/response client can't consume it",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "spanner.projects.instances.databases.sessions.executeStreamingSql: a streaming RPC (chunked JSON); the request/response client can't consume it",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "spanner.projects.instances.databases.sessions.adaptMessage: the Cassandra adapter's wire protocol, not a REST call",
+        () => Effect.void,
+      );
+    });
   },
 );

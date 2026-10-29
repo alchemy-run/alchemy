@@ -46,5 +46,29 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "oslogin.users.getLoginProfile: addressed under `users/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "oslogin.users.importSshPublicKey: addressed under `users/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "oslogin.users.projects.provisionPosixAccount: addressed under `users/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "oslogin.users.projects.delete: addressed under `users/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "oslogin.users.sshPublicKeys.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

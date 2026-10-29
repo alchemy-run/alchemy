@@ -64,5 +64,69 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "cloudasset.assets.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudasset.savedQueries.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudasset.feeds.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudasset.searchAllIamPolicies: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudasset.batchGetAssetsHistory: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudasset.exportAssets: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudasset.searchAllResources: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudasset.analyzeOrgPolicyGovernedAssets: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudasset.analyzeMove: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudasset.analyzeIamPolicyLongrunning: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudasset.analyzeOrgPolicies: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudasset.analyzeIamPolicy: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudasset.analyzeOrgPolicyGovernedContainers: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudasset.queryAssets: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudasset.effectiveIamPolicies.batchGet: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

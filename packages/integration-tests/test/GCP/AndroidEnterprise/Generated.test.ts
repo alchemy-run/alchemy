@@ -46,5 +46,317 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "androidenterprise.installs.list: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.installs.delete: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.installs.update: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.installs.get: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.webapps.insert: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.webapps.delete: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.webapps.get: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.webapps.list: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.webapps.update: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.storelayoutpages.insert: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.storelayoutpages.get: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.storelayoutpages.delete: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.storelayoutpages.update: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.storelayoutpages.list: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.managedconfigurationsforuser.delete: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.managedconfigurationsforuser.update: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.managedconfigurationsforuser.list: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.managedconfigurationsforuser.get: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.managedconfigurationsfordevice.update: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.managedconfigurationsfordevice.get: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.managedconfigurationsfordevice.list: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.managedconfigurationsfordevice.delete: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.permissions.get: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.products.getPermissions: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.products.unapprove: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.products.list: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.products.getAppRestrictionsSchema: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.products.get: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.products.approve: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.products.generateApprovalUrl: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.users.list: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.users.generateAuthenticationToken: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.users.setAvailableProductSet: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.users.insert: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.users.get: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.users.update: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.users.delete: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.users.revokeDeviceAccess: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.users.getAvailableProductSet: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.entitlements.update: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.entitlements.get: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.entitlements.delete: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.entitlements.list: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.getStoreLayout: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.getServiceAccount: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.get: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.unenroll: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.generateEnterpriseUpgradeUrl: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.createWebToken: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.setAccount: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.setStoreLayout: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.sendTestPushNotification: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.devices.setState: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.devices.get: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.devices.getState: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.devices.list: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.devices.update: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.devices.forceReportUpload: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.grouplicenseusers.list: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.managedconfigurationssettings.list: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enrollmentTokens.create: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.grouplicenses.get: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.grouplicenses.list: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.storelayoutclusters.list: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.storelayoutclusters.update: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.storelayoutclusters.delete: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.storelayoutclusters.get: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.storelayoutclusters.insert: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.serviceaccountkeys.delete: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.serviceaccountkeys.insert: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.serviceaccountkeys.list: addressed under `androidenterprise/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.acknowledgeNotificationSet: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.enroll: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.generateSignupUrl: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.pullNotificationSet: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "androidenterprise.enterprises.completeSignup: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

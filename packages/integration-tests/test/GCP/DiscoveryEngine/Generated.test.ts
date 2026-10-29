@@ -1178,5 +1178,69 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "discoveryengine.billingAccounts.billingAccountLicenseConfigs.distributeLicenseConfig: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "discoveryengine.billingAccounts.billingAccountLicenseConfigs.retractLicenseConfig: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "discoveryengine.projects.locations.dataStores.siteSearchEngine.sitemaps.delete: `projects/*/locations/*/dataStores/*/siteSearchEngine/sitemaps/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "discoveryengine.projects.locations.userEvents.write: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "discoveryengine.projects.locations.userEvents.collect: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "discoveryengine.projects.locations.collections.updateDataConnector: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "discoveryengine.projects.locations.collections.engines.completionConfig.completeQuery: name collision on CompleteCompletionConfigQuery",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "discoveryengine.projects.locations.collections.dataConnector.mcp: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "discoveryengine.projects.locations.collections.dataStores.getSiteSearchEngine: name collision on GetDataStoreSiteSearchEngine",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "discoveryengine.projects.locations.collections.dataStores.completionConfig.completeQuery: name collision on CompleteCompletionConfigQuery",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "discoveryengine.projects.locations.collections.dataStores.siteSearchEngine.recrawlUris: name collision on RecrawlSiteSearchEngineUris",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "discoveryengine.projects.locations.collections.dataStores.siteSearchEngine.disableAdvancedSiteSearch: name collision on DisableSiteSearchEngineAdvancedSiteSearch",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "discoveryengine.projects.locations.collections.dataStores.siteSearchEngine.enableAdvancedSiteSearch: name collision on EnableSiteSearchEngineAdvancedSiteSearch",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "discoveryengine.projects.locations.collections.dataStores.siteSearchEngine.sitemaps.delete: `projects/*/locations/*/collections/*/dataStores/*/siteSearchEngine/sitemaps/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "discoveryengine.projects.locations.collections.dataStores.siteSearchEngine.targetSites.batchCreate: name collision on BatchTargetSiteCreate",
+        () => Effect.void,
+      );
+    });
   },
 );

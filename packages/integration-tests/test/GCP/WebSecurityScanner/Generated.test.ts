@@ -46,5 +46,49 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "websecurityscanner.projects.scanConfigs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "websecurityscanner.projects.scanConfigs.start: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "websecurityscanner.projects.scanConfigs.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "websecurityscanner.projects.scanConfigs.scanRuns.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "websecurityscanner.projects.scanConfigs.scanRuns.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "websecurityscanner.projects.scanConfigs.scanRuns.stop: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "websecurityscanner.projects.scanConfigs.scanRuns.crawledUrls.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "websecurityscanner.projects.scanConfigs.scanRuns.findings.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "websecurityscanner.projects.scanConfigs.scanRuns.findings.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "websecurityscanner.projects.scanConfigs.scanRuns.findingTypeStats.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

@@ -389,5 +389,17 @@ describe.skipIf(!!process.env.FAST)(
         timeout: 600_000,
       });
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "ces.projects.locations.apps.retrieveToolSchema: no distilled operation retrieveToolSchemaProjectsLocationsApps",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ces.projects.locations.apps.toolsets.retrieveTools: no distilled operation retrieveToolsProjectsLocationsAppsToolsets",
+        () => Effect.void,
+      );
+    });
   },
 );

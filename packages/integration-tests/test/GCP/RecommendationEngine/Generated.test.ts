@@ -105,5 +105,17 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "recommendationengine.projects.locations.catalogs.eventStores.predictionApiKeyRegistrations.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "recommendationengine.projects.locations.catalogs.eventStores.userEvents.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

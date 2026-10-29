@@ -330,5 +330,25 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "vmwareengine.projects.locations.privateClouds.showNsxCredentials: no distilled operation showNsxCredentialsProjectsLocationsPrivateClouds",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vmwareengine.projects.locations.privateClouds.showVcenterCredentials: no distilled operation showVcenterCredentialsProjectsLocationsPrivateClouds",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vmwareengine.projects.locations.announcements.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vmwareengine.projects.locations.announcements.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

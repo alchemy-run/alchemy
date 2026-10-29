@@ -3,6 +3,8 @@ export * from "./GetKey.ts";
 export * from "./GetKeyHttp.ts";
 export * from "./ListKeys.ts";
 export * from "./ListKeysHttp.ts";
+export * from "./LookupKey.ts";
+export * from "./LookupKeyHttp.ts";
 export * from "./UndeleteKey.ts";
 export * from "./UndeleteKeyHttp.ts";
 export * from "./KeyAuditLogs.ts";

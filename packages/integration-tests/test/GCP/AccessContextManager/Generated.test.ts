@@ -101,5 +101,41 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "accesscontextmanager.services.get: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "accesscontextmanager.projects.lookupConfiguredServicePerimeter: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "accesscontextmanager.folders.lookupConfiguredServicePerimeter: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "accesscontextmanager.organizations.gcpUserAccessBindings.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "accesscontextmanager.accessPolicies.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "accesscontextmanager.permissions.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "accesscontextmanager.services.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "accesscontextmanager.accessPolicies.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

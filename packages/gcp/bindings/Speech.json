@@ -14,5 +14,6 @@
       "CustomClass": "Ships",
       "PhraseSet": "Hints"
     }
-  }
+  },
+  "defaultPermission": "serviceusage.services.use"
 }

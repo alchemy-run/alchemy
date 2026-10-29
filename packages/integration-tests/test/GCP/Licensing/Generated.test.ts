@@ -46,5 +46,37 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "licensing.licenseAssignments.insert: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "licensing.licenseAssignments.listForProductAndSku: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "licensing.licenseAssignments.update: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "licensing.licenseAssignments.delete: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "licensing.licenseAssignments.patch: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "licensing.licenseAssignments.get: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "licensing.licenseAssignments.listForProduct: addressed under `apps/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

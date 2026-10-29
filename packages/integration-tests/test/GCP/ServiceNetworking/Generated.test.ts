@@ -46,5 +46,245 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "cloudresourcemanager.tagValues.patch: addressed under `tagValues/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagValues.delete: addressed under `tagValues/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagValues.get: addressed under `tagValues/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagValues.tagHolds.create: addressed under `tagValues/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagValues.tagHolds.delete: addressed under `tagValues/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagValues.tagHolds.list: addressed under `tagValues/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagBindings.delete: addressed under `tagBindings/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.projects.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.projects.move: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.projects.undelete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.projects.capabilityConfigs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.projects.capabilityConfigs.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.projects.capabilityConfigs.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.projects.capabilityConfigs.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.projects.capabilityConfigs.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.liens.get: addressed under `liens/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.liens.delete: addressed under `liens/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.get: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.delete: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.move: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.undelete: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.patch: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.capabilityConfigs.delete: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.capabilityConfigs.patch: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.capabilityConfigs.get: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.capabilityConfigs.create: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.capabilityConfigs.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.capabilities.get: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.capabilities.patch: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.locations.tagBindingCollections.patch: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.locations.tagBindingCollections.get: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.locations.effectiveTagBindingCollections.get: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagKeys.patch: addressed under `tagKeys/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagKeys.delete: addressed under `tagKeys/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagKeys.get: addressed under `tagKeys/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.organizations.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.organizations.capabilityConfigs.delete: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.organizations.capabilityConfigs.create: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.organizations.capabilityConfigs.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.organizations.capabilityConfigs.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.organizations.capabilityConfigs.patch: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagValues.getNamespaced: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagValues.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagValues.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagBindings.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagBindings.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.projects.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.projects.search: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.liens.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.liens.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.folders.search: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagKeys.getNamespaced: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagKeys.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.tagKeys.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.organizations.search: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.fetchResourceSemantics: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudresourcemanager.effectiveTags.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

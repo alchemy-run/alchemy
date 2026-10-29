@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,22 @@ export default class ServiceManagementGeneratedHost extends GCP.Function<Service
   "ServiceManagementGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.ServiceManagement.GenerateServiceConfigReport();
+    const p1 = yield* GCP.ServiceManagement.ListServices();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        GenerateServiceConfigReport: outcome(Retry.none(p0({} as never))),
+        ListServices: outcome(Retry.none(p1({} as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.ServiceManagement.GenerateServiceConfigReportHttp,
+          GCP.ServiceManagement.ListServicesHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

@@ -650,5 +650,25 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "dialogflow.projects.locations.agents.sessions.serverStreamingDetectIntent: name collision on ServerSessionStreamingDetectIntent",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dialogflow.projects.locations.agents.sessions.matchIntent: name collision on MatchSessionIntent",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dialogflow.projects.locations.agents.sessions.fulfillIntent: name collision on FulfillSessionIntent",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dialogflow.projects.locations.agents.sessions.detectIntent: name collision on DetectSessionIntent",
+        () => Effect.void,
+      );
+    });
   },
 );

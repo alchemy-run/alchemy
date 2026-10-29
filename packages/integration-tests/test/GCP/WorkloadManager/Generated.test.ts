@@ -131,5 +131,13 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "workloadmanager.projects.locations.insights.writeInsight: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

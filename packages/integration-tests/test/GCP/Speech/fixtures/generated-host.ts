@@ -17,16 +17,22 @@ export default class SpeechGeneratedHost extends GCP.Function<SpeechGeneratedHos
   Effect.gen(function* () {
     const p0 = yield* GCP.Speech.ListCustomClasses();
     const p1 = yield* GCP.Speech.ListPhraseSets();
+    const p2 = yield* GCP.Speech.LongrunningrecognizeSpeech();
     return {
       fetch: serveProbes({
         ListCustomClasses: outcome(Retry.none(p0({ location: "us-central1" } as never))),
         ListPhraseSets: outcome(Retry.none(p1({ location: "us-central1" } as never))),
+        LongrunningrecognizeSpeech: outcome(Retry.none(p2({} as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Layer.mergeAll(GCP.Speech.ListCustomClassesHttp, GCP.Speech.ListPhraseSetsHttp),
+        Layer.mergeAll(
+          GCP.Speech.ListCustomClassesHttp,
+          GCP.Speech.ListPhraseSetsHttp,
+          GCP.Speech.LongrunningrecognizeSpeechHttp,
+        ),
       ),
     ),
   ),

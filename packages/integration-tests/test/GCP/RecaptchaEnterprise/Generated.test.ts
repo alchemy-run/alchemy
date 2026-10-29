@@ -175,5 +175,13 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "recaptchaenterprise.projects.keys.retrieveLegacySecretKey: no distilled operation retrieveLegacySecretKeyProjectsKeys",
+        () => Effect.void,
+      );
+    });
   },
 );

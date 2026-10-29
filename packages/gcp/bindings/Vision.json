@@ -14,5 +14,6 @@
   },
   "probes": {
     "resources": {}
-  }
+  },
+  "defaultPermission": "serviceusage.services.use"
 }

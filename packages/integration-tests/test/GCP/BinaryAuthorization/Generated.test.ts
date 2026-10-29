@@ -84,5 +84,17 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "binaryauthorization.projects.updatePolicy: replaces the project's whole Binary Authorization policy; declare it with GCP.BinaryAuthorization.Policy",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "binaryauthorization.systempolicy.getPolicy: Google's system policy for a location, not a project resource",
+        () => Effect.void,
+      );
+    });
   },
 );

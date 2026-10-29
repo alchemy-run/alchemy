@@ -290,5 +290,41 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "backupdr.projects.locations.managementServers.msComplianceMetadata: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.dataSourceReferences.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.dataSourceReferences.fetchForResourceType: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.backupPlanAssociations.fetchForResourceType: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.backupPlanAssociations.triggerBackup: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.projects.locations.backupPlanAssociations.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.folders.locations.resourceBackupConfigs.fetch: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "backupdr.organizations.locations.resourceBackupConfigs.fetch: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

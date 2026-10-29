@@ -62,5 +62,17 @@ describe.skipIf(!!process.env.FAST)(
         timeout: 600_000,
       });
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "bigquery.projects.getServiceAccount: returns BigQuery's service agent for the project: setup information, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigquery.projects.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

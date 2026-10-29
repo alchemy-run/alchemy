@@ -46,5 +46,153 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "realtimebidding.buyers.get: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.buyers.getRemarketingTag: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.buyers.creatives.list: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.buyers.creatives.create: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.buyers.creatives.patch: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.buyers.creatives.get: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.buyers.creatives.addDeals: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.buyers.userLists.close: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.buyers.userLists.open: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.buyers.userLists.create: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.buyers.userLists.get: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.buyers.userLists.getRemarketingTag: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.buyers.userLists.list: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.buyers.userLists.update: addressed under `buyers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.get: addressed under `bidders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.pretargetingConfigs.removeTargetedApps: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.pretargetingConfigs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.pretargetingConfigs.activate: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.pretargetingConfigs.list: addressed under `bidders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.pretargetingConfigs.removeTargetedSites: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.pretargetingConfigs.suspend: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.pretargetingConfigs.removeTargetedPublishers: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.pretargetingConfigs.addTargetedPublishers: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.pretargetingConfigs.addTargetedSites: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.pretargetingConfigs.addTargetedApps: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.creatives.list: addressed under `bidders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.creatives.watch: addressed under `bidders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.publisherConnections.get: addressed under `bidders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.publisherConnections.list: addressed under `bidders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.publisherConnections.batchApprove: addressed under `bidders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.publisherConnections.batchReject: addressed under `bidders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.endpoints.list: addressed under `bidders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.endpoints.patch: addressed under `bidders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.endpoints.get: addressed under `bidders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.buyers.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "realtimebidding.bidders.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

@@ -430,5 +430,57 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "sql.connect.resolve: resolves a DNS name to an instance: no project in its path",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sql.Backups.GetBackup: no distilled operation GetBackupBackups",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sql.Backups.ListBackups: no distilled operation ListBackupsBackups",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sql.Backups.CreateBackup: no distilled operation CreateBackupBackups",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sql.Backups.UpdateBackup: no distilled operation UpdateBackupBackups",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sql.Backups.DeleteBackup: no distilled operation DeleteBackupBackups",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sql.tiers.list: lists machine tiers: catalog data, no project resource",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sql.instances.ListEntraIdCertificates: no distilled operation ListEntraIdCertificatesInstances",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sql.instances.RotateEntraIdCertificate: no distilled operation RotateEntraIdCertificateInstances",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sql.instances.RotateServerCertificate: no distilled operation RotateServerCertificateInstances",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sql.instances.ListServerCertificates: no distilled operation ListServerCertificatesInstances",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "sql.flags.list: lists database flags: catalog data, no project resource",
+        () => Effect.void,
+      );
+    });
   },
 );

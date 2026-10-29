@@ -4488,5 +4488,281 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "compute.firewallPolicies.get: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.firewallPolicies.patchRule: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.firewallPolicies.addRule: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.firewallPolicies.move: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.firewallPolicies.getRule: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.firewallPolicies.removeAssociation: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.firewallPolicies.cloneRules: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.firewallPolicies.getAssociation: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.firewallPolicies.addAssociation: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.firewallPolicies.removeRule: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.projects.disableXpnResource: Shared VPC administration: organization setup, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.projects.listXpnHosts: Shared VPC administration: organization setup, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.projects.enableXpnResource: Shared VPC administration: organization setup, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.projects.moveInstance: deprecated: use instances.insert with a source machine image",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.projects.enableXpnHost: Shared VPC administration: organization setup, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.projects.getXpnResources: Shared VPC administration: organization setup, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.projects.getXpnHost: Shared VPC administration: organization setup, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.projects.moveDisk: deprecated: use disks.insert with a source snapshot",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.projects.disableXpnHost: Shared VPC administration: organization setup, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.rollouts.resume: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.rollouts.advance: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.rollouts.pause: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.globalAddresses.move: moves the address to another project: infrastructure, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.globalOperations.delete: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.globalOperations.aggregatedList: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.globalOperations.get: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.globalOperations.wait: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.globalOperations.list: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.zoneOperations.delete: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.zoneOperations.wait: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.zoneOperations.list: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.zoneOperations.get: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.organizationSecurityPolicies.get: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.organizationSecurityPolicies.addRule: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.organizationSecurityPolicies.removeRule: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.organizationSecurityPolicies.getRule: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.organizationSecurityPolicies.removeAssociation: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.organizationSecurityPolicies.patchRule: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.organizationSecurityPolicies.addAssociation: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.organizationSecurityPolicies.getAssociation: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.organizationSecurityPolicies.copyRules: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.organizationSecurityPolicies.move: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.instances.reportHostAsFaulty: reports a hardware fault to Google: an operator action, not an application call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.imageViews.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.imageViews.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.addresses.move: moves the address to another project: infrastructure, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.reservationSubBlocks.reportFaulty: addressed under `reservations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.reservationSubBlocks.performMaintenance: addressed under `reservations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.reservationSubBlocks.list: addressed under `reservations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.reservationSubBlocks.getVersion: addressed under `reservations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.reservationSubBlocks.get: addressed under `reservations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.imageFamilyViews.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.globalOrganizationOperations.delete: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.globalOrganizationOperations.get: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.regionOperations.list: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.regionOperations.delete: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.regionOperations.wait: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.regionOperations.get: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.interconnectGroups.createMembers: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.projectViews.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.firewallPolicies.insert: its path names no project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.firewallPolicies.listAssociations: its path names no project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.firewallPolicies.list: its path names no project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.organizationSecurityPolicies.listPreconfiguredExpressionSets: its path names no project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.organizationSecurityPolicies.listAssociations: its path names no project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.organizationSecurityPolicies.list: its path names no project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.organizationSecurityPolicies.insert: its path names no project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "compute.globalOrganizationOperations.list: long-running operation polling: Alchemy waits on operations itself",
+        () => Effect.void,
+      );
+    });
   },
 );

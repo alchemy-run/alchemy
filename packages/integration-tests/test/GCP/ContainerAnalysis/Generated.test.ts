@@ -133,5 +133,17 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "containeranalysis.projects.locations.resources.exportSBOM: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "containeranalysis.projects.resources.exportSBOM: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

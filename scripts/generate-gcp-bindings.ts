@@ -188,6 +188,12 @@ interface ServiceConfig extends Partial<ApiConfig> {
    */
   verbPermissions?: Record<string, string>;
   /**
+   * The permission a method checks when no other resolves: APIs that bill a
+   * project but check no IAM permission of their own (Vision, Speech) need
+   * only `serviceusage.services.use`.
+   */
+  defaultPermission?: string;
+  /**
    * Live probes: when set, the generator also writes a Cloud Run host that
    * calls every binding (`test/GCP/<Service>/fixtures/generated-host.ts`)
    * and a test per binding (`test/GCP/<Service>/Generated.test.ts`).
@@ -436,7 +442,19 @@ const classify = (options: {
   }));
   const results: Classified[] = [];
   const ownCollections = new Set(resources.map((r) => r.collection));
-  const methods = collectMethods(doc, [], []);
+  // A call that names the project (`projects.images.annotate`) wins over its
+  // global twin (`images.annotate`) when both map to one binding.
+  // Collection + verb of every call that names something in its path: a
+  // global call with such a twin (AI Platform's API-key `datasets.list`) is
+  // an alternate entry point, not the project's.
+  const scopedTwins = new Set(
+    collectMethods(doc, [], [])
+      .filter(({ method }) => method.path.includes("{"))
+      .map(({ name, path }) => `${path.at(-1)}.${name}`),
+  );
+  const methods = collectMethods(doc, [], []).sort(
+    (a, b) => Number(b.method.path.includes("{")) - Number(a.method.path.includes("{")),
+  );
   // A method and its `locations` twin are one binding: if a hand-written
   // binding calls either, both are covered.
   const twinKey = (id: string) =>
@@ -481,10 +499,26 @@ const classify = (options: {
       method.parameters?.project?.location === "query"
         ? { param: undefined, segments: ["projects", "*"], params: ["project"] }
         : undefined;
+    // Or a global call with no path parameters (`images:annotate`): a
+    // project-scoped binding that injects nothing; the call bills the
+    // credentials' project.
+    const global =
+      vars.length === 0 &&
+      !method.path.includes("locations/") &&
+      !scopedTwins.has(`${cols.at(-1)}.${verb}`)
+        ? { param: undefined, segments: ["projects", "*"], params: [] }
+        : undefined;
     const target: { param: string | undefined; segments: string[]; params?: string[] } | undefined =
-      targets.sort((a, b) => b.segments.length - a.segments.length)[0] ?? flat ?? projectQuery;
+      targets.sort((a, b) => b.segments.length - a.segments.length)[0] ??
+      flat ??
+      projectQuery ??
+      global;
     if (target === undefined) {
-      results.push({ id, kind: "project", reason: "no resource-name path parameter" });
+      results.push({
+        id,
+        kind: "project",
+        reason: "its path names no project",
+      });
       continue;
     }
     const lifecycleOnly = resources.find(
@@ -571,7 +605,14 @@ const classify = (options: {
       results.push(
         created
           ? { id, kind: "lifecycle" }
-          : { id, kind: "project", reason: target.segments.join("/") },
+          : {
+              id,
+              kind: "project",
+              reason:
+                target.segments[0] !== "projects"
+                  ? `addressed under \`${target.segments[0]}/\`, not a project`
+                  : `\`${target.segments.join("/")}\` has no Alchemy resource to bind`,
+            },
       );
       continue;
     }
@@ -647,7 +688,8 @@ const classify = (options: {
                 : "update"
             }`,
         )
-        .find((p) => roles[p] !== undefined);
+        .find((p) => roles[p] !== undefined) ??
+      config.defaultPermission;
     if (permission === undefined || roles[permission] === undefined) {
       results.push({ id, kind: "needs-permission", reason: permission });
       continue;
@@ -758,7 +800,7 @@ const emitProjectContract = (service: string, binding: Binding) => {
   const first = binding.variants[0]!;
   const located = binding.variants.some((v) => v.scope === "location");
   const global = binding.variants.some((v) => v.scope === "project");
-  const omitted = [first.param ?? first.projectField!];
+  const omitted = [first.param ?? first.projectField].filter((o): o is string => o !== undefined);
   const required = requiredMembers(first.api.moduleSource, first.types.request).filter(
     (m) => !omitted.includes(m),
   );
@@ -792,7 +834,7 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 
 export interface ${binding.name}Request
-  extends Omit<${first.api.ns}.${first.types.request}, ${omitted.map((o) => `"${o}"`).join(" | ")}>${locationField}
+  extends Omit<${first.api.ns}.${first.types.request}, ${omitted.map((o) => `"${o}"`).join(" | ") || "never"}>${locationField}
 
 export type ${binding.name}Shape = () => Effect.Effect<
   (
@@ -827,7 +869,7 @@ const emitProjectHttp = (service: string, binding: Binding) => {
   const variants = binding.variants.map(
     (v) => `    {
       operation: ${v.api.ns}.${v.fn},
-      ${v.param !== undefined ? `param: "${v.param}",` : `projectField: "${v.projectField}",`}${v.scope === "location" ? "\n      location: true," : ""}${v.children.length ? `\n      children: [${v.children.map(([c, f]) => `["${c}", "${f}"]`).join(", ")}],` : ""}
+      ${v.param !== undefined ? `param: "${v.param}",` : v.projectField !== undefined ? `projectField: "${v.projectField}",` : "// A global call: nothing names the project."}${v.scope === "location" ? "\n      location: true," : ""}${v.children.length ? `\n      children: [${v.children.map(([c, f]) => `["${c}", "${f}"]`).join(", ")}],` : ""}
       role: "${v.role}",
     },`,
   );
@@ -936,7 +978,7 @@ import type * as Effect from "effect/Effect";
 ${resourceTypes.map((r) => `import type { ${importName(config.resources[r]!, r)} } from "./${config.resources[r]!.file ?? r}.ts";`).join("\n")}
 
 export interface ${binding.name}Request
-  extends Omit<${first.api.ns}.${first.types.request}, ${omitted.map((o) => `"${o}"`).join(" | ")}>${childType}
+  extends Omit<${first.api.ns}.${first.types.request}, ${omitted.map((o) => `"${o}"`).join(" | ") || "never"}>${childType}
 
 export type ${binding.name}Shape = (
   resource: ${resourceTypes.join(" | ")},
@@ -1305,7 +1347,17 @@ const generateService = Effect.fn(function* (root: string, service: string, repo
     const hostFile = path.join(testDir, "fixtures/generated-host.ts");
     const testFile = path.join(testDir, "Generated.test.ts");
     yield* fs.writeFileString(hostFile, emitProbeHost(service, config, probes));
-    yield* fs.writeFileString(testFile, emitProbeTest(service, config, probes));
+    yield* fs.writeFileString(
+      testFile,
+      emitProbeTest(
+        service,
+        config,
+        probes,
+        results.filter(
+          (r) => r.kind === "skip" || r.kind === "project" || r.kind === "needs-permission",
+        ),
+      ),
+    );
     probeFiles.push(hostFile, testFile);
   }
   // Format what was written, so regenerating is a no-op diff.
@@ -1371,7 +1423,7 @@ const probesOf = (config: ServiceConfig, bindings: Binding[]): Probe[] => {
     return variants.map((variant): Probe => {
       const key = project ? undefined : variant.resource;
       const omitted = project
-        ? [variant.param ?? variant.projectField!]
+        ? [variant.param ?? variant.projectField].filter((o): o is string => o !== undefined)
         : [
             ...(variant.param !== undefined ? [variant.param] : []),
             ...Object.keys(variant.params ?? {}),
@@ -1488,7 +1540,12 @@ ${chunk(layers, 40)
 `;
 };
 
-const emitProbeTest = (service: string, config: ServiceConfig, probes: Probe[]) => {
+const emitProbeTest = (
+  service: string,
+  config: ServiceConfig,
+  probes: Probe[],
+  unbound: Classified[],
+) => {
   const groups = new Map<string, Probe[]>();
   for (const probe of probes) {
     const group = probe.key ?? "project";
@@ -1561,7 +1618,21 @@ ${items
   .join("\n")}
   });`,
   )
+  .join("\n")}${
+    unbound.length
+      ? `
+
+  // Discovery methods with no binding, and why.
+  describe("not generated", () => {
+${unbound
+  .map(
+    (r) =>
+      `    test.provider.skip(${JSON.stringify(`${r.id}: ${r.kind === "needs-permission" ? `no predefined role grants ${r.reason ?? "its permission"}` : (r.reason ?? r.kind)}`)}, () => Effect.void);`,
+  )
   .join("\n")}
+  });`
+      : ""
+  }
 });
 `;
 };

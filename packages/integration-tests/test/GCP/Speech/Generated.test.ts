@@ -64,6 +64,14 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
+      test.provider(
+        "LongrunningrecognizeSpeech (speech.speech.longrunningrecognize)",
+        () => probe("LongrunningrecognizeSpeech", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:speech", "live"],
+          timeout: 600_000,
+        },
+      );
     });
   },
 );

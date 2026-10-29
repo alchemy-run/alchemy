@@ -217,5 +217,41 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "datamigration.projects.locations.conversionWorkspaces.describeConversionWorkspaceRevisions: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamigration.projects.locations.conversionWorkspaces.fetchEntitiesStatusView: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamigration.projects.locations.conversionWorkspaces.searchBackgroundJobs: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamigration.projects.locations.conversionWorkspaces.fetchIssues: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamigration.projects.locations.conversionWorkspaces.setDraftEntityDdl: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamigration.projects.locations.conversionWorkspaces.describeDatabaseEntities: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamigration.projects.locations.conversionWorkspaces.mappingRules.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamigration.projects.locations.conversionWorkspaces.mappingRules.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

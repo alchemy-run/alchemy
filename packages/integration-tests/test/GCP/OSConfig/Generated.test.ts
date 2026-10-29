@@ -67,5 +67,21 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "osconfig.organizations.locations.global.policyOrchestrators.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "osconfig.projects.locations.global.policyOrchestrators.list: `projects/*/locations/global` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "osconfig.folders.locations.global.policyOrchestrators.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

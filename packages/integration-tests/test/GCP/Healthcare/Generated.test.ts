@@ -615,5 +615,141 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.dicomStores.dicomWeb.studies.getStudyMetrics: `projects/*/locations/*/datasets/*/dicomStores/*/dicomWeb/studies/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.dicomStores.dicomWeb.studies.setBlobStorageSettings: `projects/*/locations/*/datasets/*/dicomStores/*/dicomWeb/studies/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.dicomStores.dicomWeb.studies.series.getSeriesMetrics: `projects/*/locations/*/datasets/*/dicomStores/*/dicomWeb/studies/*/series/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.dicomStores.dicomWeb.studies.series.instances.getStorageInfo: `projects/*/locations/*/datasets/*/dicomStores/*/dicomWeb/studies/*/series/*/instances/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.dicomStores.studies.retrieveStudy: no distilled operation retrieveStudyProjectsLocationsDatasetsDicomStoresStudies",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.dicomStores.studies.retrieveMetadata: no distilled operation retrieveMetadataProjectsLocationsDatasetsDicomStoresStudies",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.dicomStores.studies.series.retrieveSeries: no distilled operation retrieveSeriesProjectsLocationsDatasetsDicomStoresStudiesSeries",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.dicomStores.studies.series.retrieveMetadata: no distilled operation retrieveMetadataProjectsLocationsDatasetsDicomStoresStudiesSeries",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.dicomStores.studies.series.instances.retrieveRendered: no distilled operation retrieveRenderedProjectsLocationsDatasetsDicomStoresStudiesSeriesInstances",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.dicomStores.studies.series.instances.retrieveInstance: no distilled operation retrieveInstanceProjectsLocationsDatasetsDicomStoresStudiesSeriesInstances",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.dicomStores.studies.series.instances.retrieveMetadata: no distilled operation retrieveMetadataProjectsLocationsDatasetsDicomStoresStudiesSeriesInstances",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.dicomStores.studies.series.instances.frames.retrieveRendered: addressed under `studies/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.dicomStores.studies.series.instances.frames.retrieveFrames: no distilled operation retrieveFramesProjectsLocationsDatasetsDicomStoresStudiesSeriesInstancesFrames",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.dicomStores.studies.series.instances.bulkdata.retrieveBulkdata: addressed under `studies/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.bulk-export-group: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/Group/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.read: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/*/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.patch: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/*/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Patient-consent-enforcement-status: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/Patient/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Binary-create: no distilled operation Binary_createProjectsLocationsDatasetsFhirStoresFhir",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Binary-read: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/Binary/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.update: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/*/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.vread: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Resource-validate: no distilled operation Resource_validateProjectsLocationsDatasetsFhirStoresFhir",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Resource-purge: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/*/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Binary-update: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/Binary/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Patient-everything: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/Patient/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.history: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/*/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.search-type: no distilled operation search_typeProjectsLocationsDatasetsFhirStoresFhir",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.delete: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/*/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Binary-vread: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Consent-enforcement-status: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/Consent/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.datasets.fhirStores.fhir.bulk-export: no distilled operation bulk_exportProjectsLocationsDatasetsFhirStoresFhir",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "healthcare.projects.locations.services.nlp.analyzeEntities: `projects/*/locations/*/services/nlp` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+    });
   },
 );

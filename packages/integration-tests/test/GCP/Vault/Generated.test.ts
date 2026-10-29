@@ -46,5 +46,109 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "vault.matters.close: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.reopen: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.undelete: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.removePermissions: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.update: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.delete: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.addPermissions: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.get: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.count: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.savedQueries.get: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.savedQueries.delete: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.savedQueries.list: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.holds.get: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.holds.removeHeldAccounts: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.holds.addHeldAccounts: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.holds.update: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.holds.delete: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.holds.list: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.holds.accounts.delete: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.holds.accounts.list: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.holds.accounts.create: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.exports.list: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.exports.delete: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.exports.get: addressed under `matters/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vault.matters.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

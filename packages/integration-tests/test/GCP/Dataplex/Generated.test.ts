@@ -509,5 +509,37 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "dataplex.projects.locations.dataScans.generateDataQualityRules: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataplex.projects.locations.dataScans.jobs.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataplex.projects.locations.dataScans.jobs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataplex.projects.locations.dataScans.jobs.generateDataQualityRules: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataplex.projects.locations.dataScans.jobs.cancel: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataplex.organizations.locations.encryptionConfigs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataplex.organizations.locations.encryptionConfigs.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

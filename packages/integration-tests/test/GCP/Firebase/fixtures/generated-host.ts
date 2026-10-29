@@ -20,8 +20,9 @@ export default class FirebaseGeneratedHost extends GCP.Function<FirebaseGenerate
     const p2 = yield* GCP.Firebase.GetProject();
     const p3 = yield* GCP.Firebase.GetProjectAdminSdkConfig();
     const p4 = yield* GCP.Firebase.GetProjectAnalyticsDetails();
-    const p5 = yield* GCP.Firebase.RemoveProjectAnalytics();
-    const p6 = yield* GCP.Firebase.SearchProjectApps();
+    const p5 = yield* GCP.Firebase.ListProjects();
+    const p6 = yield* GCP.Firebase.RemoveProjectAnalytics();
+    const p7 = yield* GCP.Firebase.SearchProjectApps();
     return {
       fetch: serveProbes({
         AddProjectFirebase: outcome(
@@ -33,8 +34,9 @@ export default class FirebaseGeneratedHost extends GCP.Function<FirebaseGenerate
         GetProject: outcome(Retry.none(p2({} as never))),
         GetProjectAdminSdkConfig: outcome(Retry.none(p3({} as never))),
         GetProjectAnalyticsDetails: outcome(Retry.none(p4({} as never))),
-        RemoveProjectAnalytics: outcome(Retry.none(p5({} as never))),
-        SearchProjectApps: outcome(Retry.none(p6({} as never))),
+        ListProjects: outcome(Retry.none(p5({} as never))),
+        RemoveProjectAnalytics: outcome(Retry.none(p6({} as never))),
+        SearchProjectApps: outcome(Retry.none(p7({} as never))),
       }),
     };
   }).pipe(
@@ -46,6 +48,7 @@ export default class FirebaseGeneratedHost extends GCP.Function<FirebaseGenerate
           GCP.Firebase.GetProjectHttp,
           GCP.Firebase.GetProjectAdminSdkConfigHttp,
           GCP.Firebase.GetProjectAnalyticsDetailsHttp,
+          GCP.Firebase.ListProjectsHttp,
           GCP.Firebase.RemoveProjectAnalyticsHttp,
           GCP.Firebase.SearchProjectAppsHttp,
         ),

@@ -46,5 +46,65 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "iap.projects.brands.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iap.projects.brands.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iap.projects.brands.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iap.projects.brands.identityAwareProxyClients.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iap.projects.brands.identityAwareProxyClients.resetSecret: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iap.projects.brands.identityAwareProxyClients.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iap.projects.iap_tunnel.locations.destGroups.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iap.projects.iap_tunnel.locations.destGroups.create: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iap.projects.iap_tunnel.locations.destGroups.get: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iap.projects.iap_tunnel.locations.destGroups.patch: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iap.projects.iap_tunnel.locations.destGroups.delete: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iap.validateAttributeExpression: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iap.updateIapSettings: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iap.getIapSettings: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

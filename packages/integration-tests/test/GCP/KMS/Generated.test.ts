@@ -154,5 +154,105 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "cloudkms.organizations.getKajPolicyConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.organizations.updateKajPolicyConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.updateAutokeyConfig: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.getAutokeyConfig: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.updateKajPolicyConfig: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.showEffectiveKeyAccessJustificationsPolicyConfig: organization-level Key Access Justifications configuration",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.getKajPolicyConfig: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.showEffectiveKeyAccessJustificationsEnrollmentConfig: organization-level Key Access Justifications configuration",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.showEffectiveAutokeyConfig: organization-level Autokey configuration",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.importTrustedKeyWrappedCryptoKeyVersion: single-tenant HSM key transfer",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.import: imports wrapped key material through an ImportJob; a deploy-time concern, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.locations.keyRings.cryptoKeys.cryptoKeyVersions.exportTrustedKeyWrappedCryptoKeyVersion: single-tenant HSM key transfer",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.locations.keyHandles.create: needs Autokey enabled on a folder (an organization-level setup)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.locations.ekmConnections.create: creates long-lived infrastructure that belongs in a resource, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.locations.singleTenantHsmInstances.create: creates long-lived infrastructure that belongs in a resource, not a runtime call (a dedicated HSM, billed per month)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.locations.singleTenantHsmInstances.proposals.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.locations.singleTenantHsmInstances.proposals.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.locations.singleTenantHsmInstances.proposals.approve: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.projects.locations.singleTenantHsmInstances.proposals.execute: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.folders.getAutokeyConfig: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.folders.showEffectiveAutokeyConfig: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.folders.getKajPolicyConfig: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.folders.updateAutokeyConfig: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudkms.folders.updateKajPolicyConfig: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

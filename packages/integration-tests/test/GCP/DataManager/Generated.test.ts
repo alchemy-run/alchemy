@@ -46,5 +46,113 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userListDirectLicenses.get: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userListDirectLicenses.create: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userListDirectLicenses.patch: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userListDirectLicenses.list: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.insights.retrieve: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userListGlobalLicenses.create: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userListGlobalLicenses.list: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userListGlobalLicenses.get: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userListGlobalLicenses.patch: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userListGlobalLicenses.userListGlobalLicenseCustomerInfos.list: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.partnerLinks.search: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.partnerLinks.create: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.partnerLinks.delete: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userLists.get: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userLists.delete: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userLists.patch: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userLists.create: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.accountTypes.accounts.userLists.list: addressed under `accountTypes/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.audienceMembers.removeAll: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.audienceMembers.ingest: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.audienceMembers.remove: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.events.ingest: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.users.ingest: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.users.remove: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.requestStatus.retrieve: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datamanager.adEvents.ingest: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

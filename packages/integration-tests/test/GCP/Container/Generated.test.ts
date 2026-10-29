@@ -263,5 +263,141 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "container.projects.zones.getServerconfig: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.operations.cancel: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.operations.list: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.operations.get: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.update: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.monitoring: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.legacyAbac: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.delete: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.setMasterAuth: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.completeControlPlaneUpgrade: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.addons: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.master: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.locations: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.create: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.list: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.resourceLabels: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.completeIpRotation: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.startIpRotation: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.fetchClusterUpgradeInfo: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.logging: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.setMaintenancePolicy: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.get: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.setNetworkPolicy: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.nodePools.autoscaling: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.nodePools.rollback: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.nodePools.fetchNodePoolUpgradeInfo: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.nodePools.list: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.nodePools.setManagement: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.nodePools.get: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.nodePools.delete: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.nodePools.setSize: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.nodePools.create: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "container.projects.zones.clusters.nodePools.update: the zonal v1 method; the location-scoped method reaches the same clusters",
+        () => Effect.void,
+      );
+    });
   },
 );

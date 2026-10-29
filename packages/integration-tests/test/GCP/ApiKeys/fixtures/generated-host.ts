@@ -18,12 +18,14 @@ export default class ApiKeysGeneratedHost extends GCP.Function<ApiKeysGeneratedH
   Effect.gen(function* () {
     const p0 = yield* GCP.ApiKeys.GetKey(Maps);
     const p1 = yield* GCP.ApiKeys.ListKeys();
-    const p2 = yield* GCP.ApiKeys.UndeleteKey(Maps);
+    const p2 = yield* GCP.ApiKeys.LookupKey();
+    const p3 = yield* GCP.ApiKeys.UndeleteKey(Maps);
     return {
       fetch: serveProbes({
         GetKey: outcome(Retry.none(p0({} as never))),
         ListKeys: outcome(Retry.none(p1({ location: "global" } as never))),
-        UndeleteKey: outcome(Retry.none(p2({} as never))),
+        LookupKey: outcome(Retry.none(p2({} as never))),
+        UndeleteKey: outcome(Retry.none(p3({} as never))),
       }),
     };
   }).pipe(
@@ -32,6 +34,7 @@ export default class ApiKeysGeneratedHost extends GCP.Function<ApiKeysGeneratedH
         Layer.mergeAll(
           GCP.ApiKeys.GetKeyHttp,
           GCP.ApiKeys.ListKeysHttp,
+          GCP.ApiKeys.LookupKeyHttp,
           GCP.ApiKeys.UndeleteKeyHttp,
         ),
       ),

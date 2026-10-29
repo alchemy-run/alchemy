@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { outcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,44 @@ export default class VisionGeneratedHost extends GCP.Function<VisionGeneratedHos
   "VisionGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.Vision.AnnotateFile();
+    const p1 = yield* GCP.Vision.AnnotateImage();
+    const p2 = yield* GCP.Vision.AsyncFileBatchAnnotate();
+    const p3 = yield* GCP.Vision.AsyncImageBatchAnnotate();
+    const p4 = yield* GCP.Vision.ImportProductSet();
+    const p5 = yield* GCP.Vision.ListProducts();
+    const p6 = yield* GCP.Vision.ListProductSets();
+    const p7 = yield* GCP.Vision.PurgeProduct();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        AnnotateFile: outcome(Retry.none(p0({} as never))),
+        AnnotateImage: outcome(Retry.none(p1({} as never))),
+        AsyncFileBatchAnnotate: outcome(Retry.none(p2({} as never))),
+        AsyncImageBatchAnnotate: outcome(Retry.none(p3({} as never))),
+        ImportProductSet: outcome(
+          Retry.none(
+            p4({ location: "us-central1", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        ListProducts: outcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListProductSets: outcome(Retry.none(p6({ location: "us-central1" } as never))),
+        PurgeProduct: outcome(Retry.none(p7({ location: "us-central1" } as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.Vision.AnnotateFileHttp,
+          GCP.Vision.AnnotateImageHttp,
+          GCP.Vision.AsyncFileBatchAnnotateHttp,
+          GCP.Vision.AsyncImageBatchAnnotateHttp,
+          GCP.Vision.ImportProductSetHttp,
+          GCP.Vision.ListProductsHttp,
+          GCP.Vision.ListProductSetsHttp,
+          GCP.Vision.PurgeProductHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

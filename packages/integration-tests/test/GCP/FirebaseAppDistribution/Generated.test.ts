@@ -46,5 +46,81 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "firebaseappdistribution.projects.testers.batchAdd: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.testers.batchRemove: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.testers.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.testers.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.apps.getAabInfo: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.apps.releases.batchDelete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.apps.releases.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.apps.releases.distribute: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.apps.releases.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.apps.releases.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.apps.releases.feedbackReports.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.apps.releases.feedbackReports.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.apps.releases.feedbackReports.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.groups.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.groups.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.groups.batchLeave: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.projects.groups.batchJoin: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebaseappdistribution.media.upload: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

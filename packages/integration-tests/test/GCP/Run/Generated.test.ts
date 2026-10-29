@@ -118,5 +118,29 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "run.projects.locations.sourceUploads.upload: uploads source for a deploy: a deploy-time step",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "run.projects.locations.jobs.executions.exportStatus: checks `run.locations.exportImage`, which no predefined role grants",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "run.projects.locations.services.revisions.exportStatus: checks `run.locations.exportImage`, which no predefined role grants",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "run.projects.locations.instances.create: creates long-lived infrastructure that belongs in a resource, not a runtime call (Cloud Run instances, preview)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "run.projects.locations.builds.submit: builds a container image for a deploy: a deploy-time step",
+        () => Effect.void,
+      );
+    });
   },
 );

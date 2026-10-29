@@ -9,6 +9,8 @@ export * from "./GetProjectAdminSdkConfig.ts";
 export * from "./GetProjectAdminSdkConfigHttp.ts";
 export * from "./GetProjectAnalyticsDetails.ts";
 export * from "./GetProjectAnalyticsDetailsHttp.ts";
+export * from "./ListProjects.ts";
+export * from "./ListProjectsHttp.ts";
 export * from "./RemoveProjectAnalytics.ts";
 export * from "./RemoveProjectAnalyticsHttp.ts";
 export * from "./SearchProjectApps.ts";

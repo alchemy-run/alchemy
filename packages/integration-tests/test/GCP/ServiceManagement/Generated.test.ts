@@ -46,5 +46,72 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    describe("project", { concurrent: true }, () => {
+      test.provider(
+        "GenerateServiceConfigReport (servicemanagement.services.generateConfigReport)",
+        () => probe("GenerateServiceConfigReport", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:servicemanagement", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListServices (servicemanagement.services.list)",
+        () => probe("ListServices", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:servicemanagement", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "servicemanagement.services.delete: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicemanagement.services.get: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicemanagement.services.getConfig: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicemanagement.services.undelete: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicemanagement.services.rollouts.list: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicemanagement.services.rollouts.create: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicemanagement.services.rollouts.get: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicemanagement.services.configs.submit: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicemanagement.services.configs.create: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicemanagement.services.configs.list: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "servicemanagement.services.configs.get: addressed under `services/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

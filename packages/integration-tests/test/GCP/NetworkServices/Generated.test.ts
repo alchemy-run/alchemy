@@ -349,5 +349,81 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "networkservices.projects.locations.producerExtensions.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.producerExtensions.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.producerExtensions.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.producerExtensions.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.multicastConsumerAssociations.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.multicastConsumerAssociations.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.extensionBindings.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.extensionBindings.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.extensionBindings.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.extensionBindings.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.extensionBindings.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.multicastGroupConsumerActivations.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.multicastGroupConsumerActivations.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.agentConnectivityTemplates.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.agentConnectivityTemplates.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.agentConnectivityTemplates.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.agentConnectivityTemplates.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkservices.projects.locations.agentConnectivityTemplates.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

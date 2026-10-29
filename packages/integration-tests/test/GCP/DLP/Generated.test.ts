@@ -357,5 +357,198 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "dlp.locations.infoTypes.list: addressed under `locations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.dlpJobs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.dlpJobs.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.dlpJobs.cancel: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.infoTypes.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.image.redact: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.discoveryConfigs.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.discoveryConfigs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.content.inspect: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.content.deidentify: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.content.reidentify: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.fileStoreDataProfiles.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.fileStoreDataProfiles.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.fileStoreDataProfiles.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.dlpJobs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.dlpJobs.cancel: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.dlpJobs.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.dlpJobs.hybridInspect: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.locations.dlpJobs.finish: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.image.redact: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.content.deidentify: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.content.reidentify: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.projects.content.inspect: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.deidentifyTemplates.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.fileStoreDataProfiles.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.fileStoreDataProfiles.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.fileStoreDataProfiles.delete: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.discoveryConfigs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.discoveryConfigs.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.infoTypes.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.columnDataProfiles.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.columnDataProfiles.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.storedInfoTypes.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.deidentifyTemplates.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.tableDataProfiles.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.tableDataProfiles.delete: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.tableDataProfiles.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.connections.get: name collision on GetConnection",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.connections.search: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.connections.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.inspectTemplates.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.projectDataProfiles.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.projectDataProfiles.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.dlpJobs.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.locations.jobTriggers.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.inspectTemplates.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dlp.organizations.storedInfoTypes.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip("dlp.infoTypes.list: its path names no project", () => Effect.void);
+    });
   },
 );

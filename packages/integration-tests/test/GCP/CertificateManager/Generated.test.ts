@@ -87,5 +87,41 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "certificatemanager.projects.locations.certificates.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "certificatemanager.projects.locations.certificates.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "certificatemanager.projects.locations.certificateIssuanceConfigs.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "certificatemanager.projects.locations.certificateIssuanceConfigs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "certificatemanager.projects.locations.certificateMaps.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "certificatemanager.projects.locations.certificateMaps.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "certificatemanager.projects.locations.certificateMaps.certificateMapEntries.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "certificatemanager.projects.locations.certificateMaps.certificateMapEntries.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

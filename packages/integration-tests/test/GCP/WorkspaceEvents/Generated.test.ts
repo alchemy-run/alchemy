@@ -297,5 +297,13 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "pubsub.projects.schemas.deleteRevision: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

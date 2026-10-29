@@ -112,5 +112,77 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "assuredworkloads.organizations.locations.dbFrameworkComplianceSummaries.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.organizations.locations.dbFrameworkComplianceReports.fetch: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.organizations.locations.dbFrameworkComplianceReports.aggregate: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.organizations.locations.dbFrameworkComplianceReports.dbControlComplianceSummaries.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.organizations.locations.workloads.mutatePartnerPermissions: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.organizations.locations.workloads.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.organizations.locations.workloads.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.organizations.locations.workloads.analyzeWorkloadMove: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.organizations.locations.workloads.enableComplianceUpdates: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.organizations.locations.workloads.enableResourceMonitoring: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.organizations.locations.workloads.restrictAllowedResources: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.organizations.locations.dbFindingSummaries.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.folders.locations.dbFrameworkComplianceReports.aggregate: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.folders.locations.dbFrameworkComplianceReports.fetch: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.folders.locations.dbFrameworkComplianceReports.dbControlComplianceSummaries.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.folders.locations.dbFindingSummaries.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "assuredworkloads.folders.locations.dbFrameworkComplianceSummaries.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

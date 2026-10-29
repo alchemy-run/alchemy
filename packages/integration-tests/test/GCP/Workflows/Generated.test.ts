@@ -58,5 +58,21 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "workflowexecutions.projects.locations.workflows.executions.exportData: rejects execution names with the project id, and the project number only works for the basic Owner/Editor roles",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "workflowexecutions.projects.locations.workflows.executions.deleteExecutionHistory: checks workflows.executions.delete, which no predefined role grants",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "workflowexecutions.projects.locations.workflows.executions.callbacks.list: rejects execution names with the project id, and the project number only works for the basic Owner/Editor roles",
+        () => Effect.void,
+      );
+    });
   },
 );

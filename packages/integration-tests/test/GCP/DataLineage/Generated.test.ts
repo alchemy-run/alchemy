@@ -106,5 +106,33 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "datalineage.projects.locations.config.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datalineage.projects.locations.config.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datalineage.folders.locations.config.get: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datalineage.folders.locations.config.patch: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datalineage.organizations.locations.config.patch: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "datalineage.organizations.locations.config.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

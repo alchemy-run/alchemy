@@ -84,6 +84,10 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
+      test.provider("ListProjects (firebase.projects.list)", () => probe("ListProjects", true), {
+        tags: ["provider:gcp", "provider:gcp:firebase", "live"],
+        timeout: 600_000,
+      });
       test.provider(
         "RemoveProjectAnalytics (firebase.projects.removeAnalytics)",
         () => probe("RemoveProjectAnalytics", false),
@@ -99,6 +103,110 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:firebase", "live"],
           timeout: 600_000,
         },
+      );
+    });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "firebase.projects.iosApps.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.iosApps.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.iosApps.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.iosApps.remove: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.iosApps.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.iosApps.undelete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.iosApps.getConfig: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.defaultLocation.finalize: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.androidApps.undelete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.androidApps.getConfig: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.androidApps.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.androidApps.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.androidApps.remove: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.androidApps.sha.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.androidApps.sha.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.androidApps.sha.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.availableLocations.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.webApps.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.webApps.getConfig: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.webApps.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.webApps.undelete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.webApps.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.webApps.remove: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.projects.webApps.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firebase.availableProjects.list: no predefined role grants its permission",
+        () => Effect.void,
       );
     });
   },

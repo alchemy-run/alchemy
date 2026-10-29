@@ -213,5 +213,29 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "dns.outboundEndpoints.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dns.outboundEndpoints.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dns.outboundEndpoints.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dns.outboundEndpoints.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dns.outboundEndpoints.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

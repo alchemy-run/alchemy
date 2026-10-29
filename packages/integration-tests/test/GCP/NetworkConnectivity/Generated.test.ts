@@ -410,5 +410,33 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "networkconnectivity.projects.locations.automatedDnsRecords.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkconnectivity.projects.locations.automatedDnsRecords.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkconnectivity.projects.locations.global.hubs.list: `projects/*/locations/global` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkconnectivity.projects.locations.global.policyBasedRoutes.list: `projects/*/locations/global` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkconnectivity.projects.locations.serviceConnectionTokens.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkconnectivity.projects.locations.serviceConnectionTokens.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

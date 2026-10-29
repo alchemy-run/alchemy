@@ -121,5 +121,37 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "cloudnumberregistry.projects.locations.discoveredRanges.showUtilization: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudnumberregistry.projects.locations.discoveredRanges.findFreeIpRanges: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudnumberregistry.projects.locations.customRanges.showUtilization: no distilled operation showUtilizationProjectsLocationsCustomRanges",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudnumberregistry.organizations.locations.orgNumberRegistries.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudnumberregistry.organizations.locations.orgNumberRegistries.delete: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudnumberregistry.organizations.locations.orgNumberRegistries.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudnumberregistry.organizations.locations.orgNumberRegistries.create: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

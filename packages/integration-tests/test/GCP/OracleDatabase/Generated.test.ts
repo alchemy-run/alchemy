@@ -192,5 +192,49 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "oracledatabase.projects.locations.goldengateDeploymentVersions.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "oracledatabase.projects.locations.goldengateDeploymentTypes.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "oracledatabase.projects.locations.goldengateDeployments.stop: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "oracledatabase.projects.locations.goldengateDeployments.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "oracledatabase.projects.locations.goldengateDeployments.start: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "oracledatabase.projects.locations.goldengateDeploymentEnvironments.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "oracledatabase.projects.locations.goldengateConnections.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "oracledatabase.projects.locations.goldengateConnectionAssignments.test: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "oracledatabase.projects.locations.goldengateConnectionAssignments.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "oracledatabase.projects.locations.goldengateConnectionTypes.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

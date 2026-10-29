@@ -46,5 +46,25 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "bigquerydatapolicy.projects.locations.dataPolicies.removeGrantees: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigquerydatapolicy.projects.locations.dataPolicies.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigquerydatapolicy.projects.locations.dataPolicies.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigquerydatapolicy.projects.locations.dataPolicies.addGrantees: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

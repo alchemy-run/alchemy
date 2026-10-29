@@ -58,5 +58,25 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "bigtableadmin.projects.instances.partialUpdateInstance: updates the instance, which its provider owns",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigtableadmin.projects.instances.clusters.getMemoryLayer: the cluster's memory layer (preview); no Alchemy resource models it yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigtableadmin.projects.instances.clusters.partialUpdateCluster: updates the cluster, which its provider owns",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigtableadmin.projects.instances.clusters.updateMemoryLayer: the cluster's memory layer (preview); no Alchemy resource models it yet",
+        () => Effect.void,
+      );
+    });
   },
 );

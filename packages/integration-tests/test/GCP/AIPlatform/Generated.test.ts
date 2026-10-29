@@ -2203,5 +2203,274 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "aiplatform.batchPredictionJobs.get: addressed under `batchPredictionJobs/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.endpoints.google.science.inference: `projects/*/locations/*/endpoints/google` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.endpoints.openapi.embeddings: `projects/*/locations/*/endpoints/openapi` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.endpoints.openapi.completions: `projects/*/locations/*/endpoints/openapi` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.endpoints.openapi.responses: `projects/*/locations/*/endpoints/openapi` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.servingProfiles.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.servingProfiles.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.servingProfiles.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.servingProfiles.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.servingProfiles.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.reasoningEngines.query: the hand-written binding of the same name reaches the same resource",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.reasoningEngines.get: the hand-written binding of the same name reaches the same resource",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.reasoningEngines.sandboxEnvironmentTemplates.get: the hand-written binding of the same name reaches the same resource",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.migratableResources.batchMigrate: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.persistentResources.reboot: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.pipelineJobs.batchCancel: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.pipelineJobs.batchDelete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.memoryBanks.ingestEvents: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.tuningJobs.rebaseTunedModel: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.publishers.v1.responses: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.publishers.v1.responses.delete: `projects/*/locations/*/publishers/*/v1/responses/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.publishers.v1.responses.compact: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.projects.locations.publishers.v1.responses.get: `projects/*/locations/*/publishers/*/v1/responses/*` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.datasets.get: name collision on GetDataset",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.datasets.datasetVersions.get: name collision on GetDatasetVersion",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.datasets.datasetVersions.restore: name collision on RestoreDatasetVersion",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.datasets.datasetVersions.list: name collision on ListDatasetVersions",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.endpoints.predict: addressed under `endpoints/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.endpoints.computeTokens: addressed under `endpoints/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.endpoints.generateContent: addressed under `endpoints/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.endpoints.countTokens: addressed under `endpoints/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.endpoints.fetchPredictOperation: addressed under `endpoints/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.endpoints.predictLongRunning: addressed under `endpoints/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.endpoints.streamGenerateContent: addressed under `endpoints/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.endpoints.chat.completions: addressed under `endpoints/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.media.upload: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.computeTokens: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.streamGenerateContent: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.get: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.predictLongRunning: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.generateContent: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.fetchPredictOperation: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.predict: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.publishers.models.countTokens: addressed under `publishers/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.delete: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.streamQuery: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.executeCode: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.cancelAsyncQuery: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.patch: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.asyncQuery: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.sandboxEnvironmentSnapshots.delete: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.sandboxEnvironmentSnapshots.get: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.sandboxEnvironmentSnapshots.list: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.sandboxEnvironments.list: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.runtimeRevisions.streamQuery: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.runtimeRevisions.query: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.sandboxEnvironmentTemplates.list: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.sandboxEnvironmentTemplates.delete: addressed under `reasoningEngines/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.batchPredictionJobs.list: its path names no project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.batchPredictionJobs.create: its path names no project",
+        () => Effect.void,
+      );
+      test.provider.skip("aiplatform.datasets.list: its path names no project", () => Effect.void);
+      test.provider.skip(
+        "aiplatform.datasets.create: its path names no project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.evaluateInstances: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.generateInstanceRubrics: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.evaluateDataset: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.create: its path names no project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "aiplatform.reasoningEngines.list: its path names no project",
+        () => Effect.void,
+      );
+    });
   },
 );

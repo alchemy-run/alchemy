@@ -71,6 +71,10 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
+      test.provider("LookupKey (apikeys.keys.lookupKey)", () => probe("LookupKey", false), {
+        tags: ["provider:gcp", "provider:gcp:apikeys", "live"],
+        timeout: 600_000,
+      });
     });
   },
 );

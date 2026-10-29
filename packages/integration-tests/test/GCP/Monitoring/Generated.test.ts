@@ -290,5 +290,37 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "monitoring.organizations.timeSeries.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "monitoring.services.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "monitoring.folders.timeSeries.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "monitoring.projects.timeSeries.createService: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "monitoring.projects.timeSeries.query: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "monitoring.projects.collectdTimeSeries.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "monitoring.uptimeCheckIps.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

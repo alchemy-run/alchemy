@@ -73,5 +73,21 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "cloudcontrolspartner.organizations.locations.customers.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudcontrolspartner.organizations.locations.customers.workloads.getEkmConnections: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudcontrolspartner.organizations.locations.customers.workloads.getPartnerPermissions: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

@@ -131,5 +131,17 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "managedidentities.projects.locations.global.domains.list: `projects/*/locations/global` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "managedidentities.projects.locations.global.peerings.list: `projects/*/locations/global` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+    });
   },
 );

@@ -3,5 +3,7 @@ export * from "./ListCustomClasses.ts";
 export * from "./ListCustomClassesHttp.ts";
 export * from "./ListPhraseSets.ts";
 export * from "./ListPhraseSetsHttp.ts";
+export * from "./LongrunningrecognizeSpeech.ts";
+export * from "./LongrunningrecognizeSpeechHttp.ts";
 export * from "./CustomClassAuditLogs.ts";
 export * from "./PhraseSetAuditLogs.ts";

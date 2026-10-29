@@ -892,5 +892,257 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "apigee.organizations.getMcpServerConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.getRuntimeConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.getSecuritySettings: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.getDeployedIngressConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.updateControlPlaneAccess: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.updateSecuritySettings: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.getControlPlaneAccess: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.sharedflows.move: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.sharedflows.revisions.updateSharedFlowRevision: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.sharedflows.revisions.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.sites.apidocs.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.sites.apidocs.getDocumentation: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.sites.apidocs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.sites.apidocs.updateDocumentation: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.sites.apicategories.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.sites.apicategories.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.envgroups.getDeployedIngressConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.hostSecurityReports.getResultView: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.hostSecurityReports.getResult: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.hostQueries.getResultView: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.hostQueries.getResult: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.getDebugmask: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.updateTraceConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.updateDebugmask: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.getApiSecurityRuntimeConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.getAddonsConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.updateSecurityActionsConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.getSecurityActionsConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.getDeployedConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.getTraceConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.securityReports.getResultView: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.securityReports.getResult: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.traceConfig.overrides.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.queries.getResulturl: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.queries.getResult: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.addonsConfig.setAddonEnablement: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.analytics.admin.getSchemav2: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.analytics.exports.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.environments.apis.revisions.getDeployments: name collision on GetRevisionDeployments",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.apimServiceExtensions.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.apimServiceExtensions.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.appgroups.getMonetizationConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.appgroups.updateMonetizationConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.appgroups.getBalance: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.appgroups.balance.credit: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.appgroups.balance.adjust: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.apis.move: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.apis.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.apis.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.apis.debugsessions.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.apis.revisions.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.apis.revisions.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.apis.revisions.updateApiProxyRevision: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.optimizedHostStats.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.developers.getMonetizationConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.developers.updateMonetizationConfig: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.developers.getBalance: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.developers.balance.adjust: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.developers.balance.credit: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.organizations.securityAssessmentResults.batchCompute: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apigee.hybrid.issuers.list: addressed under `hybrid/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

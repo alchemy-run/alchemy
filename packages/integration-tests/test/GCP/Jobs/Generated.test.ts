@@ -46,5 +46,61 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "jobs.projects.tenants.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "jobs.projects.tenants.completeQuery: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "jobs.projects.tenants.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "jobs.projects.tenants.clientEvents.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "jobs.projects.tenants.jobs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "jobs.projects.tenants.jobs.batchCreate: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "jobs.projects.tenants.jobs.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "jobs.projects.tenants.jobs.batchUpdate: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "jobs.projects.tenants.jobs.searchForAlert: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "jobs.projects.tenants.jobs.batchDelete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "jobs.projects.tenants.jobs.search: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "jobs.projects.tenants.companies.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "jobs.projects.tenants.companies.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

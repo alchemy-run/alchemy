@@ -498,5 +498,21 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "managedkafka.projects.locations.schemaRegistries.contexts.schemas.getSchema: the registry-level GetSchema reads the same schemas; contexts add a prefix only",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "managedkafka.projects.locations.schemaRegistries.contexts.subjects.lookupVersion: the registry-level LookupSubjectVersion reads the same subjects; contexts add a prefix only",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "managedkafka.projects.locations.schemaRegistries.contexts.compatibility.checkCompatibility: name collision on CheckCompatibility",
+        () => Effect.void,
+      );
+    });
   },
 );

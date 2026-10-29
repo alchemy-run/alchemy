@@ -62,5 +62,77 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "storage.anywhereCaches.insert: creates a cache: infrastructure",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.anywhereCaches.pause: no distilled operation pauseAnywhereCaches",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.rapidCaches.insert: creates a cache: infrastructure",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.rapidCaches.update: rapid caches are not generally available",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.rapidCaches.get: rapid caches are not generally available",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.rapidCaches.list: rapid caches are not generally available",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.rapidCaches.disable: rapid caches are not generally available",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.bucketAccessControls.insert: lifecycle of GCP.Storage.BucketAccessControl",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.buckets.relocate: moves the bucket to another location: infrastructure, set by GCP.Storage.Bucket's location",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.buckets.lockRetentionPolicy: permanently locks the bucket's retention policy: irreversible infrastructure, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.defaultObjectAccessControls.insert: lifecycle of GCP.Storage.DefaultObjectAccessControl",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.notifications.insert: lifecycle of GCP.Storage.Notification",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.objectAccessControls.insert: lifecycle of GCP.Storage.ObjectAccessControl",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.objects.insert: uploads go to the media upload endpoint: use GCP.Storage.PutObject",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.projects.hmacKeys.create: lifecycle of GCP.Storage.HmacKey",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.projects.serviceAccount.get: returns Cloud Storage's service agent for the project: setup information, not a runtime call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "storage.channels.stop: object change notification channels are deprecated; use GCP.Storage.BucketEventSource",
+        () => Effect.void,
+      );
+    });
   },
 );

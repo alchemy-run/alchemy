@@ -69,5 +69,21 @@ describe.skipIf(!!process.env.FAST)(
         timeout: 600_000,
       });
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "serviceusage.services.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "serviceusage.services.batchEnable: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "serviceusage.services.batchGet: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

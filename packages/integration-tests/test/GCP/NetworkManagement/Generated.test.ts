@@ -121,5 +121,53 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "networkmanagement.projects.locations.global.connectivityTests.list: `projects/*/locations/global` has no Alchemy resource to bind",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkmanagement.projects.locations.vpcFlowLogsConfigs.showEffectiveFlowLogsConfigs: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkmanagement.projects.locations.vpcFlowLogsConfigs.queryOrgVpcFlowLogsConfigs: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkmanagement.projects.locations.networkMonitoringProviders.generateMonitoringPointConfig: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkmanagement.projects.locations.networkMonitoringProviders.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkmanagement.projects.locations.networkMonitoringProviders.generateProviderAccessToken: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkmanagement.projects.locations.networkMonitoringProviders.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadServerConnectConfig: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadInstallScript: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadRecreateInstallScript: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networkmanagement.organizations.locations.vpcFlowLogsConfigs.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

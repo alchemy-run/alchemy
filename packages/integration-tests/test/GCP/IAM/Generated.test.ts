@@ -46,5 +46,21 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "iam.policies.listPolicies: addressed under `policies/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iam.policies.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "iam.policies.createPolicy: addressed under `policies/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

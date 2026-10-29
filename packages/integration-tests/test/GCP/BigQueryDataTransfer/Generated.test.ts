@@ -156,5 +156,49 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "bigquerydatatransfer.projects.transferConfigs.scheduleRuns: the location-scoped method reaches the same transfer configs and is the one GCP documents",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigquerydatatransfer.projects.transferConfigs.patch: the location-scoped method reaches the same transfer configs and is the one GCP documents",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigquerydatatransfer.projects.transferConfigs.get: the location-scoped method reaches the same transfer configs and is the one GCP documents",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigquerydatatransfer.projects.transferConfigs.delete: the location-scoped method reaches the same transfer configs and is the one GCP documents",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigquerydatatransfer.projects.transferConfigs.transferResources.get: the location-scoped method reaches the same transfer configs and is the one GCP documents",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigquerydatatransfer.projects.transferConfigs.transferResources.list: the location-scoped method reaches the same transfer configs and is the one GCP documents",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigquerydatatransfer.projects.transferConfigs.runs.get: the location-scoped method reaches the same transfer configs and is the one GCP documents",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigquerydatatransfer.projects.transferConfigs.runs.list: the location-scoped method reaches the same transfer configs and is the one GCP documents",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigquerydatatransfer.projects.transferConfigs.runs.delete: the location-scoped method reaches the same transfer configs and is the one GCP documents",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "bigquerydatatransfer.projects.transferConfigs.runs.transferLogs.list: the location-scoped method reaches the same transfer configs and is the one GCP documents",
+        () => Effect.void,
+      );
+    });
   },
 );

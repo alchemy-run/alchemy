@@ -64,5 +64,41 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "securityposture.organizations.locations.postureTemplates.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securityposture.organizations.locations.postureTemplates.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securityposture.organizations.locations.reports.createIaCValidationReport: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securityposture.organizations.locations.reports.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securityposture.organizations.locations.reports.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securityposture.organizations.locations.postureDeployments.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securityposture.organizations.locations.postures.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "securityposture.organizations.locations.postures.extract: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

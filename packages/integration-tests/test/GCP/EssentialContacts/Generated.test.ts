@@ -98,5 +98,33 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "essentialcontacts.organizations.contacts.compute: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "essentialcontacts.organizations.contacts.sendTestMessage: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "essentialcontacts.organizations.contacts.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "essentialcontacts.folders.contacts.compute: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "essentialcontacts.folders.contacts.sendTestMessage: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "essentialcontacts.folders.contacts.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

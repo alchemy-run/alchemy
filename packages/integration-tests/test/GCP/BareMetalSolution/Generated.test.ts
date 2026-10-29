@@ -207,5 +207,33 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "baremetalsolution.projects.locations.provisioningConfigs.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "baremetalsolution.projects.locations.provisioningConfigs.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "baremetalsolution.projects.locations.provisioningConfigs.patch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "baremetalsolution.projects.locations.provisioningConfigs.submit: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "baremetalsolution.projects.locations.provisioningQuotas.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "baremetalsolution.projects.locations.osImages.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

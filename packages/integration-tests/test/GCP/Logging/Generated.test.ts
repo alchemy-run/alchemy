@@ -451,5 +451,349 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "logging.projects.getCmekSettings: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.getSettings: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.locations.savedQueries.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.locations.savedQueries.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.locations.recentQueries.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.metrics.update: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.metrics.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.metrics.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.metrics.delete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.projects.metrics.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.getCmekSettings: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.getSettings: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.sinks.update: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.sinks.create: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.sinks.patch: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.sinks.delete: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.sinks.list: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.sinks.get: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.locations.recentQueries.list: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.locations.buckets.list: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.locations.buckets.createAsync: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.locations.savedQueries.list: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.locations.savedQueries.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.exclusions.list: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.logs.delete: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.billingAccounts.logs.list: addressed under `billingAccounts/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.updateSettings: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.getCmekSettings: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.getSettings: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.sinks.delete: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.sinks.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.sinks.patch: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.sinks.update: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.sinks.create: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.sinks.get: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.logs.delete: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.logs.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.locations.savedQueries.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.locations.savedQueries.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.locations.buckets.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.locations.buckets.createAsync: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.locations.recentQueries.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.locations.logScopes.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.folders.exclusions.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.getCmekSettings: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.getSettings: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.updateSettings: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.updateCmekSettings: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.locations.buckets.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.locations.buckets.createAsync: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.exclusions.delete: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.exclusions.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.exclusions.patch: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.exclusions.get: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.updateCmekSettings: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.updateSettings: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.getCmekSettings: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.getSettings: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.locations.savedQueries.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.locations.savedQueries.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.locations.logScopes.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.locations.recentQueries.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.locations.buckets.createAsync: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.locations.buckets.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.exclusions.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.sinks.patch: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.sinks.delete: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.sinks.get: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.sinks.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.sinks.update: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.sinks.create: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.logs.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.organizations.logs.delete: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.sinks.update: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.sinks.create: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.sinks.get: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.sinks.delete: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.sinks.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.logs.delete: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.logs.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.entries.tail: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.entries.write: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.entries.copy: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.entries.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.monitoredResourceDescriptors.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

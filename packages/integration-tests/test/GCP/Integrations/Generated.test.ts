@@ -599,5 +599,89 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "integrations.projects.getClientmetadata: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.products.certificates.get: name collision on GetCertificate",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.products.cloudFunctions.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.clients.toggleHttp: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.clients.deprovision: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.clients.changeConfig: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.clients.switchVariableMasking: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.clients.provisionClientPostProcessor: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.clients.provision: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.clients.switch: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.clients.replace: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.cloudFunctions.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.connections.getConnectionSchemaMetadata: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.connections.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.connections.runtimeEntitySchemas.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.connections.runtimeActionSchemas.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.appsScriptProjects.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.projects.locations.appsScriptProjects.link: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.callback.generateToken: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "integrations.connectorPlatformRegions.enumerate: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

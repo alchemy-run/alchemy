@@ -46,5 +46,49 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "gamesConfiguration.achievementConfigurations.update: addressed under `games/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gamesConfiguration.achievementConfigurations.list: addressed under `games/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gamesConfiguration.achievementConfigurations.delete: addressed under `games/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gamesConfiguration.achievementConfigurations.insert: addressed under `games/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gamesConfiguration.achievementConfigurations.get: addressed under `games/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gamesConfiguration.leaderboardConfigurations.update: addressed under `games/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gamesConfiguration.leaderboardConfigurations.list: addressed under `games/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gamesConfiguration.leaderboardConfigurations.delete: addressed under `games/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gamesConfiguration.leaderboardConfigurations.insert: addressed under `games/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gamesConfiguration.leaderboardConfigurations.get: addressed under `games/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

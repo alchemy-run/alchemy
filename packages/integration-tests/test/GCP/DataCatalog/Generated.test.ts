@@ -330,5 +330,13 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "datacatalog.catalog.search: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

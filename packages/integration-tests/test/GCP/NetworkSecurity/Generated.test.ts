@@ -568,5 +568,25 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "networksecurity.organizations.locations.securityProfileGroups.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networksecurity.organizations.locations.addressGroups.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networksecurity.organizations.locations.firewallEndpoints.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "networksecurity.organizations.locations.securityProfiles.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

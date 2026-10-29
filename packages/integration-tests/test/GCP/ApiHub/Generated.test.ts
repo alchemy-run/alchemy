@@ -314,5 +314,45 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "apihub.projects.locations.plugins.updateStyleGuide: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apihub.projects.locations.plugins.instances.executeAction: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apihub.projects.locations.plugins.instances.enableAction: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apihub.projects.locations.plugins.instances.disableAction: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apihub.projects.locations.plugins.instances.manageSourceData: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apihub.projects.locations.servers.configureAndDeployServer: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apihub.projects.locations.addons.manageConfig: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apihub.projects.locations.runtimeProjectAttachments.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "apihub.projects.locations.runtimeProjectAttachments.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

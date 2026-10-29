@@ -46,5 +46,45 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "gmailpostmastertools.domains.getVerificationToken: addressed under `domains/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gmailpostmastertools.domains.verify: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gmailpostmastertools.domains.getComplianceStatus: addressed under `domains/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gmailpostmastertools.domains.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gmailpostmastertools.domains.domainStats.query: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gmailpostmastertools.domains.users.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gmailpostmastertools.domains.users.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gmailpostmastertools.domains.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "gmailpostmastertools.domainStats.batchQuery: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

@@ -497,5 +497,17 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "dataproc.projects.locations.batches.sparkApplications.write: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "dataproc.projects.locations.sessions.sparkApplications.write: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

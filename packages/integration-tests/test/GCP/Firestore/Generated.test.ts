@@ -82,5 +82,41 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "firestore.projects.databases.clone: creates long-lived infrastructure that belongs in a resource, not a runtime call (a new database)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firestore.projects.databases.restore: creates long-lived infrastructure that belongs in a resource, not a runtime call (a new database)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firestore.projects.databases.documents.listen: a streaming (WebChannel) RPC, not a request/response call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firestore.projects.databases.documents.write: a streaming (WebChannel) RPC, not a request/response call",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firestore.projects.databases.changeStreams.create: checks a permission no predefined Firestore role grants (preview)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firestore.projects.databases.changeStreams.delete: checks a permission no predefined Firestore role grants (preview)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firestore.projects.databases.changeStreams.list: checks a permission no predefined Firestore role grants (preview)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "firestore.projects.databases.changeStreams.get: checks a permission no predefined Firestore role grants (preview)",
+        () => Effect.void,
+      );
+    });
   },
 );

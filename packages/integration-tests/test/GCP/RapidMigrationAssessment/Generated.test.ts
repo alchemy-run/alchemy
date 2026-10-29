@@ -46,5 +46,25 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "rapidmigrationassessment.projects.locations.collectors.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "rapidmigrationassessment.projects.locations.collectors.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "rapidmigrationassessment.projects.locations.annotations.create: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "rapidmigrationassessment.projects.locations.annotations.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

@@ -46,5 +46,85 @@ describe.skipIf(!!process.env.FAST)(
     );
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "cloudsupport.cases.patch: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.cases.search: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.cases.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.cases.close: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.cases.escalate: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.cases.get: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.cases.create: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.cases.comments.create: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.cases.comments.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.cases.comments.get: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.cases.attachments.get: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.cases.attachments.list: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.organizations.supportEventSubscriptions.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.organizations.supportEventSubscriptions.undelete: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.organizations.supportEventSubscriptions.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.organizations.supportEventSubscriptions.expunge: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.media.upload: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.media.download: addressed under `*/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "cloudsupport.caseClassifications.search: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

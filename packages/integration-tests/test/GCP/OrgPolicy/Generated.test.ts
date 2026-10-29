@@ -88,5 +88,61 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "orgpolicy.folders.policies.patch: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "orgpolicy.folders.policies.delete: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "orgpolicy.folders.policies.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "orgpolicy.folders.policies.getEffectivePolicy: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "orgpolicy.folders.policies.get: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "orgpolicy.folders.constraints.list: addressed under `folders/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "orgpolicy.projects.policies.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "orgpolicy.projects.policies.getEffectivePolicy: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "orgpolicy.organizations.policies.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "orgpolicy.organizations.policies.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "orgpolicy.organizations.policies.getEffectivePolicy: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "orgpolicy.organizations.customConstraints.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "orgpolicy.organizations.constraints.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );

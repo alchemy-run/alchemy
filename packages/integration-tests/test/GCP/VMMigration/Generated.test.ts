@@ -250,5 +250,17 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "vmmigration.projects.locations.targetProjects.list: no predefined role grants its permission",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "vmmigration.projects.locations.targetProjects.get: no predefined role grants its permission",
+        () => Effect.void,
+      );
+    });
   },
 );

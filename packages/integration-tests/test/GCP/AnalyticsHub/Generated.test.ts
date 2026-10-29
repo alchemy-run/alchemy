@@ -170,5 +170,13 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
     });
+
+    // Discovery methods with no binding, and why.
+    describe("not generated", () => {
+      test.provider.skip(
+        "analyticshub.organizations.locations.dataExchanges.list: addressed under `organizations/`, not a project",
+        () => Effect.void,
+      );
+    });
   },
 );
