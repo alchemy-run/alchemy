@@ -17,6 +17,7 @@ export const ProbeNotificationChannel = GCP.Monitoring.NotificationChannel(
   {
     type: "email",
     description: "oncall",
+    labels: { email_address: "alchemy-test@example.com" },
     userLabels: { env: "test" },
   },
 );
