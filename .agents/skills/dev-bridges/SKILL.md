@@ -55,8 +55,12 @@ Use the first one that fits the cell. Each is implemented once per cloud.
 2. **Pull.** The sidecar consumes the real source (queue lease, stream
    shard iterator, change feed) and delivers each batch to the local
    runtime's handler, acking only after the handler succeeds. Fits event
-   edges whose source can be polled. Reference: Cloudflare Queues
-   `http_pull` consumer + pull loop (`Queues/Consumer.ts`).
+   edges whose source can be polled, on a host type with no stub host.
+   Reference: Cloudflare Queues `http_pull` consumer + pull loop
+   (`Queues/Consumer.ts`). Where a stub host exists, prefer it for pull
+   sources too: the cloud's own poller (a Lambda event-source mapping)
+   then keeps batching, partial failures and retries exactly as deployed,
+   with no per-source poller to write.
 3. **Stub host.** The SST "Live Lambda" pattern. Deploy the *host* for
    real, with a stub body; real triggers invoke the stub, which forwards
    each invocation to the sidecar over a channel the sidecar dials out to,
@@ -67,7 +71,9 @@ Use the first one that fits the cell. Each is implemented once per cloud.
    Functions tasks. Prefer a cloud-native channel the developer's
    credentials already reach (an SQS request/reply pair, IoT Core or
    AppSync Events websockets on AWS; a Durable Object websocket on
-   Cloudflare) over a public ingress.
+   Cloudflare) over a public ingress. Reference: AWS
+   `Lambda/DevBridge.ts` (`wireEventSource`), `Lambda/dev-stub`, and
+   `Local/DevBridgeRelay.ts` (requests on SQS, responses in S3).
 4. **Remote proxy.** Deploy a small real proxy that holds the native
    binding, and forward the local client's calls to it over authenticated
    HTTP. Fits call edges that only exist as native bindings.
@@ -80,11 +86,14 @@ Use the first one that fits the cell. Each is implemented once per cloud.
 6. **Ingress.** Expose a local URL publicly through the dev relay or a
    tunnel. Fits event edges that push to an arbitrary URL: webhooks, SNS
    HTTPS subscriptions, EventBridge API destinations.
-7. **Reject.** Fail at plan time with a typed error that names the host,
-   the resource, the edge kind and the missing strategy, plus the
-   workaround (`Alchemy.remote()` the host too, or emulate the resource).
-   This is the default for remote→local edges (a deployed host calling an
-   emulator on a laptop) and for any cell not yet bridged.
+7. **Reject.** Fail at plan time with `UnbridgedDevEdge`
+   (`alchemy/ProviderMode`), naming both ends, the edge kind and the
+   workaround (`Alchemy.remote()` both ends, or neither). The engine
+   already rejects every real-cloud resource whose inputs come from an
+   emulated one (`Plan.ts`), which covers remote→local calls and
+   references for every cloud; a cloud adds by-name rejects at its seams
+   for the cells the plan can't see (a local host dialing a private
+   endpoint, a cross-side target builder).
 
 Foreign edges reuse the same strategies with the provider pair's credential
 federation: an IAM user + access key for non-AWS hosts, Google
@@ -140,6 +149,13 @@ resolve their operations when the layer is built, before any resource is
 bound, so a decision made at construction misses them. That is exactly how
 the first AWS fix covered S3 and missed ~265 other bindings.
 
+Keep the same-side path byte-for-byte what it was: a seam that changes a
+deployed resource's namespace or logical id replaces it on every existing
+stack. Push extra namespacing only on the bridged path (AWS's stub
+triggers live under the host). Wiring declared outside a host's init
+(Pipes, `events(bus).toLambda(fn)`) has no runtime context, so the seam
+attaches what the sidecar needs to the host as a binding, not runtime env.
+
 ### 4. Implement the strategy once, at the seam
 
 Write it centrally. Per-service differences are declared hooks on the
@@ -154,8 +170,9 @@ reaches it yet.
 
 ### 6. Gate
 
-- An audit script (CI-able, like `pnpm exports:check`) that fails when a
-  member of a bridged class doesn't use its seam.
+- An audit script in CI that fails when a member of a bridged class doesn't
+  use its seam. Reference: `scripts/check-dev-bridges.ts`
+  (`pnpm dev-bridges:check`).
 - The per-class local tests from step 2, green.
 - The cloud's `local-development.mdx` gains the matrix: which cells work,
   how, and which are rejected.
@@ -164,9 +181,11 @@ reaches it yet.
 
 | Cloud | Call | Event | Connect |
 | --- | --- | --- | --- |
-| AWS | Direct for every `withCredentials` binding (#2684) | not bridged; event-source mappings land in floci (silent) | not bridged |
+| AWS | Direct for every binding; local Workers calling AWS rejected | Stub host for every Lambda event source and target builder; other targets rejected | private endpoints rejected; public-capable ones reached directly |
 | Cloudflare | Remote proxy (remote bindings), Queue shim | Pull for Queue consumers | n/a |
 | GCP | no local providers yet | — | — |
+
+Per-cloud inventories: [aws.md](aws.md).
 
 ## Footguns
 
