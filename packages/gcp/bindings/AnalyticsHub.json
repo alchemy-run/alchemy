@@ -18,5 +18,11 @@
       "DataExchangesListing": "ProbeListing"
     },
     "untestable": {}
+  },
+  "permissions": {
+    "analyticshub.projects.locations.dataExchanges.listings.listSubscriptions": "analyticshub.listings.viewSubscriptions",
+    "analyticshub.projects.locations.dataExchanges.listSubscriptions": "analyticshub.dataExchanges.viewSubscriptions",
+    "analyticshub.projects.locations.dataExchanges.subscribe": "analyticshub.dataExchanges.subscribe",
+    "analyticshub.projects.locations.dataExchanges.listings.subscribe": "analyticshub.listings.subscribe"
   }
 }

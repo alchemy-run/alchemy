@@ -1,5 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
+import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
 import * as Effect from "effect/Effect";
+import { UsersSource } from "./features.ts";
 
 /**
  * Vertex AI resources the generated bindings bind: the suite's own agent,
@@ -189,5 +191,69 @@ export const ProbeMemory = Effect.gen(function* () {
     location,
     scope: { user_id: "alchemy-probe" },
     fact: "the user prefers concise answers",
+  });
+});
+
+export const ProbeIndex = GCP.AIPlatform.Index("ProbeIndex", {
+  location,
+  displayName: "alchemy-probe-index",
+  indexUpdateMethod: "STREAM_UPDATE",
+  metadata: {
+    config: {
+      dimensions: 8,
+      approximateNeighborsCount: 10,
+      distanceMeasureType: "DOT_PRODUCT_DISTANCE",
+      shardSize: "SHARD_SIZE_SMALL",
+      algorithmConfig: { bruteForceConfig: {} },
+    },
+  },
+});
+export const ProbeCachedContent = Effect.gen(function* () {
+  const { project } = yield* GcpEnvironment.current;
+  return yield* GCP.AIPlatform.CachedContent("ProbeCachedContent", {
+    location,
+    model: `projects/${project}/locations/${location}/publishers/google/models/gemini-2.5-flash`,
+    ttl: "3600s",
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: Array.from(
+              { length: 400 },
+              (_, i) => `Rule ${i + 1}: answer question ${i + 1} in at most ${i + 2} words.`,
+            ).join("\n"),
+          },
+        ],
+      },
+    ],
+  });
+});
+export const ProbeFeatureGroup = Effect.gen(function* () {
+  const inputUri = yield* UsersSource;
+  return yield* GCP.AIPlatform.FeatureGroup("ProbeFeatureGroup", {
+    location,
+    bigQuery: { inputUri, entityIdColumns: ["entity_id"] },
+  });
+});
+export const ProbeGroupFeature = Effect.gen(function* () {
+  const group = yield* ProbeFeatureGroup;
+  return yield* GCP.AIPlatform.FeatureGroupsFeature("ProbeGroupFeature", {
+    featureGroup: group.name,
+    location,
+    versionColumnName: "age",
+  });
+});
+export const ProbeFeatureView = Effect.gen(function* () {
+  const store = yield* ProbeFeatureOnlineStore;
+  const group = yield* ProbeFeatureGroup;
+  const feature = yield* ProbeGroupFeature;
+  return yield* GCP.AIPlatform.FeatureOnlineStoresFeatureView("ProbeFeatureView", {
+    featureOnlineStore: store.name,
+    location,
+    featureRegistrySource: {
+      featureGroups: [{ featureGroupId: group.featureGroupId, featureIds: [feature.featureId] }],
+    },
+    syncConfig: { cron: "0 * * * *" },
   });
 });

@@ -22,7 +22,7 @@ export const ListDataExchangeSubscriptionsHttp = Layer.effect(
         resource: "GCP.AnalyticsHub.DataExchange",
         operation: analyticshub.listSubscriptionsProjectsLocationsDataExchanges,
         param: "resource",
-        iam: { role: "roles/analyticshub.viewer" },
+        iam: { role: "roles/analyticshub.admin" },
       },
     ],
   }),

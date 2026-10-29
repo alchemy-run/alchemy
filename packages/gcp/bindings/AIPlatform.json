@@ -183,7 +183,12 @@
       "FeaturestoresEntityTypesFeature": "ProbeEntityFeature",
       "StudiesTrial": "ProbeTrial",
       "TensorboardsExperimentsRunsTimeSeries": "ProbeTimeSeries",
-      "ReasoningEnginesMemory": "ProbeMemory"
+      "ReasoningEnginesMemory": "ProbeMemory",
+      "Index": "ProbeIndex",
+      "CachedContent": "ProbeCachedContent",
+      "FeatureGroup": "ProbeFeatureGroup",
+      "FeatureGroupsFeature": "ProbeGroupFeature",
+      "FeatureOnlineStoresFeatureView": "ProbeFeatureView"
     },
     "untestable": {
       "Agent": "AgentService is v1beta1-only; the v1 SDK gets \"This API version is not supported by AgentService\"",

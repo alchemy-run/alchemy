@@ -26,7 +26,7 @@ export type ListListingSubscriptionsShape = (
  * Lists all subscriptions on a given Data Exchange or Listing.
  *
  * Bind it to a {@link DataExchangesListing} and provide {@link ListListingSubscriptionsHttp}. The
- * host gets `roles/analyticshub.viewer` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/analyticshub.listingAdmin` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `listings.listSubscriptions`

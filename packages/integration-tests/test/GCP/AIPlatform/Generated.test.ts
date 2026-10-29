@@ -66,9 +66,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("CachedContent", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetCachedContent (aiplatform.projects.locations.cachedContents.get): CachedContent: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetCachedContent (aiplatform.projects.locations.cachedContents.get)",
+        () => probe("GetCachedContent", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -334,24 +338,40 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("FeatureGroup", { concurrent: true }, () => {
-      test.provider.todo(
-        "BatchFeatureCreate@FeatureGroup (aiplatform.projects.locations.featureGroups.features.batchCreate): FeatureGroup: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "BatchFeatureCreate@FeatureGroup (aiplatform.projects.locations.featureGroups.features.batchCreate)",
+        () => probe("BatchFeatureCreate@FeatureGroup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetFeatureGroup (aiplatform.projects.locations.featureGroups.get): FeatureGroup: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetFeatureGroup (aiplatform.projects.locations.featureGroups.get)",
+        () => probe("GetFeatureGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListFeatureGroupFeatures (aiplatform.projects.locations.featureGroups.features.list): FeatureGroup: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListFeatureGroupFeatures (aiplatform.projects.locations.featureGroups.features.list)",
+        () => probe("ListFeatureGroupFeatures", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("FeatureGroupsFeature", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetFeature@FeatureGroupsFeature (aiplatform.projects.locations.featureGroups.features.get): FeatureGroupsFeature: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetFeature@FeatureGroupsFeature (aiplatform.projects.locations.featureGroups.features.get)",
+        () => probe("GetFeature@FeatureGroupsFeature", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -375,37 +395,69 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("FeatureOnlineStoresFeatureView", { concurrent: true }, () => {
-      test.provider.todo(
-        "DirectFeatureViewWrite (aiplatform.projects.locations.featureOnlineStores.featureViews.directWrite): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "DirectFeatureViewWrite (aiplatform.projects.locations.featureOnlineStores.featureViews.directWrite)",
+        () => probe("DirectFeatureViewWrite", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "FetchFeatureViewFeatureValues (aiplatform.projects.locations.featureOnlineStores.featureViews.fetchFeatureValues): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "FetchFeatureViewFeatureValues (aiplatform.projects.locations.featureOnlineStores.featureViews.fetchFeatureValues)",
+        () => probe("FetchFeatureViewFeatureValues", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GenerateFeatureViewFetchAccessToken (aiplatform.projects.locations.featureOnlineStores.featureViews.generateFetchAccessToken): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GenerateFeatureViewFetchAccessToken (aiplatform.projects.locations.featureOnlineStores.featureViews.generateFetchAccessToken)",
+        () => probe("GenerateFeatureViewFetchAccessToken", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetFeatureView (aiplatform.projects.locations.featureOnlineStores.featureViews.get): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetFeatureView (aiplatform.projects.locations.featureOnlineStores.featureViews.get)",
+        () => probe("GetFeatureView", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "GetFeatureViewSync (aiplatform.projects.locations.featureOnlineStores.featureViews.featureViewSyncs.get): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetFeatureViewSync (aiplatform.projects.locations.featureOnlineStores.featureViews.featureViewSyncs.get)",
+        () => probe("GetFeatureViewSync", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "ListFeatureViewSyncs (aiplatform.projects.locations.featureOnlineStores.featureViews.featureViewSyncs.list): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "ListFeatureViewSyncs (aiplatform.projects.locations.featureOnlineStores.featureViews.featureViewSyncs.list)",
+        () => probe("ListFeatureViewSyncs", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SearchFeatureViewNearestEntities (aiplatform.projects.locations.featureOnlineStores.featureViews.searchNearestEntities): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SearchFeatureViewNearestEntities (aiplatform.projects.locations.featureOnlineStores.featureViews.searchNearestEntities)",
+        () => probe("SearchFeatureViewNearestEntities", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "SyncFeatureView (aiplatform.projects.locations.featureOnlineStores.featureViews.sync): FeatureOnlineStoresFeatureView: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "SyncFeatureView (aiplatform.projects.locations.featureOnlineStores.featureViews.sync)",
+        () => probe("SyncFeatureView", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -534,17 +586,29 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Index", { concurrent: true }, () => {
-      test.provider.todo(
-        "GetIndex (aiplatform.projects.locations.indexes.get): Index: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "GetIndex (aiplatform.projects.locations.indexes.get)",
+        () => probe("GetIndex", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "RemoveIndexDatapoints (aiplatform.projects.locations.indexes.removeDatapoints): Index: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "RemoveIndexDatapoints (aiplatform.projects.locations.indexes.removeDatapoints)",
+        () => probe("RemoveIndexDatapoints", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.todo(
-        "UpsertIndexDatapoints (aiplatform.projects.locations.indexes.upsertDatapoints): Index: the probe fixture doesn't deploy one yet",
-        () => Effect.void,
+      test.provider(
+        "UpsertIndexDatapoints (aiplatform.projects.locations.indexes.upsertDatapoints)",
+        () => probe("UpsertIndexDatapoints", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
