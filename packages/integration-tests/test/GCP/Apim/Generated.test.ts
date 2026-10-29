@@ -72,80 +72,44 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("ObservationJob", { concurrent: true }, () => {
-      test.provider(
-        "BatchApiObservationEditTags (apim.projects.locations.observationJobs.apiObservations.batchEditTags)",
-        () => probe("BatchApiObservationEditTags", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:apim", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'BatchApiObservationEditTags (apim.projects.locations.observationJobs.apiObservations.batchEditTags): ObservationJob: needs a provisioned Apigee organization ("Apigee organization is not provisioned for project"), a paid setup the testing project doesn\'t have',
+        () => Effect.void,
       );
-      test.provider(
-        "DisableObservationJob (apim.projects.locations.observationJobs.disable)",
-        () => probe("DisableObservationJob", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:apim", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'DisableObservationJob (apim.projects.locations.observationJobs.disable): ObservationJob: needs a provisioned Apigee organization ("Apigee organization is not provisioned for project"), a paid setup the testing project doesn\'t have',
+        () => Effect.void,
       );
-      test.provider(
-        "EnableObservationJob (apim.projects.locations.observationJobs.enable)",
-        () => probe("EnableObservationJob", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:apim", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'EnableObservationJob (apim.projects.locations.observationJobs.enable): ObservationJob: needs a provisioned Apigee organization ("Apigee organization is not provisioned for project"), a paid setup the testing project doesn\'t have',
+        () => Effect.void,
       );
-      test.provider(
-        "GetObservationJob (apim.projects.locations.observationJobs.get)",
-        () => probe("GetObservationJob", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:apim", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetObservationJob (apim.projects.locations.observationJobs.get): ObservationJob: needs a provisioned Apigee organization ("Apigee organization is not provisioned for project"), a paid setup the testing project doesn\'t have',
+        () => Effect.void,
       );
-      test.provider(
-        "GetObservationJobApiObservation (apim.projects.locations.observationJobs.apiObservations.get)",
-        () => probe("GetObservationJobApiObservation", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:apim", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetObservationJobApiObservation (apim.projects.locations.observationJobs.apiObservations.get): ObservationJob: needs a provisioned Apigee organization ("Apigee organization is not provisioned for project"), a paid setup the testing project doesn\'t have',
+        () => Effect.void,
       );
-      test.provider(
-        "GetObservationJobApiObservationApiOperation (apim.projects.locations.observationJobs.apiObservations.apiOperations.get)",
-        () => probe("GetObservationJobApiObservationApiOperation", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:apim", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetObservationJobApiObservationApiOperation (apim.projects.locations.observationJobs.apiObservations.apiOperations.get): ObservationJob: needs a provisioned Apigee organization ("Apigee organization is not provisioned for project"), a paid setup the testing project doesn\'t have',
+        () => Effect.void,
       );
-      test.provider(
-        "ListObservationJobApiObservationApiOperations (apim.projects.locations.observationJobs.apiObservations.apiOperations.list)",
-        () => probe("ListObservationJobApiObservationApiOperations", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:apim", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'ListObservationJobApiObservationApiOperations (apim.projects.locations.observationJobs.apiObservations.apiOperations.list): ObservationJob: needs a provisioned Apigee organization ("Apigee organization is not provisioned for project"), a paid setup the testing project doesn\'t have',
+        () => Effect.void,
       );
-      test.provider(
-        "ListObservationJobApiObservations (apim.projects.locations.observationJobs.apiObservations.list)",
-        () => probe("ListObservationJobApiObservations", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:apim", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'ListObservationJobApiObservations (apim.projects.locations.observationJobs.apiObservations.list): ObservationJob: needs a provisioned Apigee organization ("Apigee organization is not provisioned for project"), a paid setup the testing project doesn\'t have',
+        () => Effect.void,
       );
     });
 
     describe("ObservationSource", { concurrent: true }, () => {
-      test.provider(
-        "GetObservationSource (apim.projects.locations.observationSources.get)",
-        () => probe("GetObservationSource", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:apim", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetObservationSource (apim.projects.locations.observationSources.get): ObservationSource: needs a provisioned Apigee organization ("Apigee organization is not provisioned for project"), a paid setup the testing project doesn\'t have',
+        () => Effect.void,
       );
     });
 

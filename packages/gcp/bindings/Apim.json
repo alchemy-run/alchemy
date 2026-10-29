@@ -10,11 +10,11 @@
     }
   },
   "probes": {
-    "resources": {
-      "ObservationJob": "ProbeObservationJob",
-      "ObservationSource": "ProbeObservationSource"
+    "resources": {},
+    "untestable": {
+      "ObservationJob": "needs a provisioned Apigee organization (\"Apigee organization is not provisioned for project\"), a paid setup the testing project doesn't have",
+      "ObservationSource": "needs a provisioned Apigee organization (\"Apigee organization is not provisioned for project\"), a paid setup the testing project doesn't have"
     },
-    "untestable": {},
     "enable": [
       "apim.googleapis.com"
     ]
