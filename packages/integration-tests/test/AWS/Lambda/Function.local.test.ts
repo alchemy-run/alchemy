@@ -718,6 +718,26 @@ test.provider(
         expect.objectContaining({ _tag: "UnbridgedDevEdge", edge: "connect" }),
       );
 
+      // Only Lambda targets are bridged: a real bus cannot deliver to an
+      // emulated queue.
+      const route = yield* stack
+        .deploy(
+          Effect.gen(function* () {
+            const bus = yield* AWS.EventBridge.EventBus("UnbridgedBus", {}).pipe(Alchemy.remote());
+            const queue = yield* AWS.SQS.Queue("UnbridgedTargetQueue");
+            yield* AWS.EventBridge.events(bus, { source: ["alchemy.test"] }).toQueue(queue);
+          }),
+        )
+        .pipe(Effect.exit);
+      expect(edgeOf(route)).toContainEqual(
+        expect.objectContaining({
+          _tag: "UnbridgedDevEdge",
+          from: "UnbridgedTargetQueue",
+          to: "UnbridgedBus",
+          edge: "event",
+        }),
+      );
+
       yield* stack.destroy();
     }),
   { tags: ["provider:aws", "provider:aws:lambda", "local"], timeout: 120_000 },
