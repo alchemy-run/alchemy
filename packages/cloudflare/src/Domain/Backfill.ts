@@ -154,11 +154,11 @@ const BackfillLive = () =>
             workflowName: news.workflowName,
             instanceId,
           });
-          // Started on an edge that doesn't have the uploaded Worker yet: run it again
+          // Started on an edge that doesn't have the uploaded Worker (or its entrypoint) yet: run it again
           // once the new version has arrived.
           if (
             instance.status === "errored" &&
-            /entrypoint name .* was not found/.test(error?.message ?? "") &&
+            /entrypoint name .* was not found|^Worker not found/.test(error?.message ?? "") &&
             restarts < MAX_RESTARTS
           ) {
             restarts += 1;
