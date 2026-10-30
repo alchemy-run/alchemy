@@ -1,0 +1,62 @@
+---
+title: Storage & retention
+description: What a Celld fleet's bucket holds, and what destroying a fleet or removing a resource deletes.
+---
+
+A fleet's bucket is the fleet. The nodes can be replaced at any time, but
+the bucket holds everything that makes your app yours: Durable Object
+storage, KV namespaces, D1 databases, R2 buckets, queues, workflow runs and
+the code of every Worker you publish.
+
+So Alchemy is careful with it. This chapter explains what's kept by default,
+when data is deleted, and how to opt in to deleting it.
+
+## Destroying a fleet keeps its data
+
+By default, destroying a fleet removes its nodes, network and load balancer,
+and keeps the bucket.
+
+```typescript title="src/fleet.ts"
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  instances: 2,
+}) {}
+```
+
+A mistaken destroy loses no data, but the bucket keeps costing you for what
+it stores until you delete it yourself.
+
+## Delete data with a disposable fleet
+
+Previews, tests and tutorials don't need their data afterwards. Set
+`retainStorage: false`, and destroying the fleet deletes the bucket and
+everything in it.
+
+```typescript title="src/fleet.ts"
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  retainStorage: false,
+}) {}
+```
+
+## Removing a resource keeps its data
+
+Deleting a `Celld.KV.Namespace`, `Celld.D1.Database`, `Celld.R2.Bucket` or
+`Celld.Queues.Queue` from your code doesn't delete what it stored. Alchemy
+marks it retained in the fleet's catalog of resources and stops managing it.
+Removing the `Celld.Application` works the same way: its Workers stay
+published until you destroy the fleet.
+
+A line deleted by accident in a refactor shouldn't erase a database. So Alchemy
+only deletes a fleet's data when it deletes the whole bucket.
+
+## The bucket belongs to one fleet
+
+The bucket belongs to the fleet's logical ID. Renaming `Cells` creates a
+new fleet with a new, empty bucket; it doesn't move the data. Keep the ID
+stable for the life of the app.
+
+The fleet also uses its bucket to pass requests to its
+[management runner](/celld/fleet/management). A lifecycle rule deletes any
+request a lost deploy left behind after one day.
+
+Next, [Private fleets](/celld/fleet/private-fleets): keeping a fleet off the
+internet entirely.

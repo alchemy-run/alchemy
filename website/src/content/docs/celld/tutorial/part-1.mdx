@@ -1,0 +1,145 @@
+---
+title: "Part 1: Your First Fleet"
+description: Create a Stack, declare a Celld Fleet hosted on AWS ECS, and deploy it.
+sidebar:
+  order: 1
+---
+
+import PackageManagers from "../../../../components/PackageManagers.astro";
+
+export const pkgs = `alchemy@latest @alchemy.run/celld@latest @alchemy.run/aws@latest effect @effect/platform-bun`;
+
+In this part you deploy a Celld fleet: the compute and storage your Workers
+will run on. The fleet runs on AWS ECS in your own account. Part 2 puts a
+Worker on it.
+
+## Prerequisites
+
+You need [Bun](https://bun.sh) and an AWS account. Configure an
+[Alchemy profile](/environments/profiles) with AWS credentials that can
+create ECS, EC2 networking, IAM, S3 and SQS resources.
+
+## Create a project
+
+```sh
+mkdir celld-tutorial && cd celld-tutorial
+bun init -y
+```
+
+## Install dependencies
+
+<PackageManagers add={pkgs} />
+
+`@alchemy.run/celld` provides the fleet, Workers and bindings.
+`@alchemy.run/aws` is the optional peer that `@alchemy.run/celld/AWS`, the ECS
+host the fleet runs on, needs.
+
+## Declare the fleet
+
+```typescript
+// src/fleet.ts
+import * as Celld from "@alchemy.run/celld";
+
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  instances: 1,
+  ingress: true,
+  retainStorage: false,
+}) {}
+```
+
+`instances: 1` runs one node. `ingress: true` puts the fleet behind a public
+load balancer so you can reach it with `curl`. A fleet keeps its storage when
+you destroy it; `retainStorage: false` deletes it too, which suits a tutorial.
+
+## Create the Stack
+
+```typescript
+// alchemy.run.ts
+import * as Alchemy from "alchemy";
+import * as AWS from "@alchemy.run/aws";
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { Cells } from "./src/fleet.ts";
+
+export default Alchemy.Stack(
+  "CelldTutorial",
+  {
+    providers: Layer.mergeAll(AWS.providers(), Celld.providers()),
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    const cells = yield* Cells;
+    return { url: cells.publicUrl };
+  }),
+);
+```
+
+`AWS.state()` keeps the stack's state in an S3 bucket in your account.
+
+## Choose where the fleet runs
+
+Celld is a runtime, not a cloud, so the fleet needs a host. Add the ECS host
+to the providers:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import * as Celld from "@alchemy.run/celld";
++import * as CelldAWS from "@alchemy.run/celld/AWS";
+
+-    providers: Layer.mergeAll(AWS.providers(), Celld.providers()),
++    providers: Layer.mergeAll(
++      AWS.providers(),
++      Celld.providers(),
++      CelldAWS.EcsFleet(),
++    ),
+```
+
+`@alchemy.run/celld/AWS` holds everything Celld needs from AWS, so the core
+package never loads AWS code. `CelldAWS.EcsFleet()` runs the nodes as Fargate
+tasks behind an ECS service and stores fleet data in an S3 bucket.
+
+## Choose where management runs
+
+The stack doesn't type-check yet: `EcsFleet` needs a management Layer.
+Deploys reach the nodes through a small runner inside the fleet's network,
+and this Layer decides how it's hosted:
+
+```diff lang="typescript"
+// alchemy.run.ts
+-      CelldAWS.EcsFleet(),
++      CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
+```
+
+`EcsTaskManagement` starts the runner as a Fargate task when a deploy needs
+it and stops it after five idle minutes. See
+[Management runners](/celld/fleet/management) for the other options.
+
+## Deploy
+
+```sh
+bun alchemy deploy
+```
+
+The first deploy creates a VPC, the ECS cluster and service, the load
+balancer and the fleet bucket. It takes several minutes.
+
+## Verify it worked
+
+The deploy prints the fleet's public URL:
+
+```
+url: http://celld-tutorial-....elb.amazonaws.com
+```
+
+Nothing is published to the fleet yet, so the URL doesn't serve a Worker.
+That's Part 2.
+
+## Recap
+
+- A `Celld.Fleet` declares compute and storage, not code.
+- `CelldAWS.EcsFleet()` hosts it on ECS, and a management Layer hosts the runner
+  deploys use.
+- `ingress: true` exposes the fleet on a public load balancer.
+
+Next, [Part 2](/celld/tutorial/part-2) publishes a Worker.

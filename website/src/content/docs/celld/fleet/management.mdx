@@ -1,0 +1,103 @@
+---
+title: Management runners
+description: Why a Celld deploy needs a runner inside the fleet's network, and how to choose between an on-demand task, an always-on service and a VPC Lambda.
+---
+
+import DAG from "../../../../components/DAG.astro";
+
+Uploading a Worker only puts files in the bucket. To serve them, the nodes
+have to load the new revision, reload their Workers and run D1 migrations,
+and a deploy has to tell them to. Nodes take those instructions on a private
+operator port that nothing outside the fleet's network can reach, including
+the laptop or CI job running your deploy.
+
+So the deploy doesn't call the nodes itself. It hands each instruction to a
+**management runner** that lives inside the network and calls the nodes for
+it. This chapter explains how that works and how to choose where the runner
+runs.
+
+## How a deploy reaches the nodes
+
+With the default runner, the deploy writes each request to the fleet's
+bucket and queues it. The runner picks it up, calls the operator port, writes
+the reply back to the bucket, and the deploy reads it.
+
+<DAG
+  nodes={[
+    { id: "deploy", label: "alchemy deploy", type: "your machine", layer: 0 },
+    { id: "bucket", label: "fleet bucket", type: "request, reply", layer: 1 },
+    { id: "runner", label: "runner", type: "inside the VPC", layer: 2, tone: "accent" },
+    { id: "nodes", label: "nodes", type: "operator port", layer: 3 },
+  ]}
+  edges={[
+    { from: "deploy", to: "bucket" },
+    { from: "bucket", to: "runner" },
+    { from: "runner", to: "nodes" },
+  ]}
+  caption="The deploy never connects to a node. The runner does it from inside."
+/>
+
+The runner's security group is the only one the operator port accepts. Your
+Workers' traffic never goes through it, so it only matters while you deploy.
+
+## Choose one when you provide the host
+
+`CelldAWS.EcsFleet()` requires a management Layer. Leaving it out is a type
+error, and only the runner you choose is bundled into your program.
+
+```typescript title="alchemy.run.ts"
+CelldAWS.EcsFleet().pipe(
+  Layer.provide(CelldAWS.EcsTaskManagement()),
+);
+```
+
+The three runners do the same job. They differ in what you pay while
+nothing is deploying, how long a deploy waits for the runner, and how long
+destroying the fleet takes.
+
+## Start a task when you deploy
+
+`CelldAWS.EcsTaskManagement()` starts the runner as a small Fargate task when
+a deploy first needs it. Requests reach it through an SQS queue. The task
+stops on its own once it has been idle for `idleSeconds`, five minutes by
+default.
+
+```typescript title="alchemy.run.ts"
+CelldAWS.EcsTaskManagement({ idleSeconds: 900 })
+```
+
+Nothing runs between deploys, and a running task costs under two cents an
+hour. The price is about a minute at the start of a deploy while the task
+boots, and later deploys inside the idle window reuse it. Start here.
+
+## Keep one running
+
+If you deploy often, from CI for example, that minute adds up.
+`CelldAWS.EcsServiceManagement()` keeps one runner task up all the time with
+an ECS service, so a deploy never waits for it.
+
+```typescript title="alchemy.run.ts"
+CelldAWS.EcsServiceManagement()
+```
+
+The task is 0.25 vCPU and 0.5 GB on ARM, and with its public IPv4 address it
+costs about $11 a month in us-east-1.
+
+## Invoke a Lambda instead
+
+`CelldAWS.EcsLambdaManagement()` runs the runner as a Lambda in the fleet's
+subnets. The deploy invokes it directly, with no queue or bucket in between.
+
+```typescript title="alchemy.run.ts"
+CelldAWS.EcsLambdaManagement()
+```
+
+It costs nothing between deploys, and a deploy waits only for a cold start.
+The catch is teardown: AWS frees a VPC Lambda's network interfaces slowly,
+so destroying the fleet takes around 20 minutes instead of a few. Choose it
+for a fleet that lives a long time. In your own VPC, it adds an S3 gateway
+endpoint to your subnets' route tables if they don't have one, so it can
+reach the bucket.
+
+Next, [Scaling](/celld/fleet/scaling): how many nodes run, and how requests
+find the node that holds a Durable Object.

@@ -1,0 +1,152 @@
+---
+title: Workers
+description: Compose an HTTP Worker and its durable objects, then publish them as a Celld Application.
+---
+
+Start with the Fleet and Stack from [Setup](/celld/setup). A Celld Worker stages
+code and bindings; an Application publishes and activates the selected graph.
+
+## Declare a Worker
+
+```typescript
+// src/worker.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return { fetch: Effect.succeed(HttpServerResponse.text("Hello from Celld")) };
+  }),
+) {}
+```
+
+The outer Effect assembles the handler. It can resolve services and register
+bindings; request I/O belongs in `fetch`, not in construction.
+
+## Host a Durable Object
+
+Create the [Counter](/celld/compute/durable-objects) first, then yield it and
+provide its implementation:
+
+```diff lang="typescript"
+// src/worker.ts
++import { Counter, CounterLive } from "./counter.ts";
+
+  Effect.gen(function* () {
++    const counters = yield* Counter;
+    return { fetch: Effect.succeed(HttpServerResponse.text("Hello from Celld")) };
+-  }),
++  }).pipe(Effect.provide(CounterLive)),
+```
+
+Yielding the class registers its namespace on this Worker. It doesn't select or
+activate any particular Counter instance.
+
+## Call a named instance
+
+```diff lang="typescript"
+// src/worker.ts
+-    return { fetch: Effect.succeed(HttpServerResponse.text("Hello from Celld")) };
++    return {
++      fetch: Effect.gen(function* () {
++        const count = yield* counters.getByName("visits").increment();
++        return HttpServerResponse.text(String(count));
++      }),
++    };
+```
+
+`"visits"` selects one durable identity. Every request to this example increments
+the same counter; a real application should authorize any user-selected name.
+
+## Declare a service Worker
+
+```typescript
+// src/jobs.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export class Jobs extends Celld.Worker<Jobs>()("Jobs") {}
+
+export default Jobs.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return { fetch: Effect.succeed(HttpServerResponse.text("Jobs ready")) };
+  }),
+);
+```
+
+Declaring the class separately from `.make()` lets other Workers import `Jobs`
+to [bind it](/celld/compute/service-bindings) without bundling its code.
+
+## Publish the Worker graph
+
+Update the Setup stack:
+
+```diff lang="typescript"
+// alchemy.run.ts
++import JobsLive, { Jobs } from "./src/jobs.ts";
+
+-    const app = yield* Celld.Application("App", { entrypoint: Api });
++    const app = yield* Celld.Application("App", {
++      entrypoint: Api,
++      workers: [Jobs],
++    });
+    return { url: app.url, revision: app.revision };
+-  }).pipe(Effect.provide(Celld.Fleet.layer(Cells))),
++  }).pipe(
++    Effect.provide(JobsLive.pipe(Layer.provideMerge(Celld.Fleet.layer(Cells)))),
++  ),
+```
+
+Only the entrypoint may request public ingress. List each Worker exactly once,
+and keep service-binding and queue-consumer Workers in the same fleet. Staging a
+Worker without publishing the Application does not activate a new revision.
+
+## Runtime behavior
+
+Construction is reused by the runtime. Each HTTP event gets its own request
+scope; acquire disposable resources lazily there. Durable Object instance
+initialization is a separate inner Effect, which runs on activation. Provide
+implementation dependencies once with `Effect.provide`; combine independent
+layers with `Layer.mergeAll`.
+
+## Configure the bundle
+
+```typescript
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    compatibilityDate: "2026-09-01",
+    compatibilityFlags: ["nodejs_compat"],
+  },
+  impl,
+) {}
+```
+
+`compatibilityDate` defaults to `2025-06-01` and `compatibilityFlags` to
+`["nodejs_compat"]`. `build` overrides bundler options. `env` and `assets`
+are covered in [Secrets & env](/celld/security/secrets-env) and
+[Static assets](/celld/compute/static-assets).
+
+## Limitations
+
+Celld's Worker surface is provider-owned. Cloudflare-only bindings do not become
+available by changing an import. Only the Application entrypoint is served by
+the fleet's listener, and only it can run
+[cron triggers](/celld/messaging/cron).
+
+## Related guides
+
+- [Service bindings](/celld/compute/service-bindings)
+- [Worker Loader](/celld/compute/worker-loader)
+- [Static assets](/celld/compute/static-assets)
+- [Durable Objects](/celld/compute/durable-objects)
+- [Effect RPC](/celld/apis/effect-rpc)
+- [Cloudflare Workers](/cloudflare/compute/workers)
+- [Worker reference](/providers/celld/reference/celld#worker)
+- [Application reference](/providers/celld/reference/celld#application)

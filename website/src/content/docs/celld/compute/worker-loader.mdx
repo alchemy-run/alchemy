@@ -1,0 +1,156 @@
+---
+title: Worker Loader
+description: Load and run Worker code at runtime in a sandboxed Celld isolate, with CPU and subrequest limits and tail reports.
+---
+
+`Celld.WorkerLoader` runs Worker code that your Worker receives at runtime,
+such as user-submitted scripts or generated code, in its own isolate. You
+control its bindings, its network access and its limits.
+
+## Register the loader
+
+```typescript
+const loader = yield* Celld.WorkerLoader();
+```
+
+Call it in the Worker's Construction phase. It registers a loader binding
+named `LOADER`; pass a name to register more than one.
+
+## Load code and call it
+
+```typescript
+const loaded = yield* loader.load({
+  compatibilityDate: "2026-09-01",
+  mainModule: "main.js",
+  modules: {
+    "main.js": "export default { fetch() { return new Response('ok'); } }",
+  },
+  globalOutbound: null,
+});
+const entrypoint = yield* loaded.getEntrypoint();
+const response = yield* entrypoint.fetch(HttpClientRequest.get("https://loaded/"));
+```
+
+Load inside a request. The request's scope disposes the loaded Worker when the
+request ends. `globalOutbound: null` blocks the loaded code's outbound
+`fetch`.
+
+## Reuse loaded code by name
+
+```typescript
+const loaded = yield* loader.get("calculator-v1", () => code);
+```
+
+`get` loads the code once per name and returns the same isolate to later
+requests on that node. Change the name when the code changes.
+
+## Pass bindings and props
+
+```typescript
+const loaded = yield* loader.load({ ...code, env: { marker: "tenant-42" } });
+const calculator = yield* loaded.getEntrypoint<{ add(a: number, b: number): number }>(
+  "Calculator",
+  { props: { offset: 3 } },
+);
+const sum = yield* calculator.add(2, 4);
+```
+
+`env` becomes the loaded code's environment. A named entrypoint selects an
+exported `WorkerEntrypoint` class, `props` reach it as `this.ctx.props`, and
+its methods are callable as typed RPC.
+
+## Limit CPU and subrequests
+
+```typescript
+const loaded = yield* loader.load({
+  compatibilityDate: "2026-09-01",
+  mainModule: "main.js",
+  modules: {
+    "main.js": "export default { fetch() { return new Response('ok'); } }",
+  },
+  globalOutbound: null,
+  limits: { cpuMs: 50, subRequests: 10 },
+});
+```
+
+`cpuMs` bounds CPU time per invocation. `subRequests` bounds outbound subrequests.
+Celld validates and enforces these limits in the loaded isolate.
+
+## Select stricter invocation limits
+
+```typescript
+const entrypoint = yield* loaded.getEntrypoint(null, {
+  limits: { cpuMs: 20, subRequests: 2 },
+});
+```
+
+The selected limits apply to fetch and direct RPC calls. For each field, Celld
+uses the lower value from the loaded code and the entrypoint selection. Class
+selectors and `ctx.exports` loopbacks accept `props` only.
+
+## Receive loaded Worker reports
+
+A same-fleet Worker can receive completed fetch reports through an Effect-native
+`tail` handler:
+
+```typescript
+// src/logs.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+
+export default class Logs extends Celld.Worker<Logs>()(
+  "Logs",
+  { main: import.meta.url },
+  Effect.succeed({
+    tail: (events: readonly Celld.TailEvent[]) =>
+      Effect.forEach(
+        events,
+        (event) => Effect.logInfo({
+          outcome: event.outcome,
+          status: event.event.response?.status,
+        }),
+        { discard: true },
+      ),
+  }),
+) {}
+```
+
+Each report includes request metadata, response status, console records, uncaught
+exceptions, and an outcome. The handler runs with the usual request scope.
+Request metadata can include sensitive headers and query parameters; choose the
+fields you retain.
+
+## Attach the tail Worker
+
+With `logs` referencing the same-fleet Logs Worker, bind it in the caller's
+initialization Effect and provide `Celld.FetchBinding` on that Effect:
+
+```typescript
+const tail = yield* Celld.Fetch(logs);
+```
+
+Inside the request, pass the original native capability when loading the code:
+
+```typescript
+const loaded = yield* loader.load({ ...source, tails: [tail.raw] });
+```
+
+Include the Logs Worker in `Application.workers`. The `raw` getter preserves the
+native capability identity required by Celld. Tail delivery follows completion
+of the loaded fetch and its background work; a tail-handler failure leaves the
+response unchanged. Native console capture is capped at 256 KiB per invocation.
+Tails currently report fetch invocations; direct RPC calls receive the configured
+limits but produce no tail report.
+
+## Limitations
+
+Loaded code runs with the Celld Worker runtime, not workerd. Tails report fetch
+invocations only; direct RPC calls receive the configured limits but produce
+no tail report. Native console capture is capped at 256 KiB per invocation.
+
+## Related guides
+
+- [Workers](/celld/compute/workers)
+- [Service bindings](/celld/compute/service-bindings)
+- [Cloudflare Worker Loader](/cloudflare/compute/worker-loader)
+- [WorkerLoader reference](/providers/celld/reference/celld#workerloader)

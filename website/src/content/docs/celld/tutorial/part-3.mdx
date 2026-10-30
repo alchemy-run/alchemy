@@ -1,0 +1,150 @@
+---
+title: "Part 3: Add a Durable Object"
+description: Persist a counter per name in a Celld Durable Object and call it from the Worker.
+sidebar:
+  order: 3
+---
+
+In [Part 2](/celld/tutorial/part-2) you published two stateless Workers. Now
+you add a Durable Object: a named instance with its own storage. Each name
+lives on exactly one node at a time, and every node forwards calls for that
+name to it.
+
+## Declare the Counter
+
+```typescript
+// src/counter.ts
+import * as Celld from "@alchemy.run/celld";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Effect from "effect/Effect";
+
+export class Counter extends Celld.DurableObject<
+  Counter,
+  {
+    increment: () => Effect.Effect<number, never, RuntimeContext>;
+    get: () => Effect.Effect<number, never, RuntimeContext>;
+  }
+>()("Counter") {}
+```
+
+The second type parameter is the object's public methods. Workers call them
+through a typed stub. `RuntimeContext` marks them as callable only inside a
+deployed Worker.
+
+## Implement it
+
+```diff lang="typescript"
+// src/counter.ts
+export class Counter extends Celld.DurableObject<
+  Counter,
+  {
+    increment: () => Effect.Effect<number, never, RuntimeContext>;
+    get: () => Effect.Effect<number, never, RuntimeContext>;
+  }
+>()("Counter") {}
+
++export const CounterLive = Counter.make(
++  Effect.gen(function* () {
++    const state = yield* Celld.DurableObjectState;
++    return Effect.gen(function* () {
++      return {};
++    });
++  }),
++);
+```
+
+The outer Effect runs once per isolate and resolves the state handle. The
+inner Effect runs each time an instance activates and returns its methods.
+
+## Persist the count
+
+```diff lang="typescript"
+// src/counter.ts
+    return Effect.gen(function* () {
+-      return {};
++      return {
++        get: () =>
++          state.storage.get<number>("count").pipe(
++            Effect.map((count) => count ?? 0),
++            Effect.orDie,
++          ),
++        increment: () =>
++          Effect.gen(function* () {
++            const count = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
++            yield* state.storage.put("count", count);
++            return count;
++          }).pipe(Effect.orDie),
++      };
+    });
+```
+
+`state.storage` is the instance's own SQLite-backed store. A value written here
+survives restarts and moves with the instance when it changes node.
+
+## Bind the Counter to the Worker
+
+```diff lang="typescript"
+// src/api.ts
++import { Counter, CounterLive } from "./counter.ts";
+
+  Effect.gen(function* () {
+    const greeter = yield* Celld.Fetch(yield* Greeter);
++    const counters = yield* Counter;
+```
+
+Yielding the class registers the Counter namespace on this Worker. It doesn't
+activate any instance.
+
+## Provide its implementation
+
+```diff lang="typescript"
+// src/api.ts
+-  }).pipe(Effect.provide(Celld.FetchBinding)),
++  }).pipe(
++    Effect.provide(Layer.mergeAll(Celld.FetchBinding, CounterLive)),
++  ),
+```
+
+Add `import * as Layer from "effect/Layer";` at the top. The Counter's code is
+bundled into the Worker that provides it.
+
+## Call a named Counter
+
+```diff lang="typescript"
+// src/api.ts
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        if (request.url.startsWith("/greet")) return yield* greeter(request);
++        if (request.url.startsWith("/count")) {
++          const count = yield* counters.getByName("visits").increment();
++          return HttpServerResponse.text(String(count));
++        }
+        return HttpServerResponse.text("Hello from Celld");
+      }),
+```
+
+`getByName("visits")` selects one instance. Another name selects independent
+state.
+
+## Deploy and count
+
+```sh
+bun alchemy deploy
+curl "$URL/count"
+# 1
+curl "$URL/count"
+# 2
+```
+
+The count keeps rising across deploys, because the instance's storage belongs
+to the fleet, not to the Worker's code.
+
+## Recap
+
+- A `Celld.DurableObject` class declares a named, stateful instance and its
+  methods.
+- `Counter.make` implements it; providing `CounterLive` on a Worker bundles it
+  there.
+- `counters.getByName(name)` returns a typed stub to one instance.
+
+Next, [Part 4](/celld/tutorial/part-4) adds KV and D1.

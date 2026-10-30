@@ -9,9 +9,7 @@ import { resolveAccessContext, type WorkerExecutionContextAccess } from "./Worke
 export const WorkerTypeId = "Cloudflare.Worker";
 export type WorkerTypeId = typeof WorkerTypeId;
 
-export class WorkerEnvironment extends Context.Service<WorkerEnvironment, Record<string, any>>()(
-  "Cloudflare.Workers.WorkerEnvironment",
-) {}
+export { WorkerEnvironment } from "alchemy/Workers/WorkerEnvironment";
 
 export class CachePurgeError extends Data.TaggedError("CachePurgeError")<{
   message: string;
@@ -312,29 +310,8 @@ export const waitUntil = <A, E, R>(
 ): Effect.Effect<void, never, R | RuntimeContext> =>
   WorkerExecutionContext.pipe(Effect.flatMap((ctx) => ctx.waitUntil(effect)));
 
-export type WorkerEvent = Exclude<
-  {
-    [type in keyof cf.ExportedHandler]: {
-      kind: "Cloudflare.Workers.WorkerEvent";
-      type: type;
-      input: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[0];
-      env: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[1];
-      context: Parameters<Exclude<cf.ExportedHandler[type], undefined>>[2];
-    };
-  }[keyof cf.ExportedHandler],
-  undefined
->;
-
-export const isWorkerEvent = (value: any): value is WorkerEvent =>
-  value?.kind === "Cloudflare.Workers.WorkerEvent";
-
-export const ExportedHandlerMethods = [
-  "fetch",
-  "tail",
-  "trace",
-  "tailStream",
-  "scheduled",
-  "test",
-  "email",
-  "queue",
-] as const satisfies (keyof cf.ExportedHandler)[];
+export {
+  ExportedHandlerMethods,
+  isWorkerEvent,
+  type WorkerEvent,
+} from "alchemy/Workers/Workerd/WorkerEvent";

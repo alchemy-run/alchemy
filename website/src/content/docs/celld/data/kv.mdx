@@ -1,0 +1,132 @@
+---
+title: KV
+description: Create a KV namespace in a Celld fleet, bind it to a Worker with read- or write-scoped access, and store values with metadata.
+---
+
+A Celld KV namespace is a key-value store kept in the fleet's bucket. Workers
+reach it through the same typed, access-scoped bindings as
+[Cloudflare KV](/cloudflare/data/kv).
+
+Reach for KV for configuration, flags, sessions and cached responses. Use
+[D1](/celld/data/d1) for relational queries, and
+[Durable Object storage](/celld/compute/durable-objects) for state coordinated
+per object.
+
+## Create a namespace
+
+```typescript
+// src/storage.ts
+import * as Celld from "@alchemy.run/celld";
+
+export const Cache = Celld.KV.Namespace("Cache");
+```
+
+The namespace belongs to the fleet selected by `Celld.Fleet.layer`. Pass
+`title` to set a readable label; changing it doesn't move stored keys.
+
+## Bind it to a Worker
+
+```typescript
+// src/api.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Cache } from "./storage.ts";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const kv = yield* Celld.KV.ReadWriteNamespace(yield* Cache);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const key = new URL(request.url, "http://api").searchParams.get("key") ?? "";
+
+        if (request.method === "PUT") {
+          yield* kv.put(key, yield* request.text);
+          return HttpServerResponse.empty({ status: 204 });
+        }
+
+        const value = yield* kv.get(key);
+        return value === null
+          ? HttpServerResponse.text("Not found", { status: 404 })
+          : HttpServerResponse.text(value);
+      }).pipe(
+        Effect.catchTag("Celld.KV.NamespaceError", (error) =>
+          Effect.succeed(HttpServerResponse.text(error.message, { status: 500 })),
+        ),
+      ),
+    };
+  }).pipe(Effect.provide(Celld.KV.ReadWriteNamespaceBinding)),
+) {}
+```
+
+Operations fail with a typed `Celld.KV.NamespaceError`, handled here with
+`Effect.catchTag`.
+
+## Read JSON
+
+```typescript
+const text = yield* kv.get("greeting"); // string | null
+const config = yield* kv.get<Config>("config", "json"); // Config | null
+```
+
+`get` returns text by default. Pass `"json"`, `"arrayBuffer"` or `"stream"` for
+other value types.
+
+## Store metadata
+
+```typescript
+yield* kv.put("session:abc", token, { metadata: { userId: "u_123" } });
+
+const { value, metadata } = yield* kv.getWithMetadata("session:abc", "text");
+```
+
+`getWithMetadata` reads the value and its metadata in one call.
+
+## List keys
+
+```typescript
+const page = yield* kv.list({ prefix: "session:" });
+const keys = page.keys.map((key) => key.name);
+```
+
+## Delete a key
+
+```typescript
+yield* kv.delete("session:abc");
+```
+
+## Choose an access level
+
+The capability is split so each Worker gets only what it needs:
+
+```typescript
+const reader = yield* Celld.KV.ReadNamespace(yield* Cache); // get, getWithMetadata, list
+const writer = yield* Celld.KV.WriteNamespace(yield* Cache); // put, delete
+```
+
+Provide the matching Layer: `Celld.KV.ReadNamespaceBinding`,
+`Celld.KV.WriteNamespaceBinding` or `Celld.KV.ReadWriteNamespaceBinding`.
+
+## Runtime behavior
+
+The binding is a native Celld KV binding; reads and writes go to the fleet's
+bucket through the node. Bind a namespace only to Workers in the same fleet;
+a cross-fleet binding is rejected at deploy time.
+
+## Limitations
+
+Celld KV has no HTTP-token implementation like Cloudflare's `*NamespaceHttp`
+Layers; use the native binding from a Worker. Removing the namespace from the
+stack retains its keys; see [Storage & retention](/celld/fleet/storage).
+
+## Related guides
+
+- [D1](/celld/data/d1)
+- [R2](/celld/data/r2)
+- [Cloudflare KV](/cloudflare/data/kv)
+- [KV reference](/providers/celld/kv)

@@ -1,0 +1,137 @@
+---
+title: D1
+description: Create a SQLite database in a Celld fleet, apply migrations on deploy, and query it from a Worker with prepared statements.
+---
+
+A Celld D1 database is a SQLite database stored in the fleet. Workers query it
+through a D1-compatible binding, and Alchemy applies your migrations on every
+deploy.
+
+Reach for D1 when data is shared across requests and Workers and you want SQL.
+For state that belongs to one entity, a
+[Durable Object with SQL migrations](/celld/data/sql-migrations) keeps it next
+to the code that owns it.
+
+## Create a database
+
+```typescript
+// src/storage.ts
+import * as Celld from "@alchemy.run/celld";
+
+export const Database = Celld.D1.Database("Database");
+```
+
+Pass `name` to choose the database's name in the fleet; otherwise Alchemy
+generates one.
+
+## Apply migrations on deploy
+
+```sql
+-- migrations/0001_users.sql
+CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT NOT NULL);
+```
+
+```diff lang="typescript"
+// src/storage.ts
+-export const Database = Celld.D1.Database("Database");
++export const Database = Celld.D1.Database("Database", {
++  migrations: "./migrations",
++});
+```
+
+Each deploy applies the files in `./migrations` that haven't run yet, in name
+order, before the Application activates. Each file runs in one transaction
+with its entry in the `__alchemy_migrations` table, so a failed file leaves no
+partial schema. Editing or removing an applied file fails the deploy. The
+path is relative to where you run `alchemy`, and drizzle-kit
+migration folders work too.
+
+## Bind it to a Worker
+
+```typescript
+// src/api.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Database } from "./storage.ts";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const db = yield* Celld.D1.QueryDatabase(yield* Database);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const { results } = yield* db.prepare("SELECT id, email FROM users").all();
+        return yield* HttpServerResponse.json(results);
+      }),
+    };
+  }).pipe(Effect.provide(Celld.D1.QueryDatabaseBinding)),
+) {}
+```
+
+## Bind parameters
+
+```typescript
+yield* db
+  .prepare("INSERT INTO users (id, email) VALUES (?, ?)")
+  .bind(id, email)
+  .run();
+```
+
+`prepare` and `bind` only build the statement. `all`, `first`, `run` and `raw`
+execute it.
+
+## Read one row
+
+```typescript
+const user = yield* db
+  .prepare("SELECT * FROM users WHERE id = ?")
+  .bind(id)
+  .first<{ id: string; email: string }>();
+```
+
+`first` returns the first row or `null`. Pass a column name to get just that
+value.
+
+## Run statements together
+
+```typescript
+yield* db.batch([
+  db.prepare("INSERT INTO users (id, email) VALUES (?, ?)").bind("u1", "a@x"),
+  db.prepare("INSERT INTO users (id, email) VALUES (?, ?)").bind("u2", "b@x"),
+]);
+```
+
+A batch runs in order and rolls back if any statement fails.
+
+## Use an ORM
+
+```typescript
+const native = yield* db.raw;
+```
+
+`db.raw` resolves the native D1 binding for libraries that take one, such as
+Drizzle's D1 driver. Use it inside a request.
+
+## Runtime behavior
+
+Queries run on the node against the database's SQLite file, which Celld stores
+in the fleet bucket. Migrations run through the
+[management runner](/celld/fleet/management), so a deploy with pending
+migrations waits for it.
+
+## Limitations
+
+There's no D1 HTTP API from outside the fleet; query through a Worker. Removing
+the database from the stack retains its data; see
+[Storage & retention](/celld/fleet/storage).
+
+## Related guides
+
+- [Durable Object SQL migrations](/celld/data/sql-migrations)
+- [KV](/celld/data/kv)
+- [Drizzle migrations](/sql/drizzle/migrations)
+- [Cloudflare D1](/cloudflare/data/d1)
+- [D1 reference](/providers/celld/d1)

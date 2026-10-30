@@ -1,0 +1,122 @@
+---
+title: Service bindings
+description: Call another Worker in the same Celld Application over a native service binding, without leaving the fleet.
+---
+
+A service binding lets one Worker call another Worker's `fetch` handler
+directly. The request stays inside the fleet and never reaches its public
+ingress.
+
+## Declare the callee
+
+```typescript
+// src/auth.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export class Auth extends Celld.Worker<Auth>()("Auth") {}
+
+export default Auth.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const ok = request.headers["authorization"] === "Bearer demo";
+        return HttpServerResponse.text(ok ? "ok" : "denied", {
+          status: ok ? 200 : 401,
+        });
+      }),
+    };
+  }),
+);
+```
+
+Declare `Auth` as a class and implement it with `.make()`, so callers import
+only the class.
+
+## Bind it from the caller
+
+```typescript
+// src/api.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import { Auth } from "./auth.ts";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const auth = yield* Celld.Fetch(yield* Auth);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        return yield* auth(request);
+      }),
+    };
+  }).pipe(Effect.provide(Celld.FetchBinding)),
+) {}
+```
+
+`Celld.Fetch(worker)` registers the binding and returns a fetch function.
+Passing the incoming `HttpServerRequest` forwards it unchanged.
+
+## Send a new request
+
+```typescript
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
+
+const response = yield* auth(
+  HttpClientRequest.get("https://auth/check").pipe(
+    HttpClientRequest.setHeader("authorization", "Bearer demo"),
+  ),
+);
+```
+
+The fetch function also takes an Effect `HttpClientRequest`, and then returns
+an `HttpClientResponse` you can read.
+
+## Publish both Workers
+
+```typescript
+// alchemy.run.ts
+const app = yield* Celld.Application("App", {
+  entrypoint: Api,
+  workers: [Auth],
+});
+```
+
+Every Worker reached through a binding must be in the same Application, and
+so in the same fleet. Provide `AuthLive` on the stack next to
+`Celld.Fleet.layer(Cells)`.
+
+## Name the binding
+
+```typescript
+const auth = yield* Celld.Fetch(yield* Auth, { bindingName: "AUTH" });
+```
+
+The binding is named after the callee's logical ID. Set `bindingName` when
+two targets share one.
+
+## Runtime behavior
+
+The call runs in the callee's own isolate, and its `fetch` gets its own
+request scope. The binding is looked up when the fetch function is
+called, inside the request.
+
+## Limitations
+
+Celld service bindings carry `fetch` only. To call methods across Workers, put
+them on a [Durable Object](/celld/compute/durable-objects), or use
+[Effect RPC](/celld/apis/effect-rpc).
+
+## Related guides
+
+- [Workers](/celld/compute/workers)
+- [Worker Loader](/celld/compute/worker-loader)
+- [Fetch reference](/providers/celld/reference/celld#fetch)

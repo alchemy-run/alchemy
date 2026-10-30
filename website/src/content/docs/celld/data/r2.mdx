@@ -1,0 +1,143 @@
+---
+title: R2
+description: Store objects in a Celld fleet with an R2-compatible bucket binding — put, get, list, delete and multipart uploads.
+---
+
+A Celld R2 bucket is an object keyspace inside the fleet's own S3 bucket.
+Workers reach it through an R2-compatible binding, split into read and write
+access like [Cloudflare R2](/cloudflare/data/r2).
+
+## Create a bucket
+
+```typescript
+// src/storage.ts
+import * as Celld from "@alchemy.run/celld";
+
+export const Files = Celld.R2.Bucket("Files");
+```
+
+Pass `bucketName` to choose the keyspace's name in the fleet; otherwise
+Alchemy generates one.
+
+## Bind it to a Worker
+
+```typescript
+// src/api.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Files } from "./storage.ts";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const files = yield* Celld.R2.ReadWriteBucket(yield* Files);
+
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const key = new URL(request.url, "http://api").pathname.slice(1);
+
+        if (request.method === "PUT") {
+          yield* files.put(key, yield* request.text);
+          return HttpServerResponse.empty({ status: 201 });
+        }
+
+        const object = yield* files.get(key);
+        if (object === null) return HttpServerResponse.text("Not found", { status: 404 });
+        return HttpServerResponse.text(yield* object.text());
+      }).pipe(
+        Effect.catchTag("Celld.R2.R2Error", (error) =>
+          Effect.succeed(HttpServerResponse.text(error.message, { status: 500 })),
+        ),
+      ),
+    };
+  }).pipe(Effect.provide(Celld.R2.ReadWriteBucketBinding)),
+) {}
+```
+
+`get` returns the object with a body, or `null`. `object.text()` and
+`object.json()` read the body as Effects.
+
+## Store metadata
+
+```typescript
+yield* files.put(key, body, {
+  httpMetadata: { contentType: "text/plain" },
+  customMetadata: { author: "alchemy" },
+});
+
+const object = yield* files.get(key);
+object?.customMetadata; // { author: "alchemy" }
+```
+
+`httpMetadata` stores standard HTTP headers; `customMetadata` stores your own
+string pairs.
+
+## Check an object without reading it
+
+```typescript
+const head = yield* files.head(key); // R2Object | null
+```
+
+## List objects
+
+```typescript
+const page = yield* files.list({ prefix: "reports/" });
+const keys = page.objects.map((object) => object.key);
+```
+
+## Delete objects
+
+```typescript
+yield* files.delete(key);
+yield* files.delete(["a.txt", "b.txt"]);
+```
+
+## Upload in parts
+
+```typescript
+const upload = yield* files.createMultipartUpload("large.bin");
+```
+
+Upload parts on the returned handle, then complete it. A later request can
+continue an upload with `files.resumeMultipartUpload(key, uploadId)`.
+
+## Stream a body
+
+```typescript
+yield* files.put(key, stream); // Stream.Stream<Uint8Array>
+```
+
+`put` accepts an Effect `Stream` of bytes as well as strings, buffers and
+blobs.
+
+## Choose an access level
+
+```typescript
+const reader = yield* Celld.R2.ReadBucket(yield* Files); // head, get, list
+const writer = yield* Celld.R2.WriteBucket(yield* Files); // put, delete, multipart
+```
+
+Provide `Celld.R2.ReadBucketBinding`, `Celld.R2.WriteBucketBinding` or
+`Celld.R2.ReadWriteBucketBinding` to match.
+
+## Runtime behavior
+
+Objects are stored in the fleet's S3 bucket under the R2 bucket's keyspace.
+Reads and writes go through the node's native binding.
+
+## Limitations
+
+There's no public bucket URL or presigned URL; serve objects through a Worker.
+Removing the bucket from the stack retains its objects; see
+[Storage & retention](/celld/fleet/storage).
+
+## Related guides
+
+- [KV](/celld/data/kv)
+- [Static assets](/celld/compute/static-assets)
+- [Cloudflare R2](/cloudflare/data/r2)
+- [R2 reference](/providers/celld/r2)

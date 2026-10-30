@@ -1,0 +1,141 @@
+{
+  "name": "@alchemy.run/celld",
+  "version": "2.0.0-beta.84",
+  "description": "Self-hosted Workers and Durable Objects on Celld fleets for Alchemy.",
+  "keywords": [
+    "alchemy",
+    "celld",
+    "durable-objects",
+    "effect",
+    "infrastructure-as-code",
+    "workers"
+  ],
+  "homepage": "https://alchemy.run",
+  "bugs": {
+    "url": "https://github.com/alchemy-run/alchemy/issues"
+  },
+  "license": "Apache-2.0",
+  "author": "Sam Goodwin <sam@alchemy.run>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/alchemy-run/alchemy.git",
+    "directory": "packages/celld"
+  },
+  "files": [
+    "lib",
+    "src"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "exports": {
+    ".": "./src/index.ts",
+    "./AWS": "./src/AWS/index.ts",
+    "./Containers": "./src/Containers/index.ts",
+    "./D1": "./src/D1/index.ts",
+    "./KV": "./src/KV/index.ts",
+    "./Queues": "./src/Queues/index.ts",
+    "./R2": "./src/R2/index.ts",
+    "./Workflows": "./src/Workflows/index.ts",
+    "./*": "./src/*.ts",
+    "./package.json": "./package.json"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./lib/index.d.ts",
+        "bun": "./src/index.ts",
+        "worker": "./src/index.ts",
+        "default": "./lib/index.js"
+      },
+      "./AWS": {
+        "types": "./lib/AWS/index.d.ts",
+        "bun": "./src/AWS/index.ts",
+        "worker": "./src/AWS/index.ts",
+        "default": "./lib/AWS/index.js"
+      },
+      "./Containers": {
+        "types": "./lib/Containers/index.d.ts",
+        "bun": "./src/Containers/index.ts",
+        "worker": "./src/Containers/index.ts",
+        "default": "./lib/Containers/index.js"
+      },
+      "./D1": {
+        "types": "./lib/D1/index.d.ts",
+        "bun": "./src/D1/index.ts",
+        "worker": "./src/D1/index.ts",
+        "default": "./lib/D1/index.js"
+      },
+      "./KV": {
+        "types": "./lib/KV/index.d.ts",
+        "bun": "./src/KV/index.ts",
+        "worker": "./src/KV/index.ts",
+        "default": "./lib/KV/index.js"
+      },
+      "./Queues": {
+        "types": "./lib/Queues/index.d.ts",
+        "bun": "./src/Queues/index.ts",
+        "worker": "./src/Queues/index.ts",
+        "default": "./lib/Queues/index.js"
+      },
+      "./R2": {
+        "types": "./lib/R2/index.d.ts",
+        "bun": "./src/R2/index.ts",
+        "worker": "./src/R2/index.ts",
+        "default": "./lib/R2/index.js"
+      },
+      "./Workflows": {
+        "types": "./lib/Workflows/index.d.ts",
+        "bun": "./src/Workflows/index.ts",
+        "worker": "./src/Workflows/index.ts",
+        "default": "./lib/Workflows/index.js"
+      },
+      "./*": {
+        "types": "./lib/*.d.ts",
+        "bun": "./src/*.ts",
+        "worker": "./src/*.ts",
+        "default": "./lib/*.js"
+      },
+      "./package.json": "./package.json"
+    },
+    "access": "public"
+  },
+  "scripts": {
+    "build": "pnpm -r --filter \"{.}...\" run build:package",
+    "build:package": "node scripts/build.ts"
+  },
+  "dependencies": {
+    "@alchemy.run/cloudflare-runtime": "workspace:*",
+    "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/sql": "workspace:*",
+    "@distilled.cloud/celld": "workspace:*",
+    "@distilled.cloud/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@alchemy.run/aws": "workspace:*",
+    "@cloudflare/workers-types": "catalog:",
+    "@distilled.cloud/aws": "workspace:*",
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "@alchemy.run/aws": "workspace:*",
+    "@distilled.cloud/aws": "workspace:*",
+    "@effect/platform-bun": "catalog:",
+    "@effect/platform-node": "catalog:",
+    "alchemy": "workspace:*",
+    "effect": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "@alchemy.run/aws": {
+      "optional": true
+    },
+    "@distilled.cloud/aws": {
+      "optional": true
+    }
+  }
+}

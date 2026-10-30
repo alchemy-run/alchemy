@@ -1,0 +1,140 @@
+---
+title: Call from AWS Lambda
+description: Bind a Celld Application's entrypoint into an AWS Lambda Function and call its fetch handler, RPC methods and Durable Objects.
+---
+
+`Celld.bindWorker` gives a Lambda Function a typed client for a fleet's
+entrypoint Worker. It works for public and [private](/celld/fleet/private-fleets)
+fleets: the Lambda joins the fleet's network and calls it on the private URL.
+
+## Declare the entrypoint's methods
+
+```typescript
+// src/api.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { CounterLive } from "./counter.ts";
+
+export class Api extends Celld.Worker<
+  Api,
+  { whoami: () => Effect.Effect<string> }
+>()("Api") {}
+
+export default Api.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      whoami: () => Effect.succeed("api"),
+      fetch: Effect.succeed(HttpServerResponse.text("hello")),
+    };
+  }).pipe(Effect.provide(CounterLive)),
+);
+```
+
+The second type parameter lists the Worker's RPC methods. The Worker also
+hosts the `Counter` Durable Object from
+[Durable Objects](/celld/compute/durable-objects).
+
+## Declare the Application in its own module
+
+```typescript
+// src/app.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import { Api } from "./api.ts";
+import { Cells } from "./fleet.ts";
+
+export const App = Celld.Application("App", { entrypoint: Api }).pipe(
+  Effect.provide(Celld.Fleet.layer(Cells)),
+);
+```
+
+The stack and the Lambda both import `App`, and both resolve the same
+Application.
+
+## Bind it in the Lambda
+
+```typescript
+// src/backend.ts
+import * as AWS from "@alchemy.run/aws";
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Api } from "./api.ts";
+import { App } from "./app.ts";
+
+export default class Backend extends AWS.Lambda.Function<Backend>()(
+  "Backend",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const api = yield* Celld.bindWorker(App, Api);
+    return {
+      fetch: Effect.gen(function* () {
+        return HttpServerResponse.text(yield* api.whoami());
+      }),
+    };
+  }),
+) {}
+```
+
+`bindWorker` puts the Lambda in the fleet's subnets with the caller security
+group, and binds the fleet URL and the Worker's gateway secret into it.
+`api.whoami()` is type-checked against `Api`'s declared methods.
+
+## Deploy both
+
+```typescript
+// alchemy.run.ts
+Effect.gen(function* () {
+  yield* App;
+  const backend = yield* Backend;
+  return { url: backend.functionUrl };
+}).pipe(
+  Effect.provide(ApiLive.pipe(Layer.provideMerge(Celld.Fleet.layer(Cells)))),
+);
+```
+
+The Lambda deploys after the Application activates, because the binding needs
+the activated revision.
+
+## Call a Durable Object
+
+```typescript
+// src/backend.ts
+const counters = api.durableObject<CounterShape>("Counter");
+const count = yield* counters.getByName("lobby").increment();
+```
+
+`durableObject` takes the class name the Worker hosts and the object's method
+shape. Calls go through the fleet gateway to the node that holds the object.
+
+## Call the Worker's fetch handler
+
+```typescript
+// src/backend.ts
+const response = yield* api.fetch(HttpClientRequest.get("/hello"));
+```
+
+The request carries the gateway secret, so it reaches the Worker whether or
+not the fleet has public ingress.
+
+## Runtime behavior
+
+Calls are never retried automatically: a failed response can follow a
+mutation that succeeded. Retry only idempotent calls. A cold Durable Object
+can take a few seconds on first touch while it activates, so give the Lambda a
+`timeout` above the default three seconds.
+
+## Limitations
+
+`bindWorker` only targets an Application's entrypoint, in the fleet the
+Application publishes to. A Lambda in a VPC needs a route to anything else it
+calls on the internet.
+
+## Related guides
+
+- [Private fleets](/celld/fleet/private-fleets)
+- [Durable Objects](/celld/compute/durable-objects)
+- [AWS Lambda](/aws/compute/lambda)
+- [Worker reference](/providers/celld/reference/celld#worker)

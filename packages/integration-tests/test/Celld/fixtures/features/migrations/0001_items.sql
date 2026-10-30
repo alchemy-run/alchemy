@@ -1,0 +1,1 @@
+CREATE TABLE items (id TEXT PRIMARY KEY, value TEXT NOT NULL);

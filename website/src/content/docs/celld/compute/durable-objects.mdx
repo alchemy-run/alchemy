@@ -1,0 +1,156 @@
+---
+title: Durable Objects
+description: Declare a Celld Durable Object, persist its state in native storage, and call it by name from a Worker.
+---
+
+A Celld Durable Object is a named instance with its own SQLite-backed storage.
+Each name lives on one node at a time; every node forwards calls for that name
+to it. Use one per entity whose state must be consistent: a counter, a room, a
+user's session.
+
+## Declare the Counter
+
+```typescript
+// src/counter.ts
+import * as Celld from "@alchemy.run/celld";
+import type { RuntimeContext } from "alchemy/RuntimeContext";
+import * as Effect from "effect/Effect";
+
+export class Counter extends Celld.DurableObject<
+  Counter,
+  {
+    get: () => Effect.Effect<number, never, RuntimeContext>;
+    increment: () => Effect.Effect<number, never, RuntimeContext>;
+  }
+>()("Counter") {}
+```
+
+The class carries the object's public methods. Workers that import it get a
+typed stub; they don't bundle its code. `RuntimeContext` marks each method as
+callable only inside a deployed Worker.
+
+## Resolve the state handle
+
+```typescript
+// src/counter.ts
+export const CounterLive = Counter.make(
+  Effect.gen(function* () {
+    const state = yield* Celld.DurableObjectState;
+    return Effect.gen(function* () {
+      return {
+        get: () => Effect.succeed(0),
+        increment: () => Effect.succeed(1),
+      };
+    });
+  }),
+);
+```
+
+The outer Effect runs once per isolate and resolves services. The inner Effect
+runs each time an instance activates and returns its methods. Do storage I/O
+in the inner Effect or in methods, never in the outer one.
+
+## Persist the count
+
+```diff lang="typescript"
+// src/counter.ts
+      return {
+-        get: () => Effect.succeed(0),
+-        increment: () => Effect.succeed(1),
++        get: () =>
++          state.storage.get<number>("count").pipe(
++            Effect.map((count) => count ?? 0),
++            Effect.orDie,
++          ),
++        increment: () =>
++          state.storage
++            .transaction(
++              Effect.gen(function* () {
++                const count = ((yield* state.storage.get<number>("count")) ?? 0) + 1;
++                yield* state.storage.put("count", count);
++                return count;
++              }),
++            )
++            .pipe(Effect.orDie),
+      };
+```
+
+`state.storage` is the instance's key-value store. `transaction` makes the read
+and write atomic. JavaScript variables aren't durable and aren't rolled back.
+
+## Bind it to a Worker
+
+```typescript
+// src/api.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import { Counter, CounterLive } from "./counter.ts";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const counters = yield* Counter;
+    return {
+      fetch: Effect.gen(function* () {
+        const count = yield* counters.getByName("visits").increment();
+        return HttpServerResponse.text(String(count));
+      }),
+    };
+  }).pipe(Effect.provide(CounterLive)),
+) {}
+```
+
+Yielding `Counter` registers its namespace on the Worker. Providing
+`CounterLive` hosts the class in this Worker's bundle.
+
+## Call a named instance
+
+```typescript
+const lobby = counters.getByName("lobby");
+const count = yield* lobby.increment();
+```
+
+`getByName` selects one instance; each name has independent state. Authorize
+any name a user chooses before you use it.
+
+## Query with SQL
+
+```typescript
+yield* state.storage.sql.exec("CREATE TABLE IF NOT EXISTS events (body TEXT)");
+const rows = yield* (yield* state.storage.sql.exec<{ body: string }>(
+  "SELECT body FROM events",
+)).toArray();
+```
+
+Every instance has its own SQLite database. Manage its schema with
+[SQL migrations](/celld/data/sql-migrations).
+
+## Schedule work
+
+An instance can wake itself later with an alarm.
+[Durable schedules](/celld/compute/durable-schedules) wraps alarms with named,
+replaceable jobs.
+
+## Runtime behavior
+
+Each method call gets a fresh scope; acquire connections and other disposable
+resources inside it. If the instance's node drains or fails, the next call
+activates it on another node from storage, so the inner Effect runs again;
+recover state from storage, not from memory.
+
+## Limitations
+
+Keep the Worker, class and object names stable across deploys: they are the
+instance's identity. A transaction covers one instance's storage, not another
+instance or an external API.
+
+## Related guides
+
+- [Durable schedules](/celld/compute/durable-schedules)
+- [WebSockets](/celld/compute/hibernatable-websockets)
+- [SQL migrations](/celld/data/sql-migrations)
+- [Call from AWS Lambda](/celld/networking/call-from-lambda)
+- [Cloudflare Durable Objects](/cloudflare/compute/durable-objects)
+- [DurableObject reference](/providers/celld/reference/celld#durableobject)

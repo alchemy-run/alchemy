@@ -1,0 +1,80 @@
+---
+title: Scaling
+description: How a Celld fleet spreads Workers and Durable Objects across its nodes, and how to run a fixed count or scale on CPU.
+---
+
+import DAG from "../../../../components/DAG.astro";
+
+Scaling a fleet means changing how many nodes it runs. Because nodes keep
+nothing of their own, that's safe to do at any time. This chapter explains
+how requests are shared across nodes, what happens to a Durable Object when
+the node holding it goes away, and how to set the count.
+
+## Any node serves any Worker
+
+Workers keep no state between requests, so every node can run every Worker.
+The load balancer, or the private URL, sends each request to whichever node
+it picks, and more nodes means more requests served at once.
+
+## Each Durable Object lives on one node
+
+A Durable Object is different. It keeps state in memory and in its own
+storage, so it must run in exactly one place. Each object is held by one
+node at a time, under a lease kept in the fleet's bucket.
+
+A request can still land on any node. If that node doesn't hold the object,
+it forwards the call to the one that does.
+
+<DAG
+  nodes={[
+    { id: "req", label: "request", type: "visits", layer: 0 },
+    { id: "a", label: "node 1", type: "forwards", layer: 1 },
+    { id: "b", label: "node 2", type: "holds visits", layer: 2, tone: "accent" },
+  ]}
+  edges={[
+    { from: "req", to: "a" },
+    { from: "a", to: "b" },
+  ]}
+  caption="The request lands anywhere. The object answers from one node."
+/>
+
+Your code never sees this. A stub from `counters.getByName("visits")` reaches the
+same object whichever node your Worker runs on.
+
+## When a node leaves, its objects move
+
+When a node drains, during a scale-in or an upgrade, its leases are released
+and other nodes take its objects over. The object's storage is already in
+the bucket, so nothing is copied. The next call to a moved object starts it
+on its new node, which takes a few seconds the first time.
+
+That's why one node is fine for development but production wants at least
+two: with one, a drain leaves no other node to take over.
+
+## Run a fixed count
+
+`instances` sets how many nodes run. The default is two.
+
+```typescript title="src/fleet.ts"
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  instances: 3,
+}) {}
+```
+
+## Scale on CPU
+
+Give `instances` a range, and the host adds nodes when average CPU climbs
+above `targetCpu` percent and removes them when it falls.
+
+```typescript title="src/fleet.ts"
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  instances: { min: 2, max: 8, targetCpu: 60 },
+}) {}
+```
+
+`targetCpu` defaults to 60. CPU scaling works on Fargate only. On EC2 each
+node takes a whole instance and one spare instance covers rollouts, so EC2
+fleets need a fixed count.
+
+Next, [Upgrades](/celld/fleet/upgrades): moving every node to a new Celld
+release without downtime.

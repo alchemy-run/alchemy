@@ -1,0 +1,196 @@
+---
+title: "Part 2: Add a Worker"
+description: Write an Effect-native Worker, publish it to the fleet as an Application, and call a second Worker through a service binding.
+sidebar:
+  order: 2
+---
+
+In [Part 1](/celld/tutorial/part-1) you deployed an empty fleet. Now you write
+a Worker, publish it, and call it over the fleet's public URL.
+
+## Create the Worker file
+
+```typescript
+// src/api.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.succeed(HttpServerResponse.text("Hello from Celld")),
+    };
+  }),
+) {}
+```
+
+The outer `Effect.gen` is the Worker's Construction phase: it runs once per
+isolate and returns the handlers. `fetch` runs per request.
+
+## Publish it as an Application
+
+A Worker on its own is only staged. An `Application` publishes a graph of
+Workers to a fleet and activates it:
+
+```diff lang="typescript"
+// alchemy.run.ts
++import Api from "./src/api.ts";
+
+  Effect.gen(function* () {
+-    const cells = yield* Cells;
+-    return { url: cells.publicUrl };
++    const app = yield* Celld.Application("App", { entrypoint: Api });
++    return { url: app.url };
+  }),
+```
+
+The `entrypoint` is the Worker the fleet's public listener serves.
+
+## Select the fleet
+
+Celld resources need to know which fleet they belong to. `Fleet.layer`
+selects it for everything declared inside:
+
+```diff lang="typescript"
+// alchemy.run.ts
+  Effect.gen(function* () {
+    const app = yield* Celld.Application("App", { entrypoint: Api });
+    return { url: app.url };
+-  }),
++  }).pipe(Effect.provide(Celld.Fleet.layer(Cells))),
+```
+
+Yielding the Application deploys the fleet first, so the stack no longer
+yields `Cells` itself.
+
+## Deploy
+
+```sh
+bun alchemy deploy
+```
+
+The fleet already exists, so this deploy bundles the Worker, stages it and
+activates the Application. Activation is the first management call, so it
+waits about a minute for the runner task to start.
+
+## Try it out
+
+```sh
+curl "$URL"
+# Hello from Celld
+```
+
+Set `URL` to the `url` the deploy printed.
+
+## Add a second Worker
+
+Applications can hold more than one Worker. Declare `Greeter` as a class, and
+attach its implementation with `.make()`:
+
+```typescript
+// src/greeter.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
+import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
+
+export class Greeter extends Celld.Worker<Greeter>()("Greeter") {}
+
+export default Greeter.make(
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        const url = new URL(request.url, "http://greeter");
+        const name = url.searchParams.get("name") ?? "world";
+        return HttpServerResponse.text(`Hello, ${name}`);
+      }),
+    };
+  }),
+);
+```
+
+Other Workers import the `Greeter` class, not its implementation. `.make()` is
+marked pure, so the bundler leaves `Greeter`'s code out of their bundles.
+
+## Call it through a service binding
+
+Bind `Greeter` in the entrypoint's Construction phase and forward requests to
+it:
+
+```diff lang="typescript"
+// src/api.ts
+import * as Celld from "@alchemy.run/celld";
+import * as Effect from "effect/Effect";
++import { HttpServerRequest } from "effect/http/HttpServerRequest";
+import * as HttpServerResponse from "effect/http/HttpServerResponse";
++import { Greeter } from "./greeter.ts";
+
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url },
+  Effect.gen(function* () {
++    const greeter = yield* Celld.Fetch(yield* Greeter);
+    return {
+-      fetch: Effect.succeed(HttpServerResponse.text("Hello from Celld")),
++      fetch: Effect.gen(function* () {
++        const request = yield* HttpServerRequest;
++        if (request.url.startsWith("/greet")) return yield* greeter(request);
++        return HttpServerResponse.text("Hello from Celld");
++      }),
+    };
+-  }),
++  }).pipe(Effect.provide(Celld.FetchBinding)),
+) {}
+```
+
+`Celld.Fetch` returns a function that sends a request to the other Worker
+without leaving the fleet. `Celld.FetchBinding` implements it.
+
+## Add it to the Application
+
+List every Worker in the graph on the Application, and provide `Greeter`'s
+implementation to the stack:
+
+```diff lang="typescript"
+// alchemy.run.ts
+import Api from "./src/api.ts";
++import GreeterLive, { Greeter } from "./src/greeter.ts";
+
+  Effect.gen(function* () {
+-    const app = yield* Celld.Application("App", { entrypoint: Api });
++    const app = yield* Celld.Application("App", {
++      entrypoint: Api,
++      workers: [Greeter],
++    });
+    return { url: app.url };
+-  }).pipe(Effect.provide(Celld.Fleet.layer(Cells))),
++  }).pipe(
++    Effect.provide(
++      GreeterLive.pipe(Layer.provideMerge(Celld.Fleet.layer(Cells))),
++    ),
++  ),
+```
+
+Only the entrypoint is served publicly. `Greeter` is reachable only through
+bindings.
+
+## Deploy and call it
+
+```sh
+bun alchemy deploy
+curl "$URL/greet?name=sam"
+# Hello, sam
+```
+
+## Recap
+
+- A `Celld.Worker` stages code; an `Application` publishes and activates it.
+- `Celld.Fleet.layer(Cells)` selects the fleet for the declarations inside.
+- `Celld.Fetch` calls another Worker in the same Application.
+
+Next, [Part 3](/celld/tutorial/part-3) adds a Durable Object.

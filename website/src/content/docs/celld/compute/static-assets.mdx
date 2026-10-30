@@ -1,0 +1,96 @@
+---
+title: Static assets
+description: Serve a directory of static files from a Celld Worker, with _headers, _redirects and SPA fallback, and run the Worker first when it needs to.
+---
+
+A Celld Worker can ship a directory of static files with its bundle. The fleet
+serves them from the Application entrypoint, using the same `_headers` and
+`_redirects` rules as Cloudflare Workers assets.
+
+## Add an assets directory
+
+```typescript
+// src/api.ts
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  { main: import.meta.url, assets: { directory: "public" } },
+  impl,
+) {}
+```
+
+`directory` is relative to the Worker's entry module. Requests that match a
+file are served from it; the rest reach the Worker's `fetch`.
+
+## Set headers and redirects
+
+```
+# public/_headers
+/hello.txt
+  Cache-Control: public, max-age=3600
+```
+
+```
+# public/_redirects
+/old /hello.txt 302
+```
+
+`_headers` adds response headers by path, and `_redirects` maps paths to
+redirects. Both live in the assets directory.
+
+## Serve a single-page app
+
+```typescript
+assets: {
+  directory: "dist",
+  notFoundHandling: "single-page-application",
+},
+```
+
+Unmatched paths then serve `index.html`. Use `"404-page"` to serve
+`404.html` instead. `htmlHandling` controls trailing-slash redirects for HTML
+files.
+
+## Run the Worker first
+
+```typescript
+// src/api.ts
+export default class Api extends Celld.Worker<Api>()(
+  "Api",
+  {
+    main: import.meta.url,
+    assets: { directory: "public", binding: "ASSETS", runWorkerFirst: true },
+  },
+  Effect.gen(function* () {
+    const assets = yield* Celld.Assets();
+    return {
+      fetch: Effect.gen(function* () {
+        const request = yield* HttpServerRequest;
+        if (request.url.startsWith("/api")) return HttpServerResponse.text("api");
+        return yield* assets.fetch(request);
+      }),
+    };
+  }).pipe(Effect.provide(Celld.AssetsBinding)),
+) {}
+```
+
+With `runWorkerFirst: true`, every request reaches `fetch`, and the Worker
+forwards the ones it doesn't handle to the asset router with `assets.fetch`.
+Pass an array of route patterns to run the Worker first only for those.
+
+## Runtime behavior
+
+Assets upload with the Worker's bundle when it's staged, and go live when the
+Application activates. `assets.fetch` uses Celld's native asset router, so
+`_headers` and `_redirects` apply to forwarded requests too.
+
+## Limitations
+
+Assets are served by the entrypoint Worker only. The assets binding supports
+`fetch`; it has no RPC. There's no CDN in front of the fleet; put one in front
+of the load balancer if you need edge caching.
+
+## Related guides
+
+- [Workers](/celld/compute/workers)
+- [Domains & ingress](/celld/networking/domains)
+- [Assets reference](/providers/celld/reference/celld#assets)

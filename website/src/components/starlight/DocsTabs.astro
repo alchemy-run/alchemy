@@ -1,6 +1,6 @@
 ---
 import { TAB_ICONS } from "../../docs-icons";
-import { DOCS_TABS, DOCS_TAB_GROUPS, activeTab, groupTabs } from "../../docs-tabs";
+import { DOCS_TABS, DOCS_TAB_GROUPS, activeTab, groupOwns } from "../../docs-tabs";
 
 const start = DOCS_TABS.filter((tab) => tab.slot === "start");
 const current = activeTab(Astro.url.pathname);
@@ -35,7 +35,7 @@ const current = activeTab(Astro.url.pathname);
         current hub ("Clouds · AWS"). */}
     {
       DOCS_TAB_GROUPS.map((group) => {
-        const activeHere = groupTabs(group).some((tab) => tab.label === current.label);
+        const activeHere = groupOwns(group, current);
         return (
           <div class="alc-tabs__menu-root">
             <button
@@ -64,11 +64,21 @@ const current = activeTab(Astro.url.pathname);
               {group.sections.map((section) => (
                 <div class="alc-tabs__menu-section">
                   {section.heading && <div class="alc-tabs__menu-heading">{section.heading}</div>}
-                  {section.tabs.map((tab) => (
-                    <a
-                      href={tab.href}
-                      class:list={["alc-tabs__menu-item", { "alc-tabs__menu-item--active": tab.label === current.label }]}
+                  {section.tabs.map((tab) => {
+                    // A coming-soon hub is listed but not a link yet.
+                    const Item = tab.soon ? "span" : "a";
+                    return (
+                    <Item
+                      href={tab.soon ? undefined : tab.href}
+                      class:list={[
+                        "alc-tabs__menu-item",
+                        {
+                          "alc-tabs__menu-item--active": tab.label === current.label,
+                          "alc-tabs__menu-item--soon": tab.soon,
+                        },
+                      ]}
                       aria-current={tab.label === current.label ? "true" : undefined}
+                      aria-disabled={tab.soon ? "true" : undefined}
                     >
                       {TAB_ICONS[tab.label] && (
                         <svg
@@ -84,8 +94,9 @@ const current = activeTab(Astro.url.pathname);
                         <span>{tab.label}</span>
                         {tab.hint && <span class="alc-tabs__menu-hint">{tab.hint}</span>}
                       </span>
-                    </a>
-                  ))}
+                    </Item>
+                    );
+                  })}
                 </div>
               ))}
             </div>
@@ -221,6 +232,12 @@ const current = activeTab(Astro.url.pathname);
   .alc-tabs__menu-item:hover {
     color: var(--alc-accent-deep);
     background: var(--alc-bg-elev-1);
+  }
+  .alc-tabs__menu-item--soon,
+  .alc-tabs__menu-item--soon:hover {
+    color: var(--alc-fg-4);
+    background: none;
+    cursor: default;
   }
   .alc-tabs__menu-item--active {
     color: var(--alc-accent-deep);

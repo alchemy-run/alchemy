@@ -39,6 +39,7 @@ function providersSidebarEntry() {
       { label: "Hetzner", link: "/hetzner" },
       { label: "Fly", link: "/fly" },
       { label: "Railway", link: "/railway" },
+      { label: "Celld", link: "/celld" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
@@ -1192,6 +1193,76 @@ export default defineConfig({
               items: [{ label: "IPs & certificates", link: "/fly/networking" }],
             },
             providerResourcesEntry("Fly"),
+          ],
+        },
+        {
+          label: "Celld",
+          items: [
+            { label: "Overview", link: "/celld" },
+            { label: "Setup", link: "/celld/setup" },
+            {
+              label: "Tutorial",
+              items: [{ autogenerate: { directory: "celld/tutorial" } }],
+            },
+            {
+              label: "Fleet",
+              items: [
+                { label: "Fleets & Applications", link: "/celld/fleet/fleets-and-applications" },
+                { label: "Hosting on ECS", link: "/celld/fleet/ecs" },
+                { label: "Management runners", link: "/celld/fleet/management" },
+                { label: "Scaling", link: "/celld/fleet/scaling" },
+                { label: "Upgrades", link: "/celld/fleet/upgrades" },
+                { label: "Storage & retention", link: "/celld/fleet/storage" },
+                { label: "Private fleets", link: "/celld/fleet/private-fleets" },
+              ],
+            },
+            {
+              label: "Compute",
+              items: [
+                { label: "Workers", link: "/celld/compute/workers" },
+                { label: "Service bindings", link: "/celld/compute/service-bindings" },
+                { label: "Worker Loader", link: "/celld/compute/worker-loader" },
+                { label: "Static assets", link: "/celld/compute/static-assets" },
+                { label: "Durable Objects", link: "/celld/compute/durable-objects" },
+                { label: "Durable schedules", link: "/celld/compute/durable-schedules" },
+                { label: "WebSockets", link: "/celld/compute/hibernatable-websockets" },
+                { label: "Containers", link: "/celld/compute/containers" },
+                { label: "Workflows", link: "/celld/compute/workflows" },
+                { label: "Effect workflows", link: "/celld/compute/effect-workflows" },
+              ],
+            },
+            {
+              label: "APIs",
+              items: [{ label: "Effect RPC", link: "/celld/apis/effect-rpc" }],
+            },
+            {
+              label: "Data",
+              items: [
+                { label: "KV", link: "/celld/data/kv" },
+                { label: "R2", link: "/celld/data/r2" },
+                { label: "D1", link: "/celld/data/d1" },
+                { label: "Durable Object SQL migrations", link: "/celld/data/sql-migrations" },
+              ],
+            },
+            {
+              label: "Messaging & events",
+              items: [
+                { label: "Queues", link: "/celld/messaging/queues" },
+                { label: "Cron triggers", link: "/celld/messaging/cron" },
+              ],
+            },
+            {
+              label: "Networking",
+              items: [
+                { label: "Domains & ingress", link: "/celld/networking/domains" },
+                { label: "Call from AWS Lambda", link: "/celld/networking/call-from-lambda" },
+              ],
+            },
+            {
+              label: "Security & secrets",
+              items: [{ label: "Secrets & env", link: "/celld/security/secrets-env" }],
+            },
+            providerResourcesEntry("Celld"),
           ],
         },
         {

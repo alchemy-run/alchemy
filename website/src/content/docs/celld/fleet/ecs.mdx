@@ -1,0 +1,143 @@
+---
+title: Hosting on ECS
+description: How a host Layer decides where a Celld fleet runs, and how to choose between Fargate and dedicated EC2 hosts on Amazon ECS.
+---
+
+import DAG from "../../../../components/DAG.astro";
+
+A fleet declaration describes nodes and a bucket, but not where they run.
+That's the host's job. A host is a Layer that turns the fleet into real cloud
+resources: compute for the nodes, a bucket for the data, and a network that
+connects them.
+
+This chapter covers the ECS host: how to provide it, the two kinds of
+compute it offers and when each fits, and how it fits into a network you
+already have.
+
+## Provide the host
+
+The host sits next to your providers, so every fleet in the stack runs on it.
+
+```typescript title="alchemy.run.ts"
+import * as CelldAWS from "@alchemy.run/celld/AWS";
+
+const providers = Layer.mergeAll(
+  AWS.providers(),
+  Celld.providers(),
+  CelldAWS.EcsFleet().pipe(
+    Layer.provide(CelldAWS.EcsTaskManagement()),
+  ),
+);
+```
+
+`CelldAWS.EcsFleet()` runs each node as an ECS task and keeps the fleet's data
+in an S3 bucket. It also needs a management Layer, which decides how deploys
+reach the nodes. [Management runners](/celld/fleet/management) explains it.
+
+Keeping the host out of the declaration means `Cells` stays the same whatever
+runs it. Your Workers never import AWS.
+
+## What the host creates
+
+From one fleet declaration, the host creates everything the nodes need.
+
+<DAG
+  nodes={[
+    { id: "fleet", label: "Cells", type: "Celld.Fleet", layer: 0, tone: "accent" },
+    { id: "service", label: "ECS service", type: "the nodes", layer: 1 },
+    { id: "bucket", label: "S3 bucket", type: "code and data", layer: 1 },
+    { id: "network", label: "VPC", type: "subnets, groups", layer: 1 },
+    { id: "map", label: "Cloud Map", type: "private URL", layer: 1 },
+  ]}
+  edges={[
+    { from: "fleet", to: "service" },
+    { from: "fleet", to: "bucket" },
+    { from: "fleet", to: "network" },
+    { from: "fleet", to: "map" },
+  ]}
+  caption="One declaration, composed into the AWS resources a fleet runs on."
+/>
+
+The nodes register in a Cloud Map namespace, which gives the fleet its
+private URL. Security groups separate three kinds of traffic: Workers'
+callers, the nodes themselves, and the management runner. A fleet with
+`ingress` also gets an Application Load Balancer.
+
+## Fargate by default
+
+With no options, each node is a Fargate task. There are no machines to patch
+or size, and you pay per second for what the tasks use.
+
+You choose the size of each node on the fleet.
+
+```typescript title="src/fleet.ts"
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  instances: 2,
+  cpu: 1024,
+  memory: 2048,
+}) {}
+```
+
+`cpu` is in Fargate units, where `1024` is one vCPU, and `memory` is in MiB.
+Nodes default to `512` and `1024`, and to ARM64, which costs less on Fargate.
+The Celld image runs on either architecture, so `cpuArchitecture: "X86_64"`
+works too.
+
+## EC2 when you run containers
+
+Fargate tasks can't reach a Docker daemon, so they can't run
+[Containers](/celld/compute/containers). For those, give each node a whole
+EC2 host.
+
+```typescript title="alchemy.run.ts"
+CelldAWS.EcsFleet({
+  capacity: { type: "ec2", instanceType: "m7i.large" },
+}).pipe(Layer.provide(CelldAWS.EcsTaskManagement()));
+```
+
+The host runs one node per instance in an Auto Scaling group, with one spare
+instance so a new node can start before an old one stops. The node gets the
+instance's memory minus `reservedMemoryMiB`, 1024 by default, which stays
+back for Linux, Docker and the ECS agent. On EC2, a private Network Load
+Balancer gives the fleet its private URL instead of Cloud Map.
+
+Containers on a node share its kernel. To sandbox them, run them under
+gVisor.
+
+```typescript title="alchemy.run.ts"
+CelldAWS.EcsFleet({
+  capacity: { type: "ec2", instanceType: "m7i.large" },
+  containerRuntime: "runsc",
+}).pipe(Layer.provide(CelldAWS.EcsTaskManagement()));
+```
+
+Each host installs gVisor, and the node runs its containers in gVisor's
+sandbox, which gives each one its own kernel.
+
+Choose the capacity when you create the fleet. Moving between Fargate and
+EC2, or changing the container runtime, would replace every node at once, so
+the host refuses it.
+
+## Run in your own VPC
+
+Without `vpc`, the host builds a network just for the fleet: public subnets,
+no NAT gateway, and public IPs on the nodes so they can reach S3 and pull
+the Celld image. To put the fleet next to services you already run, give it
+your subnets instead.
+
+```typescript title="src/fleet.ts"
+export class Cells extends Celld.Fleet<Cells>()("Cells", {
+  vpc: {
+    vpcId: "vpc-0123456789abcdef0",
+    subnetIds: ["subnet-aaa", "subnet-bbb"],
+    securityGroupIds: ["sg-0123456789abcdef0"],
+  },
+}) {}
+```
+
+The groups in `securityGroupIds` must allow fleet traffic on port 8080. A
+fleet with public `ingress` needs subnets in at least two Availability
+Zones, because an Application Load Balancer does.
+
+Next, [Management runners](/celld/fleet/management): how a deploy on your
+laptop reaches nodes inside this network.

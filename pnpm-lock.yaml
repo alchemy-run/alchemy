@@ -1923,6 +1923,28 @@ importers:
         specifier: 'catalog:'
         version: 8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
 
+  examples/celld-tutorial:
+    dependencies:
+      '@alchemy.run/aws':
+        specifier: workspace:*
+        version: link:../../packages/aws
+      '@alchemy.run/celld':
+        specifier: workspace:*
+        version: link:../../packages/celld
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)
+      alchemy:
+        specifier: workspace:*
+        version: link:../../packages/alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
+    devDependencies:
+      '@alchemy.run/test':
+        specifier: workspace:*
+        version: link:../../packages/alchemy-test
+
   examples/cloudflare-agents:
     dependencies:
       '@modelcontextprotocol/sdk':
@@ -8539,6 +8561,9 @@ importers:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
         version: link:../frontend-frameworks
+      '@cloudflare/workers-types':
+        specifier: 5.20261026.1
+        version: 5.20261026.1
       '@effect/platform-bun':
         specifier: 'catalog:'
         version: 4.1.0(effect@4.1.0)
@@ -8783,6 +8808,55 @@ importers:
       pg:
         specifier: 'catalog:'
         version: 8.23.1
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/celld:
+    dependencies:
+      '@alchemy.run/cloudflare-runtime':
+        specifier: workspace:*
+        version: link:../cloudflare-runtime
+      '@alchemy.run/docker':
+        specifier: workspace:*
+        version: link:../docker
+      '@alchemy.run/sql':
+        specifier: workspace:*
+        version: link:../sql
+      '@distilled.cloud/celld':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/celld
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+    devDependencies:
+      '@alchemy.run/aws':
+        specifier: workspace:*
+        version: link:../aws
+      '@cloudflare/workers-types':
+        specifier: 5.20261026.1
+        version: 5.20261026.1
+      '@distilled.cloud/aws':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/aws
+      '@effect/platform-bun':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)
+      '@effect/platform-node':
+        specifier: 'catalog:'
+        version: 4.1.0(effect@4.1.0)(redis@6.2.1)
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.0
+        version: 4.1.0
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -10157,6 +10231,9 @@ importers:
       '@alchemy.run/axiom':
         specifier: workspace:*
         version: link:../axiom
+      '@alchemy.run/celld':
+        specifier: workspace:*
+        version: link:../celld
       '@alchemy.run/cloudflare':
         specifier: workspace:*
         version: link:../cloudflare
@@ -10238,6 +10315,9 @@ importers:
       '@distilled.cloud/aws':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/aws
+      '@distilled.cloud/celld':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/celld
       '@distilled.cloud/cloudflare':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/cloudflare
@@ -38997,7 +39077,7 @@ snapshots:
 
   '@types/sax@1.2.7':
     dependencies:
-      '@types/node': 24.13.3
+      '@types/node': 26.6.5
 
   '@types/unist@2.0.11': {}
 

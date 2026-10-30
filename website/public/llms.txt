@@ -616,6 +616,72 @@ The Railway hub: overview (Projects, Services, databases), setup (workspace, API
 - [Waku](https://alchemy.run/railway/frontend/waku) — Deploy a Waku app to Railway with Railway.Website.Waku — RSC server on a container Service, SSG pages in the image, and Waku's own dev server under alchemy dev.
 - [Octane](https://alchemy.run/railway/frontend/octane) — Deploy an OctaneJS app to Railway with Railway.Website.Octane — SSR plus client assets on one Service, and Octane's own Vite dev server under alchemy dev.
 
+## Celld — start here
+
+Celld embeds V8 on your own infrastructure: overview and fleet setup on the ECS host.
+
+- [Celld](https://alchemy.run/celld) — Run Effect-native Workers, Durable Objects, KV, D1, R2, Queues and Workflows on a Celld fleet in your own AWS account.
+- [Setup](https://alchemy.run/celld/setup) — Provision a Celld fleet and publish a Worker graph through Alchemy APIs.
+
+## Celld — Tutorial
+
+- [Part 1: Your First Fleet](https://alchemy.run/celld/tutorial/part-1) — Create a Stack, declare a Celld Fleet hosted on AWS ECS, and deploy it.
+- [Part 2: Add a Worker](https://alchemy.run/celld/tutorial/part-2) — Write an Effect-native Worker, publish it to the fleet as an Application, and call a second Worker through a service binding.
+- [Part 3: Add a Durable Object](https://alchemy.run/celld/tutorial/part-3) — Persist a counter per name in a Celld Durable Object and call it from the Worker.
+- [Part 4: Add KV and D1](https://alchemy.run/celld/tutorial/part-4) — Store a guestbook in D1 with deploy-time migrations, and remember the last visitor in KV.
+- [Part 5: Testing](https://alchemy.run/celld/tutorial/part-5) — Deploy the Celld stack from a test file and assert on the live Worker over HTTP.
+- [Part 6: CI/CD](https://alchemy.run/celld/tutorial/part-6) — Deploy the Celld stack from GitHub Actions, with a preview fleet per pull request.
+
+## Celld — Fleet
+
+Hosting, management, scaling, upgrades, storage and private networking for a Celld fleet.
+
+- [Fleets & Applications](https://alchemy.run/celld/fleet/fleets-and-applications) — What a Celld fleet is, why its nodes are disposable, and how an Application puts your Workers on it.
+- [Hosting on ECS](https://alchemy.run/celld/fleet/ecs) — How a host Layer decides where a Celld fleet runs, and how to choose between Fargate and dedicated EC2 hosts on Amazon ECS.
+- [Management runners](https://alchemy.run/celld/fleet/management) — Why a Celld deploy needs a runner inside the fleet's network, and how to choose between an on-demand task, an always-on service and a VPC Lambda.
+- [Private fleets](https://alchemy.run/celld/fleet/private-fleets) — Keep a Celld fleet off the internet and call its Workers only from services in the same network.
+- [Scaling](https://alchemy.run/celld/fleet/scaling) — How a Celld fleet spreads Workers and Durable Objects across its nodes, and how to run a fixed count or scale on CPU.
+- [Storage & retention](https://alchemy.run/celld/fleet/storage) — What a Celld fleet's bucket holds, and what destroying a fleet or removing a resource deletes.
+- [Upgrades](https://alchemy.run/celld/fleet/upgrades) — How a Celld fleet rolls to a new release or node size one node at a time, and which changes it refuses.
+
+## Celld — Compute
+
+- [Containers](https://alchemy.run/celld/compute/containers) — Attach a container image to a Celld Durable Object, start it, wait for its port and run commands, on EC2 hosts with gVisor isolation.
+- [Durable Objects](https://alchemy.run/celld/compute/durable-objects) — Declare a Celld Durable Object, persist its state in native storage, and call it by name from a Worker.
+- [Durable schedules](https://alchemy.run/celld/compute/durable-schedules) — Register an archive callback, schedule and cancel jobs, and coordinate them with cell storage.
+- [Effect workflows](https://alchemy.run/celld/compute/effect-workflows) — Run Effect workflows on Celld Durable Objects. Declare a workflow with effect/workflow, implement it with Workflows.layer, start runs with Workflows.RunWorkflow, and let them sleep, wait for signals and undo steps durably.
+- [Hibernatable WebSockets](https://alchemy.run/celld/compute/hibernatable-websockets) — Accept native Celld sockets and validate versioned Session attachments after a wake.
+- [Service bindings](https://alchemy.run/celld/compute/service-bindings) — Call another Worker in the same Celld Application over a native service binding, without leaving the fleet.
+- [Static assets](https://alchemy.run/celld/compute/static-assets) — Serve a directory of static files from a Celld Worker, with _headers, _redirects and SPA fallback, and run the Worker first when it needs to.
+- [Worker Loader](https://alchemy.run/celld/compute/worker-loader) — Load and run Worker code at runtime in a sandboxed Celld isolate, with CPU and subrequest limits and tail reports.
+- [Workers](https://alchemy.run/celld/compute/workers) — Compose an HTTP Worker and its durable objects, then publish them as a Celld Application.
+- [Workflows](https://alchemy.run/celld/compute/workflows) — Run checkpointed Celld tasks with typed failure replay and per-attempt cleanup.
+
+## Celld — APIs
+
+- [Effect RPC](https://alchemy.run/celld/apis/effect-rpc) — Serve a schema-backed Room API with incremental streams and a scoped WebSocket client.
+
+## Celld — Data
+
+- [D1](https://alchemy.run/celld/data/d1) — Create a SQLite database in a Celld fleet, apply migrations on deploy, and query it from a Worker with prepared statements.
+- [Durable Object SQL migrations](https://alchemy.run/celld/data/sql-migrations) — Capture SQL files in the bundle and apply them once per Celld durable instance.
+- [KV](https://alchemy.run/celld/data/kv) — Create a KV namespace in a Celld fleet, bind it to a Worker with read- or write-scoped access, and store values with metadata.
+- [R2](https://alchemy.run/celld/data/r2) — Store objects in a Celld fleet with an R2-compatible bucket binding — put, get, list, delete and multipart uploads.
+
+## Celld — Messaging & events
+
+- [Cron triggers](https://alchemy.run/celld/messaging/cron) — Run an Effect on a schedule in a Celld Worker with Celld.cron.
+- [Queues](https://alchemy.run/celld/messaging/queues) — Send messages to a Celld queue from a Worker and consume them in batches with retries and a dead-letter queue.
+
+## Celld — Networking
+
+- [Call from AWS Lambda](https://alchemy.run/celld/networking/call-from-lambda) — Bind a Celld Application's entrypoint into an AWS Lambda Function and call its fetch handler, RPC methods and Durable Objects.
+- [Domains & ingress](https://alchemy.run/celld/networking/domains) — Expose a Celld fleet's Application on a public load balancer, then on a custom domain with a TLS certificate and DNS records.
+
+## Celld — Security & secrets
+
+- [Secrets & env](https://alchemy.run/celld/security/secrets-env) — Pass environment values and secrets to a Celld Worker with the env prop and effect/Config.
+
 ## PlanetScale
 
 Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.
@@ -898,8 +964,8 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Story](https://alchemy.run/domain/story) — A specification you can run. Given some history, when a command is sent, then these events are recorded.
 - [Testing a model](https://alchemy.run/domain/testing-models) — Test your model's rules, views, policies and deadlines with stories that run it in memory.
 - [Testing an Api](https://alchemy.run/domain/testing-apis) — Test what each client may do and see, in process, over HTTP, and against a real deployment.
-- [Integrate with foldkit](https://alchemy.run/domain/foldkit) — Run domain commands from foldkit commands, watch views with subscriptions, and give the app its Api client as a resource.
-- [Optimistic updates](https://alchemy.run/domain/optimistic-updates) — Show a change the moment the user asks for it, then confirm it when the bank's event arrives, or mark it rejected.
+- [Integrate with Foldkit](https://alchemy.run/domain/foldkit) — Derive Foldkit Commands from an Api, follow View snapshots, and seed the Model from Flags.
+- [Optimistic updates](https://alchemy.run/domain/optimistic-updates) — Show pending intent, confirm it by commandId from a View feed, and retry an unknown outcome safely.
 - [Offline and local first](https://alchemy.run/domain/local-first) — Choose how local an app is, and keep it working offline by recording intents and sending them when the connection returns.
 - [Sessions and middleware](https://alchemy.run/domain/sessions) — Authenticate every request, carry who is asking into the domain, and sign browsers in with a cookie.
 - [Sign in with better-auth](https://alchemy.run/domain/better-auth) — Sign users in to a Domain Api with GitHub or Google through better-auth, and give every command and view the signed-in user.
@@ -914,4 +980,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~200 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~207 KB) — only fetch it when you need to locate a specific resource's reference page.

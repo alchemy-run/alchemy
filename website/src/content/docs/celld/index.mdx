@@ -1,0 +1,72 @@
+---
+title: Celld
+description: Run Effect-native Workers, Durable Objects, KV, D1, R2, Queues and Workflows on a Celld fleet in your own AWS account.
+---
+
+[Celld](https://github.com/denoland/celld) runs V8 Workers and SQLite-backed
+Durable Objects on infrastructure you own. Alchemy deploys a Celld **Fleet**
+onto AWS ECS and publishes your Workers to it as an **Application**. The
+Workers use the same Effect APIs and Cloudflare-style bindings as
+[Cloudflare Workers](/cloudflare).
+
+```typescript
+// alchemy.run.ts
+export default Alchemy.Stack(
+  "App",
+  {
+    providers: Layer.mergeAll(
+      AWS.providers(),
+      Celld.providers(),
+      CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
+    ),
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    const app = yield* Celld.Application("App", { entrypoint: Api });
+    return { url: app.url };
+  }).pipe(Effect.provide(Celld.Fleet.layer(Cells))),
+);
+```
+
+## Start here
+
+[Setup](/celld/setup) deploys a fleet and a Worker in one page. The
+[tutorial](/celld/tutorial/part-1) builds an app step by step: a fleet, Workers,
+a Durable Object, KV and D1, tests and CI.
+
+## Fleet
+
+A fleet is compute and storage you run. These pages cover how it's hosted and
+operated: [Fleets & Applications](/celld/fleet/fleets-and-applications),
+[Hosting on ECS](/celld/fleet/ecs),
+[Management runners](/celld/fleet/management), [Scaling](/celld/fleet/scaling),
+[Upgrades](/celld/fleet/upgrades),
+[Storage & retention](/celld/fleet/storage) and
+[Private fleets](/celld/fleet/private-fleets).
+
+## Build
+
+Write [Workers](/celld/compute/workers) and connect them with
+[service bindings](/celld/compute/service-bindings). Keep state in
+[Durable Objects](/celld/compute/durable-objects), [KV](/celld/data/kv),
+[D1](/celld/data/d1) and [R2](/celld/data/r2). Run background work with
+[Queues](/celld/messaging/queues), [cron triggers](/celld/messaging/cron) and
+[Workflows](/celld/compute/workflows) or
+[Effect workflows](/celld/compute/effect-workflows), and sandboxed code with the
+[Worker Loader](/celld/compute/worker-loader) and
+[Containers](/celld/compute/containers).
+
+## How it differs from Cloudflare
+
+Celld embeds V8, not workerd, and runs where you deploy it: there's no global
+edge, no Cloudflare product integrations, and no `alchemy dev` emulator yet.
+Data lives in your fleet's S3 bucket, and you pay AWS for the nodes, load
+balancer and storage. The guides mirror their Cloudflare counterparts, but
+check each page's limitations before you port code.
+
+## Related guides
+
+- [Setup](/celld/setup)
+- [Tutorial](/celld/tutorial/part-1)
+- [Cloudflare overview](/cloudflare)
+- [Celld reference](/providers/celld/reference/celld)

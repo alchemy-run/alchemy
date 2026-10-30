@@ -1,0 +1,128 @@
+---
+title: "Part 5: Testing"
+description: Deploy the Celld stack from a test file and assert on the live Worker over HTTP.
+sidebar:
+  order: 5
+---
+
+In [Part 4](/celld/tutorial/part-4) you finished the Worker. Now you write
+tests that deploy the stack and call it over HTTP.
+
+## Install the test harness
+
+```sh
+bun add -d @alchemy.run/test
+```
+
+## Create the test file
+
+Configure the same providers and state as the Stack once at the top of the
+file:
+
+```typescript
+// test/integ.test.ts
+import * as AWS from "@alchemy.run/aws";
+import * as Celld from "@alchemy.run/celld";
+import * as CelldAWS from "@alchemy.run/celld/AWS";
+import * as Test from "@alchemy.run/test/Bun";
+import { expect } from "bun:test";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import Stack from "../alchemy.run.ts";
+
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  providers: Layer.mergeAll(
+    AWS.providers(),
+    Celld.providers(),
+    CelldAWS.EcsFleet().pipe(Layer.provide(CelldAWS.EcsTaskManagement())),
+  ),
+  state: AWS.state(),
+});
+```
+
+## Deploy the stack before tests
+
+```diff lang="typescript"
+// test/integ.test.ts
+const { test, beforeAll, afterAll, deploy, destroy } = Test.make({
+  // ...
+});
+
++const stack = beforeAll(deploy(Stack), { timeout: 1_200_000 });
+```
+
+`beforeAll` deploys once and returns an accessor for the stack's outputs. A
+fresh fleet takes several minutes to create, so raise the hook's timeout; a
+redeploy of unchanged infrastructure is much faster.
+
+## Test the Counter
+
+```diff lang="typescript"
+// test/integ.test.ts
+const stack = beforeAll(deploy(Stack), { timeout: 1_200_000 });
+
++test(
++  "counts visits",
++  Effect.gen(function* () {
++    const { url } = yield* stack;
++    const first = Number(yield* (yield* HttpClient.get(`${url}/count`)).text);
++    const second = Number(yield* (yield* HttpClient.get(`${url}/count`)).text);
++    expect(second).toBe(first + 1);
++  }),
++);
+```
+
+Add `import * as HttpClient from "effect/http/HttpClient";`. The harness
+provides `HttpClient`. Compare the two counts rather than expecting `1`: the
+Counter keeps its value between runs.
+
+## Test the guestbook
+
+```diff lang="typescript"
+// test/integ.test.ts
++test(
++  "signs the guestbook",
++  Effect.gen(function* () {
++    const { url } = yield* stack;
++    const signed = yield* HttpClient.post(`${url}/sign`, {
++      body: HttpBody.text("tester"),
++    });
++    expect(signed.status).toBe(201);
++    const book = (yield* (yield* HttpClient.get(`${url}/guestbook`)).json) as {
++      last: string;
++    };
++    expect(book.last).toBe("tester");
++  }),
++);
+```
+
+Add `import * as HttpBody from "effect/http/HttpBody";`.
+
+## Run the tests
+
+```sh
+bun test test/integ.test.ts
+```
+
+The first run deploys the stack, or updates the one you already deployed.
+
+## Destroy after tests on CI
+
+```diff lang="typescript"
+// test/integ.test.ts
+const stack = beforeAll(deploy(Stack), { timeout: 1_200_000 });
++
++afterAll.skipIf(!process.env.CI)(destroy(Stack), { timeout: 1_800_000 });
+```
+
+Locally the stack stays up, so the next run is fast. On CI it's destroyed. The
+fleet's storage goes with it because Part 1 set `retainStorage: false`.
+
+## Recap
+
+- `Test.make` takes the same providers and state as the Stack.
+- `beforeAll(deploy(Stack))` deploys once; give it a timeout that covers a
+  fresh fleet.
+- `afterAll.skipIf(!process.env.CI)(destroy(Stack))` cleans up on CI only.
+
+Next, [Part 6](/celld/tutorial/part-6) deploys from CI.

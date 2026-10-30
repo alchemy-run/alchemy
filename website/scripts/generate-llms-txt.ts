@@ -443,6 +443,45 @@ const SECTIONS: Section[] = [
     pages: { directory: "railway/frontend" },
   },
   {
+    heading: "Celld — start here",
+    intro: "Celld embeds V8 on your own infrastructure: overview and fleet setup on the ECS host.",
+    pages: { slugs: ["celld/index", "celld/setup"] },
+  },
+  {
+    heading: "Celld — Tutorial",
+    pages: { directory: "celld/tutorial" },
+  },
+  {
+    heading: "Celld — Fleet",
+    intro:
+      "Hosting, management, scaling, upgrades, storage and private networking for a Celld fleet.",
+    pages: { directory: "celld/fleet" },
+  },
+  {
+    heading: "Celld — Compute",
+    pages: { directory: "celld/compute" },
+  },
+  {
+    heading: "Celld — APIs",
+    pages: { directory: "celld/apis" },
+  },
+  {
+    heading: "Celld — Data",
+    pages: { directory: "celld/data" },
+  },
+  {
+    heading: "Celld — Messaging & events",
+    pages: { directory: "celld/messaging" },
+  },
+  {
+    heading: "Celld — Networking",
+    pages: { directory: "celld/networking" },
+  },
+  {
+    heading: "Celld — Security & secrets",
+    pages: { directory: "celld/security" },
+  },
+  {
     heading: "PlanetScale",
     intro:
       "Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.",
