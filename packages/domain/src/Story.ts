@@ -1198,7 +1198,8 @@ const make =
                 );
               }
               if (actual._tag === "Died")
-                assertedDeaths.add(`${s.saga.sagaName}/${run.executionId}`);
+                // The engine names a model's sagas `<model>/<saga>`.
+                assertedDeaths.add(`${domain.modelName}/${s.saga.sagaName}/${run.executionId}`);
               break;
             }
             case "Answer": {
@@ -1299,7 +1300,7 @@ const make =
           return yield* new StepFailed({
             step: steps.length,
             atEnd: true,
-            message: `saga ${death.saga} run ${death.executionId} died with ${String(death.defect)}, which no step asserts`,
+            message: `saga ${death.saga.slice(`${domain.modelName}/`.length)} run ${death.executionId} died with ${String(death.defect)}, which no step asserts`,
           });
         }
         if (observed.length > 0) {

@@ -6,7 +6,17 @@ import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import { Account, Audit, Billing, Open, Owners } from "./isolation.ts";
+import {
+  Account,
+  Audit,
+  Billing,
+  Open,
+  OpenAccount,
+  OpenAccountLive,
+  Owners,
+  Sales,
+  Support,
+} from "./isolation.ts";
 
 /** Billing's and Audit's Account and Owners, hosted on one platform. */
 const clients = (platform: ReturnType<typeof DomainCloudflare.layerDurableObjects>) =>
@@ -18,6 +28,23 @@ const clients = (platform: ReturnType<typeof DomainCloudflare.layerDurableObject
       Effect.provide(Audit.layer(Layer.empty).pipe(Layer.provide(platform))),
     ),
   });
+
+/** Sales' and Support's Account and OpenAccount runs, on the default platform. */
+const sagas = Effect.all({
+  Sales: Effect.all({ accounts: Account, runs: OpenAccount }).pipe(
+    Effect.provide(
+      Sales.layer(OpenAccountLive).pipe(Layer.provide(DomainCloudflare.layerDurableObjects())),
+    ),
+  ),
+  Support: Effect.all({ accounts: Account, runs: OpenAccount }).pipe(
+    Effect.provide(
+      Support.layer(OpenAccountLive).pipe(Layer.provide(DomainCloudflare.layerDurableObjects())),
+    ),
+  ),
+});
+
+/** `POST /saga/<model>/<key>/<owner>` runs OpenAccount to the end and answers the model's Account. */
+const SAGA_ROUTE = /^\/saga\/(Sales|Support)\/([^/]+)\/([^/]+)$/;
 
 /**
  * `POST /<isolate>/<model>/open/<id>/<owner>`, `GET /<isolate>/<model>/state/<id>`
@@ -34,10 +61,20 @@ export default class DomainIsolationWorker extends Cloudflare.Worker<DomainIsola
       class: yield* clients(DomainCloudflare.layerDurableObjects()),
       key: yield* clients(DomainCloudflare.layerDurableObjects({ isolate: "key" })),
     };
+    const runs = yield* sagas;
     return {
       fetch: Effect.gen(function* () {
         const request = yield* HttpServerRequest;
-        const route = ROUTE.exec(new URL(request.url, "http://localhost").pathname);
+        const path = new URL(request.url, "http://localhost").pathname;
+        const saga = SAGA_ROUTE.exec(path);
+        if (saga) {
+          const { accounts, runs: openAccount } = runs[saga[1] as "Sales" | "Support"];
+          const key = decodeURIComponent(saga[2]!);
+          const run = yield* openAccount.start(key, { owner: saga[3]! });
+          yield* run.result;
+          return yield* HttpServerResponse.json(yield* accounts.state(key));
+        }
+        const route = ROUTE.exec(path);
         if (!route) return HttpServerResponse.text("Not Found", { status: 404 });
         const isolate = route[1] as "class" | "key";
         const { accounts, owners } = hosted[isolate][route[2] as "Billing" | "Audit"];

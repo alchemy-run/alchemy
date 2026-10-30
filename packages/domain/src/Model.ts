@@ -372,7 +372,10 @@ const build = <A, E, R>(
           ),
         );
       }
-      for (const saga of sagas) hosts = Context.add(hosts, saga, Saga.client(saga, engine.value));
+      // The model's own runs: its sagas register and start under `<model>/<saga>`.
+      const modelEngine = Saga.engineFor(engine.value, modelName);
+      hosts = Context.add(hosts, WorkflowEngine.WorkflowEngine, modelEngine);
+      for (const saga of sagas) hosts = Context.add(hosts, saga, Saga.client(saga, modelEngine));
     }
 
     // Policies, projections and sagas are built with the clients available, then hosted.

@@ -65,3 +65,17 @@ for (const isolate of ["class", "key"] as const) {
     { timeout: 180_000 },
   );
 }
+
+test(
+  "two models running the same saga in one Worker keep separate runs",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const base = url.replace(/\/+$/, "");
+    const key = `s-${yield* Effect.sync(() => crypto.randomUUID())}`;
+
+    // the same key in both models: two runs, each with its own input
+    expect(yield* call(base, "POST", `/saga/Sales/${key}/sam`)).toEqual({ owner: "sam" });
+    expect(yield* call(base, "POST", `/saga/Support/${key}/alex`)).toEqual({ owner: "alex" });
+  }),
+  { timeout: 180_000 },
+);
