@@ -116,7 +116,7 @@ function typeFromExtension(name: string): ModuleType | undefined {
 function moduleFileName(type: ModuleType, name: string) {
   const inferred = /\.([cm]?js|py|map)$/.test(name)
     ? undefined
-    : /\.custom$/.test(name)
+    : name.endsWith(".custom")
       ? "Text"
       : (typeFromExtension(name) ?? "Data");
   if (inferred === type) return name;

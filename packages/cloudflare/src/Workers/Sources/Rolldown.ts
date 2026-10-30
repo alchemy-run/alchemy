@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import * as Artifacts from "alchemy/Artifacts";
 import * as Bundle from "alchemy/Bundle/Bundle";
 import { findCwdForBundle, resolveMainPath } from "alchemy/Bundle/TempRoot";
@@ -134,7 +135,7 @@ const withRulesHint = (error: Bundle.BundleError): Bundle.BundleError => {
   const files = (errors ?? []).flatMap((e) => {
     const file =
       e.code === "UNLOADABLE_DEPENDENCY"
-        ? e.message?.replace(/\u001b\[[0-9;]*m/g, "").match(/Could not load (\S+)/)?.[1]
+        ? (e.message && stripVTControlCharacters(e.message))?.match(/Could not load (\S+)/)?.[1]
         : e.code === "PARSE_ERROR"
           ? e.id
           : undefined;
