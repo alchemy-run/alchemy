@@ -79,10 +79,9 @@ const decodeBase64 = (value: string) => Buffer.from(value, "base64").toString("u
 
 const expandHome = Effect.fn(function* (input: string) {
   if (!input.startsWith("~")) return input;
-  const home = yield* Config.String("HOME").pipe(
-    Config.orElse(() => Config.String("USERPROFILE")),
-    Effect.orElseSucceed(() => undefined),
-  );
+  // `~` is the user's real home directory, not a configured value.
+  // oxlint-disable-next-line effecttsgo/process-env-in-effect -- home expansion reads the real process env
+  const home = yield* Effect.sync(() => process.env.HOME ?? process.env.USERPROFILE);
   if (!home) {
     return yield* new KubeConfigError({
       message: `Cannot expand '${input}': no HOME environment variable`,
