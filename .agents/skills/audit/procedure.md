@@ -173,8 +173,11 @@ remove any a contributor committed.
 - Long suites block the worktree. Advance the next PR in a separate worktree
   meanwhile. A large refactor can go to a background agent in its own
   worktree with "commit, don't push"; review its result before pushing.
-- Leave full type-checking to CI. If you've changed types, a targeted `tsc` on
-  the changed files saves a CI round.
+- Before pushing, run the CI Check steps your change can break:
+  `pnpm exec tsrs -b`, `pnpm lint`, `pnpm format:check`,
+  `pnpm docs:check-jsdoc` and `pnpm exports:check`. They're in
+  `.github/workflows/check.yml`. A new test file or fixture is type-checked
+  too.
 
 ## 6. Push and update the PR
 
@@ -185,11 +188,23 @@ remove any a contributor committed.
   repo-wide pre-commit formatter swept in, and revert them. Run
   `pnpm exec oxfmt --check` on every file the PR changes and read the whole
   output.
-- First-time contributors' CI runs sit at `action_required` and pushes don't
-  start them; approve the runs or ask the user to. Don't approve runs on
-  parked PRs.
-- "Ready" means: tests pass locally, CI green, not a draft, mergeable. Then
-  `gh pr ready <n>`.
+- **Leave every PR with CI passing.** After each push, wait for every check
+  on the new head to finish (`gh pr checks <n>`). When one fails, read its log
+  (`gh run view <id> --log-failed`), fix the cause, push, and wait again.
+  Don't end your turn while a local suite is still running: wait on it with
+  `t3_background_wait`, since ending the turn is your report. A delegated
+  thread can't watch CI, so once the push is done, hand back with the checks'
+  state; the coordinator watches the PR and sends you the log if one fails.
+- Make sure CI actually runs. First-time contributors' runs sit at
+  `action_required` and pushes don't start them. Read the whole diff first:
+  approve the runs (`gh run approve <id>`) only when it doesn't touch
+  `.github/`, scripts CI executes, or anything that reads secrets or sends
+  data out. Otherwise ask the user. Don't approve runs on parked PRs. If no
+  checks appear at all, find out why (a draft, a push that didn't trigger
+  `pull_request`) and get them started.
+- "Ready" means: tests pass locally, every CI check on the final head has
+  passed, not a draft, mergeable. A pending, failing or empty check list is
+  not ready. Then `gh pr ready <n>`.
 
 **Rewrite the description to show the developer experience** — every PR you
 touch, even when the author's body looks fine. Explain the change through the
@@ -270,8 +285,9 @@ Next in the list: #M (omit when it was the only one).
 https://github.com/alchemy-run/alchemy/pull/N
 ```
 
-- Say which tests ran and whether they passed. CI must be green before
-  "ready", but CI status doesn't replace the test report.
+- Say which tests ran and whether they passed. Every CI check must have
+  passed on the head you report before you call it "ready", but CI status
+  doesn't replace the test report.
 - Label deliberate runs against main as expected failures.
 - Say plainly what was **not** run.
 - When fixes span several PRs, say which PR holds each fix and give the merge
