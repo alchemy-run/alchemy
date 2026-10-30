@@ -16,6 +16,7 @@ import { startPool } from "@alchemy.run/domain/internal/explore/Workers";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 import * as M from "./Models.ts";
 
@@ -108,6 +109,22 @@ describe("a batched projection is not queued", () => {
 });
 
 describe("failure paths and limits", () => {
+  it("a refused build closes its scope", async () => {
+    class Rows extends Domain.Projection("Rows", { from: [M.Src], key: M.Src, on: [M.Go] }) {}
+    let closed = 0;
+    const Live = Layer.mergeAll(
+      Rows.toLayer(Effect.succeed(Effect.fn(function* () {})), { batch: { size: 10 } }),
+      Layer.effectDiscard(Effect.addFinalizer(() => Effect.sync(() => void closed++))),
+    );
+    class Model extends Domain.Model("BuiltThenRefused", {
+      aggregates: [M.Src],
+      projections: [Rows],
+    }) {}
+    const r = await run({ ...M.twoBits, name: "refused", model: Model, layer: Model.layer(Live) });
+    expect(r.engineErrors.length).toBe(1);
+    expect(closed).toBe(1);
+  });
+
   class FakeWorker {
     static made: Array<FakeWorker> = [];
     readonly handlers = new Map<string, (value: any) => void>();
