@@ -3,13 +3,14 @@ import * as Http from "alchemy/Http";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as EffectHttp from "effect/http/HttpEffect";
+import { ClientAbort } from "effect/http/HttpServerError";
 import * as HttpServerRequest from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { Request } from "./Request.ts";
 import type { WorkerServices } from "./Worker.ts";
-import { isWorkerEvent } from "./WorkerRuntime.ts";
+import { isWorkerEvent, WorkerExecutionContext } from "./WorkerRuntime.ts";
 
 export type HttpEffect = Http.HttpEffect<WorkerServices>;
 
@@ -24,11 +25,7 @@ export const makeRequestEffect = <Req = never>(
   webRequest: cf.Request,
   handler: Http.HttpEffect<Req> | Effect.Effect<Http.HttpEffect<Req>>,
 ) => {
-  // The signal fires when the client goes away; the handler is then
-  // interrupted instead of running to completion for nobody.
-  const safeHandler = Http.safeHttpEffect(handler, {
-    signal: (webRequest as any as globalThis.Request).signal,
-  });
+  const safeHandler = Http.safeHttpEffect(handler);
   return Effect.gen(function* () {
     const request = HttpServerRequest.fromWeb(webRequest as any as globalThis.Request).modify({
       remoteAddress: Option.fromUndefinedOr(
@@ -49,8 +46,39 @@ export const makeRequestEffect = <Req = never>(
         Layer.succeed(Request, webRequest as any),
       ]),
     );
-  }) as any;
+  }).pipe(interruptOnClientAbort((webRequest as any as globalThis.Request).signal)) as any;
 };
+
+/**
+ * Interrupts the request fiber when the client disconnects, as Effect's
+ * `HttpEffect.toWebHandler` does, annotated with `ClientAbort` so
+ * `causeResponse` answers 499. The signal only fires under the
+ * `enable_request_signal` compatibility flag.
+ *
+ * workerd cancels the event's pending I/O once the client is gone, so the
+ * abort also registers the fiber with `waitUntil`, letting the handler's
+ * finalizers finish.
+ */
+const interruptOnClientAbort =
+  (signal: AbortSignal | undefined) =>
+  <A, E, R>(self: Effect.Effect<A, E, R>) =>
+    signal === undefined
+      ? self
+      : Effect.flatMap(WorkerExecutionContext.asEffect(), (ctx) =>
+          Effect.withFiber((fiber) => {
+            const onAbort = () => {
+              ctx.raw.waitUntil(new Promise<void>((resolve) => fiber.addObserver(() => resolve())));
+              fiber.interruptUnsafe(undefined, ClientAbort.annotation);
+            };
+            if (signal.aborted) {
+              onAbort();
+            } else {
+              signal.addEventListener("abort", onAbort, { once: true });
+              fiber.addObserver(() => signal.removeEventListener("abort", onAbort));
+            }
+            return self;
+          }),
+        );
 
 const toHandledWebResponse = <Req>(
   handler: Effect.Effect<HttpServerResponse.HttpServerResponse, never, Req>,
@@ -61,7 +89,9 @@ const toHandledWebResponse = <Req>(
     const context = yield* Effect.context();
     const webResponse = yield* Deferred.make<Response>();
 
-    yield* EffectHttp.toHandled(handler, (request, response) => {
+    // `toHandled` runs the request uninterruptibly; the handler opts back in,
+    // as `HttpRouter` routes do, so a client abort reaches it.
+    yield* EffectHttp.toHandled(Effect.interruptible(handler), (request, response) => {
       const withoutBody = request.method === "HEAD";
       if (!HttpServerResponse.omitsBody(response, withoutBody)) {
         response = EffectHttp.scopeTransferToStream(response);

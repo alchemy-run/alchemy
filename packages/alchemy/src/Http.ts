@@ -10,7 +10,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Etag from "effect/http/Etag";
 import type { HttpBodyError } from "effect/http/HttpBody";
 import * as HttpPlatform from "effect/http/HttpPlatform";
-import { causeResponse, ClientAbort, type HttpServerError } from "effect/http/HttpServerError";
+import { causeResponse, type HttpServerError } from "effect/http/HttpServerError";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
 import * as Layer from "effect/Layer";
@@ -75,28 +75,18 @@ export class HttpServer extends Context.Service<
 
 export const safeHttpEffect = <Req = never>(
   handler: HttpEffect<Req> | Effect.Effect<HttpEffect<Req>>,
-  options?: {
-    /**
-     * The request's abort signal. When it fires, the handler is interrupted
-     * as a client abort and the boundary below answers 499.
-     */
-    readonly signal?: AbortSignal | undefined;
-  },
 ): Effect.Effect<
   HttpServerResponse.HttpServerResponse,
   never,
   Req | HttpServerRequest | Scope.Scope
 > =>
   Effect.catchCause(
-    raceClientAbort(
-      handler.pipe(
-        // @ts-expect-error
-        Effect.flatMap((response) =>
-          HttpServerResponse.isHttpServerResponse(response) ? Effect.succeed(response) : response,
-        ),
-      ) as any as HttpEffect<Req>,
-      options?.signal,
-    ),
+    handler.pipe(
+      // @ts-expect-error
+      Effect.flatMap((response) =>
+        HttpServerResponse.isHttpServerResponse(response) ? Effect.succeed(response) : response,
+      ),
+    ) as any as HttpEffect<Req>,
     (cause) =>
       // `causeResponse` is effect's native failure boundary: Respondable
       // failures keep their intended response (e.g. RouteNotFound -> 404),
@@ -114,33 +104,6 @@ export const safeHttpEffect = <Req = never>(
         ),
       ),
   );
-
-/**
- * Races the handler against the request's abort signal. The abort wins as an
- * interrupt annotated with Effect's `ClientAbort`, which `causeResponse` maps
- * to 499, and the race interrupts the handler so its finalizers run.
- *
- * A race rather than interrupting the request fiber: `HttpEffect.toHandled`
- * runs the handler uninterruptibly, so an interrupt against that fiber waits
- * for the handler to finish. The race's fibers are interruptible.
- */
-const raceClientAbort = <A, E, R>(
-  handler: Effect.Effect<A, E, R>,
-  signal: AbortSignal | undefined,
-): Effect.Effect<A, E, R> =>
-  signal === undefined
-    ? handler
-    : // The abort goes first so a request that arrived aborted never starts its handler.
-      Effect.raceFirst(
-        Effect.callback<never>((resume) => {
-          const onAbort = () =>
-            resume(Effect.failCause(Cause.annotate(Cause.interrupt(), ClientAbort.annotation)));
-          if (signal.aborted) return onAbort();
-          signal.addEventListener("abort", onAbort, { once: true });
-          return Effect.sync(() => signal.removeEventListener("abort", onAbort));
-        }),
-        handler,
-      );
 
 /**
  * No `ErrorReporter` is registered by default, so without a fallback a defect

@@ -136,8 +136,8 @@ export const makeWorkerBridge = (
       super(ctx, env);
 
       for (const methodName of ExportedHandlerMethods) {
-        (this as any)[methodName] = async (input: any) => {
-          const event = processEvent(
+        (this as any)[methodName] = async (input: any) =>
+          processEvent(
             (built) =>
               built.export[methodName](input, this.env, this.ctx) as [
                 Effect.Effect<any>,
@@ -150,15 +150,6 @@ export const makeWorkerBridge = (
                 ? Promise.resolve(exit.value)
                 : Promise.reject(Cause.squash(exit.cause)),
           );
-          if (methodName === "fetch") {
-            // workerd cancels a fetch event's pending I/O once the client
-            // disconnects, dropping the cleanup a client abort starts (see
-            // `Http.safeHttpEffect`). `waitUntil` keeps the invocation alive
-            // until the event, including its request-scope close, settles.
-            this.ctx.waitUntil(event.catch(() => undefined));
-          }
-          return event;
-        };
       }
 
       return new Proxy(this, {
