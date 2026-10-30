@@ -8,6 +8,7 @@
  * Every test uses its own table prefixes, and drops its tables before and
  * after it runs.
  */
+import * as Domain from "@alchemy.run/domain";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import * as Effect from "effect/Effect";
@@ -36,6 +37,7 @@ import {
   hosted,
   Increment,
 } from "./fixtures/HostContract.ts";
+import { concurrentCompletion, rollbackBetweenDeletes } from "./fixtures/RetentionRace.ts";
 
 const POSTGRES_URL = process.env.DOMAIN_TEST_POSTGRES_URL;
 const MYSQL_URL = process.env.DOMAIN_TEST_MYSQL_URL;
@@ -53,10 +55,39 @@ const suite = (
     // writes it reports (https://github.com/Effect-TS/effect/issues/10162).
     const stress = `dct_${tag}_stress`;
     /** A host on new tables, with one runner and its own connection pool. */
-    const onPrefix = (prefix: string) =>
-      singleRunner(prefix).pipe(Layer.provide(clean(prefix)), Layer.provideMerge(client(url!)));
+    const onPrefix = (prefix: string, options?: Domain.Cluster.Options) =>
+      singleRunner(prefix, options).pipe(
+        Layer.provide(clean(prefix)),
+        Layer.provideMerge(client(url!)),
+      );
 
     hostContract(`Cluster on ${name}`, () => onPrefix(`dct_${tag}_${next++}`));
+
+    for (const [title, race] of [
+      [
+        "retention: a request that completes during a sweep keeps its message and reply",
+        concurrentCompletion,
+      ],
+      ["retention: a failed message delete rolls back its reply delete", rollbackBetweenDeletes],
+    ] as const) {
+      it.live(title, () => {
+        const prefix = `dct_${tag}_${race === concurrentCompletion ? "race" : "rollback"}`;
+        return race(
+          { messages: `${prefix}c_messages`, replies: `${prefix}c_replies`, name: prefix },
+          `Domain.Policy/${prefix}/Mirror`,
+        ).pipe(
+          Effect.scoped,
+          Effect.provide(
+            hosted(
+              onPrefix(prefix, {
+                sweep: { intervalMillis: 100, afterMillis: 30_000 },
+                retention: { receipts: "forever", cancelled: "forever", messages: 0 },
+              }),
+            ),
+          ),
+        );
+      });
+    }
 
     it.live(
       "concurrent commands keep one event and one receipt each; every processed view delivery is applied",

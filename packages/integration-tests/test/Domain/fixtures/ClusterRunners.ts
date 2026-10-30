@@ -62,8 +62,8 @@ export const clean = (prefix: string): Layer.Layer<never, never, SqlClient.SqlCl
 export const config = { entityMessagePollInterval: "1 second" } as const;
 
 /** One runner that owns every shard, with its own table prefixes. */
-export const singleRunner = (prefix: string) =>
-  Domain.Cluster.layer({ tablePrefix: prefix, clusterTablePrefix: `${prefix}c` }).pipe(
+export const singleRunner = (prefix: string, options: Domain.Cluster.Options = {}) =>
+  Domain.Cluster.layer({ ...options, tablePrefix: prefix, clusterTablePrefix: `${prefix}c` }).pipe(
     Layer.provide(
       Sharding.layer.pipe(
         Layer.provideMerge(Runners.layerNoop),
