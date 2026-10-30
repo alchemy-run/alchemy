@@ -15,12 +15,11 @@ const parentOf = (project: string) => `projects/${project}/locations/us-central1
 const missingDeploymentOf = (project: string) =>
   `${parentOf(project)}/deployments/alchemy-missing-deployment`;
 
-// Workload Manager API is entitlement-gated on the default testing project
-// (`ServiceDisabled`: "Workload Manager API has not been used in project
-// <project> before or it is disabled."). Set
-// GCP_TEST_WORKLOADMANAGER=1 on an entitled project to run the lifecycle.
-const entitled = process.env.GCP_TEST_WORKLOADMANAGER === "1";
-const runLifecycle = entitled && !process.env.FAST;
+// The testing project doesn't enable workloadmanager.googleapis.com by default: every test
+// deploys it first.
+const WorkloadManagerApi = GCP.ServiceUsage.ProjectService("WorkloadManagerApi", {
+  service: "workloadmanager.googleapis.com",
+});
 
 const waitUntilGone = (name: string) =>
   workloadmanager.getProjectsLocationsDeploymentsActuations({ name }).pipe(
@@ -40,13 +39,14 @@ test.provider(
       const { project } = yield* GcpEnvironment.current;
       const missingDeployment = missingDeploymentOf(project);
       yield* stack.destroy();
+      yield* stack.deploy(WorkloadManagerApi);
 
       const error = yield* Effect.flip(
         workloadmanager.getProjectsLocationsDeploymentsActuations({
           name: `${missingDeployment}/actuations/alchemy-missing-actuation`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -56,50 +56,26 @@ test.provider(
   },
 );
 
-test.provider.skipIf(entitled)(
-  "createProjectsLocationsDeploymentsActuations is rejected with ServiceDisabled while Workload Manager is disabled",
-  (stack) =>
-    Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      const missingDeployment = missingDeploymentOf(project);
-      yield* stack.destroy();
-
-      const error = yield* Effect.flip(
-        workloadmanager.createProjectsLocationsDeploymentsActuations({
-          parent: missingDeployment,
-          body: {
-            name: `${missingDeployment}/actuations/alchemy-actuation-probe`,
-          },
-        }),
-      );
-      expect(error._tag).toEqual("ServiceDisabled");
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:workloadmanager", "live"],
-    timeout: 90_000,
-  },
-);
-
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create against a missing deployment is rejected with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       const missingDeployment = missingDeploymentOf(project);
       yield* stack.destroy();
+      yield* stack.deploy(WorkloadManagerApi);
 
       const error = yield* Effect.flip(
         stack.deploy(
           Effect.gen(function* () {
+            yield* WorkloadManagerApi;
             return yield* GCP.WorkloadManager.DeploymentsActuation("Bootstrap", {
               deployment: missingDeployment,
             });
           }),
         ),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -109,18 +85,23 @@ test.provider.skipIf(!runLifecycle)(
   },
 );
 
-test.provider.skipIf(!runLifecycle || !process.env.GCP_TEST_WORKLOADMANAGER_DEPLOYMENT)(
+// An actuation runs under a Workload Manager deployment: an SAP system rollout
+// that provisions its own infrastructure. Set GCP_TEST_WORKLOADMANAGER_DEPLOYMENT
+// to an existing deployment to run this lifecycle.
+test.provider.skipIf(!process.env.GCP_TEST_WORKLOADMANAGER_DEPLOYMENT)(
   "create and delete an actuation under an entitled deployment",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
+      yield* stack.deploy(WorkloadManagerApi);
 
       const deploymentName = process.env.GCP_TEST_WORKLOADMANAGER_DEPLOYMENT;
       expect(deploymentName).toEqual(expect.any(String));
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* WorkloadManagerApi;
           return yield* GCP.WorkloadManager.DeploymentsActuation("Bootstrap", {
             deployment: deploymentName!,
           });

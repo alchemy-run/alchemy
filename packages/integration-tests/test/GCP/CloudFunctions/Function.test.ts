@@ -16,10 +16,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 const LOCATION = "us-central1";
 
-// Gen2 function create/update/delete is a multi-minute LRO. Set
-// GCP_TEST_CLOUDFUNCTIONS=1 to run the lifecycle; default recapture
-// keeps the list probe only.
-// gen2 function builds take 2-4 minutes.
+// Gen2 function builds take 2-4 minutes, so `--fast` skips the lifecycle.
 const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>

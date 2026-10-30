@@ -25,7 +25,7 @@ const waitUntilGone = (name: string) =>
 
 // A lake (~2.5 min) plus a bucket asset (~1.5 min), then teardown of both,
 // runs past 5 minutes.
-test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete a lake asset",
   (stack) =>
     Effect.gen(function* () {

@@ -11,7 +11,7 @@ const { test } = Test.make({ providers: GCP.providers() });
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Workstation clusters take ~20 minutes to create and delete.
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 test.provider(
   "getProjectsLocationsWorkstationClusters on a missing cluster fails with a typed tag",

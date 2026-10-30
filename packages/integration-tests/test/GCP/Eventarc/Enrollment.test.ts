@@ -13,7 +13,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 // Enrollment depends on a Pipeline, whose create/update/delete LROs take
 // over 15 minutes end to end.
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 const LOCATION = "europe-west1";
 
 const waitUntilGone = (name: string) =>

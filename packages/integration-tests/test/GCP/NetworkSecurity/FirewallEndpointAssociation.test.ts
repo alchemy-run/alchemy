@@ -13,9 +13,8 @@ const { test } = Test.make({ providers: GCP.providers() });
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Firewall endpoints (Cloud NGFW Enterprise) bill hourly and take well over 5
-// minutes to provision; set GCP_TEST_NGFW=1 together with GCP_TEST_SLOW to run.
-const runLifecycle =
-  !!process.env.GCP_TEST_NGFW && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+// minutes to provision, so `--fast` skips the lifecycle.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   networksecurity.getProjectsLocationsFirewallEndpointAssociations({ name }).pipe(

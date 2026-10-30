@@ -16,7 +16,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // access is not enabled." — and take ~10 minutes to provision. Set
 // GCP_TEST_PRIVATE_SERVICE_ACCESS=1 on a project with PSA configured.
 const privateServiceAccess = !!process.env.GCP_TEST_PRIVATE_SERVICE_ACCESS;
-const runLifecycle = privateServiceAccess && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = privateServiceAccess && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   memcache.getProjectsLocationsInstances({ name }).pipe(

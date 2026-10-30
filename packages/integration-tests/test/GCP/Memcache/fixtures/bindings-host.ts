@@ -6,12 +6,11 @@ import { serveProbes } from "../../bindingHost.ts";
  * Memcached instances need Private Service Access on the project's default
  * network (without it create fails with BadRequest "Google private service
  * access is not enabled.") and take ~10 minutes to provision, so
- * `GCP_TEST_PRIVATE_SERVICE_ACCESS=1` + `GCP_TEST_SLOW=1` opt in. The gate
- * is forwarded to the host's environment so the deployed runtime binds the
+ * `GCP_TEST_PRIVATE_SERVICE_ACCESS=1` opts in, and `--fast` skips it.
+ * The gate is forwarded to the host's environment so the deployed runtime binds the
  * same set.
  */
-export const memcacheEnabled =
-  !!process.env.GCP_TEST_PRIVATE_SERVICE_ACCESS && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+export const memcacheEnabled = !!process.env.GCP_TEST_PRIVATE_SERVICE_ACCESS && !process.env.FAST;
 
 /** Instance the binding is granted for; declared only when enabled. */
 export const Cache = GCP.Memcache.Instance("Cache", {
@@ -34,7 +33,7 @@ export default class MemcacheBindingsHost extends GCP.Function<MemcacheBindingsH
     invokerIamDisabled: true,
     env: {
       GCP_TEST_PRIVATE_SERVICE_ACCESS: memcacheEnabled ? "1" : "",
-      GCP_TEST_SLOW: memcacheEnabled ? "1" : "",
+      FAST: memcacheEnabled ? "" : "1",
     },
   },
   Effect.gen(function* () {

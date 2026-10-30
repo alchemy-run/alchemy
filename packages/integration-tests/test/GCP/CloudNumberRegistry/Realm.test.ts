@@ -7,20 +7,20 @@ import {
   location,
   logLevel,
   currentProject,
-  entitled,
-  runLifecycle,
+  CloudNumberRegistryApi,
   waitUntilGone,
 } from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-test.provider.skipIf(!entitled)(
+test.provider(
   "getProjectsLocationsRealms on a missing realm fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       const project = yield* currentProject;
 
       yield* stack.destroy();
+      yield* stack.deploy(CloudNumberRegistryApi);
 
       const error = yield* Effect.flip(
         cnr.getProjectsLocationsRealms({
@@ -37,39 +37,18 @@ test.provider.skipIf(!entitled)(
   },
 );
 
-test.provider.skipIf(entitled)(
-  "getProjectsLocationsRealms fails with ServiceDisabled while the API is disabled",
-  (stack) =>
-    Effect.gen(function* () {
-      const project = yield* currentProject;
-
-      yield* stack.destroy();
-
-      const error = yield* Effect.flip(
-        cnr.getProjectsLocationsRealms({
-          name: `projects/${project}/locations/${location}/realms/alchemy-missing-realm`,
-        }),
-      );
-      expect(error._tag).toEqual("ServiceDisabled");
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:cloudnumberregistry", "live"],
-    timeout: 90_000,
-  },
-);
-
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a realm",
   (stack) =>
     Effect.gen(function* () {
       const project = yield* currentProject;
 
       yield* stack.destroy();
+      yield* stack.deploy(CloudNumberRegistryApi);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* CloudNumberRegistryApi;
           const book = yield* GCP.CloudNumberRegistry.RegistryBook("Inventory", {
             location,
             labels: { env: "test" },
@@ -106,6 +85,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* CloudNumberRegistryApi;
           const book = yield* GCP.CloudNumberRegistry.RegistryBook("Inventory", {
             registryBookId: created.book.registryBookId,
             location,

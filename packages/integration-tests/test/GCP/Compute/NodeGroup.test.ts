@@ -11,9 +11,9 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// A sole-tenant node bills for the whole host (several dollars per hour).
-// Set GCP_TEST_COMPUTE_NODE=1 to opt in.
-const runLifecycle = !!process.env.GCP_TEST_COMPUTE_NODE && !process.env.FAST;
+// A sole-tenant node bills for the whole host (several dollars per hour, for
+// the few minutes the test holds it); `--fast` skips the lifecycle.
+const runLifecycle = !process.env.FAST;
 
 const zone = "us-central1-a";
 const region = "us-central1";

@@ -14,9 +14,8 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour).
 // The API is enabled on the testing project; get-missing returns
 // `NotFound`, and create with an invalid CIDR returns `BadRequest`
-// (`CIDR "not-a-cidr" is invalid`). Set GCP_TEST_MANAGEDIDENTITIES=1
-// to run the full lifecycle.
-const runLifecycle = !process.env.FAST && process.env.GCP_TEST_MANAGEDIDENTITIES === "1";
+// (`CIDR "not-a-cidr" is invalid`). `--fast` skips the lifecycle.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   managedidentities.getProjectsLocationsGlobalDomains({ name }).pipe(

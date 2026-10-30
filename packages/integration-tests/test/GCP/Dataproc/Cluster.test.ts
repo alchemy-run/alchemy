@@ -12,7 +12,7 @@ const { test } = Test.make({ providers: GCP.providers() });
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // Cluster create + update + delete takes ~8 minutes (observed 475s).
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (projectId: string, region: string, clusterName: string) =>
   dataproc.getProjectsRegionsClusters({ projectId, region, clusterName }).pipe(

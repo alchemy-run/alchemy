@@ -12,10 +12,10 @@ const { test } = Test.make({ providers: GCP.providers() });
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The Contact Center AI Platform API is not enabled in the testing project.
-// Set GCP_TEST_CONTACT_CENTER_AI_PLATFORM=1 on a project where it is; the
-// lifecycle also needs GCP_TEST_SLOW (instances take 30–45 minutes).
+// Set GCP_TEST_CONTACT_CENTER_AI_PLATFORM=1 on a project where it is `--fast`
+// skips the lifecycle (instances take 30–45 minutes).
 const entitled = !!process.env.GCP_TEST_CONTACT_CENTER_AI_PLATFORM;
-const runLifecycle = entitled && !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = entitled && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   ccaip.getProjectsLocationsContactCenters({ name }).pipe(

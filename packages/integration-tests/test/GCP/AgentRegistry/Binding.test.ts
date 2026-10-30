@@ -11,9 +11,11 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Agent Registry is not enabled in the test project (ServiceDisabled, see
-// the probe below). Set GCP_TEST_AGENT_REGISTRY=1 in a project that has it.
-const runLifecycle = !!process.env.GCP_TEST_AGENT_REGISTRY && !process.env.FAST;
+// The testing project doesn't enable agentregistry.googleapis.com by default: every test
+// deploys it first.
+const AgentRegistryApi = GCP.ServiceUsage.ProjectService("AgentRegistryApi", {
+  service: "agentregistry.googleapis.com",
+});
 
 const location = "us-central1";
 const currentParent = GcpEnvironment.current.pipe(
@@ -159,34 +161,13 @@ const ensureFixtures = () =>
     };
   });
 
-test.provider.skipIf(runLifecycle)(
-  "getProjectsLocationsBindings without Agent Registry enabled fails with ServiceDisabled",
-  (stack) =>
-    Effect.gen(function* () {
-      const parent = yield* currentParent;
-      yield* stack.destroy();
-
-      const error = yield* Effect.flip(
-        registry.getProjectsLocationsBindings({
-          name: `${parent}/bindings/alchemy-missing-binding`,
-        }),
-      );
-      expect(error._tag).toEqual("ServiceDisabled");
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:agentregistry", "live"],
-    timeout: 90_000,
-  },
-);
-
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a binding",
   (stack) =>
     Effect.gen(function* () {
       const parent = yield* currentParent;
       yield* stack.destroy();
+      yield* stack.deploy(AgentRegistryApi);
 
       const { sourceService, targetService, sourceIdentifier, targetIdentifier } =
         yield* ensureFixtures();
@@ -195,6 +176,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* AgentRegistryApi;
           return yield* GCP.AgentRegistry.Binding("Orchestrator", {
             location,
             displayName: "orchestrator tools",
@@ -224,6 +206,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* AgentRegistryApi;
           return yield* GCP.AgentRegistry.Binding("Orchestrator", {
             location,
             displayName: "orchestrator tools v2",

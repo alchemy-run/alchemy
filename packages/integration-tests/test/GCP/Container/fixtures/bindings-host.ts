@@ -4,11 +4,11 @@ import { serveProbes } from "../../bindingHost.ts";
 import { CAPACITY_ZONE_2 } from "../../zones.ts";
 
 /**
- * GKE cluster create and delete each take 5-10 minutes, so
- * `GCP_TEST_SLOW=1` opts in. The gate is forwarded to the host's
+ * GKE cluster create and delete each take 5-10 minutes, so they
+ * are skipped under `--fast`. `FAST` is forwarded to the host's
  * environment so the deployed runtime binds the same set.
  */
-export const slow = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+export const slow = !process.env.FAST;
 
 /**
  * The cluster lives for the whole describe block, so it cannot hold a
@@ -75,7 +75,7 @@ export default class ContainerBindingsHost extends GCP.Function<ContainerBinding
   {
     main: import.meta.url,
     invokerIamDisabled: true,
-    env: { GCP_TEST_SLOW: slow ? "1" : "" },
+    env: { FAST: slow ? "" : "1" },
   },
   Effect.gen(function* () {
     const cluster = slow ? yield* clusterProbes : {};

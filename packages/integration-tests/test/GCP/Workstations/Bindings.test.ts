@@ -14,7 +14,7 @@ const { test, beforeAll, afterAll } = Test.make(testOptions);
 const sharedStack = Core.scratchStack(testOptions, "WorkstationsBindings");
 
 // Workstation clusters take ~20 minutes to create and delete.
-const runLifecycle = !!process.env.GCP_TEST_SLOW && !process.env.FAST;
+const runLifecycle = !process.env.FAST;
 
 let baseUrl: string;
 let hostAccount: string;

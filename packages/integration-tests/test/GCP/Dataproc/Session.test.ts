@@ -14,9 +14,9 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // Each serverless workload reserves 12 vCPUs and hundreds of GB of Hyperdisk;
 // next to the rest of the suite the testing project's quotas run out
 // (`Quota 'HDB_TOTAL_GB' exceeded. Limit: 500.0 in region us-central1`,
-// `Insufficient 'CPUS_ALL_REGIONS' quota`). Passes solo in ~2 minutes; set
-// GCP_TEST_DATAPROC_SERVERLESS=1 on a project with headroom.
-const runLifecycle = !!process.env.GCP_TEST_DATAPROC_SERVERLESS && !process.env.FAST;
+// `Insufficient 'CPUS_ALL_REGIONS' quota`). It passes alone in ~2 minutes,
+// so the lifecycle runs exclusively.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   dataproc.getProjectsLocationsSessions({ name }).pipe(
@@ -84,5 +84,5 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:dataproc", "live"], timeout: 600_000 },
+  { tags: ["provider:gcp", "provider:gcp:dataproc", "live"], timeout: 600_000, exclusive: true },
 );

@@ -11,11 +11,11 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// The API Management API is not enabled in the testing project: every call
-// answers 403 SERVICE_DISABLED (typed `ServiceDisabled`). Set GCP_TEST_APIM=1
-// on a project with the API enabled to run the lifecycle.
-const apimEnabled = !!process.env.GCP_TEST_APIM;
-const runLifecycle = !process.env.FAST && apimEnabled;
+// The testing project doesn't enable apim.googleapis.com by default: every test
+// deploys it first.
+const ApimApi = GCP.ServiceUsage.ProjectService("ApimApi", {
+  service: "apim.googleapis.com",
+});
 const location = "us-central1";
 
 const waitUntilGone = (name: string) =>
@@ -30,27 +30,28 @@ const waitUntilGone = (name: string) =>
   );
 
 test.provider(
-  "getProjectsLocationsObservationJobs on a missing job fails with ServiceDisabled while the API is disabled",
+  "getProjectsLocationsObservationJobs on a missing job fails with NotFound",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       const parent = `projects/${project}/locations/${location}`;
 
       yield* stack.destroy();
+      yield* stack.deploy(ApimApi);
 
       const error = yield* Effect.flip(
         apim.getProjectsLocationsObservationJobs({
           name: `${parent}/observationJobs/alchemy-missing-job`,
         }),
       );
-      expect(error._tag).toEqual(apimEnabled ? "NotFound" : "ServiceDisabled");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
   { tags: ["provider:gcp", "provider:gcp:apim", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, enable, and delete an API Observation job",
   (stack) =>
     Effect.gen(function* () {
@@ -58,9 +59,11 @@ test.provider.skipIf(!runLifecycle)(
       const parent = `projects/${project}/locations/${location}`;
 
       yield* stack.destroy();
+      yield* stack.deploy(ApimApi);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* ApimApi;
           return yield* GCP.Apim.ObservationJob("Shadow", {
             location,
             enabled: false,
@@ -80,6 +83,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* ApimApi;
           return yield* GCP.Apim.ObservationJob("Shadow", {
             observationJobId: created.observationJobId,
             location,

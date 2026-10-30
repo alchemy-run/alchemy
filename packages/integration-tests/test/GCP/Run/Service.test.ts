@@ -609,7 +609,7 @@ test.provider(
 );
 
 // Memorystore Redis provisioning takes 5-10 minutes.
-test.provider.skipIf(!process.env.GCP_TEST_SLOW || !!process.env.FAST)(
+test.provider.skipIf(!!process.env.FAST)(
   "effect-native Function with Memorystore Redis over Direct VPC",
   (stack) =>
     Effect.gen(function* () {

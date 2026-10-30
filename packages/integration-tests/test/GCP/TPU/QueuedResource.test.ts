@@ -11,11 +11,13 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Cloud TPU is disabled on the testing project (ServiceDisabled "Cloud TPU API
-// has not been used in project ...") and TPU VMs bill by the hour (dollars
-// per run) and need TPU quota; set
-// GCP_TEST_TPU=1 to opt in.
-const runLifecycle = !!process.env.GCP_TEST_TPU && !process.env.FAST;
+// The testing project doesn't enable Cloud TPU by default: every test deploys
+// it first. TPU VMs take several minutes to provision, so `--fast` skips the
+// lifecycle.
+const TpuApi = GCP.ServiceUsage.ProjectService("TpuApi", {
+  service: "tpu.googleapis.com",
+});
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   tpu.getProjectsLocationsQueuedResources({ name }).pipe(
@@ -34,13 +36,14 @@ test.provider(
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
+      yield* stack.deploy(TpuApi);
 
       const error = yield* Effect.flip(
         tpu.getProjectsLocationsQueuedResources({
           name: `projects/${project}/locations/us-central1-c/queuedResources/alchemy-tpu-qr-missing`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -52,9 +55,11 @@ test.provider.skipIf(!runLifecycle)(
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
+      yield* stack.deploy(TpuApi);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* TpuApi;
           return yield* GCP.TPU.QueuedResource("Trainer", {
             location: "us-central1-c",
             nodeSpec: [
