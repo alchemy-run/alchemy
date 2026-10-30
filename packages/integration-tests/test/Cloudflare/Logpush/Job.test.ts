@@ -81,7 +81,10 @@ const program = (creds: R2Creds, opts: JobOpts) =>
     });
     const job = yield* Cloudflare.Logpush.Job("Job", {
       dataset: opts.dataset,
-      destinationConf: Output.interpolate`r2://${bucket.bucketName}/alchemy/{DATE}?account-id=${creds.accountId}&access-key-id=${creds.accessKeyId}&secret-access-key=${creds.secretAccessKey}`,
+      destinationConf:
+        Output.interpolate`r2://${bucket.bucketName}/alchemy/{DATE}?account-id=${creds.accountId}&access-key-id=${creds.accessKeyId}&secret-access-key=${creds.secretAccessKey}`.pipe(
+          Output.map(Redacted.make),
+        ),
       enabled: opts.enabled,
       maxUploadIntervalSeconds: opts.maxUploadIntervalSeconds,
       outputOptions: opts.outputOptions,
@@ -136,7 +139,8 @@ test.provider(
       expect(initial.job.zoneId).toBeUndefined();
       expect(initial.job.dataset).toEqual("workers_trace_events");
       expect(initial.job.enabled).toEqual(false);
-      expect(initial.job.destinationConf).toContain(
+      expect(Redacted.isRedacted(initial.job.destinationConf)).toBe(true);
+      expect(Redacted.value(initial.job.destinationConf)).toContain(
         `r2://${initial.bucket.bucketName}/alchemy/{DATE}`,
       );
 
