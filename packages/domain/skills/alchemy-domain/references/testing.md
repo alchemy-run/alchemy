@@ -104,31 +104,25 @@ story(
 
 More: [Testing models: Assert real calls](https://alchemy.run/domain/testing-models#assert-real-calls).
 
-### Adapter contracts
+### Every adapter, same tests
 
-One set of cases that every adapter of an external system must pass (vendor, in-memory fake, no-op), so a fake never drifts from the vendor:
+An adapter is a Layer for the system's service. Run one set of tests against each adapter (vendor, in-memory fake, no-op) so a fake never drifts from the vendor:
 
 ```ts
-import * as ExternalSystem from "@alchemy.run/domain/ExternalSystem";
-
-const SmsContract = ExternalSystem.contract(Sms, {
-  "sends a message": ExternalSystem.returns(Sms.send, { to: "+15550100", body: "hi" }),
-  "counts the segments": ExternalSystem.returns(Sms.send, { to: "+15550100", body: "x".repeat(200) }, { segments: 2 }),
-  "refuses a landline": ExternalSystem.fails(Sms.send, { to: "+15550199", body: "hi" }, "Undeliverable"),
-});
-
 for (const [adapter, layer] of [["Twilio", TwilioSms], ["fake", FakeSms]] as const) {
-  describe(`Sms contract: ${adapter}`, () => {
-    for (const [name, test] of Object.entries(SmsContract)) {
-      it.effect(name, () => test.pipe(Effect.provide(layer)));
-    }
+  describe(`Sms: ${adapter}`, () => {
+    it.effect("counts the segments", () =>
+      Effect.gen(function* () {
+        const sms = yield* Sms;
+        const sent = yield* sms.send({ to: "+15550100", body: "x".repeat(200) });
+        expect(sent.segments).toBe(2);
+      }).pipe(Effect.provide(layer)),
+    );
   });
 }
 ```
 
-`returns` / `fails` check the outcome against the operation's success or error schema, then against the optional expectation: a partial value, an error `_tag`, or a function that returns `false` (or throws) to reject. A broken case fails with a `ContractFailure` naming system, operation and case. Write one contract per external system instead of a hand-written test file per adapter.
-
-More: [Testing models: Check every adapter against one contract](https://alchemy.run/domain/testing-models#check-every-adapter-against-one-contract).
+More: [Testing models: Run the same tests against every adapter](https://alchemy.run/domain/testing-models#run-the-same-tests-against-every-adapter).
 
 ### Sagas
 

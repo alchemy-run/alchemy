@@ -93,7 +93,7 @@ Declare the refusals the model has an answer for, in its own words. A declined r
 
 ## Implement it with a Layer
 
-An adapter is a Layer that implements every call. It's the only code that knows the vendor, so swapping vendor, or using a fake, never touches the model. To prove a fake answers like the vendor, run both against one contract; see [Check every adapter against one contract](/domain/testing-models#check-every-adapter-against-one-contract).
+An adapter is a Layer that implements every call. It's the only code that knows the vendor, so swapping vendor, or using a fake, never touches the model. To prove a fake answers like the vendor, [run the same tests against both](/domain/testing-models#run-the-same-tests-against-every-adapter).
 
 ```typescript title="packages/server/src/Settlement/StripePayments.ts"
 export const StripePayments = Payments.toLayer(
