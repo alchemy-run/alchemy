@@ -104,8 +104,10 @@ A command to an instance that another runner owns goes to that runner, and a liv
 
 | Runner B | Commands to B's instances answered again |
 | --- | --- |
-| Stopped cleanly | 0.3 to 3 seconds after the stop returned |
-| Killed (SIGKILL) | 33 to 35 seconds later: B's shard locks must expire first (`shardLockExpiration`, 35 seconds) |
+| Stopped cleanly | 0.3 to 3 seconds after the stop returned. The stop itself took 36 ms to 3.7 s, and once 15 s on MariaDB 13: that equals `entityTerminationTimeout` (15 seconds), the longest the cluster waits for an entity's running requests at shutdown. The cause of that run is not proved. |
+| Killed (SIGKILL) | 32 to 35 seconds later: B's shard locks must expire first (`shardLockExpiration`, 35 seconds) |
+
+These are measurements, not limits.
 
 A runner that freezes keeps its shards the same way, until its locks expire.
 
@@ -176,14 +178,14 @@ Set a value to `"forever"` to keep those rows. With a `prefix` on `SqlMessageSto
 | Postgres (`@effect/sql-pg`) | One or several runners. |
 | MySQL, MariaDB (`@effect/sql-mysql2`) | One or several runners. Create the tables in a deploy step. |
 
-The host has statements for MSSQL too, but no tests run on it.
+Tested versions: SQLite (Bun 1.4), Postgres 17.11, MariaDB 13.0.2 (`innodb_snapshot_isolation` on) and MariaDB 10.11.19 (off). MySQL itself and MSSQL are not tested; the host has statements for MSSQL, untested.
 
 :::note
 The host never writes a cluster message or reply inside its own transaction, and uses no `WithTransaction` requests. On MySQL and MariaDB, `effect/cluster` can store the reply of a `WithTransaction` request after a deadlock rolled back the handler's writes ([Effect-TS/effect#10162](https://github.com/Effect-TS/effect/issues/10162)). Your own cluster entities on the same database are open to it until that issue is fixed.
 :::
 
 :::note
-MariaDB 11.8 and later turn on `innodb_snapshot_isolation`. The cluster's message reader then gets `ER_CHECKREAD` (1020) errors and retries them, so it runs slower. Results stay correct. To remove the retries, turn it off for the runners' user on the server, for example `SET GLOBAL init_connect = 'SET SESSION innodb_snapshot_isolation=OFF, TRANSACTION ISOLATION LEVEL READ COMMITTED'`, or the same two settings in `my.cnf`.
+MariaDB 11.8 and later turn on `innodb_snapshot_isolation` (10.11 has it off and needs nothing here). The cluster's message reader then gets `ER_CHECKREAD` (1020) errors and retries them, so it runs slower. Results stay correct. To remove the retries, turn it off for the runners' user on the server, for example `SET GLOBAL init_connect = 'SET SESSION innodb_snapshot_isolation=OFF, TRANSACTION ISOLATION LEVEL READ COMMITTED'`, or the same two settings in `my.cnf`.
 :::
 
 ## Avoid these pitfalls
