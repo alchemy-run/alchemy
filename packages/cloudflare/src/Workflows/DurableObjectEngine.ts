@@ -425,13 +425,30 @@ const executionObject = (registration: Registration) =>
       const wake = runs
         .schedule(RUN, { after: 0, payload: {} })
         .pipe(Effect.orDie, Effect.provide(context));
+      // Journal rows only accumulate, so a clock or a completed deferred passes
+      // their count as progress and a healthy hop keeps the alarm's retry budget.
+      const progress = Effect.map(
+        query<{ progress: number }>(
+          `SELECT (SELECT COUNT(*) FROM workflow_activity)
+                + (SELECT COUNT(*) FROM workflow_deferred)
+                + (SELECT COUNT(*) FROM workflow_clock) AS progress`,
+        ),
+        (rows) => rows[0]!.progress,
+      );
 
       const complete = (deferredName: string, exit: string) =>
         query(
           "INSERT OR IGNORE INTO workflow_deferred (name, exit) VALUES (?, ?)",
           deferredName,
           exit,
-        ).pipe(Effect.andThen(wake));
+        ).pipe(
+          Effect.andThen(progress),
+          Effect.flatMap((progress) =>
+            runs
+              .schedule(RUN, { after: 0, payload: {}, progress })
+              .pipe(Effect.orDie, Effect.provide(context)),
+          ),
+        );
 
       const clocks = yield* makeCallback(
         "clock",
@@ -446,7 +463,11 @@ const executionObject = (registration: Registration) =>
           const done = yield* query("SELECT 1 FROM workflow_deferred WHERE name = ?", deferredName);
           if (done.length > 0) return;
           yield* clocks
-            .schedule(name, { at: due, payload: { deferred: deferredName } })
+            .schedule(name, {
+              at: due,
+              payload: { deferred: deferredName },
+              progress: yield* progress,
+            })
             .pipe(Effect.orDie, Effect.provide(context));
         });
 
