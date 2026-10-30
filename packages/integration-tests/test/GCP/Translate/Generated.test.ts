@@ -55,14 +55,14 @@ describe.skipIf(!!process.env.FAST)(
         yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
-              service: "translation.googleapis.com",
+              service: "translate.googleapis.com",
             });
           }),
         );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
-              service: "translation.googleapis.com",
+              service: "translate.googleapis.com",
             });
             const host = yield* TranslateGeneratedHost;
             return { uri: host.uri };

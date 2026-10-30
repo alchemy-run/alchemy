@@ -31,7 +31,7 @@
       "GlossariesGlossaryEntry": "needs an existing glossary built from a CSV in Cloud Storage (GCP_TEST_TRANSLATE_GLOSSARY)"
     },
     "enable": [
-      "translation.googleapis.com"
+      "translate.googleapis.com"
     ]
   }
 }
