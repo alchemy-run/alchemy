@@ -105,14 +105,17 @@ yield* Command.Exec("migrate", {
 ```
 
 `Redacted` env values are unwrapped at spawn time, so the secret
-reaches the child process without appearing in logs or state. The
+reaches the child process without appearing in logs. State stores
+them as `Redacted`. The
 full re-run matrix:
 
 - Unchanged inputs — the run is skipped.
 - A changed memoized file, an env-only change, or a command-only
   change — each re-runs the command.
-- Destroy — delete is a no-op; the command's side effects are never
-  reversed.
+- A `destroyCommand`-only change — the new props are saved without
+  re-running the command, unless `memo` is `false`.
+- Destroy — runs `destroyCommand` if set, and otherwise does nothing;
+  the command's side effects are never reversed.
 - After a destroy, an unchanged redeploy runs the command again —
   destroy forgets the run key.
 
