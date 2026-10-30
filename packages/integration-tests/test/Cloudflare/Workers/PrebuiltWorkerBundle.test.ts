@@ -165,6 +165,13 @@ layer(NodeServices.layer)("readPrebuiltWorkerBundle", (it) => {
         // The type is part of the hash, so changing it redeploys.
         expect((yield* read()).hash).not.toEqual(bundle.hash);
 
+        // The first matching rule decides, typed or not, as when bundling.
+        const first = yield* readPrebuiltWorkerBundle({
+          main: path.join(root, "index.mjs"),
+          rules: [{ globs: ["**/*.mjs", "**/*.md"] }, { type: "Text", globs: ["**/*.md"] }],
+        });
+        expect(first.files.find((file) => file.path === "notes.md")?.type).toBeUndefined();
+
         yield* fs.remove(root, { recursive: true });
       }),
     { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },

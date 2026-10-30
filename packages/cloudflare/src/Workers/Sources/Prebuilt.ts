@@ -74,17 +74,16 @@ export const readPrebuiltWorkerBundle = Effect.fn(function* (options: PrebuiltWo
   const entryName = path.basename(main);
 
   const rules = options.rules ?? defaultModuleRules;
-  const typed = rules
-    .filter((rule) => rule.type)
-    .map((rule) => ({
+  // The first matching rule decides the type, as when bundling.
+  const matchers = rules.map((rule) => {
+    const include = rule.globs.filter((glob) => !glob.startsWith("!"));
+    return {
       type: rule.type,
-      test: picomatch(
-        rule.globs.filter((glob) => !glob.startsWith("!")),
-        { dot: true },
-      ),
-    }));
+      test: include.length ? picomatch(include, { dot: true }) : () => false,
+    };
+  });
   const typeOf = (name: string) =>
-    /\.[cm]?js$/.test(name) ? undefined : typed.find((rule) => rule.test(name))?.type;
+    /\.[cm]?js$/.test(name) ? undefined : matchers.find((rule) => rule.test(name))?.type;
 
   const readModuleFile = Effect.fn(function* (name: string) {
     const file = path.join(root, name);

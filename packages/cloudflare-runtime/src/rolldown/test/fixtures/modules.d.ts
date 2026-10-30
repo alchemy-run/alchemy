@@ -41,3 +41,8 @@ declare module "*.ttf" {
   const value: ArrayBuffer;
   export default value;
 }
+
+declare module "*.md" {
+  const value: string;
+  export default value;
+}

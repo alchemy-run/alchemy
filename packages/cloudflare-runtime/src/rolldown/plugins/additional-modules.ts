@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import path from "node:path";
 import MagicString from "magic-string";
 import type {
@@ -86,9 +87,15 @@ export const additionalModulesPlugin = createPlugin("additional-modules", (optio
           for (const match of matches) {
             const [full, type, id] = match as unknown as [string, ModuleType, string];
             const source = await this.fs.readFile(id);
+            // An explicit file name keyed by type and content: rolldown merges
+            // assets with identical bytes, which would give a Data import the
+            // Text module of another file.
+            const name = moduleFileName(type, path.basename(id));
+            const ext = path.extname(name);
+            const hash = createHash("sha256").update(type).update(source).digest("hex").slice(0, 8);
             const referenceId = this.emitFile({
               type: "asset",
-              name: moduleFileName(type, path.basename(id)),
+              fileName: `assets/${name.slice(0, name.length - ext.length)}-${hash}${ext}`,
               source,
             });
             const fileName = this.getFileName(referenceId);

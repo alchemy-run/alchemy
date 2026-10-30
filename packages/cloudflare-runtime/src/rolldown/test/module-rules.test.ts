@@ -34,6 +34,23 @@ describe("module rules", () => {
     expect(await miniflare.fetchJson("/")).toEqual({ type: "[object String]" });
   });
 
+  it("keeps identical files of different types apart", async () => {
+    const built = await buildFixture({
+      fixture: "module-rules-dedupe/index.ts",
+      pluginOptions: {
+        compatibilityDate: "2025-07-01",
+        moduleRules: [{ type: "Text", test: (path) => path.endsWith(".md") }],
+      },
+    });
+    await using miniflare = await createMiniflareFromRolldown(built.output, {
+      compatibilityDate: "2025-07-01",
+    });
+    expect(await miniflare.fetchJson("/")).toEqual({
+      text: "[object String]",
+      data: "[object ArrayBuffer]",
+    });
+  });
+
   it("leaves an unmatched extension to rolldown", async () => {
     await expect(buildFixture({ fixture })).rejects.toThrow(/font\.ttf/);
   });
