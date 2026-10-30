@@ -1,12 +1,13 @@
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import type { EnvironmentVariable } from "../../Auth/AuthProvider.ts";
-import { getEnv } from "../../Auth/Env.ts";
-import { resolveProfileName } from "../../Auth/Resolve.ts";
-import { loadConfigProvider } from "../../Util/ConfigProvider.ts";
-import { AlchemistInvalidInput } from "../Errors.ts";
-import { collectAuthProviders, DEFAULT_ENTRYPOINT, type Target } from "../Session.ts";
+import type { EnvironmentVariable } from "../Auth/AuthProvider.ts";
+import { getEnv } from "../Auth/Env.ts";
+import { resolveProfileName } from "../Auth/Resolve.ts";
+import { loadConfigProvider } from "../Util/ConfigProvider.ts";
+import { collectAuthProviders } from "./AuthRegistry.ts";
+import { DEFAULT_ENTRYPOINT, type Target } from "./Entrypoint.ts";
+import { AlchemistInvalidInput } from "./Errors.ts";
 
 export interface CheckEnvironmentInput extends Target {
   /** Providers to check. Omitted means every registered provider. */
