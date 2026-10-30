@@ -1434,8 +1434,17 @@ export const makeNode = (
         concurrency: limits.concurrency,
         discard: true,
       });
-      yield* storage.exclusive(storage.delete(rows.map(([key]) => key)));
-      yield* jobs.schedule("split", 0);
+      // A sweep that began while the page was copied may have told the children
+      // already, so they could list these too late to wait for them: keep them here,
+      // where the sweep's own listing finds them, and move them once it is over.
+      const moved = yield* storage.exclusive(
+        Effect.gen(function* () {
+          if ((yield* sweeps).some(({ sweep }) => sweep.phase !== "complete")) return false;
+          yield* storage.delete(rows.map(([key]) => key));
+          return true;
+        }),
+      );
+      yield* jobs.schedule("split", moved ? 0 : RETRY_MS);
     });
 
   /** Scan and ready the instances that joined late, a page at a time. */
