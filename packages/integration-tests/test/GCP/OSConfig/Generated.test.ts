@@ -57,12 +57,18 @@ describe.skipIf(!!process.env.FAST)(
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
               service: "osconfig.googleapis.com",
             });
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi1", {
+              service: "progressiverollout.googleapis.com",
+            });
           }),
         );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
             yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
               service: "osconfig.googleapis.com",
+            });
+            yield* GCP.ServiceUsage.ProjectService("ProbeApi1", {
+              service: "progressiverollout.googleapis.com",
             });
             const host = yield* OSConfigGeneratedHost;
             return { uri: host.uri };

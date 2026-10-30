@@ -21,7 +21,8 @@
       "OrganizationsLocationsGlobalPolicyOrchestrator": "organization-level: needs org IAM the testing account lacks"
     },
     "enable": [
-      "osconfig.googleapis.com"
+      "osconfig.googleapis.com",
+      "progressiverollout.googleapis.com"
     ]
   }
 }
