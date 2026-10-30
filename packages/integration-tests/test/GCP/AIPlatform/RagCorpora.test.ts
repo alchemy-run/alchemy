@@ -15,9 +15,15 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // "For new projects, using Spanner mode with RAG Engine in us-central1,
 // us-east1, and us-east4 is restricted to only allowlisted projects."), so the
 // lifecycle switches the region's RAG Engine to serverless first.
-const Rag = GCP.AIPlatform.RagEngineConfig("Rag", {
-  location: "us-central1",
-  mode: "serverless",
+// Serverless RAG Engine stores corpora in Vector Search, so its API is on too.
+const Rag = Effect.gen(function* () {
+  yield* GCP.ServiceUsage.ProjectService("VectorSearchApi", {
+    service: "vectorsearch.googleapis.com",
+  });
+  return yield* GCP.AIPlatform.RagEngineConfig("Rag", {
+    location: "us-central1",
+    mode: "serverless",
+  });
 });
 
 const waitUntilGone = (name: string) =>

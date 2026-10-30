@@ -230,13 +230,9 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ManagementServer", { concurrent: true }, () => {
-      test.provider(
-        "GetManagementServer (backupdr.projects.locations.managementServers.get)",
-        () => probe("GetManagementServer", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetManagementServer (backupdr.projects.locations.managementServers.get): ManagementServer: the Management Console is being deprecated: create answers "creation of new Management server is restricted"',
+        () => Effect.void,
       );
     });
 

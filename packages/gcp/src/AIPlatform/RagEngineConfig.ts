@@ -24,6 +24,9 @@ export type RagEngineConfigProps = {
    * Backend RAG Engine stores corpora in. New projects can't create corpora
    * in Spanner mode in `us-central1`, `us-east1` or `us-east4` (it is
    * allowlisted there), so set `serverless` before creating a corpus.
+   * Serverless corpora live in Vector Search: enable
+   * `vectorsearch.googleapis.com` too, or corpus create fails with
+   * "Vector Search API has not been used in project".
    */
   mode: RagEngineMode;
   /**
@@ -65,6 +68,9 @@ export type RagEngineConfig = Resource<
  * ### Choosing a backend
  * **Example:** Serverless RAG Engine before creating a corpus
  * ```typescript
+ * yield* GCP.ServiceUsage.ProjectService("VectorSearchApi", {
+ *   service: "vectorsearch.googleapis.com",
+ * });
  * const rag = yield* GCP.AIPlatform.RagEngineConfig("Rag", {
  *   location: "us-central1",
  *   mode: "serverless",

@@ -4,7 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
-import { QueuedTrainer, Trainer } from "./generated-resources.ts";
+import { QueuedTrainer } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated TPU binding as its own
@@ -17,15 +17,12 @@ export default class TPUGeneratedHost extends GCP.Function<TPUGeneratedHost>()(
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.TPU.GetAcceleratorType();
-    const p1 = yield* GCP.TPU.GetNodeGuestAttributes(Trainer);
-    const p2 = yield* GCP.TPU.GetRuntimeVersion();
-    const p3 = yield* GCP.TPU.ListAcceleratorTypes();
-    const p4 = yield* GCP.TPU.ListNodes();
-    const p5 = yield* GCP.TPU.ListQueuedResources();
-    const p6 = yield* GCP.TPU.ListRuntimeVersions();
-    const p7 = yield* GCP.TPU.ResetQueuedResource(QueuedTrainer);
-    const p8 = yield* GCP.TPU.StartNode(Trainer);
-    const p9 = yield* GCP.TPU.StopNode(Trainer);
+    const p1 = yield* GCP.TPU.GetRuntimeVersion();
+    const p2 = yield* GCP.TPU.ListAcceleratorTypes();
+    const p3 = yield* GCP.TPU.ListNodes();
+    const p4 = yield* GCP.TPU.ListQueuedResources();
+    const p5 = yield* GCP.TPU.ListRuntimeVersions();
+    const p6 = yield* GCP.TPU.ResetQueuedResource(QueuedTrainer);
     return {
       fetch: serveProbes({
         GetAcceleratorType: probeOutcome(
@@ -33,17 +30,14 @@ export default class TPUGeneratedHost extends GCP.Function<TPUGeneratedHost>()(
             p0({ acceleratorType: "alchemy-missing", location: "us-central1-a" } as never),
           ),
         ),
-        GetNodeGuestAttributes: probeOutcome(Retry.none(p1({} as never))),
         GetRuntimeVersion: probeOutcome(
-          Retry.none(p2({ runtimeVersion: "alchemy-missing", location: "us-central1-a" } as never)),
+          Retry.none(p1({ runtimeVersion: "alchemy-missing", location: "us-central1-a" } as never)),
         ),
-        ListAcceleratorTypes: probeOutcome(Retry.none(p3({ location: "us-central1-a" } as never))),
-        ListNodes: probeOutcome(Retry.none(p4({ location: "us-central1-a" } as never))),
-        ListQueuedResources: probeOutcome(Retry.none(p5({ location: "us-central1-a" } as never))),
-        ListRuntimeVersions: probeOutcome(Retry.none(p6({ location: "us-central1-a" } as never))),
-        ResetQueuedResource: probeOutcome(Retry.none(p7({} as never))),
-        StartNode: probeOutcome(Retry.none(p8({} as never))),
-        StopNode: probeOutcome(Retry.none(p9({} as never))),
+        ListAcceleratorTypes: probeOutcome(Retry.none(p2({ location: "us-central1-a" } as never))),
+        ListNodes: probeOutcome(Retry.none(p3({ location: "us-central1-a" } as never))),
+        ListQueuedResources: probeOutcome(Retry.none(p4({ location: "us-central1-a" } as never))),
+        ListRuntimeVersions: probeOutcome(Retry.none(p5({ location: "us-central1-a" } as never))),
+        ResetQueuedResource: probeOutcome(Retry.none(p6({} as never))),
       }),
     };
   }).pipe(
@@ -51,15 +45,12 @@ export default class TPUGeneratedHost extends GCP.Function<TPUGeneratedHost>()(
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.TPU.GetAcceleratorTypeHttp,
-          GCP.TPU.GetNodeGuestAttributesHttp,
           GCP.TPU.GetRuntimeVersionHttp,
           GCP.TPU.ListAcceleratorTypesHttp,
           GCP.TPU.ListNodesHttp,
           GCP.TPU.ListQueuedResourcesHttp,
           GCP.TPU.ListRuntimeVersionsHttp,
           GCP.TPU.ResetQueuedResourceHttp,
-          GCP.TPU.StartNodeHttp,
-          GCP.TPU.StopNodeHttp,
         ),
       ),
     ),

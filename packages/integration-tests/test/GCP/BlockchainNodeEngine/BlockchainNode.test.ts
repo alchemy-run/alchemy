@@ -11,9 +11,10 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Blockchain nodes take 15-45 minutes to provision, so `--fast` skips the
-// lifecycle.
-const runLifecycle = !process.env.FAST;
+// Blockchain Node Engine is being deprecated: create fails with BadRequest
+// "Blockchain Node Engine is being deprecated. New node creation is disabled."
+// Set GCP_TEST_BLOCKCHAIN_NODE=1 on a project that still has nodes.
+const runLifecycle = !!process.env.GCP_TEST_BLOCKCHAIN_NODE && !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   bne.getProjectsLocationsBlockchainNodes({ name }).pipe(

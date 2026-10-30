@@ -6,18 +6,18 @@ import * as tpu from "@distilled.cloud/gcp/tpu_v2";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { nodeCapacity } from "./fixtures/bindings-host.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
 // The testing project doesn't enable Cloud TPU by default: every test deploys
-// it first. TPU VMs take several minutes to provision, so `--fast` skips the
-// lifecycle.
+// it first. The lifecycle needs TPU capacity (see fixtures/bindings-host.ts).
 const TpuApi = GCP.ServiceUsage.ProjectService("TpuApi", {
   service: "tpu.googleapis.com",
 });
-const runLifecycle = !process.env.FAST;
+const runLifecycle = nodeCapacity;
 
 const waitUntilGone = (name: string) =>
   tpu.getProjectsLocationsNodes({ name }).pipe(

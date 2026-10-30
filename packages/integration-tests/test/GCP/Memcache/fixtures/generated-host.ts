@@ -17,21 +17,17 @@ export default class MemcacheGeneratedHost extends GCP.Function<MemcacheGenerate
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.Memcache.ApplyInstanceParameters(Cache);
-    const p1 = yield* GCP.Memcache.GetInstanceTags(Cache);
-    const p2 = yield* GCP.Memcache.ListInstances();
-    const p3 = yield* GCP.Memcache.RescheduleInstanceMaintenance(Cache);
-    const p4 = yield* GCP.Memcache.SetInstanceTags(Cache);
-    const p5 = yield* GCP.Memcache.UpdateInstanceParameters(Cache);
-    const p6 = yield* GCP.Memcache.UpgradeInstance(Cache);
+    const p1 = yield* GCP.Memcache.ListInstances();
+    const p2 = yield* GCP.Memcache.RescheduleInstanceMaintenance(Cache);
+    const p3 = yield* GCP.Memcache.UpdateInstanceParameters(Cache);
+    const p4 = yield* GCP.Memcache.UpgradeInstance(Cache);
     return {
       fetch: serveProbes({
         ApplyInstanceParameters: probeOutcome(Retry.none(p0({} as never))),
-        GetInstanceTags: probeOutcome(Retry.none(p1({} as never))),
-        ListInstances: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
-        RescheduleInstanceMaintenance: probeOutcome(Retry.none(p3({} as never))),
-        SetInstanceTags: probeOutcome(Retry.none(p4({} as never))),
-        UpdateInstanceParameters: probeOutcome(Retry.none(p5({} as never))),
-        UpgradeInstance: probeOutcome(Retry.none(p6({} as never))),
+        ListInstances: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        RescheduleInstanceMaintenance: probeOutcome(Retry.none(p2({} as never))),
+        UpdateInstanceParameters: probeOutcome(Retry.none(p3({} as never))),
+        UpgradeInstance: probeOutcome(Retry.none(p4({} as never))),
       }),
     };
   }).pipe(
@@ -39,10 +35,8 @@ export default class MemcacheGeneratedHost extends GCP.Function<MemcacheGenerate
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.Memcache.ApplyInstanceParametersHttp,
-          GCP.Memcache.GetInstanceTagsHttp,
           GCP.Memcache.ListInstancesHttp,
           GCP.Memcache.RescheduleInstanceMaintenanceHttp,
-          GCP.Memcache.SetInstanceTagsHttp,
           GCP.Memcache.UpdateInstanceParametersHttp,
           GCP.Memcache.UpgradeInstanceHttp,
         ),

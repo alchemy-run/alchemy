@@ -215,7 +215,8 @@
     },
     "allowedOutcomes": {
       "DataLabelingJobDeprecated": "data labeling is closed to new projects that haven't opted in to Labelbox human labelers"
-    }
+    },
+    "enable": ["vectorsearch.googleapis.com"]
   },
   "permissions": {
     "aiplatform.projects.getCacheConfig": "aiplatform.cacheConfigs.get",

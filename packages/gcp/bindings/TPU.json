@@ -15,10 +15,11 @@
   },
   "probes": {
     "resources": {
-      "Node": "Trainer",
       "QueuedResource": "QueuedTrainer"
     },
-    "untestable": {},
+    "untestable": {
+      "Node": "on-demand TPU VMs have no capacity on the testing project (\"Insufficient capacity. Try again in a different zone\" for v2-8 in us-central1-b/c/f) (GCP_TEST_TPU_NODE)"
+    },
     "enable": ["tpu.googleapis.com"],
     "location": "us-central1-a"
   }

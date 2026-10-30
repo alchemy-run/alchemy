@@ -18,11 +18,11 @@
   "probes": {
     "resources": {
       "BackupVault": "ProbeBackupVault",
-      "BackupPlan": "ProbeBackupPlan",
-      "ManagementServer": "ProbeManagementServer"
+      "BackupPlan": "ProbeBackupPlan"
     },
     "untestable": {
-      "BackupPlanAssociation": "an association needs a VM the vault's service agent can back up, and the first scheduled backup sits under the vault's minimum enforced retention (at least a day), which blocks deleting the vault; BackupPlanAssociation.test.ts covers the typed rejections"
+      "BackupPlanAssociation": "an association needs a VM the vault's service agent can back up, and the first scheduled backup sits under the vault's minimum enforced retention (at least a day), which blocks deleting the vault; BackupPlanAssociation.test.ts covers the typed rejections",
+      "ManagementServer": "the Management Console is being deprecated: create answers \"creation of new Management server is restricted\""
     }
   },
   "permissions": {

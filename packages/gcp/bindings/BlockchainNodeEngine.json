@@ -7,10 +7,9 @@
     }
   },
   "probes": {
-    "resources": {
-      "BlockchainNode": "ProbeNode"
-    },
-    "untestable": {},
-    "deployMinutes": 60
+    "resources": {},
+    "untestable": {
+      "BlockchainNode": "Blockchain Node Engine is being deprecated: create answers \"New node creation is disabled.\""
+    }
   }
 }

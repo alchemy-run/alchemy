@@ -4,7 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
-import { ProbeBackupPlan, ProbeBackupVault, ProbeManagementServer } from "./generated-resources.ts";
+import { ProbeBackupPlan, ProbeBackupVault } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated BackupDR binding as its own
@@ -32,24 +32,23 @@ export default class BackupDRGeneratedHost extends GCP.Function<BackupDRGenerate
     const p13 = yield* GCP.BackupDR.GetBackupVaultDataSource(ProbeBackupVault);
     const p14 = yield* GCP.BackupDR.GetBackupVaultDataSourceBackup(ProbeBackupVault);
     const p15 = yield* GCP.BackupDR.GetDataSourceReference();
-    const p16 = yield* GCP.BackupDR.GetManagementServer(ProbeManagementServer);
-    const p17 = yield* GCP.BackupDR.InitializeServiceConfig();
-    const p18 = yield* GCP.BackupDR.InitiateDataSourceBackup(ProbeBackupVault);
-    const p19 = yield* GCP.BackupDR.ListBackupPlanAssociations();
-    const p20 = yield* GCP.BackupDR.ListBackupPlanRevisions(ProbeBackupPlan);
-    const p21 = yield* GCP.BackupDR.ListBackupPlans();
-    const p22 = yield* GCP.BackupDR.ListBackupVaultDataSourceBackups(ProbeBackupVault);
-    const p23 = yield* GCP.BackupDR.ListBackupVaultDataSources(ProbeBackupVault);
-    const p24 = yield* GCP.BackupDR.ListBackupVaults();
-    const p25 = yield* GCP.BackupDR.ListDataSourceReferences();
-    const p26 = yield* GCP.BackupDR.ListManagementServers();
-    const p27 = yield* GCP.BackupDR.ListResourceBackupConfigs();
-    const p28 = yield* GCP.BackupDR.PatchBackupVaultDataSource(ProbeBackupVault);
-    const p29 = yield* GCP.BackupDR.PatchBackupVaultDataSourceBackup(ProbeBackupVault);
-    const p30 = yield* GCP.BackupDR.RemoveBackupVaultDataSource(ProbeBackupVault);
-    const p31 = yield* GCP.BackupDR.RestoreBackupVaultDataSourceBackup(ProbeBackupVault);
-    const p32 = yield* GCP.BackupDR.SetDataSourceInternalStatus(ProbeBackupVault);
-    const p33 = yield* GCP.BackupDR.SubscribeTrial();
+    const p16 = yield* GCP.BackupDR.InitializeServiceConfig();
+    const p17 = yield* GCP.BackupDR.InitiateDataSourceBackup(ProbeBackupVault);
+    const p18 = yield* GCP.BackupDR.ListBackupPlanAssociations();
+    const p19 = yield* GCP.BackupDR.ListBackupPlanRevisions(ProbeBackupPlan);
+    const p20 = yield* GCP.BackupDR.ListBackupPlans();
+    const p21 = yield* GCP.BackupDR.ListBackupVaultDataSourceBackups(ProbeBackupVault);
+    const p22 = yield* GCP.BackupDR.ListBackupVaultDataSources(ProbeBackupVault);
+    const p23 = yield* GCP.BackupDR.ListBackupVaults();
+    const p24 = yield* GCP.BackupDR.ListDataSourceReferences();
+    const p25 = yield* GCP.BackupDR.ListManagementServers();
+    const p26 = yield* GCP.BackupDR.ListResourceBackupConfigs();
+    const p27 = yield* GCP.BackupDR.PatchBackupVaultDataSource(ProbeBackupVault);
+    const p28 = yield* GCP.BackupDR.PatchBackupVaultDataSourceBackup(ProbeBackupVault);
+    const p29 = yield* GCP.BackupDR.RemoveBackupVaultDataSource(ProbeBackupVault);
+    const p30 = yield* GCP.BackupDR.RestoreBackupVaultDataSourceBackup(ProbeBackupVault);
+    const p31 = yield* GCP.BackupDR.SetDataSourceInternalStatus(ProbeBackupVault);
+    const p32 = yield* GCP.BackupDR.SubscribeTrial();
     return {
       fetch: serveProbes({
         AbandonDataSourceBackup: probeOutcome(
@@ -94,42 +93,41 @@ export default class BackupDRGeneratedHost extends GCP.Function<BackupDRGenerate
             p15({ dataSourceReference: "alchemy-missing", location: "us-central1" } as never),
           ),
         ),
-        GetManagementServer: probeOutcome(Retry.none(p16({} as never))),
         InitializeServiceConfig: probeOutcome(
-          Retry.none(p17({ location: "us-central1" } as never)),
+          Retry.none(p16({ location: "us-central1" } as never)),
         ),
         InitiateDataSourceBackup: probeOutcome(
-          Retry.none(p18({ dataSource: "alchemy-missing" } as never)),
+          Retry.none(p17({ dataSource: "alchemy-missing" } as never)),
         ),
         ListBackupPlanAssociations: probeOutcome(
-          Retry.none(p19({ location: "us-central1" } as never)),
+          Retry.none(p18({ location: "us-central1" } as never)),
         ),
-        ListBackupPlanRevisions: probeOutcome(Retry.none(p20({} as never))),
-        ListBackupPlans: probeOutcome(Retry.none(p21({ location: "us-central1" } as never))),
+        ListBackupPlanRevisions: probeOutcome(Retry.none(p19({} as never))),
+        ListBackupPlans: probeOutcome(Retry.none(p20({ location: "us-central1" } as never))),
         ListBackupVaultDataSourceBackups: probeOutcome(
-          Retry.none(p22({ dataSource: "alchemy-missing" } as never)),
+          Retry.none(p21({ dataSource: "alchemy-missing" } as never)),
         ),
-        ListBackupVaultDataSources: probeOutcome(Retry.none(p23({} as never))),
-        ListBackupVaults: probeOutcome(Retry.none(p24({ location: "us-central1" } as never))),
+        ListBackupVaultDataSources: probeOutcome(Retry.none(p22({} as never))),
+        ListBackupVaults: probeOutcome(Retry.none(p23({ location: "us-central1" } as never))),
         ListDataSourceReferences: probeOutcome(
-          Retry.none(p25({ location: "us-central1" } as never)),
+          Retry.none(p24({ location: "us-central1" } as never)),
         ),
-        ListManagementServers: probeOutcome(Retry.none(p26({ location: "us-central1" } as never))),
+        ListManagementServers: probeOutcome(Retry.none(p25({ location: "us-central1" } as never))),
         ListResourceBackupConfigs: probeOutcome(
-          Retry.none(p27({ location: "us-central1" } as never)),
+          Retry.none(p26({ location: "us-central1" } as never)),
         ),
         PatchBackupVaultDataSource: probeOutcome(
-          Retry.none(p28({ dataSource: "alchemy-missing" } as never)),
+          Retry.none(p27({ dataSource: "alchemy-missing" } as never)),
         ),
         PatchBackupVaultDataSourceBackup: probeOutcome(
-          Retry.none(p29({ dataSource: "alchemy-missing", backup: "alchemy-missing" } as never)),
+          Retry.none(p28({ dataSource: "alchemy-missing", backup: "alchemy-missing" } as never)),
         ),
         RemoveBackupVaultDataSource: probeOutcome(
-          Retry.none(p30({ dataSource: "alchemy-missing" } as never)),
+          Retry.none(p29({ dataSource: "alchemy-missing" } as never)),
         ),
         RestoreBackupVaultDataSourceBackup: probeOutcome(
           Retry.none(
-            p31({
+            p30({
               dataSource: "alchemy-missing",
               backup: "alchemy-missing",
               body: { alchemyProbe: "alchemy-missing" },
@@ -137,9 +135,9 @@ export default class BackupDRGeneratedHost extends GCP.Function<BackupDRGenerate
           ),
         ),
         SetDataSourceInternalStatus: probeOutcome(
-          Retry.none(p32({ dataSource: "alchemy-missing" } as never)),
+          Retry.none(p31({ dataSource: "alchemy-missing" } as never)),
         ),
-        SubscribeTrial: probeOutcome(Retry.none(p33({ location: "us-central1" } as never))),
+        SubscribeTrial: probeOutcome(Retry.none(p32({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
@@ -162,7 +160,6 @@ export default class BackupDRGeneratedHost extends GCP.Function<BackupDRGenerate
           GCP.BackupDR.GetBackupVaultDataSourceHttp,
           GCP.BackupDR.GetBackupVaultDataSourceBackupHttp,
           GCP.BackupDR.GetDataSourceReferenceHttp,
-          GCP.BackupDR.GetManagementServerHttp,
           GCP.BackupDR.InitializeServiceConfigHttp,
           GCP.BackupDR.InitiateDataSourceBackupHttp,
           GCP.BackupDR.ListBackupPlanAssociationsHttp,

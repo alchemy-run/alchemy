@@ -6,6 +6,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { callProbe, outcomeTag } from "../bindingHost.ts";
+import { releaseNetworkSlots, takeNetworkSlots } from "../networkQuota.ts";
 import ComputeGeneratedHost from "./fixtures/generated-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -50,6 +51,7 @@ describe.skipIf(!!process.env.FAST)(
   () => {
     beforeAll(
       Effect.gen(function* () {
+        yield* takeNetworkSlots(1);
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
@@ -62,7 +64,9 @@ describe.skipIf(!!process.env.FAST)(
       { timeout: 1_800_000 },
     );
 
-    afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+    afterAll(sharedStack.destroy().pipe(Effect.ensuring(releaseNetworkSlots(1))), {
+      timeout: 1_800_000,
+    });
 
     describe("Address", { concurrent: true }, () => {
       test.provider("GetAddress (compute.addresses.get)", () => probe("GetAddress", true), {

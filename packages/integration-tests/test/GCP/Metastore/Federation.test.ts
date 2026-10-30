@@ -4,20 +4,32 @@ import { expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as metastore from "@distilled.cloud/gcp/metastore_v1";
 import * as Effect from "effect/Effect";
-import { MetastoreApi, location, logLevel, parentOf, waitUntilGone } from "./common.ts";
+import {
+  MetastoreApi,
+  hiveService,
+  location,
+  logLevel,
+  parentOf,
+  waitUntilGone,
+} from "./common.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
-/** A federation over the project's BigQuery metastore: no Dataproc Metastore service needed. */
+/**
+ * A federation over a Dataproc Metastore service and the project's BigQuery
+ * metastore (at least one backend must be a Dataproc Metastore).
+ */
 const federation = (labels: Record<string, string>) =>
   Effect.gen(function* () {
     const { project } = yield* GcpEnvironment.current;
     yield* MetastoreApi;
+    const service = yield* hiveService({ env: "test" });
     return yield* GCP.Metastore.Federation("Lakehouse", {
       location,
       version: "3.1.2",
       backendMetastores: {
-        "1": { name: `projects/${project}`, metastoreType: "BIGQUERY" },
+        "1": { name: service.name, metastoreType: "DATAPROC_METASTORE" },
+        "2": { name: `projects/${project}`, metastoreType: "BIGQUERY" },
       },
       labels,
     });
@@ -43,7 +55,8 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:metastore", "live"], timeout: 90_000 },
 );
 
-// Federations take minutes to create and delete, so `--fast` skips the lifecycle.
+// The federation's Dataproc Metastore backend takes 20–40 minutes to
+// provision, so `--fast` skips the lifecycle.
 test.provider.skipIf(!!process.env.FAST)(
   "create, relabel, and delete a metastore federation",
   (stack) =>
@@ -56,7 +69,8 @@ test.provider.skipIf(!!process.env.FAST)(
 
       const fetched = yield* metastore.getProjectsLocationsFederations({ name: created.name });
       expect(fetched.state).toEqual("ACTIVE");
-      expect(fetched.backendMetastores?.["1"]?.metastoreType).toEqual("BIGQUERY");
+      expect(fetched.backendMetastores?.["1"]?.metastoreType).toEqual("DATAPROC_METASTORE");
+      expect(fetched.backendMetastores?.["2"]?.metastoreType).toEqual("BIGQUERY");
       expect(fetched.labels?.env).toEqual("test");
 
       const updated = yield* stack.deploy(federation({ env: "prod" }));
@@ -70,5 +84,5 @@ test.provider.skipIf(!!process.env.FAST)(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:metastore", "live"], timeout: 1_800_000 },
+  { tags: ["provider:gcp", "provider:gcp:metastore", "live"], timeout: 3_600_000 },
 );

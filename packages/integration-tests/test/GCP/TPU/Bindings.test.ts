@@ -6,7 +6,7 @@ import * as resourcemanager from "@distilled.cloud/gcp/cloudresourcemanager_v3";
 import * as tpu from "@distilled.cloud/gcp/tpu_v2";
 import * as Effect from "effect/Effect";
 import { expectProbe } from "../bindingHost.ts";
-import TpuBindingsHost, { QueuedTrainer, Trainer } from "./fixtures/bindings-host.ts";
+import TpuBindingsHost, { QueuedTrainer, Trainer, nodeCapacity } from "./fixtures/bindings-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -55,13 +55,13 @@ describe.skipIf(!runLifecycle)(
           Effect.gen(function* () {
             yield* TpuApi;
             const host = yield* TpuBindingsHost;
-            const node = yield* Trainer;
+            const node = nodeCapacity ? yield* Trainer : undefined;
             const queued = yield* QueuedTrainer;
             return {
               uri: host.uri,
               serviceAccount: host.serviceAccount,
               project: host.project,
-              node: node.name,
+              node: node?.name ?? "",
               queued: queued.name,
             };
           }),
@@ -83,7 +83,7 @@ describe.skipIf(!runLifecycle)(
       expect(yield* projectRoles()).toEqual([{ role: "roles/tpu.viewer", condition: undefined }]);
     });
 
-    describe("GetNode", () => {
+    describe.skipIf(!nodeCapacity)("GetNode", () => {
       test.provider(
         "reads the bound node as the host",
         (_stack) =>

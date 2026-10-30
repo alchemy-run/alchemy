@@ -77,13 +77,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "GetInstanceTags (memcache.projects.locations.instances.getTags)",
-        () => probe("GetInstanceTags", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:memcache", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetInstanceTags (memcache.projects.locations.instances.getTags): Memcache tags sit behind a Google experiment: the call answers Forbidden "UseTaggingRemoteExtension experiment flag is not enabled"',
+        () => Effect.void,
       );
       test.provider(
         "RescheduleInstanceMaintenance (memcache.projects.locations.instances.rescheduleMaintenance)",
@@ -93,13 +89,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "SetInstanceTags (memcache.projects.locations.instances.setTags)",
-        () => probe("SetInstanceTags", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:memcache", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'SetInstanceTags (memcache.projects.locations.instances.setTags): Memcache tags sit behind a Google experiment: the call answers Forbidden "UseTaggingRemoteExtension experiment flag is not enabled"',
+        () => Effect.void,
       );
       test.provider(
         "UpdateInstanceParameters (memcache.projects.locations.instances.updateParameters)",

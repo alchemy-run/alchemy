@@ -13,6 +13,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { GcpEnvironment } from "../Environment.ts";
 import { createInternalLabels, diffLabels, hasAlchemyLabels, toLabels } from "../Labels.ts";
+import { waitForOperation as waitForGcpOperation } from "../Operation.ts";
 import type { Providers } from "../Providers.ts";
 import {
   encodeOwnership,
@@ -26,7 +27,6 @@ import {
   resourceNameFromOperation,
   stringMapOf,
   userLabels,
-  waitForOperation,
 } from "./internal.ts";
 
 export type AgentTool = {
@@ -224,6 +224,32 @@ const getByName = (name: string) =>
   aiplatform
     .getProjectsLocationsAgents({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
+
+/**
+ * Wait for an AgentService operation. Its records live under the v1beta1
+ * API (the v1 operations path answers 404), so this polls v1beta1. With
+ * `notFoundOk`, NOT_FOUND counts as done (a lost delete race).
+ */
+const waitForOperation = (
+  operation: aiplatform.GoogleLongrunningOperation,
+  options?: { notFoundOk?: boolean },
+) =>
+  Effect.gen(function* () {
+    const get = (name: string) => aiplatform.getProjectsLocationsAgentsOperations({ name });
+    const finished = yield* waitForGcpOperation(operation, get, { budget: "10 minutes" }).pipe(
+      Effect.as(true),
+      Effect.catchTags({
+        "GCP.OperationFailed": (error) =>
+          error.code === 6 || (options?.notFoundOk === true && error.code === 5)
+            ? Effect.succeed(false)
+            : Effect.fail(error),
+        NotFound: (error) =>
+          options?.notFoundOk === true ? Effect.succeed(false) : Effect.fail(error),
+      }),
+    );
+    if (!finished || operation.done === true || !operation.name) return operation;
+    return yield* get(operation.name);
+  });
 
 // AgentService is served only in `global`.
 const AGENT_LOCATION = "global";

@@ -59,19 +59,15 @@ describe.skipIf(!!process.env.FAST)(
         );
         baseUrl = out.uri!;
       }),
-      { timeout: 3_600_000 },
+      { timeout: 1_800_000 },
     );
 
-    afterAll(sharedStack.destroy(), { timeout: 3_600_000 });
+    afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("BlockchainNode", { concurrent: true }, () => {
-      test.provider(
-        "GetBlockchainNode (blockchainnodeengine.projects.locations.blockchainNodes.get)",
-        () => probe("GetBlockchainNode", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:blockchainnodeengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        'GetBlockchainNode (blockchainnodeengine.projects.locations.blockchainNodes.get): BlockchainNode: Blockchain Node Engine is being deprecated: create answers "New node creation is disabled."',
+        () => Effect.void,
       );
     });
 
