@@ -385,4 +385,6 @@ export const BankHandlers = Layer.mergeAll(
 
 `Bank.layer(BankHandlers)` hosts the model on whatever platform is provided: `Domain.InMemory` or `DomainCloudflare.layerDurableObjects()`.
 
-More: [Domain Model: Declare the model](https://alchemy.run/domain/model#declare-the-model).
+`Domain.describe(Bank, { apis: [CustomerApi] })` gives the model as plain JSON data, sorted by name, with a `hash`. Use it for maps, for diffs, and to name a version. It holds what is declared: no `decide`, no handlers, and no list of what a policy sends.
+
+More: [Domain Model: Declare the model](https://alchemy.run/domain/model#declare-the-model), [Describe it as data](https://alchemy.run/domain/model#describe-it-as-data).

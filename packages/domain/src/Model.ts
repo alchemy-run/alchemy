@@ -89,6 +89,8 @@ export interface ModelClass<Name extends string, Provided, Policies> {
   readonly kind: "Model";
   readonly modelName: Name;
   readonly definitions: Kernel.Definitions;
+  /** The sagas the model runs. */
+  readonly sagas: ReadonlyArray<Saga.Any>;
   /**
    * Host every entity on the ambient {@link Platform}. The policy and
    * projection Layers (`handlers`) are built after the aggregates, views and
@@ -108,6 +110,7 @@ export interface Any {
   readonly kind: "Model";
   readonly modelName: string;
   readonly definitions: Kernel.Definitions;
+  readonly sagas?: ReadonlyArray<Saga.Any>;
 }
 
 type ProvidedBy<

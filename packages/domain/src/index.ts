@@ -20,6 +20,7 @@
 import * as AggregateModule from "./Aggregate.ts";
 import * as ApiModule from "./Api.ts";
 import * as CommandModule from "./Command.ts";
+import * as DescribeModule from "./Describe.ts";
 import * as EventModule from "./Event.ts";
 import * as ExternalSystemModule from "./ExternalSystem.ts";
 import type * as KeyModule from "./Key.ts";
@@ -252,6 +253,11 @@ export const Model = ModelModule.make;
 export const verify = ModelModule.verify;
 /** A problem in a Model's definitions, found by {@link verify} or when its Layer is built. */
 export { DefinitionError } from "./Kernel.ts";
+
+/** A Model as plain JSON data, with a stable hash. See {@link DescribeModule.describe}. */
+export const describe = DescribeModule.describe;
+/** What {@link describe} returns, and each of its parts. */
+export type * as Description from "./Describe.ts";
 
 /** A service middleware provides to a request, carried into the domain. See {@link RequestContextModule.make}. */
 export const RequestContext = RequestContextModule.make;
