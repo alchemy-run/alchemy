@@ -41,7 +41,7 @@ export class LedgerStore extends Context.Service<
     readonly forAccount: (
       accountId: string,
       page: Domain.Query.PageRequest,
-    ) => Effect.Effect<Domain.View.Page<LedgerRow>, never, RuntimeContext>;
+    ) => Effect.Effect<Domain.Query.Page<LedgerRow>, never, RuntimeContext>;
   }
 >()("Bank/LedgerStore") {}
 

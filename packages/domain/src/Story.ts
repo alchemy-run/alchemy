@@ -337,7 +337,7 @@ const streamed = <S extends DomainStream.Any>(
 
 /** What a query step expects: the rows of a page, a (partial) result, or a function over it. */
 type QueryExpectation<Q extends Query.Any> =
-  | (Query.ResultOf<Q> extends View.Page<infer Row>
+  | (Query.ResultOf<Q> extends Query.Page<infer Row>
       ? ReadonlyArray<Partial<Row>>
       : Partial<Query.ResultOf<Q>>)
   | ((result: Query.ResultOf<Q>) => void);
@@ -1242,7 +1242,7 @@ const make =
               }
               const label = `${name}(${brief(s.input)})`;
               if (s.query.definition.row) {
-                const rows = (wire as View.Page<unknown>).entries;
+                const rows = (wire as Query.Page<unknown>).entries;
                 const expected = s.expected as ReadonlyArray<unknown>;
                 const ok =
                   expected.length === rows.length && expected.every((e, i) => partial(e, rows[i]));

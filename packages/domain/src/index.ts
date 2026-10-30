@@ -182,6 +182,8 @@ export declare namespace Query {
   export type Any = QueryModule.Any;
   export type InputOf<Q extends QueryModule.Any> = QueryModule.InputOf<Q>;
   export type ResultOf<Q extends QueryModule.Any> = QueryModule.ResultOf<Q>;
+  /** A page of a paged query's rows. */
+  export type Page<Row> = QueryModule.Page<Row>;
   /** The page a paged query's handler is asked for. */
   export type PageRequest = QueryModule.PageRequest;
   /** What `validate` sees besides the input. */

@@ -37,6 +37,13 @@ export interface PageRequest {
   readonly take: number;
 }
 
+/** A page of a paged query's rows. */
+export interface Page<Row> {
+  readonly entries: ReadonlyArray<Row>;
+  /** Pass as `after` for the next page; `null` on the last. The store chooses its encoding. */
+  readonly cursor: string | null;
+}
+
 /** Page size limits of a paged query. */
 export interface Take {
   /** Rows per page when the client doesn't say. @default 50 */
@@ -55,7 +62,7 @@ export type Member =
 
 /** The result of a query with a `row` (a page) or a `success` schema. */
 export type ResultType<Row, S> = Row extends Schema.Top
-  ? View.Page<Row["Type"]>
+  ? Page<Row["Type"]>
   : S extends Schema.Top
     ? S["Type"]
     : void;
@@ -129,7 +136,7 @@ export type NeedsOf<Q extends Any> = Q extends Any ? Q["~needs"] : never;
  * rejections, and `ConsistencyTimeout` when it reads from projections.
  */
 export type FailureOf<Q extends Any> =
-  | Aggregate.Inst<NonNullable<Q["definition"]["rejects"]>[number]>
+  | Aggregate.InstanceOf<NonNullable<Q["definition"]["rejects"]>[number]>
   | (NonNullable<Q["definition"]["from"]> extends readonly [] ? never : View.ConsistencyTimeout);
 
 /**
@@ -183,7 +190,7 @@ export interface Definition<
   readonly validate?: (
     input: Data<F>,
     request: Request,
-  ) => Effect.Effect<void, Aggregate.Inst<Rejects[number]>, RV>;
+  ) => Effect.Effect<void, Aggregate.InstanceOf<Rejects[number]>, RV>;
   /**
    * Judge each row of a paged result: rows it refuses are dropped, never
    * rejected. The handler should scope its store by the caller; this is the
@@ -250,7 +257,7 @@ export interface Definition<
  * ### Asking it
  * **Example:** Reading your own write, a page at a time
  * ```typescript
- * const receipt = yield* bank.DepositMoney({ target: accountId, amount: 100 });
+ * const receipt = yield* bank.DepositMoney(accountId, { amount: 100 });
  * const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt, take: 20 });
  * if (page.cursor) yield* bank.AccountLedger({ account: accountId }, { after: page.cursor });
  * ```
@@ -276,7 +283,7 @@ export const make = <
   Data<F>,
   ResultType<Row, S>,
   PageOf<Row>,
-  Aggregate.Inst<Rejects[number]>,
+  Aggregate.InstanceOf<Rejects[number]>,
   Ms,
   Exclude<RV | RS, Middleware.Provides<Ms>>
 > => {
@@ -330,7 +337,7 @@ export const make = <
     Data<F>,
     ResultType<Row, S>,
     PageOf<Row>,
-    Aggregate.Inst<Rejects[number]>,
+    Aggregate.InstanceOf<Rejects[number]>,
     Ms,
     Exclude<RV | RS, Middleware.Provides<Ms>>
   >;
@@ -429,7 +436,7 @@ export const host = (
         const page = (yield* implementation.handle(input, {
           after,
           take: size,
-        })) as View.Page<unknown>;
+        })) as Page<unknown>;
         const shown = visible
           ? yield* Effect.filter(page.entries, (row) => visible(row, input))
           : page.entries;
