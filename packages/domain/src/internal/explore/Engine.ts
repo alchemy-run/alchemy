@@ -14,6 +14,7 @@ import * as Scope from "effect/Scope";
 import type * as Aggregate from "../../Aggregate.ts";
 import type * as Model from "../../Model.ts";
 import { Platform, type Json, type ViewSnapshot } from "../../Platform.ts";
+import type { Step as StoryStep } from "../../Story.ts";
 import { canonical, digest, type Digest } from "./Canonical.ts";
 import { EngineFault, type EngineError } from "./Errors.ts";
 import {
@@ -235,7 +236,7 @@ interface RuleBase {
    */
   readonly storyTail?: (v: { readonly message: string; readonly world: World }) => {
     readonly code: ReadonlyArray<string>;
-    readonly steps: ReadonlyArray<unknown>;
+    readonly steps: ReadonlyArray<StoryStep>;
   };
 }
 
@@ -449,7 +450,7 @@ export const build = async (scenario: Scenario): Promise<Built> => {
   const rt = new Rt(scenario.host ?? {});
   rt.armedByOn = scenario.derived?.timerRearm !== false;
   rt.world = freshWorld(scenario);
-  const scope = Effect.runSync(Scope.make());
+  const scope = Scope.makeUnsafe();
   const close = () => Effect.runPromise(Scope.close(scope, Exit.void));
   let ctx: Context.Context<any>;
   try {
@@ -695,7 +696,7 @@ const runWork = (b: Built, pk: string): Effect.Effect<void, unknown> =>
       });
       return Effect.try({
         try: () => kit.apply(key, part.snapshot, [q.d]),
-        catch: (e) => e,
+        catch: (e) => String((e as Error)?.message ?? e),
       }).pipe(
         Effect.flatMap((result) => {
           remove();
@@ -704,9 +705,8 @@ const runWork = (b: Built, pk: string): Effect.Effect<void, unknown> =>
           part.entries.push(...JSON.parse(JSON.stringify(result.entries)));
           return Effect.forEach(result.downstream, (d) => kit.deliver(d), { discard: true });
         }),
-        Effect.catch((e: unknown) =>
+        Effect.catch((error) =>
           Effect.sync(() => {
-            const error = String((e as Error)?.message ?? e);
             rt.log.defects.push({ where: `view ${target} on ${q.d.tag}`, error });
             q.tries++;
             if (q.tries > maxTriesOf(b)) {
@@ -876,7 +876,7 @@ export const runOnce = (
     b,
     asEffect(b, move).pipe(
       Effect.exit,
-      Effect.flatMap((main) => Effect.as(drainInline(b), main)),
+      Effect.tap(() => drainInline(b)),
     ) as never,
   );
   const engine: Array<EngineError> = [...rt.engine];

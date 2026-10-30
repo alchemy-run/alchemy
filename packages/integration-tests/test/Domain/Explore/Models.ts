@@ -10,7 +10,7 @@ import {
   type Rule,
   type Scenario,
 } from "@alchemy.run/domain/Explore";
-import { Story } from "@alchemy.run/domain/Story";
+import { Story, type Step } from "@alchemy.run/domain/Story";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -364,11 +364,7 @@ export const jobStoryBindings = {
   ref: (a: string, id: string) => `${a}.ref(${JSON.stringify(id)})`,
   header: () => "",
   aggregate: () => Job,
-  run: (steps: ReadonlyArray<unknown>) =>
-    (Story.make as any)(JobModel, { layer: JobTimersLive })(...steps) as Effect.Effect<
-      void,
-      unknown
-    >,
+  run: (steps: ReadonlyArray<Step>) => Story.make(JobModel, { layer: JobTimersLive })(...steps),
 };
 
 export const LATE_RULE: Rule = {

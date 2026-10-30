@@ -15,15 +15,8 @@ import {
   type Move,
 } from "./Engine.ts";
 import { EngineFault, type EngineError } from "./Errors.ts";
-import {
-  Expander,
-  pack,
-  type ChildOut,
-  type ExpandItem,
-  type ExpandOptions,
-  type ExpandOut,
-} from "./Expand.ts";
-import type { ScriptEntry, World } from "./Host.ts";
+import { Expander, pack, type ExpandItem, type ExpandOptions, type ExpandOut } from "./Expand.ts";
+import type { ScriptEntry } from "./Host.ts";
 import { replayChain } from "./Trace.ts";
 
 // ─────────────────────────────────────────────────────────── Steps ──

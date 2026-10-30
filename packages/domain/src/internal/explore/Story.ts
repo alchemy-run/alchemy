@@ -9,7 +9,7 @@ import * as Exit from "effect/Exit";
  * other outcome is `UnsupportedStoryTrace(reason)`. No second model of the
  * Story schedule lives here.
  */
-import { Story } from "../../Story.ts";
+import { Story, type Step as StoryStep } from "../../Story.ts";
 import { enabled, freshWorld, runOnce, type Built, type Rule } from "./Engine.ts";
 import { EngineFault, UnsupportedStoryTrace } from "./Errors.ts";
 import type { Send } from "./Host.ts";
@@ -25,7 +25,7 @@ export interface StoryBindings {
   /** A statement that refuses to run on another model (see `assertModelHash`). */
   readonly modelGuard?: (modelHash: string) => string;
   /** The real Story runner over the model's real layer. */
-  readonly run: (steps: ReadonlyArray<unknown>) => Effect.Effect<void, unknown>;
+  readonly run: (steps: ReadonlyArray<StoryStep>) => Effect.Effect<void, unknown>;
 }
 
 export const iso = (ms: number) => DateTime.formatIso(DateTime.makeUnsafe(ms));
@@ -58,7 +58,7 @@ export interface StoryOut {
 
 const failureText = (cause: Cause.Cause<unknown>) => {
   const e = Cause.squash(cause) as { message?: string; reason?: string };
-  return `${e?.message ?? ""} ${e?.reason ?? ""} ${String(e)}`;
+  return `${e?.message ?? ""} ${e?.reason ?? ""} ${Cause.pretty(cause)}`;
 };
 
 /** A Story of a trace, proven RED on the rule on the real runner, or a refusal. `b` is a fresh build. */
@@ -73,7 +73,7 @@ export const toStory = async (
     return new UnsupportedStoryTrace({ reason: `rule ${rule.id} has no Story tail` });
   // The trace first: every digest and the rule failure on this build.
   const replayed = checkTrace(b, trace);
-  const steps: Array<unknown> = [Story.clock(iso(b.scenario.startTimeMillis))];
+  const steps: Array<StoryStep> = [Story.clock(iso(b.scenario.startTimeMillis))];
   const lines: Array<string> = [
     `    Story.clock(${JSON.stringify(iso(b.scenario.startTimeMillis))}),`,
   ];
