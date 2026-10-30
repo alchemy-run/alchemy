@@ -9,8 +9,6 @@
   "probes": {
     "resources": {},
     "untestable": {},
-    "enable": [
-      "realtimebidding.googleapis.com"
-    ]
+    "enable": ["realtimebidding.googleapis.com"]
   }
 }

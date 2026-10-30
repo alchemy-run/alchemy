@@ -186,7 +186,10 @@ const toId = (id: string, agentId: string | undefined, existing?: string) =>
   });
 
 const toolsOf = (
-  tools: readonly AgentTool[] | readonly aiplatform.GoogleCloudAiplatformV1beta1AgentTool[] | undefined,
+  tools:
+    | readonly AgentTool[]
+    | readonly aiplatform.GoogleCloudAiplatformV1beta1AgentTool[]
+    | undefined,
 ): AgentTool[] =>
   (tools ?? []).map((tool) => ({
     type: tool.type,

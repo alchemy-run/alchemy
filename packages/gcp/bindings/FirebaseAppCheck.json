@@ -36,8 +36,6 @@
       "AppsDebugToken": "needs a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none",
       "ServicesResourcePolicy": "needs a Firebase project; adding Firebase to a GCP project is permanent, and the testing project has none"
     },
-    "enable": [
-      "firebaseappcheck.googleapis.com"
-    ]
+    "enable": ["firebaseappcheck.googleapis.com"]
   }
 }

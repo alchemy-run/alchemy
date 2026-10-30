@@ -19,9 +19,7 @@
       "Node": "TPU VMs bill by the hour and need TPU quota the testing project doesn't have",
       "QueuedResource": "a queued resource provisions TPU VMs: hourly billing and TPU quota"
     },
-    "enable": [
-      "tpu.googleapis.com"
-    ],
+    "enable": ["tpu.googleapis.com"],
     "location": "us-central1-a"
   }
 }

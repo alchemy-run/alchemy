@@ -1,8 +1,8 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
-import { deployProject } from "../../deployProject.ts";
 import { serveProbes } from "../../bindingHost.ts";
+import { deployProject } from "../../deployProject.ts";
 import { CAPACITY_REGION } from "../../zones.ts";
 
 /**

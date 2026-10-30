@@ -15,9 +15,7 @@
       "Evaluation": "evaluates rules from the SAP/SQL Server rule catalog against workloads the project runs; the testing project runs none",
       "DeploymentsActuation": "actuates a Workload Manager SAP deployment; the testing project has none"
     },
-    "enable": [
-      "workloadmanager.googleapis.com"
-    ],
+    "enable": ["workloadmanager.googleapis.com"],
     "skip": {
       "ListDiscoveredprofiles": "discovered profiles come from Workload Manager's service agent scanning the project; the agent doesn't exist until an evaluation or deployment runs, so the list answers NotFound for the agent"
     }

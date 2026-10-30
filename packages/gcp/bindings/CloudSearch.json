@@ -12,8 +12,6 @@
   "probes": {
     "resources": {},
     "untestable": {},
-    "enable": [
-      "cloudsearch.googleapis.com"
-    ]
+    "enable": ["cloudsearch.googleapis.com"]
   }
 }

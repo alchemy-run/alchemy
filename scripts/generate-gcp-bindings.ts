@@ -1578,7 +1578,10 @@ const emitProbeTest = (
   unbound: Classified[],
 ) => {
   const enables = (config.probes!.enable ?? [])
-    .map((api, i) => `          yield* GCP.ServiceUsage.ProjectService("ProbeApi${i}", { service: "${api}" });\n`)
+    .map(
+      (api, i) =>
+        `          yield* GCP.ServiceUsage.ProjectService("ProbeApi${i}", { service: "${api}" });\n`,
+    )
     .join("");
   const groups = new Map<string, Probe[]>();
   for (const probe of probes) {
@@ -1643,12 +1646,16 @@ ${config.probes!.coveredBy ? `// Resource-bound bindings run live in ${config.pr
   beforeAll(
     Effect.gen(function* () {
       yield* sharedStack.destroy();
-${enables ? `      // The APIs first: the probe resources need them enabled to deploy.
+${
+  enables
+    ? `      // The APIs first: the probe resources need them enabled to deploy.
       yield* sharedStack.deploy(
         Effect.gen(function* () {
 ${enables}        }),
       );
-` : ""}      const out = yield* sharedStack.deploy(
+`
+    : ""
+}      const out = yield* sharedStack.deploy(
         Effect.gen(function* () {
 ${enables}          const host = yield* ${service}GeneratedHost;
           return { uri: host.uri };

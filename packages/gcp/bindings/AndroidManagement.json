@@ -15,8 +15,6 @@
   "probes": {
     "resources": {},
     "untestable": {},
-    "enable": [
-      "androidmanagement.googleapis.com"
-    ]
+    "enable": ["androidmanagement.googleapis.com"]
   }
 }

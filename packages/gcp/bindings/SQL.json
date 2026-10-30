@@ -4,26 +4,15 @@
   "resources": {
     "Instance": {
       "pattern": "projects/*/instances/*",
-      "attributes": [
-        "project",
-        "instanceName"
-      ]
+      "attributes": ["project", "instanceName"]
     },
     "Database": {
       "pattern": "projects/*/instances/*/databases/*",
-      "attributes": [
-        "project",
-        "instance",
-        "databaseName"
-      ]
+      "attributes": ["project", "instance", "databaseName"]
     },
     "User": {
       "pattern": "projects/*/instances/*/users/*",
-      "attributes": [
-        "project",
-        "instance",
-        "userName"
-      ],
+      "attributes": ["project", "instance", "userName"],
       "fields": {
         "host": "host"
       }
@@ -34,11 +23,7 @@
     },
     "BackupRun": {
       "pattern": "projects/*/instances/*/backupRuns/*",
-      "attributes": [
-        "project",
-        "instance",
-        "backupRunId"
-      ]
+      "attributes": ["project", "instance", "backupRunId"]
     },
     "Backup": {
       "pattern": "projects/*/backups/*"

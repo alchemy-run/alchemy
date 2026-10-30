@@ -30,8 +30,6 @@
   "probes": {
     "resources": {},
     "untestable": {},
-    "enable": [
-      "appengine.googleapis.com"
-    ]
+    "enable": ["appengine.googleapis.com"]
   }
 }

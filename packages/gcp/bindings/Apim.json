@@ -15,8 +15,6 @@
       "ObservationJob": "needs a provisioned Apigee organization (\"Apigee organization is not provisioned for project\"), a paid setup the testing project doesn't have",
       "ObservationSource": "needs a provisioned Apigee organization (\"Apigee organization is not provisioned for project\"), a paid setup the testing project doesn't have"
     },
-    "enable": [
-      "apim.googleapis.com"
-    ]
+    "enable": ["apim.googleapis.com"]
   }
 }

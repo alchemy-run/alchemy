@@ -10,8 +10,6 @@
   "probes": {
     "resources": {},
     "untestable": {},
-    "enable": [
-      "siteverification.googleapis.com"
-    ]
+    "enable": ["siteverification.googleapis.com"]
   }
 }

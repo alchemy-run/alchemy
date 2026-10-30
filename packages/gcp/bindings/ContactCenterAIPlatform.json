@@ -11,8 +11,6 @@
     "untestable": {
       "ContactCenter": "a contact center instance is a paid subscription that takes 30\u201345 minutes to provision"
     },
-    "enable": [
-      "contactcenteraiplatform.googleapis.com"
-    ]
+    "enable": ["contactcenteraiplatform.googleapis.com"]
   }
 }

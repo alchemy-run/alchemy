@@ -24,8 +24,6 @@
   "probes": {
     "resources": {},
     "untestable": {},
-    "enable": [
-      "cloudidentity.googleapis.com"
-    ]
+    "enable": ["cloudidentity.googleapis.com"]
   }
 }

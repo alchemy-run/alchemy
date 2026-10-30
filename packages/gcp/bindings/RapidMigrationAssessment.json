@@ -9,8 +9,6 @@
   "probes": {
     "resources": {},
     "untestable": {},
-    "enable": [
-      "rapidmigrationassessment.googleapis.com"
-    ]
+    "enable": ["rapidmigrationassessment.googleapis.com"]
   }
 }

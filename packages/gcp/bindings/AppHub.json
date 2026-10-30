@@ -24,8 +24,6 @@
       "ApplicationsWorkload": "registers a workload App Hub discovered in the project; the testing project has no discovered workloads",
       "ServiceProjectAttachment": "attaches a service project to an App Hub host project; the testing account has a single project"
     },
-    "enable": [
-      "apphub.googleapis.com"
-    ]
+    "enable": ["apphub.googleapis.com"]
   }
 }

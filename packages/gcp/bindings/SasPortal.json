@@ -21,8 +21,6 @@
   "probes": {
     "resources": {},
     "untestable": {},
-    "enable": [
-      "sasportal.googleapis.com"
-    ]
+    "enable": ["sasportal.googleapis.com"]
   }
 }

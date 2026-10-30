@@ -281,7 +281,11 @@ export const makeGcpProjectBinding = <Shape>(options: {
       if (!globalThis.__ALCHEMY_RUNTIME__) {
         const { project } = yield* GcpEnvironment.current;
         yield* bind`${options.tag}(${{ LogicalId: "project" }})`({
-          iam: [...new Set(options.variants.flatMap((variant) => [variant.role, ...(variant.also ?? [])]))].map((role) => ({
+          iam: [
+            ...new Set(
+              options.variants.flatMap((variant) => [variant.role, ...(variant.also ?? [])]),
+            ),
+          ].map((role) => ({
             role,
           })),
           env: { [PROJECT_KEY]: project },

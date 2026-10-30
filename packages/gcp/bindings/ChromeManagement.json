@@ -9,8 +9,6 @@
   "probes": {
     "resources": {},
     "untestable": {},
-    "enable": [
-      "chromemanagement.googleapis.com"
-    ]
+    "enable": ["chromemanagement.googleapis.com"]
   }
 }

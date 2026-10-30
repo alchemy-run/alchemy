@@ -1,7 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
-import { CAPACITY_REGION } from "../../zones.ts";
 import { serveProbes } from "../../bindingHost.ts";
+import { CAPACITY_REGION } from "../../zones.ts";
 
 /** Cluster → config → workstation, on the project's `default` network. */
 export const Dev = Effect.gen(function* () {

@@ -12,9 +12,7 @@
       "CatalogsCatalogItem": "Shirt"
     },
     "untestable": {},
-    "enable": [
-      "recommendationengine.googleapis.com"
-    ],
+    "enable": ["recommendationengine.googleapis.com"],
     "location": "global"
   }
 }

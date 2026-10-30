@@ -11,8 +11,6 @@
       "AuthProvider": "ProbeAuthProvider"
     },
     "untestable": {},
-    "enable": [
-      "agentidentity.googleapis.com"
-    ]
+    "enable": ["agentidentity.googleapis.com"]
   }
 }

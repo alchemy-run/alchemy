@@ -23,9 +23,7 @@
       "Realm": "registry books need an IPAM admin scope (\"Failed to find IPAM admin scope for project\"), which is set on an organization; the testing account has none",
       "CustomRange": "registry books need an IPAM admin scope (\"Failed to find IPAM admin scope for project\"), which is set on an organization; the testing account has none"
     },
-    "enable": [
-      "cloudnumberregistry.googleapis.com"
-    ],
+    "enable": ["cloudnumberregistry.googleapis.com"],
     "location": "global"
   }
 }

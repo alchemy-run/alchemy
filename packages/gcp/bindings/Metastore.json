@@ -19,8 +19,6 @@
       "ServicesBackup": "a backup needs a running Dataproc Metastore service (20\u201340 minutes to provision, billed per hour)",
       "Federation": "a federation fronts running Dataproc Metastore services (20\u201340 minutes each to provision, billed per hour)"
     },
-    "enable": [
-      "metastore.googleapis.com"
-    ]
+    "enable": ["metastore.googleapis.com"]
   }
 }
