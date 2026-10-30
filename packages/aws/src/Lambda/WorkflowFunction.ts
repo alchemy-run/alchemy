@@ -12,7 +12,7 @@ import {
   payloadCodec,
 } from "alchemy/WorkflowEncoding";
 import { type Implemented, implemented } from "alchemy/Workflows";
-import * as Config from "effect/Config";
+import type { ConfigError } from "effect/Config";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -71,7 +71,7 @@ export interface WorkflowFunctionClass<
   make<ROut, E, RIn, PropsReq = never>(
     props:
       | InputProps<DurableFunctionProps>
-      | Effect.Effect<InputProps<DurableFunctionProps>, Config.ConfigError, PropsReq>,
+      | Effect.Effect<InputProps<DurableFunctionProps>, ConfigError, PropsReq>,
     workflows: Layer.Layer<ROut, E, RIn> & ImplementsAll<ROut, WorkflowNames<W>>,
   ): Layer.Layer<
     Self,
@@ -299,15 +299,13 @@ const makeWorkflowRunner = <ROut, E, RIn>(
 > =>
   Effect.gen(function* () {
     const context = yield* Effect.context<LambdaServices>();
-    const functionName = yield* Config.option(Config.String("AWS_LAMBDA_FUNCTION_NAME")).pipe(
-      Effect.map(Option.getOrUndefined),
-      Effect.orElseSucceed(() => undefined),
-    );
+    // Facts about the executing process, read raw: a Config read here would be
+    // bound into the function's env at plan time (reserved Lambda keys).
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- reads the executing Lambda's identity
+    const functionName = yield* Effect.sync(() => process.env.AWS_LAMBDA_FUNCTION_NAME);
     // Child workflows start on the version this function is running.
-    const version = yield* Config.String("AWS_LAMBDA_FUNCTION_VERSION").pipe(
-      Config.withDefault("$LATEST"),
-      Effect.orElseSucceed(() => "$LATEST"),
-    );
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- reads the executing Lambda's identity
+    const version = yield* Effect.sync(() => process.env.AWS_LAMBDA_FUNCTION_VERSION ?? "$LATEST");
     const handlers = new Map<string, Registration>();
     const calls = makeCalls(
       (effect) => effect.pipe(Effect.provide(context)),
