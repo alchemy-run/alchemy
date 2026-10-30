@@ -18,7 +18,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // so the lifecycle builds its own network (see fixtures/network.ts). The 2 TiB
 // STANDARD pool fills a region's default quota
 // (StandardStoragePoolCapacityGiBPerRegion = 2048), so each suite creates its
-// pool in a region of its own (`us-west2`). Pools take minutes to create, so
+// pool in `us-west2`, one suite at a time. Pools take minutes to create, so
 // `--fast` skips the lifecycle.
 const runLifecycle = !process.env.FAST;
 
@@ -156,5 +156,9 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.snapshot.name);
       expect(gone).toEqual("gone");
     }).pipe(withNetworkSlot, logLevel),
-  { tags: ["provider:gcp", "provider:gcp:netapp", "live"], timeout: 900_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+    timeout: 3_600_000,
+    exclusive: "gcp:netapp-pools",
+  },
 );

@@ -70,21 +70,21 @@ test.provider.skipIf(!runLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const sourcePool = yield* GCP.NetApp.StoragePool("Source", {
-            location: "us-east4",
+            location: "us-west2",
             network: yield* NetAppNetwork,
             serviceLevel: "STANDARD",
             capacityGib: 2048,
             labels: { env: "test" },
           });
           const destPool = yield* GCP.NetApp.StoragePool("Dest", {
-            location: "us-west3",
+            location: "us-west4",
             network: yield* NetAppNetwork,
             serviceLevel: "STANDARD",
             capacityGib: 2048,
             labels: { env: "test" },
           });
           const volume = yield* GCP.NetApp.Volume("Share", {
-            location: "us-east4",
+            location: "us-west2",
             storagePool: sourcePool.name,
             protocols: ["NFSV3"],
             capacityGib: 100,
@@ -126,7 +126,7 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           const sourcePool = yield* GCP.NetApp.StoragePool("Source", {
             storagePoolId: created.sourcePool.storagePoolId,
-            location: "us-east4",
+            location: "us-west2",
             network: yield* NetAppNetwork,
             serviceLevel: "STANDARD",
             capacityGib: 2048,
@@ -134,7 +134,7 @@ test.provider.skipIf(!runLifecycle)(
           });
           const destPool = yield* GCP.NetApp.StoragePool("Dest", {
             storagePoolId: created.destPool.storagePoolId,
-            location: "us-west3",
+            location: "us-west4",
             network: yield* NetAppNetwork,
             serviceLevel: "STANDARD",
             capacityGib: 2048,
@@ -142,7 +142,7 @@ test.provider.skipIf(!runLifecycle)(
           });
           const volume = yield* GCP.NetApp.Volume("Share", {
             volumeId: created.volume.volumeId,
-            location: "us-east4",
+            location: "us-west2",
             storagePool: sourcePool.name,
             protocols: ["NFSV3"],
             capacityGib: 100,
@@ -185,5 +185,9 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.replication.name);
       expect(gone).toEqual("gone");
     }).pipe(withNetworkSlot, logLevel),
-  { tags: ["provider:gcp", "provider:gcp:netapp", "live"], timeout: 900_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+    timeout: 3_600_000,
+    exclusive: "gcp:netapp-pools",
+  },
 );

@@ -17,7 +17,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 // so the lifecycle builds its own network (see fixtures/network.ts). The 2 TiB
 // STANDARD pool fills a region's default quota
 // (StandardStoragePoolCapacityGiBPerRegion = 2048), so each suite creates its
-// pool in a region of its own (`us-west4`). Pools take minutes to create, so
+// pool in `us-west2`, one suite at a time. Pools take minutes to create, so
 // `--fast` skips the lifecycle.
 const runLifecycle = !process.env.FAST;
 
@@ -69,21 +69,21 @@ test.provider.skipIf(!runLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           const pool = yield* GCP.NetApp.StoragePool("Pool", {
-            location: "us-west4",
+            location: "us-west2",
             network: yield* NetAppNetwork,
             serviceLevel: "STANDARD",
             capacityGib: 2048,
             labels: { env: "test" },
           });
           const volume = yield* GCP.NetApp.Volume("Share", {
-            location: "us-west4",
+            location: "us-west2",
             storagePool: pool.name,
             protocols: ["NFSV3"],
             capacityGib: 100,
             labels: { env: "test" },
           });
           return yield* GCP.NetApp.VolumesQuotaRule("DefaultUser", {
-            location: "us-west4",
+            location: "us-west2",
             volume: volume.name,
             type: "DEFAULT_USER_QUOTA",
             diskLimitMib: 1024,
@@ -107,21 +107,21 @@ test.provider.skipIf(!runLifecycle)(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           const pool = yield* GCP.NetApp.StoragePool("Pool", {
-            location: "us-west4",
+            location: "us-west2",
             network: yield* NetAppNetwork,
             serviceLevel: "STANDARD",
             capacityGib: 2048,
             labels: { env: "test" },
           });
           const volume = yield* GCP.NetApp.Volume("Share", {
-            location: "us-west4",
+            location: "us-west2",
             storagePool: pool.name,
             protocols: ["NFSV3"],
             capacityGib: 100,
             labels: { env: "test" },
           });
           return yield* GCP.NetApp.VolumesQuotaRule("DefaultUser", {
-            location: "us-west4",
+            location: "us-west2",
             quotaRuleId: created.quotaRuleId,
             volume: volume.name,
             type: "DEFAULT_USER_QUOTA",
@@ -142,5 +142,9 @@ test.provider.skipIf(!runLifecycle)(
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
     }).pipe(withNetworkSlot, logLevel),
-  { tags: ["provider:gcp", "provider:gcp:netapp", "live"], timeout: 900_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+    timeout: 3_600_000,
+    exclusive: "gcp:netapp-pools",
+  },
 );
