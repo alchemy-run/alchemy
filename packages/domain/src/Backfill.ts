@@ -1,3 +1,4 @@
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Semaphore from "effect/Semaphore";
 import {
@@ -110,6 +111,8 @@ export interface NodeRpc {
     target: string,
     phase: "discover" | "ready",
     child: string,
+    /** Why the child took as long as it did: see {@link Hop}. */
+    trail?: ReadonlyArray<Hop>,
   ) => Effect.Effect<void>;
   readonly settled: (path: string, target: string, ref: SourceRef) => Effect.Effect<void>;
   readonly phase: (path: string, target: string) => Effect.Effect<Phase>;
@@ -205,6 +208,22 @@ export interface Network {
 }
 
 /** What the root reports: the targets whose history has fully arrived, and those still running. */
+/**
+ * One node's part of a phase, in epoch milliseconds: when it began, when it had
+ * handled its own instances, when the last of them settled (`ready`), and when
+ * it was done, with the child it waited for last. A node's report carries its
+ * hop and that child's trail, so the root's trail is the phase's critical path.
+ */
+export interface Hop {
+  readonly path: string;
+  readonly begin: number;
+  readonly own?: number;
+  readonly settled?: number;
+  readonly end: number;
+  readonly last?: string;
+  readonly lastAt?: number;
+}
+
 export interface Status {
   readonly complete: ReadonlyArray<string>;
   readonly running: ReadonlyArray<string>;
@@ -1322,6 +1341,9 @@ export const makeNode = (
   const reportPrefix = (target: string, phase: string) => `rp:${enc(target)}:${phase}:`;
   const unsettledPrefix = (target: string) => `us:${enc(target)}:`;
   const settledKey = (target: string, ref: SourceRef) => `st:${enc(target)}:${refKey(ref)}`;
+  /** This node's part of a phase so far: when it began and handled its own instances. */
+  const hopKey = (target: string, phase: string) => `tl:${enc(target)}:${phase}`;
+  const lastSettledKey = (target: string) => `tl:${enc(target)}:settled`;
 
   /** Remember this node's path (jobs read it), written once. */
   const keepPath = (path: string) =>
@@ -1537,6 +1559,7 @@ export const makeNode = (
       const previous = yield* getSweep(target);
       const adopting = phase !== "discover" && previous === undefined ? null : previous?.adopting;
       yield* keepPath(path);
+      yield* storage.put({ [hopKey(target, phase)]: { begin: yield* Clock.currentTimeMillis } });
       yield* storage.put({
         [sweepKey(target)]: {
           phase,
@@ -1575,10 +1598,11 @@ export const makeNode = (
     Effect.gen(function* () {
       const sweep = yield* getSweep(target);
       if (!sweep || sweep.reported || !sweep.own || sweep.phase === "complete") return;
+      const reports = yield* storage.list<{ at: number; trail: ReadonlyArray<Hop> } | true>({
+        prefix: reportPrefix(target, sweep.phase),
+      });
       const reported = new Set(
-        (yield* storage.list({ prefix: reportPrefix(target, sweep.phase) })).map(([key]) =>
-          key.slice(reportPrefix(target, sweep.phase).length),
-        ),
+        reports.map(([key]) => key.slice(reportPrefix(target, sweep.phase).length)),
       );
       if (sweep.children.some((child) => !reported.has(child))) return;
       if (
@@ -1588,6 +1612,32 @@ export const makeNode = (
         return;
       yield* storage.put({ [sweepKey(target)]: { ...sweep, reported: true } });
       yield* trace("settled-phase", { path, target, phase: sweep.phase });
+      // The critical path: this node's hop, then the trail of the child it waited for last.
+      let last: { child: string; at: number; trail: ReadonlyArray<Hop> } | undefined;
+      for (const [key, value] of reports) {
+        if (value === true) continue;
+        if (last === undefined || value.at > last.at)
+          last = { child: key.slice(reportPrefix(target, sweep.phase).length), ...value };
+      }
+      const begun = yield* storage.get<{ begin: number; own?: number }>(
+        hopKey(target, sweep.phase),
+      );
+      const settledAt =
+        sweep.phase === "ready" ? yield* storage.get<number>(lastSettledKey(target)) : undefined;
+      const hop: Hop = {
+        path,
+        begin: begun?.begin ?? 0,
+        ...(begun?.own === undefined ? {} : { own: begun.own }),
+        ...(settledAt === undefined ? {} : { settled: settledAt }),
+        end: yield* Clock.currentTimeMillis,
+        ...(last === undefined ? {} : { last: last.child, lastAt: last.at }),
+      };
+      const trail = [hop, ...(last?.trail ?? [])];
+      yield* storage.put({ [hopKey(target, sweep.phase)]: trail });
+      if (path === "")
+        yield* Effect.logInfo(
+          `backfill trail ${JSON.stringify({ target, phase: sweep.phase, trail })}`,
+        );
       if (path !== "") return yield* jobs.schedule(`report:${target}`, 0);
       yield* begin(path, target, sweep.phase === "discover" ? "ready" : "complete");
     });
@@ -1706,6 +1756,12 @@ export const makeNode = (
             own: current.listed && pending.length === 0,
           };
           yield* storage.put({ [sweepKey(target)]: updated });
+          if (updated.own && !current.own) {
+            const hop = yield* storage.get<{ begin: number }>(hopKey(target, current.phase));
+            yield* storage.put({
+              [hopKey(target, current.phase)]: { ...hop, own: yield* Clock.currentTimeMillis },
+            });
+          }
           yield* settle(path, target);
           return updated;
         }),
@@ -1787,12 +1843,19 @@ export const makeNode = (
           yield* begin(path, target, phase);
         }),
       ),
-    report: (path: string, target: string, phase: "discover" | "ready", child: string) =>
+    report: (
+      path: string,
+      target: string,
+      phase: "discover" | "ready",
+      child: string,
+      trail: ReadonlyArray<Hop> = [],
+    ) =>
       storage.exclusive(
         Effect.gen(function* () {
           const sweep = yield* getSweep(target);
           if (!sweep || sweep.phase !== phase) return;
-          yield* storage.put({ [`${reportPrefix(target, phase)}${child}`]: true });
+          const at = yield* Clock.currentTimeMillis;
+          yield* storage.put({ [`${reportPrefix(target, phase)}${child}`]: { at, trail } });
           yield* settle(path, target);
         }),
       ),
@@ -1801,7 +1864,8 @@ export const makeNode = (
         const split = yield* storage.exclusive(
           Effect.gen(function* () {
             yield* keepPath(path);
-            yield* storage.put({ [settledKey(target, ref)]: true });
+            yield* storage.put({ [settledKey(target, ref)]: yield* Clock.currentTimeMillis });
+            yield* storage.put({ [lastSettledKey(target)]: yield* Clock.currentTimeMillis });
             yield* storage.delete([`${unsettledPrefix(target)}${refKey(ref)}`]);
             yield* settle(path, target);
             return (yield* storage.get<boolean>("split")) === true;
@@ -1847,8 +1911,16 @@ export const makeNode = (
         if (id === "split") return yield* split(path);
         if (kind === "report") {
           const sweep = yield* getSweep(target);
-          if (sweep?.reported && sweep.phase !== "complete")
-            yield* net.node.report(parent, target, sweep.phase, path);
+          if (sweep?.reported && sweep.phase !== "complete") {
+            const trail = yield* storage.get<ReadonlyArray<Hop>>(hopKey(target, sweep.phase));
+            yield* net.node.report(
+              parent,
+              target,
+              sweep.phase,
+              path,
+              Array.isArray(trail) ? trail : [],
+            );
+          }
           yield* retry.clear(id);
         }
       }).pipe(

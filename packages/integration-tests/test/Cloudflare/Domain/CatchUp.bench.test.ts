@@ -3,6 +3,7 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import { Credentials, formatHeaders } from "@distilled.cloud/cloudflare/Credentials";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -163,6 +164,51 @@ const settledUsage = (scriptName: string, from: Date, to: Date) =>
     return last;
   });
 
+/**
+ * The root's critical path for each phase of the backfill (`backfill trail`
+ * lines, logged once a phase is done), from Workers Logs. They arrive minutes
+ * late: read until both phases are in.
+ */
+const trails = (scriptName: string, from: Date) =>
+  Effect.gen(function* () {
+    const { accountId } = yield* yield* CloudflareEnvironment;
+    const read = Effect.suspend(() =>
+      workers.queryObservabilityTelemetry({
+        accountId,
+        queryId: "adhoc-backfill-trail",
+        view: "events",
+        timeframe: { from: from.getTime() - 60_000, to: Date.now() },
+        limit: 100,
+        parameters: {
+          filters: [
+            { key: "$metadata.service", operation: "eq", type: "string", value: scriptName },
+            {
+              key: "$metadata.message",
+              operation: "includes",
+              type: "string",
+              value: "backfill trail",
+            },
+          ],
+        },
+      }),
+    ).pipe(
+      Effect.map((response) =>
+        (response.events?.events ?? []).flatMap((event) => {
+          const message = String(event.metadata?.message ?? "");
+          const at = message.indexOf("{");
+          return at < 0 ? [] : [message.slice(at)];
+        }),
+      ),
+    );
+    return yield* read.pipe(
+      Effect.repeat({
+        schedule: Schedule.spaced("30 seconds"),
+        until: (lines) => lines.some((line) => line.includes('"phase":"ready"')),
+        times: 20,
+      }),
+    );
+  });
+
 const now = Effect.sync(() => new Date());
 
 const { test } = Test.make({ providers: Cloudflare.providers() });
@@ -173,6 +219,8 @@ const seedRetry = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
 ) =>
   effect.pipe(
+    // A seed request can hang for many minutes: fail it and send it again (seeds are idempotent).
+    Effect.timeout("2 minutes"),
     Effect.tapError((error) =>
       Effect.sync(() =>
         console.log(
@@ -242,6 +290,14 @@ const run = (
     );
     const deployEnd = yield* now;
     yield* serving(url, "v2");
+    // Where the time went: each phase's critical path, from the root down to a leaf.
+    if (process.env.DOMAIN_BENCH_TRAIL) {
+      const lines = yield* trails(scriptName, deployStart).pipe(
+        Effect.catchCause(() => Effect.succeed([] as Array<string>)),
+      );
+      for (const line of lines)
+        yield* Effect.sync(() => console.log(`TRAIL ${deployStart.getTime()} ${line}`));
+    }
 
     // The deploy returned once the backfill was done.
     const history = JSON.parse(yield* call(url, "GET", "/history")) as { complete: boolean };

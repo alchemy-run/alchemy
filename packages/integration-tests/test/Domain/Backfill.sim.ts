@@ -51,6 +51,8 @@ class SimObject {
   /** Pending jobs by id: when due, and a version so a replaced job's queue entry is skipped. */
   readonly jobs = new Map<string, { readonly due: number; readonly version: number }>();
   readonly stats: Stats = { requests: 0, rowsRead: 0, rowsWritten: 0 };
+  /** Requests by call or job, to see what makes an object hot. */
+  readonly methods = new Map<string, number>();
   /**
    * In the wall-time model: the milliseconds this object spends running events,
    * one at a time. An event runs in the first free one at or after it arrives;
@@ -337,10 +339,15 @@ export class Sim {
    * wall-time model it waits for its object to be free, which is how a hot
    * object's queue shows up.
    */
-  private call<A>(target: SimObject, effect: () => Effect.Effect<A>): Effect.Effect<A> {
+  private call<A>(
+    target: SimObject,
+    effect: () => Effect.Effect<A>,
+    method = "call",
+  ): Effect.Effect<A> {
     return Effect.suspend(() => {
       this.calls += 1;
       target.stats.requests += 1;
+      target.methods.set(method, (target.methods.get(method) ?? 0) + 1);
       if (this.chance(this.faults.callBefore)) {
         this.failures += 1;
         return Effect.die(new Crash("call failed in transit"));
@@ -428,6 +435,8 @@ export class Sim {
           if (object.jobs.get(id)?.version !== version) return Effect.void;
           object.jobs.delete(id);
           object.stats.requests += 1;
+          const job = `job:${id.split(":")[0]}`;
+          object.methods.set(job, (object.methods.get(job) ?? 0) + 1);
           this.vt = object.occupy(vt, this.latency.service);
           return object.run(id).pipe(
             // A failed job is retried, like a durable callback.
@@ -479,56 +488,91 @@ export class Sim {
   readonly net: Backfill.Network = {
     node: {
       register: (path, ref) =>
-        this.call(this.node(path).object, () => this.node(path).role.register(path, ref)),
+        this.call(
+          this.node(path).object,
+          () => this.node(path).role.register(path, ref),
+          "register",
+        ),
       child: (path, child) =>
-        this.call(this.node(path).object, () => this.node(path).role.child(path, child)),
+        this.call(this.node(path).object, () => this.node(path).role.child(path, child), "child"),
       news: (path, targets, plans) =>
-        this.call(this.node(path).object, () => this.node(path).role.news(path, targets, plans)),
+        this.call(
+          this.node(path).object,
+          () => this.node(path).role.news(path, targets, plans),
+          "news",
+        ),
       sweep: (path, target, phase, plan) =>
         Effect.andThen(this.interject?.(path) ?? Effect.void, () =>
-          this.call(this.node(path).object, () =>
-            this.node(path).role.sweep(path, target, phase, plan),
+          this.call(
+            this.node(path).object,
+            () => this.node(path).role.sweep(path, target, phase, plan),
+            "sweep",
           ),
         ),
-      report: (path, target, phase, child) =>
-        this.call(this.node(path).object, () =>
-          this.node(path).role.report(path, target, phase, child),
+      report: (path, target, phase, child, trail) =>
+        this.call(
+          this.node(path).object,
+          () => this.node(path).role.report(path, target, phase, child, trail),
+          "report",
         ),
       settled: (path, target, ref) =>
-        this.call(this.node(path).object, () => this.node(path).role.settled(path, target, ref)),
+        this.call(
+          this.node(path).object,
+          () => this.node(path).role.settled(path, target, ref),
+          "settled",
+        ),
       phase: (path, target) =>
-        this.call(this.node(path).object, () => this.node(path).role.phase(path, target)),
-      status: (path) => this.call(this.node(path).object, () => this.node(path).role.status(path)),
+        this.call(this.node(path).object, () => this.node(path).role.phase(path, target), "phase"),
+      status: (path) =>
+        this.call(this.node(path).object, () => this.node(path).role.status(path), "status"),
     },
     source: {
       scan: (ref, target) =>
-        this.call(this.source(ref).object, () => this.busy(this.source(ref)).role.scan(target)),
+        this.call(
+          this.source(ref).object,
+          () => this.busy(this.source(ref)).role.scan(target),
+          "scan",
+        ),
       ready: (ref, target, reportTo) =>
-        this.call(this.source(ref).object, () =>
-          this.busy(this.source(ref)).role.ready(target, reportTo),
+        this.call(
+          this.source(ref).object,
+          () => this.busy(this.source(ref)).role.ready(target, reportTo),
+          "ready",
         ),
       pull: (ref, target, key, after) =>
-        this.call(this.source(ref).object, () =>
-          this.busy(this.source(ref)).role.pull(target, key, after),
+        this.call(
+          this.source(ref).object,
+          () => this.busy(this.source(ref)).role.pull(target, key, after),
+          "pull",
         ),
       log: (ref, after, limit) =>
-        this.call(this.source(ref).object, () =>
-          this.busy(this.source(ref)).role.log(after, limit),
+        this.call(
+          this.source(ref).object,
+          () => this.busy(this.source(ref)).role.log(after, limit),
+          "log",
         ),
       handoff: (ref, target, key, through) =>
-        this.call(this.source(ref).object, () =>
-          this.busy(this.source(ref)).role.handoff(target, key, through),
+        this.call(
+          this.source(ref).object,
+          () => this.busy(this.source(ref)).role.handoff(target, key, through),
+          "handoff",
         ),
     },
     consumer: {
       source: (target, key, stream, ref) =>
-        this.call(this.key(key).object, () =>
-          this.busy(this.key(key)).role.source(target, stream, ref),
+        this.call(
+          this.key(key).object,
+          () => this.busy(this.key(key)).role.source(target, stream, ref),
+          "source",
         ),
       ready: (target, key) =>
-        this.call(this.key(key).object, () => this.busy(this.key(key)).role.ready(target)),
+        this.call(this.key(key).object, () => this.busy(this.key(key)).role.ready(target), "ready"),
       start: (target, key, ref) =>
-        this.call(this.key(key).object, () => this.busy(this.key(key)).role.start(target, ref)),
+        this.call(
+          this.key(key).object,
+          () => this.busy(this.key(key)).role.start(target, ref),
+          "start",
+        ),
     },
   };
 
@@ -848,6 +892,7 @@ export class Sim {
       object.stats.requests = 0;
       object.stats.rowsRead = 0;
       object.stats.rowsWritten = 0;
+      object.methods.clear();
       object.busy.clear();
     }
     this.vt = 0;

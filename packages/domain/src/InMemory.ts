@@ -205,7 +205,8 @@ export const make = (
       child: (path, child) => node(path).child(path, child),
       news: (path, targets, plans) => node(path).news(path, targets, plans),
       sweep: (path, target, phase, plan) => node(path).sweep(path, target, phase, plan),
-      report: (path, target, phase, child) => node(path).report(path, target, phase, child),
+      report: (path, target, phase, child, trail) =>
+        node(path).report(path, target, phase, child, trail),
       settled: (path, target, ref) => node(path).settled(path, target, ref),
       phase: (path, target) => node(path).phase(path, target),
       status: (path) => node(path).status(path),

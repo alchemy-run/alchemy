@@ -541,8 +541,13 @@ const directoryObject = (net: Backfill.Network, planOf: PlanOf) =>
           phase: "discover" | "ready" | "complete",
           plan: Backfill.Plan | undefined,
         ) => reportDefects(role.sweep(path, target, phase, plan)),
-        report: (path: string, target: string, phase: "discover" | "ready", child: string) =>
-          reportDefects(role.report(path, target, phase, child)),
+        report: (
+          path: string,
+          target: string,
+          phase: "discover" | "ready",
+          child: string,
+          trail?: ReadonlyArray<Backfill.Hop>,
+        ) => reportDefects(role.report(path, target, phase, child, trail)),
         settled: (path: string, target: string, ref: Backfill.SourceRef) =>
           reportDefects(role.settled(path, target, ref)),
         phase: (path: string, target: string) => reportDefects(role.phase(path, target)),
@@ -1422,8 +1427,8 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
         news: (path, targets, plans) => unwrapDefects(nodeStub(path).news(path, targets, plans)),
         sweep: (path, target, phase, plan) =>
           unwrapDefects(nodeStub(path).sweep(path, target, phase, plan)),
-        report: (path, target, phase, child) =>
-          unwrapDefects(nodeStub(path).report(path, target, phase, child)),
+        report: (path, target, phase, child, trail) =>
+          unwrapDefects(nodeStub(path).report(path, target, phase, child, trail)),
         settled: (path, target, ref) => unwrapDefects(nodeStub(path).settled(path, target, ref)),
         phase: (path, target) => unwrapDefects(nodeStub(path).phase(path, target)),
         status: (path) => unwrapDefects(nodeStub(path).status(path)),
