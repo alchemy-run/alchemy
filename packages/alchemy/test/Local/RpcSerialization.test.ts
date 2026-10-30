@@ -123,6 +123,33 @@ describe("Local.RpcSerialization", { tags: ["unit", "local"] }, () => {
       }),
     );
 
+    it.effect("round-trips a RegExp nested inside an object (Worker build options)", () =>
+      Effect.gen(function* () {
+        const handlers = {
+          take: (build: { output: { codeSplitting: { groups: Array<{ test: unknown }> } } }) => {
+            const test = build.output.codeSplitting.groups[0]!.test;
+            return Effect.succeed({
+              isRegExp: test instanceof RegExp,
+              source: (test as RegExp).source,
+              flags: (test as RegExp).flags,
+              matches: (test as RegExp).test("/repo/node_modules/alchemy/src/Rpc.ts"),
+            });
+          },
+        };
+        const client = roundTrip(handlers);
+        expect(
+          yield* client.take({
+            output: { codeSplitting: { groups: [{ test: /[\\/]node_modules[\\/]alchemy[\\/]/i }] } },
+          }),
+        ).toEqual({
+          isRegExp: true,
+          source: "[\\\\/]node_modules[\\\\/]alchemy[\\\\/]",
+          flags: "i",
+          matches: true,
+        });
+      }),
+    );
+
     it.effect("serializes arrays element-wise", () =>
       Effect.gen(function* () {
         const handlers = {
