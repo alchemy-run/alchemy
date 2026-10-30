@@ -525,6 +525,8 @@ export class Sim {
         this.call(this.node(path).object, () => this.node(path).role.phase(path, target), "phase"),
       status: (path) =>
         this.call(this.node(path).object, () => this.node(path).role.status(path), "status"),
+      list: (path, after) =>
+        this.call(this.node(path).object, () => this.node(path).role.list(path, after), "list"),
     },
     source: {
       scan: (ref, target) =>
@@ -567,14 +569,50 @@ export class Sim {
         ),
       ready: (target, key) =>
         this.call(this.key(key).object, () => this.busy(this.key(key)).role.ready(target), "ready"),
-      start: (target, key, ref) =>
+      start: (target, key, ref, waitMillis) =>
         this.call(
           this.key(key).object,
-          () => this.busy(this.key(key)).role.start(target, ref),
+          () => this.busy(this.key(key)).role.start(target, ref, waitMillis),
           "start",
         ),
     },
+    relay: {
+      run: (name, run, items) =>
+        this.call(this.relay(name), () => this.relays.run(name, run, items), "relay"),
+    },
   };
+
+  /** The relays of runs: stateless, one object each. */
+  readonly relayObjects = new Map<string, SimObject>();
+  private readonly relays = Backfill.makeRelay(this.net);
+  relay(name: string) {
+    let object = this.relayObjects.get(name);
+    if (!object) {
+      object = new SimObject(`relay:${name}`, this, () => Effect.void);
+      this.relayObjects.set(name, object);
+    }
+    return object;
+  }
+
+  /** Consumers keyed by their source whose run has found every key with its history. */
+  readonly relayed = new Set<string>();
+
+  /**
+   * The deploy's Workflow for a consumer keyed by its source: one pass of a relay
+   * run, again a second later until every key has its history.
+   */
+  private readonly workflow = new SimObject("workflow", this, (target) =>
+    this.relays
+      .run(`run:${target}`, { target, plan: this.planOf(target), waitMillis: 0 }, [{ path: "" }])
+      .pipe(
+        Effect.flatMap((done) =>
+          Effect.sync(() => {
+            if (done) this.relayed.add(target);
+            else this.schedule(this.workflow, target, 1_000);
+          }),
+        ),
+      ),
+  );
 
   node(path: string) {
     let node = this.nodes.get(path);
@@ -647,6 +685,7 @@ export class Sim {
           ref,
           targets: () => (knows() ? this.targets.filter((t) => this.feeds(ref.source, t)) : []),
           model: () => (knows() ? this.targets : []),
+          singleSource: () => this.singleSource,
           log: (after, limit) =>
             Effect.sync(() => data.events.filter((event) => event.seq > after).slice(0, limit)),
           version: Effect.sync(() => data.events.length),
@@ -909,7 +948,14 @@ export class Sim {
     if (options.running)
       for (const source of this.sources.values())
         source.staleUntil = Math.max(source.staleUntil, this.now + 20_000);
-    return this.retry(this.net.node.news("a7", this.targets, this.plans()));
+    return this.retry(this.net.node.news("a7", this.targets, this.plans())).pipe(
+      Effect.tap(() =>
+        Effect.sync(() => {
+          for (const target of this.targets)
+            if (this.planOf(target).singleSource) this.schedule(this.workflow, target, 0);
+        }),
+      ),
+    );
   }
 
   /** Run until nothing is left to do, interleaving `actions` (client commits). */
@@ -928,9 +974,10 @@ export class Sim {
         const busy = yield* this.step();
         if (
           this.completedAt === undefined &&
-          (
-            this.nodes.get("")?.object.data.get("complete") as ReadonlyArray<string> | undefined
-          )?.includes(this.target)
+          (this.relayed.has(this.target) ||
+            (
+              this.nodes.get("")?.object.data.get("complete") as ReadonlyArray<string> | undefined
+            )?.includes(this.target))
         )
           this.completedAt = this.vt;
         if (!busy && pending.length === 0) return steps;
@@ -943,8 +990,11 @@ export class Sim {
     });
   }
 
-  /** The root's status for the target. */
+  /** The root's status, with the consumers keyed by their source whose run is done. */
   status() {
-    return this.node("").role.status("");
+    return Effect.map(this.node("").role.status(""), (status) => ({
+      ...status,
+      complete: [...status.complete, ...this.relayed],
+    }));
   }
 }

@@ -202,6 +202,28 @@ describe("Domain backfill (simulated)", () => {
   );
 
   scenario(
+    "keyed by its source: an instance created on older code after the run starts its key on the deployed code",
+    (sim) =>
+      Effect.gen(function* () {
+        sim.singleSource = true;
+        for (const commit of own(sim, 4, 16)) yield* commit();
+        yield* sim.deploy();
+        yield* sim.run();
+        // A host still on the code from before the deploy creates an instance the run never listed.
+        sim.now += 1;
+        yield* sim.commit("A/late", ["late"], sim.now + 60_000);
+        sim.now += 1;
+        yield* sim.commit("A/late", ["late"]);
+        yield* sim.run([
+          () => {
+            sim.now += 61_000;
+            return sim.commit("A/late", ["late"]);
+          },
+        ]);
+      }),
+  );
+
+  scenario(
     "keyed by its source, with faults",
     (sim) =>
       Effect.gen(function* () {

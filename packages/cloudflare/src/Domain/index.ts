@@ -554,6 +554,50 @@ const directoryObject = (net: Backfill.Network, planOf: PlanOf) =>
           reportDefects(role.settled(path, target, ref)),
         phase: (path: string, target: string) => reportDefects(role.phase(path, target)),
         status: (path: string) => reportDefects(role.status(path)),
+        list: (path: string, after: string | undefined) => reportDefects(role.list(path, after)),
+      };
+    });
+  });
+
+/**
+ * How long the root of a relay run works before it answers the Workflow: it
+ * answers `false` if keys are still reading history, and is called again.
+ */
+const RELAY_ROOT_WAIT_MS = 5 * 60_000;
+
+/** The relay at the root of a run for `target`: it records when the run is done. */
+const relayRoot = (target: string) => `run:${target}`;
+
+/**
+ * A relay: one node of a run's tree, each its own object (see `Backfill.makeRelay`).
+ * New objects, so they run the deployed code. The root records that the run is done.
+ */
+const relayObject = (net: Backfill.Network) =>
+  Effect.gen(function* () {
+    const state = yield* DurableObjectState;
+    return Effect.gen(function* () {
+      const relay = Backfill.makeRelay(net);
+      const doneKey = (target: string) => `done:${target}`;
+      return {
+        run: (name: string, run: Backfill.RelayRun, items: ReadonlyArray<Backfill.RelayItem>) =>
+          reportDefects(relay.run(name, run, items)),
+        drive: (target: string, plan: Backfill.Plan) =>
+          reportDefects(
+            Effect.gen(function* () {
+              if (yield* state.storage.get<boolean>(doneKey(target))) return true;
+              const done = yield* relay.run(
+                relayRoot(target),
+                { target, plan, waitMillis: RELAY_ROOT_WAIT_MS },
+                [{ path: "" }],
+              );
+              if (done) yield* state.storage.put(doneKey(target), true);
+              return done;
+            }),
+          ),
+        done: (target: string) =>
+          reportDefects(
+            Effect.map(state.storage.get<boolean>(doneKey(target)), (done) => done === true),
+          ),
       };
     });
   });
@@ -580,6 +624,7 @@ const aggregateObject = (
   kit: AggregateKit,
   net: Backfill.Network,
   model: () => ReadonlyArray<string>,
+  planOf: PlanOf,
 ) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
@@ -606,6 +651,7 @@ const aggregateObject = (
         (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
           ref: { source: kit.name, id },
           targets: () => kit.targets,
+          singleSource: (target) => planOf(target)?.singleSource === true,
           model,
           log: (after, limit) =>
             runtime.provide(
@@ -949,6 +995,7 @@ const viewObject = (
         (source ??= Backfill.makeSource(runtime.storage, runtime.jobs, net, {
           ref: { source: kit.name, id: key },
           targets: () => kit.targets,
+          singleSource: (target) => planOf(target)?.singleSource === true,
           model,
           log: (after, limit) =>
             runtime.provide(
@@ -1025,11 +1072,11 @@ const viewObject = (
           reportDefects(sourceFor(key).log(after, limit)),
         bfHandoff: (key: string, target: string, consumerKey: string, through: number) =>
           reportDefects(sourceFor(key).handoff(target, consumerKey, through)),
-        bfStart: (key: string, target: string, ref: Backfill.SourceRef) =>
+        bfStart: (key: string, target: string, ref: Backfill.SourceRef, waitMillis?: number) =>
           reportDefects(
             Effect.gen(function* () {
               yield* state.storage.put(ID_KEY, key);
-              return yield* consumerFor(key).start(target, ref);
+              return yield* consumerFor(key).start(target, ref, waitMillis);
             }),
           ),
         // The key lists itself in its merge job, before its first entry.
@@ -1280,8 +1327,10 @@ const projectionObject = (kit: ProjectionKit, net: Backfill.Network, planOf: Pla
           ),
         bfConsumerReady: (key: string, target: string) =>
           reportDefects(keep(key).pipe(Effect.andThen(consumerFor(key).ready(target)))),
-        bfStart: (key: string, target: string, ref: Backfill.SourceRef) =>
-          reportDefects(keep(key).pipe(Effect.andThen(consumerFor(key).start(target, ref)))),
+        bfStart: (key: string, target: string, ref: Backfill.SourceRef, waitMillis?: number) =>
+          reportDefects(
+            keep(key).pipe(Effect.andThen(consumerFor(key).start(target, ref, waitMillis))),
+          ),
       };
     });
   });
@@ -1417,6 +1466,8 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
     // The objects the backfill protocol reaches: directory nodes, sources by name,
     // consumers by kind and name.
     let directory: Namespace | undefined;
+    let relays: Namespace | undefined;
+    const relayStub = (name: string) => relays!.getByName(name);
     const sources = new Map<string, Namespace>();
     const consumers = new Map<string, Namespace>();
     const nodeStub = (path: string) => directory!.getByName(`node:${path}`);
@@ -1458,6 +1509,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
         settled: (path, target, ref) => unwrapDefects(nodeStub(path).settled(path, target, ref)),
         phase: (path, target) => unwrapDefects(nodeStub(path).phase(path, target)),
         status: (path) => unwrapDefects(nodeStub(path).status(path)),
+        list: (path, after) => unwrapDefects(nodeStub(path).list(path, after)),
       },
       source: {
         // A source no longer in the model has nothing to give.
@@ -1503,13 +1555,17 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           Effect.flatMap(consumerOf(target, key), (stub) =>
             unwrapDefects(stub.bfConsumerReady(key, target)),
           ),
-        start: (target, key, ref) =>
+        start: (target, key, ref, waitMillis) =>
           Effect.flatMap(consumerOf(target, key), (stub) =>
-            unwrapDefects(stub.bfStart(key, target, ref)),
+            unwrapDefects(stub.bfStart(key, target, ref, waitMillis)),
           ),
+      },
+      relay: {
+        run: (name, run, items) => unwrapDefects(relayStub(name).run(name, run, items)),
       },
     };
     directory = yield* inInit(declare("DomainDirectory", directoryObject(net, consumerPlans)));
+    relays = yield* inInit(declare("DomainRelay", relayObject(net)));
 
     // A run of the backfill: announce the model's consumers to the directory, then
     // check the root until every one is complete. Reconciliation starts it and waits.
@@ -1522,17 +1578,32 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
             readonly plans?: Readonly<Record<string, Backfill.Plan>>;
           }) =>
             Effect.gen(function* () {
-              yield* task(
-                "announce",
-                net.node.news("", params.targets, {
-                  ...plansOf(params.targets, planOf),
-                  ...params.plans,
-                }),
+              const plans = { ...plansOf(params.targets, planOf), ...params.plans };
+              // Keyed by its source: a relay run starts every key and waits for each.
+              const relayed = params.targets.filter((target) => plans[target]?.singleSource);
+              const swept = params.targets.filter((target) => !relayed.includes(target));
+              yield* Effect.forEach(
+                relayed,
+                (target) =>
+                  Effect.gen(function* () {
+                    for (let attempt = 0; ; attempt++) {
+                      const done = yield* task(
+                        `relay-${target}-${attempt}`,
+                        unwrapDefects<boolean>(
+                          relayStub(relayRoot(target)).drive(target, plans[target]!),
+                        ),
+                        { timeout: "15 minutes" },
+                      );
+                      if (done) return;
+                    }
+                  }),
+                { concurrency: "unbounded", discard: true },
               );
+              if (swept.length === 0) return { complete: true };
+              yield* task("announce", net.node.news("", swept, plans));
               for (let check = 0; ; check++) {
                 const { complete } = yield* task(`check-${check}`, net.node.status(""));
-                if (params.targets.every((target) => complete.includes(target)))
-                  return { complete: true };
+                if (swept.every((target) => complete.includes(target))) return { complete: true };
                 yield* sleep(
                   `wait-${check}`,
                   // Soon at first, then less often: each check is a step (an instance has 10,000).
@@ -1567,7 +1638,7 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           Effect.gen(function* () {
             const namespace = yield* declare(
               `${aggregate.aggregateName}Aggregate`,
-              aggregateObject(kit, net, current),
+              aggregateObject(kit, net, current, consumerPlans),
             );
             sources.set(aggregate.aggregateName, namespace);
             return {
@@ -1733,12 +1804,16 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
           }),
         ),
       history: (target) =>
-        net.node.status("").pipe(
-          Effect.map(({ complete }) => ({
-            complete: complete.includes(target),
-            through: undefined,
-          })),
-        ),
+        planOf(target)?.singleSource === true
+          ? unwrapDefects<boolean>(relayStub(relayRoot(target)).done(target)).pipe(
+              Effect.map((complete) => ({ complete, through: undefined })),
+            )
+          : net.node.status("").pipe(
+              Effect.map(({ complete }) => ({
+                complete: complete.includes(target),
+                through: undefined,
+              })),
+            ),
       start: (targets, plansOfTarget) =>
         Effect.gen(function* () {
           // At deploy time: reconciliation runs the backfill of new consumers and waits.

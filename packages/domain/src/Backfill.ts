@@ -117,6 +117,19 @@ export interface NodeRpc {
   readonly settled: (path: string, target: string, ref: SourceRef) => Effect.Effect<void>;
   readonly phase: (path: string, target: string) => Effect.Effect<Phase>;
   readonly status: (path: string) => Effect.Effect<Status>;
+  /**
+   * A page of what a node lists: its own instances after `after`, and (on the
+   * first page) its children. Any code answers it, whatever consumers it knows.
+   */
+  readonly list: (path: string, after: string | undefined) => Effect.Effect<Listing>;
+}
+
+/** A page of a directory node's listing. */
+export interface Listing {
+  readonly rows: ReadonlyArray<SourceRef>;
+  readonly children: ReadonlyArray<string>;
+  /** Where the next page starts, if there is one. */
+  readonly next?: string;
 }
 
 /** What a source answers to `scan`. */
@@ -191,13 +204,38 @@ export interface ConsumerRpc {
   readonly ready: (target: string, key: string) => Effect.Effect<void>;
   /**
    * Start a key of a consumer keyed by its source: it reads `ref`'s log itself.
-   * `"settled"` when it has its history already.
+   * `"settled"` once it has its history: it works on it for up to `waitMillis`
+   * before it answers.
    */
   readonly start: (
     target: string,
     key: string,
     ref: SourceRef,
+    waitMillis?: number,
   ) => Effect.Effect<"pending" | "settled">;
+}
+
+/** What a relay works through: directory nodes to list, and instances whose keys to start. */
+export type RelayItem = { readonly path: string } | { readonly ref: SourceRef };
+
+/** A run of a relay tree for one consumer keyed by its source. */
+export interface RelayRun {
+  readonly target: string;
+  readonly plan: Plan;
+  /** How long a relay keeps at its keys before it answers `false` (not all done): 0 for one pass. */
+  readonly waitMillis: number;
+}
+
+export interface RelayRpc {
+  /**
+   * Start every key under `items`, and answer `true` once each has its history.
+   * `name` is the relay's place in the tree: each one is its own object.
+   */
+  readonly run: (
+    name: string,
+    run: RelayRun,
+    items: ReadonlyArray<RelayItem>,
+  ) => Effect.Effect<boolean>;
 }
 
 /** How the roles reach each other. */
@@ -205,6 +243,7 @@ export interface Network {
   readonly node: NodeRpc;
   readonly source: SourceRpc;
   readonly consumer: ConsumerRpc;
+  readonly relay: RelayRpc;
 }
 
 /** What the root reports: the targets whose history has fully arrived, and those still running. */
@@ -341,6 +380,13 @@ type Message =
       readonly ref: SourceRef;
     }
   | { readonly kind: "ready"; readonly target: string; readonly key: string }
+  /** Start the key of a consumer keyed by its source, which no run started. */
+  | {
+      readonly kind: "start";
+      readonly target: string;
+      readonly key: string;
+      readonly ref: SourceRef;
+    }
   | {
       readonly kind: "settled";
       readonly target: string;
@@ -358,8 +404,14 @@ const OUTBOX_LEASE_MS = 60_000;
  */
 const RETRY_MS = 30_000;
 
+/** Instances a directory node lists per page. */
+const LIST_PAGE = 512;
+
 /** How long a key that is waiting to be told discovery is complete waits before asking. */
 const SAFETY_POLL_MS = 60_000;
+
+/** How long a key started with a wait pauses between pages that couldn't go further. */
+const WAIT_PAUSE_MS = 50;
 
 /**
  * Run a job again after a refusal or a failure, waiting twice as long each time:
@@ -408,6 +460,8 @@ const outbox = (storage: Storage, jobs: Jobs, net: Network, depth: number, retry
         return net.consumer.source(message.target, message.key, message.stream, message.ref);
       case "ready":
         return net.consumer.ready(message.target, message.key);
+      case "start":
+        return Effect.asVoid(net.consumer.start(message.target, message.key, message.ref));
       case "settled":
         return net.node.settled(
           message.to ?? leafOf(message.ref, depth),
@@ -488,6 +542,8 @@ export interface SourceHost {
   readonly targets: () => ReadonlyArray<string>;
   /** Every consumer in the model this instance's code runs: a target outside it is from newer code. */
   readonly model: () => ReadonlyArray<string>;
+  /** Whether `target`'s keys are keyed by their source: each reads its own source's log. */
+  readonly singleSource?: (target: string) => boolean;
   /** Its current version: the seq of its last event or entry. */
   readonly version: Effect.Effect<number>;
   readonly routed: Effect.Effect<Routed | undefined>;
@@ -654,6 +710,17 @@ export const makeSource = (
     ) =>
       Effect.gen(function* () {
         const state = yield* getState(target);
+        if (state === undefined && host.singleSource?.(target) === true) {
+          // Its key reads this instance's log, so these reach it that way. A run lists
+          // instances once, so one listed after (created on older code during a
+          // rollout) has a key no one started: start it, once.
+          const kicked = `bf:kick:${enc(target)}`;
+          if ((yield* storage.get(kicked)) === undefined) {
+            yield* storage.put({ [kicked]: true });
+            yield* queue.stage([{ kind: "start", target, key: host.ref.id, ref: host.ref }]);
+          }
+          return [] as ReadonlyArray<Delivery>;
+        }
         // The scan hasn't reached the rows before this commit: it will reach these too.
         if (state === undefined || state.scanned < before) return [] as ReadonlyArray<Delivery>;
         const { send, messages, added } = yield* route(target, deliveries, false);
@@ -768,6 +835,7 @@ export const makeSource = (
             const routed = yield* host.routed;
             if (routed !== undefined && (routed[target] ?? 0) < through)
               yield* host.markLive(target);
+            yield* storage.delete([`bf:kick:${enc(target)}`]);
             return "live" as const;
           }),
         );
@@ -849,8 +917,7 @@ export const makeConsumer = (
   const pullingPrefix = (target: string) => `bf:p:${T(target)}:`;
   const bufferPrefix = (target: string) => `bf:b:${T(target)}:`;
   const jobId = (target: string) => `bf-merge:${target}`;
-  /** The source to tell its leaf about once this key has its history (keyed by its source). */
-  const reportKey = (target: string) => `bf:report:${T(target)}`;
+  /** Keyed by its source: it has read its source's log to the end (its history is here). */
   const caughtKey = (target: string) => `bf:caught:${T(target)}`;
   const retry = makeRetry(storage, jobs, limits);
   /**
@@ -972,16 +1039,6 @@ export const makeConsumer = (
       } satisfies Pulled & { readonly caughtUp: boolean };
     });
 
-  /** Tell the leaf that this key has its history, once. */
-  const report = (target: string) =>
-    Effect.gen(function* () {
-      const ref = yield* storage.get<SourceRef>(reportKey(target));
-      if (ref === undefined) return;
-      yield* net.node.settled(leafOf(ref, limits.depth), target, ref);
-      yield* storage.delete([reportKey(target)]);
-      yield* trace("caught-up", { key: host.key, target });
-    });
-
   /** Pull a page for each feed that starves the merge. */
   const pullStarved = (target: string) =>
     Effect.gen(function* () {
@@ -1018,8 +1075,10 @@ export const makeConsumer = (
                 "caughtUp" in pulled &&
                 pulled.caughtUp &&
                 !(yield* storage.get(caughtKey(target)))
-              )
-                yield* storage.put({ [caughtKey(target)]: true, [reportKey(target)]: feed.ref });
+              ) {
+                yield* storage.put({ [caughtKey(target)]: true });
+                yield* trace("caught-up", { key: host.key, target });
+              }
               // Its only source, and nothing buffered ahead: the page is already in
               // order, so apply it rather than buffer it.
               const direct =
@@ -1108,6 +1167,83 @@ export const makeConsumer = (
       }),
     );
 
+  /** Keyed by its source: it has its history (read to the end of its log, or done). */
+  const settled = (target: string) =>
+    Effect.map(
+      Effect.all([storage.get(doneKey(target)), storage.get(caughtKey(target))]),
+      ([done, caught]) => done !== undefined || caught !== undefined,
+    );
+
+  /**
+   * Keyed by its source: read `ref`'s log from the start. Ready at once, since
+   * it has no other source to wait for. Callers hold the exclusive section.
+   */
+  const follow = (target: string, ref: SourceRef) =>
+    Effect.gen(function* () {
+      const backfill = yield* begin(target);
+      if (!backfill.ready)
+        yield* storage.put({ [backfillKey(target)]: { ...backfill, ready: true } });
+      const stream = `${ref.source}/${ref.id}`;
+      const feed = yield* storage.get<Feed>(feedKey(target, stream));
+      if (feed === undefined || feed.ref === null)
+        yield* putFeed(target, stream, {
+          ref,
+          cursor: 0,
+          live: false,
+          buffered: feed?.buffered ?? 0,
+        });
+    });
+
+  /** The merge job for one target. */
+  const merge = (target: string): Effect.Effect<void> =>
+    Effect.gen(function* () {
+      const backfill = yield* storage.get<Backfill>(backfillKey(target));
+      if (!backfill) return;
+      if (!backfill.ready) {
+        // A key with sources is told when discovery is complete; ask the directory only
+        // rarely, as a safety net. One fed only live has no source to tell it: it asks.
+        const pulling =
+          (yield* storage.list({ prefix: pullingPrefix(target), limit: 1 })).length > 0;
+        yield* trace("waiting", { key: host.key, target, pulling });
+        if (pulling && !(yield* storage.get(`bf:asked:${T(target)}`))) {
+          yield* storage.put({ [`bf:asked:${T(target)}`]: true });
+          return yield* jobs.schedule(jobId(target), SAFETY_POLL_MS);
+        }
+        const asked = yield* askPhase(target, backfill).pipe(
+          Effect.catchCause(() => Effect.succeed(undefined)),
+        );
+        if (asked === undefined) return yield* retry.later(jobId(target), RETRY_MS);
+        const { phase, ask } = asked;
+        const ready = phase === "ready" || phase === "complete";
+        yield* storage.exclusive(
+          Effect.gen(function* () {
+            const current = yield* storage.get<Backfill>(backfillKey(target));
+            if (current)
+              yield* storage.put({
+                [backfillKey(target)]: { ...current, ready: current.ready || ready, ask },
+              });
+          }),
+        );
+        // Its sources tell a key with history when it's ready: it asks again only
+        // rarely, so a wide backfill never polls the directory hard.
+        if (!ready)
+          return yield* jobs.schedule(
+            jobId(target),
+            ask !== backfill.ask ? 0 : pulling ? SAFETY_POLL_MS : limits.pollMillis,
+          );
+      }
+      const outcome = yield* applyBuffered(target);
+      yield* trace("merge", { key: host.key, target, outcome });
+      if (host.after) yield* host.after;
+      if (outcome === "done" || outcome === "waiting") return yield* retry.clear(jobId(target));
+      // A remote failure never fails the job (which a durable callback would retry
+      // with a growing delay, then park): it asks again after a fixed wait.
+      const failed = outcome === "starved" ? yield* pullStarved(target) : false;
+      if (failed) return yield* retry.later(jobId(target), RETRY_MS);
+      yield* retry.clear(jobId(target));
+      yield* jobs.schedule(jobId(target), 0);
+    });
+
   return {
     /**
      * Deliveries for `target` arriving at this key. `true`: apply them now, as
@@ -1125,6 +1261,20 @@ export const makeConsumer = (
           }),
         );
         if (known !== "unknown") return known === "apply";
+        if (host.singleSource?.() === true) {
+          // Keyed by its source: it needs no one to start it. It reads its source's
+          // log, and takes these in order with it (a new instance's key reads little).
+          // Its source is the instance with its own id.
+          const source = deliveries[0]!.origin;
+          yield* storage.exclusive(
+            Effect.gen(function* () {
+              yield* follow(target, { source, id: host.key });
+              yield* buffer(target, deliveries, true);
+            }),
+          );
+          yield* jobs.schedule(jobId(target), 0);
+          return false;
+        }
         // A key's first delivery for this target: is a backfill still running?
         const { phase } = yield* askPhase(target, { ready: false, ask: firstAsk(target) });
         return yield* storage.exclusive(
@@ -1170,36 +1320,34 @@ export const makeConsumer = (
         }),
       ),
 
-    start: (target: string, ref: SourceRef) =>
-      storage.exclusive(
-        Effect.gen(function* () {
-          yield* trace("start", { key: host.key, target });
-          if (target !== host.target()) {
-            yield* stale(target);
-            // An older generation's sweep: superseded, nothing to wait for.
-            return "settled" as const;
-          }
-          if (yield* storage.get(doneKey(target))) return "settled" as const;
-          if ((yield* storage.get(caughtKey(target))) !== undefined) {
-            // Caught up already; its report may still be on its way.
-            if ((yield* storage.get(reportKey(target))) === undefined) return "settled" as const;
-          }
-          const backfill = yield* begin(target);
-          if (!backfill.ready)
-            yield* storage.put({ [backfillKey(target)]: { ...backfill, ready: true } });
-          const stream = `${ref.source}/${ref.id}`;
-          const feed = yield* storage.get<Feed>(feedKey(target, stream));
-          if (feed === undefined || feed.ref === null)
-            yield* putFeed(target, stream, {
-              ref,
-              cursor: 0,
-              live: false,
-              buffered: feed?.buffered ?? 0,
-            });
-          yield* jobs.schedule(jobId(target), 0);
-          return "pending" as const;
-        }),
-      ),
+    start: (target: string, ref: SourceRef, waitMillis = 0) =>
+      Effect.gen(function* () {
+        const started = yield* storage.exclusive(
+          Effect.gen(function* () {
+            yield* trace("start", { key: host.key, target });
+            if (target !== host.target()) {
+              yield* stale(target);
+              // An older generation's run: superseded, nothing to wait for.
+              return "settled" as const;
+            }
+            if (yield* settled(target)) return "settled" as const;
+            yield* follow(target, ref);
+            return "pending" as const;
+          }),
+        );
+        if (started === "settled") return started;
+        yield* jobs.schedule(jobId(target), 0);
+        if (waitMillis <= 0) return started;
+        // Work on it here, rather than wait for an alarm to run the job: read its
+        // source's log a page at a time until it has its history, or time is up.
+        const until = (yield* Clock.currentTimeMillis) + waitMillis;
+        while (true) {
+          yield* merge(target);
+          if (yield* settled(target)) return "settled" as const;
+          if ((yield* Clock.currentTimeMillis) >= until) return "pending" as const;
+          yield* Effect.sleep(`${WAIT_PAUSE_MS} millis`);
+        }
+      }),
 
     ready: (target: string) =>
       storage.exclusive(
@@ -1215,67 +1363,7 @@ export const makeConsumer = (
       ),
 
     /** The merge job for one target. */
-    merge: (target: string) =>
-      Effect.gen(function* () {
-        // Has its history: tell its leaf (again, after a failed attempt), even once done.
-        const reported = yield* report(target).pipe(
-          Effect.as(true),
-          Effect.catchCause(() => Effect.succeed(false)),
-        );
-        if (!reported) return yield* retry.later(jobId(target), RETRY_MS);
-        const backfill = yield* storage.get<Backfill>(backfillKey(target));
-        if (!backfill) return;
-        if (!backfill.ready) {
-          // A key with sources is told when discovery is complete; ask the directory only
-          // rarely, as a safety net. One fed only live has no source to tell it: it asks.
-          const pulling =
-            (yield* storage.list({ prefix: pullingPrefix(target), limit: 1 })).length > 0;
-          yield* trace("waiting", { key: host.key, target, pulling });
-          if (pulling && !(yield* storage.get(`bf:asked:${T(target)}`))) {
-            yield* storage.put({ [`bf:asked:${T(target)}`]: true });
-            return yield* jobs.schedule(jobId(target), SAFETY_POLL_MS);
-          }
-          const asked = yield* askPhase(target, backfill).pipe(
-            Effect.catchCause(() => Effect.succeed(undefined)),
-          );
-          if (asked === undefined) return yield* retry.later(jobId(target), RETRY_MS);
-          const { phase, ask } = asked;
-          const ready = phase === "ready" || phase === "complete";
-          yield* storage.exclusive(
-            Effect.gen(function* () {
-              const current = yield* storage.get<Backfill>(backfillKey(target));
-              if (current)
-                yield* storage.put({
-                  [backfillKey(target)]: { ...current, ready: current.ready || ready, ask },
-                });
-            }),
-          );
-          // Its sources tell a key with history when it's ready: it asks again only
-          // rarely, so a wide backfill never polls the directory hard.
-          if (!ready)
-            return yield* jobs.schedule(
-              jobId(target),
-              ask !== backfill.ask ? 0 : pulling ? SAFETY_POLL_MS : limits.pollMillis,
-            );
-        }
-        const outcome = yield* applyBuffered(target);
-        yield* trace("merge", { key: host.key, target, outcome });
-        if (host.after) yield* host.after;
-        if (outcome === "done" || outcome === "waiting") {
-          // The key's history is complete: it tells its leaf on the next run.
-          if ((yield* storage.get(reportKey(target))) !== undefined)
-            return yield* jobs.schedule(jobId(target), 0);
-          return yield* retry.clear(jobId(target));
-        }
-        // A remote failure never fails the job (which a durable callback would retry
-        // with a growing delay, then park): it asks again after a fixed wait.
-        const failed = outcome === "starved" ? yield* pullStarved(target) : false;
-        if ((yield* storage.get(reportKey(target))) !== undefined)
-          yield* report(target).pipe(Effect.catchCause(() => Effect.void));
-        if (failed) return yield* retry.later(jobId(target), RETRY_MS);
-        yield* retry.clear(jobId(target));
-        yield* jobs.schedule(jobId(target), 0);
-      }),
+    merge,
 
     /** Is a backfill of `target` still running on this key? */
     backfilling: (target: string) =>
@@ -1490,34 +1578,7 @@ export const makeNode = (
         limit: limits.nodePage,
       });
       let stale = false;
-      const plan = yield* planFor(target);
       for (const [row, ref] of rows) {
-        if (plan?.singleSource === true) {
-          // Its key reads its log itself: start it, and wait for it to report.
-          const started = yield* net.consumer
-            .start(target, ref.id, ref)
-            .pipe(Effect.catchCause(() => Effect.succeed("stale" as const)));
-          if (started === "stale") {
-            stale = true;
-            continue;
-          }
-          yield* storage.exclusive(
-            Effect.gen(function* () {
-              yield* storage.delete([row]);
-              const current = yield* getSweep(target);
-              if (started === "settled")
-                yield* storage.delete([`${unsettledPrefix(target)}${refKey(ref)}`]);
-              else if (
-                current?.phase !== "complete" &&
-                !current?.reported &&
-                !(yield* storage.get(settledKey(target, ref)))
-              )
-                yield* storage.put({ [`${unsettledPrefix(target)}${refKey(ref)}`]: ref });
-              yield* settle(path, target);
-            }),
-          );
-          continue;
-        }
         const scanned = yield* net.source
           .scan(ref, target)
           .pipe(Effect.catchCause(() => Effect.succeed("stale" as const)));
@@ -1553,19 +1614,6 @@ export const makeNode = (
       if (stale) return yield* retry.later(`late:${target}`, limits.staleRetryMillis);
       yield* retry.clear(`late:${target}`);
       if (rows.length > 0) yield* jobs.schedule(`late:${target}`, 0);
-    });
-
-  /**
-   * A consumer keyed by its source: start the instance's own key, which reads the
-   * instance's log itself (whatever code the instance runs), and wait for it to
-   * report that it has its history. Starting is idempotent: a key that has its
-   * history already (live deliveries alone can complete one) answers `settled`.
-   */
-  const startKey = (target: string, ref: SourceRef) =>
-    Effect.gen(function* () {
-      if ((yield* storage.get(settledKey(target, ref))) !== undefined) return "done" as const;
-      const started = yield* net.consumer.start(target, ref.id, ref);
-      return started === "settled" ? ("done" as const) : ("pending" as const);
     });
 
   const begin = (path: string, target: string, phase: Sweep["phase"]) =>
@@ -1732,15 +1780,13 @@ export const makeNode = (
         }),
       );
       const call = (ref: SourceRef): Effect.Effect<"done" | "more" | "stale" | "pending"> =>
-        plan?.singleSource === true
-          ? startKey(target, ref)
-          : sweep.phase === "discover"
-            ? Effect.map(net.source.scan(ref, target), (result) =>
-                result === "discovered" ? "done" : result,
-              )
-            : Effect.map(net.source.ready(ref, target, path), (result) =>
-                result === "settled" ? "done" : result,
-              );
+        sweep.phase === "discover"
+          ? Effect.map(net.source.scan(ref, target), (result) =>
+              result === "discovered" ? "done" : result,
+            )
+          : Effect.map(net.source.ready(ref, target, path), (result) =>
+              result === "settled" ? "done" : result,
+            );
       const results = yield* Effect.forEach(
         batch,
         (ref) =>
@@ -1849,8 +1895,12 @@ export const makeNode = (
       storage.exclusive(
         Effect.gen(function* () {
           const known = (yield* storage.get<Array<string>>("known")) ?? [];
-          const fresh = targets.filter((target) => !known.includes(target));
           for (const target of targets) yield* keepPlan(target, plans[target]);
+          // A consumer keyed by its source is backfilled by a relay run, not a sweep.
+          const swept: Array<string> = [];
+          for (const target of targets)
+            if ((yield* planFor(target))?.singleSource !== true) swept.push(target);
+          const fresh = swept.filter((target) => !known.includes(target));
           if (fresh.length === 0) return;
           yield* keepPath(path);
           yield* storage.put({ known: [...known, ...fresh] });
@@ -1898,6 +1948,28 @@ export const makeNode = (
         // An instance reports to the leaf it first listed in: pass it down to where it is now.
         if (split) yield* net.node.settled(childFor(path, ref), target, ref);
       }),
+    list: (path: string, after: string | undefined) =>
+      storage.exclusive(
+        Effect.gen(function* () {
+          yield* keepPath(path);
+          const rows = yield* storage.list<SourceRef>({
+            prefix: "i:",
+            ...(after === undefined ? {} : { startAfter: after }),
+            limit: LIST_PAGE,
+          });
+          // Its own rows before its children: a row a split moves on is copied to the
+          // child before it leaves here, so a reader that lists the child later finds it.
+          const children =
+            after === undefined
+              ? (yield* storage.list({ prefix: "c:" })).map(([key]) => key.slice(2))
+              : [];
+          return {
+            rows: rows.map(([, ref]) => ref),
+            children,
+            ...(rows.length === LIST_PAGE ? { next: rows[rows.length - 1]![0] } : {}),
+          } satisfies Listing;
+        }),
+      ),
     phase: (_path: string, target: string) =>
       Effect.gen(function* () {
         if (yield* storage.get(`done:${enc(target)}`)) return "complete" as Phase;
@@ -1955,6 +2027,131 @@ export const makeNode = (
 };
 
 export type Node = ReturnType<typeof makeNode>;
+
+// ---------------------------------------------------------------- relay
+
+/**
+ * How many calls a relay makes at once: Cloudflare runs at most six outgoing
+ * calls per invocation, so a wider relay would queue its own calls.
+ */
+export const RELAY_FANOUT = 6;
+
+/** How long a key works on its history before it answers a relay that is waiting for it. */
+const RELAY_KEY_WAIT_MS = 10_000;
+
+/** How long a relay waits before it calls again after a failure. */
+const RELAY_RETRY_MS = 250;
+
+/**
+ * A relay: one node of the tree a run of a consumer keyed by its source fans
+ * out over, each its own object. Given more than {@link RELAY_FANOUT} items it
+ * splits them among as many child relays; given one directory node, it lists
+ * it and works through what it lists; given a few, it starts their keys
+ * itself and hands each directory node to a child relay. Every relay answers
+ * once everything under it is done, so the run is done when the first one
+ * answers, after about log6 of the instances levels of calls.
+ *
+ * It keeps no state: a relay that fails is called again, and a key already
+ * started answers at once. It reads the directory, which any code serves, and
+ * starts keys, which are new with the deploy: so a run never waits for an
+ * existing object to run the deployed code.
+ */
+export const makeRelay = (net: Network) => {
+  /** Keep at `effect` until it succeeds or `until` (epoch ms) has passed; `undefined` then. */
+  const persist = <A>(effect: Effect.Effect<A>, until: number): Effect.Effect<A | undefined> =>
+    Effect.gen(function* () {
+      while (true) {
+        const result = yield* effect.pipe(
+          Effect.map((value) => ({ value })),
+          Effect.catchCause(() => Effect.succeed(undefined)),
+        );
+        if (result !== undefined) return result.value;
+        if ((yield* Clock.currentTimeMillis) + RELAY_RETRY_MS >= until) return undefined;
+        yield* Effect.sleep(`${RELAY_RETRY_MS} millis`);
+      }
+    });
+
+  /** Every page a directory node lists: its instances' keys, and its children. */
+  const listed = (path: string, run: RelayRun, until: number) =>
+    Effect.gen(function* () {
+      const items: Array<RelayItem> = [];
+      let after: string | undefined;
+      while (true) {
+        const page = yield* persist(net.node.list(path, after), until);
+        if (page === undefined) return undefined;
+        for (const ref of page.rows) items.push({ ref });
+        // The root lists one subtree per source: only those the consumer reads.
+        const sources = path === "" ? run.plan.sources : undefined;
+        for (const child of page.children)
+          if (sources === undefined || sources.includes(sourceOfPath(child) ?? ""))
+            items.push({ path: child });
+        if (page.next === undefined) return items;
+        after = page.next;
+      }
+    });
+
+  /** Start a key and keep at it until it has its history, or time is up. */
+  const key = (run: RelayRun, ref: SourceRef, until: number) =>
+    Effect.gen(function* () {
+      while (true) {
+        const left = until - (yield* Clock.currentTimeMillis);
+        const started = yield* persist(
+          net.consumer.start(
+            run.target,
+            ref.id,
+            ref,
+            Math.max(0, Math.min(RELAY_KEY_WAIT_MS, left)),
+          ),
+          until,
+        );
+        if (started === "settled") return true;
+        if ((yield* Clock.currentTimeMillis) >= until) return false;
+      }
+    });
+
+  const run = (
+    name: string,
+    relayRun: RelayRun,
+    items: ReadonlyArray<RelayItem>,
+  ): Effect.Effect<boolean> =>
+    Effect.gen(function* () {
+      const until = (yield* Clock.currentTimeMillis) + relayRun.waitMillis;
+      const child = (suffix: string, chunk: ReadonlyArray<RelayItem>) =>
+        Effect.map(
+          persist(net.relay.run(`${name}${suffix}`, relayRun, chunk), until),
+          (done) => done === true,
+        );
+      if (items.length > RELAY_FANOUT) {
+        // Too many to call at once: split them among child relays.
+        const size = Math.ceil(items.length / RELAY_FANOUT);
+        const chunks = Array.from({ length: RELAY_FANOUT }, (_, i) =>
+          items.slice(i * size, (i + 1) * size),
+        ).filter((chunk) => chunk.length > 0);
+        const done = yield* Effect.forEach(chunks, (chunk, i) => child(`/${i}`, chunk), {
+          concurrency: RELAY_FANOUT,
+        });
+        return done.every(Boolean);
+      }
+      const only = items.length === 1 ? items[0]! : undefined;
+      if (only !== undefined && "path" in only) {
+        // One directory node: list it, and work through what it lists here.
+        const next = yield* listed(only.path, relayRun, until);
+        if (next === undefined) return false;
+        yield* trace("relay-listed", { name, path: only.path, items: next.length });
+        return yield* run(name, relayRun, next);
+      }
+      const done = yield* Effect.forEach(
+        items,
+        (item, i) => ("path" in item ? child(`.${i}`, [item]) : key(relayRun, item.ref, until)),
+        { concurrency: RELAY_FANOUT },
+      );
+      return done.every(Boolean);
+    });
+
+  return { run };
+};
+
+export type Relay = ReturnType<typeof makeRelay>;
 
 // ---------------------------------------------------------------- host glue
 

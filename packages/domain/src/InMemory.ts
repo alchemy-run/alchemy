@@ -210,6 +210,7 @@ export const make = (
       settled: (path, target, ref) => node(path).settled(path, target, ref),
       phase: (path, target) => node(path).phase(path, target),
       status: (path) => node(path).status(path),
+      list: (path, after) => node(path).list(path, after),
     },
     source: {
       // A source no longer in the model has nothing to give.
@@ -247,12 +248,29 @@ export const make = (
         Effect.suspend(() => consumerRole(target, key)?.source(target, stream, ref) ?? Effect.void),
       ready: (target, key) =>
         Effect.suspend(() => consumerRole(target, key)?.ready(target) ?? Effect.void),
-      start: (target, key, ref) =>
+      start: (target, key, ref, waitMillis) =>
         Effect.suspend(
-          () => consumerRole(target, key)?.start(target, ref) ?? Effect.succeed("settled" as const),
+          () =>
+            consumerRole(target, key)?.start(target, ref, waitMillis) ??
+            Effect.succeed("settled" as const),
         ),
     },
+    relay: { run: (name, run, items) => Effect.suspend(() => relay.run(name, run, items)) },
   };
+  const relay = Backfill.makeRelay(net);
+  /** Consumers keyed by their source whose run has found every key with its history. */
+  const relayed = new Set<string>();
+  /**
+   * One pass of a relay run over the directory: it starts every key, and is
+   * done once each has its history. Keys work on the work queue between passes.
+   */
+  const relayPass = (target: string, plan: Backfill.Plan) =>
+    Effect.gen(function* () {
+      if (relayed.has(target)) return true;
+      const done = yield* relay.run(target, { target, plan, waitMillis: 0 }, [{ path: "" }]);
+      if (done) relayed.add(target);
+      return done;
+    });
   /** List an instance in the directory; its first commit waits for it. */
   const register = (ref: Backfill.SourceRef) =>
     node(Backfill.leafOf(ref)).register(Backfill.leafOf(ref), ref);
@@ -409,6 +427,7 @@ export const make = (
               ref: { source: kit.name, id },
               targets: () => kit.targets,
               model: () => model,
+              singleSource: (target) => planOf(target)?.singleSource === true,
               log: (after, limit) =>
                 Effect.sync(() =>
                   instance(id)
@@ -707,6 +726,7 @@ export const make = (
               ref: { source: kit.name, id: key },
               targets: () => kit.targets,
               model: () => model,
+              singleSource: (target) => planOf(target)?.singleSource === true,
               log: (after, limit) =>
                 Effect.map(entries, (all) =>
                   all.filter((entry) => entry.seq > after).slice(0, limit),
@@ -1048,16 +1068,24 @@ export const make = (
         planOf = plans;
         if (targets.length === 0) return Effect.void;
         const announced: Record<string, Backfill.Plan> = {};
+        const relays: Array<Effect.Effect<void>> = [];
         for (const target of targets) {
           const plan = plans(target);
           if (plan !== undefined) announced[target] = plan;
+          if (plan?.singleSource === true) relays.push(Effect.asVoid(relayPass(target, plan)));
         }
-        return net.node.news("00", targets, announced);
+        return net.node.news("00", targets, announced).pipe(Effect.andThen(enqueueWork(relays)));
       }),
     history: (target) =>
-      Effect.map(net.node.status(""), (status) => ({
-        complete: status.complete.includes(target),
-      })),
+      Effect.suspend(() => {
+        // Keyed by its source: complete once a pass finds every key with its history.
+        const plan = planOf(target);
+        if (plan?.singleSource === true)
+          return Effect.map(relayPass(target, plan), (complete) => ({ complete }));
+        return Effect.map(net.node.status(""), (status) => ({
+          complete: status.complete.includes(target),
+        }));
+      }),
   });
 
   return {
