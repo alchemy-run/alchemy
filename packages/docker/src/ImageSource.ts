@@ -586,15 +586,23 @@ export const makeContainerImageSource = Effect.gen(function* () {
     },
   ) {
     const credentials = yield* target.credentials;
-    yield* docker.image.build({
-      tag: options.imageUri,
-      context: options.context,
-      file: options.dockerfile,
-      platform: options.platform,
-      "build-arg": options.build?.args,
-      secrets: options.build?.secrets,
-    });
-    yield* push(options.imageUri, credentials, options.platform);
+    yield* docker.image.build(
+      {
+        tag: options.imageUri,
+        context: options.context,
+        file: options.dockerfile,
+        platform: options.platform,
+        "build-arg": options.build?.args,
+        secrets: options.build?.secrets,
+      },
+      undefined,
+      credentials,
+    );
+    // With credentials the build publishes the image itself, as Cloudflare
+    // containers do: a remote builder keeps no local image to push.
+    if (credentials === undefined) {
+      yield* push(options.imageUri, credentials, options.platform);
+    }
     return options.imageUri;
   });
 
