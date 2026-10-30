@@ -954,9 +954,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("PersistentResource", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPersistentResource (aiplatform.projects.locations.persistentResources.get): PersistentResource: a persistent resource keeps a VM pool running for ~15 minutes to provision (slow-gated in PersistentResource.test.ts)",
-        () => Effect.void,
+      test.provider(
+        "GetPersistentResource (aiplatform.projects.locations.persistentResources.get)",
+        () => probe("GetPersistentResource", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

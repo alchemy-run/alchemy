@@ -1373,33 +1373,57 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("NodeGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "AddNodeGroupNodes (compute.nodeGroups.addNodes): NodeGroup: a sole-tenant node bills for a whole host (several dollars per hour)",
-        () => Effect.void,
+      test.provider(
+        "AddNodeGroupNodes (compute.nodeGroups.addNodes)",
+        () => probe("AddNodeGroupNodes", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteNodeGroupNodes (compute.nodeGroups.deleteNodes): NodeGroup: a sole-tenant node bills for a whole host (several dollars per hour)",
-        () => Effect.void,
+      test.provider(
+        "DeleteNodeGroupNodes (compute.nodeGroups.deleteNodes)",
+        () => probe("DeleteNodeGroupNodes", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetNodeGroup (compute.nodeGroups.get): NodeGroup: a sole-tenant node bills for a whole host (several dollars per hour)",
-        () => Effect.void,
+      test.provider("GetNodeGroup (compute.nodeGroups.get)", () => probe("GetNodeGroup", true), {
+        tags: ["provider:gcp", "provider:gcp:compute", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "ListNodeGroupNodes (compute.nodeGroups.listNodes)",
+        () => probe("ListNodeGroupNodes", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListNodeGroupNodes (compute.nodeGroups.listNodes): NodeGroup: a sole-tenant node bills for a whole host (several dollars per hour)",
-        () => Effect.void,
+      test.provider(
+        "PerformNodeGroupMaintenance (compute.nodeGroups.performMaintenance)",
+        () => probe("PerformNodeGroupMaintenance", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PerformNodeGroupMaintenance (compute.nodeGroups.performMaintenance): NodeGroup: a sole-tenant node bills for a whole host (several dollars per hour)",
-        () => Effect.void,
+      test.provider(
+        "SetNodeGroupNodeTemplate (compute.nodeGroups.setNodeTemplate)",
+        () => probe("SetNodeGroupNodeTemplate", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SetNodeGroupNodeTemplate (compute.nodeGroups.setNodeTemplate): NodeGroup: a sole-tenant node bills for a whole host (several dollars per hour)",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "SimulateNodeGroupMaintenanceEvent (compute.nodeGroups.simulateMaintenanceEvent): NodeGroup: a sole-tenant node bills for a whole host (several dollars per hour)",
-        () => Effect.void,
+      test.provider(
+        "SimulateNodeGroupMaintenanceEvent (compute.nodeGroups.simulateMaintenanceEvent)",
+        () => probe("SimulateNodeGroupMaintenanceEvent", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:compute", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

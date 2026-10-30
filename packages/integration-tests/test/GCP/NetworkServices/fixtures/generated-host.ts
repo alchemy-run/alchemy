@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 import {
+  ProbeAgentGateway,
   ProbeAuthzExtension,
   ProbeEndpointPolicy,
   ProbeGateway,
@@ -27,76 +28,79 @@ export default class NetworkServicesGeneratedHost extends GCP.Function<NetworkSe
   "NetworkServicesGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.NetworkServices.GetAuthzExtension(ProbeAuthzExtension);
-    const p1 = yield* GCP.NetworkServices.GetEndpointPolicy(ProbeEndpointPolicy);
-    const p2 = yield* GCP.NetworkServices.GetGateway(ProbeGateway);
-    const p3 = yield* GCP.NetworkServices.GetGatewayRouteView(ProbeGateway);
-    const p4 = yield* GCP.NetworkServices.GetGrpcRoute(ProbeGrpcRoute);
-    const p5 = yield* GCP.NetworkServices.GetHttpRoute(ProbeHttpRoute);
-    const p6 = yield* GCP.NetworkServices.GetMeshe(ProbeMesh);
-    const p7 = yield* GCP.NetworkServices.GetMesheRouteView(ProbeMesh);
-    const p8 = yield* GCP.NetworkServices.GetServiceBinding(ProbeServiceBinding);
-    const p9 = yield* GCP.NetworkServices.GetServiceLbPolicy(ProbeServiceLbPolicy);
-    const p10 = yield* GCP.NetworkServices.GetTcpRoute(ProbeTcpRoute);
-    const p11 = yield* GCP.NetworkServices.GetTlsRoute(ProbeTlsRoute);
-    const p12 = yield* GCP.NetworkServices.ListAgentGateways();
-    const p13 = yield* GCP.NetworkServices.ListAuthzExtensions();
-    const p14 = yield* GCP.NetworkServices.ListEndpointPolicies();
-    const p15 = yield* GCP.NetworkServices.ListGatewayRouteViews(ProbeGateway);
-    const p16 = yield* GCP.NetworkServices.ListGateways();
-    const p17 = yield* GCP.NetworkServices.ListGrpcRoutes();
-    const p18 = yield* GCP.NetworkServices.ListHttpRoutes();
-    const p19 = yield* GCP.NetworkServices.ListLbEdgeExtensions();
-    const p20 = yield* GCP.NetworkServices.ListLbRouteExtensions();
-    const p21 = yield* GCP.NetworkServices.ListLbTrafficExtensions();
-    const p22 = yield* GCP.NetworkServices.ListMesheRouteViews(ProbeMesh);
-    const p23 = yield* GCP.NetworkServices.ListMeshes();
-    const p24 = yield* GCP.NetworkServices.ListServiceBindings();
-    const p25 = yield* GCP.NetworkServices.ListServiceLbPolicies();
-    const p26 = yield* GCP.NetworkServices.ListTcpRoutes();
-    const p27 = yield* GCP.NetworkServices.ListTlsRoutes();
-    const p28 = yield* GCP.NetworkServices.ListWasmPlugins();
+    const p0 = yield* GCP.NetworkServices.GetAgentGateway(ProbeAgentGateway);
+    const p1 = yield* GCP.NetworkServices.GetAuthzExtension(ProbeAuthzExtension);
+    const p2 = yield* GCP.NetworkServices.GetEndpointPolicy(ProbeEndpointPolicy);
+    const p3 = yield* GCP.NetworkServices.GetGateway(ProbeGateway);
+    const p4 = yield* GCP.NetworkServices.GetGatewayRouteView(ProbeGateway);
+    const p5 = yield* GCP.NetworkServices.GetGrpcRoute(ProbeGrpcRoute);
+    const p6 = yield* GCP.NetworkServices.GetHttpRoute(ProbeHttpRoute);
+    const p7 = yield* GCP.NetworkServices.GetMeshe(ProbeMesh);
+    const p8 = yield* GCP.NetworkServices.GetMesheRouteView(ProbeMesh);
+    const p9 = yield* GCP.NetworkServices.GetServiceBinding(ProbeServiceBinding);
+    const p10 = yield* GCP.NetworkServices.GetServiceLbPolicy(ProbeServiceLbPolicy);
+    const p11 = yield* GCP.NetworkServices.GetTcpRoute(ProbeTcpRoute);
+    const p12 = yield* GCP.NetworkServices.GetTlsRoute(ProbeTlsRoute);
+    const p13 = yield* GCP.NetworkServices.ListAgentGateways();
+    const p14 = yield* GCP.NetworkServices.ListAuthzExtensions();
+    const p15 = yield* GCP.NetworkServices.ListEndpointPolicies();
+    const p16 = yield* GCP.NetworkServices.ListGatewayRouteViews(ProbeGateway);
+    const p17 = yield* GCP.NetworkServices.ListGateways();
+    const p18 = yield* GCP.NetworkServices.ListGrpcRoutes();
+    const p19 = yield* GCP.NetworkServices.ListHttpRoutes();
+    const p20 = yield* GCP.NetworkServices.ListLbEdgeExtensions();
+    const p21 = yield* GCP.NetworkServices.ListLbRouteExtensions();
+    const p22 = yield* GCP.NetworkServices.ListLbTrafficExtensions();
+    const p23 = yield* GCP.NetworkServices.ListMesheRouteViews(ProbeMesh);
+    const p24 = yield* GCP.NetworkServices.ListMeshes();
+    const p25 = yield* GCP.NetworkServices.ListServiceBindings();
+    const p26 = yield* GCP.NetworkServices.ListServiceLbPolicies();
+    const p27 = yield* GCP.NetworkServices.ListTcpRoutes();
+    const p28 = yield* GCP.NetworkServices.ListTlsRoutes();
+    const p29 = yield* GCP.NetworkServices.ListWasmPlugins();
     return {
       fetch: serveProbes({
-        GetAuthzExtension: probeOutcome(Retry.none(p0({} as never))),
-        GetEndpointPolicy: probeOutcome(Retry.none(p1({} as never))),
-        GetGateway: probeOutcome(Retry.none(p2({} as never))),
+        GetAgentGateway: probeOutcome(Retry.none(p0({} as never))),
+        GetAuthzExtension: probeOutcome(Retry.none(p1({} as never))),
+        GetEndpointPolicy: probeOutcome(Retry.none(p2({} as never))),
+        GetGateway: probeOutcome(Retry.none(p3({} as never))),
         GetGatewayRouteView: probeOutcome(
-          Retry.none(p3({ routeView: "alchemy-missing" } as never)),
+          Retry.none(p4({ routeView: "alchemy-missing" } as never)),
         ),
-        GetGrpcRoute: probeOutcome(Retry.none(p4({} as never))),
-        GetHttpRoute: probeOutcome(Retry.none(p5({} as never))),
-        GetMeshe: probeOutcome(Retry.none(p6({} as never))),
-        GetMesheRouteView: probeOutcome(Retry.none(p7({ routeView: "alchemy-missing" } as never))),
-        GetServiceBinding: probeOutcome(Retry.none(p8({} as never))),
-        GetServiceLbPolicy: probeOutcome(Retry.none(p9({} as never))),
-        GetTcpRoute: probeOutcome(Retry.none(p10({} as never))),
-        GetTlsRoute: probeOutcome(Retry.none(p11({} as never))),
-        ListAgentGateways: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
-        ListAuthzExtensions: probeOutcome(Retry.none(p13({ location: "us-central1" } as never))),
-        ListEndpointPolicies: probeOutcome(Retry.none(p14({ location: "us-central1" } as never))),
-        ListGatewayRouteViews: probeOutcome(Retry.none(p15({} as never))),
-        ListGateways: probeOutcome(Retry.none(p16({ location: "us-central1" } as never))),
-        ListGrpcRoutes: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
-        ListHttpRoutes: probeOutcome(Retry.none(p18({ location: "us-central1" } as never))),
-        ListLbEdgeExtensions: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
-        ListLbRouteExtensions: probeOutcome(Retry.none(p20({ location: "us-central1" } as never))),
+        GetGrpcRoute: probeOutcome(Retry.none(p5({} as never))),
+        GetHttpRoute: probeOutcome(Retry.none(p6({} as never))),
+        GetMeshe: probeOutcome(Retry.none(p7({} as never))),
+        GetMesheRouteView: probeOutcome(Retry.none(p8({ routeView: "alchemy-missing" } as never))),
+        GetServiceBinding: probeOutcome(Retry.none(p9({} as never))),
+        GetServiceLbPolicy: probeOutcome(Retry.none(p10({} as never))),
+        GetTcpRoute: probeOutcome(Retry.none(p11({} as never))),
+        GetTlsRoute: probeOutcome(Retry.none(p12({} as never))),
+        ListAgentGateways: probeOutcome(Retry.none(p13({ location: "us-central1" } as never))),
+        ListAuthzExtensions: probeOutcome(Retry.none(p14({ location: "us-central1" } as never))),
+        ListEndpointPolicies: probeOutcome(Retry.none(p15({ location: "us-central1" } as never))),
+        ListGatewayRouteViews: probeOutcome(Retry.none(p16({} as never))),
+        ListGateways: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
+        ListGrpcRoutes: probeOutcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListHttpRoutes: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
+        ListLbEdgeExtensions: probeOutcome(Retry.none(p20({ location: "us-central1" } as never))),
+        ListLbRouteExtensions: probeOutcome(Retry.none(p21({ location: "us-central1" } as never))),
         ListLbTrafficExtensions: probeOutcome(
-          Retry.none(p21({ location: "us-central1" } as never)),
+          Retry.none(p22({ location: "us-central1" } as never)),
         ),
-        ListMesheRouteViews: probeOutcome(Retry.none(p22({} as never))),
-        ListMeshes: probeOutcome(Retry.none(p23({ location: "us-central1" } as never))),
-        ListServiceBindings: probeOutcome(Retry.none(p24({ location: "us-central1" } as never))),
-        ListServiceLbPolicies: probeOutcome(Retry.none(p25({ location: "us-central1" } as never))),
-        ListTcpRoutes: probeOutcome(Retry.none(p26({ location: "us-central1" } as never))),
-        ListTlsRoutes: probeOutcome(Retry.none(p27({ location: "us-central1" } as never))),
-        ListWasmPlugins: probeOutcome(Retry.none(p28({ location: "us-central1" } as never))),
+        ListMesheRouteViews: probeOutcome(Retry.none(p23({} as never))),
+        ListMeshes: probeOutcome(Retry.none(p24({ location: "us-central1" } as never))),
+        ListServiceBindings: probeOutcome(Retry.none(p25({ location: "us-central1" } as never))),
+        ListServiceLbPolicies: probeOutcome(Retry.none(p26({ location: "us-central1" } as never))),
+        ListTcpRoutes: probeOutcome(Retry.none(p27({ location: "us-central1" } as never))),
+        ListTlsRoutes: probeOutcome(Retry.none(p28({ location: "us-central1" } as never))),
+        ListWasmPlugins: probeOutcome(Retry.none(p29({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.NetworkServices.GetAgentGatewayHttp,
           GCP.NetworkServices.GetAuthzExtensionHttp,
           GCP.NetworkServices.GetEndpointPolicyHttp,
           GCP.NetworkServices.GetGatewayHttp,

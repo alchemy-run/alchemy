@@ -561,3 +561,16 @@ export const RegionInstantSnapshotGroup = Effect.gen(function* () {
     ),
   });
 });
+
+/** A sole-tenant node group with no nodes yet (nothing bills until a node is added). */
+export const ProbeNodeGroup = Effect.gen(function* () {
+  const template = yield* GCP.Compute.NodeTemplate("ProbeNodeTemplate", {
+    region: "us-central1",
+    nodeType: "n2-node-80-640",
+  });
+  return yield* GCP.Compute.NodeGroup("ProbeNodeGroup", {
+    zone: "us-central1-a",
+    nodeTemplate: template.nodeTemplateName,
+    initialNodeCount: 0,
+  });
+});

@@ -114,3 +114,9 @@ export const ProbeTlsRoute = Effect.gen(function* () {
     ],
   });
 });
+
+/** A Google-managed agent gateway (~7 minutes to create and delete). */
+export const ProbeAgentGateway = GCP.NetworkServices.AgentGateway("ProbeAgentGateway", {
+  location: "us-central1",
+  googleManaged: { governedAccessPath: "AGENT_TO_ANYWHERE" },
+});

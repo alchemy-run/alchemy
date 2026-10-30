@@ -68,7 +68,8 @@
       "EndpointPolicy": "ProbeEndpointPolicy",
       "TcpRoute": "ProbeTcpRoute",
       "AuthzExtension": "ProbeAuthzExtension",
-      "TlsRoute": "ProbeTlsRoute"
+      "TlsRoute": "ProbeTlsRoute",
+      "AgentGateway": "ProbeAgentGateway"
     },
     "untestable": {
       "LbEdgeExtension": "Edge extensions need a WasmPlugin with a main version; the fixture's bare plugin makes create fail with BadRequest \"MAIN_VERSION_ID_EMPTY: Main (GCP_TEST_LB_EDGE_EXTENSION)",
@@ -77,8 +78,7 @@
       "MulticastConsumerAssociation": "Multicast needs a multicast domain activation in the project; without one create fails with BadRequest \"The request was invalid: missing (GCP_TEST_MULTICAST)",
       "MulticastGroupConsumerActivation": "Multicast needs a multicast domain activation in the project; without one create fails with BadRequest \"The request was invalid: missing (GCP_TEST_MULTICAST)",
       "WasmPlugin": "a plugin's image is a .wasm artifact uploaded to Artifact Registry through the upload API first; WasmPlugin.test.ts covers it",
-      "WasmPluginsVersion": "a plugin's image is a .wasm artifact uploaded to Artifact Registry through the upload API first; WasmPlugin.test.ts covers it",
-      "AgentGateway": "an agent gateway takes ~7 minutes to create and delete (slow-gated in AgentGateway.test.ts)"
+      "WasmPluginsVersion": "a plugin's image is a .wasm artifact uploaded to Artifact Registry through the upload API first; WasmPlugin.test.ts covers it"
     }
   }
 }

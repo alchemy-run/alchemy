@@ -397,3 +397,15 @@ export const ProbeRagCorpora = Effect.gen(function* () {
     displayName: "alchemy-probe",
   });
 });
+
+/** A one-machine persistent training pool (~15 minutes to provision). */
+export const ProbePersistentResource = GCP.AIPlatform.PersistentResource(
+  "ProbePersistentResource",
+  {
+    location,
+    displayName: "alchemy-probe",
+    resourcePools: [
+      { id: "worker", replicaCount: "1", machineSpec: { machineType: "n1-standard-4" } },
+    ],
+  },
+);

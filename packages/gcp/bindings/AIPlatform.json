@@ -196,7 +196,8 @@
       "BatchPredictionJob": "ProbeBatchPredictionJob",
       "EvaluationRun": "ProbeEvaluationRun",
       "SemanticGovernancePolicy": "ProbeSemanticGovernancePolicy",
-      "RagCorpora": "ProbeRagCorpora"
+      "RagCorpora": "ProbeRagCorpora",
+      "PersistentResource": "ProbePersistentResource"
     },
     "untestable": {
       "Agent": "AgentService is v1beta1-only; the v1 SDK gets \"This API version is not supported by AgentService\"",
@@ -206,8 +207,7 @@
       "OnlineEvaluator": "an evaluator needs an existing evaluation metric (GCP_TEST_AIPLATFORM_EVALUATION_METRIC)",
       "SpecialistPool": "Vertex AI data labeling is shut down (\"Data labeling service is shutdown\")",
       "TuningJob": "the tuning service agent can't read the public sample dataset (gs://cloud-samples-data/ai-platform/tuning/sft_train.jsonl)",
-      "NotebookExecutionJob": "a notebook execution provisions a runtime VM for ~10 minutes (slow-gated in NotebookExecutionJob.test.ts)",
-      "PersistentResource": "a persistent resource keeps a VM pool running for ~15 minutes to provision (slow-gated in PersistentResource.test.ts)"
+      "NotebookExecutionJob": "a notebook execution provisions a runtime VM for ~10 minutes (slow-gated in NotebookExecutionJob.test.ts)"
     },
     "skip": {
       "ListNasJobNasTrialDetails": "trial details exist only once a NAS job runs trials; the probe job is cancelled before it starts any (running one bills accelerator hours)",

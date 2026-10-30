@@ -18,10 +18,10 @@
   "probes": {
     "resources": {
       "BackupVault": "ProbeBackupVault",
-      "BackupPlan": "ProbeBackupPlan"
+      "BackupPlan": "ProbeBackupPlan",
+      "ManagementServer": "ProbeManagementServer"
     },
     "untestable": {
-      "ManagementServer": "a management server takes well over 5 minutes to provision (slow-gated in ManagementServer.test.ts)",
       "BackupPlanAssociation": "an association needs a VM the vault's service agent can back up, and the first scheduled backup sits under the vault's minimum enforced retention (at least a day), which blocks deleting the vault; BackupPlanAssociation.test.ts covers the typed rejections"
     }
   },

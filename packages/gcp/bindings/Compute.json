@@ -615,7 +615,8 @@
       "PacketMirroring": "PacketMirroring",
       "RegionCompositeHealthCheck": "RegionCompositeHealthCheck",
       "InstantSnapshotGroup": "InstantSnapshotGroup",
-      "RegionInstantSnapshotGroup": "RegionInstantSnapshotGroup"
+      "RegionInstantSnapshotGroup": "RegionInstantSnapshotGroup",
+      "NodeGroup": "ProbeNodeGroup"
     },
     "untestable": {
       "FutureReservation": "the testing project is not eligible (412 FutureReservationsNotEligible)",
@@ -627,7 +628,6 @@
       "InterconnectAttachmentGroup": "needs Interconnect attachments",
       "InterconnectGroup": "needs physical Interconnects",
       "NetworkEdgeSecurityService": "needs Cloud Armor Managed Protection Plus",
-      "NodeGroup": "a sole-tenant node bills for a whole host (several dollars per hour)",
       "StoragePool": "a Hyperdisk storage pool bills for its provisioned capacity (10 TiB minimum)",
       "RegionHealthCheckService": "Health Check as a Service is allowlisted; the testing project is not",
       "RegionNotificationEndpoint": "Health Check as a Service is allowlisted; the testing project is not"

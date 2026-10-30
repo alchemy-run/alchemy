@@ -230,9 +230,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("ManagementServer", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetManagementServer (backupdr.projects.locations.managementServers.get): ManagementServer: a management server takes well over 5 minutes to provision (slow-gated in ManagementServer.test.ts)",
-        () => Effect.void,
+      test.provider(
+        "GetManagementServer (backupdr.projects.locations.managementServers.get)",
+        () => probe("GetManagementServer", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:backupdr", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

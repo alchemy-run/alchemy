@@ -26,3 +26,8 @@ export const ProbeBackupPlan = Effect.gen(function* () {
     ],
   });
 });
+
+/** A Backup and DR management console (well over 5 minutes to provision). */
+export const ProbeManagementServer = GCP.BackupDR.ManagementServer("ProbeManagementServer", {
+  description: "alchemy probe",
+});

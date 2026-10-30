@@ -65,9 +65,13 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("AgentGateway", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetAgentGateway (networkservices.projects.locations.agentGateways.get): AgentGateway: an agent gateway takes ~7 minutes to create and delete (slow-gated in AgentGateway.test.ts)",
-        () => Effect.void,
+      test.provider(
+        "GetAgentGateway (networkservices.projects.locations.agentGateways.get)",
+        () => probe("GetAgentGateway", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
