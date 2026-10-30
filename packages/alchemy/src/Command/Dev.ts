@@ -31,8 +31,8 @@ export interface DevProps extends CommandProps {
   /**
    * The port the command listens on. Alchemy sets `PORT` to it, over any
    * `env.PORT`, and the resource is ready once the port accepts a
-   * connection, however long that takes. Output isn't scanned for a URL, so `waitForUrl` has no
-   * effect: `url` is `http://localhost:<port>`.
+   * connection, however long that takes. Output isn't scanned for a URL,
+   * so `waitForUrl` has no effect: `url` is `http://localhost:<port>`.
    *
    * The resource fails if the command exits before the port opens, or if
    * another process already listens on the port when the command starts.
