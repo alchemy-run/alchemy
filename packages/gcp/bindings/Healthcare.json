@@ -77,5 +77,24 @@
       "roles/healthcare.fhirStoreAdmin",
       "roles/healthcare.fhirResourceEditor"
     ]
+  },
+  "suffix": {
+    "healthcare.projects.locations.datasets.fhirStores.fhir.read": ["/", "resourceId"],
+    "healthcare.projects.locations.datasets.fhirStores.fhir.update": ["/", "resourceId"],
+    "healthcare.projects.locations.datasets.fhirStores.fhir.patch": ["/", "resourceId"],
+    "healthcare.projects.locations.datasets.fhirStores.fhir.delete": ["/", "resourceId"],
+    "healthcare.projects.locations.datasets.fhirStores.fhir.history": ["/", "resourceId"],
+    "healthcare.projects.locations.datasets.fhirStores.fhir.Resource-purge": ["/", "resourceId"]
+  },
+  "permissions": {
+    "healthcare.projects.locations.datasets.fhirStores.fhir.read": "healthcare.fhirResources.get",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.update": "healthcare.fhirResources.update",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.patch": "healthcare.fhirResources.patch",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.delete": "healthcare.fhirResources.delete",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.history": "healthcare.fhirResources.get",
+    "healthcare.projects.locations.datasets.fhirStores.fhir.Resource-purge": "healthcare.fhirResources.purge"
+  },
+  "childFields": {
+    "fhir": "resourceType"
   }
 }

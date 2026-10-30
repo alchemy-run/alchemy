@@ -159,6 +159,12 @@ interface ServiceConfig extends Partial<ApiConfig> {
    */
   suffix?: Record<string, [string, string]>;
   /**
+   * Child collection → the request field naming its member, when the
+   * collection's singular isn't a good name: FHIR's `fhir/{type}` →
+   * `resourceType`.
+   */
+  childFields?: Record<string, string>;
+  /**
    * Method id → the attribute of the bound resource naming what the
    * permission is checked on, and that resource's IAM kind:
    * `{ "attribute": "topic", "iamKind": "pubsub.topic" }`.
@@ -578,6 +584,11 @@ const classify = (options: {
       });
       continue;
     }
+    // A `/`-separated suffix is the target's last segment, filled from the
+    // request (`fhir/{type}/{id}`): match the resource on the rest.
+    if (config.suffix?.[id]?.[0] === "/") {
+      target.segments = target.segments.slice(0, -1);
+    }
     const lifecycleOnly = resources.find(
       (r) =>
         r.lifecycleOnly &&
@@ -679,7 +690,10 @@ const classify = (options: {
     const children: [string, string][] = [];
     for (let i = 0; target.param !== undefined && i < extra.length; i += 2) {
       // A trailing singleton (`…/certificateAuthority`) is a fixed segment.
-      children.push([extra[i]!, extra[i + 1] === undefined ? "" : singular(extra[i]!)]);
+      children.push([
+        extra[i]!,
+        extra[i + 1] === undefined ? "" : (config.childFields?.[extra[i]!] ?? singular(extra[i]!)),
+      ]);
     }
     // Flat target: the method parameter at each of the resource's wildcards,
     // filled from the matching attribute.

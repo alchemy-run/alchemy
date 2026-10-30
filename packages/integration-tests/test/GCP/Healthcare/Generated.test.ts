@@ -483,6 +483,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "DeleteFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.delete)",
+        () => probe("DeleteFhirStoreFhir", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "ExecuteFhirBundle (healthcare.projects.locations.datasets.fhirStores.fhir.executeBundle)",
         () => probe("ExecuteFhirBundle", false),
         {
@@ -523,8 +531,32 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "HistoryFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.history)",
+        () => probe("HistoryFhirStoreFhir", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "ImportFhirStore (healthcare.projects.locations.datasets.fhirStores.import)",
         () => probe("ImportFhirStore", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "PatchFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.patch)",
+        () => probe("PatchFhirStoreFhir", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ReadFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.read)",
+        () => probe("ReadFhirStoreFhir", false),
         {
           tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
           timeout: 600_000,
@@ -541,6 +573,14 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "SearchFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.search)",
         () => probe("SearchFhirStoreFhir", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "UpdateFhirStoreFhir (healthcare.projects.locations.datasets.fhirStores.fhir.update)",
+        () => probe("UpdateFhirStoreFhir", false),
         {
           tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
           timeout: 600_000,
@@ -692,14 +732,6 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.fhirStores.fhir.read: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/*/*` has no Alchemy resource to bind",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "healthcare.projects.locations.datasets.fhirStores.fhir.patch: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/*/*` has no Alchemy resource to bind",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "healthcare.projects.locations.datasets.fhirStores.fhir.Patient-consent-enforcement-status: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/Patient/*` has no Alchemy resource to bind",
         () => Effect.void,
       );
@@ -712,10 +744,6 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.fhirStores.fhir.update: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/*/*` has no Alchemy resource to bind",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "healthcare.projects.locations.datasets.fhirStores.fhir.vread: addressed under `*/`, not a project",
         () => Effect.void,
       );
@@ -724,7 +752,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.fhirStores.fhir.Resource-purge: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/*/*` has no Alchemy resource to bind",
+        "healthcare.projects.locations.datasets.fhirStores.fhir.Resource-purge: no distilled operation Resource_purgeProjectsLocationsDatasetsFhirStoresFhir",
         () => Effect.void,
       );
       test.provider.skip(
@@ -736,15 +764,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "healthcare.projects.locations.datasets.fhirStores.fhir.history: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/*/*` has no Alchemy resource to bind",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "healthcare.projects.locations.datasets.fhirStores.fhir.search-type: no distilled operation search_typeProjectsLocationsDatasetsFhirStoresFhir",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "healthcare.projects.locations.datasets.fhirStores.fhir.delete: `projects/*/locations/*/datasets/*/fhirStores/*/fhir/*/*` has no Alchemy resource to bind",
         () => Effect.void,
       );
       test.provider.skip(
