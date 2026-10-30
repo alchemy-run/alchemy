@@ -68,16 +68,8 @@ export interface Members<
   J extends ReadonlyArray<Projection.Any>,
   S extends ReadonlyArray<DomainStream.Any>,
   G extends ReadonlyArray<Saga.Any> = readonly [],
-  M extends ReadonlyArray<Any> = readonly [],
 > {
-  /**
-   * Other models to host as part of this one, such as one per bounded
-   * context. Their members join this model's, and a member they share (an
-   * aggregate both react to) is hosted once, so its events reach every
-   * model's views, policies and projections.
-   */
-  readonly models?: M;
-  readonly aggregates?: A;
+  readonly aggregates: A;
   readonly views?: V;
   readonly policies?: P;
   readonly projections?: J;
@@ -97,12 +89,6 @@ export interface ModelClass<Name extends string, Provided, Policies> {
   readonly kind: "Model";
   readonly modelName: Name;
   readonly definitions: Kernel.Definitions;
-  /** The sagas the model runs. */
-  readonly sagas: ReadonlyArray<Saga.Any>;
-  /** Type-level only: every service `layer` provides. */
-  readonly "~provided": Provided;
-  /** Type-level only: every implementation `layer` requires. */
-  readonly "~handled": Policies;
   /**
    * Host every entity on the ambient {@link Platform}. The policy and
    * projection Layers (`handlers`) are built after the aggregates, views and
@@ -122,18 +108,7 @@ export interface Any {
   readonly kind: "Model";
   readonly modelName: string;
   readonly definitions: Kernel.Definitions;
-  readonly sagas: ReadonlyArray<Saga.Any>;
 }
-
-/** Every service a model's `layer` provides. */
-type ProvidedOf<M> = M extends { readonly "~provided": infer P } ? P : never;
-/** Every implementation a model's `layer` requires. */
-type HandledOf<M> = M extends { readonly "~handled": infer H } ? H : never;
-
-/** The members of several lists, each once, in order. */
-const union = <T>(lists: ReadonlyArray<ReadonlyArray<T> | undefined>): ReadonlyArray<T> => [
-  ...new Set(lists.flatMap((list) => list ?? [])),
-];
 
 type ProvidedBy<
   A extends ReadonlyArray<Aggregate.Any>,
@@ -187,64 +162,44 @@ type HandledBy<
  * );
  * ```
  *
- * ### Composing models
- * Host several models (one per bounded context) as one. A member they
- * share is hosted once, so every model hears its events. Hosting two models
- * that share a member side by side on one platform fails instead.
- *
- * **Example:** Two contexts that both react to `Account`
- * ```typescript
- * export class App extends Domain.Model("App", { models: [Billing, Audit] }) {}
- *
- * export const AppInMemory = App.layer(Layer.mergeAll(BillingHandlers, AuditHandlers)).pipe(
- *   Layer.provide(Domain.InMemory),
- * );
- * ```
- *
  * @primitive
  */
 export const make = <
   const Name extends string,
-  const A extends ReadonlyArray<Aggregate.Any> = readonly [],
+  const A extends ReadonlyArray<Aggregate.Any>,
   const V extends ReadonlyArray<View.Any> = readonly [],
   const P extends ReadonlyArray<Policy.Any> = readonly [],
   const J extends ReadonlyArray<Projection.Any> = readonly [],
   const S extends ReadonlyArray<DomainStream.Any> = readonly [],
   const G extends ReadonlyArray<Saga.Any> = readonly [],
-  const M extends ReadonlyArray<Any> = readonly [],
 >(
   name: Name,
-  members: Members<A, V, P, J, S, G, M>,
-): ModelClass<
-  Name,
-  ProvidedBy<A, V, J, S, G> | ProvidedOf<M[number]>,
-  HandledBy<P, J, G> | HandledOf<M[number]>
-> => {
-  const models = members.models ?? [];
-  // A member several composed models list is the same class, so it is kept once.
+  members: Members<A, V, P, J, S, G>,
+): ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>> => {
   const definitions: Kernel.Definitions = {
-    aggregates: union([...models.map((m) => m.definitions.aggregates), members.aggregates]),
-    views: union([...models.map((m) => m.definitions.views), members.views]),
-    policies: union([...models.map((m) => m.definitions.policies), members.policies]),
-    projections: union([...models.map((m) => m.definitions.projections), members.projections]),
-    streams: union([...models.map((m) => m.definitions.streams), members.streams]),
+    aggregates: members.aggregates,
+    views: members.views ?? [],
+    policies: members.policies ?? [],
+    projections: members.projections ?? [],
+    streams: members.streams ?? [],
   };
-  const sagas = union([...models.map((m) => m.sagas), members.sagas]);
   return class {
     static readonly kind = "Model" as const;
     static readonly modelName: Name = name;
     static readonly definitions: Kernel.Definitions = definitions;
-    static readonly sagas: ReadonlyArray<Saga.Any> = sagas;
-    static layer<E, R>(handlers: Layer.Layer<never, E, R>, options?: LayerOptions) {
+    static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];
+    static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G>, E, R>, options?: LayerOptions) {
       return Layer.effectContext(
-        build(definitions, handlers, sagas, Telemetry.resolve(options?.telemetry)),
+        build(
+          name,
+          definitions,
+          handlers,
+          members.sagas ?? [],
+          Telemetry.resolve(options?.telemetry),
+        ),
       );
     }
-  } as unknown as ModelClass<
-    Name,
-    ProvidedBy<A, V, J, S, G> | ProvidedOf<M[number]>,
-    HandledBy<P, J, G> | HandledOf<M[number]>
-  >;
+  } as unknown as ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>>;
 };
 
 /**
@@ -318,13 +273,15 @@ const observeProjection =
   };
 
 const build = <A, E, R>(
+  modelName: string,
   definitions: Kernel.Definitions,
   policies: Layer.Layer<A, E, R>,
   sagas: ReadonlyArray<Saga.Any>,
   telemetry: Telemetry.Resolved,
 ) =>
   Effect.gen(function* () {
-    const platform = yield* Platform;
+    // The model's own storage: models sharing a definition never share its data.
+    const platform = yield* (yield* Platform).model({ modelName });
     const kernel = yield* Kernel.make(definitions, telemetry);
 
     const aggregateStores = new Map<string, AggregateStore>();

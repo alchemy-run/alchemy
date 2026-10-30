@@ -48,6 +48,10 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
 
 A rejection with no fields: `class NotOpen extends Domain.Rejection("NotOpen") {}` in `NotOpen.rejection.ts`. Events and rejections take `attributes` as a third argument: `Domain.Event("MoneyWithdrawn", { ... }, { attributes: (e) => ({ ... }) })`. Nothing from a payload is traced unless `attributes` returns it, and `Redacted` values record as `<redacted>`.
 
+`Domain.Rejection(tag, fields, annotations)` is `Schema.TaggedError` with its type filled in: the third argument takes the same annotations (`httpApiStatus`, `description`, ...) plus `attributes`. `rejects` takes any tagged error class, `HttpApiError.Forbidden` included.
+
+More: [Command: Annotate a rejection](https://alchemy.run/domain/command#annotate-a-rejection).
+
 More: [Command](https://alchemy.run/domain/command), [Event](https://alchemy.run/domain/event).
 
 ## Aggregate
@@ -357,6 +361,6 @@ export const BankHandlers = Layer.mergeAll(
 );
 ```
 
-`Bank.layer(BankHandlers)` hosts the model on whatever platform is provided: `Domain.InMemory` or `DomainCloudflare.DurableObjects`. To host several models in one Worker, compose them: `Domain.Model("App", { models: [Bank, Support] })`, then `App.layer(Layer.mergeAll(BankHandlers, SupportHandlers))`. A member they share is hosted once.
+`Bank.layer(BankHandlers)` hosts the model on whatever platform is provided: `Domain.InMemory` or `DomainCloudflare.layerDurableObjects()`.
 
 More: [Domain Model: Declare the model](https://alchemy.run/domain/model#declare-the-model).

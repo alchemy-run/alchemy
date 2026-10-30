@@ -5,7 +5,7 @@ import * as Schema from "effect/Schema";
 import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
-import { DefinitionError } from "./Kernel.ts";
+import { DefinitionError } from "./internal.ts";
 import type * as Policy from "./Policy.ts";
 import type * as Projection from "./Projection.ts";
 import type * as DomainStream from "./Stream.ts";
@@ -517,9 +517,30 @@ export interface StreamStore {
 }
 
 /**
- * How a Domain is hosted. One factory per concept, each called once per entity
- * while the Domain's Layer is built. A factory may declare any infrastructure
- * (Durable Objects, buckets, queues) and returns the store the kernel talks to.
+ * Where one model is hosted. One factory per concept, each called once per
+ * entity while the model's Layer is built. A factory may declare any
+ * infrastructure (Durable Objects, buckets, queues) and returns the store the
+ * kernel talks to.
+ */
+export interface ModelHost {
+  readonly aggregate: (
+    aggregate: Aggregate.Any,
+    kit: AggregateKit,
+  ) => Effect.Effect<AggregateStore>;
+  readonly view: (view: View.Any, kit: ViewKit) => Effect.Effect<ViewStore>;
+  readonly policy: (policy: Policy.Any, kit: PolicyKit) => Effect.Effect<PolicyStore>;
+  readonly projection: (
+    projection: Projection.Any,
+    kit: ProjectionKit,
+  ) => Effect.Effect<ProjectionStore>;
+  readonly stream: (stream: DomainStream.Any, kit: StreamKit) => Effect.Effect<StreamStore>;
+}
+
+/**
+ * How a Domain is hosted. `model` is called once per model while its Layer is
+ * built, and gives that model storage of its own: two models that use the
+ * same aggregate, view or stream definition never share its data. Hosting
+ * two models with the same name on one platform fails.
  *
  * Swap the platform Layer to move a Domain between infrastructures: in-memory
  * for tests and single processes, Durable Objects on Cloudflare, and so on.
@@ -527,55 +548,28 @@ export interface StreamStore {
 export class Platform extends Context.Service<
   Platform,
   {
-    readonly aggregate: (
-      aggregate: Aggregate.Any,
-      kit: AggregateKit,
-    ) => Effect.Effect<AggregateStore>;
-    readonly view: (view: View.Any, kit: ViewKit) => Effect.Effect<ViewStore>;
-    readonly policy: (policy: Policy.Any, kit: PolicyKit) => Effect.Effect<PolicyStore>;
-    readonly projection: (
-      projection: Projection.Any,
-      kit: ProjectionKit,
-    ) => Effect.Effect<ProjectionStore>;
-    readonly stream: (stream: DomainStream.Any, kit: StreamKit) => Effect.Effect<StreamStore>;
+    readonly model: (model: { readonly modelName: string }) => Effect.Effect<ModelHost>;
   }
 >()("alchemy/Domain/Platform") {}
 
 /**
- * Make a platform refuse to host the same aggregate, view, policy,
- * projection or stream twice. Two models that share a member and are hosted
- * side by side would each host it, and its events would reach only one
- * model's consumers; compose them into one model instead.
+ * Track the models a platform hosts: `claim` fails when a model with the same
+ * name is already hosted, since both would address the same storage.
  *
  * @internal
  */
-export const hostOnce = (platform: Platform["Service"]): Platform["Service"] => {
+export const hostedModels = () => {
   const hosted = new Set<string>();
-  const once =
-    <E, K, S>(
-      kind: string,
-      nameOf: (entity: E) => string,
-      factory: (entity: E, kit: K) => Effect.Effect<S>,
-    ) =>
-    (entity: E, kit: K): Effect.Effect<S> =>
-      Effect.suspend(() => {
-        const name = nameOf(entity);
-        const key = `${kind} ${name}`;
-        if (hosted.has(key)) {
-          return Effect.die(
-            new DefinitionError(
-              `${key} is hosted twice on one platform: compose the models that share it into one, with \`models: [...]\``,
-            ),
-          );
-        }
-        hosted.add(key);
-        return factory(entity, kit);
-      });
-  return {
-    aggregate: once("Aggregate", (a: Aggregate.Any) => a.aggregateName, platform.aggregate),
-    view: once("View", (v: View.Any) => v.viewName, platform.view),
-    policy: once("Policy", (p: Policy.Any) => p.policyName, platform.policy),
-    projection: once("Projection", (p: Projection.Any) => p.projectionName, platform.projection),
-    stream: once("Stream", (s: DomainStream.Any) => s.streamName, platform.stream),
-  };
+  return (modelName: string): Effect.Effect<void> =>
+    Effect.suspend(() => {
+      if (hosted.has(modelName)) {
+        return Effect.die(
+          new DefinitionError(
+            `Model ${modelName} is hosted twice on one platform: give each model its own name`,
+          ),
+        );
+      }
+      hosted.add(modelName);
+      return Effect.void;
+    });
 };

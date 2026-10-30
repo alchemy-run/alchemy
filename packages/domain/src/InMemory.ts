@@ -12,9 +12,10 @@ import {
   type Delivery,
   emptySnapshot,
   emptyStreamMeta,
-  hostOnce,
+  hostedModels,
   Platform,
   type Json,
+  type ModelHost,
   type SendResult,
   type StoredEvent,
   type StreamEntry,
@@ -189,7 +190,8 @@ export const make = (
     commits,
   };
 
-  const platform = Platform.of({
+  // Every factory call makes fresh stores, so each model's data is its own.
+  const hostFor = (modelName: string): ModelHost => ({
     aggregate: (_aggregate, kit) =>
       Effect.sync(() => {
         const instances = new Map<
@@ -285,7 +287,7 @@ export const make = (
                 instance(id).cancelled.delete(meta.commandId);
                 const at = "at" in due ? due.at : now() + due.afterMillis;
                 return timer(
-                  `${kit.name}/${id}/${meta.commandId}`,
+                  `${modelName}/${kit.name}/${id}/${meta.commandId}`,
                   at,
                   commit(id, command, meta).pipe(Effect.asVoid),
                   lock.withPermits(1),
@@ -300,7 +302,7 @@ export const make = (
                   if (executed(id, commandId)) return Effect.fail(new AlreadyExecuted(fields));
                   const { cancelled } = instance(id);
                   if (cancelled.has(commandId)) return Effect.fail(new AlreadyCancelled(fields));
-                  if (!timers.delete(`${kit.name}/${id}/${commandId}`))
+                  if (!timers.delete(`${modelName}/${kit.name}/${id}/${commandId}`))
                     return Effect.fail(new NotScheduled(fields));
                   cancelled.add(commandId);
                   return Effect.void;
@@ -648,10 +650,14 @@ export const make = (
         };
       }),
   });
+  const claim = hostedModels();
+  const platform = Platform.of({
+    model: ({ modelName }) => Effect.as(claim(modelName), hostFor(modelName)),
+  });
 
   return {
     layer: Layer.mergeAll(
-      Layer.succeed(Platform, hostOnce(platform)),
+      Layer.succeed(Platform, platform),
       Layer.succeed(WorkflowEngine.WorkflowEngine, workflows),
     ),
     control,
@@ -661,7 +667,7 @@ export const make = (
 /**
  * Host a domain model in the current process: aggregates, views and policies,
  * with nothing to deploy. Use it in tests and single-process apps; swap it
- * for `DomainCloudflare.DurableObjects` and nothing else changes.
+ * for `DomainCloudflare.layerDurableObjects()` and nothing else changes.
  *
  * ### Hosting in memory
  * **Example:** A model with its policies
