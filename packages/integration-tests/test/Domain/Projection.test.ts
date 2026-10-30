@@ -222,7 +222,10 @@ class Wallets extends Domain.Model("Wallets", {
   streams: [WalletCard],
 }) {}
 
-class WalletApi extends Domain.Api("WalletApi", Deposit, WalletCard) {}
+class WalletApi extends Domain.Api("WalletApi", {
+  model: Wallets,
+  serves: [Deposit, WalletCard],
+}) {}
 
 const handlers = (options?: Domain.Projection.Options) =>
   Layer.mergeAll(walletLedgerLayer(options), WalletCardsLive, LargeMovementsLive);

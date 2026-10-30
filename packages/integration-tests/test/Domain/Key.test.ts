@@ -250,7 +250,10 @@ describe("Domain keyed by a schema", () => {
 
   it.live("is served through an Api by its key", () =>
     Effect.gen(function* () {
-      class TourApi extends Domain.Api("TourApi", OrgSchedule, OrgFeed) {}
+      class TourApi extends Domain.Api("TourApi", {
+        model: Tours,
+        serves: [OrgSchedule, OrgFeed],
+      }) {}
       const client = yield* TourApi.clientInProcess;
       const tours = yield* Tour;
       const receipt = yield* tours.send("t-1", new BookTour({ orgId: acme, unit: "1A" }));

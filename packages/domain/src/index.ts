@@ -199,10 +199,15 @@ export declare namespace ExternalSystem {
 export const ExternalSystem = ExternalSystemModule.make;
 
 export declare namespace Api {
-  /** What an Api may expose: commands, views, and aggregates with a `read` contract. */
-  export type Entry = ApiModule.Entry;
+  /** What an Api may serve: commands, views, streams, and aggregates with a `read` contract. */
+  export type Servable = ApiModule.Servable;
+  /** What `Domain.Api` takes: the model, and what of it the Api serves. */
+  export type Options<
+    M extends ModelModule.Any,
+    Serves extends ReadonlyArray<ApiModule.Servable>,
+  > = ApiModule.Options<M, Serves>;
   /** The typed client of an Api. */
-  export type Client<E extends ApiModule.Entry> = ApiModule.ApiClient<E>;
+  export type Client<E extends ApiModule.Servable> = ApiModule.ApiClient<E>;
   /** Type-level identity of an Api's client service, e.g. `Domain.Api.ClientKey<"BankApi">`. */
   export type ClientKey<Name extends string> = ApiModule.ClientKey<Name>;
   export type CommandClient<C extends CommandModule.Any> = ApiModule.CommandClient<C>;

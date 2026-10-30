@@ -110,7 +110,11 @@ class MessageView extends Domain.View("Message", {
   initial: 0,
   from: [],
 }) {}
-class CollisionApi extends Domain.Api("CollisionApi", MessageView) {}
+class Collision extends Domain.Model("Collision", { aggregates: [], views: [MessageView] }) {}
+class CollisionApi extends Domain.Api("CollisionApi", {
+  model: Collision,
+  serves: [MessageView],
+}) {}
 // @ts-expect-error Message is reserved for command results
 Foldkit.make(CollisionApi);
 

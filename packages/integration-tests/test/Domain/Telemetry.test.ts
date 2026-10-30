@@ -107,7 +107,12 @@ class Balance extends Domain.View("Balance", {
   },
 }) {}
 
-class WalletApi extends Domain.Api("WalletApi", Balance) {}
+// The model a browser client reads the balance from.
+class Balances extends Domain.Model("TelemetryBalances", {
+  aggregates: [Wallet],
+  views: [Balance],
+}) {}
+class WalletApi extends Domain.Api("WalletApi", { model: Balances, serves: [Balance] }) {}
 
 class Bank extends Domain.Model("TelemetryBank", {
   aggregates: [Wallet, Ledger],

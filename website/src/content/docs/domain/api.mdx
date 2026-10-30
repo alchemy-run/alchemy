@@ -115,14 +115,13 @@ Reading an aggregate directly is handy for an account's own screen. For anything
 The tutorial's bank exposes registration, deposits, withdrawals and the account summary.
 
 ```typescript title="src/BankApi.api.ts"
-export class BankApi extends Domain.Api(
-  "BankApi",
-  RegisterCustomer,
-  DepositMoney,
-  WithdrawMoney,
-  AccountSummary,
-) {}
+export class BankApi extends Domain.Api("BankApi", {
+  model: Bank,
+  serves: [RegisterCustomer, DepositMoney, WithdrawMoney, AccountSummary],
+}) {}
 ```
+
+`model` is the model the Api is over, and `serves` is what of it a client may reach. Serving something the model doesn't hold is a type error.
 
 Leaving something out is how you keep it internal. `OpenAccount` isn't listed, because only the `MainAccountProvisioning` policy opens accounts. No client can send it, however it's built.
 
@@ -131,14 +130,10 @@ Leaving something out is how you keep it internal. `OpenAccount` isn't listed, b
 Different clients need different surfaces. In the example bank, customers and support agents use the same model through two Apis.
 
 ```typescript title="packages/domain/src/SupportApi.api.ts"
-export class SupportApi extends Domain.Api(
-  "SupportApi",
-  FreezeAccount,
-  ChangeOwner,
-  ApproveTransfer,
-  AccountSummary,
-  AccountActivity,
-) {}
+export class SupportApi extends Domain.Api("SupportApi", {
+  model: Bank,
+  serves: [FreezeAccount, ChangeOwner, ApproveTransfer, AccountSummary, AccountActivity],
+}) {}
 ```
 
 `FreezeAccount` and `ChangeOwner` are on the support Api and not the customer one. `AccountSummary` is on both.

@@ -51,7 +51,7 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 
 ## Calling the Api in process
 
-Code in the Worker that is not a client of the Api (a webhook route, a scheduled job) calls it with `CustomerApi.clientInProcess`: the same typed client, wired to the handlers in process, with every entry's middleware. When that code has already checked its caller (a webhook signature), it provides a middleware Layer that trusts the caller, to that client only:
+Code in the Worker that is not a client of the Api (a webhook route, a scheduled job) calls it with `CustomerApi.clientInProcess`: the same typed client, wired to the handlers in process, with the middleware of everything it serves. When that code has already checked its caller (a webhook signature), it provides a middleware Layer that trusts the caller, to that client only:
 
 ```ts
 const asSystem = Layer.succeed(Session, (effect) =>

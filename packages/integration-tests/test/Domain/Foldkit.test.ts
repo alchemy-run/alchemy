@@ -10,7 +10,13 @@ import * as Option from "effect/Option";
 import * as RpcClientError from "effect/rpc/RpcClientError";
 import * as Schema from "effect/Schema";
 import * as Stream from "effect/Stream";
-import { Client, CounterApi, CounterId, Increment } from "./FoldkitCounter.ts";
+import {
+  Client,
+  Counter as CounterAggregate,
+  CounterApi,
+  CounterId,
+  Increment,
+} from "./FoldkitCounter.ts";
 
 const Counter = Foldkit.make(CounterApi);
 const target = CounterId.make("one");
@@ -443,7 +449,14 @@ it("reserves Message for command results", () => {
     state: Schema.Number,
     initial: 0,
   }) {}
-  class CollisionApi extends Domain.Api("CollisionApi", Increment, MessageView) {}
+  class Collision extends Domain.Model("Collision", {
+    aggregates: [CounterAggregate],
+    views: [MessageView],
+  }) {}
+  class CollisionApi extends Domain.Api("CollisionApi", {
+    model: Collision,
+    serves: [Increment, MessageView],
+  }) {}
   // @ts-expect-error Message is reserved for command results
   const collision = Foldkit.make(CollisionApi);
   expect("watch" in collision.Message).toBe(false);

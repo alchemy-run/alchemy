@@ -84,9 +84,11 @@ export interface Members<
  * the Model provides; `Policies` is every policy and projection whose
  * implementation `layer` requires.
  */
-export interface ModelClass<Name extends string, Provided, Policies> {
+export interface ModelClass<Name extends string, Provided, Policies, Servable = unknown> {
   new (_: never): {};
   readonly kind: "Model";
+  /** Type-level only: what an Api over this model may serve. See {@link ServableOf}. */
+  readonly "~servable"?: Servable;
   readonly modelName: Name;
   readonly definitions: Kernel.Definitions;
   /**
@@ -109,6 +111,23 @@ export interface Any {
   readonly modelName: string;
   readonly definitions: Kernel.Definitions;
 }
+
+/**
+ * What an Api over a model may serve: its aggregates and their commands, its
+ * views and its streams. `unknown` for a model typed as {@link Any}.
+ */
+export type ServableOf<M extends Any> = M extends { readonly "~servable"?: infer S }
+  ? unknown extends S
+    ? unknown
+    : NonNullable<S>
+  : unknown;
+
+/** The aggregates, their commands, the views and the streams of a model's members. */
+type ServableBy<
+  A extends ReadonlyArray<Aggregate.Any>,
+  V extends ReadonlyArray<View.Any>,
+  S extends ReadonlyArray<DomainStream.Any>,
+> = A[number] | A[number]["definition"]["commands"][number] | V[number] | S[number];
 
 type ProvidedBy<
   A extends ReadonlyArray<Aggregate.Any>,
@@ -175,7 +194,7 @@ export const make = <
 >(
   name: Name,
   members: Members<A, V, P, J, S, G>,
-): ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>> => {
+): ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>, ServableBy<A, V, S>> => {
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
     views: members.views ?? [],
@@ -193,7 +212,12 @@ export const make = <
         build(definitions, handlers, members.sagas ?? [], Telemetry.resolve(options?.telemetry)),
       );
     }
-  } as unknown as ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>>;
+  } as unknown as ModelClass<
+    Name,
+    ProvidedBy<A, V, J, S, G>,
+    HandledBy<P, J, G>,
+    ServableBy<A, V, S>
+  >;
 };
 
 /**
