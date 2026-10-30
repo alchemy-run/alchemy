@@ -66,7 +66,7 @@ test.provider(
             action: "ALLOW",
             target: {
               loadBalancingScheme: "INTERNAL_MANAGED",
-              resources: [alb.rule],
+              resources: [forwardingRule],
             },
             httpRules: [
               {
