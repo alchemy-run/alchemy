@@ -40,7 +40,7 @@ test.provider(
           name: `${parent}/policyOrchestrators/alchemy-missing-orch`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

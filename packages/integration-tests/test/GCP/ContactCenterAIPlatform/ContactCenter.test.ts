@@ -57,7 +57,7 @@ test.provider.skipIf(!entitled)(
 );
 
 test.provider.skipIf(entitled)(
-  "getProjectsLocationsContactCenters fails with ServiceDisabled while the API is disabled",
+  "getProjectsLocationsContactCenters fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
@@ -68,7 +68,7 @@ test.provider.skipIf(entitled)(
           name: `projects/${project}/locations/us-central1/contactCenters/alchemy-missing-cc`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

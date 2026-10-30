@@ -11,11 +11,9 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// App Hub is not enabled in the test project; live calls fail with
-// ServiceDisabled:
-// "App Hub API has not been used in project <project>
-// before or it is disabled." Workload registration also needs a
-// discovered workload in the host project.
+// Workload registration needs a workload App Hub discovered in the host
+// project (a managed instance group or GKE workload). Set GCP_TEST_APPHUB=1
+// on a project with one.
 const runLifecycle = !process.env.FAST && process.env.GCP_TEST_APPHUB === "1";
 const location = "us-central1";
 
@@ -44,7 +42,7 @@ const firstDiscoveredWorkload = GcpEnvironment.current.pipe(
   ),
 );
 
-test.provider.skipIf(runLifecycle)(
+test.provider(
   "getProjectsLocationsApplicationsWorkloads on a missing workload fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
@@ -56,7 +54,7 @@ test.provider.skipIf(runLifecycle)(
           name: `projects/${project}/locations/${location}/applications/alchemy-missing-app/workloads/alchemy-missing-workload`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),

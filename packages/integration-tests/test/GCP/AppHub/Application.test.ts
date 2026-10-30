@@ -11,12 +11,12 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// App Hub is not enabled in the test project; live calls fail with
-// ServiceDisabled:
-// "App Hub API has not been used in project <project>
-// before or it is disabled. Enable it by visiting
-// https://console.developers.google.com/apis/api/apphub.googleapis.com/overview?project=<project>"
-const runLifecycle = !process.env.FAST && process.env.GCP_TEST_APPHUB === "1";
+// The testing project doesn't enable App Hub by default: every test deploys
+// it first.
+const AppHubApi = GCP.ServiceUsage.ProjectService("AppHubApi", {
+  service: "apphub.googleapis.com",
+});
+const runLifecycle = !process.env.FAST;
 const location = "us-central1";
 
 const waitUntilGone = (name: string) =>
@@ -30,43 +30,20 @@ const waitUntilGone = (name: string) =>
     }),
   );
 
-test.provider.skipIf(runLifecycle)(
-  "createProjectsLocationsApplications fails with ServiceDisabled when App Hub is disabled",
-  (stack) =>
-    Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      yield* stack.destroy();
-
-      const error = yield* Effect.flip(
-        apphub.createProjectsLocationsApplications({
-          parent: `projects/${project}/locations/${location}`,
-          applicationId: "alchemy-apphub-probe",
-          body: {
-            displayName: "probe",
-            scope: { type: "REGIONAL" },
-          },
-        }),
-      );
-      expect(error._tag).toEqual("ServiceDisabled");
-
-      yield* stack.destroy();
-    }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:apphub", "live"], timeout: 90_000 },
-);
-
-test.provider.skipIf(runLifecycle)(
+test.provider(
   "getProjectsLocationsApplications on a missing application fails with a typed tag",
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
+      yield* stack.deploy(AppHubApi);
 
       const error = yield* Effect.flip(
         apphub.getProjectsLocationsApplications({
           name: `projects/${project}/locations/${location}/applications/alchemy-missing-app`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
     }).pipe(logLevel),
@@ -79,9 +56,11 @@ test.provider.skipIf(!runLifecycle)(
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
       yield* stack.destroy();
+      yield* stack.deploy(AppHubApi);
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* AppHubApi;
           return yield* GCP.AppHub.Application("Checkout", {
             location,
             displayName: "checkout",
@@ -116,6 +95,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          yield* AppHubApi;
           return yield* GCP.AppHub.Application("Checkout", {
             applicationId: created.applicationId,
             location,
