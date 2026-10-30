@@ -1,6 +1,7 @@
 import type * as Aggregate from "@alchemy.run/domain/Aggregate";
 import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "@alchemy.run/domain/Aggregate";
 import { isAfter, mergeCheckpoints } from "@alchemy.run/domain/InMemory";
+import { DefinitionError } from "@alchemy.run/domain/Kernel";
 import {
   type Accepted,
   type AggregateKit,
@@ -8,8 +9,10 @@ import {
   type Delivery,
   emptySnapshot,
   emptyStreamMeta,
+  hostedModels,
   Platform,
   type Json,
+  type ModelHost,
   type PolicyKit,
   type ProjectionKit,
   type Push,
@@ -839,10 +842,38 @@ const pollAfter = <A>(
     });
   });
 
+/** A Durable Object class name segment for a model name. */
+const classSegment = (modelName: string) => modelName.replace(/[^A-Za-z0-9_]/g, "_");
+
+/** Address a shared namespace's instances under a model's prefix. */
+const prefixed = (namespace: Namespace, prefix: string): Namespace => ({
+  getByName: (name) => namespace.getByName(`${prefix}${name}`),
+  jurisdiction: (jurisdiction) => prefixed(namespace.jurisdiction(jurisdiction), prefix),
+});
+
+/**
+ * A shared class's instance runs the kit of the model its name starts with
+ * (`<model>/<key>`). Every model registers its kit while the Worker's Layer
+ * is built, before any instance is constructed.
+ */
+const routeToModel = (name: string, impls: ReadonlyMap<string, ObjectImpl>): ObjectImpl =>
+  Effect.gen(function* () {
+    const state = yield* DurableObjectState;
+    const instance = state.id.name ?? "";
+    const impl = impls.get(instance.slice(0, instance.indexOf("/")));
+    if (!impl) {
+      return yield* Effect.die(
+        new DefinitionError(`${name} instance '${instance}' belongs to no model hosted here`),
+      );
+    }
+    return yield* impl;
+  });
+
 /** The aggregates, views, policies, projections and streams, each on its own Durable Object class. */
-const durableObjectPlatform = (
-  jurisdiction: DurableObjectJurisdiction | undefined,
-): Layer.Layer<Platform, never, Worker> =>
+const durableObjectPlatform = ({
+  jurisdiction,
+  isolate = "class",
+}: DurableObjectsOptions): Layer.Layer<Platform, never, Worker> =>
   Layer.effect(
     Platform,
     Effect.gen(function* () {
@@ -858,170 +889,209 @@ const durableObjectPlatform = (
           jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction),
         );
 
-      return Platform.of({
-        aggregate: (aggregate, kit) =>
-          inInit(
-            Effect.gen(function* () {
-              const namespace = yield* declareIn(
-                `${aggregate.aggregateName}Aggregate`,
-                aggregateObject(kit),
-              );
-              return {
-                send: (id, command, meta) =>
-                  unwrapDefects(namespace.getByName(id).send(id, command, meta)),
-                // The object answers with a tag (RPC loses typed failures); fail with it here.
-                schedule: (id, command, meta, due) =>
-                  unwrapDefects<{ readonly at: number } | "AlreadyExecuted">(
-                    namespace.getByName(id).schedule(id, command, meta, due),
-                  ).pipe(
-                    Effect.flatMap((outcome) =>
-                      outcome === "AlreadyExecuted"
-                        ? Effect.fail(
-                            new AlreadyExecuted({
-                              aggregate: aggregate.aggregateName,
-                              id,
-                              commandId: meta.commandId,
-                            }),
-                          )
-                        : Effect.succeed(outcome.at),
-                    ),
-                  ),
-                unschedule: (id, commandId) =>
-                  unwrapDefects<
-                    "Cancelled" | "AlreadyCancelled" | "AlreadyExecuted" | "NotScheduled"
-                  >(namespace.getByName(id).unschedule(commandId)).pipe(
-                    Effect.flatMap(
-                      (
-                        outcome,
-                      ): Effect.Effect<void, AlreadyExecuted | AlreadyCancelled | NotScheduled> => {
-                        const fields = { aggregate: aggregate.aggregateName, id, commandId };
-                        if (outcome === "AlreadyExecuted")
-                          return Effect.fail(new AlreadyExecuted(fields));
-                        if (outcome === "AlreadyCancelled")
-                          return Effect.fail(new AlreadyCancelled(fields));
-                        if (outcome === "NotScheduled")
-                          return Effect.fail(new NotScheduled(fields));
-                        return Effect.void;
-                      },
-                    ),
-                  ),
-                state: (id) => unwrapDefects(namespace.getByName(id).state()),
-                // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
-                changes: (id) =>
-                  Stream.fromEffectSchedule(
-                    unwrapDefects<{ state: Json; version: number }>(
-                      namespace.getByName(id).state(),
-                    ),
-                    POLL,
-                  ).pipe(Stream.changesWith((a, b) => a.version === b.version)),
-                tail: (id, from) =>
-                  pollAfter(
-                    from,
-                    (cursor) =>
-                      unwrapDefects<ReadonlyArray<StoredEvent>>(
-                        namespace.getByName(id).after(cursor),
+      const claim = hostedModels();
+      // `isolate: "key"`: one class per definition, shared by every model.
+      // Each instance is named `<model>/<key>` and runs its model's kit.
+      const shared = new Map<
+        string,
+        { readonly namespace: Namespace; readonly impls: Map<string, ObjectImpl> }
+      >();
+      const declareShared = (name: string, modelName: string, impl: ObjectImpl) =>
+        Effect.gen(function* () {
+          const found = shared.get(name);
+          if (found) {
+            found.impls.set(modelName, impl);
+            return found.namespace;
+          }
+          const impls = new Map([[modelName, impl]]);
+          const namespace = yield* declareIn(name, routeToModel(name, impls));
+          shared.set(name, { namespace, impls });
+          return namespace;
+        });
+
+      const hostFor = (modelName: string): ModelHost => {
+        // Every object of the model is declared through here, so none is left
+        // outside the model's isolation.
+        const object = (name: string, impl: ObjectImpl) =>
+          isolate === "key"
+            ? Effect.map(declareShared(name, modelName, impl), (namespace) =>
+                prefixed(namespace, `${modelName}/`),
+              )
+            : declareIn(`${classSegment(modelName)}${name}`, impl);
+        return {
+          aggregate: (aggregate, kit) =>
+            inInit(
+              Effect.gen(function* () {
+                const namespace = yield* object(
+                  `${aggregate.aggregateName}Aggregate`,
+                  aggregateObject(kit),
+                );
+                return {
+                  send: (id, command, meta) =>
+                    unwrapDefects(namespace.getByName(id).send(id, command, meta)),
+                  // The object answers with a tag (RPC loses typed failures); fail with it here.
+                  schedule: (id, command, meta, due) =>
+                    unwrapDefects<{ readonly at: number } | "AlreadyExecuted">(
+                      namespace.getByName(id).schedule(id, command, meta, due),
+                    ).pipe(
+                      Effect.flatMap((outcome) =>
+                        outcome === "AlreadyExecuted"
+                          ? Effect.fail(
+                              new AlreadyExecuted({
+                                aggregate: aggregate.aggregateName,
+                                id,
+                                commandId: meta.commandId,
+                              }),
+                            )
+                          : Effect.succeed(outcome.at),
                       ),
-                    (event) => event.envelope.seq,
-                  ),
-                connect: connectTo(namespace),
-              };
-            }),
-          ),
-        view: (view, kit) =>
-          inInit(
-            Effect.gen(function* () {
-              const namespace = yield* declareIn(`${view.viewName}View`, viewObject(kit));
-              const read = (key: string) =>
-                unwrapDefects<ViewSnapshot>(namespace.getByName(key).read());
-              const after = (key: string, cursor: number) =>
-                unwrapDefects<ReadonlyArray<ViewEntry>>(namespace.getByName(key).after(cursor));
-              return {
-                receive: (key, deliveries) =>
-                  unwrapDefects(namespace.getByName(key).receive(key, deliveries)),
-                read,
-                // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
-                changes: (key) =>
-                  Stream.fromEffectSchedule(read(key), POLL).pipe(
-                    Stream.changesWith((a, b) => a.version === b.version),
-                  ),
-                list: (key) => after(key, 0),
-                connect: connectTo(namespace),
-                tail: (key, from) =>
-                  Stream.suspend(() => {
-                    let first = true;
-                    return Stream.paginate(from, (cursor: number) => {
-                      const poll = after(key, cursor);
-                      const next = first ? poll : Effect.delay(poll, "300 millis");
-                      first = false;
-                      return Effect.map(
-                        next,
-                        (fresh) =>
-                          [
-                            fresh,
-                            Option.some(fresh.length > 0 ? fresh[fresh.length - 1]!.seq : cursor),
-                          ] as const,
-                      );
-                    });
-                  }),
-              };
-            }),
-          ),
-        projection: (projection, kit) =>
-          inInit(
-            Effect.gen(function* () {
-              const namespace = yield* declareIn(
-                `${projection.projectionName}Projection`,
-                projectionObject(kit),
-              );
-              return {
-                receive: (delivery) =>
-                  unwrapDefects(namespace.getByName(delivery.key).receive(delivery.key, delivery)),
-                checkpoints: (key) =>
-                  unwrapDefects<Readonly<Record<string, number>>>(
-                    namespace.getByName(key).checkpoints(),
-                  ),
-              };
-            }),
-          ),
-        stream: (stream, kit) =>
-          inInit(
-            Effect.gen(function* () {
-              const namespace = yield* declareIn(`${stream.streamName}Stream`, streamObject(kit));
-              const read = (key: string) =>
-                unwrapDefects<StreamMeta>(namespace.getByName(key).read());
-              const after = (key: string, cursor: number) =>
-                unwrapDefects<ReadonlyArray<StreamEntry>>(namespace.getByName(key).after(cursor));
-              return {
-                append: (key, write) => unwrapDefects(namespace.getByName(key).append(key, write)),
-                advance: (key, checkpoints) =>
-                  unwrapDefects(namespace.getByName(key).advance(checkpoints)),
-                read,
-                // Streamed responses poll; WebSocket reads (`connect`) are pushed on append.
-                changes: (key) =>
-                  Stream.fromEffectSchedule(read(key), POLL).pipe(
-                    Stream.changesWith((a, b) => a.seq === b.seq),
-                  ),
-                list: (key) => after(key, 0),
-                tail: (key, from) =>
-                  pollAfter(
-                    from,
-                    (cursor) => after(key, cursor),
-                    (e) => e.seq,
-                  ),
-                connect: connectTo(namespace),
-              };
-            }),
-          ),
-        policy: (policy, kit) =>
-          inInit(
-            Effect.gen(function* () {
-              const namespace = yield* declareIn(`${policy.policyName}Policy`, policyObject(kit));
-              return {
-                receive: (delivery) =>
-                  unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
-              };
-            }),
-          ),
+                    ),
+                  unschedule: (id, commandId) =>
+                    unwrapDefects<
+                      "Cancelled" | "AlreadyCancelled" | "AlreadyExecuted" | "NotScheduled"
+                    >(namespace.getByName(id).unschedule(commandId)).pipe(
+                      Effect.flatMap(
+                        (
+                          outcome,
+                        ): Effect.Effect<
+                          void,
+                          AlreadyExecuted | AlreadyCancelled | NotScheduled
+                        > => {
+                          const fields = { aggregate: aggregate.aggregateName, id, commandId };
+                          if (outcome === "AlreadyExecuted")
+                            return Effect.fail(new AlreadyExecuted(fields));
+                          if (outcome === "AlreadyCancelled")
+                            return Effect.fail(new AlreadyCancelled(fields));
+                          if (outcome === "NotScheduled")
+                            return Effect.fail(new NotScheduled(fields));
+                          return Effect.void;
+                        },
+                      ),
+                    ),
+                  state: (id) => unwrapDefects(namespace.getByName(id).state()),
+                  // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
+                  changes: (id) =>
+                    Stream.fromEffectSchedule(
+                      unwrapDefects<{ state: Json; version: number }>(
+                        namespace.getByName(id).state(),
+                      ),
+                      POLL,
+                    ).pipe(Stream.changesWith((a, b) => a.version === b.version)),
+                  tail: (id, from) =>
+                    pollAfter(
+                      from,
+                      (cursor) =>
+                        unwrapDefects<ReadonlyArray<StoredEvent>>(
+                          namespace.getByName(id).after(cursor),
+                        ),
+                      (event) => event.envelope.seq,
+                    ),
+                  connect: connectTo(namespace),
+                };
+              }),
+            ),
+          view: (view, kit) =>
+            inInit(
+              Effect.gen(function* () {
+                const namespace = yield* object(`${view.viewName}View`, viewObject(kit));
+                const read = (key: string) =>
+                  unwrapDefects<ViewSnapshot>(namespace.getByName(key).read());
+                const after = (key: string, cursor: number) =>
+                  unwrapDefects<ReadonlyArray<ViewEntry>>(namespace.getByName(key).after(cursor));
+                return {
+                  receive: (key, deliveries) =>
+                    unwrapDefects(namespace.getByName(key).receive(key, deliveries)),
+                  read,
+                  // Streamed responses poll; WebSocket reads (`connect`) are pushed on commit.
+                  changes: (key) =>
+                    Stream.fromEffectSchedule(read(key), POLL).pipe(
+                      Stream.changesWith((a, b) => a.version === b.version),
+                    ),
+                  list: (key) => after(key, 0),
+                  connect: connectTo(namespace),
+                  tail: (key, from) =>
+                    Stream.suspend(() => {
+                      let first = true;
+                      return Stream.paginate(from, (cursor: number) => {
+                        const poll = after(key, cursor);
+                        const next = first ? poll : Effect.delay(poll, "300 millis");
+                        first = false;
+                        return Effect.map(
+                          next,
+                          (fresh) =>
+                            [
+                              fresh,
+                              Option.some(fresh.length > 0 ? fresh[fresh.length - 1]!.seq : cursor),
+                            ] as const,
+                        );
+                      });
+                    }),
+                };
+              }),
+            ),
+          projection: (projection, kit) =>
+            inInit(
+              Effect.gen(function* () {
+                const namespace = yield* object(
+                  `${projection.projectionName}Projection`,
+                  projectionObject(kit),
+                );
+                return {
+                  receive: (delivery) =>
+                    unwrapDefects(
+                      namespace.getByName(delivery.key).receive(delivery.key, delivery),
+                    ),
+                  checkpoints: (key) =>
+                    unwrapDefects<Readonly<Record<string, number>>>(
+                      namespace.getByName(key).checkpoints(),
+                    ),
+                };
+              }),
+            ),
+          stream: (stream, kit) =>
+            inInit(
+              Effect.gen(function* () {
+                const namespace = yield* object(`${stream.streamName}Stream`, streamObject(kit));
+                const read = (key: string) =>
+                  unwrapDefects<StreamMeta>(namespace.getByName(key).read());
+                const after = (key: string, cursor: number) =>
+                  unwrapDefects<ReadonlyArray<StreamEntry>>(namespace.getByName(key).after(cursor));
+                return {
+                  append: (key, write) =>
+                    unwrapDefects(namespace.getByName(key).append(key, write)),
+                  advance: (key, checkpoints) =>
+                    unwrapDefects(namespace.getByName(key).advance(checkpoints)),
+                  read,
+                  // Streamed responses poll; WebSocket reads (`connect`) are pushed on append.
+                  changes: (key) =>
+                    Stream.fromEffectSchedule(read(key), POLL).pipe(
+                      Stream.changesWith((a, b) => a.seq === b.seq),
+                    ),
+                  list: (key) => after(key, 0),
+                  tail: (key, from) =>
+                    pollAfter(
+                      from,
+                      (cursor) => after(key, cursor),
+                      (e) => e.seq,
+                    ),
+                  connect: connectTo(namespace),
+                };
+              }),
+            ),
+          policy: (policy, kit) =>
+            inInit(
+              Effect.gen(function* () {
+                const namespace = yield* object(`${policy.policyName}Policy`, policyObject(kit));
+                return {
+                  receive: (delivery) =>
+                    unwrapDefects(namespace.getByName(delivery.key).receive(delivery)),
+                };
+              }),
+            ),
+        };
+      };
+      return Platform.of({
+        model: ({ modelName }) => Effect.as(claim(modelName), hostFor(modelName)),
       });
     }),
   );
@@ -1080,19 +1150,19 @@ const durableObjectPlatform = (
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export function layerDurableObjects({ jurisdiction }: DurableObjectsOptions = {}): Layer.Layer<
-  Platform | WorkflowEngine.WorkflowEngine,
-  never,
-  Worker
-> {
+export function layerDurableObjects(
+  options: DurableObjectsOptions = {},
+): Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker> {
   // The same options return the same Layer, so models that each provide it
   // share one platform and one workflow engine.
-  let platform = platforms.get(jurisdiction);
+  const { jurisdiction, isolate = "class" } = options;
+  const key = `${jurisdiction ?? ""}/${isolate}`;
+  let platform = platforms.get(key);
   if (platform === undefined)
     platforms.set(
-      jurisdiction,
+      key,
       (platform = Layer.merge(
-        durableObjectPlatform(jurisdiction),
+        durableObjectPlatform({ jurisdiction, isolate }),
         layerDurableObjectEngine({ jurisdiction }),
       )),
     );
@@ -1119,9 +1189,23 @@ export interface DurableObjectsOptions {
    * @default undefined (no jurisdiction restriction)
    */
   readonly jurisdiction?: DurableObjectJurisdiction;
+  /**
+   * How models hosted in one Worker keep their data apart. With `"class"`,
+   * each model declares its own Durable Object classes
+   * (`BillingAccountAggregate`). With `"key"`, models share one class per
+   * definition (`AccountAggregate`) and each instance is named after its
+   * model (`Billing/a-1`). Either way, two models that use the same
+   * definition never share its data.
+   *
+   * Changing it on a model that already has data does not move that data:
+   * the model starts empty under the new names.
+   *
+   * @default "class"
+   */
+  readonly isolate?: "class" | "key";
 }
 
 const platforms = new Map<
-  DurableObjectJurisdiction | undefined,
+  string,
   Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker>
 >();
