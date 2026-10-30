@@ -247,6 +247,17 @@ interface ProbeConfig {
    * exist)"). Probes retry it while a fresh grant propagates, then accept it.
    */
   ambiguousTags?: Record<string, string>;
+  /**
+   * VPC networks the probe resources create (Private Service Access, an
+   * internal load balancer): the suite holds that many quota slots from
+   * deploy to destroy (`test/GCP/networkQuota.ts`).
+   */
+  networks?: number;
+  /**
+   * Minutes the probe stack may take to deploy or destroy, when a resource
+   * provisions for longer than the default 30 (Managed Microsoft AD).
+   */
+  deployMinutes?: number;
 }
 
 // ============ Discovery ============
@@ -1613,6 +1624,11 @@ const emitProbeTest = (
     groups.set(group, [...(groups.get(group) ?? []), probe]);
   }
   const tags = `["provider:gcp", "provider:gcp:${service.toLowerCase()}", "live"]`;
+  const networks = config.probes!.networks ?? 0;
+  // Milliseconds with digit grouping, as oxfmt leaves it (`1_800_000`).
+  const timeout = ((config.probes!.deployMinutes ?? 30) * 60_000)
+    .toString()
+    .replace(/\B(?=(\d{3})+$)/g, "_");
   return `${PROBE_HEADER(service)}import * as GCP from "@alchemy.run/gcp";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -1620,7 +1636,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { callProbe, outcomeTag } from "../bindingHost.ts";
-import ${service}GeneratedHost from "./fixtures/generated-host.ts";
+${networks ? `import { releaseNetworkSlots, takeNetworkSlots } from "../networkQuota.ts";\n` : ""}import ${service}GeneratedHost from "./fixtures/generated-host.ts";
 
 const testOptions = { providers: GCP.providers() };
 const { test, beforeAll, afterAll } = Test.make(testOptions);
@@ -1669,7 +1685,7 @@ ${config.probes!.coveredBy ? `// Resource-bound bindings run live in ${config.pr
   () => {
   beforeAll(
     Effect.gen(function* () {
-      yield* sharedStack.destroy();
+${networks ? `      yield* takeNetworkSlots(${networks});\n` : ""}      yield* sharedStack.destroy();
 ${
   enables
     ? `      // The APIs first: the probe resources need them enabled to deploy.
@@ -1687,10 +1703,10 @@ ${enables}          const host = yield* ${service}GeneratedHost;
       );
       baseUrl = out.uri!;
     }),
-    { timeout: 1_800_000 },
+    { timeout: ${timeout} },
   );
 
-  afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+  afterAll(${networks ? `sharedStack.destroy().pipe(Effect.ensuring(releaseNetworkSlots(${networks})))` : "sharedStack.destroy()"}, { timeout: ${timeout} });
 ${[...groups.entries()]
   .sort(([a], [b]) => a.localeCompare(b))
   .map(

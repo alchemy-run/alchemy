@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeNode } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated BlockchainNodeEngine binding as its own
@@ -15,15 +16,22 @@ export default class BlockchainNodeEngineGeneratedHost extends GCP.Function<Bloc
   "BlockchainNodeEngineGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.BlockchainNodeEngine.ListBlockchainNodes();
+    const p0 = yield* GCP.BlockchainNodeEngine.GetBlockchainNode(ProbeNode);
+    const p1 = yield* GCP.BlockchainNodeEngine.ListBlockchainNodes();
     return {
       fetch: serveProbes({
-        ListBlockchainNodes: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
+        GetBlockchainNode: probeOutcome(Retry.none(p0({} as never))),
+        ListBlockchainNodes: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(Layer.mergeAll(GCP.BlockchainNodeEngine.ListBlockchainNodesHttp)),
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.BlockchainNodeEngine.GetBlockchainNodeHttp,
+          GCP.BlockchainNodeEngine.ListBlockchainNodesHttp,
+        ),
+      ),
     ),
   ),
 ) {}

@@ -6,6 +6,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { callProbe, outcomeTag } from "../bindingHost.ts";
+import { releaseNetworkSlots, takeNetworkSlots } from "../networkQuota.ts";
 import MemcacheGeneratedHost from "./fixtures/generated-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -50,6 +51,7 @@ describe.skipIf(!!process.env.FAST)(
   () => {
     beforeAll(
       Effect.gen(function* () {
+        yield* takeNetworkSlots(1);
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
@@ -62,32 +64,58 @@ describe.skipIf(!!process.env.FAST)(
       { timeout: 1_800_000 },
     );
 
-    afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+    afterAll(sharedStack.destroy().pipe(Effect.ensuring(releaseNetworkSlots(1))), {
+      timeout: 1_800_000,
+    });
 
     describe("Instance", { concurrent: true }, () => {
-      test.provider.skip(
-        "ApplyInstanceParameters (memcache.projects.locations.instances.applyParameters): Instance: needs Private Service Access peering on the network (GCP_TEST_PRIVATE_SERVICE_ACCESS)",
-        () => Effect.void,
+      test.provider(
+        "ApplyInstanceParameters (memcache.projects.locations.instances.applyParameters)",
+        () => probe("ApplyInstanceParameters", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:memcache", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetInstanceTags (memcache.projects.locations.instances.getTags): Instance: needs Private Service Access peering on the network (GCP_TEST_PRIVATE_SERVICE_ACCESS)",
-        () => Effect.void,
+      test.provider(
+        "GetInstanceTags (memcache.projects.locations.instances.getTags)",
+        () => probe("GetInstanceTags", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:memcache", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RescheduleInstanceMaintenance (memcache.projects.locations.instances.rescheduleMaintenance): Instance: needs Private Service Access peering on the network (GCP_TEST_PRIVATE_SERVICE_ACCESS)",
-        () => Effect.void,
+      test.provider(
+        "RescheduleInstanceMaintenance (memcache.projects.locations.instances.rescheduleMaintenance)",
+        () => probe("RescheduleInstanceMaintenance", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:memcache", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "SetInstanceTags (memcache.projects.locations.instances.setTags): Instance: needs Private Service Access peering on the network (GCP_TEST_PRIVATE_SERVICE_ACCESS)",
-        () => Effect.void,
+      test.provider(
+        "SetInstanceTags (memcache.projects.locations.instances.setTags)",
+        () => probe("SetInstanceTags", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:memcache", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UpdateInstanceParameters (memcache.projects.locations.instances.updateParameters): Instance: needs Private Service Access peering on the network (GCP_TEST_PRIVATE_SERVICE_ACCESS)",
-        () => Effect.void,
+      test.provider(
+        "UpdateInstanceParameters (memcache.projects.locations.instances.updateParameters)",
+        () => probe("UpdateInstanceParameters", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:memcache", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UpgradeInstance (memcache.projects.locations.instances.upgrade): Instance: needs Private Service Access peering on the network (GCP_TEST_PRIVATE_SERVICE_ACCESS)",
-        () => Effect.void,
+      test.provider(
+        "UpgradeInstance (memcache.projects.locations.instances.upgrade)",
+        () => probe("UpgradeInstance", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:memcache", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

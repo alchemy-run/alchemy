@@ -7,9 +7,10 @@
     }
   },
   "probes": {
-    "resources": {},
-    "untestable": {
-      "Instance": "needs Private Service Access peering on the network (GCP_TEST_PRIVATE_SERVICE_ACCESS)"
-    }
+    "resources": {
+      "Instance": "Cache"
+    },
+    "untestable": {},
+    "networks": 1
   }
 }

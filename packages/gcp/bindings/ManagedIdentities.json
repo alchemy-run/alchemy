@@ -13,11 +13,13 @@
     }
   },
   "probes": {
-    "resources": {},
+    "resources": {
+      "Domain": "ProbeDomain",
+      "DomainsBackup": "ProbeBackup"
+    },
     "untestable": {
-      "Domain": "Managed Microsoft AD takes 20-60 minutes to provision (~$0.40/hour). The API is enabled on the testing project; get-missing returns `NotFound`, and create with an invalid CIDR returns `BadRequest` (GCP_TEST_MANAGEDIDENTITIES)",
-      "DomainsBackup": "Backups require a provisioned Managed AD domain (20-60 minutes). Create against a missing parent returns `NotFound` (`parent resource not found for .../domains/missing.alch.test/backups/...`). Set (GCP_TEST_MANAGEDIDENTITIES)",
       "Peering": "Domain peering is cross-project only. Same-project create returns `BadRequest` (\"DomainPeering should be used when network and domain resource belong to different projects\"). Full lifecycle needs a (GCP_TEST_MANAGEDIDENTITIES)"
-    }
+    },
+    "deployMinutes": 90
   }
 }

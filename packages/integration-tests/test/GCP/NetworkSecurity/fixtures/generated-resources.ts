@@ -1,6 +1,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
+import { InternalAlb } from "../../internalAlb.ts";
 
 /** NetworkSecurity resources the generated bindings bind, mirroring each resource suite's smallest shape. */
 
@@ -205,5 +206,31 @@ export const ProbeTlsInspectionPolicy = Effect.gen(function* () {
     caPool: pool.name,
     description: Output.interpolate`probe ${ca.certificateAuthorityId}`,
     excludePublicCaSet: true,
+  });
+});
+
+/** A Cloud NGFW endpoint, and its association with a network of its own. */
+export const ProbeFirewallEndpoint = GCP.NetworkSecurity.FirewallEndpoint("ProbeFirewallEndpoint", {
+  location: "us-central1-a",
+  description: "alchemy probe",
+});
+export const ProbeFirewallAssociation = Effect.gen(function* () {
+  const vpc = yield* GCP.Compute.Network("ProbeNgfwVpc", { autoCreateSubnetworks: false });
+  const endpoint = yield* ProbeFirewallEndpoint;
+  return yield* GCP.NetworkSecurity.FirewallEndpointAssociation("ProbeFirewallAssociation", {
+    location: "us-central1-a",
+    firewallEndpoint: endpoint.name,
+    network: vpc.selfLink.as<string>(),
+  });
+});
+
+/** An authorization policy on an internal Application Load Balancer. */
+export const ProbeAuthzPolicy = Effect.gen(function* () {
+  const alb = yield* InternalAlb;
+  return yield* GCP.NetworkSecurity.AuthzPolicy("ProbeAuthzPolicy", {
+    location: "us-central1",
+    action: "ALLOW",
+    target: { loadBalancingScheme: "INTERNAL_MANAGED", resources: [alb.rule] },
+    httpRules: [{ to: { operations: [{ methods: ["GET"], paths: [{ prefix: "/admin" }] }] } }],
   });
 });

@@ -12,10 +12,10 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Conversations need the Large Language Model add-on (BadRequest "This
-// feature is only available when Large Language Model add-on is enabled.").
-// Set GCP_TEST_DISCOVERYENGINE_LLM=1 on a project with the add-on.
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_DISCOVERYENGINE_LLM;
+// Conversations need the engine's Large Language Model add-on (without it,
+// BadRequest "This feature is only available when Large Language Model add-on
+// is enabled."), which needs the Enterprise tier. Both bill per query.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   discoveryengine.getProjectsLocationsCollectionsEnginesConversations({ name }).pipe(
@@ -67,6 +67,10 @@ test.provider.skipIf(!runLifecycle)(
             location: "global",
             dataStoreIds: [store.dataStoreId],
             displayName: "conversation engine",
+            searchEngineConfig: {
+              searchTier: "SEARCH_TIER_ENTERPRISE",
+              searchAddOns: ["SEARCH_ADD_ON_LLM"],
+            },
           });
           const conversation = yield* GCP.DiscoveryEngine.CollectionsEnginesConversation("Chat", {
             engine: engine.name,
@@ -98,6 +102,10 @@ test.provider.skipIf(!runLifecycle)(
             location: "global",
             dataStoreIds: [store.dataStoreId],
             displayName: "conversation engine",
+            searchEngineConfig: {
+              searchTier: "SEARCH_TIER_ENTERPRISE",
+              searchAddOns: ["SEARCH_ADD_ON_LLM"],
+            },
           });
           const conversation = yield* GCP.DiscoveryEngine.CollectionsEnginesConversation("Chat", {
             engine: engine.name,

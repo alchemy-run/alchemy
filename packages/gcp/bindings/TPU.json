@@ -14,11 +14,11 @@
     "tpu.projects.locations.queuedResources.reset": "tpu.nodes.reset"
   },
   "probes": {
-    "resources": {},
-    "untestable": {
-      "Node": "TPU VMs bill by the hour and need TPU quota the testing project doesn't have",
-      "QueuedResource": "a queued resource provisions TPU VMs: hourly billing and TPU quota"
+    "resources": {
+      "Node": "Trainer",
+      "QueuedResource": "QueuedTrainer"
     },
+    "untestable": {},
     "enable": ["tpu.googleapis.com"],
     "location": "us-central1-a"
   }

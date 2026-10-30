@@ -2,7 +2,9 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeBackup, ProbeDomain } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated ManagedIdentities binding as its own
@@ -14,8 +16,74 @@ export default class ManagedIdentitiesGeneratedHost extends GCP.Function<Managed
   "ManagedIdentitiesGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.ManagedIdentities.AttachDomainTrust(ProbeDomain);
+    const p1 = yield* GCP.ManagedIdentities.CheckDomainMigrationPermission(ProbeDomain);
+    const p2 = yield* GCP.ManagedIdentities.DetachDomainTrust(ProbeDomain);
+    const p3 = yield* GCP.ManagedIdentities.DisableDomainMigration(ProbeDomain);
+    const p4 = yield* GCP.ManagedIdentities.DomainJoinMachine(ProbeDomain);
+    const p5 = yield* GCP.ManagedIdentities.EnableDomainMigration(ProbeDomain);
+    const p6 = yield* GCP.ManagedIdentities.ExtendDomainSchema(ProbeDomain);
+    const p7 = yield* GCP.ManagedIdentities.GetBackup(ProbeBackup);
+    const p8 = yield* GCP.ManagedIdentities.GetDomain(ProbeDomain);
+    const p9 = yield* GCP.ManagedIdentities.GetDomainLdapssettings(ProbeDomain);
+    const p10 = yield* GCP.ManagedIdentities.GetDomainSqlIntegration(ProbeDomain);
+    const p11 = yield* GCP.ManagedIdentities.ListDomainBackups(ProbeDomain);
+    const p12 = yield* GCP.ManagedIdentities.ListDomainSqlIntegrations(ProbeDomain);
+    const p13 = yield* GCP.ManagedIdentities.ReconfigureDomainTrust(ProbeDomain);
+    const p14 = yield* GCP.ManagedIdentities.ResetDomainAdminPassword(ProbeDomain);
+    const p15 = yield* GCP.ManagedIdentities.RestoreDomain(ProbeDomain);
+    const p16 = yield* GCP.ManagedIdentities.UpdateDomainLdapssettings(ProbeDomain);
+    const p17 = yield* GCP.ManagedIdentities.ValidateDomainTrust(ProbeDomain);
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        AttachDomainTrust: probeOutcome(Retry.none(p0({} as never))),
+        CheckDomainMigrationPermission: probeOutcome(Retry.none(p1({} as never))),
+        DetachDomainTrust: probeOutcome(Retry.none(p2({} as never))),
+        DisableDomainMigration: probeOutcome(Retry.none(p3({} as never))),
+        DomainJoinMachine: probeOutcome(Retry.none(p4({} as never))),
+        EnableDomainMigration: probeOutcome(Retry.none(p5({} as never))),
+        ExtendDomainSchema: probeOutcome(Retry.none(p6({} as never))),
+        GetBackup: probeOutcome(Retry.none(p7({} as never))),
+        GetDomain: probeOutcome(Retry.none(p8({} as never))),
+        GetDomainLdapssettings: probeOutcome(Retry.none(p9({} as never))),
+        GetDomainSqlIntegration: probeOutcome(
+          Retry.none(p10({ sqlIntegration: "alchemy-missing" } as never)),
+        ),
+        ListDomainBackups: probeOutcome(Retry.none(p11({} as never))),
+        ListDomainSqlIntegrations: probeOutcome(Retry.none(p12({} as never))),
+        ReconfigureDomainTrust: probeOutcome(Retry.none(p13({} as never))),
+        ResetDomainAdminPassword: probeOutcome(Retry.none(p14({} as never))),
+        RestoreDomain: probeOutcome(
+          Retry.none(p15({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        UpdateDomainLdapssettings: probeOutcome(Retry.none(p16({} as never))),
+        ValidateDomainTrust: probeOutcome(Retry.none(p17({} as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.ManagedIdentities.AttachDomainTrustHttp,
+          GCP.ManagedIdentities.CheckDomainMigrationPermissionHttp,
+          GCP.ManagedIdentities.DetachDomainTrustHttp,
+          GCP.ManagedIdentities.DisableDomainMigrationHttp,
+          GCP.ManagedIdentities.DomainJoinMachineHttp,
+          GCP.ManagedIdentities.EnableDomainMigrationHttp,
+          GCP.ManagedIdentities.ExtendDomainSchemaHttp,
+          GCP.ManagedIdentities.GetBackupHttp,
+          GCP.ManagedIdentities.GetDomainHttp,
+          GCP.ManagedIdentities.GetDomainLdapssettingsHttp,
+          GCP.ManagedIdentities.GetDomainSqlIntegrationHttp,
+          GCP.ManagedIdentities.ListDomainBackupsHttp,
+          GCP.ManagedIdentities.ListDomainSqlIntegrationsHttp,
+          GCP.ManagedIdentities.ReconfigureDomainTrustHttp,
+          GCP.ManagedIdentities.ResetDomainAdminPasswordHttp,
+          GCP.ManagedIdentities.RestoreDomainHttp,
+          GCP.ManagedIdentities.UpdateDomainLdapssettingsHttp,
+          GCP.ManagedIdentities.ValidateDomainTrustHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

@@ -112,12 +112,12 @@
       "MirroringDeployment": "ProbeMirroringDeployment",
       "InterceptEndpointGroupAssociation": "ProbeInterceptAssociation",
       "MirroringEndpointGroupAssociation": "ProbeMirroringAssociation",
-      "TlsInspectionPolicy": "ProbeTlsInspectionPolicy"
+      "TlsInspectionPolicy": "ProbeTlsInspectionPolicy",
+      "FirewallEndpoint": "ProbeFirewallEndpoint",
+      "FirewallEndpointAssociation": "ProbeFirewallAssociation",
+      "AuthzPolicy": "ProbeAuthzPolicy"
     },
     "untestable": {
-      "AuthzPolicy": "Needs an existing application load balancer forwarding rule; set (GCP_TEST_AUTHZ_POLICY_TARGET)",
-      "FirewallEndpoint": "Firewall endpoints (Cloud NGFW Enterprise) bill hourly and take well over 5 (GCP_TEST_NGFW)",
-      "FirewallEndpointAssociation": "Firewall endpoints (Cloud NGFW Enterprise) bill hourly and take well over 5 (GCP_TEST_NGFW)",
       "OrganizationsAddressGroup": "needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
       "OrganizationsFirewallEndpoint": "needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
       "OrganizationsSecurityProfile": "needs GCP_TEST_ORG_NETWORKSECURITY (an external prerequisite the testing project lacks)",
@@ -139,6 +139,8 @@
       "ListFirewallEndpointAssociations": "us-central1-a",
       "ListInterceptDeployments": "us-central1-a",
       "ListMirroringDeployments": "us-central1-a"
-    }
+    },
+    "networks": 2,
+    "deployMinutes": 60
   }
 }

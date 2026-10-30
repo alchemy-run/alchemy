@@ -59,15 +59,19 @@ describe.skipIf(!!process.env.FAST)(
         );
         baseUrl = out.uri!;
       }),
-      { timeout: 1_800_000 },
+      { timeout: 3_600_000 },
     );
 
-    afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+    afterAll(sharedStack.destroy(), { timeout: 3_600_000 });
 
     describe("BlockchainNode", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBlockchainNode (blockchainnodeengine.projects.locations.blockchainNodes.get): BlockchainNode: Blockchain nodes bill hourly and take 15-45 minutes to provision, so the (GCP_TEST_BLOCKCHAIN_NODE)",
-        () => Effect.void,
+      test.provider(
+        "GetBlockchainNode (blockchainnodeengine.projects.locations.blockchainNodes.get)",
+        () => probe("GetBlockchainNode", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:blockchainnodeengine", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

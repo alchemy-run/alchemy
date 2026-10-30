@@ -72,17 +72,29 @@ describe.skipIf(!!process.env.FAST)(
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
     describe("Node", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetNodeGuestAttributes (tpu.projects.locations.nodes.getGuestAttributes): Node: TPU VMs bill by the hour and need TPU quota the testing project doesn't have",
-        () => Effect.void,
+      test.provider(
+        "GetNodeGuestAttributes (tpu.projects.locations.nodes.getGuestAttributes)",
+        () => probe("GetNodeGuestAttributes", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:tpu", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "StartNode (tpu.projects.locations.nodes.start): Node: TPU VMs bill by the hour and need TPU quota the testing project doesn't have",
-        () => Effect.void,
+      test.provider(
+        "StartNode (tpu.projects.locations.nodes.start)",
+        () => probe("StartNode", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:tpu", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "StopNode (tpu.projects.locations.nodes.stop): Node: TPU VMs bill by the hour and need TPU quota the testing project doesn't have",
-        () => Effect.void,
+      test.provider(
+        "StopNode (tpu.projects.locations.nodes.stop)",
+        () => probe("StopNode", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:tpu", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -138,9 +150,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("QueuedResource", { concurrent: true }, () => {
-      test.provider.skip(
-        "ResetQueuedResource (tpu.projects.locations.queuedResources.reset): QueuedResource: a queued resource provisions TPU VMs: hourly billing and TPU quota",
-        () => Effect.void,
+      test.provider(
+        "ResetQueuedResource (tpu.projects.locations.queuedResources.reset)",
+        () => probe("ResetQueuedResource", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:tpu", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },
