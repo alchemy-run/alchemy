@@ -149,7 +149,9 @@ describe("Domain.Cluster after a SIGKILL", () => {
             ),
           );
         }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
-      { timeout: 90_000 },
+      // A new process catches up thousands of commands on synchronous SQLite: run
+      // alone, so other files' short timers are not held up.
+      { timeout: 90_000, exclusive: true },
     );
   }
 
@@ -180,6 +182,8 @@ describe("Domain.Cluster after a SIGKILL", () => {
           ),
         );
       }).pipe(Effect.scoped, Effect.provide(BunServices.layer)),
-    { timeout: 90_000 },
+    // A new process catches up thousands of commands on synchronous SQLite: run
+    // alone, so other files' short timers are not held up.
+    { timeout: 90_000, exclusive: true },
   );
 });
