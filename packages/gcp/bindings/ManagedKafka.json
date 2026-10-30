@@ -36,16 +36,17 @@
     "managedkafka.projects.locations.schemaRegistries.contexts.compatibility.checkCompatibility": "managedkafka.schemaRegistries.get"
   },
   "probes": {
-    "resources": {},
-    "untestable": {
-      "Cluster": "everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-      "ClustersTopic": "everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-      "ConnectCluster": "everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-      "SchemaRegistry": "everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-      "ClustersAcl": "everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-      "SchemaRegistriesSubjectsVersion": "everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-      "ConnectClustersConnector": "everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-      "SchemaRegistriesContextsSubjectsVersion": "everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW"
-    }
+    "resources": {
+      "Cluster": "Brokers",
+      "ClustersTopic": "Events",
+      "ConnectCluster": "Connect",
+      "SchemaRegistry": "Schemas",
+      "ClustersAcl": "ProbeAcl",
+      "ConnectClustersConnector": "ProbeConnector",
+      "SchemaRegistriesSubjectsVersion": "ProbeSubjectVersion",
+      "SchemaRegistriesContextsSubjectsVersion": "ProbeContextSubjectVersion"
+    },
+    "untestable": {},
+    "deployMinutes": 90
   }
 }

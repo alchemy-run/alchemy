@@ -59,80 +59,140 @@ describe.skipIf(!!process.env.FAST)(
         );
         baseUrl = out.uri!;
       }),
-      { timeout: 1_800_000 },
+      { timeout: 5_400_000 },
     );
 
-    afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+    afterAll(sharedStack.destroy(), { timeout: 5_400_000 });
 
     describe("Cluster", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeleteClusterConsumerGroup (managedkafka.projects.locations.clusters.consumerGroups.delete): Cluster: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "DeleteClusterConsumerGroup (managedkafka.projects.locations.clusters.consumerGroups.delete)",
+        () => probe("DeleteClusterConsumerGroup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetClusterConsumerGroup (managedkafka.projects.locations.clusters.consumerGroups.get): Cluster: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetClusterConsumerGroup (managedkafka.projects.locations.clusters.consumerGroups.get)",
+        () => probe("GetClusterConsumerGroup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListClusterAcls (managedkafka.projects.locations.clusters.acls.list): Cluster: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListClusterAcls (managedkafka.projects.locations.clusters.acls.list)",
+        () => probe("ListClusterAcls", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListClusterConsumerGroups (managedkafka.projects.locations.clusters.consumerGroups.list): Cluster: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListClusterConsumerGroups (managedkafka.projects.locations.clusters.consumerGroups.list)",
+        () => probe("ListClusterConsumerGroups", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListClusterTopics (managedkafka.projects.locations.clusters.topics.list): Cluster: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListClusterTopics (managedkafka.projects.locations.clusters.topics.list)",
+        () => probe("ListClusterTopics", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchClusterConsumerGroup (managedkafka.projects.locations.clusters.consumerGroups.patch): Cluster: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "PatchClusterConsumerGroup (managedkafka.projects.locations.clusters.consumerGroups.patch)",
+        () => probe("PatchClusterConsumerGroup", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ClustersAcl", { concurrent: true }, () => {
-      test.provider.skip(
-        "AddAclEntry (managedkafka.projects.locations.clusters.acls.addAclEntry): ClustersAcl: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "AddAclEntry (managedkafka.projects.locations.clusters.acls.addAclEntry)",
+        () => probe("AddAclEntry", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetAcl (managedkafka.projects.locations.clusters.acls.get): ClustersAcl: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetAcl (managedkafka.projects.locations.clusters.acls.get)",
+        () => probe("GetAcl", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RemoveAclEntry (managedkafka.projects.locations.clusters.acls.removeAclEntry): ClustersAcl: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "RemoveAclEntry (managedkafka.projects.locations.clusters.acls.removeAclEntry)",
+        () => probe("RemoveAclEntry", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ConnectCluster", { concurrent: true }, () => {
-      test.provider.skip(
-        "ListConnectClusterConnectors (managedkafka.projects.locations.connectClusters.connectors.list): ConnectCluster: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListConnectClusterConnectors (managedkafka.projects.locations.connectClusters.connectors.list)",
+        () => probe("ListConnectClusterConnectors", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ConnectClustersConnector", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetConnector (managedkafka.projects.locations.connectClusters.connectors.get): ConnectClustersConnector: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetConnector (managedkafka.projects.locations.connectClusters.connectors.get)",
+        () => probe("GetConnector", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PauseConnector (managedkafka.projects.locations.connectClusters.connectors.pause): ConnectClustersConnector: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "PauseConnector (managedkafka.projects.locations.connectClusters.connectors.pause)",
+        () => probe("PauseConnector", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RestartConnector (managedkafka.projects.locations.connectClusters.connectors.restart): ConnectClustersConnector: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "RestartConnector (managedkafka.projects.locations.connectClusters.connectors.restart)",
+        () => probe("RestartConnector", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ResumeConnector (managedkafka.projects.locations.connectClusters.connectors.resume): ConnectClustersConnector: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ResumeConnector (managedkafka.projects.locations.connectClusters.connectors.resume)",
+        () => probe("ResumeConnector", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "StopConnector (managedkafka.projects.locations.connectClusters.connectors.stop): ConnectClustersConnector: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "StopConnector (managedkafka.projects.locations.connectClusters.connectors.stop)",
+        () => probe("StopConnector", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -164,159 +224,307 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("SchemaRegistriesContextsSubjectsVersion", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetVersion@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.get): SchemaRegistriesContextsSubjectsVersion: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetVersion@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.get)",
+        () => probe("GetVersion@SchemaRegistriesContextsSubjectsVersion", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetVersionSchema@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.getSchema): SchemaRegistriesContextsSubjectsVersion: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetVersionSchema@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.getSchema)",
+        () => probe("GetVersionSchema@SchemaRegistriesContextsSubjectsVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListVersionReferencedby@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.referencedby.list): SchemaRegistriesContextsSubjectsVersion: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListVersionReferencedby@SchemaRegistriesContextsSubjectsVersion (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.referencedby.list)",
+        () => probe("ListVersionReferencedby@SchemaRegistriesContextsSubjectsVersion", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("SchemaRegistriesSubjectsVersion", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetVersion@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.get): SchemaRegistriesSubjectsVersion: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetVersion@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.get)",
+        () => probe("GetVersion@SchemaRegistriesSubjectsVersion", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetVersionSchema@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.getSchema): SchemaRegistriesSubjectsVersion: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetVersionSchema@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.getSchema)",
+        () => probe("GetVersionSchema@SchemaRegistriesSubjectsVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListVersionReferencedby@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.referencedby.list): SchemaRegistriesSubjectsVersion: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListVersionReferencedby@SchemaRegistriesSubjectsVersion (managedkafka.projects.locations.schemaRegistries.subjects.versions.referencedby.list)",
+        () => probe("ListVersionReferencedby@SchemaRegistriesSubjectsVersion", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("SchemaRegistry", { concurrent: true }, () => {
-      test.provider.skip(
-        "CheckCompatibility (managedkafka.projects.locations.schemaRegistries.compatibility.checkCompatibility): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "CheckCompatibility (managedkafka.projects.locations.schemaRegistries.compatibility.checkCompatibility)",
+        () => probe("CheckCompatibility", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteSchemaRegistryConfig (managedkafka.projects.locations.schemaRegistries.config.delete): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "DeleteSchemaRegistryConfig (managedkafka.projects.locations.schemaRegistries.config.delete)",
+        () => probe("DeleteSchemaRegistryConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteSchemaRegistryContextConfig (managedkafka.projects.locations.schemaRegistries.contexts.config.delete): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "DeleteSchemaRegistryContextConfig (managedkafka.projects.locations.schemaRegistries.contexts.config.delete)",
+        () => probe("DeleteSchemaRegistryContextConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteSchemaRegistryContextMode (managedkafka.projects.locations.schemaRegistries.contexts.mode.delete): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "DeleteSchemaRegistryContextMode (managedkafka.projects.locations.schemaRegistries.contexts.mode.delete)",
+        () => probe("DeleteSchemaRegistryContextMode", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteSchemaRegistryContextSubject (managedkafka.projects.locations.schemaRegistries.contexts.subjects.delete): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "DeleteSchemaRegistryContextSubject (managedkafka.projects.locations.schemaRegistries.contexts.subjects.delete)",
+        () => probe("DeleteSchemaRegistryContextSubject", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteSchemaRegistryMode (managedkafka.projects.locations.schemaRegistries.mode.delete): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "DeleteSchemaRegistryMode (managedkafka.projects.locations.schemaRegistries.mode.delete)",
+        () => probe("DeleteSchemaRegistryMode", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteSchemaRegistrySubject (managedkafka.projects.locations.schemaRegistries.subjects.delete): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "DeleteSchemaRegistrySubject (managedkafka.projects.locations.schemaRegistries.subjects.delete)",
+        () => probe("DeleteSchemaRegistrySubject", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetSchema (managedkafka.projects.locations.schemaRegistries.schemas.getSchema): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetSchema (managedkafka.projects.locations.schemaRegistries.schemas.getSchema)",
+        () => probe("GetSchema", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetSchemaRegistryConfig (managedkafka.projects.locations.schemaRegistries.config.get): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetSchemaRegistryConfig (managedkafka.projects.locations.schemaRegistries.config.get)",
+        () => probe("GetSchemaRegistryConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetSchemaRegistryContext (managedkafka.projects.locations.schemaRegistries.contexts.get): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetSchemaRegistryContext (managedkafka.projects.locations.schemaRegistries.contexts.get)",
+        () => probe("GetSchemaRegistryContext", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetSchemaRegistryContextConfig (managedkafka.projects.locations.schemaRegistries.contexts.config.get): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetSchemaRegistryContextConfig (managedkafka.projects.locations.schemaRegistries.contexts.config.get)",
+        () => probe("GetSchemaRegistryContextConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetSchemaRegistryContextMode (managedkafka.projects.locations.schemaRegistries.contexts.mode.get): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetSchemaRegistryContextMode (managedkafka.projects.locations.schemaRegistries.contexts.mode.get)",
+        () => probe("GetSchemaRegistryContextMode", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetSchemaRegistryContextSchema (managedkafka.projects.locations.schemaRegistries.contexts.schemas.get): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetSchemaRegistryContextSchema (managedkafka.projects.locations.schemaRegistries.contexts.schemas.get)",
+        () => probe("GetSchemaRegistryContextSchema", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetSchemaRegistryMode (managedkafka.projects.locations.schemaRegistries.mode.get): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetSchemaRegistryMode (managedkafka.projects.locations.schemaRegistries.mode.get)",
+        () => probe("GetSchemaRegistryMode", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetSchemaRegistrySchema (managedkafka.projects.locations.schemaRegistries.schemas.get): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "GetSchemaRegistrySchema (managedkafka.projects.locations.schemaRegistries.schemas.get)",
+        () => probe("GetSchemaRegistrySchema", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSchemaRegistryContexts (managedkafka.projects.locations.schemaRegistries.contexts.list): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListSchemaRegistryContexts (managedkafka.projects.locations.schemaRegistries.contexts.list)",
+        () => probe("ListSchemaRegistryContexts", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSchemaRegistryContextSchemaSubjects (managedkafka.projects.locations.schemaRegistries.contexts.schemas.subjects.list): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListSchemaRegistryContextSchemaSubjects (managedkafka.projects.locations.schemaRegistries.contexts.schemas.subjects.list)",
+        () => probe("ListSchemaRegistryContextSchemaSubjects", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSchemaRegistryContextSchemaTypes (managedkafka.projects.locations.schemaRegistries.contexts.schemas.types.list): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListSchemaRegistryContextSchemaTypes (managedkafka.projects.locations.schemaRegistries.contexts.schemas.types.list)",
+        () => probe("ListSchemaRegistryContextSchemaTypes", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSchemaRegistryContextSchemaVersions (managedkafka.projects.locations.schemaRegistries.contexts.schemas.versions.list): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListSchemaRegistryContextSchemaVersions (managedkafka.projects.locations.schemaRegistries.contexts.schemas.versions.list)",
+        () => probe("ListSchemaRegistryContextSchemaVersions", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSchemaRegistryContextSubjects (managedkafka.projects.locations.schemaRegistries.contexts.subjects.list): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListSchemaRegistryContextSubjects (managedkafka.projects.locations.schemaRegistries.contexts.subjects.list)",
+        () => probe("ListSchemaRegistryContextSubjects", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSchemaRegistryContextSubjectVersions (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.list): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListSchemaRegistryContextSubjectVersions (managedkafka.projects.locations.schemaRegistries.contexts.subjects.versions.list)",
+        () => probe("ListSchemaRegistryContextSubjectVersions", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSchemaRegistrySchemaSubjects (managedkafka.projects.locations.schemaRegistries.schemas.subjects.list): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListSchemaRegistrySchemaSubjects (managedkafka.projects.locations.schemaRegistries.schemas.subjects.list)",
+        () => probe("ListSchemaRegistrySchemaSubjects", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSchemaRegistrySchemaTypes (managedkafka.projects.locations.schemaRegistries.schemas.types.list): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListSchemaRegistrySchemaTypes (managedkafka.projects.locations.schemaRegistries.schemas.types.list)",
+        () => probe("ListSchemaRegistrySchemaTypes", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSchemaRegistrySchemaVersions (managedkafka.projects.locations.schemaRegistries.schemas.versions.list): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListSchemaRegistrySchemaVersions (managedkafka.projects.locations.schemaRegistries.schemas.versions.list)",
+        () => probe("ListSchemaRegistrySchemaVersions", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSchemaRegistrySubjects (managedkafka.projects.locations.schemaRegistries.subjects.list): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListSchemaRegistrySubjects (managedkafka.projects.locations.schemaRegistries.subjects.list)",
+        () => probe("ListSchemaRegistrySubjects", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListSchemaRegistrySubjectVersions (managedkafka.projects.locations.schemaRegistries.subjects.versions.list): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "ListSchemaRegistrySubjectVersions (managedkafka.projects.locations.schemaRegistries.subjects.versions.list)",
+        () => probe("ListSchemaRegistrySubjectVersions", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "LookupSubjectVersion (managedkafka.projects.locations.schemaRegistries.subjects.lookupVersion): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "LookupSubjectVersion (managedkafka.projects.locations.schemaRegistries.subjects.lookupVersion)",
+        () => probe("LookupSubjectVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UpdateSchemaRegistryConfig (managedkafka.projects.locations.schemaRegistries.config.update): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "UpdateSchemaRegistryConfig (managedkafka.projects.locations.schemaRegistries.config.update)",
+        () => probe("UpdateSchemaRegistryConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UpdateSchemaRegistryContextConfig (managedkafka.projects.locations.schemaRegistries.contexts.config.update): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "UpdateSchemaRegistryContextConfig (managedkafka.projects.locations.schemaRegistries.contexts.config.update)",
+        () => probe("UpdateSchemaRegistryContextConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UpdateSchemaRegistryContextMode (managedkafka.projects.locations.schemaRegistries.contexts.mode.update): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "UpdateSchemaRegistryContextMode (managedkafka.projects.locations.schemaRegistries.contexts.mode.update)",
+        () => probe("UpdateSchemaRegistryContextMode", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "UpdateSchemaRegistryMode (managedkafka.projects.locations.schemaRegistries.mode.update): SchemaRegistry: everything here sits on a Kafka cluster (plus a Connect cluster), which takes ~30 minutes each to provision; Bindings.test.ts and the resource suites cover them under GCP_TEST_SLOW",
-        () => Effect.void,
+      test.provider(
+        "UpdateSchemaRegistryMode (managedkafka.projects.locations.schemaRegistries.mode.update)",
+        () => probe("UpdateSchemaRegistryMode", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedkafka", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
