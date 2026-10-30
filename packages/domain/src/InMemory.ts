@@ -234,7 +234,11 @@ export const make = (
           return found;
         };
         // Callers hold `lock`.
-        const commit = (id: string, command: Json, meta: Aggregate.SendMeta) =>
+        const commit = (
+          id: string,
+          command: Json,
+          meta: Aggregate.SendMeta,
+        ): Effect.Effect<SendResult> =>
           Effect.gen(function* () {
             const current = instance(id);
             const duplicate = current.receipts.get(meta.commandId);
@@ -267,6 +271,18 @@ export const make = (
               },
             };
             current.receipts.set(meta.commandId, sent);
+            for (const commandId of result.timers?.cancel ?? []) {
+              timers.delete(`${kit.name}/${id}/${commandId}`);
+            }
+            for (const armed of result.timers?.arm ?? []) {
+              current.receipts.delete(armed.meta.commandId);
+              yield* timer(
+                `${kit.name}/${id}/${armed.meta.commandId}`,
+                armed.at,
+                commit(id, armed.command, armed.meta).pipe(Effect.asVoid),
+                lock.withPermits(1),
+              );
+            }
             yield* announce(id);
             yield* enqueue(result.deliveries, kit.deliver);
             return sent;

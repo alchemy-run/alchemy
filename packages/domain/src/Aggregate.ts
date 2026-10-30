@@ -3,7 +3,7 @@ import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import type * as DateTime from "effect/DateTime";
-import type * as Duration from "effect/Duration";
+import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
@@ -183,7 +183,14 @@ export interface Definition<
    * Every phase this aggregate can be in, each with the moves its events make.
    * Declare it with `phaseOf` and `when`. See {@link Phase}.
    */
-  readonly phases?: { readonly [K in P]: Phase<NoInfer<P>, E["tag"]> };
+  readonly phases?: {
+    readonly [K in P]: Phase<
+      NoInfer<P>,
+      E["tag"],
+      S["Type"],
+      Extract<C[number], { readonly rejects: readonly [] }>
+    >;
+  };
   /** The phase a state is in. The state stays the only thing that is stored. */
   readonly phaseOf?: (state: S["Type"]) => NoInfer<P>;
   /**
@@ -197,13 +204,27 @@ export interface Definition<
  * One phase of an aggregate's life, such as `draft` or `approved`. Phases are
  * data, so `Domain.verify`, a client and a diagram read the same rule.
  */
-export interface Phase<P extends string = string, Tag extends string = string> {
+export interface Phase<
+  P extends string = string,
+  Tag extends string = string,
+  State = never,
+  Timer extends Command.Any = Command.Any,
+> {
   /**
    * The phases an event may move an instance to from this one. An event that
    * has no entry leaves the instance in this phase. An instance that moves in
    * any other way is a defect, and nothing commits.
    */
   readonly on?: { readonly [T in Tag]?: P | ReadonlyArray<P> };
+  /**
+   * Commands this phase sends after a delay, keyed by the delay (`"24 hours"`).
+   * Each one is a command that never rejects: its class, when it takes no
+   * input, or a function of the state. The host arms them when an instance
+   * enters the phase, and cancels them when it leaves.
+   */
+  readonly after?: {
+    readonly [delay: string]: Timer | ((state: State) => InstanceOf<Timer>);
+  };
 }
 
 /**
@@ -291,7 +312,7 @@ export interface AnyDefinition {
   readonly evolve: AnyHandlers;
   readonly reply?: AnyHandlers;
   readonly read?: Read.AnyContract;
-  readonly phases?: { readonly [phase: string]: Phase };
+  readonly phases?: { readonly [phase: string]: Phase<string, string, never, any> };
   readonly phaseOf?: (state: never) => string;
   readonly when?: { readonly [tag: string]: ReadonlyArray<string> | "*" };
 }
@@ -483,6 +504,98 @@ export const undeclaredMove = (
       );
 };
 
+/** A phase's timer, as the kernel sees it. */
+type AnyTimer = Command.Any | ((state: unknown) => { readonly _tag: string });
+
+const timersOf = (phase: Phase | undefined): ReadonlyArray<readonly [string, AnyTimer]> =>
+  Object.entries((phase?.after ?? {}) as Readonly<Record<string, AnyTimer>>);
+
+const isCommandClass = (timer: AnyTimer): timer is Command.Any => "tag" in timer;
+
+/** The command a timer sends: its class, or what its function builds from the state. */
+const timerCommand = (timer: AnyTimer, state: unknown) =>
+  // oxlint-disable-next-line effecttsgo/new-schema-class -- Command.Any has no `make`
+  isCommandClass(timer) ? new timer() : timer(state);
+
+/** The host derives a timer's id from its phase and delay, so a phase has one per delay. */
+const timerId = (phase: string, delay: string) => `phase-timer:${phase}:${delay}`;
+
+/**
+ * What the phase moves of one commit do to timers, by timer id: the last move
+ * wins, so an instance that leaves a phase and returns in one commit arms its
+ * timers again. `from` is `undefined` when an instance first commits, which
+ * enters the initial phase.
+ *
+ * @internal
+ */
+export const timerChanges = (
+  aggregate: Any,
+  moves: ReadonlyArray<{ readonly from: string | undefined; readonly to: string }>,
+  state: unknown,
+): { readonly arm: ReadonlyArray<PhaseTimer>; readonly cancel: ReadonlyArray<string> } => {
+  const phases = aggregate.definition.phases;
+  const changes = new Map<string, PhaseTimer | "cancel">();
+  for (const { from, to } of moves) {
+    if (from !== undefined) {
+      for (const [delay] of timersOf(phases?.[from])) changes.set(timerId(from, delay), "cancel");
+    }
+    for (const [delay, timer] of timersOf(phases?.[to])) {
+      changes.set(timerId(to, delay), {
+        commandId: timerId(to, delay),
+        command: timerCommand(timer, state),
+        afterMillis: Duration.toMillis(Duration.fromInputUnsafe(delay as Duration.Input)),
+      });
+    }
+  }
+  const armed = [...changes.values()].filter((change) => change !== "cancel");
+  const cancelled = [...changes].flatMap(([id, change]) => (change === "cancel" ? [id] : []));
+  return { arm: armed, cancel: cancelled };
+};
+
+/** A command a phase sends after a delay, under an id the host derives. @internal */
+export interface PhaseTimer {
+  readonly commandId: string;
+  readonly command: { readonly _tag: string };
+  readonly afterMillis: number;
+}
+
+/** Every problem in a phase's `after`. */
+const timerProblems = (
+  aggregate: Any,
+  from: string,
+  phase: Phase,
+  allowedIn: (command: Command.Any, phase: string) => boolean,
+): ReadonlyArray<string> => {
+  const name = aggregate.aggregateName;
+  return timersOf(phase).flatMap(([delay, timer]) => {
+    const where = `${name}.phases.${from}.after["${delay}"]`;
+    const problems: Array<string> = [];
+    if (Option.isNone(Duration.fromInput(delay as Duration.Input))) {
+      problems.push(`${where} is not a duration: write it like "24 hours"`);
+    }
+    if (!isCommandClass(timer)) return problems;
+    const command = aggregate.definition.commands.find((c) => c === timer);
+    if (command === undefined) return [...problems, `${where} is not a command of ${name}`];
+    if (command.rejects.length > 0) {
+      problems.push(`${where}: ${command.tag} declares rejections, and nobody waits for a timer`);
+    }
+    if (command.middleware.length > 0) {
+      problems.push(`${where}: ${command.tag} has middleware, and a timer has no caller`);
+    }
+    if (!allowedIn(command, from)) {
+      problems.push(`${where}: when does not let ${command.tag} run in '${from}'`);
+    }
+    if (
+      Object.keys((command as unknown as { readonly fields?: object }).fields ?? {}).some(
+        (field) => field !== "_tag",
+      )
+    ) {
+      problems.push(`${where}: ${command.tag} takes input: use a function of the state`);
+    }
+    return problems;
+  });
+};
+
 /**
  * Every problem in an aggregate's phases: a table that is not complete, a
  * phase nothing can reach, a command that can never run, and a move no event
@@ -551,6 +664,7 @@ export const phaseProblems = (aggregate: Any): ReadonlyArray<string> => {
         );
     }
     moves.set(from, reached);
+    problems.push(...timerProblems(aggregate, from, phase, allowedIn));
   }
 
   const initial = (phaseOf as (state: unknown) => string)(def.initial);

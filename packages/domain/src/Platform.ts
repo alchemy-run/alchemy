@@ -151,7 +151,28 @@ export type HandleResult =
       readonly events: ReadonlyArray<StoredEvent>;
       readonly reply: Json;
       readonly deliveries: ReadonlyArray<Delivery>;
+      /** What the commit does to its phases' timers. Absent when it changes none. */
+      readonly timers?: TimerChanges;
     };
+
+/**
+ * What a commit does to the timers its aggregate's phases own. A platform
+ * applies them with the commit: atomically, where it has transactions.
+ */
+export interface TimerChanges {
+  /**
+   * Timers to arm, each like a schedule of `meta.commandId` that replaces what
+   * is there: a pending timer, and the receipt of one that already ran.
+   */
+  readonly arm: ReadonlyArray<{
+    readonly command: Json;
+    readonly meta: Aggregate.SendMeta;
+    /** When it is due, in epoch milliseconds. */
+    readonly at: number;
+  }>;
+  /** Command ids of timers to cancel. A timer that is not pending is no error. */
+  readonly cancel: ReadonlyArray<string>;
+}
 
 /**
  * The receipt of an accepted command, in JSON form.

@@ -139,6 +139,44 @@ yield* transfers.unschedule(source, `expire:${source.id}`).pipe(
 );
 ```
 
+## Let a phase own the timer
+
+The policy above arms a timer and cancels it, and it must handle `AlreadyExecuted` and `NotScheduled` to do so. When a deadline belongs to a [phase](/domain/aggregate#declare-its-phases), declare it on the phase instead, and there is no policy to write:
+
+```typescript title="packages/domain/src/Ticket/Ticket.aggregate.ts"
+phases: {
+  triage: {
+    on: { TicketPaused: "paused", TicketClosed: "closed" },
+    after: { "24 hours": MarkStalled },
+  },
+  paused: { on: { TicketResumed: "triage", TicketClosed: "closed" } },
+  closed: {},
+},
+phaseOf: (s) => s.status,
+when: {
+  MarkStalled: ["triage"],
+  // ...
+},
+```
+
+- Entering the phase arms the timer, from the time of the commit.
+- Leaving the phase cancels it.
+- Entering again arms it again, even if it already ran.
+
+The key is the delay. The value is a command that never rejects: its class when it takes no input, or a function of the state after the commit, like `(s) => new MarkStalled({ owner: s.owner })`. A timer has no caller, so its command has no middleware.
+
+The host derives the timer's command id from the phase and the delay, and changes timers with the commit that moves the instance. There is no id for you to choose, so nothing can hit `AlreadyExecuted`. A phase has one timer per delay. It fires once: a commit that stays in the phase does not arm it again. To repeat it, let its command leave the phase and return in one commit.
+
+Three limits:
+
+- An instance that first commits arms the timers of its initial phase. Before that, it doesn't exist.
+- Timers arm on a move, so an instance that is already in the phase when you add `after` gets no timer until it enters the phase again.
+- Seeded history moves no timers, as it runs no policies. To test a timer, send the command that enters the phase.
+
+`Domain.verify` reports a delay that isn't a duration, a command that isn't this aggregate's, one that can reject, one with middleware or input, and one that `when` doesn't allow in that phase.
+
+Use `schedule` for a deadline that doesn't belong to a phase, or one a policy must compute from outside the aggregate.
+
 ## Test it with the clock
 
 A story has its own clock. `Story.clock` moves it, and any scheduled command that's now due fires.

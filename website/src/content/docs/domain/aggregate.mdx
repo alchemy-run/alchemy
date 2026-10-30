@@ -254,6 +254,8 @@ An event that moves an instance in a way `phases` doesn't declare is a defect, a
 - a command `when` limits that declares rejections but not `Domain.WrongPhase`
 - a name in the table that doesn't exist
 
+A phase can also [own its timers](/domain/deadlines#let-a-phase-own-the-timer) with `after`.
+
 ### Ask what comes next
 
 `Order.nextCommands(state)` gives the tags of the commands that may run in that state, and `Order.phase(state)` gives the phase. Both are plain functions of the state, so a client can use them with no second copy of the rule. `Order.predict` refuses a command outside its phases as the host does.
