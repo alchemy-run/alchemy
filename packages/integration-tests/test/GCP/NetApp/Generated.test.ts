@@ -6,6 +6,7 @@ import * as Core from "@alchemy.run/test/Core";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { callProbe, outcomeTag } from "../bindingHost.ts";
+import { releaseNetworkSlots, takeNetworkSlots } from "../networkQuota.ts";
 import NetAppGeneratedHost from "./fixtures/generated-host.ts";
 
 const testOptions = { providers: GCP.providers() };
@@ -50,6 +51,7 @@ describe.skipIf(!!process.env.FAST)(
   () => {
     beforeAll(
       Effect.gen(function* () {
+        yield* takeNetworkSlots(1);
         yield* sharedStack.destroy();
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
@@ -59,10 +61,12 @@ describe.skipIf(!!process.env.FAST)(
         );
         baseUrl = out.uri!;
       }),
-      { timeout: 1_800_000 },
+      { timeout: 3_600_000 },
     );
 
-    afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+    afterAll(sharedStack.destroy().pipe(Effect.ensuring(releaseNetworkSlots(1))), {
+      timeout: 3_600_000,
+    });
 
     describe("ActiveDirectory", { concurrent: true }, () => {
       test.provider(
@@ -106,9 +110,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("BackupVaultsBackup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBackup (netapp.projects.locations.backupVaults.backups.get): BackupVaultsBackup: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
-        () => Effect.void,
+      test.provider(
+        "GetBackup (netapp.projects.locations.backupVaults.backups.get)",
+        () => probe("GetBackup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -289,82 +297,126 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Volume", { concurrent: true }, () => {
-      test.provider.skip(
-        "EstablishVolumePeering (netapp.projects.locations.volumes.establishPeering): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
-        () => Effect.void,
+      test.provider(
+        "EstablishVolumePeering (netapp.projects.locations.volumes.establishPeering)",
+        () => probe("EstablishVolumePeering", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetVolume (netapp.projects.locations.volumes.get): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
-        () => Effect.void,
+      test.provider(
+        "GetVolume (netapp.projects.locations.volumes.get)",
+        () => probe("GetVolume", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetVolumeSplitStatus (netapp.projects.locations.volumes.getSplitStatus): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
-        () => Effect.void,
+      test.provider(
+        "GetVolumeSplitStatus (netapp.projects.locations.volumes.getSplitStatus)",
+        () => probe("GetVolumeSplitStatus", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListVolumeQuotaRules (netapp.projects.locations.volumes.quotaRules.list): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
-        () => Effect.void,
+      test.provider(
+        "ListVolumeQuotaRules (netapp.projects.locations.volumes.quotaRules.list)",
+        () => probe("ListVolumeQuotaRules", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListVolumeReplications (netapp.projects.locations.volumes.replications.list): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
-        () => Effect.void,
+      test.provider(
+        "ListVolumeReplications (netapp.projects.locations.volumes.replications.list)",
+        () => probe("ListVolumeReplications", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListVolumeSnapshots (netapp.projects.locations.volumes.snapshots.list): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
-        () => Effect.void,
+      test.provider(
+        "ListVolumeSnapshots (netapp.projects.locations.volumes.snapshots.list)",
+        () => probe("ListVolumeSnapshots", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RestoreVolume (netapp.projects.locations.volumes.restore): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
-        () => Effect.void,
+      test.provider(
+        "RestoreVolume (netapp.projects.locations.volumes.restore)",
+        () => probe("RestoreVolume", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RevertVolume (netapp.projects.locations.volumes.revert): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
-        () => Effect.void,
+      test.provider(
+        "RevertVolume (netapp.projects.locations.volumes.revert)",
+        () => probe("RevertVolume", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "StartVolumeSplit (netapp.projects.locations.volumes.startSplit): Volume: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
-        () => Effect.void,
+      test.provider(
+        "StartVolumeSplit (netapp.projects.locations.volumes.startSplit)",
+        () => probe("StartVolumeSplit", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("VolumesQuotaRule", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetQuotaRule (netapp.projects.locations.volumes.quotaRules.get): VolumesQuotaRule: Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service… (GCP_TEST_NETAPP_VOLUMES)",
-        () => Effect.void,
+      test.provider(
+        "GetQuotaRule (netapp.projects.locations.volumes.quotaRules.get)",
+        () => probe("GetQuotaRule", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("VolumesReplication", { concurrent: true }, () => {
       test.provider.skip(
-        "EstablishReplicationPeering (netapp.projects.locations.volumes.replications.establishPeering): VolumesReplication: Two pools + volume + replication: skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with… (GCP_TEST_NETAPP_VOLUMES)",
+        "EstablishReplicationPeering (netapp.projects.locations.volumes.replications.establishPeering): VolumesReplication: a replication needs a second 2 TiB pool and volume in another region; VolumesReplication.test.ts covers it",
         () => Effect.void,
       );
       test.provider.skip(
-        "GetReplication (netapp.projects.locations.volumes.replications.get): VolumesReplication: Two pools + volume + replication: skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with… (GCP_TEST_NETAPP_VOLUMES)",
+        "GetReplication (netapp.projects.locations.volumes.replications.get): VolumesReplication: a replication needs a second 2 TiB pool and volume in another region; VolumesReplication.test.ts covers it",
         () => Effect.void,
       );
       test.provider.skip(
-        "ResumeReplication (netapp.projects.locations.volumes.replications.resume): VolumesReplication: Two pools + volume + replication: skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with… (GCP_TEST_NETAPP_VOLUMES)",
+        "ResumeReplication (netapp.projects.locations.volumes.replications.resume): VolumesReplication: a replication needs a second 2 TiB pool and volume in another region; VolumesReplication.test.ts covers it",
         () => Effect.void,
       );
       test.provider.skip(
-        "ReverseReplicationDirection (netapp.projects.locations.volumes.replications.reverseDirection): VolumesReplication: Two pools + volume + replication: skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with… (GCP_TEST_NETAPP_VOLUMES)",
+        "ReverseReplicationDirection (netapp.projects.locations.volumes.replications.reverseDirection): VolumesReplication: a replication needs a second 2 TiB pool and volume in another region; VolumesReplication.test.ts covers it",
         () => Effect.void,
       );
       test.provider.skip(
-        "StopReplication (netapp.projects.locations.volumes.replications.stop): VolumesReplication: Two pools + volume + replication: skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with… (GCP_TEST_NETAPP_VOLUMES)",
+        "StopReplication (netapp.projects.locations.volumes.replications.stop): VolumesReplication: a replication needs a second 2 TiB pool and volume in another region; VolumesReplication.test.ts covers it",
         () => Effect.void,
       );
       test.provider.skip(
-        "SyncReplication (netapp.projects.locations.volumes.replications.sync): VolumesReplication: Two pools + volume + replication: skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with… (GCP_TEST_NETAPP_VOLUMES)",
+        "SyncReplication (netapp.projects.locations.volumes.replications.sync): VolumesReplication: a replication needs a second 2 TiB pool and volume in another region; VolumesReplication.test.ts covers it",
         () => Effect.void,
       );
     });
 
     describe("VolumesSnapshot", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSnapshot (netapp.projects.locations.volumes.snapshots.get): VolumesSnapshot: Pool + volume provisioning is multi-minute; skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails… (GCP_TEST_NETAPP_VOLUMES)",
-        () => Effect.void,
+      test.provider(
+        "GetSnapshot (netapp.projects.locations.volumes.snapshots.get)",
+        () => probe("GetSnapshot", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:netapp", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

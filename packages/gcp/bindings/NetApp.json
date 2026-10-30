@@ -43,17 +43,19 @@
       "BackupVault": "ProbeBackupVault",
       "HostGroup": "ProbeHostGroup",
       "StoragePool": "ProbeStoragePool",
-      "KmsConfig": "ProbeKmsConfig"
+      "KmsConfig": "ProbeKmsConfig",
+      "Volume": "ProbeVolume",
+      "VolumesQuotaRule": "ProbeQuotaRule",
+      "VolumesSnapshot": "ProbeSnapshot",
+      "BackupVaultsBackup": "ProbeVolumeBackup"
     },
     "untestable": {
-      "BackupVaultsBackup": "Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service\u2026 (GCP_TEST_NETAPP_VOLUMES)",
-      "Volume": "Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service\u2026 (GCP_TEST_NETAPP_VOLUMES)",
-      "VolumesQuotaRule": "Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with `Please create Service Networking connection with service\u2026 (GCP_TEST_NETAPP_VOLUMES)",
-      "VolumesReplication": "Two pools + volume + replication: skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails with\u2026 (GCP_TEST_NETAPP_VOLUMES)",
-      "VolumesSnapshot": "Pool + volume provisioning is multi-minute; skip unless explicitly enabled. Volumes need a Private Service Access connection to `netapp.servicenetworking.goog` on the `default` network (otherwise volume create fails\u2026 (GCP_TEST_NETAPP_VOLUMES)"
+      "VolumesReplication": "a replication needs a second 2 TiB pool and volume in another region; VolumesReplication.test.ts covers it"
     },
     "skip": {
       "ListStoragePoolBackupConfigs": "backup configs exist only on ONTAP-mode storage pools (\"ListBackupConfigs is only supported for ONTAP mode storage pools\"); the probe pool is a standard pool"
-    }
+    },
+    "networks": 1,
+    "deployMinutes": 60
   }
 }
