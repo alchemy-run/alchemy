@@ -30,10 +30,19 @@ export const resourceNameFromOperation = (
  */
 export const waitForOperation = (
   operation: aiplatform.GoogleLongrunningOperation,
-  options?: { notFoundOk?: boolean; alreadyExistsOk?: boolean },
+  options?: {
+    notFoundOk?: boolean;
+    alreadyExistsOk?: boolean;
+    /**
+     * Operation getter for a service that the v1 API does not serve, such as
+     * AgentService (v1beta1 only). Defaults to v1 `getProjectsLocationsOperations`.
+     */
+    get?: (name: string) => ReturnType<typeof aiplatform.getProjectsLocationsOperations>;
+  },
 ) =>
   Effect.gen(function* () {
-    const get = (name: string) => aiplatform.getProjectsLocationsOperations({ name });
+    const get =
+      options?.get ?? ((name: string) => aiplatform.getProjectsLocationsOperations({ name }));
     const finished = yield* waitForGcpOperation(operation, get, {
       budget: "30 minutes",
     }).pipe(
