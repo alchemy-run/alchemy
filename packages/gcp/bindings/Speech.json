@@ -17,6 +17,9 @@
     "locations": {
       "ListCustomClasses": "global",
       "ListPhraseSets": "global"
+    },
+    "args": {
+      "LongrunningrecognizeSpeech": "{ body: { config: { languageCode: \"en-US\" }, audio: { uri: \"gs://alchemy-missing-bucket/missing.flac\" } } }"
     }
   },
   "defaultPermission": "serviceusage.services.use",

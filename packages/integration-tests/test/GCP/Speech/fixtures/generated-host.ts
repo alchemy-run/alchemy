@@ -22,7 +22,16 @@ export default class SpeechGeneratedHost extends GCP.Function<SpeechGeneratedHos
       fetch: serveProbes({
         ListCustomClasses: probeOutcome(Retry.none(p0({ location: "global" } as never))),
         ListPhraseSets: probeOutcome(Retry.none(p1({ location: "global" } as never))),
-        LongrunningrecognizeSpeech: probeOutcome(Retry.none(p2({} as never))),
+        LongrunningrecognizeSpeech: probeOutcome(
+          Retry.none(
+            p2({
+              body: {
+                config: { languageCode: "en-US" },
+                audio: { uri: "gs://alchemy-missing-bucket/missing.flac" },
+              },
+            } as never),
+          ),
+        ),
       }),
     };
   }).pipe(
