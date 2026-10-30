@@ -113,6 +113,8 @@ const page = yield* bank.AccountLedger({ account: accountId }, { take: 20 });
 
 The result is decoded from the row schema. The error type lists the query's rejections, its middleware's errors, `ConsistencyTimeout` when it reads from projections, and `RpcClientError`, so `Effect.catchTag` handles each.
 
+A Foldkit app asks a query through a Command from `@alchemy.run/domain/Foldkit`. See [Integrate with Foldkit: Ask a query](/domain/foldkit#ask-a-query).
+
 ## Page through it
 
 Paging is by cursor. The handler returns `cursor: null` on the last page; otherwise the client passes the cursor back as `after`.
