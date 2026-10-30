@@ -229,8 +229,11 @@ export const GlossaryProvider = () =>
         );
         yield* waitForOperation(operation);
         current = yield* getByName(name);
-      } else {
-        // Sync: the file and display name are the only mutable fields.
+      }
+
+      // Sync: the file and display name are the only mutable fields. Create
+      // ignores `displayName`, so a new glossary is patched here too.
+      if (current !== undefined) {
         const mask = [
           ...(sameText(current.inputConfig?.gcsSource?.inputUri, news.source)
             ? []

@@ -11,10 +11,16 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// A policy governs a Vertex AI Agent; the lifecycle creates one.
-const Governed = GCP.AIPlatform.Agent("Governed", {
-  location: "global",
-  systemInstruction: "Answer briefly.",
+// A policy governs an agent in Agent Registry; the lifecycle registers one.
+const Governed = Effect.gen(function* () {
+  yield* GCP.ServiceUsage.ProjectService("AgentRegistryApi", {
+    service: "agentregistry.googleapis.com",
+  });
+  return yield* GCP.AgentRegistry.Service("Governed", {
+    location: "us-central1",
+    agentSpec: { type: "NO_SPEC" },
+    interfaces: [{ url: "https://example.com/agent", protocolBinding: "HTTP_JSON" }],
+  });
 });
 
 const waitUntilGone = (name: string) =>
@@ -37,7 +43,7 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsSemanticGovernancePolicies({
-          name: `projects/${project}/locations/global/semanticGovernancePolicies/alchemy-sgp-missing`,
+          name: `projects/${project}/locations/us-central1/semanticGovernancePolicies/alchemy-sgp-missing`,
         }),
       );
       expect(error._tag).toEqual("NotFound");
@@ -60,10 +66,10 @@ test.provider(
         Effect.gen(function* () {
           const governed = yield* Governed;
           return yield* GCP.AIPlatform.SemanticGovernancePolicy("Safety", {
-            location: "global",
+            location: "us-central1",
             displayName: "safety",
             description: "no pii",
-            agent: governed.name,
+            agent: governed.registryResource.as<string>(),
             naturalLanguageConstraint: "Never share customer PII.",
           });
         }),
@@ -83,11 +89,11 @@ test.provider(
         Effect.gen(function* () {
           const governed = yield* Governed;
           return yield* GCP.AIPlatform.SemanticGovernancePolicy("Safety", {
-            location: "global",
+            location: "us-central1",
             semanticGovernancePolicyId: created.semanticGovernancePolicyId,
             displayName: "safety-v2",
             description: "no pii v2",
-            agent: governed.name,
+            agent: governed.registryResource.as<string>(),
             naturalLanguageConstraint: "Never share secrets or PII.",
           });
         }),

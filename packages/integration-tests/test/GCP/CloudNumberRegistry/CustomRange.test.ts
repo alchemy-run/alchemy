@@ -8,6 +8,7 @@ import {
   logLevel,
   currentProject,
   CloudNumberRegistryApi,
+  orgRegistry,
   waitUntilGone,
 } from "./common.ts";
 
@@ -39,7 +40,7 @@ test.provider(
   },
 );
 
-test.provider(
+test.provider.skipIf(!orgRegistry)(
   "create, update, and delete a custom range",
   (stack) =>
     Effect.gen(function* () {

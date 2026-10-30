@@ -14,6 +14,11 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 // The testing project doesn't enable apim.googleapis.com by default: every test
 // deploys it first.
+// Observation sources sit on an Apigee organization: create answers BadRequest
+// "Apigee organization is not provisioned for project", and jobs need a
+// source. Set GCP_TEST_APIGEE_ORG=1 on a project with one.
+const apigeeOrg = !!process.env.GCP_TEST_APIGEE_ORG && !process.env.FAST;
+
 const ApimApi = GCP.ServiceUsage.ProjectService("ApimApi", {
   service: "apim.googleapis.com",
 });
@@ -52,7 +57,7 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:apim", "live"], timeout: 90_000 },
 );
 
-test.provider(
+test.provider.skipIf(!apigeeOrg)(
   "create and delete an API Observation source",
   (stack) =>
     Effect.gen(function* () {

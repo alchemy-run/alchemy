@@ -11,6 +11,13 @@ export const logLevel = Effect.provideService(
 
 // The testing project doesn't enable the Cloud Number Registry API by
 // default: every test deploys it first.
+// Lifecycles need an IPAM admin scope, which needs an organization-level number
+// registry: create answers BadRequest "OrgNumberRegistry must be created for
+// organization N with admin project N before creating an IPAM admin scope",
+// and registry books "Failed to find IPAM admin scope for project N". Set
+// GCP_TEST_CLOUD_NUMBER_REGISTRY_ORG=1 on a project whose organization has one.
+export const orgRegistry = !!process.env.GCP_TEST_CLOUD_NUMBER_REGISTRY_ORG && !process.env.FAST;
+
 export const CloudNumberRegistryApi = GCP.ServiceUsage.ProjectService("CloudNumberRegistryApi", {
   service: "cloudnumberregistry.googleapis.com",
 });

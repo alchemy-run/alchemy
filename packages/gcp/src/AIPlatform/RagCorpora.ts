@@ -292,10 +292,15 @@ export const RagCorporaProvider = () =>
       if (displayChanged || descriptionChanged) {
         const patched = yield* aiplatform.patchProjectsLocationsRagCorpora({
           name: observedName,
+          // The patch replaces the whole corpus: echo its (immutable) vector
+          // store, or the API reads the default as a change ("The vector db
+          // type is immutable").
           body: {
             name: observedName,
             displayName,
             description: stampedDescription,
+            vectorDbConfig: current.vectorDbConfig,
+            vertexAiSearchConfig: current.vertexAiSearchConfig,
           },
         });
         yield* waitForOperation(patched);

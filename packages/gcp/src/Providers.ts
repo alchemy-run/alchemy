@@ -35,6 +35,10 @@ import {
   Binding as AgentregistryBinding,
   BindingProvider as AgentregistryBindingProvider,
 } from "./AgentRegistry/Binding.ts";
+import {
+  Service as AgentregistryService,
+  ServiceProvider as AgentregistryServiceProvider,
+} from "./AgentRegistry/Service.ts";
 import { Agent, AgentProvider } from "./AIPlatform/Agent.ts";
 import { BatchPredictionJob, BatchPredictionJobProvider } from "./AIPlatform/BatchPredictionJob.ts";
 import { CachedContent, CachedContentProvider } from "./AIPlatform/CachedContent.ts";
@@ -2969,6 +2973,7 @@ const makeProviders = () =>
           ResourceManagerProject,
           Key,
           AgentregistryBinding,
+          AgentregistryService,
           RecaptchaenterpriseKey,
           RecaptchaenterpriseFirewallpolicy,
           Policy,
@@ -4647,6 +4652,7 @@ const makeProviders = () =>
                 WorkstationClustersWorkstationConfigProvider(),
                 WorkstationClustersWorkstationConfigsWorkstationProvider(),
                 AgentregistryBindingProvider(),
+                AgentregistryServiceProvider(),
                 RecaptchaenterpriseKeyProvider(),
                 RecaptchaenterpriseFirewallpolicyProvider(),
                 AgentidentityAuthProviderProvider(),

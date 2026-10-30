@@ -222,6 +222,9 @@ export type Evaluation = Resource<
  */
 export const Evaluation = Resource<Evaluation>("GCP.WorkloadManager.Evaluation");
 
+/** Evaluation ids: a letter first, 3–36 characters. */
+const MAX_EVALUATION_ID_LENGTH = 36;
+
 const resourceName = (project: string, location: string, evaluationId: string) =>
   `projects/${project}/locations/${location}/evaluations/${evaluationId}`;
 
@@ -335,6 +338,7 @@ export const EvaluationProvider = () =>
         olds?.evaluationId,
         output?.evaluationId,
         "evaluation",
+        MAX_EVALUATION_ID_LENGTH,
       );
       const location = normalizeLocation(olds?.location ?? output?.location, env.region);
       const name = output?.name ?? resourceName(env.project, location, evaluationId);
@@ -358,6 +362,7 @@ export const EvaluationProvider = () =>
         news.evaluationId,
         output?.evaluationId,
         "evaluation",
+        MAX_EVALUATION_ID_LENGTH,
       );
       const location = normalizeLocation(news.location ?? output?.location, env.region);
       const name = resourceName(env.project, location, evaluationId);

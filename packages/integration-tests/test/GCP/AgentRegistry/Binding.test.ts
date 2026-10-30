@@ -18,6 +18,18 @@ const AgentRegistryApi = GCP.ServiceUsage.ProjectService("AgentRegistryApi", {
 });
 
 const location = "us-central1";
+
+// A binding delegates through an auth provider (the API answers BadRequest
+// "auth_provider is required" without one).
+const Keys = Effect.gen(function* () {
+  yield* GCP.ServiceUsage.ProjectService("AgentIdentityApi", {
+    service: "agentidentity.googleapis.com",
+  });
+  return yield* GCP.AgentIdentity.AuthProvider("Keys", {
+    location,
+    authProviderTypeParams: { apiKey: { apiKey: "alchemy-test-api-key" } },
+  });
+});
 const currentParent = GcpEnvironment.current.pipe(
   Effect.map(({ project }) => `projects/${project}/locations/${location}`),
 );
@@ -177,7 +189,9 @@ test.provider(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           yield* AgentRegistryApi;
+          const keys = yield* Keys;
           return yield* GCP.AgentRegistry.Binding("Orchestrator", {
+            authProviderBinding: { authProvider: keys.name },
             location,
             displayName: "orchestrator tools",
             description: "routes the orchestrator",
@@ -207,7 +221,9 @@ test.provider(
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
           yield* AgentRegistryApi;
+          const keys = yield* Keys;
           return yield* GCP.AgentRegistry.Binding("Orchestrator", {
+            authProviderBinding: { authProvider: keys.name },
             location,
             displayName: "orchestrator tools v2",
             description: "updated routing",

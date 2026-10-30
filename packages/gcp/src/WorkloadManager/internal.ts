@@ -40,17 +40,21 @@ export const lastSegment = (value: string) => {
   return parts[parts.length - 1] || trimmed;
 };
 
-export const rfc1035 = (name: string, fallback = "workloadmanager"): string => {
+export const rfc1035 = (
+  name: string,
+  fallback = "workloadmanager",
+  maxLength = MAX_NAME_LENGTH,
+): string => {
   let next = name
     .toLowerCase()
     .replace(/[^a-z0-9-]/g, "-")
     .replace(/-+/g, "-")
     .replace(/^-+|-+$/g, "");
   if (!/^[a-z]/.test(next)) next = `w${next}`;
-  next = next.slice(0, MAX_NAME_LENGTH).replace(/-+$/g, "");
+  next = next.slice(0, maxLength).replace(/-+$/g, "");
   if (next.length === 0) return fallback;
-  if (!/[a-z0-9]$/.test(next)) next = `${next.slice(0, MAX_NAME_LENGTH - 1)}0`;
-  return next.slice(0, MAX_NAME_LENGTH);
+  if (!/[a-z0-9]$/.test(next)) next = `${next.slice(0, maxLength - 1)}0`;
+  return next.slice(0, maxLength);
 };
 
 export const normalizeLocation = (location: string | undefined, fallback: string) =>
@@ -64,17 +68,15 @@ export const toPhysicalId = (
   explicit: string | undefined,
   existing: string | undefined,
   fallback = "workloadmanager",
+  maxLength = MAX_NAME_LENGTH,
 ) =>
   Effect.gen(function* () {
-    if (explicit !== undefined) return rfc1035(explicit, fallback);
+    if (explicit !== undefined) return rfc1035(explicit, fallback, maxLength);
     if (existing !== undefined) return existing;
     return rfc1035(
-      yield* createPhysicalName({
-        id,
-        maxLength: MAX_NAME_LENGTH,
-        lowercase: true,
-      }),
+      yield* createPhysicalName({ id, maxLength, lowercase: true }),
       fallback,
+      maxLength,
     );
   });
 
