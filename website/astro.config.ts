@@ -500,6 +500,7 @@ export default defineConfig({
           label: "CLI",
           items: [
             { label: "Overview", link: "/cli" },
+            { label: "Programmatic API", link: "/cli/api" },
             {
               label: "Deploy",
               items: [

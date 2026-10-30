@@ -7,7 +7,7 @@ import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
-import { DefinitionError, judge, settle } from "./internal.ts";
+import { DefinitionError, judge, rejectionTag, settle } from "./internal.ts";
 import * as Key from "./Key.ts";
 import type {
   Accepted,
@@ -259,7 +259,8 @@ const build = (
         reply: command.reply ? jsonCodec(command.reply) : undefined,
       });
       for (const rejection of command.rejects) {
-        if (!rejections.has(rejection.tag)) rejections.set(rejection.tag, jsonCodec(rejection));
+        const tag = rejectionTag(rejection);
+        if (!rejections.has(tag)) rejections.set(tag, jsonCodec(rejection));
       }
     }
     let initial: Json = null;
@@ -737,7 +738,7 @@ const build = (
           if (judged._tag === "Rejected") {
             const rejection = judged.rejection;
             const codec = codecs.rejections.get(rejection._tag)!;
-            const declared = command.cls.rejects.find((r) => r.tag === rejection._tag)!;
+            const declared = command.cls.rejects.find((r) => rejectionTag(r) === rejection._tag)!;
             yield* Effect.annotateCurrentSpan({
               "domain.outcome": rejection._tag,
               ...Telemetry.attributesOf(declared, rejection),

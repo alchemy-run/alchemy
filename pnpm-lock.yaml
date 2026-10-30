@@ -256,11 +256,11 @@ catalogs:
       specifier: ^2.3.0
       version: 2.3.0
     '@foldkit/ui':
-      specifier: ^0.169.0
-      version: 0.169.0
+      specifier: ^0.170.0
+      version: 0.170.0
     '@foldkit/vite-plugin':
-      specifier: ^0.28.0
-      version: 0.28.0
+      specifier: ^0.29.0
+      version: 0.29.0
     '@fontsource-variable/caveat':
       specifier: ^5.3.0
       version: 5.3.0
@@ -514,8 +514,8 @@ catalogs:
       specifier: ^0.8.3
       version: 0.8.3
     foldkit:
-      specifier: ^0.169.0
-      version: 0.169.0
+      specifier: ^0.170.0
+      version: 0.170.0
     heap-js:
       specifier: ^2.5.0
       version: 2.7.1
@@ -1404,7 +1404,7 @@ importers:
         version: 4.1.0
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
     devDependencies:
       '@alchemy.run/aws':
         specifier: workspace:*
@@ -1423,7 +1423,7 @@ importers:
         version: 4.1.0(effect@4.1.0)(redis@6.2.1)
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
-        version: 0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2158,10 +2158,10 @@ importers:
         version: 4.1.0(effect@4.1.0)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
-        version: 0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
       vite:
         specifier: 'catalog:'
         version: 8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
@@ -2194,7 +2194,7 @@ importers:
         version: 4.1.0
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
     devDependencies:
       '@effect/platform-node':
         specifier: 'catalog:'
@@ -2204,7 +2204,7 @@ importers:
         version: 4.1.0(effect@4.1.0)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
-        version: 0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
@@ -2299,14 +2299,14 @@ importers:
         version: 4.1.0
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
     devDependencies:
       '@effect/vitest':
         specifier: 'catalog:'
         version: 4.1.0(effect@4.1.0)(vitest@5.0.4(@types/node@26.6.5)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)))
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
-        version: 0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       vite:
         specifier: 'catalog:'
         version: 8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
@@ -2461,7 +2461,7 @@ importers:
         version: 4.1.0
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
     devDependencies:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
@@ -2471,7 +2471,7 @@ importers:
         version: link:../../packages/alchemy-test
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
-        version: 0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2495,13 +2495,13 @@ importers:
     dependencies:
       '@foldkit/ui':
         specifier: 'catalog:'
-        version: 0.169.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))
+        version: 0.170.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))
       effect:
         specifier: 4.1.0
         version: 4.1.0
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
     devDependencies:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
@@ -2511,7 +2511,7 @@ importers:
         version: link:../../packages/alchemy-test
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
-        version: 0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2538,7 +2538,7 @@ importers:
         version: 4.1.0
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
     devDependencies:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
@@ -2548,7 +2548,7 @@ importers:
         version: link:../../packages/alchemy-test
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
-        version: 0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -2572,13 +2572,13 @@ importers:
     dependencies:
       '@foldkit/ui':
         specifier: 'catalog:'
-        version: 0.169.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))
+        version: 0.170.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))
       effect:
         specifier: 4.1.0
         version: 4.1.0
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
     devDependencies:
       '@alchemy.run/cloudflare':
         specifier: workspace:*
@@ -2588,7 +2588,7 @@ importers:
         version: link:../../packages/alchemy-test
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
-        version: 0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -4382,7 +4382,7 @@ importers:
         version: 4.1.0
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
     devDependencies:
       '@alchemy.run/fly':
         specifier: workspace:*
@@ -4401,7 +4401,7 @@ importers:
         version: 4.1.0(effect@4.1.0)(redis@6.2.1)
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
-        version: 0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -5501,7 +5501,7 @@ importers:
         version: 4.1.0
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
     devDependencies:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
@@ -5520,7 +5520,7 @@ importers:
         version: 4.1.0(effect@4.1.0)(redis@6.2.1)
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
-        version: 0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -6343,7 +6343,7 @@ importers:
         version: 4.1.0
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
     devDependencies:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
@@ -6359,7 +6359,7 @@ importers:
         version: 4.1.0(effect@4.1.0)(redis@6.2.1)
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
-        version: 0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -7108,7 +7108,7 @@ importers:
         version: 4.1.0
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
     devDependencies:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
@@ -7124,7 +7124,7 @@ importers:
         version: 4.1.0(effect@4.1.0)(redis@6.2.1)
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
-        version: 0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -7858,7 +7858,7 @@ importers:
         version: 4.1.0
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
     devDependencies:
       '@alchemy.run/frontend-frameworks':
         specifier: workspace:*
@@ -7877,7 +7877,7 @@ importers:
         version: 4.1.0(effect@4.1.0)(redis@6.2.1)
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
-        version: 0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@tailwindcss/vite':
         specifier: 'catalog:'
         version: 4.3.3(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -9127,7 +9127,7 @@ importers:
         version: 4.1.0
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
@@ -10377,7 +10377,7 @@ importers:
         version: 0.3.15
       '@foldkit/vite-plugin':
         specifier: 'catalog:'
-        version: 0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@libsql/client':
         specifier: 'catalog:'
         version: 0.17.4
@@ -10518,7 +10518,7 @@ importers:
         version: 0.8.3
       foldkit:
         specifier: 'catalog:'
-        version: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+        version: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
       hono:
         specifier: 'catalog:'
         version: 4.13.13
@@ -14258,24 +14258,11 @@ packages:
     peerDependencies:
       effect: 4.1.0
 
-  '@effect/platform-node-shared@4.0.0':
-    resolution: {integrity: sha512-VBXHJU9UXVZPdQGGDRjGXpo+TpOzRwZuMrdKAtIxi1qwcRftmacZ1zTgIrzBa0Z2RA2KVkoOecQUsTlt/nJZhw==}
-    engines: {node: '>=18.0.0'}
-    peerDependencies:
-      effect: 4.1.0
-
   '@effect/platform-node-shared@4.1.0':
     resolution: {integrity: sha512-uYQfFRoxWLo8fIhiSeBcmz/R1ooOfE3HF3cWHFgxz82tZMk2Wn02BGABcdLmaAch9VpDLbtWnuhSxNyBsGMUFg==}
     engines: {node: '>=22.19.0'}
     peerDependencies:
       effect: 4.1.0
-
-  '@effect/platform-node@4.0.0':
-    resolution: {integrity: sha512-/L+4MUbl8FejPKLHLROYSOebvHnfixkP8KiblSD/DE5uH5xENZBHaux4nH6XMnRP+lr8ajpEJFS8sUrmmxFJeQ==}
-    engines: {node: '>=18.0.0'}
-    peerDependencies:
-      effect: 4.1.0
-      redis: '>=5.0.0 <7.0.0'
 
   '@effect/platform-node@4.1.0':
     resolution: {integrity: sha512-v+X7moGVF9k5oMVvz0slA+NgtEod+W+oygeI285MDJgSlUCW3JcqElj+cD3rlijFZtpKhC7RLkU1GuCxjGHTpA==}
@@ -14950,16 +14937,16 @@ packages:
     peerDependencies:
       vite: ^8.0.0
 
-  '@foldkit/ui@0.169.0':
-    resolution: {integrity: sha512-+883P+QgdX0VQp2CGShNKMZ7aXQB+6uLO5GehKJVJWwn2ujzm3JPWZlD8qSCu0h62TrgAa7yD9FNGpEyL6snUA==}
+  '@foldkit/ui@0.170.0':
+    resolution: {integrity: sha512-OU6eDVwweFCUA8wsURIBoUptvohD1J7Xs+n+kRJT7h1vmqwajf8h6yu5PljntNrpi6QiRohjqR/sZt3fWSC65A==}
     engines: {node: '>=18.0.0'}
     peerDependencies:
       effect: 4.1.0
       foldkit: '>=0.167.0'
 
-  '@foldkit/vite-plugin@0.28.0':
-    resolution: {integrity: sha512-ZGZDZi3wvUp+gkWT8EDPwWOAhbPPTzOnvXi4WSnJWyrJbGPIdRcM4M+6RcF88ZYnI6B0vQUYCHfjU0I4+6bL9w==}
-    engines: {node: '>=20.19.0'}
+  '@foldkit/vite-plugin@0.29.0':
+    resolution: {integrity: sha512-nLRScsxd7qzFI0omrkBsP9HtF+B0qhJ+wBEDhWSix+6yy2pmo8GXInq/Cdwu1OnaNkvo2+K4BOC/ZaV+/U7q0Q==}
+    engines: {node: '>=22.19.0'}
     peerDependencies:
       effect: 4.1.0
       foldkit: '>=0.167.0'
@@ -23319,8 +23306,8 @@ packages:
   focus-trap@7.8.0:
     resolution: {integrity: sha512-/yNdlIkpWbM0ptxno3ONTuf+2g318kh2ez3KSeZN5dZ8YC6AAmgeWz+GasYYiBJPFaYcSAPeu4GfhUaChzIJXA==}
 
-  foldkit@0.169.0:
-    resolution: {integrity: sha512-7GHWKVJshNM6DLkPfybklfGpSo3wfDHtiywCP3VUmwmVTtpezeLdhwqhd67PtpDid8Ri7aVKtAykjk6m1tK/tw==}
+  foldkit@0.170.0:
+    resolution: {integrity: sha512-H/MRQe/IZ/LqpgPi+Zy1S1OXQ8o12e2S/6U+phQu3WmoHSm7Vase/dEnOvrq9YZfqxK44/oVq6wE9oqXzEIaig==}
     engines: {node: '>=20.19.0'}
     peerDependencies:
       '@effect/platform-browser': 4.1.0
@@ -30875,30 +30862,11 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@effect/platform-node-shared@4.0.0(effect@4.1.0)':
-    dependencies:
-      '@types/ws': 8.18.2
-      effect: 4.1.0
-      ws: 8.22.0
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
   '@effect/platform-node-shared@4.1.0(effect@4.1.0)':
     dependencies:
       '@types/ws': 8.18.2
       effect: 4.1.0
       ws: 8.22.0
-    transitivePeerDependencies:
-      - bufferutil
-      - utf-8-validate
-
-  '@effect/platform-node@4.0.0(effect@4.1.0)(redis@6.2.1)':
-    dependencies:
-      '@effect/platform-node-shared': 4.0.0(effect@4.1.0)
-      effect: 4.1.0
-      redis: 6.2.1
-      undici: 8.12.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -31445,18 +31413,18 @@ snapshots:
       - ws
       - zod
 
-  '@foldkit/ui@0.169.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))':
+  '@foldkit/ui@0.170.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))':
     dependencies:
       '@floating-ui/dom': 1.8.0
       effect: 4.1.0
-      foldkit: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+      foldkit: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
 
-  '@foldkit/vite-plugin@0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))':
+  '@foldkit/vite-plugin@0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:
-      '@effect/platform-node': 4.0.0(effect@4.1.0)(redis@6.2.1)
-      '@effect/platform-node-shared': 4.0.0(effect@4.1.0)
+      '@effect/platform-node': 4.1.0(effect@4.1.0)(redis@6.2.1)
+      '@effect/platform-node-shared': 4.1.0(effect@4.1.0)
       effect: 4.1.0
-      foldkit: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+      foldkit: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
       magic-string: 1.4.3
       vite: 8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
       vitefu: 1.1.3(vite@8.3.5(@types/node@24.13.3)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -31466,12 +31434,12 @@ snapshots:
       - redis
       - utf-8-validate
 
-  '@foldkit/vite-plugin@0.28.0(effect@4.1.0)(foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))':
+  '@foldkit/vite-plugin@0.29.0(effect@4.1.0)(foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0))(redis@6.2.1)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:
-      '@effect/platform-node': 4.0.0(effect@4.1.0)(redis@6.2.1)
-      '@effect/platform-node-shared': 4.0.0(effect@4.1.0)
+      '@effect/platform-node': 4.1.0(effect@4.1.0)(redis@6.2.1)
+      '@effect/platform-node-shared': 4.1.0(effect@4.1.0)
       effect: 4.1.0
-      foldkit: 0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
+      foldkit: 0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0)
       magic-string: 1.4.3
       vite: 8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1)
       vitefu: 1.1.3(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
@@ -42633,7 +42601,7 @@ snapshots:
     dependencies:
       tabbable: 6.5.0
 
-  foldkit@0.169.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0):
+  foldkit@0.170.0(@effect/platform-browser@4.1.0(effect@4.1.0))(effect@4.1.0):
     dependencies:
       '@effect/platform-browser': 4.1.0(effect@4.1.0)
       effect: 4.1.0

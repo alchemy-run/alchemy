@@ -12,9 +12,10 @@ This file is a navigation index for the documentation site at https://alchemy.ru
 
 ## CLI
 
-Every command runs through your package manager: bun alchemy <command>. Command pages by role, plus the Adopting Resources and Inspecting State guides.
+Every command runs through your package manager: bun alchemy <command>. Command pages by role, the Programmatic API for running them from scripts, plus the Adopting Resources and Inspecting State guides.
 
 - [CLI](https://alchemy.run/cli) — Every alchemy command at a glance — the command map, common options, and how the interactive TUI decides when to render.
+- [Programmatic API](https://alchemy.run/cli/api) — Run deploy, plan, destroy, drift, nuke, logs, and state from your own scripts with alchemy/Alchemist.
 - [deploy](https://alchemy.run/cli/deploy) — Compute a plan, ask for approval, and create/update/delete resources to match the desired state.
 - [plan](https://alchemy.run/cli/plan) — Preview what would change without applying anything. Equivalent to alchemy deploy --dry-run.
 - [destroy](https://alchemy.run/cli/destroy) — Delete every resource in a stack — plan all existing resources for deletion, ask for approval, and remove them in dependency order.

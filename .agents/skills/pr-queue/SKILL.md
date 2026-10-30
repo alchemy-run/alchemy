@@ -75,9 +75,11 @@ delegate_task({
 })
 ```
 
-Keep each returned `taskId` and `childThreadId` in the status table. Start
-about 3 at a time. The worktree is cut from this thread's commit, so keep the
-coordinator on an up-to-date `origin/main`; the brief checks out the PR
+Keep each returned `taskId` and `childThreadId` in the status table. Delegate
+the whole shortlist at once; there is no cap on running children. Send the
+`delegate_task` calls in batches of about 3: each one cuts a worktree, and
+cutting many at once in the same repo contends for git's locks. The worktree
+is cut from this thread's commit, so keep the coordinator on an up-to-date `origin/main`; the brief checks out the PR
 branch (or a new `fix/…` branch for an issue) itself.
 
 A PR's brief starts with `/audit <N>`; an issue's says to fix it per
