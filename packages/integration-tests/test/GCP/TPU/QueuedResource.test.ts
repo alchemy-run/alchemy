@@ -78,7 +78,7 @@ test.provider.skipIf(!runLifecycle)(
 
       expect(created.name).toContain("/queuedResources/");
       expect(created.queuedResourceId).toEqual(expect.any(String));
-      expect(created.location).toEqual("us-central1-c");
+      expect(created.location).toEqual("us-central1-a");
       expect(created.nodeSpec.length).toBeGreaterThan(0);
       expect(created.nodeSpec[0]?.node?.acceleratorType).toEqual("v5litepod-1");
       expect(created.nodeSpec[0]?.node?.description).toEqual("alchemy-test-qr");
