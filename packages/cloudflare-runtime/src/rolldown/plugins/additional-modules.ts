@@ -23,7 +23,9 @@ const MODULE_REFERENCE_GLOBAL_REGEX = new RegExp(MODULE_REFERENCE_PATTERN, "g");
 
 export const additionalModulesPlugin = createPlugin("additional-modules", (options) => {
   const additionalModulePaths = new Set<string>();
-  // The first module type emitted per content hash, for each output.
+  // The first module type ever emitted per content hash. Never cleared, so
+  // outputs rendering in parallel (Vite environments) agree on which type
+  // rolldown may name and merge; every other type gets an explicit name.
   const emittedTypes = new Map<string, ModuleType>();
   const userRules = options.moduleRules ?? [];
   // Subpath imports (`#html`) resolve to a module type only once resolved,
@@ -81,9 +83,6 @@ export const additionalModulesPlugin = createPlugin("additional-modules", (optio
             external: true,
           };
         },
-      },
-      renderStart() {
-        emittedTypes.clear();
       },
       renderChunk: {
         filter: { code: { include: MODULE_REFERENCE_REGEX } },
