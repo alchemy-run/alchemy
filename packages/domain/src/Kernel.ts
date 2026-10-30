@@ -138,7 +138,7 @@ export interface Kernel {
     projection: Projection.Any,
     key: string,
     batch: ReadonlyArray<Accepted>,
-  ) => ReadonlyArray<unknown>;
+  ) => Effect.Effect<ReadonlyArray<unknown>>;
   /** The keys of a projection an aggregate's committed event is routed to (empty if it is not consumed). */
   readonly projectionKeys: (
     projection: Projection.Any,
@@ -149,19 +149,27 @@ export interface Kernel {
   ) => ReadonlyArray<string>;
   /** The projection that writes a stream, if any. */
   readonly writerOf: (stream: DomainStream.Any) => Projection.Any | undefined;
-  readonly decodeStreamEntry: (entry: StreamEntry) => DomainStream.Entry<unknown, string>;
-  readonly encodeCommand: (aggregate: Aggregate.Any, command: { readonly _tag: string }) => Json;
+  readonly decodeStreamEntry: (
+    entry: StreamEntry,
+  ) => Effect.Effect<DomainStream.Entry<unknown, string>>;
+  readonly encodeCommand: (
+    aggregate: Aggregate.Any,
+    command: { readonly _tag: string },
+  ) => Effect.Effect<Json>;
   readonly decodeRejection: (aggregate: Aggregate.Any, json: Json) => unknown;
   readonly decodeReceipt: (
     aggregate: Aggregate.Any,
     commandTag: string,
     json: ReceiptJson,
-  ) => Aggregate.Receipt;
+  ) => Effect.Effect<Aggregate.Receipt>;
   readonly decodeState: (aggregate: Aggregate.Any, json: Json) => unknown;
   readonly decodeViewState: (view: View.Any, json: Json) => unknown;
-  readonly decodeViewEntry: (view: View.Any, entry: ViewEntry) => View.Entry<unknown, unknown>;
-  readonly decodeEvent: (json: Json) => unknown;
-  readonly encodeEvent: (event: { readonly _tag: string }) => Json;
+  readonly decodeViewEntry: (
+    view: View.Any,
+    entry: ViewEntry,
+  ) => Effect.Effect<View.Entry<unknown, unknown>>;
+  readonly decodeEvent: (json: Json) => Effect.Effect<unknown>;
+  readonly encodeEvent: (event: { readonly _tag: string }) => Effect.Effect<Json>;
 }
 
 /**
@@ -220,11 +228,14 @@ const build = (
   }
   const eventCodec = (tag: string) => {
     const entry = eventCodecs.get(tag);
-    if (!entry) throw new DefinitionError(`Unknown event '${tag}'`);
-    return entry.codec;
+    return entry
+      ? Effect.succeed(entry.codec)
+      : Effect.die(new DefinitionError(`Unknown event '${tag}'`));
   };
-  const encodeEvent = (event: { readonly _tag: string }) => eventCodec(event._tag).encode(event);
-  const decodeEvent = (json: Json) => eventCodec((json as { _tag: string })._tag).decode(json);
+  const encodeEvent = (event: { readonly _tag: string }): Effect.Effect<Json> =>
+    Effect.map(eventCodec(event._tag), (codec) => codec.encode(event));
+  const decodeEvent = (json: Json): Effect.Effect<unknown> =>
+    Effect.map(eventCodec((json as { _tag: string })._tag), (codec) => codec.decode(json));
   /** The span attributes an event's declaration adds. */
   const eventAttributes = (event: { readonly _tag: string }) =>
     Telemetry.attributesOf(eventCodecs.get(event._tag)?.cls, event);
@@ -603,7 +614,7 @@ const build = (
     const codecs = codecsOf(aggregate);
     // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
     const decodeId = Schema.decodeUnknownSync(def.id as any) as (u: unknown) => unknown;
-    const commit = (
+    const commit = Effect.fnUntraced(function* (
       id: string,
       state: unknown,
       version: number,
@@ -613,16 +624,18 @@ const build = (
       history: boolean,
       correlationId: string = commandId,
       trace?: Telemetry.TraceJson,
-    ) => {
+    ) {
       const stream = `${aggregate.aggregateName}/${id}`;
       const events: Array<StoredEvent> = [];
       const deliveries: Array<Delivery> = [];
       const sourceRef = Aggregate.makeRef(aggregate, id);
       let next = state;
-      decided.forEach((event, index) => {
+      for (const [index, event] of decided.entries()) {
         if (!codecs.events.has(event._tag)) {
-          throw new DefinitionError(
-            `${aggregate.aggregateName} does not declare event '${event._tag}'`,
+          return yield* Effect.die(
+            new DefinitionError(
+              `${aggregate.aggregateName} does not declare event '${event._tag}'`,
+            ),
           );
         }
         const envelope: Aggregate.Envelope = {
@@ -639,7 +652,7 @@ const build = (
           envelope,
         );
         const stored: StoredEvent = {
-          event: encodeEvent(event),
+          event: yield* encodeEvent(event),
           envelope: encodeEnvelope(envelope, trace),
         };
         events.push(stored);
@@ -657,17 +670,19 @@ const build = (
             },
           ),
         );
-      });
+      }
       return { next, events, deliveries };
-    };
+    });
     return {
       name: aggregate.aggregateName,
       deliver,
-      seed: (input) => {
+      seed: Effect.fnUntraced(function* (input) {
         const id = decodeId(input.id) as string;
         const state = codecs.state.decode(input.state ?? codecs.initial);
-        const decided = input.events.map(decodeEvent);
-        const result = commit(
+        const decided = (yield* Effect.forEach(input.events, decodeEvent)) as ReadonlyArray<{
+          readonly _tag: string;
+        }>;
+        const result = yield* commit(
           id,
           state,
           input.version,
@@ -682,7 +697,7 @@ const build = (
           events: result.events,
           deliveries: result.deliveries,
         };
-      },
+      }),
       handle: (input) => {
         const tag = (input.command as { readonly _tag: string })._tag;
         const correlationId = input.correlationId ?? input.commandId;
@@ -721,12 +736,10 @@ const build = (
           // context the command was sent with (its only requirement, enforced
           // by `Aggregate.Decision`).
           if (Effect.isEffect(decision)) {
+            const context = yield* RequestContext.restore(input.context);
             const settled = settle(
               yield* Effect.exit(
-                Effect.provideContext(
-                  decision,
-                  RequestContext.restore(input.context) as Context.Context<unknown>,
-                ),
+                Effect.provideContext(decision, context as Context.Context<unknown>),
               ),
             );
             if (settled._tag === "Failed")
@@ -746,7 +759,7 @@ const build = (
             return { _tag: "Rejected", rejection: codec.encode(rejection) } as HandleResult;
           }
           const trace = yield* Telemetry.currentTrace;
-          const { next, events, deliveries } = commit(
+          const { next, events, deliveries } = yield* commit(
             id,
             state,
             input.version,
@@ -873,7 +886,7 @@ const build = (
           ),
         );
       },
-      apply: (key, snapshot, batch) => {
+      apply: Effect.fnUntraced(function* (key, snapshot, batch) {
         let current: unknown =
           codec && snapshot.state !== null ? codec.decode(snapshot.state) : null;
         let { version, seq } = snapshot;
@@ -888,7 +901,7 @@ const build = (
           checkpoints[delivery.source] = delivery.seq;
           changed = true;
           const origin = sources.get(delivery.origin)!;
-          const event = decodeEvent(delivery.event) as { readonly _tag: string };
+          const event = (yield* decodeEvent(delivery.event)) as { readonly _tag: string };
           const envelope = decodeEnvelope(delivery.envelope);
           const context = {
             key: keyRef,
@@ -919,8 +932,10 @@ const build = (
             for (const out of emitted as ReadonlyArray<{ readonly _tag: string } | undefined>) {
               if (out === undefined) continue;
               if (declared && !declared.has(out._tag)) {
-                throw new DefinitionError(
-                  `${view.viewName} emitted '${out._tag}', which it does not declare in events`,
+                return yield* Effect.die(
+                  new DefinitionError(
+                    `${view.viewName} emitted '${out._tag}', which it does not declare in events`,
+                  ),
                 );
               }
               seq += 1;
@@ -934,7 +949,7 @@ const build = (
               };
               const entry: ViewEntry = {
                 seq,
-                event: encodeEvent(out),
+                event: yield* encodeEvent(out),
                 envelope: encodeEnvelope(outEnvelope, delivery.envelope.trace),
                 state: encodeState(current),
               };
@@ -959,7 +974,7 @@ const build = (
         }
         const next: ViewSnapshot = { state: encodeState(current), version, checkpoints, seq };
         return { snapshot: next, changed, entries, downstream };
-      },
+      }),
     };
   };
 
@@ -974,7 +989,6 @@ const build = (
         const envelope = decodeEnvelope(delivery.envelope);
         const source = Key.refOf(keyOfSource(upstream), envelope.id);
         const key = policyKey ? Key.refOf(policyKey, delivery.key) : source;
-        const event = decodeEvent(delivery.event);
         const state = sourceState(upstream, delivery.state);
         const attributes = {
           "domain.policy": policy.policyName,
@@ -982,24 +996,27 @@ const build = (
           ...deliveryAttributes(delivery),
         };
         const parent = parentOf(delivery);
-        return Effect.forEach(
-          delivery.routes ?? [undefined],
-          (route) => {
-            let n = 0;
-            const prefix = `${delivery.source}:${delivery.seq}:${policy.policyName}${route === undefined ? "" : `:${route}`}`;
-            return handler({ key, route, source, event, envelope, state }).pipe(
-              Effect.provideContext(
-                Context.make(Aggregate.PolicyRun, { next: () => `${prefix}:${n++}` }).pipe(
-                  Context.add(Telemetry.Correlation, { id: envelope.correlationId }),
+        return Effect.flatMap(decodeEvent(delivery.event), (event) =>
+          Effect.forEach(
+            delivery.routes ?? [undefined],
+            (route) => {
+              let n = 0;
+              const prefix = `${delivery.source}:${delivery.seq}:${policy.policyName}${route === undefined ? "" : `:${route}`}`;
+              return handler({ key, route, source, event, envelope, state }).pipe(
+                Effect.provideContext(
+                  Context.make(Aggregate.PolicyRun, { next: () => `${prefix}:${n++}` }).pipe(
+                    Context.add(Telemetry.Correlation, { id: envelope.correlationId }),
+                  ),
                 ),
-              ),
-            );
-          },
-          { discard: true },
-        ).pipe(
-          Effect.tap(() =>
-            Effect.annotateCurrentSpan(eventAttributes(event as { readonly _tag: string })),
+              );
+            },
+            { discard: true },
+          ).pipe(
+            Effect.tap(() =>
+              Effect.annotateCurrentSpan(eventAttributes(event as { readonly _tag: string })),
+            ),
           ),
+        ).pipe(
           Effect.onExit((exit) =>
             Effect.gen(function* () {
               const now = yield* Effect.sync(() => Date.now());
@@ -1026,34 +1043,35 @@ const build = (
     projection: Projection.Any,
     key: string,
     batch: ReadonlyArray<Accepted>,
-  ): ReadonlyArray<unknown> => {
-    const keyRef = Key.refOf(projection.definition.key, key);
-    const inputs: Array<unknown> = [];
-    for (const { delivery, position } of batch) {
-      const upstream = sources.get(delivery.origin)!;
-      const envelope = decodeEnvelope(delivery.envelope);
-      const source = Key.refOf(keyOfSource(upstream), envelope.id);
-      const event = decodeEvent(delivery.event);
-      const state = sourceState(upstream, delivery.state);
-      // Shared by every route the delivery takes, so their appends count up together.
-      const meta: InputMetaValue = {
-        projection: projection.projectionName,
-        key,
-        position,
-        source: delivery.source,
-        sourceSeq: delivery.seq,
-        at: delivery.envelope.at,
-        commandId: delivery.envelope.commandId,
-        appends: 0,
-      };
-      for (const route of delivery.routes ?? [undefined]) {
-        const input = { key: keyRef, route, source, event, envelope, state, position };
-        Object.defineProperty(input, InputMeta, { value: meta, enumerable: false });
-        inputs.push(input);
+  ): Effect.Effect<ReadonlyArray<unknown>> =>
+    Effect.gen(function* () {
+      const keyRef = Key.refOf(projection.definition.key, key);
+      const inputs: Array<unknown> = [];
+      for (const { delivery, position } of batch) {
+        const upstream = sources.get(delivery.origin)!;
+        const envelope = decodeEnvelope(delivery.envelope);
+        const source = Key.refOf(keyOfSource(upstream), envelope.id);
+        const event = yield* decodeEvent(delivery.event);
+        const state = sourceState(upstream, delivery.state);
+        // Shared by every route the delivery takes, so their appends count up together.
+        const meta: InputMetaValue = {
+          projection: projection.projectionName,
+          key,
+          position,
+          source: delivery.source,
+          sourceSeq: delivery.seq,
+          at: delivery.envelope.at,
+          commandId: delivery.envelope.commandId,
+          appends: 0,
+        };
+        for (const route of delivery.routes ?? [undefined]) {
+          const input = { key: keyRef, route, source, event, envelope, state, position };
+          Object.defineProperty(input, InputMeta, { value: meta, enumerable: false });
+          inputs.push(input);
+        }
       }
-    }
-    return inputs;
-  };
+      return inputs;
+    });
 
   const projectionKeys = (
     projection: Projection.Any,
@@ -1096,17 +1114,20 @@ const build = (
     projectionInputs,
     projectionKeys,
     writerOf: (stream) => writers.get(stream.streamName),
-    decodeStreamEntry: (entry) => ({
-      event: decodeEvent(entry.event),
-      envelope: decodeEnvelope(entry.envelope),
-    }),
+    decodeStreamEntry: (entry) =>
+      Effect.map(decodeEvent(entry.event), (event) => ({
+        event,
+        envelope: decodeEnvelope(entry.envelope),
+      })),
     decodeEvent,
     encodeEvent,
     encodeCommand: (aggregate, command) => {
       const entry = codecsOf(aggregate).commands.get(command._tag);
-      if (!entry)
-        throw new DefinitionError(`${aggregate.aggregateName} does not handle '${command._tag}'`);
-      return entry.codec.encode(command);
+      return entry
+        ? Effect.sync(() => entry.codec.encode(command))
+        : Effect.die(
+            new DefinitionError(`${aggregate.aggregateName} does not handle '${command._tag}'`),
+          );
     },
     decodeRejection: (aggregate, json) =>
       codecsOf(aggregate)
@@ -1114,23 +1135,26 @@ const build = (
         .decode(json),
     decodeReceipt: (aggregate, commandTag, json) => {
       const reply = codecsOf(aggregate).commands.get(commandTag)?.reply;
-      return {
+      return Effect.map(Effect.forEach(json.events, decodeEvent), (events) => ({
         stream: json.stream,
         version: json.version,
-        events: json.events.map(decodeEvent),
+        events,
         reply: reply && json.reply !== null ? reply.decode(json.reply) : undefined,
-      };
+      })) as Effect.Effect<Aggregate.Receipt>;
     },
     decodeState: (aggregate, json) => {
       const codecs = codecsOf(aggregate);
       return codecs.state.decode(json ?? codecs.initial);
     },
     decodeViewState: (view, json) => viewCodec(view).decode(json),
-    decodeViewEntry: (view, entry) => ({
-      event: decodeEvent(entry.event),
-      state:
-        entry.state === null || !view.definition.state ? null : viewCodec(view).decode(entry.state),
-      envelope: decodeEnvelope(entry.envelope),
-    }),
+    decodeViewEntry: (view, entry) =>
+      Effect.map(decodeEvent(entry.event), (event) => ({
+        event,
+        state:
+          entry.state === null || !view.definition.state
+            ? null
+            : viewCodec(view).decode(entry.state),
+        envelope: decodeEnvelope(entry.envelope),
+      })),
   };
 };

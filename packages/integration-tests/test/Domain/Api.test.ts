@@ -1,7 +1,9 @@
 import * as Domain from "@alchemy.run/domain";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as HttpApi from "effect/http-api/HttpApi";
 import * as HttpApiEndpoint from "effect/http-api/HttpApiEndpoint";
 import * as HttpApiError from "effect/http-api/HttpApiError";
@@ -174,6 +176,8 @@ class Vault extends Domain.Aggregate("Vault", {
 }) {}
 class Vaults extends Domain.Model("Vaults", { aggregates: [Vault] }) {}
 class VaultApi extends Domain.Api("VaultApi", Store) {}
+// Vault declares no `read`, so its state is not for clients.
+class VaultStateApi extends Domain.Api("VaultStateApi", Vault) {}
 
 describe("Domain Rejection", () => {
   it.live("a command rejects with any tagged error class, and the client gets it typed", () =>
@@ -341,6 +345,21 @@ describe("Domain Api in process", () => {
           Layer.provideMerge(Layer.mergeAll(World, AuthorSessionLive)),
         ),
       ),
+    ),
+  );
+});
+
+describe("Domain Api exposing an aggregate", () => {
+  it.live("an aggregate without a read contract is never served", () =>
+    Effect.gen(function* () {
+      const exit = yield* Effect.exit(VaultStateApi.clientInProcess);
+      expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
+        _tag: "DefinitionError",
+        message: "Vault has no `read` contract, so an Api cannot expose it",
+      });
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(Vaults.layer(Layer.empty).pipe(Layer.provideMerge(InMemory))),
     ),
   );
 });

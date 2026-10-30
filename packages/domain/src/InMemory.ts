@@ -339,9 +339,9 @@ export const make = (
             ),
           seed: (id, events) =>
             lock.withPermits(1)(
-              Effect.suspend(() => {
+              Effect.gen(function* () {
                 const current = instance(id);
-                const result = kit.seed({
+                const result = yield* kit.seed({
                   id,
                   state: current.state,
                   version: current.version,
@@ -352,7 +352,9 @@ export const make = (
                 current.state = result.state;
                 current.version = result.version;
                 current.events.push(...result.events);
-                return announce(id).pipe(Effect.andThen(enqueue(result.deliveries, kit.deliver)));
+                return yield* announce(id).pipe(
+                  Effect.andThen(enqueue(result.deliveries, kit.deliver)),
+                );
               }),
             ),
         };
@@ -387,7 +389,7 @@ export const make = (
             lock.withPermits(1)(
               Effect.gen(function* () {
                 const current = yield* get(key);
-                const result = kit.apply(
+                const result = yield* kit.apply(
                   key,
                   yield* SubscriptionRef.get(current.snapshot),
                   deliveries,

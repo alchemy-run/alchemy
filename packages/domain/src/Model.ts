@@ -385,10 +385,9 @@ const build = <A, E, R>(
           run: (key, batch) =>
             Effect.gen(function* () {
               // Platforms run handlers inside their runtime (a Durable Object, or this process).
+              const inputs = yield* kernel.projectionInputs(projection, key, batch);
               // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs handlers inside its runtime, which provides RuntimeContext
-              yield* implementation.handle(
-                kernel.projectionInputs(projection, key, batch),
-              ) as Effect.Effect<void>;
+              yield* implementation.handle(inputs) as Effect.Effect<void>;
               // What this run handled, so stream reads `atLeast` a receipt see it.
               if (writes.length === 0) return;
               const checkpoints: Record<string, number> = {};
@@ -473,7 +472,8 @@ const aggregateClient = (
         // The span records a rejection as an outcome; the caller still fails with it.
         const result = yield* Effect.gen(function* () {
           const { id, meta } = yield* metaFor(target, command, options, false);
-          const result = yield* store.send(id, kernel.encodeCommand(aggregate, command), meta);
+          const encoded = yield* kernel.encodeCommand(aggregate, command);
+          const result = yield* store.send(id, encoded, meta);
           yield* Effect.annotateCurrentSpan(
             "domain.outcome",
             result._tag === "Accepted"
@@ -489,7 +489,7 @@ const aggregateClient = (
         );
         return result._tag === "Rejected"
           ? yield* Effect.fail(kernel.decodeRejection(aggregate, result.rejection))
-          : kernel.decodeReceipt(aggregate, command._tag, result.receipt);
+          : yield* kernel.decodeReceipt(aggregate, command._tag, result.receipt);
       }),
     schedule: (target, command, options) =>
       Effect.gen(function* () {
@@ -497,7 +497,7 @@ const aggregateClient = (
         const { id, meta } = yield* metaFor(target, command, options, true);
         const at = yield* store.schedule(
           id,
-          kernel.encodeCommand(aggregate, command),
+          yield* kernel.encodeCommand(aggregate, command),
           meta,
           options.at !== undefined
             ? { at: DateTime.toEpochMillis(options.at) }
@@ -641,18 +641,24 @@ const viewHost = (
     watchEach,
     events: (key, options) =>
       store.tail(Aggregate.targetId(key), options?.after ?? 0).pipe(
-        Stream.map((entry) => kernel.decodeViewEntry(view, entry)),
+        Stream.mapEffect((entry) => kernel.decodeViewEntry(view, entry)),
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
       store.list(Aggregate.targetId(key)).pipe(
-        Effect.map((stored) => {
+        Effect.flatMap((stored) => {
           const desc = options?.order === "desc";
           const after = options?.after;
-          const rows = (desc ? [...stored].reverse() : stored)
-            .filter((row) => after === undefined || (desc ? row.seq < after : row.seq > after))
-            .map((row) => ({ seq: row.seq, entry: kernel.decodeViewEntry(view, row) }))
-            .filter((row) => matches(options?.where, row.entry.event));
+          return Effect.forEach(
+            (desc ? [...stored].reverse() : stored).filter(
+              (row) => after === undefined || (desc ? row.seq < after : row.seq > after),
+            ),
+            (row) =>
+              Effect.map(kernel.decodeViewEntry(view, row), (entry) => ({ seq: row.seq, entry })),
+          );
+        }),
+        Effect.map((decoded) => {
+          const rows = decoded.filter((row) => matches(options?.where, row.entry.event));
           const take = options?.take ?? rows.length;
           const page = rows.slice(0, take);
           return {
@@ -687,9 +693,16 @@ const streamHost = (
   const latest = (key: string, meta: StreamMeta) =>
     meta.seq === 0
       ? Effect.succeedNone
-      : store
-          .tail(key, meta.seq - 1)
-          .pipe(Stream.take(1), Stream.runHead, Effect.map(Option.map(decode)));
+      : store.tail(key, meta.seq - 1).pipe(
+          Stream.take(1),
+          Stream.runHead,
+          Effect.flatMap(
+            Option.match({
+              onNone: () => Effect.succeedNone,
+              onSome: (entry) => Effect.asSome(decode(entry)),
+            }),
+          ),
+        );
   return {
     peek: (key, options) => {
       const atLeast = options?.atLeast;
@@ -723,18 +736,23 @@ const streamHost = (
       ),
     events: (key, options) =>
       store.tail(Aggregate.targetId(key), options?.after ?? 0).pipe(
-        Stream.map(decode),
+        Stream.mapEffect(decode),
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
       store.list(Aggregate.targetId(key)).pipe(
-        Effect.map((stored) => {
+        Effect.flatMap((stored) => {
           const desc = options?.order === "desc";
           const after = options?.after;
-          const rows = (desc ? [...stored].reverse() : stored)
-            .filter((row) => after === undefined || (desc ? row.seq < after : row.seq > after))
-            .map((row) => ({ seq: row.seq, entry: decode(row) }))
-            .filter((row) => matches(options?.where, row.entry.event));
+          return Effect.forEach(
+            (desc ? [...stored].reverse() : stored).filter(
+              (row) => after === undefined || (desc ? row.seq < after : row.seq > after),
+            ),
+            (row) => Effect.map(decode(row), (entry) => ({ seq: row.seq, entry })),
+          );
+        }),
+        Effect.map((decoded) => {
+          const rows = decoded.filter((row) => matches(options?.where, row.entry.event));
           const take = options?.take ?? rows.length;
           const page = rows.slice(0, take);
           return {
@@ -757,14 +775,21 @@ const streamHost = (
           );
         }
         meta.appends += 1;
-        return store.append(meta.key, {
-          origin: [meta.position, meta.appends],
-          source: meta.source,
-          sourceSeq: meta.sourceSeq,
-          at: meta.at,
-          commandId: meta.commandId,
-          events: events.map((event) => kernel.encodeEvent(event as { readonly _tag: string })),
-        });
+        const position: [number, number] = [meta.position, meta.appends];
+        return Effect.forEach(events, (event) =>
+          kernel.encodeEvent(event as { readonly _tag: string }),
+        ).pipe(
+          Effect.flatMap((encoded) =>
+            store.append(meta.key, {
+              origin: position,
+              source: meta.source,
+              sourceSeq: meta.sourceSeq,
+              at: meta.at,
+              commandId: meta.commandId,
+              events: encoded,
+            }),
+          ),
+        );
       }),
   };
 };

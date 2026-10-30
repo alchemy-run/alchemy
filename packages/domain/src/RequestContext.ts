@@ -2,6 +2,7 @@ import * as EffectContext from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
+import { DefinitionError } from "./internal.ts";
 
 /** The JSON form of a request's context, by service key. */
 export type Json = Readonly<Record<string, unknown>>;
@@ -103,12 +104,12 @@ export const capture: Effect.Effect<Json> = Effect.gen(function* () {
  *
  * @internal
  */
-export const restore = (json: Json): EffectContext.Context<never> => {
+export const restore = Effect.fn(function* (json: Json) {
   let context = EffectContext.empty() as EffectContext.Context<unknown>;
   for (const [key, value] of Object.entries(json)) {
     const entry = registry.get(key);
-    if (!entry) throw new Error(`Unknown request context '${key}'`);
+    if (!entry) return yield* Effect.die(new DefinitionError(`Unknown request context '${key}'`));
     context = EffectContext.add(context, entry.tag, entry.decode(value));
   }
   return context as EffectContext.Context<never>;
-};
+});

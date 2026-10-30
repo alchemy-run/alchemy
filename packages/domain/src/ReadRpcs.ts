@@ -61,14 +61,15 @@ export interface ReadRpcs {
   readonly snapshot?: Rpc.Any;
 }
 
-export const contractOf = (entry: Readable): Read.AnyContract => {
-  if (entry.kind === "View" || entry.kind === "Stream") return entry.definition;
-  const read = entry.definition.read;
-  if (!read) {
-    throw new Error(`${entry.aggregateName} has no \`read\` contract, so an Api cannot expose it`);
-  }
-  return read;
-};
+/**
+ * The read contract an entry's RPCs are built from. An aggregate without
+ * `read` gets an empty one so an Api still builds its schemas; serving that
+ * Api dies with a DefinitionError instead (see `handlersOf` in Api.ts).
+ */
+export const contractOf = (entry: Readable): Read.AnyContract =>
+  entry.kind === "View" || entry.kind === "Stream"
+    ? entry.definition
+    : (entry.definition.read ?? {});
 
 const rpcCache = new WeakMap<object, ReadRpcs>();
 

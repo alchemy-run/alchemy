@@ -184,7 +184,7 @@ export interface AggregateKit {
    * Fold already-decided events into state and route them, without running
    * `decide`. Used to seed history (story `given`).
    */
-  readonly seed: (input: SeedInput) => SeedResult;
+  readonly seed: (input: SeedInput) => Effect.Effect<SeedResult>;
   /** Route a delivery produced by `handle` to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
   /**
@@ -324,13 +324,13 @@ export interface ViewKit {
     key: string,
     snapshot: ViewSnapshot,
     deliveries: ReadonlyArray<Delivery>,
-  ) => {
+  ) => Effect.Effect<{
     readonly snapshot: ViewSnapshot;
     /** `false` when every delivery was a duplicate. */
     readonly changed: boolean;
     readonly entries: ReadonlyArray<ViewEntry>;
     readonly downstream: ReadonlyArray<Delivery>;
-  };
+  }>;
   /** Route a downstream delivery to its target's host. */
   readonly deliver: (delivery: Delivery) => Effect.Effect<void>;
   /** Trace an `apply` of these deliveries to `key` (wrap the work that applies and persists them). */

@@ -11,9 +11,11 @@ import {
   type WhenStep,
 } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Cause from "effect/Cause";
 import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
 import * as Headers from "effect/http/Headers";
 import * as Layer from "effect/Layer";
@@ -867,6 +869,25 @@ describe("Domain Story", () => {
       ),
     ),
   );
+
+  it.effect("a view that emits an event it does not declare fails with a DefinitionError", () => {
+    class Loud extends Domain.View("Loud", {
+      from: [Counter],
+      key: Counter,
+      events: [Logged],
+      emit: { Incremented: () => new Capped() as never },
+    }) {}
+    class Louds extends Domain.Model("Louds", { aggregates: [Counter], views: [Loud] }) {}
+    return Story.make(Louds)(Story.when(c1, new Increment({ by: 1 }))).pipe(
+      Effect.exit,
+      Effect.map((exit) =>
+        expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
+          _tag: "DefinitionError",
+          message: "Loud emitted 'Capped', which it does not declare in events",
+        }),
+      ),
+    );
+  });
 
   it.effect("a failed policy is marked on the step that ran it", () => {
     class Boom extends Domain.Policy("Boom", { from: Counter, on: [Capped] }) {}

@@ -515,7 +515,7 @@ const viewObject = (kit: ViewKit) =>
               const kick = yield* exclusively(
                 Effect.gen(function* () {
                   const before = yield* read;
-                  const result = kit.apply(key, before, deliveries);
+                  const result = yield* kit.apply(key, before, deliveries);
                   if (!result.changed) return false;
                   const rows: Record<string, ViewEntry> = {};
                   for (const entry of result.entries) rows[`entry:${pad(entry.seq)}`] = entry;

@@ -30,6 +30,7 @@ import * as Tracer from "effect/Tracer";
 import type * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
 import { type Filter, matches } from "./Filter.ts";
+import { DefinitionError } from "./internal.ts";
 import { decodeEnvelope } from "./Kernel.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
@@ -498,7 +499,9 @@ const handlersOf = (
       if (entry.kind === "Command") {
         const aggregate = internals.commands.get(entry.tag);
         if (!aggregate) {
-          return yield* Effect.die(new Error(`No aggregate in the Domain handles ${entry.tag}`));
+          return yield* Effect.die(
+            new DefinitionError(`No aggregate in the Domain handles ${entry.tag}`),
+          );
         }
         const declared = declaredOnly(entry.rpc);
         // Runs inside the command's middleware, so the context it provides
@@ -515,6 +518,14 @@ const handlersOf = (
             ),
           );
         continue;
+      }
+      // Serving an aggregate's state without its read contract would skip its middleware.
+      if (entry.kind === "Aggregate" && !entry.definition.read) {
+        return yield* Effect.die(
+          new DefinitionError(
+            `${entry.aggregateName} has no \`read\` contract, so an Api cannot expose it`,
+          ),
+        );
       }
       const name = nameOf(entry);
       const rpcs = readRpcs(entry);
@@ -708,12 +719,8 @@ const handlersOf = (
                 (stored) =>
                   store.state(id).pipe(
                     Effect.flatMap(({ state }) => check("events", refOf(id))(stateOf(state))),
-                    Effect.as([
-                      {
-                        event: internals.kernel.decodeEvent(stored.event),
-                        envelope: decodeEnvelope(stored.envelope),
-                      },
-                    ]),
+                    Effect.andThen(internals.kernel.decodeEvent(stored.event)),
+                    Effect.map((event) => [{ event, envelope: decodeEnvelope(stored.envelope) }]),
                   ),
               ),
             ),
