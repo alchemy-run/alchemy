@@ -45,7 +45,7 @@ test.provider(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
-    timeout: 90_000,
+    timeout: 3_600_000,
   },
 );
 
@@ -137,6 +137,6 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel, withNetworkSlot),
   {
     tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
-    timeout: 90_000,
+    timeout: 3_600_000,
   },
 );

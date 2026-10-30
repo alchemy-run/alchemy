@@ -84,7 +84,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
-          const template = yield* GCP.Compute.NodeTemplate("SoleTenant", {
+          const template = yield* GCP.Compute.NodeTemplate("SoleTenantTemplate", {
             region,
             nodeType: "n2-node-80-640",
             description: "prod sole tenant",
@@ -113,7 +113,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
-          const template = yield* GCP.Compute.NodeTemplate("SoleTenant", {
+          const template = yield* GCP.Compute.NodeTemplate("SoleTenantTemplate", {
             nodeTemplateName: created.template.nodeTemplateName,
             region,
             nodeType: "n2-node-80-640",

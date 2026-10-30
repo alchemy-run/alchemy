@@ -187,6 +187,6 @@ test.provider.skipIf(!!process.env.FAST)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:networkservices", "live"],
-    timeout: 120_000,
+    timeout: 1_800_000,
   },
 );

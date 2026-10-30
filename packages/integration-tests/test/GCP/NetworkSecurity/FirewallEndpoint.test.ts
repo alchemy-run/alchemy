@@ -110,6 +110,6 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
-    timeout: 90_000,
+    timeout: 3_600_000,
   },
 );

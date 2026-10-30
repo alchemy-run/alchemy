@@ -82,6 +82,12 @@ export type SubnetworkProps = {
    */
   purpose?: compute.SubnetworkPurposeEnum;
   /**
+   * Role of a proxy-only subnet (`ACTIVE` or `BACKUP`). Used only with
+   * `REGIONAL_MANAGED_PROXY` / `GLOBAL_MANAGED_PROXY`, which require one.
+   * @default "ACTIVE" for proxy-only subnets
+   */
+  role?: compute.SubnetworkRoleEnum;
+  /**
    * Secondary ranges for alias IPs. Updated in place via patch.
    */
   secondaryIpRanges?: ReadonlyArray<SubnetworkSecondaryRange>;
@@ -391,6 +397,9 @@ const requireSubnetwork = (project: string, region: string, subnetworkName: stri
     }),
   );
 
+/** Purposes of proxy-only subnets, which need a `role`. */
+const PROXY_PURPOSES: ReadonlySet<string> = new Set(["REGIONAL_MANAGED_PROXY", "GLOBAL_MANAGED_PROXY"]);
+
 /** Purposes whose subnets host load-balancer proxies or endpoints, not VMs. */
 const NO_VM_PURPOSES: ReadonlySet<string> = new Set([
   "REGIONAL_MANAGED_PROXY",
@@ -516,6 +525,9 @@ export const SubnetworkProvider = () =>
           stackType,
         };
         if (news.purpose !== undefined) body.purpose = news.purpose;
+        if (news.purpose !== undefined && PROXY_PURPOSES.has(news.purpose)) {
+          body.role = news.role ?? "ACTIVE";
+        }
         if (news.secondaryIpRanges !== undefined) {
           body.secondaryIpRanges = [...news.secondaryIpRanges];
         }
