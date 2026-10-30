@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeBackup, ProbeFederation, ProbeService } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Metastore binding as its own
@@ -15,18 +16,93 @@ export default class MetastoreGeneratedHost extends GCP.Function<MetastoreGenera
   "MetastoreGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.Metastore.ListFederations();
-    const p1 = yield* GCP.Metastore.ListServices();
+    const p0 = yield* GCP.Metastore.AlterServiceLocation(ProbeService);
+    const p1 = yield* GCP.Metastore.AlterServiceTableProperties(ProbeService);
+    const p2 = yield* GCP.Metastore.CancelServiceMigration(ProbeService);
+    const p3 = yield* GCP.Metastore.CompleteServiceMigration(ProbeService);
+    const p4 = yield* GCP.Metastore.CreateServiceMetadataImport(ProbeService);
+    const p5 = yield* GCP.Metastore.DeleteServiceMigrationExecution(ProbeService);
+    const p6 = yield* GCP.Metastore.ExportServiceMetadata(ProbeService);
+    const p7 = yield* GCP.Metastore.GetBackup(ProbeBackup);
+    const p8 = yield* GCP.Metastore.GetFederation(ProbeFederation);
+    const p9 = yield* GCP.Metastore.GetService(ProbeService);
+    const p10 = yield* GCP.Metastore.GetServiceMetadataImport(ProbeService);
+    const p11 = yield* GCP.Metastore.GetServiceMigrationExecution(ProbeService);
+    const p12 = yield* GCP.Metastore.ListFederations();
+    const p13 = yield* GCP.Metastore.ListServiceBackups(ProbeService);
+    const p14 = yield* GCP.Metastore.ListServiceMetadataImports(ProbeService);
+    const p15 = yield* GCP.Metastore.ListServiceMigrationExecutions(ProbeService);
+    const p16 = yield* GCP.Metastore.ListServices();
+    const p17 = yield* GCP.Metastore.MoveServiceTableToDatabase(ProbeService);
+    const p18 = yield* GCP.Metastore.PatchServiceMetadataImport(ProbeService);
+    const p19 = yield* GCP.Metastore.QueryServiceMetadata(ProbeService);
+    const p20 = yield* GCP.Metastore.RestoreService(ProbeService);
+    const p21 = yield* GCP.Metastore.StartServiceMigration(ProbeService);
     return {
       fetch: serveProbes({
-        ListFederations: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
-        ListServices: probeOutcome(Retry.none(p1({ location: "us-central1" } as never))),
+        AlterServiceLocation: probeOutcome(Retry.none(p0({} as never))),
+        AlterServiceTableProperties: probeOutcome(Retry.none(p1({} as never))),
+        CancelServiceMigration: probeOutcome(Retry.none(p2({} as never))),
+        CompleteServiceMigration: probeOutcome(Retry.none(p3({} as never))),
+        CreateServiceMetadataImport: probeOutcome(
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        DeleteServiceMigrationExecution: probeOutcome(
+          Retry.none(p5({ migrationExecution: "alchemy-missing" } as never)),
+        ),
+        ExportServiceMetadata: probeOutcome(Retry.none(p6({} as never))),
+        GetBackup: probeOutcome(Retry.none(p7({} as never))),
+        GetFederation: probeOutcome(Retry.none(p8({} as never))),
+        GetService: probeOutcome(Retry.none(p9({} as never))),
+        GetServiceMetadataImport: probeOutcome(
+          Retry.none(p10({ metadataImport: "alchemy-missing" } as never)),
+        ),
+        GetServiceMigrationExecution: probeOutcome(
+          Retry.none(p11({ migrationExecution: "alchemy-missing" } as never)),
+        ),
+        ListFederations: probeOutcome(Retry.none(p12({ location: "us-central1" } as never))),
+        ListServiceBackups: probeOutcome(Retry.none(p13({} as never))),
+        ListServiceMetadataImports: probeOutcome(Retry.none(p14({} as never))),
+        ListServiceMigrationExecutions: probeOutcome(Retry.none(p15({} as never))),
+        ListServices: probeOutcome(Retry.none(p16({ location: "us-central1" } as never))),
+        MoveServiceTableToDatabase: probeOutcome(Retry.none(p17({} as never))),
+        PatchServiceMetadataImport: probeOutcome(
+          Retry.none(p18({ metadataImport: "alchemy-missing" } as never)),
+        ),
+        QueryServiceMetadata: probeOutcome(Retry.none(p19({} as never))),
+        RestoreService: probeOutcome(
+          Retry.none(p20({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        StartServiceMigration: probeOutcome(Retry.none(p21({} as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
-        Layer.mergeAll(GCP.Metastore.ListFederationsHttp, GCP.Metastore.ListServicesHttp),
+        Layer.mergeAll(
+          GCP.Metastore.AlterServiceLocationHttp,
+          GCP.Metastore.AlterServiceTablePropertiesHttp,
+          GCP.Metastore.CancelServiceMigrationHttp,
+          GCP.Metastore.CompleteServiceMigrationHttp,
+          GCP.Metastore.CreateServiceMetadataImportHttp,
+          GCP.Metastore.DeleteServiceMigrationExecutionHttp,
+          GCP.Metastore.ExportServiceMetadataHttp,
+          GCP.Metastore.GetBackupHttp,
+          GCP.Metastore.GetFederationHttp,
+          GCP.Metastore.GetServiceHttp,
+          GCP.Metastore.GetServiceMetadataImportHttp,
+          GCP.Metastore.GetServiceMigrationExecutionHttp,
+          GCP.Metastore.ListFederationsHttp,
+          GCP.Metastore.ListServiceBackupsHttp,
+          GCP.Metastore.ListServiceMetadataImportsHttp,
+          GCP.Metastore.ListServiceMigrationExecutionsHttp,
+          GCP.Metastore.ListServicesHttp,
+          GCP.Metastore.MoveServiceTableToDatabaseHttp,
+          GCP.Metastore.PatchServiceMetadataImportHttp,
+          GCP.Metastore.QueryServiceMetadataHttp,
+          GCP.Metastore.RestoreServiceHttp,
+          GCP.Metastore.StartServiceMigrationHttp,
+        ),
       ),
     ),
   ),

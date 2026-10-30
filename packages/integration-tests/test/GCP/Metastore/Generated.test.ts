@@ -70,15 +70,19 @@ describe.skipIf(!!process.env.FAST)(
         );
         baseUrl = out.uri!;
       }),
-      { timeout: 1_800_000 },
+      { timeout: 3_600_000 },
     );
 
-    afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+    afterAll(sharedStack.destroy(), { timeout: 3_600_000 });
 
     describe("Federation", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetFederation (metastore.projects.locations.federations.get): Federation: a federation fronts running Dataproc Metastore services (20–40 minutes each to provision, billed per hour)",
-        () => Effect.void,
+      test.provider(
+        "GetFederation (metastore.projects.locations.federations.get)",
+        () => probe("GetFederation", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -102,84 +106,160 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Service", { concurrent: true }, () => {
-      test.provider.skip(
-        "AlterServiceLocation (metastore.projects.locations.services.alterLocation): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "AlterServiceLocation (metastore.projects.locations.services.alterLocation)",
+        () => probe("AlterServiceLocation", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "AlterServiceTableProperties (metastore.projects.locations.services.alterTableProperties): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "AlterServiceTableProperties (metastore.projects.locations.services.alterTableProperties)",
+        () => probe("AlterServiceTableProperties", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "CancelServiceMigration (metastore.projects.locations.services.cancelMigration): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "CancelServiceMigration (metastore.projects.locations.services.cancelMigration)",
+        () => probe("CancelServiceMigration", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "CompleteServiceMigration (metastore.projects.locations.services.completeMigration): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "CompleteServiceMigration (metastore.projects.locations.services.completeMigration)",
+        () => probe("CompleteServiceMigration", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "CreateServiceMetadataImport (metastore.projects.locations.services.metadataImports.create): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "CreateServiceMetadataImport (metastore.projects.locations.services.metadataImports.create)",
+        () => probe("CreateServiceMetadataImport", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "DeleteServiceMigrationExecution (metastore.projects.locations.services.migrationExecutions.delete): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "DeleteServiceMigrationExecution (metastore.projects.locations.services.migrationExecutions.delete)",
+        () => probe("DeleteServiceMigrationExecution", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ExportServiceMetadata (metastore.projects.locations.services.exportMetadata): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "ExportServiceMetadata (metastore.projects.locations.services.exportMetadata)",
+        () => probe("ExportServiceMetadata", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetService (metastore.projects.locations.services.get): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "GetService (metastore.projects.locations.services.get)",
+        () => probe("GetService", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetServiceMetadataImport (metastore.projects.locations.services.metadataImports.get): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "GetServiceMetadataImport (metastore.projects.locations.services.metadataImports.get)",
+        () => probe("GetServiceMetadataImport", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetServiceMigrationExecution (metastore.projects.locations.services.migrationExecutions.get): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "GetServiceMigrationExecution (metastore.projects.locations.services.migrationExecutions.get)",
+        () => probe("GetServiceMigrationExecution", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListServiceBackups (metastore.projects.locations.services.backups.list): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "ListServiceBackups (metastore.projects.locations.services.backups.list)",
+        () => probe("ListServiceBackups", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListServiceMetadataImports (metastore.projects.locations.services.metadataImports.list): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "ListServiceMetadataImports (metastore.projects.locations.services.metadataImports.list)",
+        () => probe("ListServiceMetadataImports", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListServiceMigrationExecutions (metastore.projects.locations.services.migrationExecutions.list): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "ListServiceMigrationExecutions (metastore.projects.locations.services.migrationExecutions.list)",
+        () => probe("ListServiceMigrationExecutions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "MoveServiceTableToDatabase (metastore.projects.locations.services.moveTableToDatabase): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "MoveServiceTableToDatabase (metastore.projects.locations.services.moveTableToDatabase)",
+        () => probe("MoveServiceTableToDatabase", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "PatchServiceMetadataImport (metastore.projects.locations.services.metadataImports.patch): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "PatchServiceMetadataImport (metastore.projects.locations.services.metadataImports.patch)",
+        () => probe("PatchServiceMetadataImport", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "QueryServiceMetadata (metastore.projects.locations.services.queryMetadata): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "QueryServiceMetadata (metastore.projects.locations.services.queryMetadata)",
+        () => probe("QueryServiceMetadata", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "RestoreService (metastore.projects.locations.services.restore): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "RestoreService (metastore.projects.locations.services.restore)",
+        () => probe("RestoreService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "StartServiceMigration (metastore.projects.locations.services.startMigration): Service: a Dataproc Metastore service takes 20–40 minutes to provision and bills per hour",
-        () => Effect.void,
+      test.provider(
+        "StartServiceMigration (metastore.projects.locations.services.startMigration)",
+        () => probe("StartServiceMigration", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
     describe("ServicesBackup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetBackup (metastore.projects.locations.services.backups.get): ServicesBackup: a backup needs a running Dataproc Metastore service (20–40 minutes to provision, billed per hour)",
-        () => Effect.void,
+      test.provider(
+        "GetBackup (metastore.projects.locations.services.backups.get)",
+        () => probe("GetBackup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

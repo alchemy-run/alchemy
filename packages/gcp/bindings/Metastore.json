@@ -13,12 +13,13 @@
     }
   },
   "probes": {
-    "resources": {},
-    "untestable": {
-      "Service": "a Dataproc Metastore service takes 20\u201340 minutes to provision and bills per hour",
-      "ServicesBackup": "a backup needs a running Dataproc Metastore service (20\u201340 minutes to provision, billed per hour)",
-      "Federation": "a federation fronts running Dataproc Metastore services (20\u201340 minutes each to provision, billed per hour)"
+    "resources": {
+      "Service": "ProbeService",
+      "ServicesBackup": "ProbeBackup",
+      "Federation": "ProbeFederation"
     },
-    "enable": ["metastore.googleapis.com"]
+    "untestable": {},
+    "enable": ["metastore.googleapis.com"],
+    "deployMinutes": 60
   }
 }
