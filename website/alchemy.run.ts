@@ -26,7 +26,9 @@ const Website = Cloudflare.Website.StaticSite(
 
     return {
       name,
-      command: "bun run build",
+      // publish-blogpost.yml builds `dist` from a release checkout and
+      // deploys it with main's CLI, so it swaps the build for a no-op.
+      command: process.env.WEBSITE_BUILD_COMMAND ?? "bun run build",
       main: "./src/worker.ts",
       outdir: "dist",
       preview: previewParent
