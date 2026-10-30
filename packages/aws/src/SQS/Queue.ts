@@ -167,6 +167,17 @@ export interface Queue extends Resource<
     queueUrl: string;
     queueName: QueueName;
     queueArn: QueueArn;
+    /**
+     * The queue attributes this resource manages (every attribute whose
+     * prop is set, plus the removable policy attributes), as observed. Lets
+     * `alchemy drift` detect out-of-band changes.
+     */
+    attributes?: Record<string, string>;
+    /**
+     * Tags on the queue, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    tags?: Record<string, string>;
   },
   {
     policyStatements: PolicyStatement[];
@@ -435,6 +446,25 @@ export const QueueProvider = () =>
 
         return baseAttributes;
       };
+      /**
+       * The managed slice of an observed attribute map: the keys reconcile
+       * converges for `props` (an absent removable attribute reads as "").
+       * `read` and `reconcile` share it so a converged queue reads unchanged.
+       */
+      const observeManagedAttributes = (
+        props: QueueProps,
+        observed: Record<string, string | undefined>,
+      ): Record<string, string> =>
+        Object.fromEntries(
+          Object.entries(createAttributes(props, []))
+            .filter(([key, value]) => value !== undefined && key !== "FifoQueue")
+            .map(([key]) => [key, observed[key] ?? ""] as const)
+            .sort(([a], [b]) => a.localeCompare(b)),
+        );
+      const definedTags = (tags: Record<string, string | undefined>) =>
+        Object.fromEntries(
+          Object.entries(tags).filter((entry): entry is [string, string] => entry[1] !== undefined),
+        );
       const ensureQueueExists = Effect.fn(function* ({
         id,
         news = {},
@@ -535,10 +565,19 @@ export const QueueProvider = () =>
             Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
           );
           if (tagsResp === undefined) return undefined;
+          const observed = yield* sqs
+            .getQueueAttributes({ QueueUrl: url, AttributeNames: ["All"] })
+            .pipe(
+              Effect.map((r) => r.Attributes ?? {}),
+              Effect.catchTag("QueueDoesNotExist", () => Effect.undefined),
+            );
+          if (observed === undefined) return undefined;
           const attrs = {
             queueName,
             queueUrl: url,
             queueArn,
+            attributes: observeManagedAttributes(olds ?? {}, observed),
+            tags: definedTags(tagsResp),
           };
           return (yield* hasAlchemyTags(id, tagsResp)) ? attrs : Unowned(attrs);
         }),
@@ -725,6 +764,11 @@ export const QueueProvider = () =>
             queueName,
             queueUrl,
             queueArn,
+            attributes: observeManagedAttributes(news, {
+              ...currentAttributes,
+              ...attributeDelta,
+            }),
+            tags: desiredTags,
           };
         }),
         delete: Effect.fn(function* (input) {

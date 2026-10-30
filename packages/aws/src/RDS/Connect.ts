@@ -9,10 +9,11 @@ import type { SecurityGroupId } from "../EC2/SecurityGroup.ts";
 import type { SubnetId } from "../EC2/Subnet.ts";
 import type { Secret } from "../SecretsManager/Secret.ts";
 import type { DBCluster } from "./DBCluster.ts";
+import type { DBInstance } from "./DBInstance.ts";
 import type { DBProxy } from "./DBProxy.ts";
 import type { DBProxyEndpoint } from "./DBProxyEndpoint.ts";
 
-export type ConnectResource = DBCluster | DBProxy | DBProxyEndpoint;
+export type ConnectResource = DBCluster | DBInstance | DBProxy | DBProxyEndpoint;
 
 export interface ConnectionInfo {
   host: string;
@@ -47,14 +48,14 @@ interface ConnectOptionsBase {
   ssl?: boolean;
   /**
    * Subnets the host Function should be attached to so it can open a
-   * socket to the cluster/proxy. Wired through the host's `vpc` binding
+   * socket to the database. Wired through the host's `vpc` binding
    * channel — equivalent to setting the Function's `vpc` prop manually.
    */
   subnetIds?: Input<SubnetId[]>;
   /**
    * Security groups for the host Function's VPC attachment (see
    * {@link ConnectOptionsBase.subnetIds}). The referenced groups must be
-   * allowed ingress on the database port by the cluster/proxy's security
+   * allowed ingress on the database port by the database's security
    * group.
    */
   securityGroupIds?: Input<SecurityGroupId[]>;
@@ -69,14 +70,22 @@ interface ConnectOptionsBase {
 export interface SecretConnectOptions extends ConnectOptionsBase {
   /** @default "secret" */
   auth?: "secret";
-  secret: Secret;
+  /**
+   * Secret whose JSON payload carries `username` and `password`. Required
+   * for a proxy. For a `DBInstance` or `DBCluster` it defaults to the
+   * database's RDS-managed master user secret (`manageMasterUserPassword:
+   * true`); a managed secret encrypted with a customer-managed KMS key also
+   * needs `kms:Decrypt` on that key.
+   * @default the RDS-managed master user secret
+   */
+  secret?: Secret;
 }
 
 /**
  * IAM database authentication: the deploy half grants `rds-db:connect` on
  * `arn:aws:rds-db:{region}:{account}:dbuser:{resourceId}/{username}`; the
  * runtime half presigns a short-lived auth token as the password. Requires
- * `enableIAMDatabaseAuthentication: true` on the cluster and a database
+ * `enableIAMDatabaseAuthentication: true` on the database and a database
  * user granted the `rds_iam` role (Postgres) / `AWSAuthenticationPlugin`
  * (MySQL). TLS is mandatory — `ssl` is forced to `true`.
  */
@@ -90,8 +99,8 @@ export type ConnectOptions = SecretConnectOptions | IamConnectOptions;
 
 /**
  * Runtime binding that resolves connection settings for an Aurora cluster,
- * proxy, or proxy endpoint using a Secrets Manager secret or IAM database
- * authentication.
+ * RDS instance, proxy, or proxy endpoint using a Secrets Manager secret or
+ * IAM database authentication.
  *
  * Binding it yields an Effect (not a callable) that resolves a
  * `ConnectionInfo` — host, port, credentials, and a ready-to-use `url` —
@@ -132,6 +141,24 @@ export type ConnectOptions = SecretConnectOptions | IamConnectOptions;
  *     };
  *   }).pipe(Effect.provide(AWS.RDS.ConnectHttp)),
  * );
+ * ```
+ *
+ * **Example:** Connect to an RDS Instance with its Managed Secret
+ * ```typescript
+ * const instance = yield* AWS.RDS.DBInstance("AppDb", {
+ *   engine: "postgres",
+ *   dbInstanceClass: "db.t4g.micro",
+ *   masterUsername: "app",
+ *   manageMasterUserPassword: true,
+ *   dbSubnetGroupName: subnetGroup.dbSubnetGroupName,
+ *   vpcSecurityGroupIds: [dbSecurityGroup.groupId],
+ * });
+ * // no `secret` — reads the RDS-managed master user secret
+ * const connect = yield* AWS.RDS.Connect(instance, {
+ *   database: "postgres",
+ *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
+ *   securityGroupIds: [appSecurityGroup.groupId],
+ * });
  * ```
  *
  * **Example:** IAM Database Authentication

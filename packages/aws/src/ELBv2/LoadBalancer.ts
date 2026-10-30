@@ -18,6 +18,7 @@ import type { AccountID } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { attributeDelta, observedAttributes } from "./common.ts";
+import { readElbTags } from "./internal.ts";
 
 export type LoadBalancerName = string;
 export type LoadBalancerArn =
@@ -235,8 +236,15 @@ export const LoadBalancerProvider = () =>
           if (attributes === null) {
             return undefined;
           }
+          const tags = yield* readElbTags(output.loadBalancerArn).pipe(
+            Effect.catchTag("LoadBalancerNotFoundException", () => Effect.undefined),
+          );
+          if (tags === undefined) {
+            return undefined;
+          }
           return {
             ...output,
+            tags,
             dnsName: loadBalancer.DNSName!,
             canonicalHostedZoneId: loadBalancer.CanonicalHostedZoneId!,
             vpcId: loadBalancer.VpcId!,

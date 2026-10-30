@@ -1,28 +1,9 @@
 import * as Cause from "effect/Cause";
-import * as Context from "effect/Context";
 import * as Data from "effect/Data";
-import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Option from "effect/Option";
-import { Scope } from "effect/Scope";
-
-/**
- * Capture the services `R` for later use, minus the `Scope`: a captured
- * construction-time scope must never replace the scope of a later request or
- * event (finalizers would attach to the wrong lifetime, and on workerd the
- * work would be pinned to another request's I/O context).
- *
- * @internal
- */
-export const captureContext = <R = never>(): Effect.Effect<
-  Context.Context<Exclude<R, Scope>>,
-  never,
-  R
-> =>
-  Effect.map(
-    Effect.context<R>(),
-    (context) => Context.omit(Scope)(context) as Context.Context<Exclude<R, Scope>>,
-  );
+import type * as Schema from "effect/Schema";
+import * as SchemaAST from "effect/SchemaAST";
 
 /**
  * A domain definition error (duplicate tag, missing `keyOf`, …), raised while
@@ -36,6 +17,26 @@ export class DefinitionError extends Data.TaggedError("DefinitionError")<{
     super({ message });
   }
 }
+
+const tags = new WeakMap<object, string>();
+
+/**
+ * The `_tag` a rejection class declares: the literal its schema gives
+ * `_tag`, so any tagged error class can be a rejection.
+ *
+ * @internal
+ */
+export const rejectionTag = (rejection: Schema.Top): string => {
+  const cached = tags.get(rejection);
+  if (cached !== undefined) return cached;
+  const encoded = SchemaAST.toEncoded(rejection.ast);
+  const tag = SchemaAST.isObjects(encoded)
+    ? encoded.propertySignatures.find((property) => property.name === "_tag")?.type
+    : undefined;
+  const value = tag && SchemaAST.isLiteral(tag) ? String(tag.literal) : "";
+  tags.set(rejection, value);
+  return value;
+};
 
 /** What `decide` returned, once its Effect (if any) ran. @internal */
 export type Settled =
@@ -75,13 +76,13 @@ export const judge = (
   command: {
     readonly tag: string;
     readonly events: ReadonlyArray<{ readonly tag: string }>;
-    readonly rejects: ReadonlyArray<{ readonly tag: string }>;
+    readonly rejects: ReadonlyArray<Schema.Top>;
   },
   decision: unknown,
 ): Judged => {
   if (!Array.isArray(decision)) {
     const rejection = decision as { readonly _tag: string };
-    if (!command.rejects.some((r) => r.tag === rejection?._tag)) {
+    if (!command.rejects.some((r) => rejectionTag(r) === rejection?._tag)) {
       return {
         _tag: "Undeclared",
         error: new DefinitionError(

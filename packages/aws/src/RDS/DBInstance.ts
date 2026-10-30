@@ -486,6 +486,11 @@ export interface DBInstance extends Resource<
      */
     deletionProtection: boolean | undefined;
     /**
+     * Whether minor engine upgrades are applied automatically, as observed.
+     * Lets `alchemy drift` detect out-of-band changes.
+     */
+    autoMinorVersionUpgrade?: boolean;
+    /**
      * Immutable region-unique instance resource ID (used in IAM auth ARNs).
      */
     dbiResourceId: string | undefined;
@@ -1070,6 +1075,7 @@ const toAttrs = ({
   enhancedMonitoringResourceArn: instance.EnhancedMonitoringResourceArn,
   enabledCloudwatchLogsExports: instance.EnabledCloudwatchLogsExports ?? [],
   deletionProtection: instance.DeletionProtection,
+  autoMinorVersionUpgrade: instance.AutoMinorVersionUpgrade,
   dbiResourceId: instance.DbiResourceId,
   masterUsername: instance.MasterUsername,
   masterUserSecretArn: instance.MasterUserSecret?.SecretArn,

@@ -5,7 +5,7 @@ import * as iam from "@distilled.cloud/aws/iam";
 import type { CreateFunctionRequest } from "@distilled.cloud/aws/lambda";
 import * as Lambda from "@distilled.cloud/aws/lambda";
 import { Region } from "@distilled.cloud/aws/Region";
-import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
+import { Unowned, Unresolved, UnresolvedIdentity } from "alchemy/AdoptPolicy";
 import * as Binding from "alchemy/Binding";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import type { PackageInstall } from "alchemy/Bundle/InstalledPackages";
@@ -46,7 +46,12 @@ import * as IAM from "../IAM/index.ts";
 import type { PolicyStatement } from "../IAM/Policy.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
 import type { Providers } from "../Providers.ts";
-import { syncEventInvokeConfig, type EventInvokeConfig } from "./EventInvokeConfig.ts";
+import {
+  observeEventInvokeConfig,
+  syncEventInvokeConfig,
+  type EventInvokeConfig,
+  type ObservedEventInvokeConfig,
+} from "./EventInvokeConfig.ts";
 import { makeFunctionBundler } from "./FunctionBundle.ts";
 import { composeFunctionDomain, functionDomainUrl, type FunctionDomain } from "./FunctionDomain.ts";
 import {
@@ -717,6 +722,21 @@ export interface Function extends Resource<
     executionRole?: {
       managedPolicyArns: string[];
       inlinePolicies: Record<string, unknown>;
+    };
+    /**
+     * Asynchronous invocation config (retries, maximum event age,
+     * destinations) of the function, or of its alias when `alias` is set,
+     * as observed. Lets `alchemy drift` detect out-of-band changes.
+     */
+    eventInvokeConfig?: ObservedEventInvokeConfig;
+    /**
+     * Durable execution settings (execution timeout and history retention),
+     * as observed on durable functions. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    durableConfig?: {
+      executionTimeout?: number;
+      retentionPeriodInDays?: number;
     };
   },
   {
@@ -1916,7 +1936,7 @@ export const FunctionProvider = () =>
             Effect.map((policy) => JSON.parse(decodeURIComponent(policy.PolicyDocument))),
             Effect.catchTag("NoSuchEntityException", () => Effect.undefined),
           );
-        const [urlConfig, logRetentionInDays, attached, bindingPolicy, guardPolicy] =
+        const [urlConfig, logRetentionInDays, attached, bindingPolicy, guardPolicy, invokeConfig] =
           yield* Effect.all(
             [
               readFunctionUrlConfig(functionName, qualifier),
@@ -1944,6 +1964,7 @@ export const FunctionProvider = () =>
               ),
               readInlinePolicy(policyName),
               readInlinePolicy(logGroupGuardPolicyName),
+              observeEventInvokeConfig(functionName, qualifier),
             ],
             { concurrency: "unbounded" },
           );
@@ -2001,6 +2022,13 @@ export const FunctionProvider = () =>
               ...(guardPolicy === undefined ? {} : { [logGroupGuardPolicyName]: guardPolicy }),
             },
           },
+          eventInvokeConfig: invokeConfig,
+          durableConfig: fn.DurableConfig
+            ? {
+                executionTimeout: fn.DurableConfig.ExecutionTimeout,
+                retentionPeriodInDays: fn.DurableConfig.RetentionPeriodInDays,
+              }
+            : undefined,
         } satisfies Partial<Function["Attributes"]>;
       });
 
@@ -2943,6 +2971,16 @@ export const FunctionProvider = () =>
           return (yield* hasAlchemyTags(id, tags)) ? observed : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news, session }) {
+          if (!isResolved(news.functionName)) {
+            return yield* new UnresolvedIdentity({
+              message:
+                `Function(${id}): \`functionName\` depends on a resource in this ` +
+                "Function's dependency cycle, so precreate cannot name the function. " +
+                "Use a literal name, or one from outside the cycle.",
+              resourceType: "AWS.Lambda.Function",
+              logicalId: id,
+            });
+          }
           yield* validateFunctionPackageProps(id, news);
           if (isFunctionImageProps(news)) {
             // Resolve and validate the image before creating the execution
@@ -3123,7 +3161,7 @@ export const FunctionProvider = () =>
             session,
           });
 
-          const configuration = yield* createOrUpdateFunction({
+          yield* createOrUpdateFunction({
             id,
             news,
             roleArn,
@@ -3224,11 +3262,11 @@ export const FunctionProvider = () =>
 
           yield* session.note(summary(prepared.deployment));
 
+          // Re-read rather than reuse the create/update response, which omits
+          // settings such as `DurableConfig` that `read` observes.
           const observed = yield* observeFunctionConfiguration({
             id,
-            configuration:
-              configuration ??
-              (yield* Lambda.getFunctionConfiguration({ FunctionName: functionName })),
+            configuration: yield* Lambda.getFunctionConfiguration({ FunctionName: functionName }),
             qualifier: news.alias,
             roleName,
             logging: news.logging,

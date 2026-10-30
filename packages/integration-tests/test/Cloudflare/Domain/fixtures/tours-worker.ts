@@ -20,7 +20,7 @@ import {
 } from "./tours.ts";
 
 const ToursLive = Tours.layer(Layer.mergeAll(OrgFeedWriterLive, NoteBookingsLive)).pipe(
-  Layer.provide(DomainCloudflare.DurableObjects),
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 
 /**

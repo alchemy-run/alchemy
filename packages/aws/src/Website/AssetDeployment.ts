@@ -91,6 +91,18 @@ export interface AssetDeployment extends Resource<
      * manifest always reflects exactly what was uploaded.
      */
     files: string[];
+    /**
+     * MD5 of each uploaded file's object in the bucket, keyed by its path in
+     * `files` (absent when the object is missing), as observed. Lets
+     * `alchemy drift` detect out-of-band edits and deletions.
+     */
+    objectHashes?: Record<string, string>;
+    /**
+     * With `purge`, the keys under the prefix that are not part of the
+     * deployment, as observed. Lets `alchemy drift` detect objects added
+     * out of band.
+     */
+    strayKeys?: string[];
   },
   never,
   Providers
@@ -205,9 +217,17 @@ export const AssetDeploymentProvider = () =>
           return hash.digest("hex");
         });
         const desiredKeys = new Set(prepared.map((file) => file.key));
+        const objectHashes = yield* Effect.sync(() =>
+          Object.fromEntries(
+            prepared.map((file) => [
+              file.relative,
+              createHash("md5").update(file.body).digest("hex"),
+            ]),
+          ),
+        );
         yield* Effect.all(
           prepared.flatMap((file) => {
-            const expectedETag = createHash("md5").update(file.body).digest("hex");
+            const expectedETag = objectHashes[file.relative];
             const observedETag = observed.get(file.key)?.replace(/^"|"$/g, "");
             if (observedETag === expectedETag) return [];
             return [
@@ -236,6 +256,8 @@ export const AssetDeploymentProvider = () =>
           version,
           fileCount: files.length,
           files: prepared.map((file) => file.relative),
+          objectHashes,
+          strayKeys: news.purge ? [] : undefined,
         };
       });
 
@@ -246,8 +268,30 @@ export const AssetDeploymentProvider = () =>
         // enumerates "asset deployments" — the uploaded objects are plain S3
         // objects owned by their bucket — so there is nothing to enumerate.
         list: () => Effect.succeed([]),
-        read: Effect.fn(function* ({ output }) {
-          return output;
+        // The uploaded objects are the managed state: report each file's
+        // live hash (and, with purge, any stray keys) so drift sees edits
+        // and deletions made in the bucket.
+        read: Effect.fn(function* ({ olds, output }) {
+          if (output === undefined) return undefined;
+          const prefix = output.prefix ? `${output.prefix}/` : output.prefix;
+          const observed = yield* listObjects(output.bucketName, prefix).pipe(
+            Effect.catchTag("NoSuchBucket", () => Effect.undefined),
+          );
+          if (observed === undefined) return undefined;
+          const keyOf = (file: string) => (output.prefix ? `${output.prefix}/${file}` : file);
+          const objectHashes: Record<string, string> = {};
+          for (const file of output.files) {
+            const etag = observed.get(keyOf(file))?.replace(/^"|"$/g, "");
+            if (etag !== undefined) objectHashes[file] = etag;
+          }
+          const desiredKeys = new Set(output.files.map(keyOf));
+          return {
+            ...output,
+            objectHashes,
+            strayKeys: olds?.purge
+              ? [...observed.keys()].filter((key) => !desiredKeys.has(key)).sort()
+              : undefined,
+          };
         }),
         reconcile: Effect.fn(function* ({ news, session }) {
           const output = yield* retryForBucketReadiness(reconcileSync(news));

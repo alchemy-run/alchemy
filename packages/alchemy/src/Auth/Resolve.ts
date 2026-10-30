@@ -198,17 +198,16 @@ export const lazyCredentials = <Resolved, E = CredentialsUnavailable>() =>
       });
     const resolve = yield* resolveProviderConfig<{ method: string }, Resolved>(providerName).pipe(
       Effect.mapError(unavailable("")),
-      Effect.flatMap(({ profileName, resolve }) =>
-        resolve.pipe(
+      Effect.flatMap(({ profileName, resolve }) => {
+        const from = profileName === undefined ? "the environment" : `profile '${profileName}'`;
+        return Effect.logDebug(`${providerName}: credentials from ${from}`).pipe(
+          Effect.annotateLogs({ provider: providerName }),
+          Effect.andThen(resolve),
           Effect.mapError(
-            unavailable(
-              `Failed to resolve ${providerName} credentials from ${
-                profileName === undefined ? "the environment" : `profile '${profileName}'`
-              }: `,
-            ),
+            unavailable(`Failed to resolve ${providerName} credentials from ${from}: `),
           ),
-        ),
-      ),
+        );
+      }),
       deferUntilFirstUse,
     );
     const cached = yield* cacheUntilExpiry(resolve, options?.expiresAt ?? (() => undefined));

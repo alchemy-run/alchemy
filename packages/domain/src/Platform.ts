@@ -1,7 +1,8 @@
 import type { HttpEffect } from "alchemy/Http";
 import * as Context from "effect/Context";
-import type * as Effect from "effect/Effect";
+import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { Scope } from "effect/Scope";
 import type * as Stream from "effect/Stream";
 import * as Aggregate from "./Aggregate.ts";
 import type * as Policy from "./Policy.ts";
@@ -9,6 +10,23 @@ import type * as Projection from "./Projection.ts";
 import type * as DomainStream from "./Stream.ts";
 import { TraceJson } from "./Telemetry.ts";
 import type * as View from "./View.ts";
+
+/**
+ * Capture the services `R` for later use, minus the `Scope`: a captured
+ * construction-time scope must never replace the scope of a later request or
+ * event (finalizers would attach to the wrong lifetime, and on workerd the
+ * work would be pinned to another request's I/O context). Platforms that host
+ * a model call this when they are built.
+ */
+export const captureContext = <R = never>(): Effect.Effect<
+  Context.Context<Exclude<R, Scope>>,
+  never,
+  R
+> =>
+  Effect.map(
+    Effect.context<R>(),
+    (context) => Context.omit(Scope)(context) as Context.Context<Exclude<R, Scope>>,
+  );
 
 /**
  * Everything a platform persists or sends is plain JSON. The kernel owns the

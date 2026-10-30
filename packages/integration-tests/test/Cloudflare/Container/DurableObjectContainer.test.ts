@@ -8,6 +8,11 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Schedule from "effect/Schedule";
+import {
+  BuildInputs,
+  type BuildInputSet,
+  buildSecretsStack,
+} from "./fixtures/buildsecrets/stack.ts";
 import { GuardWorker } from "./fixtures/native/guard-worker.ts";
 import { policyStack, settingsStack, TEST_SSH_PUBLIC_KEY } from "./fixtures/native/settings.ts";
 import {
@@ -824,6 +829,54 @@ for (const dev of [true, false]) {
           { timeout: 300_000, retry: 0 },
         );
       }
+
+      test.provider(
+        "builds a Container's Dockerfile with build args and BuildKit secrets",
+        (stack) =>
+          Effect.gen(function* () {
+            yield* stack.destroy();
+
+            const withInputs = (inputs: BuildInputSet) =>
+              buildSecretsStack.pipe(Effect.provideService(BuildInputs, inputs));
+            const initial = { greeting: "hello", token: "alchemy-build-secret-value" };
+
+            const application = yield* Effect.gen(function* () {
+              const deployed = yield* stack.deploy(withInputs(initial));
+              const url = deployed.worker.url!;
+              yield* waitUntilReady(url);
+              // The build saw the arg and the secret's mount.
+              expect(
+                yield* getText(url, "/build").pipe(
+                  within("/build", "10 seconds"),
+                  Effect.retry({ schedule: Schedule.spaced("2 seconds"), times: 40 }),
+                ),
+              ).toBe(`hello ${initial.token.length}`);
+
+              // Secrets compare by value, so an unchanged program plans nothing.
+              const unchanged = yield* stack.plan(withInputs(initial));
+              expect(unchanged.resources.BuildSecretsImage?.action).toBe("noop");
+
+              // Rotating a secret reuses the published image.
+              const rotated = yield* stack.deploy(withInputs({ ...initial, token: "rotated" }));
+              expect(rotated.image.hash?.image).toBe(deployed.image.hash?.image);
+              expect(rotated.image.image).toBe(deployed.image.image);
+
+              // A build arg is part of the image's content hash.
+              const changed = yield* stack.deploy(
+                withInputs({ greeting: "howdy", token: "rotated" }),
+              );
+              expect(changed.image.hash?.image).not.toBe(deployed.image.hash?.image);
+              return deployed.application;
+            }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.orDie)));
+
+            if (!dev) {
+              expect(
+                yield* waitForApplicationDeleted(application.accountId, application.applicationId),
+              ).toBeUndefined();
+            }
+          }),
+        { timeout: 300_000, retry: 0 },
+      );
     },
   );
 }

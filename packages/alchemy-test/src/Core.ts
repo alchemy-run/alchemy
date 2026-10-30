@@ -1,6 +1,5 @@
 import { AdoptPolicy } from "alchemy/AdoptPolicy";
 import { AlchemyContext, AlchemyContextLive } from "alchemy/AlchemyContext";
-import { apply } from "alchemy/Apply";
 import { ArtifactStore, provideFreshArtifactStore } from "alchemy/Artifacts";
 import { AuthProviders } from "alchemy/Auth/AuthProvider";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
@@ -9,8 +8,8 @@ import { withProfileOverride } from "alchemy/Auth/Resolve";
 import { userStage } from "alchemy/Cli/commands/flags";
 import { LoggingCli } from "alchemy/Cli/LoggingCli";
 import * as Contributions from "alchemy/Contributions";
-import { deploy as _deploy } from "alchemy/Deploy";
-import { destroy as _destroy } from "alchemy/Destroy";
+import * as AlchemyDeploy from "alchemy/Deploy";
+import * as AlchemyDestroy from "alchemy/Destroy";
 import type { Input } from "alchemy/Input";
 import * as Interaction from "alchemy/Interaction";
 import * as RpcProviderProxy from "alchemy/Local/RpcProviderProxy";
@@ -30,6 +29,7 @@ import { Stage } from "alchemy/Stage";
 import * as State from "alchemy/State";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { loadConfigProvider, StackConfigOverrides } from "alchemy/Util/ConfigProvider";
+import { kindOf } from "alchemy/Util/LogRecord";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Config from "effect/Config";
@@ -40,6 +40,7 @@ import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import * as Option from "effect/Option";
 import * as Scope from "effect/Scope";
 
@@ -427,6 +428,28 @@ const alchemyLayer = Layer.mergeAll(
 );
 
 /**
+ * The runner's loggers, minus typed event records: deploys draw their
+ * progress through `AlchemyDeploy.applyAndRender` (the `LoggingCli` lines), so printing each
+ * event object too would only repeat it. `onEvent` subscribers installed
+ * inside still see every event.
+ */
+const withoutEventRecords = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.flatMap(Logger.CurrentLoggers, (loggers) =>
+    effect.pipe(
+      Effect.provideService(
+        Logger.CurrentLoggers,
+        new Set(
+          [...loggers].map((logger) =>
+            Logger.make<unknown, void>((options) => {
+              if (kindOf(options) !== "event") logger.log(options);
+            }),
+          ),
+        ),
+      ),
+    ),
+  );
+
+/**
  * Build the per-test runtime and return a self-contained Effect.
  *
  * Mirrors {@link "../bin/alchemy.js"} composition: ConfigProvider via
@@ -460,6 +483,7 @@ export const toEffect = <A, ROut = any>(
     const body = sidecar ? sidecar.provide(effect) : effect;
     const locally = testDev ? provideTestServices(body) : body;
     return yield* locally.pipe(
+      withoutEventRecords,
       provideFreshArtifactStore,
       Effect.provideService(ConfigProvider, configProvider),
       Effect.provideService(StackConfigOverrides, { profile: options.profile }),
@@ -580,7 +604,7 @@ const deployStack = <A>(
   stack: TestEffect<CompiledStack<A>, Stage | AlchemyContext>,
   callOptions?: FilteredDeployCallOptions,
 ) =>
-  _deploy({
+  AlchemyDeploy.deploy({
     stack: stack as Effect.Effect<CompiledStack<A>, never, any>,
     stage: callOptions?.stage ?? resolveStage(options),
     dev: resolveDev(options),
@@ -610,7 +634,7 @@ export const destroy = <ROut>(
   stack: StackDefinition<ROut>,
   callOptions?: { stage?: string; scope?: Scope.Scope; include?: never; exclude?: never },
 ) =>
-  _destroy({
+  AlchemyDestroy.destroy({
     include: callOptions?.include,
     exclude: callOptions?.exclude,
     stack,
@@ -717,6 +741,10 @@ export const scratchStack = <ROut>(
   const pinToTestServices = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     testDev ? provideTestServices(effect) : effect;
 
+  // TODO(unify stack builds): build scratch stacks through `Alchemist.plan` /
+  // `Alchemist.apply` instead of `makeStack` and the hand-built destroy layers
+  // below (which skip the stack's secrets and auth providers); see the TODO in
+  // `alchemy/src/EvalStack.ts`.
   const buildAndApply = (
     effect: Effect.Effect<any, any, any>,
     planOptions?: Plan.FilteredPlanOptions,
@@ -725,7 +753,7 @@ export const scratchStack = <ROut>(
       makeStack({ name: stackName, providers: options.providers, state: stateLayer } as any) as any,
       Effect.flatMap((compiled: any) =>
         Plan.make(compiled, planOptions ?? {}).pipe(
-          Effect.flatMap(apply),
+          Effect.flatMap(AlchemyDeploy.applyAndRender),
           pinToTestServices,
           Effect.provide(compiled.services),
         ),
@@ -763,7 +791,7 @@ export const scratchStack = <ROut>(
             new Plan.InvalidResourceSelection({ message: "Filtered destroy is not supported." }),
           )
         : (Plan.destroy({ name: stackName, stage }).pipe(
-            Effect.flatMap(apply),
+            Effect.flatMap(AlchemyDeploy.applyAndRender),
             Effect.asVoid,
             Effect.provide(
               stateLayer.pipe(

@@ -40,6 +40,9 @@ const OUTPUT_FILE = "__stack_output__.json";
  * the lock outlives the objects it was guarding; the store deletes it on
  * close.
  */
+/** The lease token `alchemy state migrate` leaves on a stage it moved to DynamoDB. */
+const MIGRATED_TOKEN = "migrated:dynamodb";
+
 const LEASE_FILE = "__lease__.json";
 
 /** How long a lease stays valid without a refresh. */
@@ -105,6 +108,12 @@ export interface BucketStateOptions {
    */
   readonly objects: Effect.Effect<BucketObjects, StateStoreError>;
 }
+
+/**
+ * Tokens of the leases this process holds, so a conflict with one of them
+ * can say the holder is an earlier, still-open build in the same process.
+ */
+const heldInProcess = new Set<string>();
 
 interface LeaseRecord {
   readonly token: string;
@@ -208,9 +217,14 @@ export const makeBucketState = (options: BucketStateOptions) =>
         ),
       );
 
-    const heldError = (stack: string, stage: string) =>
+    const heldError = (stack: string, stage: string, holder: string | undefined) =>
+      // The message always starts "another deploy holds": callers match on it
+      // (the AWS migration tells a held stage from a failed one by it).
       new StateStoreError({
-        message: `another deploy holds the ${options.label} state lock '${stack}/${stage}'`,
+        message:
+          holder !== undefined && heldInProcess.has(holder)
+            ? `another deploy holds the ${options.label} state lock '${stack}/${stage}': this process holds it, from an earlier operation on this stage that is still open. Run each operation in its own Effect.scoped so its build closes first.`
+            : `another deploy holds the ${options.label} state lock '${stack}/${stage}'`,
       });
 
     const lostError = (stack: string, stage: string) =>
@@ -240,16 +254,22 @@ export const makeBucketState = (options: BucketStateOptions) =>
         if (version === undefined) {
           const existing = yield* readLease(key);
           const stillHeld = existing === undefined || existing.record.expiresAt > now;
+          if (existing?.record.token === MIGRATED_TOKEN) {
+            return yield* new StateStoreError({
+              message: `${heldError(stack, stage, undefined).message}: the stage moved to a DynamoDB state store. Deploy it with a version of alchemy that has AWS.state() on DynamoDB, or run 'alchemy state migrate --rollback' with that version to move it back.`,
+            });
+          }
           if (stillHeld) {
-            return yield* heldError(stack, stage);
+            return yield* heldError(stack, stage, existing?.record.token);
           }
           const replaced = yield* putLease(key, fresh, { ifVersion: existing.version });
           if (replaced === undefined) {
-            return yield* heldError(stack, stage);
+            return yield* heldError(stack, stage, undefined);
           }
           version = replaced;
         }
 
+        heldInProcess.add(token);
         const cursor = { version, lost: false };
         const gate = Semaphore.makeUnsafe(1);
 
@@ -324,6 +344,7 @@ export const makeBucketState = (options: BucketStateOptions) =>
           )(
             Effect.gen(function* () {
               cursor.lost = true;
+              heldInProcess.delete(token);
               // Read the version we actually hold. A refresh that landed
               // after the cursor was last stored would make a release
               // against the old version a no-op, and the lease would stay.

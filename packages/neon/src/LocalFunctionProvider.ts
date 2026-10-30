@@ -9,6 +9,8 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
+import * as Result from "effect/Result";
+import * as SemVer from "effect/SemVer";
 import * as Stream from "effect/Stream";
 import { branchScopeOf, Function } from "./Function.ts";
 import { buildFunctionArtifact, validateFunctionZip } from "./FunctionArtifact.ts";
@@ -49,8 +51,13 @@ export const LocalFunctionProvider = () =>
                 }),
             ),
           );
-          const match = version.match(/(\d+)\.(\d+)\.(\d+)/);
-          if (!match || Number(match[1]) < 2 || (Number(match[1]) === 2 && Number(match[2]) < 45))
+          const cliVersion = Result.getOrUndefined(
+            SemVer.parse(version.match(/\d+\.\d+\.\d+/)?.[0] ?? ""),
+          );
+          if (
+            cliVersion === undefined ||
+            SemVer.isLessThan(cliVersion, SemVer.parseUnsafe("2.45.0"))
+          )
             return yield* new FunctionConfigurationError({
               message: "Local Function WebSockets require Neon CLI >=2.45.0",
             });

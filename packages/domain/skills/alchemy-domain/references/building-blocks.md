@@ -48,6 +48,10 @@ export class WithdrawMoney extends Domain.Command("WithdrawMoney", {
 
 A rejection with no fields: `class NotOpen extends Domain.Rejection("NotOpen") {}` in `NotOpen.rejection.ts`. Events and rejections take `attributes` as a third argument: `Domain.Event("MoneyWithdrawn", { ... }, { attributes: (e) => ({ ... }) })`. Nothing from a payload is traced unless `attributes` returns it, and `Redacted` values record as `<redacted>`.
 
+`Domain.Rejection(tag, fields, annotations)` is `Schema.TaggedError` with its type filled in: the third argument takes the same annotations (`httpApiStatus`, `description`, ...) plus `attributes`. `rejects` takes any tagged error class, `HttpApiError.Forbidden` included.
+
+More: [Command: Annotate a rejection](https://alchemy.run/domain/command#annotate-a-rejection).
+
 More: [Command](https://alchemy.run/domain/command), [Event](https://alchemy.run/domain/event).
 
 ## Aggregate
@@ -264,7 +268,7 @@ export const SiftFraudCheck = FraudCheck.toLayer(
 );
 ```
 
-Use it with `const fraud = yield* FraudCheck` in a policy or saga `toLayer`, then call `fraud.score({...})`. Declare typed errors per operation with `error:`: one schema, or a list (`error: [RefundDeclined, CardFrozen]`) when the vendor can refuse in several ways. In a story, systems in `stub` are faked and the story answers their calls; the others run for real from a Layer you provide, and the story asserts what each call sent and returned. See [testing.md](testing.md).
+Use it with `const fraud = yield* FraudCheck` in a policy or saga `toLayer`, then call `fraud.score({...})`. Declare typed errors per operation with `error:`: one schema, or a list (`error: [RefundDeclined, CardFrozen]`) when the vendor can refuse in several ways. Every call through a `toLayer` adapter is checked against the operation's schemas (args before, success or error after); a value a schema rejects dies with an `ExternalSystemSchemaError` naming the system and operation. `toLayer(build, { validate: false })` turns the check off. In a story, systems in `stub` are faked and the story answers their calls; the others run for real from a Layer you provide, and the story asserts what each call sent and returned. See [testing.md](testing.md).
 
 More: [External System](https://alchemy.run/domain/external-system).
 
@@ -357,6 +361,6 @@ export const BankHandlers = Layer.mergeAll(
 );
 ```
 
-`Bank.layer(BankHandlers)` hosts the model on whatever platform is provided: `Domain.InMemory` or `DomainCloudflare.DurableObjects`.
+`Bank.layer(BankHandlers)` hosts the model on whatever platform is provided: `Domain.InMemory` or `DomainCloudflare.layerDurableObjects()`.
 
 More: [Domain Model: Declare the model](https://alchemy.run/domain/model#declare-the-model).

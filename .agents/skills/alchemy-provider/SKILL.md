@@ -101,7 +101,10 @@ tool (its `create-workflow` skill), or the equivalent elsewhere. Run a
 workflow only when the user asked for one, since it spends many agents. A workflow runs the whole wave as one
 script with bounded parallelism, enforces an agent budget, and journals
 every finished agent's result, so a crash costs only the agents still
-running. Use plain subagents only when no workflow tool exists. Either way,
+running. Use plain subagents only when no workflow tool exists; in T3 Code
+those are `delegate_task` subagent threads (nested under the coordinator,
+which is notified as each finishes), never top-level `t3_thread_launch`
+threads. Either way,
 each agent gets the task contract from **What every agent task prompt must
 include** in `AGENTS.md`, owns one distilled service, and returns the
 structured result the coordinator turns into index statuses.

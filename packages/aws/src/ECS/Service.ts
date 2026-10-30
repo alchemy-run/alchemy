@@ -48,6 +48,7 @@ import { ListenerRule } from "../ELBv2/ListenerRule.ts";
 import { LoadBalancer } from "../ELBv2/LoadBalancer.ts";
 import { TargetGroup, type TargetGroupArn } from "../ELBv2/TargetGroup.ts";
 import { AWSEnvironment, type AccountID } from "../Environment.ts";
+import { plainJson } from "../internal/Observe.ts";
 import { syncLogGroupRetention, type LogRetentionConfig } from "../Logs/LogRetention.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
@@ -908,6 +909,13 @@ export interface Service extends Resource<
      */
     ingressKind?: "owned" | "shared";
 
+    /**
+     * Desired count, networking, load balancers, service registries, the
+     * declared deployment/placement/execute-command settings and the tags,
+     * as observed. Lets `alchemy drift` detect out-of-band changes.
+     */
+    configuration?: Record<string, unknown>;
+
     /** Family of the synthesized task definition (image-owning form only). */
     taskFamily?: string;
     /** Name of the primary container (image-owning form only). */
@@ -1348,6 +1356,63 @@ export const Service: Platform<Service, ServiceServices, ServiceShape, ServiceRu
   });
 
 /** The BYO task reference, when the props use the `task:` form. */
+/**
+ * The service settings reconcile converges, as observed on `service`.
+ * `read` and `reconcile` share it so a converged service reads unchanged.
+ * Settings whose prop is unset are left unchanged by `updateService`, so
+ * they are only observed when declared; the desired count is not observed
+ * while autoscaling owns it.
+ */
+const observeServiceConfiguration = (
+  service: ecs.Service,
+  props: ServiceProps | undefined,
+  tags: Record<string, string>,
+) => {
+  const declared = <V>(key: keyof ServiceProps, value: V) =>
+    props?.[key] === undefined ? undefined : value;
+  const vpc = service.networkConfiguration?.awsvpcConfiguration;
+  return plainJson({
+    desiredCount: props?.scaling === undefined ? service.desiredCount : undefined,
+    networkConfiguration: vpc && {
+      subnets: [...(vpc.subnets ?? [])].sort(),
+      securityGroups: [...(vpc.securityGroups ?? [])].sort(),
+      assignPublicIp: vpc.assignPublicIp,
+    },
+    loadBalancers: service.loadBalancers?.length
+      ? [...service.loadBalancers].sort((a, b) =>
+          JSON.stringify(a).localeCompare(JSON.stringify(b)),
+        )
+      : undefined,
+    serviceRegistries: service.serviceRegistries?.length ? service.serviceRegistries : undefined,
+    platformVersion: declared("platformVersion", service.platformVersion),
+    deploymentConfiguration: declared("deploymentConfiguration", service.deploymentConfiguration),
+    healthCheckGracePeriodSeconds: declared(
+      "healthCheckGracePeriod",
+      service.healthCheckGracePeriodSeconds,
+    ),
+    capacityProviderStrategy: declared(
+      "capacityProviderStrategy",
+      service.capacityProviderStrategy,
+    ),
+    placementConstraints: declared("placementConstraints", service.placementConstraints),
+    placementStrategy: declared("placementStrategy", service.placementStrategy),
+    enableExecuteCommand: declared("enableExecuteCommand", service.enableExecuteCommand),
+    propagateTags: declared("propagateTags", service.propagateTags),
+    availabilityZoneRebalancing: declared(
+      "availabilityZoneRebalancing",
+      service.availabilityZoneRebalancing,
+    ),
+    tags,
+  });
+};
+
+const ecsTagRecord = (tags: ecs.Tag[] | undefined): Record<string, string> =>
+  Object.fromEntries(
+    (tags ?? []).flatMap((t) =>
+      typeof t.key === "string" && typeof t.value === "string" ? [[t.key, t.value]] : [],
+    ),
+  );
+
 const taskRefOf = (props: ServiceProps | undefined) =>
   props !== undefined && "task" in props ? props.task : undefined;
 
@@ -3178,6 +3243,7 @@ export const ServiceProvider = () =>
             clusterArn: service.clusterArn as ClusterArn,
             taskDefinitionArn: service.taskDefinition!,
             status: service.status ?? "ACTIVE",
+            configuration: observeServiceConfiguration(service, olds, ecsTagRecord(service.tags)),
           };
         }),
         list: () =>
@@ -3378,6 +3444,7 @@ export const ServiceProvider = () =>
               clusterArn: stableService.clusterArn as ClusterArn,
               taskDefinitionArn: stableService.taskDefinition!,
               status: stableService.status ?? "ACTIVE",
+              configuration: observeServiceConfiguration(stableService, news, desiredTags),
               ...ingressAttrs,
               ...ownedAttributes,
             };
@@ -3479,6 +3546,7 @@ export const ServiceProvider = () =>
             clusterArn: stableService.clusterArn as ClusterArn,
             taskDefinitionArn: stableService.taskDefinition!,
             status: stableService.status ?? "ACTIVE",
+            configuration: observeServiceConfiguration(stableService, news, desiredTags),
             ...ingressAttrs,
             ...ownedAttributes,
           };
