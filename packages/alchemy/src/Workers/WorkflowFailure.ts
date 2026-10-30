@@ -2,7 +2,7 @@
  * The private wire format a workflow step uses to carry a typed Effect
  * failure through the engine's native step retry/storage machinery, which
  * keeps only an `Error`'s message. Shared by every Workflows engine that
- * follows the Cloudflare Workflows API (Cloudflare, Celld).
+ * follows the Cloudflare Workflows API (Cloudflare today).
  *
  * @internal
  */

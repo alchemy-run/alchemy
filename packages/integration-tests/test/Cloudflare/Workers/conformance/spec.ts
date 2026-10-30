@@ -1,7 +1,7 @@
 import { expect } from "@alchemy.run/test";
 /**
- * The **Durable Object engine conformance spec**, run against Cloudflare,
- * celld and Rivet: one frozen set of behaviors, driven over HTTP against a
+ * The **Durable Object engine conformance spec**, run against every
+ * engine: one frozen set of behaviors, driven over HTTP against a
  * deployed worker (or a caller that fronts it).
  *
  * Each suite deploys its provider-local Durable Object declaration and

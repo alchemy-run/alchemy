@@ -17,7 +17,7 @@ export interface WorkerExportLike {
 
 /** The engine-specific half of a Worker runtime context. */
 export interface WorkerRuntimeContextOptions {
-  /** The Worker resource type (`Cloudflare.Worker`, `Celld.Worker`). */
+  /** The Worker resource type (e.g. `Cloudflare.Worker`). */
   readonly type: string;
   /** Services the host provides its init in every phase. */
   readonly hostServices?: Layer.Layer<any, never, any> | undefined;

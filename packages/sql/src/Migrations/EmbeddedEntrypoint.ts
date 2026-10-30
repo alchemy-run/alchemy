@@ -1,6 +1,6 @@
 /**
  * Supply embedded SQL migration records to a runtime entrypoint. Used by
- * the generated entries of every Durable Object host (Cloudflare, Celld).
+ * the generated entries of every Durable Object host (Cloudflare today).
  *
  * @internal
  */

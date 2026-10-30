@@ -1,8 +1,8 @@
 /**
  * Shared Durable Object registration and export mechanics: ONE
  * implementation of "register the class on its hosting worker and export
- * it", used by every engine whose workers host Durable Objects (Cloudflare,
- * Celld). Binding registration, runtime-env namespace resolution, the
+ * it", used by every engine whose workers host Durable Objects.
+ * Binding registration, runtime-env namespace resolution, the
  * plan-time mock-state evaluation that discovers transitive bindings, and
  * the class export are engine-invariant; the binding data shape and the
  * stub flavor come from the engine.
@@ -126,7 +126,7 @@ export const exportDurableObjectClass = <Shape>(
   });
 
 // ---------------------------------------------------------------------------
-// Declarations for engines with local, named namespaces (Celld)
+// Declarations for engines with local, named namespaces
 // ---------------------------------------------------------------------------
 
 /** A Durable Object class declaration as registered on its hosting worker. */

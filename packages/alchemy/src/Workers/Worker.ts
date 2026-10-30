@@ -1,6 +1,6 @@
 /**
- * The engine-invariant Worker runtime core shared by the Cloudflare and
- * Celld bridges: the `WorkerEnvironment` service, the one-per-instance
+ * The engine-invariant Worker runtime core shared by every
+ * engine's bridge: the `WorkerEnvironment` service, the one-per-instance
  * layer build every export of an entrypoint shares, the per-export resolver
  * over it, and the RPC exit encoder.
  *

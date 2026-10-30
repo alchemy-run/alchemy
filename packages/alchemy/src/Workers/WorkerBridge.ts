@@ -1,6 +1,6 @@
 /**
- * The engine-invariant event-dispatch core shared by the Cloudflare and
- * Celld bridges: run one event's handler against a shared build under a
+ * The engine-invariant event-dispatch core shared by every
+ * engine's bridge: run one event's handler against a shared build under a
  * fresh per-event `Scope`, and normalize an RPC dispatcher's return value
  * into the effect the bridge runs.
  *

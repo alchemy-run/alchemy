@@ -31,8 +31,8 @@ export interface BaseRuntimeContext {
   /**
    * Serve even when the impl shape has no `fetch` handler and no RPC
    * methods. Set by runtimes whose served handler carries routes of its
-   * own — e.g. the Celld fleet gateway, which must serve Durable Object
-   * routing for a worker that hosts DOs but exposes no public surface.
+   * own — e.g. a runtime that routes Durable Object calls itself, so a
+   * worker that only hosts Durable Objects still serves.
    */
   alwaysServe?: boolean;
   shape?: () => Record<string, unknown>;

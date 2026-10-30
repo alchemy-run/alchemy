@@ -42,7 +42,7 @@ type StateService = {
 
 /**
  * Effect's `WorkflowEngine` on Durable Objects, for any Workers runtime that
- * hosts them (Cloudflare, Celld). Each workflow gets its own Durable Object
+ * hosts them (Cloudflare today). Each workflow gets its own Durable Object
  * class on the host Worker, and each execution is one instance of it, named
  * by its execution id, with its journal in that instance's SQLite.
  *

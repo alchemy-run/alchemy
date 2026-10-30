@@ -1,6 +1,6 @@
 /**
  * The workerd flavor of the Durable Object bridge, shared by every engine
- * whose objects follow the Workers API (Cloudflare, Celld): the exported
+ * whose objects follow the Workers API (Cloudflare today): the exported
  * `DurableObject` subclass that turns workerd's lifecycle and JSRPC calls
  * into Effect calls on the engine-invariant instance core.
  *

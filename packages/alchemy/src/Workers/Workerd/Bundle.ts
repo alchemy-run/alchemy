@@ -1,6 +1,6 @@
 /**
  * The rolldown bundler for Workers-style (workerd API) bundles, shared by
- * every engine that runs them (Cloudflare, Celld). The engine supplies the
+ * every engine that runs them (Cloudflare today). The engine supplies the
  * workerd compatibility plugins and the generated virtual entry.
  *
  * @internal

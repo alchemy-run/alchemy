@@ -1,6 +1,6 @@
 /**
  * The workerd flavor of the Worker bridge, shared by every engine that runs
- * Workers-compatible bundles (Cloudflare, Celld): the platform services a
+ * Workers-compatible bundles (Cloudflare today): the platform services a
  * workerd isolate builds its init against, and the `WorkerEntrypoint` class
  * that turns workerd's handler and JSRPC calls into Effect events over the
  * engine-invariant core in `../WorkerBridge.ts`.

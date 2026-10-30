@@ -19,7 +19,7 @@ export type DurableObjectAbortOptions = cf.DurableObjectAbortOptions;
 
 /**
  * The Effect view of a workerd-style `DurableObjectState`, shared by every
- * engine whose objects follow the Workers API (Cloudflare, Celld). Engines
+ * engine whose objects follow the Workers API (Cloudflare today). Engines
  * extend it with their own capabilities.
  */
 export interface WorkerdDurableObjectState {

@@ -1,6 +1,6 @@
 /**
- * The engine-invariant Durable Object instance core shared by the
- * Cloudflare and Celld bridges: build one instance of a class export
+ * The engine-invariant Durable Object instance core shared by every
+ * engine's bridge: build one instance of a class export
  * against the shared build, run each call under a fresh per-call `Scope`
  * with the instance's state and telemetry provided, and dispatch RPC
  * methods against the built shape.

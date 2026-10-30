@@ -1,6 +1,6 @@
 /**
  * The server half of `RpcDurableObject`, shared by every engine whose
- * objects follow the Workers API (Cloudflare, Celld).
+ * objects follow the Workers API (Cloudflare today).
  *
  * @internal
  */

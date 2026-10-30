@@ -511,7 +511,7 @@ export const Platform = <
                   // `Main.fetch` shape); `serve` accepts both.
                   const fetch = shape.fetch as any;
                   const hasRpcMethods = Object.keys(shape).some((key) => key !== "fetch");
-                  // `alwaysServe` runtimes (the Celld fleet gateway) serve routes
+                  // `alwaysServe` runtimes (ones that route Durable Object calls) serve routes
                   // of their own — boot the server even for an impl with no
                   // fetch handler and no RPC methods (e.g. a worker that only
                   // hosts Durable Objects).

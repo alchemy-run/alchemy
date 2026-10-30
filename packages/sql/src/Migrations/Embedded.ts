@@ -2,7 +2,7 @@
  * SQL migrations embedded into a Workers-style runtime bundle: captured
  * from a migrations directory during construction, carried into the
  * bundle as records, and applied to an object's native SQLite storage at
- * activation. Shared by every Durable Object host (Cloudflare, Celld).
+ * activation. Shared by every Durable Object host (Cloudflare today).
  * Runtime-safe: construction-time capture lives in `EmbeddedCapture.ts`.
  *
  * @internal
