@@ -3,11 +3,12 @@ import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
 import type * as Event from "./Event.ts";
-import { DefinitionError, judge, rejectionTag, settle } from "./internal.ts";
+import { DefinitionError, judge, pathsWithoutJson, rejectionTag, settle } from "./internal.ts";
 import * as Key from "./Key.ts";
 import type {
   Accepted,
@@ -178,11 +179,81 @@ export const make = (
   });
 
 /**
- * Every problem {@link make} would die with, without building anything.
- * Empty when the definitions are valid.
+ * Every problem {@link make} would die with, without building anything, and
+ * every schema with no JSON form. Empty when the definitions are valid.
  */
-export const verify = (definitions: Definitions): ReadonlyArray<DefinitionError> =>
-  collect(definitions, Telemetry.resolve(undefined)).problems;
+export const verify = (definitions: Definitions): ReadonlyArray<DefinitionError> => [
+  ...collect(definitions, Telemetry.resolve(undefined)).problems,
+  ...serializationProblems(definitions),
+];
+
+/** Why a value does not survive a trip through JSON, if it does not. */
+const roundTrip = (schema: Schema.Top, value: unknown): string | undefined => {
+  const codec = jsonCodec(schema);
+  const text = Result.try(() => JSON.stringify(codec.encode(value)));
+  // `build` reports an initial state its schema refuses.
+  if (Result.isFailure(text)) return undefined;
+  try {
+    const back = text.success === undefined ? undefined : JSON.parse(text.success);
+    return JSON.stringify(codec.encode(codec.decode(back))) === text.success
+      ? undefined
+      : `${text.success} comes back different`;
+  } catch (error) {
+    return error instanceof Error ? error.message : String(error);
+  }
+};
+
+/**
+ * Everything a host stores or sends goes through JSON. A schema with no JSON
+ * form hosts well, and fails on its first value, so only {@link verify} reports
+ * it: a model that hosts today still does.
+ */
+const serializationProblems = (definitions: Definitions): ReadonlyArray<DefinitionError> => {
+  const problems: Array<DefinitionError> = [];
+  const seen = new Set<string>();
+  const check = (schema: Schema.Top, name: string) => {
+    if (seen.has(name)) return;
+    seen.add(name);
+    for (const path of pathsWithoutJson(schema.ast, name)) {
+      problems.push(
+        new DefinitionError(
+          `${path} has no JSON form: use a Schema with one, or annotate it with toCodecJson`,
+        ),
+      );
+    }
+  };
+  const checkInitial = (schema: Schema.Top, name: string, initial: unknown) => {
+    const failure = roundTrip(schema, initial);
+    if (failure !== undefined) {
+      problems.push(new DefinitionError(`${name}.initial does not survive JSON: ${failure}`));
+    }
+  };
+  for (const aggregate of definitions.aggregates) {
+    const { aggregateName: name, definition: def } = aggregate;
+    check(def.state, `${name}.state`);
+    checkInitial(def.state, name, def.initial);
+    for (const command of def.commands) {
+      check(command, `Command ${command.tag}`);
+      if (command.reply) check(command.reply, `Command ${command.tag}.reply`);
+      for (const rejection of command.rejects) {
+        check(rejection, `Rejection ${rejectionTag(rejection)}`);
+      }
+    }
+    for (const event of def.events) check(event, `Event ${event.tag}`);
+  }
+  for (const view of definitions.views) {
+    const { state, initial, events } = view.definition;
+    if (state) {
+      check(state, `${view.viewName}.state`);
+      if (initial !== undefined) checkInitial(state, view.viewName, initial);
+    }
+    for (const event of events ?? []) check(event, `Event ${event.tag}`);
+  }
+  for (const stream of definitions.streams) {
+    for (const event of stream.definition.entries) check(event, `Event ${event.tag}`);
+  }
+  return problems;
+};
 
 /** Build the kernel and collect every definition problem, each once, in order. */
 const collect = (definitions: Definitions, telemetry: Telemetry.Resolved) => {
