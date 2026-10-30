@@ -619,8 +619,8 @@ test.provider(
         program,
       );
       const alchemist = Alchemist.layer();
-      const awsStore = { _tag: "Provider", backend: "aws", name } as const;
-      const s3Store = { _tag: "Provider", backend: "aws-s3", name } as const;
+      const awsStore = { type: "provider", backend: "aws", name } as const;
+      const s3Store = { type: "provider", backend: "aws-s3", name } as const;
       const teardown = Effect.all(
         [Alchemist.State.teardown(awsStore), Alchemist.State.teardown(s3Store)],
         { discard: true },
