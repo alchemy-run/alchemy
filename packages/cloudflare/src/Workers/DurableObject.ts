@@ -3,11 +3,14 @@ import type { Dependencies } from "alchemy/Dependencies";
 import type { HttpEffect } from "alchemy/Http";
 import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
-import { ALCHEMY_PHASE } from "alchemy/Phase";
 import type { MainRpc, PlatformServices } from "alchemy/Platform";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import { effectClass, taggedFunction } from "alchemy/Util/effect";
 import { asEffect } from "alchemy/Util/types";
+import {
+  exportDurableObjectClass,
+  resolveDurableObjectNamespace,
+} from "alchemy/Workers/DurableObject";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import type { HttpServerError } from "effect/http/HttpServerError";
@@ -22,18 +25,7 @@ import { makeRpcStub, type RpcErrorClass } from "./Rpc.ts";
 import { type WebSocket } from "./WebSocket.ts";
 import { isWorker, Worker, WorkerEnvironment, type WorkerServices } from "./Worker.ts";
 
-export interface DurableObjectExport {
-  readonly kind: "durableObject";
-  readonly constructor: Effect.Effect<
-    Effect.Effect<DurableObjectShape, never, RuntimeContext>,
-    never,
-    DurableObjectState
-  >;
-  readonly services: Context.Context<never>;
-}
-
-export const isDurableObjectExport = (value: unknown): value is DurableObjectExport =>
-  typeof value === "object" && (value as any)?.kind === "durableObject";
+export { isDurableObjectExport, type DurableObjectExport } from "alchemy/Workers/DurableObject";
 
 export type DurableObjectId = cf.DurableObjectId;
 export type DurableObjectJurisdiction = cf.DurableObjectJurisdiction;
@@ -1403,22 +1395,8 @@ export const DurableObject: DurableObjectClass = taggedFunction(
           ],
         });
 
-        const binding = yield* Effect.all([WorkerEnvironment, ALCHEMY_PHASE]).pipe(
-          Effect.flatMap(([env, phase]) => {
-            if (env === undefined || phase === "plan") {
-              // should be fine to return undefined here (it is only undefined at plantime)
-              return Effect.undefined;
-            }
-            const ns = env[namespace];
-            if (!ns) {
-              return Effect.die(new Error(`DurableObject '${namespace}' not found`));
-            } else if (typeof ns.getByName === "function") {
-              return Effect.succeed(ns);
-            } else {
-              return Effect.die(new Error(`DurableObject '${namespace}' is not a DurableObject`));
-            }
-          }),
-        );
+        // `undefined` at plan time — every method is only called at runtime.
+        const binding = yield* resolveDurableObjectNamespace<cf.DurableObjectNamespace>(namespace);
 
         // `undefined` at plan time; every method is only called at runtime.
         // A function because `jurisdiction` wraps the sub-namespace it returns.
@@ -1467,29 +1445,15 @@ export const DurableObject: DurableObjectClass = taggedFunction(
       // and also return it so a `Layer.effect(tag, make(impl))` Layer
       // resolves the tag to a concrete namespace value.
       const self = yield* binding(undefined, classProps?.transferredFrom, classProps?.errors);
-      const phase = yield* ALCHEMY_PHASE;
       const constructor = impl.pipe(Effect.provideService(DurableObjectScope, self as any));
-      if (phase === "plan") {
-        // during plan time, we evaluate the constructor with a mock DurableObjectState
-        // to trigger discovery of bindings
-        yield* constructor.pipe(
-          Effect.provide(
-            Layer.succeed(
-              DurableObjectState,
-              // mock during plan time
-              fromDurableObjectState({ storage: {} } as any),
-            ),
-          ),
-          Effect.asVoid,
-        );
-      }
-      yield* (yield* Worker).export(namespace, {
-        kind: "durableObject",
-        // initialize the object's constructor (apply infra dependencies)
+      yield* exportDurableObjectClass(
+        yield* Worker,
+        namespace,
         constructor,
-        // grab the object's infra dependencies so we can apply them when calling the instance's methods
-        services: yield* Effect.context<Effect.Services<typeof impl>>(),
-      } satisfies DurableObjectExport);
+        // during plan time, the constructor is evaluated with a mock
+        // DurableObjectState to trigger discovery of bindings
+        Context.make(DurableObjectState, fromDurableObjectState({ storage: {} } as any)),
+      );
       return self;
     });
 
