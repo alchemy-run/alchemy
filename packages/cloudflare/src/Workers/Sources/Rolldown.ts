@@ -142,7 +142,7 @@ const withRulesHint = (error: Bundle.BundleError): Bundle.BundleError => {
         : e.code === "PARSE_ERROR"
           ? e.id
           : e.code === "MISSING_EXPORT"
-            ? message.match(/is not exported by "([^"]+)"/)?.[1]
+            ? message.match(/"default" is not exported by "([^"]+)"/)?.[1]
             : undefined;
     const ext = file && path.extname(file);
     return ext && !/^\.([cm]?[jt]sx?|json|css)$/.test(ext) ? [ext] : [];
