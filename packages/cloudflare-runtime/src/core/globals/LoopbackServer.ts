@@ -42,7 +42,9 @@ export const LoopbackServerLive = Layer.effect(
   LoopbackServer,
   Effect.gen(function* () {
     const routes = MutableHashMap.empty<string, RawHandler>();
-    const secret = yield* (yield* SecureRandom.SecureRandom).uuidV4();
+    const secret = yield* SecureRandom.SecureRandom.pipe(
+      Effect.flatMap((random) => random.uuidV4()),
+    );
     const server = yield* Effect.sync(() =>
       NodeHttp.createServer(async (req, res) => {
         const secretHeader = req.headers[LoopbackServerHeaders.SECRET] as string | undefined;
