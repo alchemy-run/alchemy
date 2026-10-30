@@ -30,12 +30,17 @@ import * as Tracer from "effect/Tracer";
 import type * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
 import { type Filter, matches } from "./Filter.ts";
-import { captureContext } from "./internal.ts";
 import { decodeEnvelope } from "./Kernel.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
 import * as Model from "./Model.ts";
-import type { AggregateStore, StreamStore, Subscription, ViewStore } from "./Platform.ts";
+import {
+  type AggregateStore,
+  captureContext,
+  type StreamStore,
+  type Subscription,
+  type ViewStore,
+} from "./Platform.ts";
 import type * as Read from "./Read.ts";
 import { contractOf, nameOf, readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
@@ -1069,7 +1074,7 @@ const build = (
  *
  * const BankLive = SessionLive.pipe(
  *   Layer.provideMerge(Bank.layer(BankPolicies)),
- *   Layer.provide(DomainCloudflare.DurableObjects),
+ *   Layer.provide(DomainCloudflare.layerDurableObjects()),
  * );
  *
  * export default class BankWorker extends Cloudflare.Worker<BankWorker>()(

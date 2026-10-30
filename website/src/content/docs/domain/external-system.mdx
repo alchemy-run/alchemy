@@ -107,6 +107,24 @@ This one is a stand-in. A production adapter calls the vendor's HTTP API, maps i
 
 Adapters live in the server package, next to the platform, because they reach the network. The domain package only holds the declaration. See [Project layout](/domain/project-layout).
 
+## Calls are checked against the schemas
+
+Every call through a `toLayer` adapter is checked against the operation's schemas: the arguments before the adapter runs, then its success value or error. A value a schema rejects is a defect, an `ExternalSystemSchemaError` that names the system, the operation and the side that broke:
+
+```text
+Payments.refund returned a value its success schema rejects
+Expected string
+  at ["refundId"]
+```
+
+A policy that sends bad arguments, or an adapter that maps a vendor response wrong, fails at the seam instead of deep inside the model. Fields the success schema doesn't declare are dropped, so the model sees only what it declared. An error the operation doesn't declare is a defect too. An operation without `success` returns the adapter's value as it is.
+
+Turn the check off for one adapter with `validate: false`, for example when the payload is large and the adapter already validates it:
+
+```typescript
+export const StripePayments = Payments.toLayer(build, { validate: false });
+```
+
 ## Call it from a policy
 
 A policy uses it like any other service. This one refunds money that settled on an account that had already closed.

@@ -18,7 +18,7 @@ export type Provides<Ms extends List> = Ms[number] extends infer M
 /** The errors a list of middleware can fail a request with. */
 export type Errors<Ms extends List> = Ms[number] extends infer M
   ? M extends RpcMiddleware.AnyService
-    ? RpcMiddleware.Error<M>
+    ? RpcMiddleware.Error<M["Identifier"]>
     : never
   : never;
 

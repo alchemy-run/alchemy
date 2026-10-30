@@ -35,6 +35,7 @@ import {
   type ReplaceDiff,
   type UpdateDiff,
 } from "./Diff.ts";
+import { emit, type PlannedAction, type PlannedBinding, type PlannedResource } from "./Events.ts";
 import { parseFqn } from "./FQN.ts";
 import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -47,12 +48,6 @@ import {
   type ProviderService,
 } from "./Provider.ts";
 import { defaultProviderMode, stampedMode, type ProviderMode } from "./ProviderMode.ts";
-import {
-  Progress,
-  type PlannedAction,
-  type PlannedBinding,
-  type PlannedResource,
-} from "./Report.ts";
 import {
   isResource,
   missingImplementation,
@@ -385,9 +380,8 @@ const makePlan = <A>(
   // @ts-expect-error
   Effect.gen(function* () {
     // Per-resource plan progress and phase markers are reported through
-    // the ambient Progress reporter as the work happens, so a renderer can show
+    // events as the work happens, so a renderer can show
     // plan computation while it runs. The default reporter is a no-op.
-    const reportPlanned = yield* Progress;
 
     const declaredResources = Object.values(stack.resources);
     const declaredActions = Object.values(stack.actions ?? {});
@@ -405,7 +399,7 @@ const makePlan = <A>(
     const actions = declaredActions.filter((node) => !selected || selected.has(node.FQN));
 
     // Resolving the state service may bootstrap a remote store.
-    yield* reportPlanned({ _tag: "plan.phase", phase: "loading-state" });
+    yield* emit({ type: "plan.phase", phase: "loading-state" });
     const state = yield* yield* State;
 
     // A bare platform tag yields a forward reference registered with
@@ -560,7 +554,7 @@ const makePlan = <A>(
       if (remote.length > 0) yield* demandRemoteCredentials(remote);
     }
 
-    yield* reportPlanned({ _tag: "plan.phase", phase: "computing-plan" });
+    yield* emit({ type: "plan.phase", phase: "computing-plan" });
 
     // ── FQN renames ──────────────────────────────────────────────────────
     // Map every former FQN claimed via `renamedFrom(...)` to its claimant's
@@ -1273,8 +1267,8 @@ const makePlan = <A>(
     const resourcePlanned = (node: CRUD) =>
       Ref.updateAndGet(plannedCount, (count) => count + 1).pipe(
         Effect.flatMap((completed) =>
-          reportPlanned({
-            _tag: "plan.resource.completed",
+          emit({
+            type: "plan.resource.completed",
             ...describeResource(node),
             completed,
             total: resources.length,
@@ -1289,8 +1283,8 @@ const makePlan = <A>(
       // Paired with the resource-planned completion below so renderers can
       // show what is actually in flight (diffs may read the cloud and run
       // concurrently — completions alone hide the slow tail).
-      yield* reportPlanned({
-        _tag: "plan.resource.started",
+      yield* emit({
+        type: "plan.resource.started",
         fqn,
         logicalId: id,
         resourceType: resource.Type,
@@ -1980,8 +1974,8 @@ const makePlan = <A>(
     const actionPlanned = (entry: readonly [string, ActionApply]) =>
       Ref.updateAndGet(actionCount, (count) => count + 1).pipe(
         Effect.flatMap((completed) =>
-          reportPlanned({
-            _tag: "plan.action.completed",
+          emit({
+            type: "plan.action.completed",
             ...describeAction(entry[1]),
             completed,
             total: actions.length,
@@ -2060,10 +2054,11 @@ const makePlan = <A>(
     }
 
     // A delete-first replacement in a cycle deletes its previous generation
-    // before precreate, which runs on unresolved props. While its identity is
-    // unresolved, only the provider's `observe` can check ownership before
-    // that delete. Without it, refuse here — before apply touches anything —
-    // unless adoption is allowed.
+    // before precreate. Apply resolves the props that upstreams outside the
+    // cycle determine first, so only props derived from a cycle peer are
+    // still unresolved then, and only the provider's `observe` can check
+    // ownership before that delete. Without it, refuse here — before apply
+    // touches anything — unless adoption is allowed.
     for (const [fqn, node] of Object.entries(resourceGraph)) {
       if (
         node.action === "replace" &&
@@ -2072,6 +2067,7 @@ const makePlan = <A>(
         !node.provider.observe &&
         node.deferredAdoption?.adopt === false &&
         !isResolved(node.props) &&
+        Object.keys(Output.resolveUpstream(node.props)).some((dep) => cycleMembers.has(dep)) &&
         // A resumed replacement already holds its precreated identity.
         !(node.state.status === "replacing" && !node.restart && node.state.attr !== undefined)
       ) {
@@ -2101,8 +2097,8 @@ const makePlan = <A>(
         Effect.flatMap((completed) =>
           entry === undefined
             ? Effect.void
-            : reportPlanned({
-                _tag: "plan.action.completed",
+            : emit({
+                type: "plan.action.completed",
                 ...describeAction(entry[1]),
                 completed,
                 total: persistedFqns.length,
@@ -2165,8 +2161,8 @@ const makePlan = <A>(
         Effect.flatMap((completed) =>
           entry === undefined
             ? Effect.void
-            : reportPlanned({
-                _tag: "plan.resource.completed",
+            : emit({
+                type: "plan.resource.completed",
                 ...describeResource(entry[1]),
                 completed,
                 total: deletionCandidates.length,

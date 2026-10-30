@@ -3,7 +3,7 @@ import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { repositoryFromImageRef } from "@alchemy.run/docker/Registry";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
+import { Unowned, Unresolved, UnresolvedIdentity } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { deepEqual, isResolved } from "alchemy/Diff";
@@ -48,7 +48,7 @@ import {
 } from "./ContainerConfiguration.ts";
 import { waitForContainerImage } from "./ContainerImagePreparation.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
-import { retryContainerPublication } from "./ContainerPublication.ts";
+import { retryContainerBuild, retryContainerPublication } from "./ContainerPublication.ts";
 import { retryNamespacePropagation } from "./DurableObjectApplication.ts";
 
 export class ContainerProviderConflict extends Data.TaggedError("ContainerProviderConflict")<{
@@ -653,7 +653,7 @@ export const LiveContainerProvider = () =>
               session,
               credentials,
             )
-            .pipe(retryContainerPublication);
+            .pipe(retryContainerBuild);
         } else {
           // Effect-native program: materialize the generated Dockerfile and
           // bundled chunks into a stable staging dir, then build.
@@ -692,7 +692,7 @@ export const LiveContainerProvider = () =>
               session,
               credentials,
             )
-            .pipe(retryContainerPublication);
+            .pipe(retryContainerBuild);
         }
 
         // Resolve the pushed manifest digest from the registry itself rather
@@ -1142,9 +1142,10 @@ export const LiveContainerProvider = () =>
             `Cloudflare Container update: ${existing.applicationName} has no effective changes`,
           );
           yield* session.note(`Container application ${existing.applicationName} is unchanged.`);
+          // `existing` is the observed application; keep its configuration,
+          // which `read` reports with Cloudflare's defaults filled in.
           return {
             ...existing,
-            configuration,
             hash: {
               image: imageHash,
               digest: imageDigest,
@@ -1204,10 +1205,32 @@ export const LiveContainerProvider = () =>
             configuration,
             rollout: news.rollout,
           });
+          yield* session.note(`Waiting for the rollout of ${updated.applicationName} to land...`);
+        }
+        // Cloudflare keeps reporting the previous version and configuration
+        // until the rollout lands, then reports the configuration with its
+        // defaults filled in. Save the application as `read` will see it.
+        const observed = yield* retryForContainerApplicationReadiness(
+          "read",
+          updated.applicationId,
+          Containers.getContainerApplication({ accountId, applicationId: updated.applicationId }),
+        ).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (app) => !hasActiveRollout(app),
+            times: 30,
+          }),
+        );
+        if (hasActiveRollout(observed)) {
+          yield* Effect.logInfo(
+            `Cloudflare Container update: rollout of ${updated.applicationName} is still in progress`,
+          );
+          yield* session.note(
+            `Rollout of ${updated.applicationName} is still in progress; saved the application as it was before the rollout.`,
+          );
         }
         return {
-          ...updated,
-          configuration,
+          ...toAttributes(observed),
           hash: {
             image: imageHash,
             digest: imageDigest,
@@ -1337,6 +1360,16 @@ export const LiveContainerProvider = () =>
             : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news = {}, session }) {
+          if (!isResolved(nameOf(news))) {
+            return yield* new UnresolvedIdentity({
+              message:
+                `Container(${id}): its name depends on a resource in this ` +
+                "Container's dependency cycle, so precreate cannot name the application. " +
+                "Use a literal name, or one from outside the cycle.",
+              resourceType: "Cloudflare.Container",
+              logicalId: id,
+            });
+          }
           yield* validateContainerConfiguration(news);
           const name = yield* createApplicationName(id, nameOf(news));
           yield* Effect.logInfo(`Cloudflare Container precreate: starting ${name}`);
@@ -1788,6 +1821,10 @@ const isOwnedApplication = (
   observed: { applicationId: string },
   previous: { applicationId: string } | undefined,
 ) => explicitName === undefined || observed.applicationId === previous?.applicationId;
+
+// Durable Object applications have no rollouts.
+const hasActiveRollout = (application: Containers.GetContainerApplicationResponse) =>
+  "activeRolloutId" in application && !!application.activeRolloutId;
 
 const toAttributes = (
   application: Containers.CreateContainerApplicationResponse,

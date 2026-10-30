@@ -1,6 +1,7 @@
 import http from "node:http";
 import * as Clock from "effect/Clock";
-import * as Crypto from "effect/Crypto";
+import * as Digest from "effect/crypto/Digest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -70,16 +71,6 @@ export type OAuthRequestError =
   | OAuthNetworkError
   | OAuthServerUnavailable
   | OAuthInvalidResponse;
-
-/** Secure random generation or hashing for state/PKCE failed. */
-export class OAuthCryptoError extends Data.TaggedError("OAuthCryptoError")<{
-  operation: string;
-  cause: unknown;
-}> {
-  override get message(): string {
-    return `${this.operation} failed: ${this.cause instanceof Error ? this.cause.message : String(this.cause)}`;
-  }
-}
 
 /** The client spec lacks the endpoints/URIs a flow needs. */
 export class UnsupportedOAuthFlowError extends Data.TaggedError("UnsupportedOAuthFlowError")<{
@@ -245,7 +236,11 @@ export interface OAuthClient {
    */
   readonly authorize: (
     scopes?: ReadonlyArray<string>,
-  ) => Effect.Effect<Authorization, OAuthCryptoError | UnsupportedOAuthFlowError, Crypto.Crypto>;
+  ) => Effect.Effect<
+    Authorization,
+    UnsupportedOAuthFlowError,
+    SecureRandom.SecureRandom | Digest.Digest
+  >;
   /**
    * Exchange an authorization code directly. `authorization` supplies the
    * PKCE verifier; omit for non-PKCE clients (tests, relay-less flows).
@@ -312,23 +307,14 @@ export interface OAuthClient {
 }
 
 const randomText = Effect.fn(function* (length: number) {
-  const crypto = yield* Crypto.Crypto;
-  const bytes = yield* crypto
-    .randomBytes(length)
-    .pipe(
-      Effect.mapError(
-        (cause) => new OAuthCryptoError({ operation: "Secure random generation", cause }),
-      ),
-    );
-  return Base64Url.encode(bytes);
+  const random = yield* SecureRandom.SecureRandom;
+  return Base64Url.encode(yield* random.randomBytes(length));
 });
 
 const generatePKCE = Effect.fn(function* (length = 96) {
-  const crypto = yield* Crypto.Crypto;
+  const digest = yield* Digest.Digest;
   const verifier = yield* randomText(length);
-  const challenge = yield* crypto
-    .digest("SHA-256", new TextEncoder().encode(verifier))
-    .pipe(Effect.mapError((cause) => new OAuthCryptoError({ operation: "PKCE digest", cause })));
+  const challenge = yield* digest.digest(Digest.sha256, new TextEncoder().encode(verifier));
   return { verifier, challenge: Base64Url.encode(challenge) };
 });
 

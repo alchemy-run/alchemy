@@ -28,6 +28,12 @@ export type InstanceOf<C> = C extends abstract new (...args: any[]) => infer I ?
 export interface DecideContext<Id> {
   /** The id of the aggregate instance handling the command. */
   readonly id: Id;
+  /** The id the command was sent with; its events' envelopes carry it too. */
+  readonly commandId: string;
+  /** The stream the command's events commit to, e.g. `Account/a-1`. */
+  readonly stream: string;
+  /** The stream's version before this decision: `0` for a new instance. */
+  readonly version: number;
   /** The time the command is being handled. Controlled by stories via `clock`. */
   readonly now: DateTime.Utc;
 }
@@ -397,9 +403,9 @@ interface PredictBase<Id> {
   readonly id: Id;
   /** The time the command is decided at (the server stamps commands with its clock). */
   readonly now: DateTime.Utc;
-  /** The state's version: predicted envelopes continue from it. Defaults to `0`. */
+  /** The state's version: `decide` sees it, and predicted envelopes continue from it. Defaults to `0`. */
   readonly version?: number;
-  /** The id the command will be sent with, for the predicted envelopes. Defaults to `""`. */
+  /** The id the command will be sent with, for `decide` and the predicted envelopes. Defaults to `""`. */
   readonly commandId?: string;
   /** Defaults to the command id. */
   readonly correlationId?: string;
@@ -453,7 +459,16 @@ export const predict = (
       ),
     };
   }
-  let decision = decide(state, command, { id: options.id, now: options.now });
+  const version = options.version ?? 0;
+  const commandId = options.commandId ?? "";
+  const stream = `${aggregate.aggregateName}/${String(options.id)}`;
+  let decision = decide(state, command, {
+    id: options.id,
+    now: options.now,
+    commandId,
+    stream,
+    version,
+  });
   if (Effect.isEffect(decision)) {
     const settled = decision.pipe(
       Effect.provideContext((options.context ?? Context.empty()) as Context.Context<unknown>),
@@ -467,14 +482,12 @@ export const predict = (
   if (judged._tag === "Undeclared")
     return { _tag: "Unpredictable", cause: Cause.die(judged.error) };
   if (judged._tag === "Rejected") return judged;
-  const version = options.version ?? 0;
-  const commandId = options.commandId ?? "";
   const envelopes: Array<Envelope> = [];
   let next = state;
   judged.events.forEach((event, index) => {
     const envelope: Envelope = {
       id: options.id,
-      stream: `${aggregate.aggregateName}/${String(options.id)}`,
+      stream,
       seq: version + index + 1,
       at: options.now,
       commandId,

@@ -35,6 +35,9 @@ import EffectfulContainerWorker from "./fixtures/effectful/worker.ts";
 import { ExternalContainer } from "./fixtures/external/object.ts";
 import ExternalContainerWorker from "./fixtures/external/worker.ts";
 import { applications, cyclicApplication } from "./fixtures/identity/applications.ts";
+import LinkedChanged from "./fixtures/linked/changed.ts";
+import { LinkedContainer } from "./fixtures/linked/container.ts";
+import LinkedFirst from "./fixtures/linked/first.ts";
 import {
   publicationApplications,
   sharedApplication,
@@ -838,6 +841,59 @@ describe.concurrent(
       { timeout: 120_000 },
     );
 
+    test.provider(
+      "rebuilds a changed generated bundle in a fresh builder without pulling base layers",
+      (stack) =>
+        Effect.gen(function* () {
+          yield* stack.destroy();
+          const docker = yield* Docker;
+          const program = (live: typeof LinkedFirst) =>
+            Effect.gen(function* () {
+              const app: Cloudflare.ContainerApplication = yield* LinkedContainer.Application;
+              return { app };
+            }).pipe(Effect.provide(live));
+          const first = yield* stack.deploy(program(LinkedFirst));
+
+          const changed = yield* Effect.gen(function* () {
+            const changed = yield* stack.deploy(program(LinkedChanged));
+            const completed = (yield* buildHistory).filter((build) => build.status === "Completed");
+            expect(completed).toHaveLength(1);
+            const log = yield* docker.run([
+              "buildx",
+              "history",
+              "logs",
+              completed[0]!.ref.split("/").at(-1)!,
+              "--progress",
+              "plain",
+            ]);
+            const text = `${log.stdout}\n${log.stderr}`;
+            expect(text).toContain("importing cache manifest from registry.cloudflare.com/");
+            // A plain COPY applies onto the base snapshot, so BuildKit
+            // downloads and extracts every cached base layer first. A linked
+            // copy is exported on its own and the base layers stay remote.
+            expect(text).not.toMatch(/extracting sha256:/);
+            return changed;
+          }).pipe(withBuilder("alchemy-linked-copy-changed", { attestations: false }));
+          expect(changed.app.applicationId).toBe(first.app.applicationId);
+          expect(changed.app.hash?.digest).not.toBe(first.app.hash?.digest);
+
+          yield* stack.destroy();
+          const gone = yield* Containers.getContainerApplication({
+            accountId: first.app.accountId,
+            applicationId: first.app.applicationId,
+          }).pipe(
+            Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+            Effect.repeat({
+              until: (app) => app === undefined,
+              schedule: Schedule.spaced("1 second"),
+              times: 8,
+            }),
+          );
+          expect(gone).toBeUndefined();
+        }).pipe(withBuilder("alchemy-linked-copy", { attestations: false }), logLevel),
+      { timeout: 180_000 },
+    );
+
     // Publication reuse was confined to a provider instance in:
     // https://github.com/alchemy-run/alchemy/commit/275361dfe8358684439e42120298723305175d39
     registryCacheTest.provider(
@@ -1556,24 +1612,31 @@ describe.concurrent(
           expect(first.app.configuration.image).toMatch(
             /^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/,
           );
+          // #2602: the "no effective changes" path saves the configuration as
+          // `read` reports it (with Cloudflare's defaults filled in), not as
+          // requested, so drift reports nothing.
+          const afterNoop = yield* Drift.detect(scratch);
+          expect(afterNoop.resources.DigestReuse?.action).toBe("unchanged");
 
           // A genuinely different image still updates and rolls out. The API
           // reports the ACTIVE configuration (and version) until the rollout
-          // completes, so poll until the new digest is live.
+          // completes, and the deploy waits for it, so the new digest is
+          // already live when it returns.
           const third = yield* deployImage(scratch, "mendhak/http-https-echo:40");
           expect(third.app.applicationId).toBe(first.app.applicationId);
           expect(third.app.configuration.image).toMatch(
             /^registry\.cloudflare\.com\/.*@sha256:[a-f0-9]{64}$/,
           );
           expect(third.app.configuration.image).not.toBe(first.app.configuration.image);
-          const rolledOut = yield* waitForImage(
-            accountId,
-            first.app.applicationId,
-            third.app.configuration.image!,
-          );
+          const rolledOut = yield* live(accountId, first.app.applicationId);
           expect(rolledOut.image).toBe(third.app.configuration.image);
           expect(first.app.version).toEqual(expect.any(Number));
           expect(rolledOut.version).toBeGreaterThan(first.app.version!);
+          // #2602: reconcile saves the application after the rollout, so the
+          // saved version and configuration match what `read` returns.
+          expect(third.app.version).toBe(rolledOut.version);
+          const afterRollout = yield* Drift.detect(scratch);
+          expect(afterRollout.resources.DigestReuse?.action).toBe("unchanged");
 
           yield* scratch.destroy();
         }).pipe(logLevel),

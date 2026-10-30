@@ -112,7 +112,7 @@ import { SessionLive, sessionRoute } from "./Session.middleware.ts";
 +
 +const BankLive = Layer.mergeAll(SessionLive, TelemetryLive).pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),
-  Layer.provide(DomainCloudflare.DurableObjects),
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 
 export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
@@ -239,7 +239,7 @@ const TelemetryLive = Axiom.Telemetry({
 
 const BankLive = Layer.mergeAll(SessionLive, TelemetryLive).pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),
-  Layer.provide(DomainCloudflare.DurableObjects),
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 
 +// Accepts spans from the browser and forwards them to Axiom, for signed-in customers only.
