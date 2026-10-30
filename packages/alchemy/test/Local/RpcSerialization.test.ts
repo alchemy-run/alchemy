@@ -1,3 +1,4 @@
+import * as NodeVm from "node:vm";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as Cause from "effect/Cause";
 import * as Data from "effect/Data";
@@ -139,7 +140,9 @@ describe("Local.RpcSerialization", { tags: ["unit", "local"] }, () => {
         const client = roundTrip(handlers);
         expect(
           yield* client.take({
-            output: { codeSplitting: { groups: [{ test: /[\\/]node_modules[\\/]alchemy[\\/]/i }] } },
+            output: {
+              codeSplitting: { groups: [{ test: /[\\/]node_modules[\\/]alchemy[\\/]/i }] },
+            },
           }),
         ).toEqual({
           isRegExp: true,
@@ -147,6 +150,21 @@ describe("Local.RpcSerialization", { tags: ["unit", "local"] }, () => {
           flags: "i",
           matches: true,
         });
+      }),
+    );
+
+    it.effect("round-trips RegExps inside arrays, from another realm and as return values", () =>
+      Effect.gen(function* () {
+        const handlers = {
+          take: (tests: Array<unknown>) =>
+            Effect.succeed(tests.filter((test) => test instanceof RegExp)),
+        };
+        const client = roundTrip(handlers);
+        const returned = yield* client.take([/a/gy, NodeVm.runInNewContext("/b/u")]);
+        expect(returned.map((test) => test instanceof RegExp && String(test))).toEqual([
+          "/a/gy",
+          "/b/u",
+        ]);
       }),
     );
 

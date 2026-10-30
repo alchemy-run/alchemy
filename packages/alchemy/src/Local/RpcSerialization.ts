@@ -339,7 +339,8 @@ const serializeRpcArgs = (value: unknown): unknown => {
   }
   // A RegExp has no own enumerable fields, so the structural walk below
   // would ship it as `{}` (e.g. a Worker's `build.output.codeSplitting.groups[].test`,
-  // which Rolldown's watcher in the sidecar then rejects). Ship its source and flags.
+  // which Rolldown's watcher in the sidecar then rejects). Ship its source and
+  // flags; as with `structuredClone`, `lastIndex` and the subclass are not kept.
   if (NodeUtil.types.isRegExp(value)) {
     return {
       _tag: "~alchemy/Rpc/RegExp",
