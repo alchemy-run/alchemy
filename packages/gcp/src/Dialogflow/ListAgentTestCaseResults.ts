@@ -3,20 +3,19 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 
 export interface ListAgentTestCaseResultsRequest extends Omit<
   dialogflow.ListProjectsLocationsAgentsTestCasesResultsRequest,
   "parent"
 > {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the agent (`agents/{agent}`). */
-  agent: string;
-  /** Id of the testCase (`testCases/{testCase}`). */
+  /** Id of the testCase under the bound resource (`testCases/{testCase}`). */
   testCase: string;
 }
 
-export type ListAgentTestCaseResultsShape = () => Effect.Effect<
+export type ListAgentTestCaseResultsShape = (
+  resource: Agent,
+) => Effect.Effect<
   (
     request: ListAgentTestCaseResultsRequest,
   ) => Effect.Effect<
@@ -29,14 +28,14 @@ export type ListAgentTestCaseResultsShape = () => Effect.Effect<
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.testCases.results.list`.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link ListAgentTestCaseResultsHttp}. The host gets `roles/dialogflow.reader` on the project.
+ * Bind it to a {@link Agent} and provide {@link ListAgentTestCaseResultsHttp}. The
+ * host gets `roles/dialogflow.reader` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `results.list`
  * ```typescript
- * const listAgentTestCaseResults = yield* GCP.Dialogflow.ListAgentTestCaseResults();
- * const response = yield* listAgentTestCaseResults({ location: "us-central1", agent: "...", testCase: "..." });
+ * const listAgentTestCaseResults = yield* GCP.Dialogflow.ListAgentTestCaseResults(agent);
+ * const response = yield* listAgentTestCaseResults({ testCase: "..." });
  * ```
  *
  * @binding

@@ -3,20 +3,19 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 
 export interface GetAgentChangelogRequest extends Omit<
   dialogflow.GetProjectsLocationsAgentsChangelogsRequest,
   "name"
 > {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the agent (`agents/{agent}`). */
-  agent: string;
-  /** Id of the changelog (`changelogs/{changelog}`). */
+  /** Id of the changelog under the bound resource (`changelogs/{changelog}`). */
   changelog: string;
 }
 
-export type GetAgentChangelogShape = () => Effect.Effect<
+export type GetAgentChangelogShape = (
+  resource: Agent,
+) => Effect.Effect<
   (
     request: GetAgentChangelogRequest,
   ) => Effect.Effect<
@@ -29,14 +28,14 @@ export type GetAgentChangelogShape = () => Effect.Effect<
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.changelogs.get`.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link GetAgentChangelogHttp}. The host gets `roles/dialogflow.reader` on the project.
+ * Bind it to a {@link Agent} and provide {@link GetAgentChangelogHttp}. The
+ * host gets `roles/dialogflow.reader` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `changelogs.get`
  * ```typescript
- * const getAgentChangelog = yield* GCP.Dialogflow.GetAgentChangelog();
- * const response = yield* getAgentChangelog({ location: "us-central1", agent: "...", changelog: "..." });
+ * const getAgentChangelog = yield* GCP.Dialogflow.GetAgentChangelog(agent);
+ * const response = yield* getAgentChangelog({ changelog: "..." });
  * ```
  *
  * @binding

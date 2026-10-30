@@ -22,6 +22,13 @@ export const DetectSessionIntentHttp = Layer.effect(
         children: [["sessions", "session"]],
         iam: { role: "roles/dialogflow.client" },
       },
+      {
+        resource: "GCP.Dialogflow.Agent",
+        operation: dialogflow.detectIntentProjectsLocationsAgentsSessions,
+        param: "session",
+        children: [["sessions", "session"]],
+        iam: { role: "roles/dialogflow.client" },
+      },
     ],
   }),
 );

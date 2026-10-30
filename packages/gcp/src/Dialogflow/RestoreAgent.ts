@@ -3,20 +3,18 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 
 export interface RestoreAgentRequest extends Omit<
   dialogflow.RestoreProjectsLocationsAgentsRequest,
   "name"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the agent (`agents/{agent}`). */
-  agent: string;
-}
+> {}
 
-export type RestoreAgentShape = () => Effect.Effect<
+export type RestoreAgentShape = (
+  resource: Agent,
+) => Effect.Effect<
   (
-    request: RestoreAgentRequest,
+    request?: RestoreAgentRequest,
   ) => Effect.Effect<
     dialogflow.GoogleLongrunningOperation,
     dialogflow.RestoreProjectsLocationsAgentsError,
@@ -27,14 +25,14 @@ export type RestoreAgentShape = () => Effect.Effect<
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.restore`.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link RestoreAgentHttp}. The host gets `roles/dialogflow.admin` on the project.
+ * Bind it to a {@link Agent} and provide {@link RestoreAgentHttp}. The
+ * host gets `roles/dialogflow.admin` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `agents.restore`
  * ```typescript
- * const restoreAgent = yield* GCP.Dialogflow.RestoreAgent();
- * const response = yield* restoreAgent({ location: "us-central1", agent: "..." });
+ * const restoreAgent = yield* GCP.Dialogflow.RestoreAgent(agent);
+ * const response = yield* restoreAgent();
  * ```
  *
  * @binding

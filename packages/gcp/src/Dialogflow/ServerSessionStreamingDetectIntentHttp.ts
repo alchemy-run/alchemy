@@ -26,6 +26,13 @@ export const ServerSessionStreamingDetectIntentHttp = Layer.effect(
         children: [["sessions", "session"]],
         iam: { role: "roles/dialogflow.environmentEditor" },
       },
+      {
+        resource: "GCP.Dialogflow.Agent",
+        operation: dialogflow.serverStreamingDetectIntentProjectsLocationsAgentsSessions,
+        param: "session",
+        children: [["sessions", "session"]],
+        iam: { role: "roles/dialogflow.admin" },
+      },
     ],
   }),
 );

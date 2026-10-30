@@ -3,6 +3,7 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 import type { AgentsEnvironment } from "./AgentsEnvironment.ts";
 
 export interface FulfillSessionIntentRequest extends Omit<
@@ -14,13 +15,14 @@ export interface FulfillSessionIntentRequest extends Omit<
 }
 
 export type FulfillSessionIntentShape = (
-  resource: AgentsEnvironment,
+  resource: AgentsEnvironment | Agent,
 ) => Effect.Effect<
   (
     request: FulfillSessionIntentRequest,
   ) => Effect.Effect<
     dialogflow.GoogleCloudDialogflowCxV3FulfillIntentResponse,
-    dialogflow.FulfillIntentProjectsLocationsAgentsEnvironmentsSessionsError,
+    | dialogflow.FulfillIntentProjectsLocationsAgentsEnvironmentsSessionsError
+    | dialogflow.FulfillIntentProjectsLocationsAgentsSessionsError,
     RuntimeContext
   >
 >;
@@ -28,8 +30,8 @@ export type FulfillSessionIntentShape = (
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.environments.sessions.fulfillIntent`.
  *
- * Bind it to a {@link AgentsEnvironment} and provide {@link FulfillSessionIntentHttp}. The
- * host gets `roles/dialogflow.environmentEditor` on the project (the service has no per-resource IAM policy).
+ * Bind it to a {@link AgentsEnvironment} or {@link Agent} and provide {@link FulfillSessionIntentHttp}. The
+ * host gets `roles/dialogflow.environmentEditor`, `roles/dialogflow.admin` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sessions.fulfillIntent`

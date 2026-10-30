@@ -3,20 +3,18 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 
 export interface ListAgentFlowsRequest extends Omit<
   dialogflow.ListProjectsLocationsAgentsFlowsRequest,
   "parent"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the agent (`agents/{agent}`). */
-  agent: string;
-}
+> {}
 
-export type ListAgentFlowsShape = () => Effect.Effect<
+export type ListAgentFlowsShape = (
+  resource: Agent,
+) => Effect.Effect<
   (
-    request: ListAgentFlowsRequest,
+    request?: ListAgentFlowsRequest,
   ) => Effect.Effect<
     dialogflow.GoogleCloudDialogflowCxV3ListFlowsResponse,
     dialogflow.ListProjectsLocationsAgentsFlowsError,
@@ -27,14 +25,14 @@ export type ListAgentFlowsShape = () => Effect.Effect<
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.flows.list`.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link ListAgentFlowsHttp}. The host gets `roles/dialogflow.reader` on the project.
+ * Bind it to a {@link Agent} and provide {@link ListAgentFlowsHttp}. The
+ * host gets `roles/dialogflow.reader` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `flows.list`
  * ```typescript
- * const listAgentFlows = yield* GCP.Dialogflow.ListAgentFlows();
- * const response = yield* listAgentFlows({ location: "us-central1", agent: "..." });
+ * const listAgentFlows = yield* GCP.Dialogflow.ListAgentFlows(agent);
+ * const response = yield* listAgentFlows();
  * ```
  *
  * @binding

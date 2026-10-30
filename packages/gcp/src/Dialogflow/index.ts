@@ -1,3 +1,4 @@
+export * from "./Agent.ts";
 export * from "./AgentsEntityType.ts";
 export * from "./AgentsEnvironment.ts";
 export * from "./AgentsEnvironmentsExperiment.ts";

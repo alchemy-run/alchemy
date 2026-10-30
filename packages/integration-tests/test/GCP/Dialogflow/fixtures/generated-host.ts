@@ -4,7 +4,21 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
-import { ProbeSecuritySetting } from "./generated-resources.ts";
+import {
+  ProbeAgent,
+  ProbeEntityType,
+  ProbeFlow,
+  ProbeFlowRouteGroup,
+  ProbeFlowVersion,
+  ProbeGenerator,
+  ProbeIntent,
+  ProbePage,
+  ProbePlaybook,
+  ProbeRouteGroup,
+  ProbeSecuritySetting,
+  ProbeTool,
+  ProbeWebhook,
+} from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated Dialogflow binding as its own
@@ -16,277 +30,190 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
   "DialogflowGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.Dialogflow.BatchTestCaseDelete();
-    const p1 = yield* GCP.Dialogflow.BatchTestCaseRun();
-    const p2 = yield* GCP.Dialogflow.CalculateTestCaseCoverage();
-    const p3 = yield* GCP.Dialogflow.CreateAgent();
-    const p4 = yield* GCP.Dialogflow.CreateAgentTestCase();
-    const p5 = yield* GCP.Dialogflow.DeleteAgent();
-    const p6 = yield* GCP.Dialogflow.ExportAgent();
-    const p7 = yield* GCP.Dialogflow.ExportAgentEntityType();
-    const p8 = yield* GCP.Dialogflow.ExportAgentIntent();
-    const p9 = yield* GCP.Dialogflow.ExportAgentTestCase();
-    const p10 = yield* GCP.Dialogflow.GetAgent();
-    const p11 = yield* GCP.Dialogflow.GetAgentChangelog();
-    const p12 = yield* GCP.Dialogflow.GetAgentGenerativeSettings();
-    const p13 = yield* GCP.Dialogflow.GetAgentTestCase();
-    const p14 = yield* GCP.Dialogflow.GetAgentTestCaseResult();
-    const p15 = yield* GCP.Dialogflow.GetAgentValidationResult();
-    const p16 = yield* GCP.Dialogflow.GetFlowValidationResult();
-    const p17 = yield* GCP.Dialogflow.GetSecuritySetting(ProbeSecuritySetting);
-    const p18 = yield* GCP.Dialogflow.ImportAgentEntityType();
-    const p19 = yield* GCP.Dialogflow.ImportAgentFlow();
-    const p20 = yield* GCP.Dialogflow.ImportAgentIntent();
-    const p21 = yield* GCP.Dialogflow.ImportAgentPlaybook();
-    const p22 = yield* GCP.Dialogflow.ImportAgentTestCase();
-    const p23 = yield* GCP.Dialogflow.ListAgentChangelogs();
-    const p24 = yield* GCP.Dialogflow.ListAgentEntityTypes();
-    const p25 = yield* GCP.Dialogflow.ListAgentEnvironments();
-    const p26 = yield* GCP.Dialogflow.ListAgentFlows();
-    const p27 = yield* GCP.Dialogflow.ListAgentGenerators();
-    const p28 = yield* GCP.Dialogflow.ListAgentIntents();
-    const p29 = yield* GCP.Dialogflow.ListAgentPlaybooks();
-    const p30 = yield* GCP.Dialogflow.ListAgents();
-    const p31 = yield* GCP.Dialogflow.ListAgentSessionEntityTypes();
-    const p32 = yield* GCP.Dialogflow.ListAgentTestCaseResults();
-    const p33 = yield* GCP.Dialogflow.ListAgentTestCases();
-    const p34 = yield* GCP.Dialogflow.ListAgentTools();
-    const p35 = yield* GCP.Dialogflow.ListAgentTransitionRouteGroups();
-    const p36 = yield* GCP.Dialogflow.ListAgentWebhooks();
-    const p37 = yield* GCP.Dialogflow.ListSecuritySettings();
-    const p38 = yield* GCP.Dialogflow.PatchAgent();
-    const p39 = yield* GCP.Dialogflow.PatchAgentTestCase();
-    const p40 = yield* GCP.Dialogflow.RestoreAgent();
-    const p41 = yield* GCP.Dialogflow.RunAgentTestCase();
-    const p42 = yield* GCP.Dialogflow.SubmitSessionAnswerFeedback();
-    const p43 = yield* GCP.Dialogflow.UpdateAgentGenerativeSettings();
-    const p44 = yield* GCP.Dialogflow.ValidateAgent();
+    const p0 = yield* GCP.Dialogflow.BatchTestCaseDelete(ProbeAgent);
+    const p1 = yield* GCP.Dialogflow.BatchTestCaseRun(ProbeAgent);
+    const p2 = yield* GCP.Dialogflow.CalculateTestCaseCoverage(ProbeAgent);
+    const p3 = yield* GCP.Dialogflow.CompareVersions(ProbeFlowVersion);
+    const p4 = yield* GCP.Dialogflow.CreateAgentTestCase(ProbeAgent);
+    const p5 = yield* GCP.Dialogflow.DetectSessionIntent(ProbeAgent);
+    const p6 = yield* GCP.Dialogflow.ExportAgent(ProbeAgent);
+    const p7 = yield* GCP.Dialogflow.ExportAgentEntityType(ProbeAgent);
+    const p8 = yield* GCP.Dialogflow.ExportAgentIntent(ProbeAgent);
+    const p9 = yield* GCP.Dialogflow.ExportAgentTestCase(ProbeAgent);
+    const p10 = yield* GCP.Dialogflow.ExportFlow(ProbeFlow);
+    const p11 = yield* GCP.Dialogflow.ExportPlaybook(ProbePlaybook);
+    const p12 = yield* GCP.Dialogflow.FulfillSessionIntent(ProbeAgent);
+    const p13 = yield* GCP.Dialogflow.GetAgent(ProbeAgent);
+    const p14 = yield* GCP.Dialogflow.GetAgentChangelog(ProbeAgent);
+    const p15 = yield* GCP.Dialogflow.GetAgentGenerativeSettings();
+    const p16 = yield* GCP.Dialogflow.GetAgentTestCase(ProbeAgent);
+    const p17 = yield* GCP.Dialogflow.GetAgentTestCaseResult(ProbeAgent);
+    const p18 = yield* GCP.Dialogflow.GetAgentValidationResult();
+    const p19 = yield* GCP.Dialogflow.GetEntityType(ProbeEntityType);
+    const p20 = yield* GCP.Dialogflow.GetFlow(ProbeFlow);
+    const p21 = yield* GCP.Dialogflow.GetFlowValidationResult();
+    const p22 = yield* GCP.Dialogflow.GetGenerator(ProbeGenerator);
+    const p23 = yield* GCP.Dialogflow.GetIntent(ProbeIntent);
+    const p24 = yield* GCP.Dialogflow.GetPage(ProbePage);
+    const p25 = yield* GCP.Dialogflow.GetPlaybook(ProbePlaybook);
+    const p26 = yield* GCP.Dialogflow.GetSecuritySetting(ProbeSecuritySetting);
+    const p27 = yield* GCP.Dialogflow.GetTool(ProbeTool);
+    const p28 = yield* GCP.Dialogflow.GetTransitionRouteGroup(ProbeFlowRouteGroup);
+    const p29 = yield* GCP.Dialogflow.GetTransitionRouteGroup(ProbeRouteGroup);
+    const p30 = yield* GCP.Dialogflow.GetVersion(ProbeFlowVersion);
+    const p31 = yield* GCP.Dialogflow.GetWebhook(ProbeWebhook);
+    const p32 = yield* GCP.Dialogflow.ImportAgentEntityType(ProbeAgent);
+    const p33 = yield* GCP.Dialogflow.ImportAgentFlow(ProbeAgent);
+    const p34 = yield* GCP.Dialogflow.ImportAgentIntent(ProbeAgent);
+    const p35 = yield* GCP.Dialogflow.ImportAgentPlaybook(ProbeAgent);
+    const p36 = yield* GCP.Dialogflow.ImportAgentTestCase(ProbeAgent);
+    const p37 = yield* GCP.Dialogflow.ListAgentChangelogs(ProbeAgent);
+    const p38 = yield* GCP.Dialogflow.ListAgentEntityTypes(ProbeAgent);
+    const p39 = yield* GCP.Dialogflow.ListAgentEnvironments(ProbeAgent);
+    const p40 = yield* GCP.Dialogflow.ListAgentFlows(ProbeAgent);
+    const p41 = yield* GCP.Dialogflow.ListAgentGenerators(ProbeAgent);
+    const p42 = yield* GCP.Dialogflow.ListAgentIntents(ProbeAgent);
+    const p43 = yield* GCP.Dialogflow.ListAgentPlaybooks(ProbeAgent);
+    const p44 = yield* GCP.Dialogflow.ListAgents();
+    const p45 = yield* GCP.Dialogflow.ListAgentSessionEntityTypes(ProbeAgent);
+    const p46 = yield* GCP.Dialogflow.ListAgentTestCaseResults(ProbeAgent);
+    const p47 = yield* GCP.Dialogflow.ListAgentTestCases(ProbeAgent);
+    const p48 = yield* GCP.Dialogflow.ListAgentTools(ProbeAgent);
+    const p49 = yield* GCP.Dialogflow.ListAgentTransitionRouteGroups(ProbeAgent);
+    const p50 = yield* GCP.Dialogflow.ListAgentWebhooks(ProbeAgent);
+    const p51 = yield* GCP.Dialogflow.ListFlowPages(ProbeFlow);
+    const p52 = yield* GCP.Dialogflow.ListFlowTransitionRouteGroups(ProbeFlow);
+    const p53 = yield* GCP.Dialogflow.ListFlowVersions(ProbeFlow);
+    const p54 = yield* GCP.Dialogflow.ListPlaybookExamples(ProbePlaybook);
+    const p55 = yield* GCP.Dialogflow.ListPlaybookVersions(ProbePlaybook);
+    const p56 = yield* GCP.Dialogflow.ListSecuritySettings();
+    const p57 = yield* GCP.Dialogflow.ListToolVersions(ProbeTool);
+    const p58 = yield* GCP.Dialogflow.LoadVersion(ProbeFlowVersion);
+    const p59 = yield* GCP.Dialogflow.MatchSessionIntent(ProbeAgent);
+    const p60 = yield* GCP.Dialogflow.PatchAgentTestCase(ProbeAgent);
+    const p61 = yield* GCP.Dialogflow.RestoreAgent(ProbeAgent);
+    const p62 = yield* GCP.Dialogflow.RunAgentTestCase(ProbeAgent);
+    const p63 = yield* GCP.Dialogflow.ServerSessionStreamingDetectIntent(ProbeAgent);
+    const p64 = yield* GCP.Dialogflow.SubmitSessionAnswerFeedback(ProbeAgent);
+    const p65 = yield* GCP.Dialogflow.TrainFlow(ProbeFlow);
+    const p66 = yield* GCP.Dialogflow.UpdateAgentGenerativeSettings();
+    const p67 = yield* GCP.Dialogflow.ValidateAgent(ProbeAgent);
+    const p68 = yield* GCP.Dialogflow.ValidateFlow(ProbeFlow);
     return {
       fetch: serveProbes({
-        BatchTestCaseDelete: probeOutcome(
-          Retry.none(p0({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        BatchTestCaseRun: probeOutcome(
-          Retry.none(p1({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        CalculateTestCaseCoverage: probeOutcome(
-          Retry.none(p2({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        CreateAgent: probeOutcome(
-          Retry.none(
-            p3({ location: "global", body: { alchemyProbe: "alchemy-missing" } } as never),
-          ),
-        ),
+        BatchTestCaseDelete: probeOutcome(Retry.none(p0({} as never))),
+        BatchTestCaseRun: probeOutcome(Retry.none(p1({} as never))),
+        CalculateTestCaseCoverage: probeOutcome(Retry.none(p2({} as never))),
+        CompareVersions: probeOutcome(Retry.none(p3({} as never))),
         CreateAgentTestCase: probeOutcome(
-          Retry.none(
-            p4({
-              agent: "alchemy-missing",
-              location: "global",
-              body: { alchemyProbe: "alchemy-missing" },
-            } as never),
-          ),
+          Retry.none(p4({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        DeleteAgent: probeOutcome(
-          Retry.none(p5({ agent: "alchemy-missing", location: "global" } as never)),
+        "DetectSessionIntent@Agent": probeOutcome(
+          Retry.none(p5({ session: "alchemy-missing" } as never)),
         ),
-        ExportAgent: probeOutcome(
-          Retry.none(p6({ agent: "alchemy-missing", location: "global" } as never)),
+        ExportAgent: probeOutcome(Retry.none(p6({} as never))),
+        ExportAgentEntityType: probeOutcome(Retry.none(p7({} as never))),
+        ExportAgentIntent: probeOutcome(Retry.none(p8({} as never))),
+        ExportAgentTestCase: probeOutcome(Retry.none(p9({} as never))),
+        ExportFlow: probeOutcome(Retry.none(p10({} as never))),
+        ExportPlaybook: probeOutcome(Retry.none(p11({} as never))),
+        "FulfillSessionIntent@Agent": probeOutcome(
+          Retry.none(p12({ session: "alchemy-missing" } as never)),
         ),
-        ExportAgentEntityType: probeOutcome(
-          Retry.none(p7({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        ExportAgentIntent: probeOutcome(
-          Retry.none(p8({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        ExportAgentTestCase: probeOutcome(
-          Retry.none(p9({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        GetAgent: probeOutcome(
-          Retry.none(p10({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        GetAgentChangelog: probeOutcome(
-          Retry.none(
-            p11({
-              agent: "alchemy-missing",
-              changelog: "alchemy-missing",
-              location: "global",
-            } as never),
-          ),
-        ),
+        GetAgent: probeOutcome(Retry.none(p13({} as never))),
+        GetAgentChangelog: probeOutcome(Retry.none(p14({ changelog: "alchemy-missing" } as never))),
         GetAgentGenerativeSettings: probeOutcome(
-          Retry.none(p12({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        GetAgentTestCase: probeOutcome(
-          Retry.none(
-            p13({
-              agent: "alchemy-missing",
-              testCase: "alchemy-missing",
-              location: "global",
-            } as never),
-          ),
-        ),
-        GetAgentTestCaseResult: probeOutcome(
-          Retry.none(
-            p14({
-              agent: "alchemy-missing",
-              testCase: "alchemy-missing",
-              result: "alchemy-missing",
-              location: "global",
-            } as never),
-          ),
-        ),
-        GetAgentValidationResult: probeOutcome(
           Retry.none(p15({ agent: "alchemy-missing", location: "global" } as never)),
         ),
+        GetAgentTestCase: probeOutcome(Retry.none(p16({ testCase: "alchemy-missing" } as never))),
+        GetAgentTestCaseResult: probeOutcome(
+          Retry.none(p17({ testCase: "alchemy-missing", result: "alchemy-missing" } as never)),
+        ),
+        GetAgentValidationResult: probeOutcome(
+          Retry.none(p18({ agent: "alchemy-missing", location: "global" } as never)),
+        ),
+        "GetEntityType@AgentsEntityType": probeOutcome(Retry.none(p19({} as never))),
+        GetFlow: probeOutcome(Retry.none(p20({} as never))),
         GetFlowValidationResult: probeOutcome(
           Retry.none(
-            p16({ agent: "alchemy-missing", flow: "alchemy-missing", location: "global" } as never),
+            p21({ agent: "alchemy-missing", flow: "alchemy-missing", location: "global" } as never),
           ),
         ),
-        GetSecuritySetting: probeOutcome(Retry.none(p17({} as never))),
+        GetGenerator: probeOutcome(Retry.none(p22({} as never))),
+        GetIntent: probeOutcome(Retry.none(p23({} as never))),
+        GetPage: probeOutcome(Retry.none(p24({} as never))),
+        GetPlaybook: probeOutcome(Retry.none(p25({} as never))),
+        GetSecuritySetting: probeOutcome(Retry.none(p26({} as never))),
+        GetTool: probeOutcome(Retry.none(p27({} as never))),
+        "GetTransitionRouteGroup@AgentsFlowsTransitionRouteGroup": probeOutcome(
+          Retry.none(p28({} as never)),
+        ),
+        "GetTransitionRouteGroup@AgentsTransitionRouteGroup": probeOutcome(
+          Retry.none(p29({} as never)),
+        ),
+        "GetVersion@AgentsFlowsVersion": probeOutcome(Retry.none(p30({} as never))),
+        GetWebhook: probeOutcome(Retry.none(p31({} as never))),
         ImportAgentEntityType: probeOutcome(
-          Retry.none(
-            p18({
-              agent: "alchemy-missing",
-              location: "global",
-              body: { alchemyProbe: "alchemy-missing" },
-            } as never),
-          ),
+          Retry.none(p32({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         ImportAgentFlow: probeOutcome(
-          Retry.none(
-            p19({
-              agent: "alchemy-missing",
-              location: "global",
-              body: { alchemyProbe: "alchemy-missing" },
-            } as never),
-          ),
+          Retry.none(p33({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         ImportAgentIntent: probeOutcome(
-          Retry.none(
-            p20({
-              agent: "alchemy-missing",
-              location: "global",
-              body: { alchemyProbe: "alchemy-missing" },
-            } as never),
-          ),
+          Retry.none(p34({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         ImportAgentPlaybook: probeOutcome(
-          Retry.none(
-            p21({
-              agent: "alchemy-missing",
-              location: "global",
-              body: { alchemyProbe: "alchemy-missing" },
-            } as never),
-          ),
+          Retry.none(p35({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         ImportAgentTestCase: probeOutcome(
-          Retry.none(
-            p22({
-              agent: "alchemy-missing",
-              location: "global",
-              body: { alchemyProbe: "alchemy-missing" },
-            } as never),
-          ),
+          Retry.none(p36({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        ListAgentChangelogs: probeOutcome(
-          Retry.none(p23({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        ListAgentEntityTypes: probeOutcome(
-          Retry.none(p24({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        ListAgentEnvironments: probeOutcome(
-          Retry.none(p25({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        ListAgentFlows: probeOutcome(
-          Retry.none(p26({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        ListAgentGenerators: probeOutcome(
-          Retry.none(p27({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        ListAgentIntents: probeOutcome(
-          Retry.none(p28({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        ListAgentPlaybooks: probeOutcome(
-          Retry.none(p29({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        ListAgents: probeOutcome(Retry.none(p30({ location: "global" } as never))),
+        ListAgentChangelogs: probeOutcome(Retry.none(p37({} as never))),
+        ListAgentEntityTypes: probeOutcome(Retry.none(p38({} as never))),
+        ListAgentEnvironments: probeOutcome(Retry.none(p39({} as never))),
+        ListAgentFlows: probeOutcome(Retry.none(p40({} as never))),
+        ListAgentGenerators: probeOutcome(Retry.none(p41({} as never))),
+        ListAgentIntents: probeOutcome(Retry.none(p42({} as never))),
+        ListAgentPlaybooks: probeOutcome(Retry.none(p43({} as never))),
+        ListAgents: probeOutcome(Retry.none(p44({ location: "global" } as never))),
         ListAgentSessionEntityTypes: probeOutcome(
-          Retry.none(
-            p31({
-              agent: "alchemy-missing",
-              session: "alchemy-missing",
-              location: "global",
-            } as never),
-          ),
+          Retry.none(p45({ session: "alchemy-missing" } as never)),
         ),
         ListAgentTestCaseResults: probeOutcome(
-          Retry.none(
-            p32({
-              agent: "alchemy-missing",
-              testCase: "alchemy-missing",
-              location: "global",
-            } as never),
-          ),
+          Retry.none(p46({ testCase: "alchemy-missing" } as never)),
         ),
-        ListAgentTestCases: probeOutcome(
-          Retry.none(p33({ agent: "alchemy-missing", location: "global" } as never)),
+        ListAgentTestCases: probeOutcome(Retry.none(p47({} as never))),
+        ListAgentTools: probeOutcome(Retry.none(p48({} as never))),
+        ListAgentTransitionRouteGroups: probeOutcome(Retry.none(p49({} as never))),
+        ListAgentWebhooks: probeOutcome(Retry.none(p50({} as never))),
+        ListFlowPages: probeOutcome(Retry.none(p51({} as never))),
+        ListFlowTransitionRouteGroups: probeOutcome(Retry.none(p52({} as never))),
+        ListFlowVersions: probeOutcome(Retry.none(p53({} as never))),
+        ListPlaybookExamples: probeOutcome(Retry.none(p54({} as never))),
+        ListPlaybookVersions: probeOutcome(Retry.none(p55({} as never))),
+        ListSecuritySettings: probeOutcome(Retry.none(p56({ location: "global" } as never))),
+        ListToolVersions: probeOutcome(Retry.none(p57({} as never))),
+        LoadVersion: probeOutcome(Retry.none(p58({} as never))),
+        "MatchSessionIntent@Agent": probeOutcome(
+          Retry.none(p59({ session: "alchemy-missing" } as never)),
         ),
-        ListAgentTools: probeOutcome(
-          Retry.none(p34({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        ListAgentTransitionRouteGroups: probeOutcome(
-          Retry.none(p35({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        ListAgentWebhooks: probeOutcome(
-          Retry.none(p36({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        ListSecuritySettings: probeOutcome(Retry.none(p37({ location: "global" } as never))),
-        PatchAgent: probeOutcome(
-          Retry.none(p38({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
-        PatchAgentTestCase: probeOutcome(
-          Retry.none(
-            p39({
-              agent: "alchemy-missing",
-              testCase: "alchemy-missing",
-              location: "global",
-            } as never),
-          ),
-        ),
+        PatchAgentTestCase: probeOutcome(Retry.none(p60({ testCase: "alchemy-missing" } as never))),
         RestoreAgent: probeOutcome(
-          Retry.none(
-            p40({
-              agent: "alchemy-missing",
-              location: "global",
-              body: { alchemyProbe: "alchemy-missing" },
-            } as never),
-          ),
+          Retry.none(p61({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        RunAgentTestCase: probeOutcome(
-          Retry.none(
-            p41({
-              agent: "alchemy-missing",
-              testCase: "alchemy-missing",
-              location: "global",
-            } as never),
-          ),
+        RunAgentTestCase: probeOutcome(Retry.none(p62({ testCase: "alchemy-missing" } as never))),
+        "ServerSessionStreamingDetectIntent@Agent": probeOutcome(
+          Retry.none(p63({ session: "alchemy-missing" } as never)),
         ),
         SubmitSessionAnswerFeedback: probeOutcome(
-          Retry.none(
-            p42({
-              agent: "alchemy-missing",
-              session: "alchemy-missing",
-              location: "global",
-            } as never),
-          ),
+          Retry.none(p64({ session: "alchemy-missing" } as never)),
         ),
+        TrainFlow: probeOutcome(Retry.none(p65({} as never))),
         UpdateAgentGenerativeSettings: probeOutcome(
-          Retry.none(p43({ agent: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p66({ agent: "alchemy-missing", location: "global" } as never)),
         ),
-        ValidateAgent: probeOutcome(
-          Retry.none(p44({ agent: "alchemy-missing", location: "global" } as never)),
-        ),
+        ValidateAgent: probeOutcome(Retry.none(p67({} as never))),
+        ValidateFlow: probeOutcome(Retry.none(p68({} as never))),
       }),
     };
   }).pipe(
@@ -296,21 +223,34 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
           GCP.Dialogflow.BatchTestCaseDeleteHttp,
           GCP.Dialogflow.BatchTestCaseRunHttp,
           GCP.Dialogflow.CalculateTestCaseCoverageHttp,
-          GCP.Dialogflow.CreateAgentHttp,
+          GCP.Dialogflow.CompareVersionsHttp,
           GCP.Dialogflow.CreateAgentTestCaseHttp,
-          GCP.Dialogflow.DeleteAgentHttp,
+          GCP.Dialogflow.DetectSessionIntentHttp,
           GCP.Dialogflow.ExportAgentHttp,
           GCP.Dialogflow.ExportAgentEntityTypeHttp,
           GCP.Dialogflow.ExportAgentIntentHttp,
           GCP.Dialogflow.ExportAgentTestCaseHttp,
+          GCP.Dialogflow.ExportFlowHttp,
+          GCP.Dialogflow.ExportPlaybookHttp,
+          GCP.Dialogflow.FulfillSessionIntentHttp,
           GCP.Dialogflow.GetAgentHttp,
           GCP.Dialogflow.GetAgentChangelogHttp,
           GCP.Dialogflow.GetAgentGenerativeSettingsHttp,
           GCP.Dialogflow.GetAgentTestCaseHttp,
           GCP.Dialogflow.GetAgentTestCaseResultHttp,
           GCP.Dialogflow.GetAgentValidationResultHttp,
+          GCP.Dialogflow.GetEntityTypeHttp,
+          GCP.Dialogflow.GetFlowHttp,
           GCP.Dialogflow.GetFlowValidationResultHttp,
+          GCP.Dialogflow.GetGeneratorHttp,
+          GCP.Dialogflow.GetIntentHttp,
+          GCP.Dialogflow.GetPageHttp,
+          GCP.Dialogflow.GetPlaybookHttp,
           GCP.Dialogflow.GetSecuritySettingHttp,
+          GCP.Dialogflow.GetToolHttp,
+          GCP.Dialogflow.GetTransitionRouteGroupHttp,
+          GCP.Dialogflow.GetVersionHttp,
+          GCP.Dialogflow.GetWebhookHttp,
           GCP.Dialogflow.ImportAgentEntityTypeHttp,
           GCP.Dialogflow.ImportAgentFlowHttp,
           GCP.Dialogflow.ImportAgentIntentHttp,
@@ -320,6 +260,8 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
           GCP.Dialogflow.ListAgentEntityTypesHttp,
           GCP.Dialogflow.ListAgentEnvironmentsHttp,
           GCP.Dialogflow.ListAgentFlowsHttp,
+        ),
+        Layer.mergeAll(
           GCP.Dialogflow.ListAgentGeneratorsHttp,
           GCP.Dialogflow.ListAgentIntentsHttp,
           GCP.Dialogflow.ListAgentPlaybooksHttp,
@@ -330,16 +272,24 @@ export default class DialogflowGeneratedHost extends GCP.Function<DialogflowGene
           GCP.Dialogflow.ListAgentToolsHttp,
           GCP.Dialogflow.ListAgentTransitionRouteGroupsHttp,
           GCP.Dialogflow.ListAgentWebhooksHttp,
+          GCP.Dialogflow.ListFlowPagesHttp,
+          GCP.Dialogflow.ListFlowTransitionRouteGroupsHttp,
+          GCP.Dialogflow.ListFlowVersionsHttp,
+          GCP.Dialogflow.ListPlaybookExamplesHttp,
+          GCP.Dialogflow.ListPlaybookVersionsHttp,
           GCP.Dialogflow.ListSecuritySettingsHttp,
-          GCP.Dialogflow.PatchAgentHttp,
+          GCP.Dialogflow.ListToolVersionsHttp,
+          GCP.Dialogflow.LoadVersionHttp,
+          GCP.Dialogflow.MatchSessionIntentHttp,
           GCP.Dialogflow.PatchAgentTestCaseHttp,
-        ),
-        Layer.mergeAll(
           GCP.Dialogflow.RestoreAgentHttp,
           GCP.Dialogflow.RunAgentTestCaseHttp,
+          GCP.Dialogflow.ServerSessionStreamingDetectIntentHttp,
           GCP.Dialogflow.SubmitSessionAnswerFeedbackHttp,
+          GCP.Dialogflow.TrainFlowHttp,
           GCP.Dialogflow.UpdateAgentGenerativeSettingsHttp,
           GCP.Dialogflow.ValidateAgentHttp,
+          GCP.Dialogflow.ValidateFlowHttp,
         ),
       ),
     ),

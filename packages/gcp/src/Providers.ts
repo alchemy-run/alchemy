@@ -1164,6 +1164,10 @@ import { FetchGitRefsHttp as DeveloperconnectFetchGitRefsHttp } from "./Develope
 import { FetchReadTokenHttp as DeveloperconnectFetchReadTokenHttp } from "./DeveloperConnect/FetchReadTokenHttp.ts";
 import { FetchReadWriteTokenHttp as DeveloperconnectFetchReadWriteTokenHttp } from "./DeveloperConnect/FetchReadWriteTokenHttp.ts";
 import { InsightsConfig, InsightsConfigProvider } from "./DeveloperConnect/InsightsConfig.ts";
+import {
+  Agent as DialogflowAgent,
+  AgentProvider as DialogflowAgentProvider,
+} from "./Dialogflow/Agent.ts";
 import { AgentsEntityType, AgentsEntityTypeProvider } from "./Dialogflow/AgentsEntityType.ts";
 import { AgentsEnvironment, AgentsEnvironmentProvider } from "./Dialogflow/AgentsEnvironment.ts";
 import {
@@ -3176,6 +3180,7 @@ const makeProviders = () =>
           AgentsToolsVersion,
           AgentsTransitionRouteGroup,
           AgentsWebhook,
+          DialogflowAgent,
           SecuritySetting,
           OrganizationStoredInfoType,
           DeidentifyTemplate,
@@ -4186,6 +4191,7 @@ const makeProviders = () =>
             Layer.mergeAll(
               AgentsTransitionRouteGroupProvider(),
               AgentsWebhookProvider(),
+              DialogflowAgentProvider(),
               SecuritySettingProvider(),
             ),
           ),

@@ -3,20 +3,19 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 
 export interface SubmitSessionAnswerFeedbackRequest extends Omit<
   dialogflow.SubmitAnswerFeedbackProjectsLocationsAgentsSessionsRequest,
   "session"
 > {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the agent (`agents/{agent}`). */
-  agent: string;
-  /** Id of the session (`sessions/{session}`). */
+  /** Id of the session under the bound resource (`sessions/{session}`). */
   session: string;
 }
 
-export type SubmitSessionAnswerFeedbackShape = () => Effect.Effect<
+export type SubmitSessionAnswerFeedbackShape = (
+  resource: Agent,
+) => Effect.Effect<
   (
     request: SubmitSessionAnswerFeedbackRequest,
   ) => Effect.Effect<
@@ -29,14 +28,14 @@ export type SubmitSessionAnswerFeedbackShape = () => Effect.Effect<
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.sessions.submitAnswerFeedback`.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link SubmitSessionAnswerFeedbackHttp}. The host gets `roles/dialogflow.admin` on the project.
+ * Bind it to a {@link Agent} and provide {@link SubmitSessionAnswerFeedbackHttp}. The
+ * host gets `roles/dialogflow.admin` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sessions.submitAnswerFeedback`
  * ```typescript
- * const submitSessionAnswerFeedback = yield* GCP.Dialogflow.SubmitSessionAnswerFeedback();
- * const response = yield* submitSessionAnswerFeedback({ location: "us-central1", agent: "...", session: "..." });
+ * const submitSessionAnswerFeedback = yield* GCP.Dialogflow.SubmitSessionAnswerFeedback(agent);
+ * const response = yield* submitSessionAnswerFeedback({ session: "..." });
  * ```
  *
  * @binding

@@ -3,20 +3,18 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 
 export interface ExportAgentEntityTypeRequest extends Omit<
   dialogflow.ExportProjectsLocationsAgentsEntityTypesRequest,
   "parent"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the agent (`agents/{agent}`). */
-  agent: string;
-}
+> {}
 
-export type ExportAgentEntityTypeShape = () => Effect.Effect<
+export type ExportAgentEntityTypeShape = (
+  resource: Agent,
+) => Effect.Effect<
   (
-    request: ExportAgentEntityTypeRequest,
+    request?: ExportAgentEntityTypeRequest,
   ) => Effect.Effect<
     dialogflow.GoogleLongrunningOperation,
     dialogflow.ExportProjectsLocationsAgentsEntityTypesError,
@@ -27,14 +25,14 @@ export type ExportAgentEntityTypeShape = () => Effect.Effect<
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.entityTypes.export`.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link ExportAgentEntityTypeHttp}. The host gets `roles/dialogflow.entityTypeAdmin` on the project.
+ * Bind it to a {@link Agent} and provide {@link ExportAgentEntityTypeHttp}. The
+ * host gets `roles/dialogflow.entityTypeAdmin` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `entityTypes.export`
  * ```typescript
- * const exportAgentEntityType = yield* GCP.Dialogflow.ExportAgentEntityType();
- * const response = yield* exportAgentEntityType({ location: "us-central1", agent: "..." });
+ * const exportAgentEntityType = yield* GCP.Dialogflow.ExportAgentEntityType(agent);
+ * const response = yield* exportAgentEntityType();
  * ```
  *
  * @binding

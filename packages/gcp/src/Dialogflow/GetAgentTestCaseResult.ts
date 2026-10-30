@@ -3,22 +3,21 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 
 export interface GetAgentTestCaseResultRequest extends Omit<
   dialogflow.GetProjectsLocationsAgentsTestCasesResultsRequest,
   "name"
 > {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the agent (`agents/{agent}`). */
-  agent: string;
-  /** Id of the testCase (`testCases/{testCase}`). */
+  /** Id of the testCase under the bound resource (`testCases/{testCase}`). */
   testCase: string;
-  /** Id of the result (`results/{result}`). */
+  /** Id of the result under the bound resource (`results/{result}`). */
   result: string;
 }
 
-export type GetAgentTestCaseResultShape = () => Effect.Effect<
+export type GetAgentTestCaseResultShape = (
+  resource: Agent,
+) => Effect.Effect<
   (
     request: GetAgentTestCaseResultRequest,
   ) => Effect.Effect<
@@ -31,14 +30,14 @@ export type GetAgentTestCaseResultShape = () => Effect.Effect<
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.testCases.results.get`.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link GetAgentTestCaseResultHttp}. The host gets `roles/dialogflow.reader` on the project.
+ * Bind it to a {@link Agent} and provide {@link GetAgentTestCaseResultHttp}. The
+ * host gets `roles/dialogflow.reader` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `results.get`
  * ```typescript
- * const getAgentTestCaseResult = yield* GCP.Dialogflow.GetAgentTestCaseResult();
- * const response = yield* getAgentTestCaseResult({ location: "us-central1", agent: "...", testCase: "...", result: "..." });
+ * const getAgentTestCaseResult = yield* GCP.Dialogflow.GetAgentTestCaseResult(agent);
+ * const response = yield* getAgentTestCaseResult({ testCase: "...", result: "..." });
  * ```
  *
  * @binding

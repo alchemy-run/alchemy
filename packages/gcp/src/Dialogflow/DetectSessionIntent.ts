@@ -3,6 +3,7 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 import type { AgentsEnvironment } from "./AgentsEnvironment.ts";
 
 export interface DetectSessionIntentRequest extends Omit<
@@ -14,13 +15,14 @@ export interface DetectSessionIntentRequest extends Omit<
 }
 
 export type DetectSessionIntentShape = (
-  resource: AgentsEnvironment,
+  resource: AgentsEnvironment | Agent,
 ) => Effect.Effect<
   (
     request: DetectSessionIntentRequest,
   ) => Effect.Effect<
     dialogflow.GoogleCloudDialogflowCxV3DetectIntentResponse,
-    dialogflow.DetectIntentProjectsLocationsAgentsEnvironmentsSessionsError,
+    | dialogflow.DetectIntentProjectsLocationsAgentsEnvironmentsSessionsError
+    | dialogflow.DetectIntentProjectsLocationsAgentsSessionsError,
     RuntimeContext
   >
 >;
@@ -28,7 +30,7 @@ export type DetectSessionIntentShape = (
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.environments.sessions.detectIntent`.
  *
- * Bind it to a {@link AgentsEnvironment} and provide {@link DetectSessionIntentHttp}. The
+ * Bind it to a {@link AgentsEnvironment} or {@link Agent} and provide {@link DetectSessionIntentHttp}. The
  * host gets `roles/dialogflow.client` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage

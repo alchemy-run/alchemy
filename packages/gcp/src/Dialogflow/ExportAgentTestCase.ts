@@ -3,20 +3,18 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 
 export interface ExportAgentTestCaseRequest extends Omit<
   dialogflow.ExportProjectsLocationsAgentsTestCasesRequest,
   "parent"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the agent (`agents/{agent}`). */
-  agent: string;
-}
+> {}
 
-export type ExportAgentTestCaseShape = () => Effect.Effect<
+export type ExportAgentTestCaseShape = (
+  resource: Agent,
+) => Effect.Effect<
   (
-    request: ExportAgentTestCaseRequest,
+    request?: ExportAgentTestCaseRequest,
   ) => Effect.Effect<
     dialogflow.GoogleLongrunningOperation,
     dialogflow.ExportProjectsLocationsAgentsTestCasesError,
@@ -27,14 +25,14 @@ export type ExportAgentTestCaseShape = () => Effect.Effect<
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.testCases.export`.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link ExportAgentTestCaseHttp}. The host gets `roles/dialogflow.testCaseAdmin` on the project.
+ * Bind it to a {@link Agent} and provide {@link ExportAgentTestCaseHttp}. The
+ * host gets `roles/dialogflow.testCaseAdmin` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `testCases.export`
  * ```typescript
- * const exportAgentTestCase = yield* GCP.Dialogflow.ExportAgentTestCase();
- * const response = yield* exportAgentTestCase({ location: "us-central1", agent: "..." });
+ * const exportAgentTestCase = yield* GCP.Dialogflow.ExportAgentTestCase(agent);
+ * const response = yield* exportAgentTestCase();
  * ```
  *
  * @binding

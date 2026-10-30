@@ -3,20 +3,18 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 
 export interface ImportAgentFlowRequest extends Omit<
   dialogflow.ImportProjectsLocationsAgentsFlowsRequest,
   "parent"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the agent (`agents/{agent}`). */
-  agent: string;
-}
+> {}
 
-export type ImportAgentFlowShape = () => Effect.Effect<
+export type ImportAgentFlowShape = (
+  resource: Agent,
+) => Effect.Effect<
   (
-    request: ImportAgentFlowRequest,
+    request?: ImportAgentFlowRequest,
   ) => Effect.Effect<
     dialogflow.GoogleLongrunningOperation,
     dialogflow.ImportProjectsLocationsAgentsFlowsError,
@@ -27,14 +25,14 @@ export type ImportAgentFlowShape = () => Effect.Effect<
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.flows.import`.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link ImportAgentFlowHttp}. The host gets `roles/dialogflow.flowEditor` on the project.
+ * Bind it to a {@link Agent} and provide {@link ImportAgentFlowHttp}. The
+ * host gets `roles/dialogflow.flowEditor` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `flows.import`
  * ```typescript
- * const importAgentFlow = yield* GCP.Dialogflow.ImportAgentFlow();
- * const response = yield* importAgentFlow({ location: "us-central1", agent: "..." });
+ * const importAgentFlow = yield* GCP.Dialogflow.ImportAgentFlow(agent);
+ * const response = yield* importAgentFlow();
  * ```
  *
  * @binding

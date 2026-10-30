@@ -64,245 +64,7 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
-    describe("AgentsEntityType", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEntityType@AgentsEntityType (dialogflow.projects.locations.agents.entityTypes.get): AgentsEntityType: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsEnvironment", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeployEnvironmentFlow (dialogflow.projects.locations.agents.environments.deployFlow): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "DetectSessionIntent (dialogflow.projects.locations.agents.environments.sessions.detectIntent): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "FulfillSessionIntent (dialogflow.projects.locations.agents.environments.sessions.fulfillIntent): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetEnvironment (dialogflow.projects.locations.agents.environments.get): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetEnvironmentDeployment (dialogflow.projects.locations.agents.environments.deployments.get): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListEnvironmentContinuousTestResults (dialogflow.projects.locations.agents.environments.continuousTestResults.list): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListEnvironmentDeployments (dialogflow.projects.locations.agents.environments.deployments.list): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListEnvironmentExperiments (dialogflow.projects.locations.agents.environments.experiments.list): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListEnvironmentSessionEntityTypes (dialogflow.projects.locations.agents.environments.sessions.entityTypes.list): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "LookupEnvironmentHistory (dialogflow.projects.locations.agents.environments.lookupEnvironmentHistory): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "MatchSessionIntent (dialogflow.projects.locations.agents.environments.sessions.matchIntent): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RunEnvironmentContinuousTest (dialogflow.projects.locations.agents.environments.runContinuousTest): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ServerSessionStreamingDetectIntent (dialogflow.projects.locations.agents.environments.sessions.serverStreamingDetectIntent): AgentsEnvironment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsEnvironmentsExperiment", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetExperiment (dialogflow.projects.locations.agents.environments.experiments.get): AgentsEnvironmentsExperiment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "StartExperiment (dialogflow.projects.locations.agents.environments.experiments.start): AgentsEnvironmentsExperiment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "StopExperiment (dialogflow.projects.locations.agents.environments.experiments.stop): AgentsEnvironmentsExperiment: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsEnvironmentsSessionsEntityType", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEntityType@AgentsEnvironmentsSessionsEntityType (dialogflow.projects.locations.agents.environments.sessions.entityTypes.get): AgentsEnvironmentsSessionsEntityType: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsFlow", { concurrent: true }, () => {
-      test.provider.skip(
-        "ExportFlow (dialogflow.projects.locations.agents.flows.export): AgentsFlow: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetFlow (dialogflow.projects.locations.agents.flows.get): AgentsFlow: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListFlowPages (dialogflow.projects.locations.agents.flows.pages.list): AgentsFlow: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListFlowTransitionRouteGroups (dialogflow.projects.locations.agents.flows.transitionRouteGroups.list): AgentsFlow: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListFlowVersions (dialogflow.projects.locations.agents.flows.versions.list): AgentsFlow: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "TrainFlow (dialogflow.projects.locations.agents.flows.train): AgentsFlow: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ValidateFlow (dialogflow.projects.locations.agents.flows.validate): AgentsFlow: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsFlowsPage", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetPage (dialogflow.projects.locations.agents.flows.pages.get): AgentsFlowsPage: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsFlowsTransitionRouteGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTransitionRouteGroup@AgentsFlowsTransitionRouteGroup (dialogflow.projects.locations.agents.flows.transitionRouteGroups.get): AgentsFlowsTransitionRouteGroup: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsFlowsVersion", { concurrent: true }, () => {
-      test.provider.skip(
-        "CompareVersions (dialogflow.projects.locations.agents.flows.versions.compareVersions): AgentsFlowsVersion: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetVersion@AgentsFlowsVersion (dialogflow.projects.locations.agents.flows.versions.get): AgentsFlowsVersion: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "LoadVersion (dialogflow.projects.locations.agents.flows.versions.load): AgentsFlowsVersion: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsGenerator", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetGenerator (dialogflow.projects.locations.agents.generators.get): AgentsGenerator: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsIntent", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetIntent (dialogflow.projects.locations.agents.intents.get): AgentsIntent: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsPlaybook", { concurrent: true }, () => {
-      test.provider.skip(
-        "ExportPlaybook (dialogflow.projects.locations.agents.playbooks.export): AgentsPlaybook: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "GetPlaybook (dialogflow.projects.locations.agents.playbooks.get): AgentsPlaybook: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListPlaybookExamples (dialogflow.projects.locations.agents.playbooks.examples.list): AgentsPlaybook: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListPlaybookVersions (dialogflow.projects.locations.agents.playbooks.versions.list): AgentsPlaybook: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsPlaybooksExample", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetExample (dialogflow.projects.locations.agents.playbooks.examples.get): AgentsPlaybooksExample: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsPlaybooksVersion", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetVersion@AgentsPlaybooksVersion (dialogflow.projects.locations.agents.playbooks.versions.get): AgentsPlaybooksVersion: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RestoreVersion@AgentsPlaybooksVersion (dialogflow.projects.locations.agents.playbooks.versions.restore): AgentsPlaybooksVersion: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsSessionsEntityType", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetEntityType@AgentsSessionsEntityType (dialogflow.projects.locations.agents.sessions.entityTypes.get): AgentsSessionsEntityType: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsTool", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTool (dialogflow.projects.locations.agents.tools.get): AgentsTool: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "ListToolVersions (dialogflow.projects.locations.agents.tools.versions.list): AgentsTool: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsToolsVersion", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetVersion@AgentsToolsVersion (dialogflow.projects.locations.agents.tools.versions.get): AgentsToolsVersion: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "RestoreVersion@AgentsToolsVersion (dialogflow.projects.locations.agents.tools.versions.restore): AgentsToolsVersion: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsTransitionRouteGroup", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetTransitionRouteGroup@AgentsTransitionRouteGroup (dialogflow.projects.locations.agents.transitionRouteGroups.get): AgentsTransitionRouteGroup: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("AgentsWebhook", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetWebhook (dialogflow.projects.locations.agents.webhooks.get): AgentsWebhook: Dialogflow CX agents aren't an Alchemy resource, so a probe stack can't deploy the parent agent",
-        () => Effect.void,
-      );
-    });
-
-    describe("project", { concurrent: true }, () => {
+    describe("Agent", { concurrent: true }, () => {
       test.provider(
         "BatchTestCaseDelete (dialogflow.projects.locations.agents.testCases.batchDelete)",
         () => probe("BatchTestCaseDelete", false),
@@ -328,14 +90,6 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "CreateAgent (dialogflow.projects.locations.agents.create)",
-        () => probe("CreateAgent", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "CreateAgentTestCase (dialogflow.projects.locations.agents.testCases.create)",
         () => probe("CreateAgentTestCase", false),
         {
@@ -344,8 +98,8 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "DeleteAgent (dialogflow.projects.locations.agents.delete)",
-        () => probe("DeleteAgent", false),
+        "DetectSessionIntent@Agent (dialogflow.projects.locations.agents.sessions.detectIntent)",
+        () => probe("DetectSessionIntent@Agent", false),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -384,8 +138,16 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "FulfillSessionIntent@Agent (dialogflow.projects.locations.agents.sessions.fulfillIntent)",
+        () => probe("FulfillSessionIntent@Agent", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "GetAgent (dialogflow.projects.locations.agents.get)",
-        () => probe("GetAgent", false),
+        () => probe("GetAgent", true),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -394,14 +156,6 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "GetAgentChangelog (dialogflow.projects.locations.agents.changelogs.get)",
         () => probe("GetAgentChangelog", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "GetAgentGenerativeSettings (dialogflow.projects.locations.agents.getGenerativeSettings)",
-        () => probe("GetAgentGenerativeSettings", false),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -418,22 +172,6 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "GetAgentTestCaseResult (dialogflow.projects.locations.agents.testCases.results.get)",
         () => probe("GetAgentTestCaseResult", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "GetAgentValidationResult (dialogflow.projects.locations.agents.getValidationResult)",
-        () => probe("GetAgentValidationResult", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "GetFlowValidationResult (dialogflow.projects.locations.agents.flows.getValidationResult)",
-        () => probe("GetFlowValidationResult", false),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -481,7 +219,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListAgentChangelogs (dialogflow.projects.locations.agents.changelogs.list)",
-        () => probe("ListAgentChangelogs", false),
+        () => probe("ListAgentChangelogs", true),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -489,7 +227,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListAgentEntityTypes (dialogflow.projects.locations.agents.entityTypes.list)",
-        () => probe("ListAgentEntityTypes", false),
+        () => probe("ListAgentEntityTypes", true),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -497,7 +235,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListAgentEnvironments (dialogflow.projects.locations.agents.environments.list)",
-        () => probe("ListAgentEnvironments", false),
+        () => probe("ListAgentEnvironments", true),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -505,7 +243,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListAgentFlows (dialogflow.projects.locations.agents.flows.list)",
-        () => probe("ListAgentFlows", false),
+        () => probe("ListAgentFlows", true),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -513,7 +251,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListAgentGenerators (dialogflow.projects.locations.agents.generators.list)",
-        () => probe("ListAgentGenerators", false),
+        () => probe("ListAgentGenerators", true),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -521,7 +259,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListAgentIntents (dialogflow.projects.locations.agents.intents.list)",
-        () => probe("ListAgentIntents", false),
+        () => probe("ListAgentIntents", true),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -529,15 +267,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListAgentPlaybooks (dialogflow.projects.locations.agents.playbooks.list)",
-        () => probe("ListAgentPlaybooks", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "ListAgents (dialogflow.projects.locations.agents.list)",
-        () => probe("ListAgents", true),
+        () => probe("ListAgentPlaybooks", true),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -561,7 +291,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListAgentTestCases (dialogflow.projects.locations.agents.testCases.list)",
-        () => probe("ListAgentTestCases", false),
+        () => probe("ListAgentTestCases", true),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -569,7 +299,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListAgentTools (dialogflow.projects.locations.agents.tools.list)",
-        () => probe("ListAgentTools", false),
+        () => probe("ListAgentTools", true),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -577,7 +307,7 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListAgentTransitionRouteGroups (dialogflow.projects.locations.agents.transitionRouteGroups.list)",
-        () => probe("ListAgentTransitionRouteGroups", false),
+        () => probe("ListAgentTransitionRouteGroups", true),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -585,23 +315,15 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider(
         "ListAgentWebhooks (dialogflow.projects.locations.agents.webhooks.list)",
-        () => probe("ListAgentWebhooks", false),
+        () => probe("ListAgentWebhooks", true),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
         },
       );
       test.provider(
-        "ListSecuritySettings (dialogflow.projects.locations.securitySettings.list)",
-        () => probe("ListSecuritySettings", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "PatchAgent (dialogflow.projects.locations.agents.patch)",
-        () => probe("PatchAgent", false),
+        "MatchSessionIntent@Agent (dialogflow.projects.locations.agents.sessions.matchIntent)",
+        () => probe("MatchSessionIntent@Agent", false),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -632,16 +354,16 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "SubmitSessionAnswerFeedback (dialogflow.projects.locations.agents.sessions.submitAnswerFeedback)",
-        () => probe("SubmitSessionAnswerFeedback", false),
+        "ServerSessionStreamingDetectIntent@Agent (dialogflow.projects.locations.agents.sessions.serverStreamingDetectIntent)",
+        () => probe("ServerSessionStreamingDetectIntent@Agent", false),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
         },
       );
       test.provider(
-        "UpdateAgentGenerativeSettings (dialogflow.projects.locations.agents.updateGenerativeSettings)",
-        () => probe("UpdateAgentGenerativeSettings", false),
+        "SubmitSessionAnswerFeedback (dialogflow.projects.locations.agents.sessions.submitAnswerFeedback)",
+        () => probe("SubmitSessionAnswerFeedback", false),
         {
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
@@ -657,6 +379,387 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
+    describe("AgentsEntityType", { concurrent: true }, () => {
+      test.provider(
+        "GetEntityType@AgentsEntityType (dialogflow.projects.locations.agents.entityTypes.get)",
+        () => probe("GetEntityType@AgentsEntityType", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("AgentsEnvironment", { concurrent: true }, () => {
+      test.provider.skip(
+        "DeployEnvironmentFlow (dialogflow.projects.locations.agents.environments.deployFlow): AgentsEnvironment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "DetectSessionIntent@AgentsEnvironment (dialogflow.projects.locations.agents.environments.sessions.detectIntent): AgentsEnvironment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "FulfillSessionIntent@AgentsEnvironment (dialogflow.projects.locations.agents.environments.sessions.fulfillIntent): AgentsEnvironment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "GetEnvironment (dialogflow.projects.locations.agents.environments.get): AgentsEnvironment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "GetEnvironmentDeployment (dialogflow.projects.locations.agents.environments.deployments.get): AgentsEnvironment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListEnvironmentContinuousTestResults (dialogflow.projects.locations.agents.environments.continuousTestResults.list): AgentsEnvironment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListEnvironmentDeployments (dialogflow.projects.locations.agents.environments.deployments.list): AgentsEnvironment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListEnvironmentExperiments (dialogflow.projects.locations.agents.environments.experiments.list): AgentsEnvironment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListEnvironmentSessionEntityTypes (dialogflow.projects.locations.agents.environments.sessions.entityTypes.list): AgentsEnvironment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "LookupEnvironmentHistory (dialogflow.projects.locations.agents.environments.lookupEnvironmentHistory): AgentsEnvironment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "MatchSessionIntent@AgentsEnvironment (dialogflow.projects.locations.agents.environments.sessions.matchIntent): AgentsEnvironment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "RunEnvironmentContinuousTest (dialogflow.projects.locations.agents.environments.runContinuousTest): AgentsEnvironment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ServerSessionStreamingDetectIntent@AgentsEnvironment (dialogflow.projects.locations.agents.environments.sessions.serverStreamingDetectIntent): AgentsEnvironment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+    });
+
+    describe("AgentsEnvironmentsExperiment", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetExperiment (dialogflow.projects.locations.agents.environments.experiments.get): AgentsEnvironmentsExperiment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "StartExperiment (dialogflow.projects.locations.agents.environments.experiments.start): AgentsEnvironmentsExperiment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "StopExperiment (dialogflow.projects.locations.agents.environments.experiments.stop): AgentsEnvironmentsExperiment: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+    });
+
+    describe("AgentsEnvironmentsSessionsEntityType", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetEntityType@AgentsEnvironmentsSessionsEntityType (dialogflow.projects.locations.agents.environments.sessions.entityTypes.get): AgentsEnvironmentsSessionsEntityType: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+    });
+
+    describe("AgentsFlow", { concurrent: true }, () => {
+      test.provider(
+        "ExportFlow (dialogflow.projects.locations.agents.flows.export)",
+        () => probe("ExportFlow", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetFlow (dialogflow.projects.locations.agents.flows.get)",
+        () => probe("GetFlow", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListFlowPages (dialogflow.projects.locations.agents.flows.pages.list)",
+        () => probe("ListFlowPages", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListFlowTransitionRouteGroups (dialogflow.projects.locations.agents.flows.transitionRouteGroups.list)",
+        () => probe("ListFlowTransitionRouteGroups", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListFlowVersions (dialogflow.projects.locations.agents.flows.versions.list)",
+        () => probe("ListFlowVersions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "TrainFlow (dialogflow.projects.locations.agents.flows.train)",
+        () => probe("TrainFlow", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ValidateFlow (dialogflow.projects.locations.agents.flows.validate)",
+        () => probe("ValidateFlow", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("AgentsFlowsPage", { concurrent: true }, () => {
+      test.provider(
+        "GetPage (dialogflow.projects.locations.agents.flows.pages.get)",
+        () => probe("GetPage", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("AgentsFlowsTransitionRouteGroup", { concurrent: true }, () => {
+      test.provider(
+        "GetTransitionRouteGroup@AgentsFlowsTransitionRouteGroup (dialogflow.projects.locations.agents.flows.transitionRouteGroups.get)",
+        () => probe("GetTransitionRouteGroup@AgentsFlowsTransitionRouteGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("AgentsFlowsVersion", { concurrent: true }, () => {
+      test.provider(
+        "CompareVersions (dialogflow.projects.locations.agents.flows.versions.compareVersions)",
+        () => probe("CompareVersions", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetVersion@AgentsFlowsVersion (dialogflow.projects.locations.agents.flows.versions.get)",
+        () => probe("GetVersion@AgentsFlowsVersion", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "LoadVersion (dialogflow.projects.locations.agents.flows.versions.load)",
+        () => probe("LoadVersion", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("AgentsGenerator", { concurrent: true }, () => {
+      test.provider(
+        "GetGenerator (dialogflow.projects.locations.agents.generators.get)",
+        () => probe("GetGenerator", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("AgentsIntent", { concurrent: true }, () => {
+      test.provider(
+        "GetIntent (dialogflow.projects.locations.agents.intents.get)",
+        () => probe("GetIntent", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("AgentsPlaybook", { concurrent: true }, () => {
+      test.provider(
+        "ExportPlaybook (dialogflow.projects.locations.agents.playbooks.export)",
+        () => probe("ExportPlaybook", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetPlaybook (dialogflow.projects.locations.agents.playbooks.get)",
+        () => probe("GetPlaybook", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListPlaybookExamples (dialogflow.projects.locations.agents.playbooks.examples.list)",
+        () => probe("ListPlaybookExamples", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListPlaybookVersions (dialogflow.projects.locations.agents.playbooks.versions.list)",
+        () => probe("ListPlaybookVersions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("AgentsPlaybooksExample", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetExample (dialogflow.projects.locations.agents.playbooks.examples.get): AgentsPlaybooksExample: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+    });
+
+    describe("AgentsPlaybooksVersion", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetVersion@AgentsPlaybooksVersion (dialogflow.projects.locations.agents.playbooks.versions.get): AgentsPlaybooksVersion: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "RestoreVersion@AgentsPlaybooksVersion (dialogflow.projects.locations.agents.playbooks.versions.restore): AgentsPlaybooksVersion: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+    });
+
+    describe("AgentsSessionsEntityType", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetEntityType@AgentsSessionsEntityType (dialogflow.projects.locations.agents.sessions.entityTypes.get): AgentsSessionsEntityType: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+    });
+
+    describe("AgentsTool", { concurrent: true }, () => {
+      test.provider(
+        "GetTool (dialogflow.projects.locations.agents.tools.get)",
+        () => probe("GetTool", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListToolVersions (dialogflow.projects.locations.agents.tools.versions.list)",
+        () => probe("ListToolVersions", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("AgentsToolsVersion", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetVersion@AgentsToolsVersion (dialogflow.projects.locations.agents.tools.versions.get): AgentsToolsVersion: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "RestoreVersion@AgentsToolsVersion (dialogflow.projects.locations.agents.tools.versions.restore): AgentsToolsVersion: its parent (an environment, session, playbook or tool version) needs a published flow version chain the probe stack doesn't build yet",
+        () => Effect.void,
+      );
+    });
+
+    describe("AgentsTransitionRouteGroup", { concurrent: true }, () => {
+      test.provider(
+        "GetTransitionRouteGroup@AgentsTransitionRouteGroup (dialogflow.projects.locations.agents.transitionRouteGroups.get)",
+        () => probe("GetTransitionRouteGroup@AgentsTransitionRouteGroup", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("AgentsWebhook", { concurrent: true }, () => {
+      test.provider(
+        "GetWebhook (dialogflow.projects.locations.agents.webhooks.get)",
+        () => probe("GetWebhook", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("project", { concurrent: true }, () => {
+      test.provider(
+        "GetAgentGenerativeSettings (dialogflow.projects.locations.agents.getGenerativeSettings)",
+        () => probe("GetAgentGenerativeSettings", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetAgentValidationResult (dialogflow.projects.locations.agents.getValidationResult)",
+        () => probe("GetAgentValidationResult", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetFlowValidationResult (dialogflow.projects.locations.agents.flows.getValidationResult)",
+        () => probe("GetFlowValidationResult", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListAgents (dialogflow.projects.locations.agents.list)",
+        () => probe("ListAgents", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListSecuritySettings (dialogflow.projects.locations.securitySettings.list)",
+        () => probe("ListSecuritySettings", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "UpdateAgentGenerativeSettings (dialogflow.projects.locations.agents.updateGenerativeSettings)",
+        () => probe("UpdateAgentGenerativeSettings", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
     describe("SecuritySetting", { concurrent: true }, () => {
       test.provider(
         "GetSecuritySetting (dialogflow.projects.locations.securitySettings.get)",
@@ -665,26 +768,6 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:dialogflow", "live"],
           timeout: 600_000,
         },
-      );
-    });
-
-    // Discovery methods with no binding, and why.
-    describe("not generated", () => {
-      test.provider.skip(
-        "dialogflow.projects.locations.agents.sessions.serverStreamingDetectIntent: name collision on ServerSessionStreamingDetectIntent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dialogflow.projects.locations.agents.sessions.matchIntent: name collision on MatchSessionIntent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dialogflow.projects.locations.agents.sessions.fulfillIntent: name collision on FulfillSessionIntent",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "dialogflow.projects.locations.agents.sessions.detectIntent: name collision on DetectSessionIntent",
-        () => Effect.void,
       );
     });
   },

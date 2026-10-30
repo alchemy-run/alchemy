@@ -3,6 +3,7 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 import type { AgentsEnvironment } from "./AgentsEnvironment.ts";
 
 export interface MatchSessionIntentRequest extends Omit<
@@ -14,13 +15,14 @@ export interface MatchSessionIntentRequest extends Omit<
 }
 
 export type MatchSessionIntentShape = (
-  resource: AgentsEnvironment,
+  resource: AgentsEnvironment | Agent,
 ) => Effect.Effect<
   (
     request: MatchSessionIntentRequest,
   ) => Effect.Effect<
     dialogflow.GoogleCloudDialogflowCxV3MatchIntentResponse,
-    dialogflow.MatchIntentProjectsLocationsAgentsEnvironmentsSessionsError,
+    | dialogflow.MatchIntentProjectsLocationsAgentsEnvironmentsSessionsError
+    | dialogflow.MatchIntentProjectsLocationsAgentsSessionsError,
     RuntimeContext
   >
 >;
@@ -28,8 +30,8 @@ export type MatchSessionIntentShape = (
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.environments.sessions.matchIntent`.
  *
- * Bind it to a {@link AgentsEnvironment} and provide {@link MatchSessionIntentHttp}. The
- * host gets `roles/dialogflow.environmentEditor` on the project (the service has no per-resource IAM policy).
+ * Bind it to a {@link AgentsEnvironment} or {@link Agent} and provide {@link MatchSessionIntentHttp}. The
+ * host gets `roles/dialogflow.environmentEditor`, `roles/dialogflow.admin` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `sessions.matchIntent`

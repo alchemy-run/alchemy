@@ -3,20 +3,18 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 
 export interface BatchTestCaseRunRequest extends Omit<
   dialogflow.BatchRunProjectsLocationsAgentsTestCasesRequest,
   "parent"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the agent (`agents/{agent}`). */
-  agent: string;
-}
+> {}
 
-export type BatchTestCaseRunShape = () => Effect.Effect<
+export type BatchTestCaseRunShape = (
+  resource: Agent,
+) => Effect.Effect<
   (
-    request: BatchTestCaseRunRequest,
+    request?: BatchTestCaseRunRequest,
   ) => Effect.Effect<
     dialogflow.GoogleLongrunningOperation,
     dialogflow.BatchRunProjectsLocationsAgentsTestCasesError,
@@ -27,14 +25,14 @@ export type BatchTestCaseRunShape = () => Effect.Effect<
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.testCases.batchRun`.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link BatchTestCaseRunHttp}. The host gets `roles/dialogflow.testCaseAdmin` on the project.
+ * Bind it to a {@link Agent} and provide {@link BatchTestCaseRunHttp}. The
+ * host gets `roles/dialogflow.testCaseAdmin` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `testCases.batchRun`
  * ```typescript
- * const batchTestCaseRun = yield* GCP.Dialogflow.BatchTestCaseRun();
- * const response = yield* batchTestCaseRun({ location: "us-central1", agent: "..." });
+ * const batchTestCaseRun = yield* GCP.Dialogflow.BatchTestCaseRun(agent);
+ * const response = yield* batchTestCaseRun();
  * ```
  *
  * @binding

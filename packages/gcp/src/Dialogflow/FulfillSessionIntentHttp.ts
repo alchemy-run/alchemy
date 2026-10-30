@@ -22,6 +22,13 @@ export const FulfillSessionIntentHttp = Layer.effect(
         children: [["sessions", "session"]],
         iam: { role: "roles/dialogflow.environmentEditor" },
       },
+      {
+        resource: "GCP.Dialogflow.Agent",
+        operation: dialogflow.fulfillIntentProjectsLocationsAgentsSessions,
+        param: "session",
+        children: [["sessions", "session"]],
+        iam: { role: "roles/dialogflow.admin" },
+      },
     ],
   }),
 );

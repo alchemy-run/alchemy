@@ -3,20 +3,19 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 
 export interface PatchAgentTestCaseRequest extends Omit<
   dialogflow.PatchProjectsLocationsAgentsTestCasesRequest,
   "name"
 > {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the agent (`agents/{agent}`). */
-  agent: string;
-  /** Id of the testCase (`testCases/{testCase}`). */
+  /** Id of the testCase under the bound resource (`testCases/{testCase}`). */
   testCase: string;
 }
 
-export type PatchAgentTestCaseShape = () => Effect.Effect<
+export type PatchAgentTestCaseShape = (
+  resource: Agent,
+) => Effect.Effect<
   (
     request: PatchAgentTestCaseRequest,
   ) => Effect.Effect<
@@ -29,14 +28,14 @@ export type PatchAgentTestCaseShape = () => Effect.Effect<
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.testCases.patch`.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link PatchAgentTestCaseHttp}. The host gets `roles/dialogflow.testCaseAdmin` on the project.
+ * Bind it to a {@link Agent} and provide {@link PatchAgentTestCaseHttp}. The
+ * host gets `roles/dialogflow.testCaseAdmin` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `testCases.patch`
  * ```typescript
- * const patchAgentTestCase = yield* GCP.Dialogflow.PatchAgentTestCase();
- * const response = yield* patchAgentTestCase({ location: "us-central1", agent: "...", testCase: "..." });
+ * const patchAgentTestCase = yield* GCP.Dialogflow.PatchAgentTestCase(agent);
+ * const response = yield* patchAgentTestCase({ testCase: "..." });
  * ```
  *
  * @binding

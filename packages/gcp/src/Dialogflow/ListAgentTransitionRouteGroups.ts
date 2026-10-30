@@ -3,20 +3,18 @@ import type * as dialogflow from "@distilled.cloud/gcp/dialogflow_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Agent } from "./Agent.ts";
 
 export interface ListAgentTransitionRouteGroupsRequest extends Omit<
   dialogflow.ListProjectsLocationsAgentsTransitionRouteGroupsRequest,
   "parent"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the agent (`agents/{agent}`). */
-  agent: string;
-}
+> {}
 
-export type ListAgentTransitionRouteGroupsShape = () => Effect.Effect<
+export type ListAgentTransitionRouteGroupsShape = (
+  resource: Agent,
+) => Effect.Effect<
   (
-    request: ListAgentTransitionRouteGroupsRequest,
+    request?: ListAgentTransitionRouteGroupsRequest,
   ) => Effect.Effect<
     dialogflow.GoogleCloudDialogflowCxV3ListTransitionRouteGroupsResponse,
     dialogflow.ListProjectsLocationsAgentsTransitionRouteGroupsError,
@@ -27,14 +25,14 @@ export type ListAgentTransitionRouteGroupsShape = () => Effect.Effect<
 /**
  * Runtime binding for `dialogflow.projects.locations.agents.transitionRouteGroups.list`.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link ListAgentTransitionRouteGroupsHttp}. The host gets `roles/dialogflow.reader` on the project.
+ * Bind it to a {@link Agent} and provide {@link ListAgentTransitionRouteGroupsHttp}. The
+ * host gets `roles/dialogflow.reader` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `transitionRouteGroups.list`
  * ```typescript
- * const listAgentTransitionRouteGroups = yield* GCP.Dialogflow.ListAgentTransitionRouteGroups();
- * const response = yield* listAgentTransitionRouteGroups({ location: "us-central1", agent: "..." });
+ * const listAgentTransitionRouteGroups = yield* GCP.Dialogflow.ListAgentTransitionRouteGroups(agent);
+ * const response = yield* listAgentTransitionRouteGroups();
  * ```
  *
  * @binding
