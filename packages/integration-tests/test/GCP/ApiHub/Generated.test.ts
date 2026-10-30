@@ -324,6 +324,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "ListRuntimeProjectAttachments (apihub.projects.locations.runtimeProjectAttachments.list)",
+        () => probe("ListRuntimeProjectAttachments", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:apihub", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "LookupApiHubInstance (apihub.projects.locations.apiHubInstances.lookup)",
         () => probe("LookupApiHubInstance", false),
         {
@@ -331,14 +339,33 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
+      test.provider(
+        "ManageAddonConfig (apihub.projects.locations.addons.manageConfig)",
+        () => probe("ManageAddonConfig", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:apihub", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "UpdatePluginStyleGuide (apihub.projects.locations.plugins.updateStyleGuide)",
+        () => probe("UpdatePluginStyleGuide", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:apihub", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
+    describe("RuntimeProjectAttachment", { concurrent: true }, () => {
+      test.provider.skip(
+        'GetRuntimeProjectAttachment (apihub.projects.locations.runtimeProjectAttachments.get): RuntimeProjectAttachment: Needs a provisioned API Hub instance in us-central1 (one per project, behind a host project registration); without one writes fail with BadRequest ("Invalid resource state … API Hub instance …"). Set (GCP_TEST_APIHUB_INSTANCE)',
+        () => Effect.void,
+      );
     });
 
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
-      test.provider.skip(
-        "apihub.projects.locations.plugins.updateStyleGuide: no predefined role grants its permission",
-        () => Effect.void,
-      );
       test.provider.skip(
         "apihub.projects.locations.plugins.instances.executeAction: no predefined role grants its permission",
         () => Effect.void,
@@ -357,18 +384,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "apihub.projects.locations.servers.configureAndDeployServer: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "apihub.projects.locations.addons.manageConfig: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "apihub.projects.locations.runtimeProjectAttachments.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "apihub.projects.locations.runtimeProjectAttachments.get: no predefined role grants its permission",
         () => Effect.void,
       );
     });

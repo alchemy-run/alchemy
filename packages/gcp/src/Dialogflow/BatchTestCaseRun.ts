@@ -28,7 +28,7 @@ export type BatchTestCaseRunShape = () => Effect.Effect<
  * Runtime binding for `dialogflow.projects.locations.agents.testCases.batchRun`.
  *
  * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link BatchTestCaseRunHttp}. The host gets `roles/dialogflow.admin` on the project.
+ * Provide {@link BatchTestCaseRunHttp}. The host gets `roles/dialogflow.testCaseAdmin` on the project.
  *
  * ### Usage
  * **Example:** Call `testCases.batchRun`

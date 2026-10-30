@@ -26,5 +26,8 @@
     "ambiguousTags": {
       "DataCatalogNotFoundOrDenied": "Data Catalog answers a missing entry and a denied permission with the same 403"
     }
+  },
+  "permissions": {
+    "datacatalog.catalog.search": "datacatalog.catalogs.searchAll"
   }
 }

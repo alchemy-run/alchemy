@@ -919,6 +919,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "CollectUserEvent (discoveryengine.projects.locations.userEvents.collect)",
+        () => probe("CollectUserEvent", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "CompleteCompletionConfigQuery (discoveryengine.projects.locations.dataStores.completionConfig.completeQuery)",
         () => probe("CompleteCompletionConfigQuery", false),
         {
@@ -1135,6 +1143,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "McpCollectionDataConnector (discoveryengine.projects.locations.collections.dataConnector.mcp)",
+        () => probe("McpCollectionDataConnector", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "PatchCmekConfig (discoveryengine.projects.locations.cmekConfigs.patch)",
         () => probe("PatchCmekConfig", false),
         {
@@ -1182,6 +1198,22 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
+      test.provider(
+        "UpdateCollectionDataConnector (discoveryengine.projects.locations.collections.updateDataConnector)",
+        () => probe("UpdateCollectionDataConnector", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "WriteUserEvent (discoveryengine.projects.locations.userEvents.write)",
+        () => probe("WriteUserEvent", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
+          timeout: 600_000,
+        },
+      );
     });
 
     // Discovery methods with no binding, and why.
@@ -1199,23 +1231,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "discoveryengine.projects.locations.userEvents.write: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "discoveryengine.projects.locations.userEvents.collect: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "discoveryengine.projects.locations.collections.updateDataConnector: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "discoveryengine.projects.locations.collections.engines.completionConfig.completeQuery: name collision on CompleteCompletionConfigQuery",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "discoveryengine.projects.locations.collections.dataConnector.mcp: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

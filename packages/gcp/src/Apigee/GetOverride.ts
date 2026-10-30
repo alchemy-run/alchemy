@@ -26,7 +26,7 @@ export type GetOverrideShape = (
  * Gets a trace configuration override.
  *
  * Bind it to a {@link EnvironmentsTraceConfigOverride} and provide {@link GetOverrideHttp}. The
- * host gets `roles/apigee.analyticsViewer` on the project (the service has no per-resource IAM policy).
+ * host gets `roles/apigee.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `overrides.get`

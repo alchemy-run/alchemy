@@ -45,8 +45,9 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
     const p26 = yield* GCP.DataCatalog.PatchEntryGroupTag();
     const p27 = yield* GCP.DataCatalog.ReconcileEntryGroupEntryTag();
     const p28 = yield* GCP.DataCatalog.ReplaceTaxonomy(ProbeTaxonomy);
-    const p29 = yield* GCP.DataCatalog.StarEntryGroupEntry();
-    const p30 = yield* GCP.DataCatalog.UnstarEntryGroupEntry();
+    const p29 = yield* GCP.DataCatalog.SearchCatalog();
+    const p30 = yield* GCP.DataCatalog.StarEntryGroupEntry();
+    const p31 = yield* GCP.DataCatalog.UnstarEntryGroupEntry();
     return {
       fetch: serveProbes({
         CreateEntryGroup: probeOutcome(
@@ -219,9 +220,10 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
           ),
         ),
         ReplaceTaxonomy: probeOutcome(Retry.none(p28({} as never))),
+        SearchCatalog: probeOutcome(Retry.none(p29({} as never))),
         StarEntryGroupEntry: probeOutcome(
           Retry.none(
-            p29({
+            p30({
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
@@ -230,7 +232,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
         ),
         UnstarEntryGroupEntry: probeOutcome(
           Retry.none(
-            p30({
+            p31({
               entryGroup: "alchemy-missing",
               entry: "alchemy-missing",
               location: "us-central1",
@@ -272,6 +274,7 @@ export default class DataCatalogGeneratedHost extends GCP.Function<DataCatalogGe
           GCP.DataCatalog.PatchEntryGroupTagHttp,
           GCP.DataCatalog.ReconcileEntryGroupEntryTagHttp,
           GCP.DataCatalog.ReplaceTaxonomyHttp,
+          GCP.DataCatalog.SearchCatalogHttp,
           GCP.DataCatalog.StarEntryGroupEntryHttp,
           GCP.DataCatalog.UnstarEntryGroupEntryHttp,
         ),

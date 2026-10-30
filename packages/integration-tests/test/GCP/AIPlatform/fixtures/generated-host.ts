@@ -116,7 +116,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
     const p60 = yield* GCP.AIPlatform.ExportDataset();
     const p61 = yield* GCP.AIPlatform.ExportEntityTypeFeatureValues(ProbeEntityType);
     const p62 = yield* GCP.AIPlatform.ExportModel();
-    const p63 = yield* GCP.AIPlatform.ExportTimeSeryTensorboardTimeSeries(ProbeTimeSeries);
+    const p63 = yield* GCP.AIPlatform.ExportTensorboardTimeSeries(ProbeTimeSeries);
     const p64 = yield* GCP.AIPlatform.FetchEndpointPredictOperation(ProbeEndpoint);
     const p65 = yield* GCP.AIPlatform.FetchFeatureViewFeatureValues(ProbeFeatureView);
     const p66 = yield* GCP.AIPlatform.FetchModelPredictOperation();
@@ -175,7 +175,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
     const p119 = yield* GCP.AIPlatform.GetSession(ProbeSession);
     const p120 = yield* GCP.AIPlatform.GetStudy(ProbeStudy);
     const p121 = yield* GCP.AIPlatform.GetTensorboard(ProbeTensorboard);
-    const p122 = yield* GCP.AIPlatform.GetTimeSery(ProbeTimeSeries);
+    const p122 = yield* GCP.AIPlatform.GetTimeSeries(ProbeTimeSeries);
     const p123 = yield* GCP.AIPlatform.GetTrial(ProbeTrial);
     const p124 = yield* GCP.AIPlatform.ImportDataset();
     const p125 = yield* GCP.AIPlatform.ImportEntityTypeFeatureValues(ProbeEntityType);
@@ -284,8 +284,8 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
     const p226 = yield* GCP.AIPlatform.ReadIndexEndpointIndexDatapoints(ProbeIndexEndpoint);
     const p227 = yield* GCP.AIPlatform.ReadTensorboardSize(ProbeTensorboard);
     const p228 = yield* GCP.AIPlatform.ReadTensorboardUsage(ProbeTensorboard);
-    const p229 = yield* GCP.AIPlatform.ReadTimeSery(ProbeTimeSeries);
-    const p230 = yield* GCP.AIPlatform.ReadTimeSeryBlobData(ProbeTimeSeries);
+    const p229 = yield* GCP.AIPlatform.ReadTimeSeries(ProbeTimeSeries);
+    const p230 = yield* GCP.AIPlatform.ReadTimeSeriesBlobData(ProbeTimeSeries);
     const p231 = yield* GCP.AIPlatform.RebaseTuningJobTunedModel();
     const p232 = yield* GCP.AIPlatform.RemoveContextChildren(ProbeContext);
     const p233 = yield* GCP.AIPlatform.RemoveIndexDatapoints(ProbeIndex);
@@ -498,7 +498,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
         ExportModel: probeOutcome(
           Retry.none(p62({ model: "alchemy-missing", location: "us-central1" } as never)),
         ),
-        ExportTimeSeryTensorboardTimeSeries: probeOutcome(Retry.none(p63({} as never))),
+        ExportTensorboardTimeSeries: probeOutcome(Retry.none(p63({} as never))),
         FetchEndpointPredictOperation: probeOutcome(Retry.none(p64({} as never))),
         FetchFeatureViewFeatureValues: probeOutcome(Retry.none(p65({} as never))),
         FetchModelPredictOperation: probeOutcome(
@@ -641,7 +641,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
         GetSession: probeOutcome(Retry.none(p119({} as never))),
         GetStudy: probeOutcome(Retry.none(p120({} as never))),
         GetTensorboard: probeOutcome(Retry.none(p121({} as never))),
-        GetTimeSery: probeOutcome(Retry.none(p122({} as never))),
+        GetTimeSeries: probeOutcome(Retry.none(p122({} as never))),
         GetTrial: probeOutcome(Retry.none(p123({} as never))),
         ImportDataset: probeOutcome(
           Retry.none(
@@ -895,8 +895,8 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
         ReadIndexEndpointIndexDatapoints: probeOutcome(Retry.none(p226({} as never))),
         ReadTensorboardSize: probeOutcome(Retry.none(p227({} as never))),
         ReadTensorboardUsage: probeOutcome(Retry.none(p228({} as never))),
-        ReadTimeSery: probeOutcome(Retry.none(p229({} as never))),
-        ReadTimeSeryBlobData: probeOutcome(Retry.none(p230({} as never))),
+        ReadTimeSeries: probeOutcome(Retry.none(p229({} as never))),
+        ReadTimeSeriesBlobData: probeOutcome(Retry.none(p230({} as never))),
         RebaseTuningJobTunedModel: probeOutcome(
           Retry.none(p231({ location: "us-central1" } as never)),
         ),
@@ -1076,7 +1076,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           GCP.AIPlatform.ExportDatasetHttp,
           GCP.AIPlatform.ExportEntityTypeFeatureValuesHttp,
           GCP.AIPlatform.ExportModelHttp,
-          GCP.AIPlatform.ExportTimeSeryTensorboardTimeSeriesHttp,
+          GCP.AIPlatform.ExportTensorboardTimeSeriesHttp,
           GCP.AIPlatform.FetchEndpointPredictOperationHttp,
           GCP.AIPlatform.FetchFeatureViewFeatureValuesHttp,
           GCP.AIPlatform.FetchModelPredictOperationHttp,
@@ -1136,7 +1136,7 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           GCP.AIPlatform.GetSessionHttp,
           GCP.AIPlatform.GetStudyHttp,
           GCP.AIPlatform.GetTensorboardHttp,
-          GCP.AIPlatform.GetTimeSeryHttp,
+          GCP.AIPlatform.GetTimeSeriesHttp,
         ),
         Layer.mergeAll(
           GCP.AIPlatform.GetTrialHttp,
@@ -1249,8 +1249,8 @@ export default class AIPlatformGeneratedHost extends GCP.Function<AIPlatformGene
           GCP.AIPlatform.ReadIndexEndpointIndexDatapointsHttp,
           GCP.AIPlatform.ReadTensorboardSizeHttp,
           GCP.AIPlatform.ReadTensorboardUsageHttp,
-          GCP.AIPlatform.ReadTimeSeryHttp,
-          GCP.AIPlatform.ReadTimeSeryBlobDataHttp,
+          GCP.AIPlatform.ReadTimeSeriesHttp,
+          GCP.AIPlatform.ReadTimeSeriesBlobDataHttp,
           GCP.AIPlatform.RebaseTuningJobTunedModelHttp,
           GCP.AIPlatform.RemoveContextChildrenHttp,
           GCP.AIPlatform.RemoveIndexDatapointsHttp,

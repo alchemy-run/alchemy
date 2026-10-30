@@ -71,9 +71,23 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
+    describe("EventThreatDetectionSettingsCustomModule", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetCustomModule@EventThreatDetectionSettingsCustomModule (securitycenter.projects.eventThreatDetectionSettings.customModules.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+    });
+
     describe("FolderBigQueryExport", { concurrent: true }, () => {
       test.provider.skip(
         "GetBigQueryExport@FolderBigQueryExport (securitycenter.folders.bigQueryExports.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+    });
+
+    describe("FolderEventThreatDetectionSettingsCustomModule", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetCustomModule@FolderEventThreatDetectionSettingsCustomModule (securitycenter.folders.eventThreatDetectionSettings.customModules.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
         () => Effect.void,
       );
     });
@@ -85,9 +99,30 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
+    describe("FolderNotificationConfig", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetNotificationConfig@FolderNotificationConfig (securitycenter.folders.notificationConfigs.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+    });
+
+    describe("FolderSecurityHealthAnalyticsSettingsCustomModule", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetCustomModule@FolderSecurityHealthAnalyticsSettingsCustomModule (securitycenter.folders.securityHealthAnalyticsSettings.customModules.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+    });
+
     describe("MuteConfig", { concurrent: true }, () => {
       test.provider.skip(
         "GetMuteConfig@MuteConfig (securitycenter.projects.muteConfigs.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+    });
+
+    describe("NotificationConfig", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetNotificationConfig@NotificationConfig (securitycenter.projects.notificationConfigs.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
         () => Effect.void,
       );
     });
@@ -99,12 +134,37 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
+    describe("OrganizationEventThreatDetectionSettingsCustomModule", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetCustomModule@OrganizationEventThreatDetectionSettingsCustomModule (securitycenter.organizations.eventThreatDetectionSettings.customModules.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+    });
+
     describe("OrganizationMuteConfig", { concurrent: true }, () => {
       test.provider.skip(
         "GetMuteConfig@OrganizationMuteConfig (securitycenter.organizations.muteConfigs.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
         () => Effect.void,
       );
     });
+
+    describe("OrganizationsNotificationConfig", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetNotificationConfig@OrganizationsNotificationConfig (securitycenter.organizations.notificationConfigs.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+    });
+
+    describe(
+      "OrganizationsSecurityHealthAnalyticsSettingsCustomModule",
+      { concurrent: true },
+      () => {
+        test.provider.skip(
+          "GetCustomModule@OrganizationsSecurityHealthAnalyticsSettingsCustomModule (securitycenter.organizations.securityHealthAnalyticsSettings.customModules.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+          () => Effect.void,
+        );
+      },
+    );
 
     describe("project", { concurrent: true }, () => {
       test.provider.skip(
@@ -132,7 +192,31 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "ListCustomModuleDescendant (securitycenter.projects.eventThreatDetectionSettings.customModules.listDescendant): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListEventThreatDetectionSettingCustomModules (securitycenter.projects.eventThreatDetectionSettings.customModules.list): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListEventThreatDetectionSettingEffectiveCustomModules (securitycenter.projects.eventThreatDetectionSettings.effectiveCustomModules.list): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "ListMuteConfigs (securitycenter.projects.muteConfigs.list): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListNotificationConfigs (securitycenter.projects.notificationConfigs.list): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListSecurityHealthAnalyticsSettingCustomModules (securitycenter.projects.securityHealthAnalyticsSettings.customModules.list): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ListSecurityHealthAnalyticsSettingEffectiveCustomModules (securitycenter.projects.securityHealthAnalyticsSettings.effectiveCustomModules.list): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
         () => Effect.void,
       );
       test.provider.skip(
@@ -164,7 +248,22 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "SimulateSecurityHealthAnalyticsSettingCustomModule (securitycenter.projects.securityHealthAnalyticsSettings.customModules.simulate): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "UpdateFindingSecurityMarks (securitycenter.projects.sources.findings.updateSecurityMarks): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "ValidateEventThreatDetectionSettingCustomModule (securitycenter.projects.eventThreatDetectionSettings.validateCustomModule): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
+      );
+    });
+
+    describe("SecurityHealthAnalyticsSettingsCustomModule", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetCustomModule@SecurityHealthAnalyticsSettingsCustomModule (securitycenter.projects.securityHealthAnalyticsSettings.customModules.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
         () => Effect.void,
       );
     });
@@ -173,10 +272,6 @@ describe.skipIf(!!process.env.FAST)(
     describe("not generated", () => {
       test.provider.skip(
         "securitycenter.folders.notificationConfigs.list: addressed under `folders/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "securitycenter.folders.notificationConfigs.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -256,10 +351,6 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "securitycenter.folders.eventThreatDetectionSettings.customModules.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "securitycenter.folders.eventThreatDetectionSettings.customModules.listDescendant: addressed under `folders/`, not a project",
         () => Effect.void,
       );
@@ -269,10 +360,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "securitycenter.folders.securityHealthAnalyticsSettings.effectiveCustomModules.list: addressed under `folders/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "securitycenter.folders.securityHealthAnalyticsSettings.customModules.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -296,23 +383,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "securitycenter.projects.notificationConfigs.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "securitycenter.projects.notificationConfigs.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "securitycenter.projects.locations.muteConfigs.get: name collision on GetMuteConfig",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "securitycenter.projects.eventThreatDetectionSettings.validateCustomModule: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "securitycenter.projects.eventThreatDetectionSettings.effectiveCustomModules.list: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -320,43 +391,15 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "securitycenter.projects.eventThreatDetectionSettings.customModules.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "securitycenter.projects.eventThreatDetectionSettings.customModules.listDescendant: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "securitycenter.projects.eventThreatDetectionSettings.customModules.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "securitycenter.projects.assets.updateSecurityMarks: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
-        "securitycenter.projects.securityHealthAnalyticsSettings.customModules.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "securitycenter.projects.securityHealthAnalyticsSettings.customModules.listDescendant: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "securitycenter.projects.securityHealthAnalyticsSettings.customModules.simulate: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "securitycenter.projects.securityHealthAnalyticsSettings.customModules.get: no predefined role grants its permission",
+        "securitycenter.projects.securityHealthAnalyticsSettings.customModules.listDescendant: name collision on ListCustomModuleDescendant",
         () => Effect.void,
       );
       test.provider.skip(
         "securitycenter.projects.securityHealthAnalyticsSettings.effectiveCustomModules.get: `projects/*/securityHealthAnalyticsSettings/effectiveCustomModules/*` has no Alchemy resource to bind",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "securitycenter.projects.securityHealthAnalyticsSettings.effectiveCustomModules.list: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -388,19 +431,11 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "securitycenter.organizations.securityHealthAnalyticsSettings.customModules.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "securitycenter.organizations.attackPaths.list: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(
         "securitycenter.organizations.findings.bulkMute: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "securitycenter.organizations.notificationConfigs.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(
@@ -553,10 +588,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "securitycenter.organizations.eventThreatDetectionSettings.effectiveCustomModules.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "securitycenter.organizations.eventThreatDetectionSettings.customModules.get: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

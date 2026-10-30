@@ -60,6 +60,8 @@
     }
   },
   "permissions": {
-    "apihub.projects.locations.updateStyleGuide": "apihub.styleGuides.update"
+    "apihub.projects.locations.updateStyleGuide": "apihub.styleGuides.update",
+    "apihub.projects.locations.plugins.updateStyleGuide": "apihub.styleGuides.update",
+    "apihub.projects.locations.addons.manageConfig": "apihub.addons.manage"
   }
 }

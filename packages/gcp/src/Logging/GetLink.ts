@@ -6,7 +6,6 @@ import type * as Effect from "effect/Effect";
 import type { BillingBucketsLink } from "./BillingBucketsLink.ts";
 import type { BucketsLink } from "./BucketsLink.ts";
 import type { FolderBucketsLink } from "./FolderBucketsLink.ts";
-import type { LocationsBucketsLink } from "./LocationsBucketsLink.ts";
 import type { OrganizationBucketsLink } from "./OrganizationBucketsLink.ts";
 
 export interface GetLinkRequest extends Omit<
@@ -15,12 +14,7 @@ export interface GetLinkRequest extends Omit<
 > {}
 
 export type GetLinkShape = (
-  resource:
-    | BucketsLink
-    | BillingBucketsLink
-    | FolderBucketsLink
-    | LocationsBucketsLink
-    | OrganizationBucketsLink,
+  resource: BucketsLink | BillingBucketsLink | FolderBucketsLink | OrganizationBucketsLink,
 ) => Effect.Effect<
   (
     request?: GetLinkRequest,
@@ -29,7 +23,6 @@ export type GetLinkShape = (
     | logging.GetProjectsLocationsBucketsLinksError
     | logging.GetBillingAccountsLocationsBucketsLinksError
     | logging.GetFoldersLocationsBucketsLinksError
-    | logging.GetLocationsBucketsLinksError
     | logging.GetOrganizationsLocationsBucketsLinksError,
     RuntimeContext
   >
@@ -38,7 +31,7 @@ export type GetLinkShape = (
 /**
  * Gets a link.
  *
- * Bind it to a {@link BucketsLink} or {@link BillingBucketsLink} or {@link FolderBucketsLink} or {@link LocationsBucketsLink} or {@link OrganizationBucketsLink} and provide {@link GetLinkHttp}. The
+ * Bind it to a {@link BucketsLink} or {@link BillingBucketsLink} or {@link FolderBucketsLink} or {@link OrganizationBucketsLink} and provide {@link GetLinkHttp}. The
  * host gets `roles/logging.linkViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage

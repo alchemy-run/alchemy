@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,70 @@ export default class CloudSupportGeneratedHost extends GCP.Function<CloudSupport
   "CloudSupportGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.CloudSupport.CloseCase();
+    const p1 = yield* GCP.CloudSupport.CreateCase();
+    const p2 = yield* GCP.CloudSupport.CreateCaseComment();
+    const p3 = yield* GCP.CloudSupport.DownloadMedia();
+    const p4 = yield* GCP.CloudSupport.EscalateCase();
+    const p5 = yield* GCP.CloudSupport.GetCase();
+    const p6 = yield* GCP.CloudSupport.GetCaseAttachment();
+    const p7 = yield* GCP.CloudSupport.GetCaseComment();
+    const p8 = yield* GCP.CloudSupport.ListCaseAttachments();
+    const p9 = yield* GCP.CloudSupport.ListCaseComments();
+    const p10 = yield* GCP.CloudSupport.ListCases();
+    const p11 = yield* GCP.CloudSupport.PatchCase();
+    const p12 = yield* GCP.CloudSupport.SearchCase();
+    const p13 = yield* GCP.CloudSupport.UploadMedia();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        CloseCase: probeOutcome(Retry.none(p0({ case: "alchemy-missing" } as never))),
+        CreateCase: probeOutcome(
+          Retry.none(p1({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        CreateCaseComment: probeOutcome(
+          Retry.none(
+            p2({ case: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
+        ),
+        DownloadMedia: probeOutcome(
+          Retry.none(p3({ case: "alchemy-missing", attachment: "alchemy-missing" } as never)),
+        ),
+        EscalateCase: probeOutcome(Retry.none(p4({ case: "alchemy-missing" } as never))),
+        GetCase: probeOutcome(Retry.none(p5({ case: "alchemy-missing" } as never))),
+        GetCaseAttachment: probeOutcome(
+          Retry.none(p6({ case: "alchemy-missing", attachment: "alchemy-missing" } as never)),
+        ),
+        GetCaseComment: probeOutcome(
+          Retry.none(p7({ case: "alchemy-missing", comment: "alchemy-missing" } as never)),
+        ),
+        ListCaseAttachments: probeOutcome(Retry.none(p8({ case: "alchemy-missing" } as never))),
+        ListCaseComments: probeOutcome(Retry.none(p9({ case: "alchemy-missing" } as never))),
+        ListCases: probeOutcome(Retry.none(p10({} as never))),
+        PatchCase: probeOutcome(Retry.none(p11({ case: "alchemy-missing" } as never))),
+        SearchCase: probeOutcome(Retry.none(p12({} as never))),
+        UploadMedia: probeOutcome(Retry.none(p13({ case: "alchemy-missing" } as never))),
+      }),
     };
-  }),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.CloudSupport.CloseCaseHttp,
+          GCP.CloudSupport.CreateCaseHttp,
+          GCP.CloudSupport.CreateCaseCommentHttp,
+          GCP.CloudSupport.DownloadMediaHttp,
+          GCP.CloudSupport.EscalateCaseHttp,
+          GCP.CloudSupport.GetCaseHttp,
+          GCP.CloudSupport.GetCaseAttachmentHttp,
+          GCP.CloudSupport.GetCaseCommentHttp,
+          GCP.CloudSupport.ListCaseAttachmentsHttp,
+          GCP.CloudSupport.ListCaseCommentsHttp,
+          GCP.CloudSupport.ListCasesHttp,
+          GCP.CloudSupport.PatchCaseHttp,
+          GCP.CloudSupport.SearchCaseHttp,
+          GCP.CloudSupport.UploadMediaHttp,
+        ),
+      ),
+    ),
+  ),
 ) {}

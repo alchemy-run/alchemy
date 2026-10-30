@@ -34,12 +34,6 @@ export const UpdateBucketAsyncHttp = Layer.effect(
         iam: { role: "roles/logging.configWriter" },
       },
       {
-        resource: "GCP.Logging.LocationsBucket",
-        operation: logging.updateAsyncLocationsBuckets,
-        param: "name",
-        iam: { role: "roles/logging.configWriter" },
-      },
-      {
         resource: "GCP.Logging.OrganizationLogBucket",
         operation: logging.updateAsyncOrganizationsLocationsBuckets,
         param: "name",

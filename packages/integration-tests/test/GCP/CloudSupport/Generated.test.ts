@@ -64,56 +64,95 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
+    describe("project", { concurrent: true }, () => {
+      test.provider("CloseCase (cloudsupport.cases.close)", () => probe("CloseCase", false), {
+        tags: ["provider:gcp", "provider:gcp:cloudsupport", "live"],
+        timeout: 600_000,
+      });
+      test.provider("CreateCase (cloudsupport.cases.create)", () => probe("CreateCase", false), {
+        tags: ["provider:gcp", "provider:gcp:cloudsupport", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "CreateCaseComment (cloudsupport.cases.comments.create)",
+        () => probe("CreateCaseComment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudsupport", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "DownloadMedia (cloudsupport.media.download)",
+        () => probe("DownloadMedia", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudsupport", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "EscalateCase (cloudsupport.cases.escalate)",
+        () => probe("EscalateCase", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudsupport", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider("GetCase (cloudsupport.cases.get)", () => probe("GetCase", false), {
+        tags: ["provider:gcp", "provider:gcp:cloudsupport", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "GetCaseAttachment (cloudsupport.cases.attachments.get)",
+        () => probe("GetCaseAttachment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudsupport", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetCaseComment (cloudsupport.cases.comments.get)",
+        () => probe("GetCaseComment", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudsupport", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListCaseAttachments (cloudsupport.cases.attachments.list)",
+        () => probe("ListCaseAttachments", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudsupport", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListCaseComments (cloudsupport.cases.comments.list)",
+        () => probe("ListCaseComments", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudsupport", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider("ListCases (cloudsupport.cases.list)", () => probe("ListCases", true), {
+        tags: ["provider:gcp", "provider:gcp:cloudsupport", "live"],
+        timeout: 600_000,
+      });
+      test.provider("PatchCase (cloudsupport.cases.patch)", () => probe("PatchCase", false), {
+        tags: ["provider:gcp", "provider:gcp:cloudsupport", "live"],
+        timeout: 600_000,
+      });
+      test.provider("SearchCase (cloudsupport.cases.search)", () => probe("SearchCase", false), {
+        tags: ["provider:gcp", "provider:gcp:cloudsupport", "live"],
+        timeout: 600_000,
+      });
+      test.provider("UploadMedia (cloudsupport.media.upload)", () => probe("UploadMedia", false), {
+        tags: ["provider:gcp", "provider:gcp:cloudsupport", "live"],
+        timeout: 600_000,
+      });
+    });
+
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
-      test.provider.skip(
-        "cloudsupport.cases.patch: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsupport.cases.search: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsupport.cases.list: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsupport.cases.close: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsupport.cases.escalate: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsupport.cases.get: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsupport.cases.create: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsupport.cases.comments.create: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsupport.cases.comments.list: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsupport.cases.comments.get: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsupport.cases.attachments.get: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsupport.cases.attachments.list: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
       test.provider.skip(
         "cloudsupport.organizations.supportEventSubscriptions.list: addressed under `organizations/`, not a project",
         () => Effect.void,
@@ -128,14 +167,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "cloudsupport.organizations.supportEventSubscriptions.expunge: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsupport.media.upload: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudsupport.media.download: addressed under `*/`, not a project",
         () => Effect.void,
       );
       test.provider.skip(

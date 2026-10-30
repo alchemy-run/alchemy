@@ -109,5 +109,10 @@
       "ListEngineConversations": "conversations need the paid Large Language Model add-on ('only available when Large Language Model add-on is enabled')",
       "ListDataStoreConversations": "conversations need the paid Large Language Model add-on ('only available when Large Language Model add-on is enabled')"
     }
+  },
+  "permissions": {
+    "discoveryengine.projects.locations.userEvents.write": "discoveryengine.userEvents.create",
+    "discoveryengine.projects.locations.userEvents.collect": "discoveryengine.userEvents.create",
+    "discoveryengine.projects.locations.collections.updateDataConnector": "discoveryengine.dataConnectors.update"
   }
 }

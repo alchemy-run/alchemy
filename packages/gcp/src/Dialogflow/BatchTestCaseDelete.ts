@@ -28,7 +28,7 @@ export type BatchTestCaseDeleteShape = () => Effect.Effect<
  * Runtime binding for `dialogflow.projects.locations.agents.testCases.batchDelete`.
  *
  * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link BatchTestCaseDeleteHttp}. The host gets `roles/dialogflow.admin` on the project.
+ * Provide {@link BatchTestCaseDeleteHttp}. The host gets `roles/dialogflow.testCaseAdmin` on the project.
  *
  * ### Usage
  * **Example:** Call `testCases.batchDelete`

@@ -198,13 +198,13 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-    });
-
-    // Discovery methods with no binding, and why.
-    describe("not generated", () => {
-      test.provider.skip(
-        "workloadmanager.projects.locations.insights.writeInsight: no predefined role grants its permission",
-        () => Effect.void,
+      test.provider(
+        "WriteInsight (workloadmanager.projects.locations.insights.writeInsight)",
+        () => probe("WriteInsight", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:workloadmanager", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

@@ -3,15 +3,15 @@ import type * as serviceusage from "@distilled.cloud/gcp/serviceusage_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ProjectService } from "./ProjectService.ts";
 
-export interface GetServiceRequest extends Omit<serviceusage.GetServicesRequest, "name"> {}
+export interface GetServiceRequest extends Omit<serviceusage.GetServicesRequest, "name"> {
+  /** Id of the service (`services/{service}`). */
+  service: string;
+}
 
-export type GetServiceShape = (
-  resource: ProjectService,
-) => Effect.Effect<
+export type GetServiceShape = () => Effect.Effect<
   (
-    request?: GetServiceRequest,
+    request: GetServiceRequest,
   ) => Effect.Effect<
     serviceusage.GoogleApiServiceusageV1Service,
     serviceusage.GetServicesError,
@@ -22,14 +22,14 @@ export type GetServiceShape = (
 /**
  * Returns the service configuration and enabled state for a given service.
  *
- * Bind it to a {@link ProjectService} and provide {@link GetServiceHttp}. The
- * host gets `roles/serviceusage.serviceUsageViewer` on the project (the service has no per-resource IAM policy).
+ * A call on the stack's project, so it takes no resource.
+ * Provide {@link GetServiceHttp}. The host gets `roles/serviceusage.serviceUsageViewer` on the project.
  *
  * ### Usage
  * **Example:** Call `services.get`
  * ```typescript
- * const getService = yield* GCP.ServiceUsage.GetService(projectService);
- * const response = yield* getService();
+ * const getService = yield* GCP.ServiceUsage.GetService();
+ * const response = yield* getService({ service: "..." });
  * ```
  *
  * @binding

@@ -3,18 +3,20 @@ import type * as monitoring from "@distilled.cloud/gcp/monitoring_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ServicesServiceLevelObjective } from "./ServicesServiceLevelObjective.ts";
 
 export interface GetServiceLevelObjectiveRequest extends Omit<
   monitoring.GetServicesServiceLevelObjectivesRequest,
   "name"
-> {}
+> {
+  /** Id of the service (`services/{service}`). */
+  service: string;
+  /** Id of the serviceLevelObjective (`serviceLevelObjectives/{serviceLevelObjective}`). */
+  serviceLevelObjective: string;
+}
 
-export type GetServiceLevelObjectiveShape = (
-  resource: ServicesServiceLevelObjective,
-) => Effect.Effect<
+export type GetServiceLevelObjectiveShape = () => Effect.Effect<
   (
-    request?: GetServiceLevelObjectiveRequest,
+    request: GetServiceLevelObjectiveRequest,
   ) => Effect.Effect<
     monitoring.ServiceLevelObjective,
     monitoring.GetServicesServiceLevelObjectivesError,
@@ -25,14 +27,14 @@ export type GetServiceLevelObjectiveShape = (
 /**
  * Get a ServiceLevelObjective by name.
  *
- * Bind it to a {@link ServicesServiceLevelObjective} and provide {@link GetServiceLevelObjectiveHttp}. The
- * host gets `roles/monitoring.servicesViewer` on the project (the service has no per-resource IAM policy).
+ * A call on the stack's project, so it takes no resource.
+ * Provide {@link GetServiceLevelObjectiveHttp}. The host gets `roles/monitoring.servicesViewer` on the project.
  *
  * ### Usage
  * **Example:** Call `serviceLevelObjectives.get`
  * ```typescript
- * const getServiceLevelObjective = yield* GCP.Monitoring.GetServiceLevelObjective(servicesServiceLevelObjective);
- * const response = yield* getServiceLevelObjective();
+ * const getServiceLevelObjective = yield* GCP.Monitoring.GetServiceLevelObjective();
+ * const response = yield* getServiceLevelObjective({ service: "...", serviceLevelObjective: "..." });
  * ```
  *
  * @binding

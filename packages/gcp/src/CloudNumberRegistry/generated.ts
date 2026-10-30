@@ -7,6 +7,8 @@ export * from "./DisableIpamAdminScope.ts";
 export * from "./DisableIpamAdminScopeHttp.ts";
 export * from "./FindCustomRangeFreeIpRanges.ts";
 export * from "./FindCustomRangeFreeIpRangesHttp.ts";
+export * from "./FindDiscoveredRangeFreeIpRanges.ts";
+export * from "./FindDiscoveredRangeFreeIpRangesHttp.ts";
 export * from "./GetCustomRange.ts";
 export * from "./GetCustomRangeHttp.ts";
 export * from "./GetDiscoveredRange.ts";

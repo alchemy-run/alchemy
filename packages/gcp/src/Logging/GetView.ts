@@ -6,7 +6,6 @@ import type * as Effect from "effect/Effect";
 import type { BillingBucketsView } from "./BillingBucketsView.ts";
 import type { BucketsView } from "./BucketsView.ts";
 import type { FolderBucketsView } from "./FolderBucketsView.ts";
-import type { LocationsBucketsView } from "./LocationsBucketsView.ts";
 import type { OrganizationBucketsView } from "./OrganizationBucketsView.ts";
 
 export interface GetViewRequest extends Omit<
@@ -15,12 +14,7 @@ export interface GetViewRequest extends Omit<
 > {}
 
 export type GetViewShape = (
-  resource:
-    | BucketsView
-    | BillingBucketsView
-    | FolderBucketsView
-    | LocationsBucketsView
-    | OrganizationBucketsView,
+  resource: BucketsView | BillingBucketsView | FolderBucketsView | OrganizationBucketsView,
 ) => Effect.Effect<
   (
     request?: GetViewRequest,
@@ -29,7 +23,6 @@ export type GetViewShape = (
     | logging.GetProjectsLocationsBucketsViewsError
     | logging.GetBillingAccountsLocationsBucketsViewsError
     | logging.GetFoldersLocationsBucketsViewsError
-    | logging.GetLocationsBucketsViewsError
     | logging.GetOrganizationsLocationsBucketsViewsError,
     RuntimeContext
   >
@@ -38,7 +31,7 @@ export type GetViewShape = (
 /**
  * Gets a view on a log bucket.
  *
- * Bind it to a {@link BucketsView} or {@link BillingBucketsView} or {@link FolderBucketsView} or {@link LocationsBucketsView} or {@link OrganizationBucketsView} and provide {@link GetViewHttp}. The
+ * Bind it to a {@link BucketsView} or {@link BillingBucketsView} or {@link FolderBucketsView} or {@link OrganizationBucketsView} and provide {@link GetViewHttp}. The
  * host gets `roles/logging.privateLogViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage

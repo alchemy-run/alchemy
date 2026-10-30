@@ -3,29 +3,29 @@ import type * as serviceusage from "@distilled.cloud/gcp/serviceusage_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ProjectService } from "./ProjectService.ts";
 
-export interface DisableServiceRequest extends Omit<serviceusage.DisableServicesRequest, "name"> {}
+export interface DisableServiceRequest extends Omit<serviceusage.DisableServicesRequest, "name"> {
+  /** Id of the service (`services/{service}`). */
+  service: string;
+}
 
-export type DisableServiceShape = (
-  resource: ProjectService,
-) => Effect.Effect<
+export type DisableServiceShape = () => Effect.Effect<
   (
-    request?: DisableServiceRequest,
+    request: DisableServiceRequest,
   ) => Effect.Effect<serviceusage.Operation, serviceusage.DisableServicesError, RuntimeContext>
 >;
 
 /**
  * Disable a service so that it can no longer be used with a project.
  *
- * Bind it to a {@link ProjectService} and provide {@link DisableServiceHttp}. The
- * host gets `roles/serviceusage.serviceUsageAdmin` on the project (the service has no per-resource IAM policy).
+ * A call on the stack's project, so it takes no resource.
+ * Provide {@link DisableServiceHttp}. The host gets `roles/serviceusage.serviceUsageAdmin` on the project.
  *
  * ### Usage
  * **Example:** Call `services.disable`
  * ```typescript
- * const disableService = yield* GCP.ServiceUsage.DisableService(projectService);
- * const response = yield* disableService();
+ * const disableService = yield* GCP.ServiceUsage.DisableService();
+ * const response = yield* disableService({ service: "..." });
  * ```
  *
  * @binding

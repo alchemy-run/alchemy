@@ -646,5 +646,8 @@
       "SetProjectCommonInstanceMetadata": "also needs iam.serviceAccounts.actAs on the project, which would let the host act as every service account",
       "GetGlobalFrontendSetting": "global frontend settings answer 503 'Internal error' on every call to the testing project (checked repeatedly on 2026-10-29): the feature isn't available to it yet"
     }
+  },
+  "permissions": {
+    "compute.interconnectGroups.createMembers": "compute.interconnectGroups.patch"
   }
 }

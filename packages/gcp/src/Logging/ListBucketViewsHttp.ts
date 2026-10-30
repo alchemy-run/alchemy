@@ -34,12 +34,6 @@ export const ListBucketViewsHttp = Layer.effect(
         iam: { role: "roles/logging.privateLogViewer" },
       },
       {
-        resource: "GCP.Logging.LocationsBucket",
-        operation: logging.listLocationsBucketsViews,
-        param: "parent",
-        iam: { role: "roles/logging.privateLogViewer" },
-      },
-      {
         resource: "GCP.Logging.OrganizationLogBucket",
         operation: logging.listOrganizationsLocationsBucketsViews,
         param: "parent",

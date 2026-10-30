@@ -85,6 +85,18 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("NetworkMonitoringProvider", { concurrent: true }, () => {
       test.provider.skip(
+        "DownloadMonitoringPointInstallScript (networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadInstallScript): NetworkMonitoringProvider: Monitoring providers (AppNeta) need the provider's Terms of Service accepted for the project; otherwise the create operation fails with \"Terms of Service (GCP_TEST_NETWORKMANAGEMENT_APPNETA)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "DownloadMonitoringPointRecreateInstallScript (networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadRecreateInstallScript): NetworkMonitoringProvider: Monitoring providers (AppNeta) need the provider's Terms of Service accepted for the project; otherwise the create operation fails with \"Terms of Service (GCP_TEST_NETWORKMANAGEMENT_APPNETA)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "DownloadMonitoringPointServerConnectConfig (networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadServerConnectConfig): NetworkMonitoringProvider: Monitoring providers (AppNeta) need the provider's Terms of Service accepted for the project; otherwise the create operation fails with \"Terms of Service (GCP_TEST_NETWORKMANAGEMENT_APPNETA)",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "GetNetworkMonitoringProviderMonitoringPoint (networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.get): NetworkMonitoringProvider: Monitoring providers (AppNeta) need the provider's Terms of Service accepted for the project; otherwise the create operation fails with \"Terms of Service (GCP_TEST_NETWORKMANAGEMENT_APPNETA)",
         () => Effect.void,
       );
@@ -126,6 +138,14 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
+      test.provider(
+        "QueryOrgVpcFlowLogsConfigs (networkmanagement.projects.locations.vpcFlowLogsConfigs.queryOrgVpcFlowLogsConfigs)",
+        () => probe("QueryOrgVpcFlowLogsConfigs", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkmanagement", "live"],
+          timeout: 600_000,
+        },
+      );
     });
 
     describe("VpcFlowLogsConfig", { concurrent: true }, () => {
@@ -146,11 +166,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "networkmanagement.projects.locations.vpcFlowLogsConfigs.showEffectiveFlowLogsConfigs: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "networkmanagement.projects.locations.vpcFlowLogsConfigs.queryOrgVpcFlowLogsConfigs: no predefined role grants its permission",
+        "networkmanagement.projects.locations.vpcFlowLogsConfigs.showEffectiveFlowLogsConfigs: no distilled operation showEffectiveFlowLogsConfigsProjectsLocationsVpcFlowLogsConfigs",
         () => Effect.void,
       );
       test.provider.skip(
@@ -167,18 +183,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "networkmanagement.projects.locations.networkMonitoringProviders.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadServerConnectConfig: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadInstallScript: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadRecreateInstallScript: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

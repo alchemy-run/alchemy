@@ -34,12 +34,6 @@ export const UndeleteBucketHttp = Layer.effect(
         iam: { role: "roles/logging.configWriter" },
       },
       {
-        resource: "GCP.Logging.LocationsBucket",
-        operation: logging.undeleteLocationsBuckets,
-        param: "name",
-        iam: { role: "roles/logging.configWriter" },
-      },
-      {
         resource: "GCP.Logging.OrganizationLogBucket",
         operation: logging.undeleteOrganizationsLocationsBuckets,
         param: "name",

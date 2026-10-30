@@ -20,7 +20,7 @@ export const BatchTestCaseDeleteHttp = Layer.effect(
         param: "parent",
         location: true,
         children: [["agents", "agent"]],
-        role: "roles/dialogflow.admin",
+        role: "roles/dialogflow.testCaseAdmin",
       },
     ],
   }),

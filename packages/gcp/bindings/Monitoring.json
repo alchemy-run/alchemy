@@ -38,5 +38,9 @@
     "args": {
       "ListTimeSeries": "{ filter: 'metric.type = \"compute.googleapis.com/instance/cpu/utilization\"', \"interval.startTime\": \"2026-01-01T00:00:00Z\", \"interval.endTime\": \"2026-01-01T01:00:00Z\" }"
     }
+  },
+  "permissions": {
+    "monitoring.projects.timeSeries.query": "monitoring.timeSeries.list",
+    "monitoring.projects.timeSeries.createService": "monitoring.timeSeries.create"
   }
 }

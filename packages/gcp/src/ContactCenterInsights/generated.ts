@@ -87,6 +87,8 @@ export * from "./IngestConversation.ts";
 export * from "./IngestConversationHttp.ts";
 export * from "./IngestDatasetConversation.ts";
 export * from "./IngestDatasetConversationHttp.ts";
+export * from "./InitializeEncryptionSpec.ts";
+export * from "./InitializeEncryptionSpecHttp.ts";
 export * from "./ListAnalysisRules.ts";
 export * from "./ListAnalysisRulesHttp.ts";
 export * from "./ListAssessmentNotes.ts";

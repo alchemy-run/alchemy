@@ -19,7 +19,7 @@ export const GetOverrideHttp = Layer.effect(
         resource: "GCP.Apigee.EnvironmentsTraceConfigOverride",
         operation: apigee.getOrganizationsEnvironmentsTraceConfigOverrides,
         param: "name",
-        iam: { role: "roles/apigee.analyticsViewer" },
+        iam: { role: "roles/apigee.viewer" },
       },
     ],
   }),

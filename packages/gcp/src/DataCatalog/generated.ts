@@ -71,6 +71,8 @@ export * from "./RenameTagTemplateFieldEnumValue.ts";
 export * from "./RenameTagTemplateFieldEnumValueHttp.ts";
 export * from "./ReplaceTaxonomy.ts";
 export * from "./ReplaceTaxonomyHttp.ts";
+export * from "./SearchCatalog.ts";
+export * from "./SearchCatalogHttp.ts";
 export * from "./StarEntryGroupEntry.ts";
 export * from "./StarEntryGroupEntryHttp.ts";
 export * from "./UnstarEntryGroupEntry.ts";

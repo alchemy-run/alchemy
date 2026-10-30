@@ -27,7 +27,7 @@
     "pubsub.projects.subscriptions.modifyPushConfig": "pubsub.subscriptions.update",
     "pubsub.projects.subscriptions.detach": "pubsub.topics.detachSubscription",
     "pubsub.projects.schemas.validateMessage": "pubsub.schemas.validate",
-    "pubsub.projects.schemas.deleteRevision": "pubsub.schemas.delete"
+    "pubsub.projects.schemas.deleteRevision": "pubsub.schemas.commit"
   },
   "names": {},
   "skip": {},

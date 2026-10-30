@@ -271,6 +271,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "SearchCatalog (datacatalog.catalog.search)",
+        () => probe("SearchCatalog", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "StarEntryGroupEntry (datacatalog.projects.locations.entryGroups.entries.star)",
         () => probe("StarEntryGroupEntry", false),
         {
@@ -346,14 +354,6 @@ describe.skipIf(!!process.env.FAST)(
           tags: ["provider:gcp", "provider:gcp:datacatalog", "live"],
           timeout: 600_000,
         },
-      );
-    });
-
-    // Discovery methods with no binding, and why.
-    describe("not generated", () => {
-      test.provider.skip(
-        "datacatalog.catalog.search: no predefined role grants its permission",
-        () => Effect.void,
       );
     });
   },

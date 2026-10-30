@@ -288,16 +288,16 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "DeleteDicomStoreStudySery (healthcare.projects.locations.datasets.dicomStores.studies.series.delete)",
-        () => probe("DeleteDicomStoreStudySery", false),
+        "DeleteDicomStoreStudySeries (healthcare.projects.locations.datasets.dicomStores.studies.series.delete)",
+        () => probe("DeleteDicomStoreStudySeries", false),
         {
           tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
           timeout: 600_000,
         },
       );
       test.provider(
-        "DeleteDicomStoreStudySeryInstance (healthcare.projects.locations.datasets.dicomStores.studies.series.instances.delete)",
-        () => probe("DeleteDicomStoreStudySeryInstance", false),
+        "DeleteDicomStoreStudySeriesInstance (healthcare.projects.locations.datasets.dicomStores.studies.series.instances.delete)",
+        () => probe("DeleteDicomStoreStudySeriesInstance", false),
         {
           tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
           timeout: 600_000,
@@ -360,8 +360,8 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "SearchSeryForInstances (healthcare.projects.locations.datasets.dicomStores.studies.series.searchForInstances)",
-        () => probe("SearchSeryForInstances", false),
+        "SearchSeriesForInstances (healthcare.projects.locations.datasets.dicomStores.studies.series.searchForInstances)",
+        () => probe("SearchSeriesForInstances", false),
         {
           tags: ["provider:gcp", "provider:gcp:healthcare", "live"],
           timeout: 600_000,

@@ -5,7 +5,6 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { BillingBucket } from "./BillingBucket.ts";
 import type { FolderBucket } from "./FolderBucket.ts";
-import type { LocationsBucket } from "./LocationsBucket.ts";
 import type { LogBucket } from "./LogBucket.ts";
 import type { OrganizationLogBucket } from "./OrganizationLogBucket.ts";
 
@@ -15,7 +14,7 @@ export interface GetBucketRequest extends Omit<
 > {}
 
 export type GetBucketShape = (
-  resource: LogBucket | BillingBucket | FolderBucket | LocationsBucket | OrganizationLogBucket,
+  resource: LogBucket | BillingBucket | FolderBucket | OrganizationLogBucket,
 ) => Effect.Effect<
   (
     request?: GetBucketRequest,
@@ -24,7 +23,6 @@ export type GetBucketShape = (
     | logging.GetProjectsLocationsBucketsError
     | logging.GetBillingAccountsLocationsBucketsError
     | logging.GetFoldersLocationsBucketsError
-    | logging.GetLocationsBucketsError
     | logging.GetOrganizationsLocationsBucketsError,
     RuntimeContext
   >
@@ -33,7 +31,7 @@ export type GetBucketShape = (
 /**
  * Gets a log bucket.
  *
- * Bind it to a {@link LogBucket} or {@link BillingBucket} or {@link FolderBucket} or {@link LocationsBucket} or {@link OrganizationLogBucket} and provide {@link GetBucketHttp}. The
+ * Bind it to a {@link LogBucket} or {@link BillingBucket} or {@link FolderBucket} or {@link OrganizationLogBucket} and provide {@link GetBucketHttp}. The
  * host gets `roles/logging.privateLogViewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage

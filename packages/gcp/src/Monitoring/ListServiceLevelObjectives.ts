@@ -3,18 +3,18 @@ import type * as monitoring from "@distilled.cloud/gcp/monitoring_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { Service } from "./Service.ts";
 
 export interface ListServiceLevelObjectivesRequest extends Omit<
   monitoring.ListServicesServiceLevelObjectivesRequest,
   "parent"
-> {}
+> {
+  /** Id of the service (`services/{service}`). */
+  service: string;
+}
 
-export type ListServiceLevelObjectivesShape = (
-  resource: Service,
-) => Effect.Effect<
+export type ListServiceLevelObjectivesShape = () => Effect.Effect<
   (
-    request?: ListServiceLevelObjectivesRequest,
+    request: ListServiceLevelObjectivesRequest,
   ) => Effect.Effect<
     monitoring.ListServiceLevelObjectivesResponse,
     monitoring.ListServicesServiceLevelObjectivesError,
@@ -25,14 +25,14 @@ export type ListServiceLevelObjectivesShape = (
 /**
  * List the ServiceLevelObjectives for the given Service.
  *
- * Bind it to a {@link Service} and provide {@link ListServiceLevelObjectivesHttp}. The
- * host gets `roles/monitoring.servicesViewer` on the project (the service has no per-resource IAM policy).
+ * A call on the stack's project, so it takes no resource.
+ * Provide {@link ListServiceLevelObjectivesHttp}. The host gets `roles/monitoring.servicesViewer` on the project.
  *
  * ### Usage
  * **Example:** Call `serviceLevelObjectives.list`
  * ```typescript
- * const listServiceLevelObjectives = yield* GCP.Monitoring.ListServiceLevelObjectives(service);
- * const response = yield* listServiceLevelObjectives();
+ * const listServiceLevelObjectives = yield* GCP.Monitoring.ListServiceLevelObjectives();
+ * const response = yield* listServiceLevelObjectives({ service: "..." });
  * ```
  *
  * @binding

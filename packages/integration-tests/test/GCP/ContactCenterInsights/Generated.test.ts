@@ -496,6 +496,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "InitializeEncryptionSpec (contactcenterinsights.projects.locations.encryptionSpec.initialize)",
+        () => probe("InitializeEncryptionSpec", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:contactcenterinsights", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "ListAnalysisRules (contactcenterinsights.projects.locations.analysisRules.list)",
         () => probe("ListAnalysisRules", true),
         {
@@ -732,10 +740,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "contactcenterinsights.projects.locations.authorizedViewSets.authorizedViews.conversations.generateSignedAudio: name collision on GenerateConversationSignedAudio",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "contactcenterinsights.projects.locations.encryptionSpec.initialize: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

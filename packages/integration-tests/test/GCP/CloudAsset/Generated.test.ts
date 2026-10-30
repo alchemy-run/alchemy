@@ -64,85 +64,142 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
-    describe("Feed", { concurrent: true }, () => {
-      test.provider("GetFeed (cloudasset.feeds.get)", () => probe("GetFeed", true), {
-        tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
-        timeout: 600_000,
-      });
-    });
-
-    describe("SavedQuery", { concurrent: true }, () => {
+    describe("project", { concurrent: true }, () => {
       test.provider(
-        "GetSavedQuery (cloudasset.savedQueries.get)",
-        () => probe("GetSavedQuery", true),
+        "AnalyzeIamPolicy (cloudasset.analyzeIamPolicy)",
+        () => probe("AnalyzeIamPolicy", false),
         {
           tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
           timeout: 600_000,
         },
       );
-    });
-
-    // Discovery methods with no binding, and why.
-    describe("not generated", () => {
-      test.provider.skip(
-        "cloudasset.assets.list: addressed under `*/`, not a project",
-        () => Effect.void,
+      test.provider(
+        "AnalyzeIamPolicyLongrunning (cloudasset.analyzeIamPolicyLongrunning)",
+        () => probe("AnalyzeIamPolicyLongrunning", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "cloudasset.savedQueries.list: addressed under `*/`, not a project",
-        () => Effect.void,
+      test.provider("AnalyzeMove (cloudasset.analyzeMove)", () => probe("AnalyzeMove", false), {
+        tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "AnalyzeOrgPolicies (cloudasset.analyzeOrgPolicies)",
+        () => probe("AnalyzeOrgPolicies", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "cloudasset.feeds.list: addressed under `*/`, not a project",
-        () => Effect.void,
+      test.provider(
+        "AnalyzeOrgPolicyGovernedAssets (cloudasset.analyzeOrgPolicyGovernedAssets)",
+        () => probe("AnalyzeOrgPolicyGovernedAssets", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "cloudasset.searchAllIamPolicies: addressed under `*/`, not a project",
-        () => Effect.void,
+      test.provider(
+        "AnalyzeOrgPolicyGovernedContainers (cloudasset.analyzeOrgPolicyGovernedContainers)",
+        () => probe("AnalyzeOrgPolicyGovernedContainers", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "cloudasset.batchGetAssetsHistory: addressed under `*/`, not a project",
-        () => Effect.void,
+      test.provider(
+        "BatchEffectiveIamPolicyGet (cloudasset.effectiveIamPolicies.batchGet)",
+        () => probe("BatchEffectiveIamPolicyGet", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "cloudasset.exportAssets: addressed under `*/`, not a project",
-        () => Effect.void,
+      test.provider(
+        "BatchGetAssetsHistory (cloudasset.batchGetAssetsHistory)",
+        () => probe("BatchGetAssetsHistory", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "cloudasset.searchAllResources: addressed under `*/`, not a project",
-        () => Effect.void,
+      test.provider("DeleteFeed (cloudasset.feeds.delete)", () => probe("DeleteFeed", false), {
+        tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "DeleteSavedQuery (cloudasset.savedQueries.delete)",
+        () => probe("DeleteSavedQuery", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "cloudasset.analyzeOrgPolicyGovernedAssets: addressed under `*/`, not a project",
-        () => Effect.void,
+      test.provider("ExportAssets (cloudasset.exportAssets)", () => probe("ExportAssets", false), {
+        tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+        timeout: 600_000,
+      });
+      test.provider("GetFeed (cloudasset.feeds.get)", () => probe("GetFeed", false), {
+        tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "GetSavedQuery (cloudasset.savedQueries.get)",
+        () => probe("GetSavedQuery", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "cloudasset.analyzeMove: addressed under `*/`, not a project",
-        () => Effect.void,
+      test.provider("ListAssets (cloudasset.assets.list)", () => probe("ListAssets", true), {
+        tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+        timeout: 600_000,
+      });
+      test.provider("ListFeeds (cloudasset.feeds.list)", () => probe("ListFeeds", true), {
+        tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "ListSavedQueries (cloudasset.savedQueries.list)",
+        () => probe("ListSavedQueries", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "cloudasset.analyzeIamPolicyLongrunning: addressed under `*/`, not a project",
-        () => Effect.void,
+      test.provider("PatchFeed (cloudasset.feeds.patch)", () => probe("PatchFeed", false), {
+        tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "PatchSavedQuery (cloudasset.savedQueries.patch)",
+        () => probe("PatchSavedQuery", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "cloudasset.analyzeOrgPolicies: addressed under `*/`, not a project",
-        () => Effect.void,
+      test.provider("QueryAssets (cloudasset.queryAssets)", () => probe("QueryAssets", false), {
+        tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "SearchAllIamPolicies (cloudasset.searchAllIamPolicies)",
+        () => probe("SearchAllIamPolicies", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "cloudasset.analyzeIamPolicy: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudasset.analyzeOrgPolicyGovernedContainers: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudasset.queryAssets: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudasset.effectiveIamPolicies.batchGet: addressed under `*/`, not a project",
-        () => Effect.void,
+      test.provider(
+        "SearchAllResources (cloudasset.searchAllResources)",
+        () => probe("SearchAllResources", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudasset", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

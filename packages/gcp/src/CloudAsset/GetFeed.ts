@@ -3,29 +3,29 @@ import type * as cloudasset from "@distilled.cloud/gcp/cloudasset_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { Feed } from "./Feed.ts";
 
-export interface GetFeedRequest extends Omit<cloudasset.GetFeedsRequest, "name"> {}
+export interface GetFeedRequest extends Omit<cloudasset.GetFeedsRequest, "name"> {
+  /** Id of the feed (`feeds/{feed}`). */
+  feed: string;
+}
 
-export type GetFeedShape = (
-  resource: Feed,
-) => Effect.Effect<
+export type GetFeedShape = () => Effect.Effect<
   (
-    request?: GetFeedRequest,
+    request: GetFeedRequest,
   ) => Effect.Effect<cloudasset.Feed, cloudasset.GetFeedsError, RuntimeContext>
 >;
 
 /**
  * Gets details about an asset feed.
  *
- * Bind it to a {@link Feed} and provide {@link GetFeedHttp}. The
- * host gets `roles/cloudasset.owner` on the project (the service has no per-resource IAM policy).
+ * A call on the stack's project, so it takes no resource.
+ * Provide {@link GetFeedHttp}. The host gets `roles/cloudasset.owner` on the project.
  *
  * ### Usage
  * **Example:** Call `feeds.get`
  * ```typescript
- * const getFeed = yield* GCP.CloudAsset.GetFeed(feed);
- * const response = yield* getFeed();
+ * const getFeed = yield* GCP.CloudAsset.GetFeed();
+ * const response = yield* getFeed({ feed: "..." });
  * ```
  *
  * @binding

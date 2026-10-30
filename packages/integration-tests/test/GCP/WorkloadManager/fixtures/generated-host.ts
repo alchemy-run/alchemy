@@ -25,6 +25,7 @@ export default class WorkloadManagerGeneratedHost extends GCP.Function<WorkloadM
     const p7 = yield* GCP.WorkloadManager.ListDeployments();
     const p8 = yield* GCP.WorkloadManager.ListEvaluations();
     const p9 = yield* GCP.WorkloadManager.ListRules();
+    const p10 = yield* GCP.WorkloadManager.WriteInsight();
     return {
       fetch: serveProbes({
         CreateDeployment: probeOutcome(
@@ -61,6 +62,7 @@ export default class WorkloadManagerGeneratedHost extends GCP.Function<WorkloadM
         ListDeployments: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
         ListEvaluations: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
         ListRules: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
+        WriteInsight: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
@@ -77,6 +79,7 @@ export default class WorkloadManagerGeneratedHost extends GCP.Function<WorkloadM
           GCP.WorkloadManager.ListDeploymentsHttp,
           GCP.WorkloadManager.ListEvaluationsHttp,
           GCP.WorkloadManager.ListRulesHttp,
+          GCP.WorkloadManager.WriteInsightHttp,
         ),
       ),
     ),

@@ -42,8 +42,8 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
     const p12 = yield* GCP.Healthcare.DeidentifyFhirStore(ProbeFhirStore);
     const p13 = yield* GCP.Healthcare.DeleteConsentRevision(ProbeConsent);
     const p14 = yield* GCP.Healthcare.DeleteDicomStoreStudy(ProbeDicomStore);
-    const p15 = yield* GCP.Healthcare.DeleteDicomStoreStudySery(ProbeDicomStore);
-    const p16 = yield* GCP.Healthcare.DeleteDicomStoreStudySeryInstance(ProbeDicomStore);
+    const p15 = yield* GCP.Healthcare.DeleteDicomStoreStudySeries(ProbeDicomStore);
+    const p16 = yield* GCP.Healthcare.DeleteDicomStoreStudySeriesInstance(ProbeDicomStore);
     const p17 = yield* GCP.Healthcare.EvaluateConsentStoreUserConsents(ProbeConsentStore);
     const p18 = yield* GCP.Healthcare.ExecuteFhirBundle(ProbeFhirStore);
     const p19 = yield* GCP.Healthcare.ExplainFhirStoreDataAccess(ProbeFhirStore);
@@ -87,7 +87,7 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
     const p57 = yield* GCP.Healthcare.SearchDicomStoreForSeries(ProbeDicomStore);
     const p58 = yield* GCP.Healthcare.SearchDicomStoreForStudies(ProbeDicomStore);
     const p59 = yield* GCP.Healthcare.SearchFhirStoreFhir(ProbeFhirStore);
-    const p60 = yield* GCP.Healthcare.SearchSeryForInstances(ProbeDicomStore);
+    const p60 = yield* GCP.Healthcare.SearchSeriesForInstances(ProbeDicomStore);
     const p61 = yield* GCP.Healthcare.SearchStudyForInstances(ProbeDicomStore);
     const p62 = yield* GCP.Healthcare.SearchStudyForSeries(ProbeDicomStore);
     const p63 = yield* GCP.Healthcare.SetDicomStoreBlobStorageSettings(ProbeDicomStore);
@@ -132,10 +132,10 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
         DeleteDicomStoreStudy: probeOutcome(
           Retry.none(p14({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        DeleteDicomStoreStudySery: probeOutcome(
+        DeleteDicomStoreStudySeries: probeOutcome(
           Retry.none(p15({ dicomWebPath: "alchemy-missing" } as never)),
         ),
-        DeleteDicomStoreStudySeryInstance: probeOutcome(
+        DeleteDicomStoreStudySeriesInstance: probeOutcome(
           Retry.none(p16({ dicomWebPath: "alchemy-missing" } as never)),
         ),
         EvaluateConsentStoreUserConsents: probeOutcome(Retry.none(p17({} as never))),
@@ -193,7 +193,7 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
           Retry.none(p58({ dicomWebPath: "alchemy-missing" } as never)),
         ),
         SearchFhirStoreFhir: probeOutcome(Retry.none(p59({} as never))),
-        SearchSeryForInstances: probeOutcome(
+        SearchSeriesForInstances: probeOutcome(
           Retry.none(p60({ dicomWebPath: "alchemy-missing" } as never)),
         ),
         SearchStudyForInstances: probeOutcome(
@@ -230,8 +230,8 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
           GCP.Healthcare.DeidentifyFhirStoreHttp,
           GCP.Healthcare.DeleteConsentRevisionHttp,
           GCP.Healthcare.DeleteDicomStoreStudyHttp,
-          GCP.Healthcare.DeleteDicomStoreStudySeryHttp,
-          GCP.Healthcare.DeleteDicomStoreStudySeryInstanceHttp,
+          GCP.Healthcare.DeleteDicomStoreStudySeriesHttp,
+          GCP.Healthcare.DeleteDicomStoreStudySeriesInstanceHttp,
           GCP.Healthcare.EvaluateConsentStoreUserConsentsHttp,
           GCP.Healthcare.ExecuteFhirBundleHttp,
           GCP.Healthcare.ExplainFhirStoreDataAccessHttp,
@@ -277,7 +277,7 @@ export default class HealthcareGeneratedHost extends GCP.Function<HealthcareGene
           GCP.Healthcare.SearchDicomStoreForSeriesHttp,
           GCP.Healthcare.SearchDicomStoreForStudiesHttp,
           GCP.Healthcare.SearchFhirStoreFhirHttp,
-          GCP.Healthcare.SearchSeryForInstancesHttp,
+          GCP.Healthcare.SearchSeriesForInstancesHttp,
           GCP.Healthcare.SearchStudyForInstancesHttp,
           GCP.Healthcare.SearchStudyForSeriesHttp,
           GCP.Healthcare.SetDicomStoreBlobStorageSettingsHttp,

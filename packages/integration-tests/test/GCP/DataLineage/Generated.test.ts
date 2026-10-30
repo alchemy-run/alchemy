@@ -115,8 +115,24 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("project", { concurrent: true }, () => {
       test.provider(
+        "GetConfig (datalineage.projects.locations.config.get)",
+        () => probe("GetConfig", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datalineage", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "ListProcesses (datalineage.projects.locations.processes.list)",
         () => probe("ListProcesses", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:datalineage", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "PatchConfig (datalineage.projects.locations.config.patch)",
+        () => probe("PatchConfig", false),
         {
           tags: ["provider:gcp", "provider:gcp:datalineage", "live"],
           timeout: 600_000,
@@ -126,14 +142,6 @@ describe.skipIf(!!process.env.FAST)(
 
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
-      test.provider.skip(
-        "datalineage.projects.locations.config.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "datalineage.projects.locations.config.patch: no predefined role grants its permission",
-        () => Effect.void,
-      );
       test.provider.skip(
         "datalineage.folders.locations.config.get: addressed under `folders/`, not a project",
         () => Effect.void,

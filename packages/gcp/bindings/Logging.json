@@ -162,6 +162,10 @@
     "logging.projects.getSettings": "logging.settings.get",
     "logging.projects.locations.savedQueries.get": "logging.queries.getShared",
     "logging.projects.locations.savedQueries.list": "logging.queries.listShared",
-    "logging.projects.locations.recentQueries.list": "logging.queries.listShared"
+    "logging.projects.locations.recentQueries.list": "logging.queries.listShared",
+    "logging.getSettings": "logging.settings.get",
+    "logging.updateSettings": "logging.settings.update",
+    "logging.getCmekSettings": "logging.settings.get",
+    "logging.updateCmekSettings": "logging.settings.update"
   }
 }

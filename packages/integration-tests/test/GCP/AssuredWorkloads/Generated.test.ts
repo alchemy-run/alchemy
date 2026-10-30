@@ -105,7 +105,23 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "AnalyzeWorkloadMove (assuredworkloads.organizations.locations.workloads.analyzeWorkloadMove): Workload: Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "ApplyWorkloadUpdate (assuredworkloads.organizations.locations.workloads.updates.apply): Workload: Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "EnableWorkloadComplianceUpdates (assuredworkloads.organizations.locations.workloads.enableComplianceUpdates): Workload: Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "EnableWorkloadResourceMonitoring (assuredworkloads.organizations.locations.workloads.enableResourceMonitoring): Workload: Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "GetWorkload (assuredworkloads.organizations.locations.workloads.get): Workload: Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
       test.provider.skip(
@@ -118,6 +134,14 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "ListWorkloadViolations (assuredworkloads.organizations.locations.workloads.violations.list): Workload: Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "MutateWorkloadPartnerPermissions (assuredworkloads.organizations.locations.workloads.mutatePartnerPermissions): Workload: Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "RestrictWorkloadAllowedResources (assuredworkloads.organizations.locations.workloads.restrictAllowedResources): Workload: Workloads live under an organization the credentials administer. Set (GOOGLE_ORGANIZATION_ID)",
         () => Effect.void,
       );
     });
@@ -141,31 +165,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "assuredworkloads.organizations.locations.workloads.mutatePartnerPermissions: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "assuredworkloads.organizations.locations.workloads.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "assuredworkloads.organizations.locations.workloads.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "assuredworkloads.organizations.locations.workloads.analyzeWorkloadMove: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "assuredworkloads.organizations.locations.workloads.enableComplianceUpdates: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "assuredworkloads.organizations.locations.workloads.enableResourceMonitoring: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "assuredworkloads.organizations.locations.workloads.restrictAllowedResources: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

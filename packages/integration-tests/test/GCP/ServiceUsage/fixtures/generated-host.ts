@@ -4,7 +4,6 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
-import { ProbeProjectService } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated ServiceUsage binding as its own
@@ -16,23 +15,32 @@ export default class ServiceUsageGeneratedHost extends GCP.Function<ServiceUsage
   "ServiceUsageGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.ServiceUsage.DisableService(ProbeProjectService);
-    const p1 = yield* GCP.ServiceUsage.EnableService(ProbeProjectService);
-    const p2 = yield* GCP.ServiceUsage.GetService(ProbeProjectService);
+    const p0 = yield* GCP.ServiceUsage.BatchServiceEnable();
+    const p1 = yield* GCP.ServiceUsage.BatchServiceGet();
+    const p2 = yield* GCP.ServiceUsage.DisableService();
+    const p3 = yield* GCP.ServiceUsage.EnableService();
+    const p4 = yield* GCP.ServiceUsage.GetService();
+    const p5 = yield* GCP.ServiceUsage.ListServices();
     return {
       fetch: serveProbes({
-        DisableService: probeOutcome(Retry.none(p0({} as never))),
-        EnableService: probeOutcome(Retry.none(p1({} as never))),
-        GetService: probeOutcome(Retry.none(p2({} as never))),
+        BatchServiceEnable: probeOutcome(Retry.none(p0({} as never))),
+        BatchServiceGet: probeOutcome(Retry.none(p1({} as never))),
+        DisableService: probeOutcome(Retry.none(p2({ service: "alchemy-missing" } as never))),
+        EnableService: probeOutcome(Retry.none(p3({ service: "alchemy-missing" } as never))),
+        GetService: probeOutcome(Retry.none(p4({ service: "alchemy-missing" } as never))),
+        ListServices: probeOutcome(Retry.none(p5({} as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.ServiceUsage.BatchServiceEnableHttp,
+          GCP.ServiceUsage.BatchServiceGetHttp,
           GCP.ServiceUsage.DisableServiceHttp,
           GCP.ServiceUsage.EnableServiceHttp,
           GCP.ServiceUsage.GetServiceHttp,
+          GCP.ServiceUsage.ListServicesHttp,
         ),
       ),
     ),

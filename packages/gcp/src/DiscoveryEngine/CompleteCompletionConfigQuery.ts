@@ -28,7 +28,7 @@ export type CompleteCompletionConfigQueryShape = () => Effect.Effect<
  * Completes the user input with advanced keyword suggestions.
  *
  * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link CompleteCompletionConfigQueryHttp}. The host gets `roles/discoveryengine.agentspaceEditor` on the project.
+ * Provide {@link CompleteCompletionConfigQueryHttp}. The host gets `roles/discoveryengine.agentspaceViewer` on the project.
  *
  * ### Usage
  * **Example:** Call `completionConfig.completeQuery`

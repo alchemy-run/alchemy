@@ -3,29 +3,29 @@ import type * as serviceusage from "@distilled.cloud/gcp/serviceusage_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { ProjectService } from "./ProjectService.ts";
 
-export interface EnableServiceRequest extends Omit<serviceusage.EnableServicesRequest, "name"> {}
+export interface EnableServiceRequest extends Omit<serviceusage.EnableServicesRequest, "name"> {
+  /** Id of the service (`services/{service}`). */
+  service: string;
+}
 
-export type EnableServiceShape = (
-  resource: ProjectService,
-) => Effect.Effect<
+export type EnableServiceShape = () => Effect.Effect<
   (
-    request?: EnableServiceRequest,
+    request: EnableServiceRequest,
   ) => Effect.Effect<serviceusage.Operation, serviceusage.EnableServicesError, RuntimeContext>
 >;
 
 /**
  * Enable a service so that it can be used with a project.
  *
- * Bind it to a {@link ProjectService} and provide {@link EnableServiceHttp}. The
- * host gets `roles/serviceusage.serviceUsageAdmin` on the project (the service has no per-resource IAM policy).
+ * A call on the stack's project, so it takes no resource.
+ * Provide {@link EnableServiceHttp}. The host gets `roles/serviceusage.serviceUsageAdmin` on the project.
  *
  * ### Usage
  * **Example:** Call `services.enable`
  * ```typescript
- * const enableService = yield* GCP.ServiceUsage.EnableService(projectService);
- * const response = yield* enableService();
+ * const enableService = yield* GCP.ServiceUsage.EnableService();
+ * const response = yield* enableService({ service: "..." });
  * ```
  *
  * @binding

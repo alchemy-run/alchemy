@@ -111,6 +111,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "FindDiscoveredRangeFreeIpRanges (cloudnumberregistry.projects.locations.discoveredRanges.findFreeIpRanges)",
+        () => probe("FindDiscoveredRangeFreeIpRanges", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:cloudnumberregistry", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "GetDiscoveredRange (cloudnumberregistry.projects.locations.discoveredRanges.get)",
         () => probe("GetDiscoveredRange", false),
         {
@@ -181,11 +189,7 @@ describe.skipIf(!!process.env.FAST)(
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
       test.provider.skip(
-        "cloudnumberregistry.projects.locations.discoveredRanges.showUtilization: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "cloudnumberregistry.projects.locations.discoveredRanges.findFreeIpRanges: no predefined role grants its permission",
+        "cloudnumberregistry.projects.locations.discoveredRanges.showUtilization: no distilled operation showUtilizationProjectsLocationsDiscoveredRanges",
         () => Effect.void,
       );
       test.provider.skip(

@@ -121,6 +121,10 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
+        "GetOsImage (baremetalsolution.projects.locations.osImages.get): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "GetVolume (baremetalsolution.projects.locations.volumes.get): Bare Metal Solution is contracted physical hardware: nothing exists to bind without a signed order",
         () => Effect.void,
       );
@@ -245,10 +249,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "baremetalsolution.projects.locations.provisioningQuotas.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "baremetalsolution.projects.locations.osImages.get: no predefined role grants its permission",
         () => Effect.void,
       );
     });

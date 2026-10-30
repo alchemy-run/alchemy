@@ -64,7 +64,23 @@ describe.skipIf(!!process.env.FAST)(
 
     afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
 
-    describe("ProjectService", { concurrent: true }, () => {
+    describe("project", { concurrent: true }, () => {
+      test.provider(
+        "BatchServiceEnable (serviceusage.services.batchEnable)",
+        () => probe("BatchServiceEnable", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:serviceusage", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "BatchServiceGet (serviceusage.services.batchGet)",
+        () => probe("BatchServiceGet", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:serviceusage", "live"],
+          timeout: 600_000,
+        },
+      );
       test.provider(
         "DisableService (serviceusage.services.disable)",
         () => probe("DisableService", false),
@@ -81,25 +97,17 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider("GetService (serviceusage.services.get)", () => probe("GetService", true), {
+      test.provider("GetService (serviceusage.services.get)", () => probe("GetService", false), {
         tags: ["provider:gcp", "provider:gcp:serviceusage", "live"],
         timeout: 600_000,
       });
-    });
-
-    // Discovery methods with no binding, and why.
-    describe("not generated", () => {
-      test.provider.skip(
-        "serviceusage.services.list: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "serviceusage.services.batchEnable: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "serviceusage.services.batchGet: addressed under `*/`, not a project",
-        () => Effect.void,
+      test.provider(
+        "ListServices (serviceusage.services.list)",
+        () => probe("ListServices", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:serviceusage", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

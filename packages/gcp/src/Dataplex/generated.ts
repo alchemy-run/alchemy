@@ -35,6 +35,8 @@ export * from "./GetDataScan.ts";
 export * from "./GetDataScanHttp.ts";
 export * from "./GetDataScanJob.ts";
 export * from "./GetDataScanJobHttp.ts";
+export * from "./GetEncryptionConfig.ts";
+export * from "./GetEncryptionConfigHttp.ts";
 export * from "./GetEntity.ts";
 export * from "./GetEntityHttp.ts";
 export * from "./GetEntry.ts";

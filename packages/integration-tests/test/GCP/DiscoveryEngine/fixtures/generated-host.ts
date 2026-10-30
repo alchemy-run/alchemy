@@ -47,118 +47,122 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
     const p8 = yield* GCP.DiscoveryEngine.CheckGroundingConfig();
     const p9 = yield* GCP.DiscoveryEngine.CollectDataStoreUserEvent(ProbeDataStore);
     const p10 = yield* GCP.DiscoveryEngine.CollectDataStoreUserEvent(ProbeCollectionsDataStore);
-    const p11 = yield* GCP.DiscoveryEngine.CompleteCompletionConfigQuery();
-    const p12 = yield* GCP.DiscoveryEngine.CompleteDataStoreQuery(ProbeDataStore);
-    const p13 = yield* GCP.DiscoveryEngine.CompleteDataStoreQuery(ProbeCollectionsDataStore);
-    const p14 = yield* GCP.DiscoveryEngine.CreateCollectionDataStoreSiteSearchEngineSitemap();
-    const p15 = yield* GCP.DiscoveryEngine.CreateDataStoreSiteSearchEngineSitemap();
-    const p16 = yield* GCP.DiscoveryEngine.CreateLicenseConfig();
-    const p17 = yield* GCP.DiscoveryEngine.DeleteCmekConfig();
-    const p18 = yield* GCP.DiscoveryEngine.DeleteCollection();
-    const p19 = yield* GCP.DiscoveryEngine.DisableSiteSearchEngineAdvancedSiteSearch();
-    const p20 = yield* GCP.DiscoveryEngine.EnableSiteSearchEngineAdvancedSiteSearch();
-    const p21 = yield* GCP.DiscoveryEngine.FetchCollectionDataStoreSiteSearchEngineSitemap();
-    const p22 = yield* GCP.DiscoveryEngine.FetchDataStoreSiteSearchEngineSitemap();
-    const p23 = yield* GCP.DiscoveryEngine.FetchSiteSearchEngineDomainVerificationStatus();
-    const p24 = yield* GCP.DiscoveryEngine.GetCmekConfig();
-    const p25 = yield* GCP.DiscoveryEngine.GetCollectionDataConnector();
-    const p26 = yield* GCP.DiscoveryEngine.GetControl(ProbeLocControl);
-    const p27 = yield* GCP.DiscoveryEngine.GetControl(ProbeEngineControl);
-    const p28 = yield* GCP.DiscoveryEngine.GetControl(ProbeStoreControl);
-    const p29 = yield* GCP.DiscoveryEngine.GetDataStore(ProbeDataStore);
-    const p30 = yield* GCP.DiscoveryEngine.GetDataStore(ProbeCollectionsDataStore);
-    const p31 = yield* GCP.DiscoveryEngine.GetDataStoreSiteSearchEngine();
-    const p32 = yield* GCP.DiscoveryEngine.GetDataStoreWidgetConfig(ProbeDataStore);
-    const p33 = yield* GCP.DiscoveryEngine.GetDataStoreWidgetConfig(ProbeCollectionsDataStore);
-    const p34 = yield* GCP.DiscoveryEngine.GetDocument(ProbeLocDocument);
-    const p35 = yield* GCP.DiscoveryEngine.GetDocument(ProbeDocument);
-    const p36 = yield* GCP.DiscoveryEngine.GetEngine(ProbeEngine);
-    const p37 = yield* GCP.DiscoveryEngine.GetEngineWidgetConfig(ProbeEngine);
-    const p38 = yield* GCP.DiscoveryEngine.GetLicenseConfig();
-    const p39 = yield* GCP.DiscoveryEngine.GetSchema(ProbeLocSchema);
-    const p40 = yield* GCP.DiscoveryEngine.GetSchema(ProbeSchema);
-    const p41 = yield* GCP.DiscoveryEngine.GetServingConfig(ProbeLocServing);
-    const p42 = yield* GCP.DiscoveryEngine.GetServingConfig(ProbeEngineServing);
-    const p43 = yield* GCP.DiscoveryEngine.GetServingConfig(ProbeStoreServing);
-    const p44 = yield* GCP.DiscoveryEngine.GetSession(ProbeLocSession);
-    const p45 = yield* GCP.DiscoveryEngine.GetSession(ProbeEngineSession);
-    const p46 = yield* GCP.DiscoveryEngine.GetSession(ProbeSession);
-    const p47 = yield* GCP.DiscoveryEngine.GetSessionAnswer(ProbeLocSession);
-    const p48 = yield* GCP.DiscoveryEngine.GetSessionAnswer(ProbeEngineSession);
-    const p49 = yield* GCP.DiscoveryEngine.GetSessionAnswer(ProbeSession);
-    const p50 = yield* GCP.DiscoveryEngine.GetTargetSite(ProbeLocTargetSite);
-    const p51 = yield* GCP.DiscoveryEngine.GetTargetSite(ProbeTargetSite);
-    const p52 = yield* GCP.DiscoveryEngine.GetUserStore();
-    const p53 = yield* GCP.DiscoveryEngine.ImportDataStoreBranchDocument(ProbeDataStore);
-    const p54 = yield* GCP.DiscoveryEngine.ImportDataStoreBranchDocument(ProbeCollectionsDataStore);
-    const p55 = yield* GCP.DiscoveryEngine.ImportDataStoreCompletionSuggestion(ProbeDataStore);
-    const p56 =
+    const p11 = yield* GCP.DiscoveryEngine.CollectUserEvent();
+    const p12 = yield* GCP.DiscoveryEngine.CompleteCompletionConfigQuery();
+    const p13 = yield* GCP.DiscoveryEngine.CompleteDataStoreQuery(ProbeDataStore);
+    const p14 = yield* GCP.DiscoveryEngine.CompleteDataStoreQuery(ProbeCollectionsDataStore);
+    const p15 = yield* GCP.DiscoveryEngine.CreateCollectionDataStoreSiteSearchEngineSitemap();
+    const p16 = yield* GCP.DiscoveryEngine.CreateDataStoreSiteSearchEngineSitemap();
+    const p17 = yield* GCP.DiscoveryEngine.CreateLicenseConfig();
+    const p18 = yield* GCP.DiscoveryEngine.DeleteCmekConfig();
+    const p19 = yield* GCP.DiscoveryEngine.DeleteCollection();
+    const p20 = yield* GCP.DiscoveryEngine.DisableSiteSearchEngineAdvancedSiteSearch();
+    const p21 = yield* GCP.DiscoveryEngine.EnableSiteSearchEngineAdvancedSiteSearch();
+    const p22 = yield* GCP.DiscoveryEngine.FetchCollectionDataStoreSiteSearchEngineSitemap();
+    const p23 = yield* GCP.DiscoveryEngine.FetchDataStoreSiteSearchEngineSitemap();
+    const p24 = yield* GCP.DiscoveryEngine.FetchSiteSearchEngineDomainVerificationStatus();
+    const p25 = yield* GCP.DiscoveryEngine.GetCmekConfig();
+    const p26 = yield* GCP.DiscoveryEngine.GetCollectionDataConnector();
+    const p27 = yield* GCP.DiscoveryEngine.GetControl(ProbeLocControl);
+    const p28 = yield* GCP.DiscoveryEngine.GetControl(ProbeEngineControl);
+    const p29 = yield* GCP.DiscoveryEngine.GetControl(ProbeStoreControl);
+    const p30 = yield* GCP.DiscoveryEngine.GetDataStore(ProbeDataStore);
+    const p31 = yield* GCP.DiscoveryEngine.GetDataStore(ProbeCollectionsDataStore);
+    const p32 = yield* GCP.DiscoveryEngine.GetDataStoreSiteSearchEngine();
+    const p33 = yield* GCP.DiscoveryEngine.GetDataStoreWidgetConfig(ProbeDataStore);
+    const p34 = yield* GCP.DiscoveryEngine.GetDataStoreWidgetConfig(ProbeCollectionsDataStore);
+    const p35 = yield* GCP.DiscoveryEngine.GetDocument(ProbeLocDocument);
+    const p36 = yield* GCP.DiscoveryEngine.GetDocument(ProbeDocument);
+    const p37 = yield* GCP.DiscoveryEngine.GetEngine(ProbeEngine);
+    const p38 = yield* GCP.DiscoveryEngine.GetEngineWidgetConfig(ProbeEngine);
+    const p39 = yield* GCP.DiscoveryEngine.GetLicenseConfig();
+    const p40 = yield* GCP.DiscoveryEngine.GetSchema(ProbeLocSchema);
+    const p41 = yield* GCP.DiscoveryEngine.GetSchema(ProbeSchema);
+    const p42 = yield* GCP.DiscoveryEngine.GetServingConfig(ProbeLocServing);
+    const p43 = yield* GCP.DiscoveryEngine.GetServingConfig(ProbeEngineServing);
+    const p44 = yield* GCP.DiscoveryEngine.GetServingConfig(ProbeStoreServing);
+    const p45 = yield* GCP.DiscoveryEngine.GetSession(ProbeLocSession);
+    const p46 = yield* GCP.DiscoveryEngine.GetSession(ProbeEngineSession);
+    const p47 = yield* GCP.DiscoveryEngine.GetSession(ProbeSession);
+    const p48 = yield* GCP.DiscoveryEngine.GetSessionAnswer(ProbeLocSession);
+    const p49 = yield* GCP.DiscoveryEngine.GetSessionAnswer(ProbeEngineSession);
+    const p50 = yield* GCP.DiscoveryEngine.GetSessionAnswer(ProbeSession);
+    const p51 = yield* GCP.DiscoveryEngine.GetTargetSite(ProbeLocTargetSite);
+    const p52 = yield* GCP.DiscoveryEngine.GetTargetSite(ProbeTargetSite);
+    const p53 = yield* GCP.DiscoveryEngine.GetUserStore();
+    const p54 = yield* GCP.DiscoveryEngine.ImportDataStoreBranchDocument(ProbeDataStore);
+    const p55 = yield* GCP.DiscoveryEngine.ImportDataStoreBranchDocument(ProbeCollectionsDataStore);
+    const p56 = yield* GCP.DiscoveryEngine.ImportDataStoreCompletionSuggestion(ProbeDataStore);
+    const p57 =
       yield* GCP.DiscoveryEngine.ImportDataStoreCompletionSuggestion(ProbeCollectionsDataStore);
-    const p57 = yield* GCP.DiscoveryEngine.ImportDataStoreSuggestionDenyListEntry(ProbeDataStore);
-    const p58 =
+    const p58 = yield* GCP.DiscoveryEngine.ImportDataStoreSuggestionDenyListEntry(ProbeDataStore);
+    const p59 =
       yield* GCP.DiscoveryEngine.ImportDataStoreSuggestionDenyListEntry(ProbeCollectionsDataStore);
-    const p59 = yield* GCP.DiscoveryEngine.ImportDataStoreUserEvent(ProbeDataStore);
-    const p60 = yield* GCP.DiscoveryEngine.ImportDataStoreUserEvent(ProbeCollectionsDataStore);
-    const p61 = yield* GCP.DiscoveryEngine.ImportUserEvent();
-    const p62 = yield* GCP.DiscoveryEngine.ListCmekConfigs();
-    const p63 = yield* GCP.DiscoveryEngine.ListCollectionDataStores();
-    const p64 = yield* GCP.DiscoveryEngine.ListCollectionDataStoreSiteSearchEngineTargetSites();
-    const p65 = yield* GCP.DiscoveryEngine.ListCollectionEngines();
-    const p66 = yield* GCP.DiscoveryEngine.ListDataStoreBranchDocuments(ProbeDataStore);
-    const p67 = yield* GCP.DiscoveryEngine.ListDataStoreBranchDocuments(ProbeCollectionsDataStore);
-    const p68 = yield* GCP.DiscoveryEngine.ListDataStoreControls(ProbeDataStore);
-    const p69 = yield* GCP.DiscoveryEngine.ListDataStoreControls(ProbeCollectionsDataStore);
-    const p70 = yield* GCP.DiscoveryEngine.ListDataStoreCustomModels(ProbeCollectionsDataStore);
-    const p71 = yield* GCP.DiscoveryEngine.ListDataStores();
-    const p72 = yield* GCP.DiscoveryEngine.ListDataStoreSchemas(ProbeDataStore);
-    const p73 = yield* GCP.DiscoveryEngine.ListDataStoreSchemas(ProbeCollectionsDataStore);
-    const p74 = yield* GCP.DiscoveryEngine.ListDataStoreServingConfigs(ProbeDataStore);
-    const p75 = yield* GCP.DiscoveryEngine.ListDataStoreServingConfigs(ProbeCollectionsDataStore);
-    const p76 = yield* GCP.DiscoveryEngine.ListDataStoreSessions(ProbeDataStore);
-    const p77 = yield* GCP.DiscoveryEngine.ListDataStoreSessions(ProbeCollectionsDataStore);
-    const p78 = yield* GCP.DiscoveryEngine.ListDataStoreSiteSearchEngineTargetSites();
-    const p79 = yield* GCP.DiscoveryEngine.ListEngineAssistants(ProbeEngine);
-    const p80 = yield* GCP.DiscoveryEngine.ListEngineControls(ProbeEngine);
-    const p81 = yield* GCP.DiscoveryEngine.ListEngineServingConfigs(ProbeEngine);
-    const p82 = yield* GCP.DiscoveryEngine.ListEngineSessions(ProbeEngine);
-    const p83 = yield* GCP.DiscoveryEngine.ListIdentityMappingStores();
-    const p84 = yield* GCP.DiscoveryEngine.ListLicenseConfigs();
-    const p85 = yield* GCP.DiscoveryEngine.ListUserStoreLicenseConfigsUsageStats();
-    const p86 = yield* GCP.DiscoveryEngine.ListUserStoreUserLicenses();
-    const p87 = yield* GCP.DiscoveryEngine.PatchCmekConfig();
-    const p88 = yield* GCP.DiscoveryEngine.PatchDataStoreWidgetConfig(ProbeDataStore);
-    const p89 = yield* GCP.DiscoveryEngine.PatchDataStoreWidgetConfig(ProbeCollectionsDataStore);
-    const p90 = yield* GCP.DiscoveryEngine.PatchEngineWidgetConfig(ProbeEngine);
-    const p91 = yield* GCP.DiscoveryEngine.PatchLicenseConfig();
-    const p92 = yield* GCP.DiscoveryEngine.PatchUserStore();
-    const p93 = yield* GCP.DiscoveryEngine.ProvisionProject();
-    const p94 = yield* GCP.DiscoveryEngine.PurgeDataStoreBranchDocument(ProbeDataStore);
-    const p95 = yield* GCP.DiscoveryEngine.PurgeDataStoreBranchDocument(ProbeCollectionsDataStore);
-    const p96 = yield* GCP.DiscoveryEngine.PurgeDataStoreCompletionSuggestion(ProbeDataStore);
-    const p97 =
-      yield* GCP.DiscoveryEngine.PurgeDataStoreCompletionSuggestion(ProbeCollectionsDataStore);
-    const p98 = yield* GCP.DiscoveryEngine.PurgeDataStoreSuggestionDenyListEntry(ProbeDataStore);
+    const p60 = yield* GCP.DiscoveryEngine.ImportDataStoreUserEvent(ProbeDataStore);
+    const p61 = yield* GCP.DiscoveryEngine.ImportDataStoreUserEvent(ProbeCollectionsDataStore);
+    const p62 = yield* GCP.DiscoveryEngine.ImportUserEvent();
+    const p63 = yield* GCP.DiscoveryEngine.ListCmekConfigs();
+    const p64 = yield* GCP.DiscoveryEngine.ListCollectionDataStores();
+    const p65 = yield* GCP.DiscoveryEngine.ListCollectionDataStoreSiteSearchEngineTargetSites();
+    const p66 = yield* GCP.DiscoveryEngine.ListCollectionEngines();
+    const p67 = yield* GCP.DiscoveryEngine.ListDataStoreBranchDocuments(ProbeDataStore);
+    const p68 = yield* GCP.DiscoveryEngine.ListDataStoreBranchDocuments(ProbeCollectionsDataStore);
+    const p69 = yield* GCP.DiscoveryEngine.ListDataStoreControls(ProbeDataStore);
+    const p70 = yield* GCP.DiscoveryEngine.ListDataStoreControls(ProbeCollectionsDataStore);
+    const p71 = yield* GCP.DiscoveryEngine.ListDataStoreCustomModels(ProbeCollectionsDataStore);
+    const p72 = yield* GCP.DiscoveryEngine.ListDataStores();
+    const p73 = yield* GCP.DiscoveryEngine.ListDataStoreSchemas(ProbeDataStore);
+    const p74 = yield* GCP.DiscoveryEngine.ListDataStoreSchemas(ProbeCollectionsDataStore);
+    const p75 = yield* GCP.DiscoveryEngine.ListDataStoreServingConfigs(ProbeDataStore);
+    const p76 = yield* GCP.DiscoveryEngine.ListDataStoreServingConfigs(ProbeCollectionsDataStore);
+    const p77 = yield* GCP.DiscoveryEngine.ListDataStoreSessions(ProbeDataStore);
+    const p78 = yield* GCP.DiscoveryEngine.ListDataStoreSessions(ProbeCollectionsDataStore);
+    const p79 = yield* GCP.DiscoveryEngine.ListDataStoreSiteSearchEngineTargetSites();
+    const p80 = yield* GCP.DiscoveryEngine.ListEngineAssistants(ProbeEngine);
+    const p81 = yield* GCP.DiscoveryEngine.ListEngineControls(ProbeEngine);
+    const p82 = yield* GCP.DiscoveryEngine.ListEngineServingConfigs(ProbeEngine);
+    const p83 = yield* GCP.DiscoveryEngine.ListEngineSessions(ProbeEngine);
+    const p84 = yield* GCP.DiscoveryEngine.ListIdentityMappingStores();
+    const p85 = yield* GCP.DiscoveryEngine.ListLicenseConfigs();
+    const p86 = yield* GCP.DiscoveryEngine.ListUserStoreLicenseConfigsUsageStats();
+    const p87 = yield* GCP.DiscoveryEngine.ListUserStoreUserLicenses();
+    const p88 = yield* GCP.DiscoveryEngine.McpCollectionDataConnector();
+    const p89 = yield* GCP.DiscoveryEngine.PatchCmekConfig();
+    const p90 = yield* GCP.DiscoveryEngine.PatchDataStoreWidgetConfig(ProbeDataStore);
+    const p91 = yield* GCP.DiscoveryEngine.PatchDataStoreWidgetConfig(ProbeCollectionsDataStore);
+    const p92 = yield* GCP.DiscoveryEngine.PatchEngineWidgetConfig(ProbeEngine);
+    const p93 = yield* GCP.DiscoveryEngine.PatchLicenseConfig();
+    const p94 = yield* GCP.DiscoveryEngine.PatchUserStore();
+    const p95 = yield* GCP.DiscoveryEngine.ProvisionProject();
+    const p96 = yield* GCP.DiscoveryEngine.PurgeDataStoreBranchDocument(ProbeDataStore);
+    const p97 = yield* GCP.DiscoveryEngine.PurgeDataStoreBranchDocument(ProbeCollectionsDataStore);
+    const p98 = yield* GCP.DiscoveryEngine.PurgeDataStoreCompletionSuggestion(ProbeDataStore);
     const p99 =
+      yield* GCP.DiscoveryEngine.PurgeDataStoreCompletionSuggestion(ProbeCollectionsDataStore);
+    const p100 = yield* GCP.DiscoveryEngine.PurgeDataStoreSuggestionDenyListEntry(ProbeDataStore);
+    const p101 =
       yield* GCP.DiscoveryEngine.PurgeDataStoreSuggestionDenyListEntry(ProbeCollectionsDataStore);
-    const p100 = yield* GCP.DiscoveryEngine.PurgeDataStoreUserEvent(ProbeDataStore);
-    const p101 = yield* GCP.DiscoveryEngine.PurgeDataStoreUserEvent(ProbeCollectionsDataStore);
-    const p102 = yield* GCP.DiscoveryEngine.RankRankingConfig();
-    const p103 = yield* GCP.DiscoveryEngine.RecommendServingConfig(ProbeLocServing);
-    const p104 = yield* GCP.DiscoveryEngine.RecommendServingConfig(ProbeEngineServing);
-    const p105 = yield* GCP.DiscoveryEngine.RecommendServingConfig(ProbeStoreServing);
-    const p106 = yield* GCP.DiscoveryEngine.RecrawlSiteSearchEngineUris();
-    const p107 = yield* GCP.DiscoveryEngine.SearchServingConfig(ProbeLocServing);
-    const p108 = yield* GCP.DiscoveryEngine.SearchServingConfig(ProbeEngineServing);
-    const p109 = yield* GCP.DiscoveryEngine.SearchServingConfig(ProbeStoreServing);
-    const p110 = yield* GCP.DiscoveryEngine.SearchServingConfigLite(ProbeLocServing);
-    const p111 = yield* GCP.DiscoveryEngine.SearchServingConfigLite(ProbeEngineServing);
-    const p112 = yield* GCP.DiscoveryEngine.SearchServingConfigLite(ProbeStoreServing);
-    const p113 = yield* GCP.DiscoveryEngine.StreamServingConfigAnswer(ProbeLocServing);
-    const p114 = yield* GCP.DiscoveryEngine.StreamServingConfigAnswer(ProbeEngineServing);
-    const p115 = yield* GCP.DiscoveryEngine.StreamServingConfigAnswer(ProbeStoreServing);
-    const p116 = yield* GCP.DiscoveryEngine.TrainDataStoreCustomModel(ProbeCollectionsDataStore);
-    const p117 = yield* GCP.DiscoveryEngine.WriteDataStoreUserEvent(ProbeDataStore);
-    const p118 = yield* GCP.DiscoveryEngine.WriteDataStoreUserEvent(ProbeCollectionsDataStore);
+    const p102 = yield* GCP.DiscoveryEngine.PurgeDataStoreUserEvent(ProbeDataStore);
+    const p103 = yield* GCP.DiscoveryEngine.PurgeDataStoreUserEvent(ProbeCollectionsDataStore);
+    const p104 = yield* GCP.DiscoveryEngine.RankRankingConfig();
+    const p105 = yield* GCP.DiscoveryEngine.RecommendServingConfig(ProbeLocServing);
+    const p106 = yield* GCP.DiscoveryEngine.RecommendServingConfig(ProbeEngineServing);
+    const p107 = yield* GCP.DiscoveryEngine.RecommendServingConfig(ProbeStoreServing);
+    const p108 = yield* GCP.DiscoveryEngine.RecrawlSiteSearchEngineUris();
+    const p109 = yield* GCP.DiscoveryEngine.SearchServingConfig(ProbeLocServing);
+    const p110 = yield* GCP.DiscoveryEngine.SearchServingConfig(ProbeEngineServing);
+    const p111 = yield* GCP.DiscoveryEngine.SearchServingConfig(ProbeStoreServing);
+    const p112 = yield* GCP.DiscoveryEngine.SearchServingConfigLite(ProbeLocServing);
+    const p113 = yield* GCP.DiscoveryEngine.SearchServingConfigLite(ProbeEngineServing);
+    const p114 = yield* GCP.DiscoveryEngine.SearchServingConfigLite(ProbeStoreServing);
+    const p115 = yield* GCP.DiscoveryEngine.StreamServingConfigAnswer(ProbeLocServing);
+    const p116 = yield* GCP.DiscoveryEngine.StreamServingConfigAnswer(ProbeEngineServing);
+    const p117 = yield* GCP.DiscoveryEngine.StreamServingConfigAnswer(ProbeStoreServing);
+    const p118 = yield* GCP.DiscoveryEngine.TrainDataStoreCustomModel(ProbeCollectionsDataStore);
+    const p119 = yield* GCP.DiscoveryEngine.UpdateCollectionDataConnector();
+    const p120 = yield* GCP.DiscoveryEngine.WriteDataStoreUserEvent(ProbeDataStore);
+    const p121 = yield* GCP.DiscoveryEngine.WriteDataStoreUserEvent(ProbeCollectionsDataStore);
+    const p122 = yield* GCP.DiscoveryEngine.WriteUserEvent();
     return {
       fetch: serveProbes({
         "AnswerServingConfig@DataStoresServingConfig": probeOutcome(Retry.none(p0({} as never))),
@@ -196,14 +200,15 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
         "CollectDataStoreUserEvent@CollectionsDataStore": probeOutcome(
           Retry.none(p10({} as never)),
         ),
+        CollectUserEvent: probeOutcome(Retry.none(p11({ location: "global" } as never))),
         CompleteCompletionConfigQuery: probeOutcome(
-          Retry.none(p11({ dataStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p12({ dataStore: "alchemy-missing", location: "global" } as never)),
         ),
-        "CompleteDataStoreQuery@DataStore": probeOutcome(Retry.none(p12({} as never))),
-        "CompleteDataStoreQuery@CollectionsDataStore": probeOutcome(Retry.none(p13({} as never))),
+        "CompleteDataStoreQuery@DataStore": probeOutcome(Retry.none(p13({} as never))),
+        "CompleteDataStoreQuery@CollectionsDataStore": probeOutcome(Retry.none(p14({} as never))),
         CreateCollectionDataStoreSiteSearchEngineSitemap: probeOutcome(
           Retry.none(
-            p14({
+            p15({
               collection: "alchemy-missing",
               dataStore: "alchemy-missing",
               location: "global",
@@ -213,7 +218,7 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
         ),
         CreateDataStoreSiteSearchEngineSitemap: probeOutcome(
           Retry.none(
-            p15({
+            p16({
               dataStore: "alchemy-missing",
               location: "global",
               body: { alchemyProbe: "alchemy-missing" },
@@ -222,24 +227,24 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
         ),
         CreateLicenseConfig: probeOutcome(
           Retry.none(
-            p16({ location: "global", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p17({ location: "global", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
         DeleteCmekConfig: probeOutcome(
-          Retry.none(p17({ cmekConfig: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p18({ cmekConfig: "alchemy-missing", location: "global" } as never)),
         ),
         DeleteCollection: probeOutcome(
-          Retry.none(p18({ collection: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p19({ collection: "alchemy-missing", location: "global" } as never)),
         ),
         DisableSiteSearchEngineAdvancedSiteSearch: probeOutcome(
-          Retry.none(p19({ dataStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p20({ dataStore: "alchemy-missing", location: "global" } as never)),
         ),
         EnableSiteSearchEngineAdvancedSiteSearch: probeOutcome(
-          Retry.none(p20({ dataStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p21({ dataStore: "alchemy-missing", location: "global" } as never)),
         ),
         FetchCollectionDataStoreSiteSearchEngineSitemap: probeOutcome(
           Retry.none(
-            p21({
+            p22({
               collection: "alchemy-missing",
               dataStore: "alchemy-missing",
               location: "global",
@@ -247,11 +252,11 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
           ),
         ),
         FetchDataStoreSiteSearchEngineSitemap: probeOutcome(
-          Retry.none(p22({ dataStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p23({ dataStore: "alchemy-missing", location: "global" } as never)),
         ),
         FetchSiteSearchEngineDomainVerificationStatus: probeOutcome(
           Retry.none(
-            p23({
+            p24({
               collection: "alchemy-missing",
               dataStore: "alchemy-missing",
               location: "global",
@@ -259,106 +264,106 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
           ),
         ),
         GetCmekConfig: probeOutcome(
-          Retry.none(p24({ cmekConfig: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p25({ cmekConfig: "alchemy-missing", location: "global" } as never)),
         ),
         GetCollectionDataConnector: probeOutcome(
-          Retry.none(p25({ collection: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p26({ collection: "alchemy-missing", location: "global" } as never)),
         ),
-        "GetControl@DataStoresControl": probeOutcome(Retry.none(p26({} as never))),
-        "GetControl@CollectionsEnginesControl": probeOutcome(Retry.none(p27({} as never))),
-        "GetControl@CollectionsDataStoresControl": probeOutcome(Retry.none(p28({} as never))),
-        "GetDataStore@DataStore": probeOutcome(Retry.none(p29({} as never))),
-        "GetDataStore@CollectionsDataStore": probeOutcome(Retry.none(p30({} as never))),
+        "GetControl@DataStoresControl": probeOutcome(Retry.none(p27({} as never))),
+        "GetControl@CollectionsEnginesControl": probeOutcome(Retry.none(p28({} as never))),
+        "GetControl@CollectionsDataStoresControl": probeOutcome(Retry.none(p29({} as never))),
+        "GetDataStore@DataStore": probeOutcome(Retry.none(p30({} as never))),
+        "GetDataStore@CollectionsDataStore": probeOutcome(Retry.none(p31({} as never))),
         GetDataStoreSiteSearchEngine: probeOutcome(
-          Retry.none(p31({ dataStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p32({ dataStore: "alchemy-missing", location: "global" } as never)),
         ),
         "GetDataStoreWidgetConfig@DataStore": probeOutcome(
-          Retry.none(p32({ widgetConfig: "alchemy-missing" } as never)),
-        ),
-        "GetDataStoreWidgetConfig@CollectionsDataStore": probeOutcome(
           Retry.none(p33({ widgetConfig: "alchemy-missing" } as never)),
         ),
-        "GetDocument@DataStoresBranchesDocument": probeOutcome(Retry.none(p34({} as never))),
-        "GetDocument@CollectionsDataStoresBranchesDocument": probeOutcome(
-          Retry.none(p35({} as never)),
+        "GetDataStoreWidgetConfig@CollectionsDataStore": probeOutcome(
+          Retry.none(p34({ widgetConfig: "alchemy-missing" } as never)),
         ),
-        GetEngine: probeOutcome(Retry.none(p36({} as never))),
+        "GetDocument@DataStoresBranchesDocument": probeOutcome(Retry.none(p35({} as never))),
+        "GetDocument@CollectionsDataStoresBranchesDocument": probeOutcome(
+          Retry.none(p36({} as never)),
+        ),
+        GetEngine: probeOutcome(Retry.none(p37({} as never))),
         GetEngineWidgetConfig: probeOutcome(
-          Retry.none(p37({ widgetConfig: "alchemy-missing" } as never)),
+          Retry.none(p38({ widgetConfig: "alchemy-missing" } as never)),
         ),
         GetLicenseConfig: probeOutcome(
-          Retry.none(p38({ licenseConfig: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p39({ licenseConfig: "alchemy-missing", location: "global" } as never)),
         ),
-        "GetSchema@DataStoresSchema": probeOutcome(Retry.none(p39({} as never))),
-        "GetSchema@CollectionsDataStoresSchema": probeOutcome(Retry.none(p40({} as never))),
-        "GetServingConfig@DataStoresServingConfig": probeOutcome(Retry.none(p41({} as never))),
+        "GetSchema@DataStoresSchema": probeOutcome(Retry.none(p40({} as never))),
+        "GetSchema@CollectionsDataStoresSchema": probeOutcome(Retry.none(p41({} as never))),
+        "GetServingConfig@DataStoresServingConfig": probeOutcome(Retry.none(p42({} as never))),
         "GetServingConfig@CollectionsEnginesServingConfig": probeOutcome(
-          Retry.none(p42({} as never)),
-        ),
-        "GetServingConfig@CollectionsDataStoresServingConfig": probeOutcome(
           Retry.none(p43({} as never)),
         ),
-        "GetSession@DataStoresSession": probeOutcome(Retry.none(p44({} as never))),
-        "GetSession@CollectionsEnginesSession": probeOutcome(Retry.none(p45({} as never))),
-        "GetSession@CollectionsDataStoresSession": probeOutcome(Retry.none(p46({} as never))),
-        "GetSessionAnswer@DataStoresSession": probeOutcome(
-          Retry.none(p47({ answer: "alchemy-missing" } as never)),
+        "GetServingConfig@CollectionsDataStoresServingConfig": probeOutcome(
+          Retry.none(p44({} as never)),
         ),
-        "GetSessionAnswer@CollectionsEnginesSession": probeOutcome(
+        "GetSession@DataStoresSession": probeOutcome(Retry.none(p45({} as never))),
+        "GetSession@CollectionsEnginesSession": probeOutcome(Retry.none(p46({} as never))),
+        "GetSession@CollectionsDataStoresSession": probeOutcome(Retry.none(p47({} as never))),
+        "GetSessionAnswer@DataStoresSession": probeOutcome(
           Retry.none(p48({ answer: "alchemy-missing" } as never)),
         ),
-        "GetSessionAnswer@CollectionsDataStoresSession": probeOutcome(
+        "GetSessionAnswer@CollectionsEnginesSession": probeOutcome(
           Retry.none(p49({ answer: "alchemy-missing" } as never)),
         ),
-        "GetTargetSite@DataStoresSiteSearchEngineTargetSite": probeOutcome(
-          Retry.none(p50({} as never)),
+        "GetSessionAnswer@CollectionsDataStoresSession": probeOutcome(
+          Retry.none(p50({ answer: "alchemy-missing" } as never)),
         ),
-        "GetTargetSite@CollectionsDataStoresSiteSearchEngineTargetSite": probeOutcome(
+        "GetTargetSite@DataStoresSiteSearchEngineTargetSite": probeOutcome(
           Retry.none(p51({} as never)),
         ),
+        "GetTargetSite@CollectionsDataStoresSiteSearchEngineTargetSite": probeOutcome(
+          Retry.none(p52({} as never)),
+        ),
         GetUserStore: probeOutcome(
-          Retry.none(p52({ userStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p53({ userStore: "alchemy-missing", location: "global" } as never)),
         ),
         "ImportDataStoreBranchDocument@DataStore": probeOutcome(
-          Retry.none(
-            p53({ branch: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
-          ),
-        ),
-        "ImportDataStoreBranchDocument@CollectionsDataStore": probeOutcome(
           Retry.none(
             p54({ branch: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        "ImportDataStoreCompletionSuggestion@DataStore": probeOutcome(
-          Retry.none(p55({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        "ImportDataStoreBranchDocument@CollectionsDataStore": probeOutcome(
+          Retry.none(
+            p55({ branch: "alchemy-missing", body: { alchemyProbe: "alchemy-missing" } } as never),
+          ),
         ),
-        "ImportDataStoreCompletionSuggestion@CollectionsDataStore": probeOutcome(
+        "ImportDataStoreCompletionSuggestion@DataStore": probeOutcome(
           Retry.none(p56({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        "ImportDataStoreSuggestionDenyListEntry@DataStore": probeOutcome(
+        "ImportDataStoreCompletionSuggestion@CollectionsDataStore": probeOutcome(
           Retry.none(p57({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        "ImportDataStoreSuggestionDenyListEntry@CollectionsDataStore": probeOutcome(
+        "ImportDataStoreSuggestionDenyListEntry@DataStore": probeOutcome(
           Retry.none(p58({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        "ImportDataStoreUserEvent@DataStore": probeOutcome(
+        "ImportDataStoreSuggestionDenyListEntry@CollectionsDataStore": probeOutcome(
           Retry.none(p59({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        "ImportDataStoreUserEvent@CollectionsDataStore": probeOutcome(
+        "ImportDataStoreUserEvent@DataStore": probeOutcome(
           Retry.none(p60({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+        ),
+        "ImportDataStoreUserEvent@CollectionsDataStore": probeOutcome(
+          Retry.none(p61({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
         ImportUserEvent: probeOutcome(
           Retry.none(
-            p61({ location: "global", body: { alchemyProbe: "alchemy-missing" } } as never),
+            p62({ location: "global", body: { alchemyProbe: "alchemy-missing" } } as never),
           ),
         ),
-        ListCmekConfigs: probeOutcome(Retry.none(p62({ location: "global" } as never))),
+        ListCmekConfigs: probeOutcome(Retry.none(p63({ location: "global" } as never))),
         ListCollectionDataStores: probeOutcome(
-          Retry.none(p63({ collection: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p64({ collection: "alchemy-missing", location: "global" } as never)),
         ),
         ListCollectionDataStoreSiteSearchEngineTargetSites: probeOutcome(
           Retry.none(
-            p64({
+            p65({
               collection: "alchemy-missing",
               dataStore: "alchemy-missing",
               location: "global",
@@ -366,121 +371,130 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
           ),
         ),
         ListCollectionEngines: probeOutcome(
-          Retry.none(p65({ collection: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p66({ collection: "alchemy-missing", location: "global" } as never)),
         ),
         "ListDataStoreBranchDocuments@DataStore": probeOutcome(
-          Retry.none(p66({ branch: "alchemy-missing" } as never)),
-        ),
-        "ListDataStoreBranchDocuments@CollectionsDataStore": probeOutcome(
           Retry.none(p67({ branch: "alchemy-missing" } as never)),
         ),
-        "ListDataStoreControls@DataStore": probeOutcome(Retry.none(p68({} as never))),
-        "ListDataStoreControls@CollectionsDataStore": probeOutcome(Retry.none(p69({} as never))),
-        ListDataStoreCustomModels: probeOutcome(Retry.none(p70({} as never))),
-        ListDataStores: probeOutcome(Retry.none(p71({ location: "global" } as never))),
-        "ListDataStoreSchemas@DataStore": probeOutcome(Retry.none(p72({} as never))),
-        "ListDataStoreSchemas@CollectionsDataStore": probeOutcome(Retry.none(p73({} as never))),
-        "ListDataStoreServingConfigs@DataStore": probeOutcome(Retry.none(p74({} as never))),
+        "ListDataStoreBranchDocuments@CollectionsDataStore": probeOutcome(
+          Retry.none(p68({ branch: "alchemy-missing" } as never)),
+        ),
+        "ListDataStoreControls@DataStore": probeOutcome(Retry.none(p69({} as never))),
+        "ListDataStoreControls@CollectionsDataStore": probeOutcome(Retry.none(p70({} as never))),
+        ListDataStoreCustomModels: probeOutcome(Retry.none(p71({} as never))),
+        ListDataStores: probeOutcome(Retry.none(p72({ location: "global" } as never))),
+        "ListDataStoreSchemas@DataStore": probeOutcome(Retry.none(p73({} as never))),
+        "ListDataStoreSchemas@CollectionsDataStore": probeOutcome(Retry.none(p74({} as never))),
+        "ListDataStoreServingConfigs@DataStore": probeOutcome(Retry.none(p75({} as never))),
         "ListDataStoreServingConfigs@CollectionsDataStore": probeOutcome(
-          Retry.none(p75({} as never)),
+          Retry.none(p76({} as never)),
         ),
-        "ListDataStoreSessions@DataStore": probeOutcome(Retry.none(p76({} as never))),
-        "ListDataStoreSessions@CollectionsDataStore": probeOutcome(Retry.none(p77({} as never))),
+        "ListDataStoreSessions@DataStore": probeOutcome(Retry.none(p77({} as never))),
+        "ListDataStoreSessions@CollectionsDataStore": probeOutcome(Retry.none(p78({} as never))),
         ListDataStoreSiteSearchEngineTargetSites: probeOutcome(
-          Retry.none(p78({ dataStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p79({ dataStore: "alchemy-missing", location: "global" } as never)),
         ),
-        ListEngineAssistants: probeOutcome(Retry.none(p79({} as never))),
-        ListEngineControls: probeOutcome(Retry.none(p80({} as never))),
-        ListEngineServingConfigs: probeOutcome(Retry.none(p81({} as never))),
-        ListEngineSessions: probeOutcome(Retry.none(p82({} as never))),
-        ListIdentityMappingStores: probeOutcome(Retry.none(p83({ location: "global" } as never))),
-        ListLicenseConfigs: probeOutcome(Retry.none(p84({ location: "global" } as never))),
+        ListEngineAssistants: probeOutcome(Retry.none(p80({} as never))),
+        ListEngineControls: probeOutcome(Retry.none(p81({} as never))),
+        ListEngineServingConfigs: probeOutcome(Retry.none(p82({} as never))),
+        ListEngineSessions: probeOutcome(Retry.none(p83({} as never))),
+        ListIdentityMappingStores: probeOutcome(Retry.none(p84({ location: "global" } as never))),
+        ListLicenseConfigs: probeOutcome(Retry.none(p85({ location: "global" } as never))),
         ListUserStoreLicenseConfigsUsageStats: probeOutcome(
-          Retry.none(p85({ userStore: "alchemy-missing", location: "global" } as never)),
-        ),
-        ListUserStoreUserLicenses: probeOutcome(
           Retry.none(p86({ userStore: "alchemy-missing", location: "global" } as never)),
         ),
+        ListUserStoreUserLicenses: probeOutcome(
+          Retry.none(p87({ userStore: "alchemy-missing", location: "global" } as never)),
+        ),
+        McpCollectionDataConnector: probeOutcome(
+          Retry.none(
+            p88({ collectionsId: "alchemy-missing", locationsId: "alchemy-missing" } as never),
+          ),
+        ),
         PatchCmekConfig: probeOutcome(
-          Retry.none(p87({ cmekConfig: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p89({ cmekConfig: "alchemy-missing", location: "global" } as never)),
         ),
         "PatchDataStoreWidgetConfig@DataStore": probeOutcome(
-          Retry.none(p88({ widgetConfig: "alchemy-missing" } as never)),
-        ),
-        "PatchDataStoreWidgetConfig@CollectionsDataStore": probeOutcome(
-          Retry.none(p89({ widgetConfig: "alchemy-missing" } as never)),
-        ),
-        PatchEngineWidgetConfig: probeOutcome(
           Retry.none(p90({ widgetConfig: "alchemy-missing" } as never)),
         ),
+        "PatchDataStoreWidgetConfig@CollectionsDataStore": probeOutcome(
+          Retry.none(p91({ widgetConfig: "alchemy-missing" } as never)),
+        ),
+        PatchEngineWidgetConfig: probeOutcome(
+          Retry.none(p92({ widgetConfig: "alchemy-missing" } as never)),
+        ),
         PatchLicenseConfig: probeOutcome(
-          Retry.none(p91({ licenseConfig: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p93({ licenseConfig: "alchemy-missing", location: "global" } as never)),
         ),
         PatchUserStore: probeOutcome(
-          Retry.none(p92({ userStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p94({ userStore: "alchemy-missing", location: "global" } as never)),
         ),
-        ProvisionProject: probeOutcome(Retry.none(p93({} as never))),
+        ProvisionProject: probeOutcome(Retry.none(p95({} as never))),
         "PurgeDataStoreBranchDocument@DataStore": probeOutcome(
-          Retry.none(p94({ branch: "alchemy-missing" } as never)),
+          Retry.none(p96({ branch: "alchemy-missing" } as never)),
         ),
         "PurgeDataStoreBranchDocument@CollectionsDataStore": probeOutcome(
-          Retry.none(p95({ branch: "alchemy-missing" } as never)),
+          Retry.none(p97({ branch: "alchemy-missing" } as never)),
         ),
-        "PurgeDataStoreCompletionSuggestion@DataStore": probeOutcome(Retry.none(p96({} as never))),
+        "PurgeDataStoreCompletionSuggestion@DataStore": probeOutcome(Retry.none(p98({} as never))),
         "PurgeDataStoreCompletionSuggestion@CollectionsDataStore": probeOutcome(
-          Retry.none(p97({} as never)),
-        ),
-        "PurgeDataStoreSuggestionDenyListEntry@DataStore": probeOutcome(
-          Retry.none(p98({} as never)),
-        ),
-        "PurgeDataStoreSuggestionDenyListEntry@CollectionsDataStore": probeOutcome(
           Retry.none(p99({} as never)),
         ),
-        "PurgeDataStoreUserEvent@DataStore": probeOutcome(Retry.none(p100({} as never))),
-        "PurgeDataStoreUserEvent@CollectionsDataStore": probeOutcome(Retry.none(p101({} as never))),
+        "PurgeDataStoreSuggestionDenyListEntry@DataStore": probeOutcome(
+          Retry.none(p100({} as never)),
+        ),
+        "PurgeDataStoreSuggestionDenyListEntry@CollectionsDataStore": probeOutcome(
+          Retry.none(p101({} as never)),
+        ),
+        "PurgeDataStoreUserEvent@DataStore": probeOutcome(Retry.none(p102({} as never))),
+        "PurgeDataStoreUserEvent@CollectionsDataStore": probeOutcome(Retry.none(p103({} as never))),
         RankRankingConfig: probeOutcome(
-          Retry.none(p102({ rankingConfig: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p104({ rankingConfig: "alchemy-missing", location: "global" } as never)),
         ),
         "RecommendServingConfig@DataStoresServingConfig": probeOutcome(
-          Retry.none(p103({} as never)),
-        ),
-        "RecommendServingConfig@CollectionsEnginesServingConfig": probeOutcome(
-          Retry.none(p104({} as never)),
-        ),
-        "RecommendServingConfig@CollectionsDataStoresServingConfig": probeOutcome(
           Retry.none(p105({} as never)),
         ),
+        "RecommendServingConfig@CollectionsEnginesServingConfig": probeOutcome(
+          Retry.none(p106({} as never)),
+        ),
+        "RecommendServingConfig@CollectionsDataStoresServingConfig": probeOutcome(
+          Retry.none(p107({} as never)),
+        ),
         RecrawlSiteSearchEngineUris: probeOutcome(
-          Retry.none(p106({ dataStore: "alchemy-missing", location: "global" } as never)),
+          Retry.none(p108({ dataStore: "alchemy-missing", location: "global" } as never)),
         ),
-        "SearchServingConfig@DataStoresServingConfig": probeOutcome(Retry.none(p107({} as never))),
+        "SearchServingConfig@DataStoresServingConfig": probeOutcome(Retry.none(p109({} as never))),
         "SearchServingConfig@CollectionsEnginesServingConfig": probeOutcome(
-          Retry.none(p108({} as never)),
-        ),
-        "SearchServingConfig@CollectionsDataStoresServingConfig": probeOutcome(
-          Retry.none(p109({} as never)),
-        ),
-        "SearchServingConfigLite@DataStoresServingConfig": probeOutcome(
           Retry.none(p110({} as never)),
         ),
-        "SearchServingConfigLite@CollectionsEnginesServingConfig": probeOutcome(
+        "SearchServingConfig@CollectionsDataStoresServingConfig": probeOutcome(
           Retry.none(p111({} as never)),
         ),
-        "SearchServingConfigLite@CollectionsDataStoresServingConfig": probeOutcome(
+        "SearchServingConfigLite@DataStoresServingConfig": probeOutcome(
           Retry.none(p112({} as never)),
         ),
-        "StreamServingConfigAnswer@DataStoresServingConfig": probeOutcome(
+        "SearchServingConfigLite@CollectionsEnginesServingConfig": probeOutcome(
           Retry.none(p113({} as never)),
         ),
-        "StreamServingConfigAnswer@CollectionsEnginesServingConfig": probeOutcome(
+        "SearchServingConfigLite@CollectionsDataStoresServingConfig": probeOutcome(
           Retry.none(p114({} as never)),
         ),
-        "StreamServingConfigAnswer@CollectionsDataStoresServingConfig": probeOutcome(
+        "StreamServingConfigAnswer@DataStoresServingConfig": probeOutcome(
           Retry.none(p115({} as never)),
         ),
-        TrainDataStoreCustomModel: probeOutcome(Retry.none(p116({} as never))),
-        "WriteDataStoreUserEvent@DataStore": probeOutcome(Retry.none(p117({} as never))),
-        "WriteDataStoreUserEvent@CollectionsDataStore": probeOutcome(Retry.none(p118({} as never))),
+        "StreamServingConfigAnswer@CollectionsEnginesServingConfig": probeOutcome(
+          Retry.none(p116({} as never)),
+        ),
+        "StreamServingConfigAnswer@CollectionsDataStoresServingConfig": probeOutcome(
+          Retry.none(p117({} as never)),
+        ),
+        TrainDataStoreCustomModel: probeOutcome(Retry.none(p118({} as never))),
+        UpdateCollectionDataConnector: probeOutcome(
+          Retry.none(p119({ collection: "alchemy-missing", location: "global" } as never)),
+        ),
+        "WriteDataStoreUserEvent@DataStore": probeOutcome(Retry.none(p120({} as never))),
+        "WriteDataStoreUserEvent@CollectionsDataStore": probeOutcome(Retry.none(p121({} as never))),
+        WriteUserEvent: probeOutcome(Retry.none(p122({ location: "global" } as never))),
       }),
     };
   }).pipe(
@@ -494,6 +508,7 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
           GCP.DiscoveryEngine.BatchUserStoreUpdateUserLicensesHttp,
           GCP.DiscoveryEngine.CheckGroundingConfigHttp,
           GCP.DiscoveryEngine.CollectDataStoreUserEventHttp,
+          GCP.DiscoveryEngine.CollectUserEventHttp,
           GCP.DiscoveryEngine.CompleteCompletionConfigQueryHttp,
           GCP.DiscoveryEngine.CompleteDataStoreQueryHttp,
           GCP.DiscoveryEngine.CreateCollectionDataStoreSiteSearchEngineSitemapHttp,
@@ -526,9 +541,9 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
           GCP.DiscoveryEngine.ImportDataStoreCompletionSuggestionHttp,
           GCP.DiscoveryEngine.ImportDataStoreSuggestionDenyListEntryHttp,
           GCP.DiscoveryEngine.ImportDataStoreUserEventHttp,
-          GCP.DiscoveryEngine.ImportUserEventHttp,
         ),
         Layer.mergeAll(
+          GCP.DiscoveryEngine.ImportUserEventHttp,
           GCP.DiscoveryEngine.ListCmekConfigsHttp,
           GCP.DiscoveryEngine.ListCollectionDataStoresHttp,
           GCP.DiscoveryEngine.ListCollectionDataStoreSiteSearchEngineTargetSitesHttp,
@@ -549,6 +564,7 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
           GCP.DiscoveryEngine.ListLicenseConfigsHttp,
           GCP.DiscoveryEngine.ListUserStoreLicenseConfigsUsageStatsHttp,
           GCP.DiscoveryEngine.ListUserStoreUserLicensesHttp,
+          GCP.DiscoveryEngine.McpCollectionDataConnectorHttp,
           GCP.DiscoveryEngine.PatchCmekConfigHttp,
           GCP.DiscoveryEngine.PatchDataStoreWidgetConfigHttp,
           GCP.DiscoveryEngine.PatchEngineWidgetConfigHttp,
@@ -566,7 +582,11 @@ export default class DiscoveryEngineGeneratedHost extends GCP.Function<Discovery
           GCP.DiscoveryEngine.SearchServingConfigLiteHttp,
           GCP.DiscoveryEngine.StreamServingConfigAnswerHttp,
           GCP.DiscoveryEngine.TrainDataStoreCustomModelHttp,
+          GCP.DiscoveryEngine.UpdateCollectionDataConnectorHttp,
+        ),
+        Layer.mergeAll(
           GCP.DiscoveryEngine.WriteDataStoreUserEventHttp,
+          GCP.DiscoveryEngine.WriteUserEventHttp,
         ),
       ),
     ),

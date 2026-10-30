@@ -298,15 +298,17 @@ const patternSegments = (pattern: string): string[] | undefined => {
 };
 
 const singular = (word: string) =>
-  word.endsWith("aches")
-    ? word.slice(0, -1)
-    : word.endsWith("ies")
-      ? `${word.slice(0, -3)}y`
-      : word.endsWith("sses") || word.endsWith("xes") || word.endsWith("ches")
-        ? word.slice(0, -2)
-        : word.endsWith("s") && !word.endsWith("ss")
-          ? word.slice(0, -1)
-          : word;
+  /series$/i.test(word)
+    ? word
+    : word.endsWith("aches")
+      ? word.slice(0, -1)
+      : word.endsWith("ies")
+        ? `${word.slice(0, -3)}y`
+        : word.endsWith("sses") || word.endsWith("xes") || word.endsWith("ches")
+          ? word.slice(0, -2)
+          : word.endsWith("s") && !word.endsWith("ss")
+            ? word.slice(0, -1)
+            : word;
 
 /**
  * A path with one parameter per segment, e.g.
@@ -456,6 +458,19 @@ const classify = (options: {
 }) => {
   const { config, api, covered, bindings } = options;
   const roles = { ...options.roles, ...config.roles };
+  // IAM spells a collection its own way (`goldenGateDeployments` for
+  // `goldengateDeployments`, `notificationconfig` for `notificationConfigs`):
+  // match permissions ignoring case and a plural `s`.
+  const fold = (permission: string) =>
+    permission
+      .split(".")
+      .map((part, i, all) =>
+        i === all.length - 2 ? part.toLowerCase().replace(/s$/, "") : part.toLowerCase(),
+      )
+      .join(".");
+  const folded = new Map(Object.keys(roles).map((p) => [fold(p), p]));
+  const known = (permission: string) =>
+    roles[permission] !== undefined ? permission : folded.get(fold(permission));
   const { doc, moduleSource } = api;
   const permissionService = api.permissionService ?? doc.name;
   const resources = Object.entries(config.resources).map(([key, value]) => ({
@@ -513,6 +528,13 @@ const classify = (options: {
     const vars = [...method.path.matchAll(/\{\+?(\w+)\}/g)].map((m) => m[1]!);
     const targets = vars
       .map((v) => ({ param: v, segments: patternSegments(method.parameters?.[v]?.pattern ?? "") }))
+      // `^[^/]+/[^/]+$` takes `projects/p`, `folders/f` or `organizations/o`:
+      // bind its project form.
+      .map((t) =>
+        t.segments?.[0] === "*" && t.segments[1] === "*"
+          ? { ...t, segments: ["projects", ...t.segments.slice(1)] }
+          : t,
+      )
       .filter((t): t is { param: string; segments: string[] } => t.segments !== undefined)
       // A full name has a collection in it; `^[^/]+$` is one segment of a flat path.
       .filter((t) => t.segments.length > 1);
@@ -695,7 +717,8 @@ const classify = (options: {
                 scoped.at(-1)!.toLowerCase(),
               ].map((c) => `${permissionService}.${c}.${v}`),
         )
-        .find((p) => roles[p] !== undefined) ??
+        .map(known)
+        .find((p) => p !== undefined) ??
       // No permission named after the verb: services check custom verbs and
       // child collections as a read (`get`) or a write (`update`) of the
       // collection or its parent. The live probes confirm the grant.
@@ -712,7 +735,8 @@ const classify = (options: {
                 : "update"
             }`,
         )
-        .find((p) => roles[p] !== undefined) ??
+        .map(known)
+        .find((p) => p !== undefined) ??
       config.defaultPermission;
     if (permission === undefined || roles[permission] === undefined) {
       results.push({ id, kind: "needs-permission", reason: permission });

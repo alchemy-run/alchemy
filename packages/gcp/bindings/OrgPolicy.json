@@ -19,5 +19,9 @@
   "skip": {
     "orgpolicy.projects.policies.patch": "changing a project's policy needs roles/orgpolicy.policyAdmin, which IAM grants only on an organization (\"Role roles/orgpolicy.policyAdmin is not supported for this resource\" on a project)",
     "orgpolicy.projects.policies.delete": "changing a project's policy needs roles/orgpolicy.policyAdmin, which IAM grants only on an organization (\"Role roles/orgpolicy.policyAdmin is not supported for this resource\" on a project)"
+  },
+  "permissions": {
+    "orgpolicy.projects.policies.get": "orgpolicy.policy.get",
+    "orgpolicy.projects.policies.getEffectivePolicy": "orgpolicy.policy.get"
   }
 }

@@ -25,5 +25,9 @@
     },
     "enable": ["cloudnumberregistry.googleapis.com"],
     "location": "global"
+  },
+  "permissions": {
+    "cloudnumberregistry.projects.locations.discoveredRanges.showUtilization": "cloudnumberregistry.discoveredRanges.get",
+    "cloudnumberregistry.projects.locations.discoveredRanges.findFreeIpRanges": "cloudnumberregistry.discoveredRanges.get"
   }
 }

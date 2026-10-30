@@ -73,6 +73,22 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("project", { concurrent: true }, () => {
       test.provider(
+        "GetEffectivePolicy (orgpolicy.projects.policies.getEffectivePolicy)",
+        () => probe("GetEffectivePolicy", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:orgpolicy", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "GetPolicy (orgpolicy.projects.policies.get)",
+        () => probe("GetPolicy", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:orgpolicy", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "ListConstraints (orgpolicy.projects.constraints.list)",
         () => probe("ListConstraints", true),
         {
@@ -117,15 +133,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "orgpolicy.projects.policies.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
         'orgpolicy.projects.policies.patch: changing a project\'s policy needs roles/orgpolicy.policyAdmin, which IAM grants only on an organization ("Role roles/orgpolicy.policyAdmin is not supported for this resource" on a project)',
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "orgpolicy.projects.policies.getEffectivePolicy: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

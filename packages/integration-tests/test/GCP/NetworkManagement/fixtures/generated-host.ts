@@ -19,13 +19,17 @@ export default class NetworkManagementGeneratedHost extends GCP.Function<Network
     const p0 = yield* GCP.NetworkManagement.GetConnectivityTest(ProbeConnectivityTest);
     const p1 = yield* GCP.NetworkManagement.GetVpcFlowLogsConfig(ProbeFlowLogs);
     const p2 = yield* GCP.NetworkManagement.ListVpcFlowLogsConfigs();
-    const p3 = yield* GCP.NetworkManagement.RerunConnectivityTest(ProbeConnectivityTest);
+    const p3 = yield* GCP.NetworkManagement.QueryOrgVpcFlowLogsConfigs();
+    const p4 = yield* GCP.NetworkManagement.RerunConnectivityTest(ProbeConnectivityTest);
     return {
       fetch: serveProbes({
         GetConnectivityTest: probeOutcome(Retry.none(p0({} as never))),
         "GetVpcFlowLogsConfig@VpcFlowLogsConfig": probeOutcome(Retry.none(p1({} as never))),
         ListVpcFlowLogsConfigs: probeOutcome(Retry.none(p2({ location: "global" } as never))),
-        RerunConnectivityTest: probeOutcome(Retry.none(p3({} as never))),
+        QueryOrgVpcFlowLogsConfigs: probeOutcome(
+          Retry.none(p3({ location: "us-central1" } as never)),
+        ),
+        RerunConnectivityTest: probeOutcome(Retry.none(p4({} as never))),
       }),
     };
   }).pipe(
@@ -35,6 +39,7 @@ export default class NetworkManagementGeneratedHost extends GCP.Function<Network
           GCP.NetworkManagement.GetConnectivityTestHttp,
           GCP.NetworkManagement.GetVpcFlowLogsConfigHttp,
           GCP.NetworkManagement.ListVpcFlowLogsConfigsHttp,
+          GCP.NetworkManagement.QueryOrgVpcFlowLogsConfigsHttp,
           GCP.NetworkManagement.RerunConnectivityTestHttp,
         ),
       ),

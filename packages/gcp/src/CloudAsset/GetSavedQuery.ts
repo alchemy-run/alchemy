@@ -3,29 +3,29 @@ import type * as cloudasset from "@distilled.cloud/gcp/cloudasset_v1";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { SavedQuery } from "./SavedQuery.ts";
 
-export interface GetSavedQueryRequest extends Omit<cloudasset.GetSavedQueriesRequest, "name"> {}
+export interface GetSavedQueryRequest extends Omit<cloudasset.GetSavedQueriesRequest, "name"> {
+  /** Id of the savedQuery (`savedQueries/{savedQuery}`). */
+  savedQuery: string;
+}
 
-export type GetSavedQueryShape = (
-  resource: SavedQuery,
-) => Effect.Effect<
+export type GetSavedQueryShape = () => Effect.Effect<
   (
-    request?: GetSavedQueryRequest,
+    request: GetSavedQueryRequest,
   ) => Effect.Effect<cloudasset.SavedQuery, cloudasset.GetSavedQueriesError, RuntimeContext>
 >;
 
 /**
  * Gets details about a saved query.
  *
- * Bind it to a {@link SavedQuery} and provide {@link GetSavedQueryHttp}. The
- * host gets `roles/cloudasset.viewer` on the project (the service has no per-resource IAM policy).
+ * A call on the stack's project, so it takes no resource.
+ * Provide {@link GetSavedQueryHttp}. The host gets `roles/cloudasset.viewer` on the project.
  *
  * ### Usage
  * **Example:** Call `savedQueries.get`
  * ```typescript
- * const getSavedQuery = yield* GCP.CloudAsset.GetSavedQuery(savedQuery);
- * const response = yield* getSavedQuery();
+ * const getSavedQuery = yield* GCP.CloudAsset.GetSavedQuery();
+ * const response = yield* getSavedQuery({ savedQuery: "..." });
  * ```
  *
  * @binding

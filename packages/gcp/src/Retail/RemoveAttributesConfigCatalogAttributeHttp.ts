@@ -26,7 +26,7 @@ export const RemoveAttributesConfigCatalogAttributeHttp = Layer.effect(
           ["catalogs", "catalog"],
           ["attributesConfig", ""],
         ],
-        role: "roles/retail.editor",
+        role: "roles/retail.admin",
       },
     ],
   }),

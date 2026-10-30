@@ -16,25 +16,29 @@ export default class CloudNumberRegistryGeneratedHost extends GCP.Function<Cloud
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
     const p0 = yield* GCP.CloudNumberRegistry.CheckIpamAdminScopeAvailability();
-    const p1 = yield* GCP.CloudNumberRegistry.GetDiscoveredRange();
-    const p2 = yield* GCP.CloudNumberRegistry.ListCustomRanges();
-    const p3 = yield* GCP.CloudNumberRegistry.ListDiscoveredRanges();
-    const p4 = yield* GCP.CloudNumberRegistry.ListIpamAdminScopes();
-    const p5 = yield* GCP.CloudNumberRegistry.ListRealms();
-    const p6 = yield* GCP.CloudNumberRegistry.ListRegistryBooks();
+    const p1 = yield* GCP.CloudNumberRegistry.FindDiscoveredRangeFreeIpRanges();
+    const p2 = yield* GCP.CloudNumberRegistry.GetDiscoveredRange();
+    const p3 = yield* GCP.CloudNumberRegistry.ListCustomRanges();
+    const p4 = yield* GCP.CloudNumberRegistry.ListDiscoveredRanges();
+    const p5 = yield* GCP.CloudNumberRegistry.ListIpamAdminScopes();
+    const p6 = yield* GCP.CloudNumberRegistry.ListRealms();
+    const p7 = yield* GCP.CloudNumberRegistry.ListRegistryBooks();
     return {
       fetch: serveProbes({
         CheckIpamAdminScopeAvailability: probeOutcome(
           Retry.none(p0({ location: "global" } as never)),
         ),
-        GetDiscoveredRange: probeOutcome(
+        FindDiscoveredRangeFreeIpRanges: probeOutcome(
           Retry.none(p1({ discoveredRange: "alchemy-missing", location: "global" } as never)),
         ),
-        ListCustomRanges: probeOutcome(Retry.none(p2({ location: "global" } as never))),
-        ListDiscoveredRanges: probeOutcome(Retry.none(p3({ location: "global" } as never))),
-        ListIpamAdminScopes: probeOutcome(Retry.none(p4({ location: "global" } as never))),
-        ListRealms: probeOutcome(Retry.none(p5({ location: "global" } as never))),
-        ListRegistryBooks: probeOutcome(Retry.none(p6({ location: "global" } as never))),
+        GetDiscoveredRange: probeOutcome(
+          Retry.none(p2({ discoveredRange: "alchemy-missing", location: "global" } as never)),
+        ),
+        ListCustomRanges: probeOutcome(Retry.none(p3({ location: "global" } as never))),
+        ListDiscoveredRanges: probeOutcome(Retry.none(p4({ location: "global" } as never))),
+        ListIpamAdminScopes: probeOutcome(Retry.none(p5({ location: "global" } as never))),
+        ListRealms: probeOutcome(Retry.none(p6({ location: "global" } as never))),
+        ListRegistryBooks: probeOutcome(Retry.none(p7({ location: "global" } as never))),
       }),
     };
   }).pipe(
@@ -42,6 +46,7 @@ export default class CloudNumberRegistryGeneratedHost extends GCP.Function<Cloud
       Layer.mergeAll(
         Layer.mergeAll(
           GCP.CloudNumberRegistry.CheckIpamAdminScopeAvailabilityHttp,
+          GCP.CloudNumberRegistry.FindDiscoveredRangeFreeIpRangesHttp,
           GCP.CloudNumberRegistry.GetDiscoveredRangeHttp,
           GCP.CloudNumberRegistry.ListCustomRangesHttp,
           GCP.CloudNumberRegistry.ListDiscoveredRangesHttp,

@@ -1102,6 +1102,10 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("InterconnectGroup", { concurrent: true }, () => {
       test.provider.skip(
+        "CreateInterconnectGroupMembers (compute.interconnectGroups.createMembers): InterconnectGroup: needs physical Interconnects",
+        () => Effect.void,
+      );
+      test.provider.skip(
         "GetInterconnectGroup (compute.interconnectGroups.get): InterconnectGroup: needs physical Interconnects",
         () => Effect.void,
       );
@@ -4758,10 +4762,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "compute.regionOperations.get: long-running operation polling: Alchemy waits on operations itself",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "compute.interconnectGroups.createMembers: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

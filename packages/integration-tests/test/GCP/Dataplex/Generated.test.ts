@@ -190,6 +190,13 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
+    describe("EncryptionConfig", { concurrent: true }, () => {
+      test.provider.skip(
+        "GetEncryptionConfig (dataplex.organizations.locations.encryptionConfigs.get): EncryptionConfig: needs GOOGLE_ORGANIZATION_ID (an external prerequisite the testing project lacks)",
+        () => Effect.void,
+      );
+    });
+
     describe("EntryGroup", { concurrent: true }, () => {
       test.provider(
         "GetEntryGroup (dataplex.projects.locations.entryGroups.get)",
@@ -621,10 +628,6 @@ describe.skipIf(!!process.env.FAST)(
 
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
-      test.provider.skip(
-        "dataplex.organizations.locations.encryptionConfigs.get: no predefined role grants its permission",
-        () => Effect.void,
-      );
       test.provider.skip(
         "dataplex.organizations.locations.encryptionConfigs.list: addressed under `organizations/`, not a project",
         () => Effect.void,

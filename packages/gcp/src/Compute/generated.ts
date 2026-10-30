@@ -195,6 +195,8 @@ export * from "./CreateDiskSnapshot.ts";
 export * from "./CreateDiskSnapshotHttp.ts";
 export * from "./CreateInstanceGroupManagerInstances.ts";
 export * from "./CreateInstanceGroupManagerInstancesHttp.ts";
+export * from "./CreateInterconnectGroupMembers.ts";
+export * from "./CreateInterconnectGroupMembersHttp.ts";
 export * from "./CreateRegionDiskSnapshot.ts";
 export * from "./CreateRegionDiskSnapshotHttp.ts";
 export * from "./CreateRegionInstanceGroupManagerInstances.ts";

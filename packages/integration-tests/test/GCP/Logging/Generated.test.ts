@@ -244,71 +244,6 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
-    describe("LocationsBucket", { concurrent: true }, () => {
-      test.provider(
-        "GetBucket@LocationsBucket (logging.locations.buckets.get)",
-        () => probe("GetBucket@LocationsBucket", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:logging", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "ListBucketLinks@LocationsBucket (logging.locations.buckets.links.list)",
-        () => probe("ListBucketLinks@LocationsBucket", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:logging", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "ListBucketViews@LocationsBucket (logging.locations.buckets.views.list)",
-        () => probe("ListBucketViews@LocationsBucket", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:logging", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "UndeleteBucket@LocationsBucket (logging.locations.buckets.undelete)",
-        () => probe("UndeleteBucket@LocationsBucket", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:logging", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "UpdateBucketAsync@LocationsBucket (logging.locations.buckets.updateAsync)",
-        () => probe("UpdateBucketAsync@LocationsBucket", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:logging", "live"],
-          timeout: 600_000,
-        },
-      );
-    });
-
-    describe("LocationsBucketsLink", { concurrent: true }, () => {
-      test.provider(
-        "GetLink@LocationsBucketsLink (logging.locations.buckets.links.get)",
-        () => probe("GetLink@LocationsBucketsLink", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:logging", "live"],
-          timeout: 600_000,
-        },
-      );
-    });
-
-    describe("LocationsBucketsView", { concurrent: true }, () => {
-      test.provider(
-        "GetView@LocationsBucketsView (logging.locations.buckets.views.get)",
-        () => probe("GetView@LocationsBucketsView", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:logging", "live"],
-          timeout: 600_000,
-        },
-      );
-    });
-
     describe("LogBucket", { concurrent: true }, () => {
       test.provider(
         "GetBucket@LogBucket (logging.projects.locations.buckets.get)",
@@ -467,6 +402,14 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
+      test.provider(
+        "GetCmekSettings (logging.getCmekSettings)",
+        () => probe("GetCmekSettings", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
+      );
       test.provider("GetMetric (logging.projects.metrics.get)", () => probe("GetMetric", false), {
         tags: ["provider:gcp", "provider:gcp:logging", "live"],
         timeout: 600_000,
@@ -487,6 +430,10 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
+      test.provider("GetSettings (logging.getSettings)", () => probe("GetSettings", false), {
+        tags: ["provider:gcp", "provider:gcp:logging", "live"],
+        timeout: 600_000,
+      });
       test.provider("GetSink (logging.projects.sinks.get)", () => probe("GetSink", false), {
         tags: ["provider:gcp", "provider:gcp:logging", "live"],
         timeout: 600_000,
@@ -568,8 +515,24 @@ describe.skipIf(!!process.env.FAST)(
         timeout: 600_000,
       });
       test.provider(
+        "UpdateCmekSettings (logging.updateCmekSettings)",
+        () => probe("UpdateCmekSettings", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "UpdateMetric (logging.projects.metrics.update)",
         () => probe("UpdateMetric", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:logging", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "UpdateSettings (logging.updateSettings)",
+        () => probe("UpdateSettings", false),
         {
           tags: ["provider:gcp", "provider:gcp:logging", "live"],
           timeout: 600_000,
@@ -739,43 +702,47 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.getCmekSettings: addressed under `*/`, not a project",
+        "logging.locations.buckets.undelete: name collision on UndeleteBucket",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.getSettings: addressed under `*/`, not a project",
+        "logging.locations.buckets.updateAsync: name collision on UpdateBucketAsync",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.updateSettings: addressed under `*/`, not a project",
+        "logging.locations.buckets.list: name collision on ListBuckets",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.updateCmekSettings: addressed under `*/`, not a project",
+        "logging.locations.buckets.get: name collision on GetBucket",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.locations.buckets.list: addressed under `*/`, not a project",
+        "logging.locations.buckets.createAsync: name collision on CreateBucketAsync",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.locations.buckets.createAsync: addressed under `*/`, not a project",
+        "logging.locations.buckets.views.get: name collision on GetView",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.exclusions.delete: addressed under `*/`, not a project",
+        "logging.locations.buckets.views.list: name collision on ListBucketViews",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.exclusions.list: addressed under `*/`, not a project",
+        "logging.locations.buckets.links.list: name collision on ListBucketLinks",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.exclusions.patch: addressed under `*/`, not a project",
+        "logging.locations.buckets.links.get: name collision on GetLink",
         () => Effect.void,
       );
       test.provider.skip(
-        "logging.exclusions.get: addressed under `*/`, not a project",
+        "logging.exclusions.list: name collision on ListExclusions",
+        () => Effect.void,
+      );
+      test.provider.skip(
+        "logging.exclusions.get: name collision on GetExclusion",
         () => Effect.void,
       );
       test.provider.skip(
@@ -854,34 +821,13 @@ describe.skipIf(!!process.env.FAST)(
         "logging.organizations.logs.delete: addressed under `organizations/`, not a project",
         () => Effect.void,
       );
-      test.provider.skip(
-        "logging.sinks.update: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.sinks.create: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.sinks.get: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.sinks.delete: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.sinks.list: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.logs.delete: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "logging.logs.list: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
+      test.provider.skip("logging.sinks.update: name collision on UpdateSink", () => Effect.void);
+      test.provider.skip("logging.sinks.create: name collision on CreateSink", () => Effect.void);
+      test.provider.skip("logging.sinks.get: name collision on GetSink", () => Effect.void);
+      test.provider.skip("logging.sinks.delete: name collision on DeleteSink", () => Effect.void);
+      test.provider.skip("logging.sinks.list: name collision on ListSinks", () => Effect.void);
+      test.provider.skip("logging.logs.delete: name collision on DeleteLog", () => Effect.void);
+      test.provider.skip("logging.logs.list: name collision on ListLogs", () => Effect.void);
     });
   },
 );

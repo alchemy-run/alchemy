@@ -16,32 +16,38 @@ export default class DataLineageGeneratedHost extends GCP.Function<DataLineageGe
   "DataLineageGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.DataLineage.GetLineageEvent(ProbeLineageEvent);
-    const p1 = yield* GCP.DataLineage.GetProcess(ProbeProcess);
-    const p2 = yield* GCP.DataLineage.GetRun(ProbeRun);
-    const p3 = yield* GCP.DataLineage.ListProcesses();
-    const p4 = yield* GCP.DataLineage.ListProcessRuns(ProbeProcess);
-    const p5 = yield* GCP.DataLineage.ListRunLineageEvents(ProbeRun);
+    const p0 = yield* GCP.DataLineage.GetConfig();
+    const p1 = yield* GCP.DataLineage.GetLineageEvent(ProbeLineageEvent);
+    const p2 = yield* GCP.DataLineage.GetProcess(ProbeProcess);
+    const p3 = yield* GCP.DataLineage.GetRun(ProbeRun);
+    const p4 = yield* GCP.DataLineage.ListProcesses();
+    const p5 = yield* GCP.DataLineage.ListProcessRuns(ProbeProcess);
+    const p6 = yield* GCP.DataLineage.ListRunLineageEvents(ProbeRun);
+    const p7 = yield* GCP.DataLineage.PatchConfig();
     return {
       fetch: serveProbes({
-        GetLineageEvent: probeOutcome(Retry.none(p0({} as never))),
-        GetProcess: probeOutcome(Retry.none(p1({} as never))),
-        GetRun: probeOutcome(Retry.none(p2({} as never))),
-        ListProcesses: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListProcessRuns: probeOutcome(Retry.none(p4({} as never))),
-        ListRunLineageEvents: probeOutcome(Retry.none(p5({} as never))),
+        GetConfig: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
+        GetLineageEvent: probeOutcome(Retry.none(p1({} as never))),
+        GetProcess: probeOutcome(Retry.none(p2({} as never))),
+        GetRun: probeOutcome(Retry.none(p3({} as never))),
+        ListProcesses: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
+        ListProcessRuns: probeOutcome(Retry.none(p5({} as never))),
+        ListRunLineageEvents: probeOutcome(Retry.none(p6({} as never))),
+        PatchConfig: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
     Effect.provide(
       Layer.mergeAll(
         Layer.mergeAll(
+          GCP.DataLineage.GetConfigHttp,
           GCP.DataLineage.GetLineageEventHttp,
           GCP.DataLineage.GetProcessHttp,
           GCP.DataLineage.GetRunHttp,
           GCP.DataLineage.ListProcessesHttp,
           GCP.DataLineage.ListProcessRunsHttp,
           GCP.DataLineage.ListRunLineageEventsHttp,
+          GCP.DataLineage.PatchConfigHttp,
         ),
       ),
     ),

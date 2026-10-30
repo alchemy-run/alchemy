@@ -5,7 +5,6 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { BillingBucket } from "./BillingBucket.ts";
 import type { FolderBucket } from "./FolderBucket.ts";
-import type { LocationsBucket } from "./LocationsBucket.ts";
 import type { LogBucket } from "./LogBucket.ts";
 import type { OrganizationLogBucket } from "./OrganizationLogBucket.ts";
 
@@ -15,7 +14,7 @@ export interface UpdateBucketAsyncRequest extends Omit<
 > {}
 
 export type UpdateBucketAsyncShape = (
-  resource: LogBucket | BillingBucket | FolderBucket | LocationsBucket | OrganizationLogBucket,
+  resource: LogBucket | BillingBucket | FolderBucket | OrganizationLogBucket,
 ) => Effect.Effect<
   (
     request?: UpdateBucketAsyncRequest,
@@ -24,7 +23,6 @@ export type UpdateBucketAsyncShape = (
     | logging.UpdateAsyncProjectsLocationsBucketsError
     | logging.UpdateAsyncBillingAccountsLocationsBucketsError
     | logging.UpdateAsyncFoldersLocationsBucketsError
-    | logging.UpdateAsyncLocationsBucketsError
     | logging.UpdateAsyncOrganizationsLocationsBucketsError,
     RuntimeContext
   >
@@ -33,7 +31,7 @@ export type UpdateBucketAsyncShape = (
 /**
  * Updates a log bucket asynchronously.If the bucket has a lifecycle_state of DELETE_REQUESTED, then FAILED_PRECONDITION will be returned.After a bucket has been created, the bucket's location cannot be changed.
  *
- * Bind it to a {@link LogBucket} or {@link BillingBucket} or {@link FolderBucket} or {@link LocationsBucket} or {@link OrganizationLogBucket} and provide {@link UpdateBucketAsyncHttp}. The
+ * Bind it to a {@link LogBucket} or {@link BillingBucket} or {@link FolderBucket} or {@link OrganizationLogBucket} and provide {@link UpdateBucketAsyncHttp}. The
  * host gets `roles/logging.configWriter` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage

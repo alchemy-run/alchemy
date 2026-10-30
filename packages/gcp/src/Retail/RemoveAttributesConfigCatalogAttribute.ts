@@ -28,7 +28,7 @@ export type RemoveAttributesConfigCatalogAttributeShape = () => Effect.Effect<
  * Removes the specified CatalogAttribute from the AttributesConfig.
  *
  * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link RemoveAttributesConfigCatalogAttributeHttp}. The host gets `roles/retail.editor` on the project.
+ * Provide {@link RemoveAttributesConfigCatalogAttributeHttp}. The host gets `roles/retail.admin` on the project.
  *
  * ### Usage
  * **Example:** Call `attributesConfig.removeCatalogAttribute`

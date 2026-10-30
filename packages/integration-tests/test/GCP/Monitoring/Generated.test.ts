@@ -146,8 +146,32 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "CreateTimeSery (monitoring.projects.timeSeries.create)",
-        () => probe("CreateTimeSery", false),
+        "CreateTimeSeries (monitoring.projects.timeSeries.create)",
+        () => probe("CreateTimeSeries", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "CreateTimeSeriesService (monitoring.projects.timeSeries.createService)",
+        () => probe("CreateTimeSeriesService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "DeleteService (monitoring.services.delete)",
+        () => probe("DeleteService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "DeleteServiceLevelObjective (monitoring.services.serviceLevelObjectives.delete)",
+        () => probe("DeleteServiceLevelObjective", false),
         {
           tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
           timeout: 600_000,
@@ -168,6 +192,18 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "GetNotificationChannelDescriptor (monitoring.projects.notificationChannelDescriptors.get)",
         () => probe("GetNotificationChannelDescriptor", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider("GetService (monitoring.services.get)", () => probe("GetService", false), {
+        tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
+        "GetServiceLevelObjective (monitoring.services.serviceLevelObjectives.get)",
+        () => probe("GetServiceLevelObjective", false),
         {
           tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
           timeout: 600_000,
@@ -238,6 +274,18 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "ListServiceLevelObjectives (monitoring.services.serviceLevelObjectives.list)",
+        () => probe("ListServiceLevelObjectives", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider("ListServices (monitoring.services.list)", () => probe("ListServices", true), {
+        tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+        timeout: 600_000,
+      });
+      test.provider(
         "ListSnoozes (monitoring.projects.snoozes.list)",
         () => probe("ListSnoozes", true),
         {
@@ -262,6 +310,22 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "PatchService (monitoring.services.patch)",
+        () => probe("PatchService", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "PatchServiceLevelObjective (monitoring.services.serviceLevelObjectives.patch)",
+        () => probe("PatchServiceLevelObjective", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "PatchSnooze (monitoring.projects.snoozes.patch)",
         () => probe("PatchSnooze", false),
         {
@@ -269,27 +333,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-    });
-
-    describe("Service", { concurrent: true }, () => {
-      test.provider("GetService (monitoring.services.get)", () => probe("GetService", true), {
-        tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
-        timeout: 600_000,
-      });
       test.provider(
-        "ListServiceLevelObjectives (monitoring.services.serviceLevelObjectives.list)",
-        () => probe("ListServiceLevelObjectives", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
-          timeout: 600_000,
-        },
-      );
-    });
-
-    describe("ServicesServiceLevelObjective", { concurrent: true }, () => {
-      test.provider(
-        "GetServiceLevelObjective (monitoring.services.serviceLevelObjectives.get)",
-        () => probe("GetServiceLevelObjective", true),
+        "QueryTimeSeries (monitoring.projects.timeSeries.query)",
+        () => probe("QueryTimeSeries", false),
         {
           tags: ["provider:gcp", "provider:gcp:monitoring", "live"],
           timeout: 600_000,
@@ -315,19 +361,7 @@ describe.skipIf(!!process.env.FAST)(
         () => Effect.void,
       );
       test.provider.skip(
-        "monitoring.services.list: addressed under `*/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
         "monitoring.folders.timeSeries.list: addressed under `folders/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "monitoring.projects.timeSeries.createService: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "monitoring.projects.timeSeries.query: no predefined role grants its permission",
         () => Effect.void,
       );
       test.provider.skip(

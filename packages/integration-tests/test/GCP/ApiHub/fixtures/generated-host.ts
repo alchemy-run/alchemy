@@ -33,7 +33,10 @@ export default class ApiHubGeneratedHost extends GCP.Function<ApiHubGeneratedHos
     const p15 = yield* GCP.ApiHub.ListExternalApis();
     const p16 = yield* GCP.ApiHub.ListHostProjectRegistrations();
     const p17 = yield* GCP.ApiHub.ListPlugins();
-    const p18 = yield* GCP.ApiHub.LookupApiHubInstance();
+    const p18 = yield* GCP.ApiHub.ListRuntimeProjectAttachments();
+    const p19 = yield* GCP.ApiHub.LookupApiHubInstance();
+    const p20 = yield* GCP.ApiHub.ManageAddonConfig();
+    const p21 = yield* GCP.ApiHub.UpdatePluginStyleGuide();
     return {
       fetch: serveProbes({
         CreateHostProjectRegistration: probeOutcome(
@@ -88,7 +91,16 @@ export default class ApiHubGeneratedHost extends GCP.Function<ApiHubGeneratedHos
           Retry.none(p16({ location: "us-central1" } as never)),
         ),
         ListPlugins: probeOutcome(Retry.none(p17({ location: "us-central1" } as never))),
-        LookupApiHubInstance: probeOutcome(Retry.none(p18({ location: "us-central1" } as never))),
+        ListRuntimeProjectAttachments: probeOutcome(
+          Retry.none(p18({ location: "us-central1" } as never)),
+        ),
+        LookupApiHubInstance: probeOutcome(Retry.none(p19({ location: "us-central1" } as never))),
+        ManageAddonConfig: probeOutcome(
+          Retry.none(p20({ addon: "alchemy-missing", location: "us-central1" } as never)),
+        ),
+        UpdatePluginStyleGuide: probeOutcome(
+          Retry.none(p21({ plugin: "alchemy-missing", location: "us-central1" } as never)),
+        ),
       }),
     };
   }).pipe(
@@ -113,7 +125,10 @@ export default class ApiHubGeneratedHost extends GCP.Function<ApiHubGeneratedHos
           GCP.ApiHub.ListExternalApisHttp,
           GCP.ApiHub.ListHostProjectRegistrationsHttp,
           GCP.ApiHub.ListPluginsHttp,
+          GCP.ApiHub.ListRuntimeProjectAttachmentsHttp,
           GCP.ApiHub.LookupApiHubInstanceHttp,
+          GCP.ApiHub.ManageAddonConfigHttp,
+          GCP.ApiHub.UpdatePluginStyleGuideHttp,
         ),
       ),
     ),

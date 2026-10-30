@@ -11,5 +11,8 @@
       "ProjectService": "ProbeProjectService"
     },
     "untestable": {}
+  },
+  "permissions": {
+    "serviceusage.services.batchEnable": "serviceusage.services.enable"
   }
 }

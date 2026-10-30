@@ -3,29 +3,29 @@ import type * as monitoring from "@distilled.cloud/gcp/monitoring_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
-import type { Service } from "./Service.ts";
 
-export interface GetServiceRequest extends Omit<monitoring.GetServicesRequest, "name"> {}
+export interface GetServiceRequest extends Omit<monitoring.GetServicesRequest, "name"> {
+  /** Id of the service (`services/{service}`). */
+  service: string;
+}
 
-export type GetServiceShape = (
-  resource: Service,
-) => Effect.Effect<
+export type GetServiceShape = () => Effect.Effect<
   (
-    request?: GetServiceRequest,
+    request: GetServiceRequest,
   ) => Effect.Effect<monitoring.Service, monitoring.GetServicesError, RuntimeContext>
 >;
 
 /**
  * Get the named Service.
  *
- * Bind it to a {@link Service} and provide {@link GetServiceHttp}. The
- * host gets `roles/monitoring.servicesViewer` on the project (the service has no per-resource IAM policy).
+ * A call on the stack's project, so it takes no resource.
+ * Provide {@link GetServiceHttp}. The host gets `roles/monitoring.servicesViewer` on the project.
  *
  * ### Usage
  * **Example:** Call `services.get`
  * ```typescript
- * const getService = yield* GCP.Monitoring.GetService(service);
- * const response = yield* getService();
+ * const getService = yield* GCP.Monitoring.GetService();
+ * const response = yield* getService({ service: "..." });
  * ```
  *
  * @binding

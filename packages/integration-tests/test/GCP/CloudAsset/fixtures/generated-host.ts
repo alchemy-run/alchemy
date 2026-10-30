@@ -4,7 +4,6 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
-import { ProbeFeed, ProbeSavedQuery } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated CloudAsset binding as its own
@@ -16,17 +15,79 @@ export default class CloudAssetGeneratedHost extends GCP.Function<CloudAssetGene
   "CloudAssetGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.CloudAsset.GetFeed(ProbeFeed);
-    const p1 = yield* GCP.CloudAsset.GetSavedQuery(ProbeSavedQuery);
+    const p0 = yield* GCP.CloudAsset.AnalyzeIamPolicy();
+    const p1 = yield* GCP.CloudAsset.AnalyzeIamPolicyLongrunning();
+    const p2 = yield* GCP.CloudAsset.AnalyzeMove();
+    const p3 = yield* GCP.CloudAsset.AnalyzeOrgPolicies();
+    const p4 = yield* GCP.CloudAsset.AnalyzeOrgPolicyGovernedAssets();
+    const p5 = yield* GCP.CloudAsset.AnalyzeOrgPolicyGovernedContainers();
+    const p6 = yield* GCP.CloudAsset.BatchEffectiveIamPolicyGet();
+    const p7 = yield* GCP.CloudAsset.BatchGetAssetsHistory();
+    const p8 = yield* GCP.CloudAsset.DeleteFeed();
+    const p9 = yield* GCP.CloudAsset.DeleteSavedQuery();
+    const p10 = yield* GCP.CloudAsset.ExportAssets();
+    const p11 = yield* GCP.CloudAsset.GetFeed();
+    const p12 = yield* GCP.CloudAsset.GetSavedQuery();
+    const p13 = yield* GCP.CloudAsset.ListAssets();
+    const p14 = yield* GCP.CloudAsset.ListFeeds();
+    const p15 = yield* GCP.CloudAsset.ListSavedQueries();
+    const p16 = yield* GCP.CloudAsset.PatchFeed();
+    const p17 = yield* GCP.CloudAsset.PatchSavedQuery();
+    const p18 = yield* GCP.CloudAsset.QueryAssets();
+    const p19 = yield* GCP.CloudAsset.SearchAllIamPolicies();
+    const p20 = yield* GCP.CloudAsset.SearchAllResources();
     return {
       fetch: serveProbes({
-        GetFeed: probeOutcome(Retry.none(p0({} as never))),
-        GetSavedQuery: probeOutcome(Retry.none(p1({} as never))),
+        AnalyzeIamPolicy: probeOutcome(Retry.none(p0({} as never))),
+        AnalyzeIamPolicyLongrunning: probeOutcome(Retry.none(p1({} as never))),
+        AnalyzeMove: probeOutcome(Retry.none(p2({} as never))),
+        AnalyzeOrgPolicies: probeOutcome(Retry.none(p3({} as never))),
+        AnalyzeOrgPolicyGovernedAssets: probeOutcome(Retry.none(p4({} as never))),
+        AnalyzeOrgPolicyGovernedContainers: probeOutcome(Retry.none(p5({} as never))),
+        BatchEffectiveIamPolicyGet: probeOutcome(Retry.none(p6({} as never))),
+        BatchGetAssetsHistory: probeOutcome(Retry.none(p7({} as never))),
+        DeleteFeed: probeOutcome(Retry.none(p8({ feed: "alchemy-missing" } as never))),
+        DeleteSavedQuery: probeOutcome(Retry.none(p9({ savedQuery: "alchemy-missing" } as never))),
+        ExportAssets: probeOutcome(Retry.none(p10({} as never))),
+        GetFeed: probeOutcome(Retry.none(p11({ feed: "alchemy-missing" } as never))),
+        GetSavedQuery: probeOutcome(Retry.none(p12({ savedQuery: "alchemy-missing" } as never))),
+        ListAssets: probeOutcome(Retry.none(p13({} as never))),
+        ListFeeds: probeOutcome(Retry.none(p14({} as never))),
+        ListSavedQueries: probeOutcome(Retry.none(p15({} as never))),
+        PatchFeed: probeOutcome(Retry.none(p16({ feed: "alchemy-missing" } as never))),
+        PatchSavedQuery: probeOutcome(Retry.none(p17({ savedQuery: "alchemy-missing" } as never))),
+        QueryAssets: probeOutcome(Retry.none(p18({} as never))),
+        SearchAllIamPolicies: probeOutcome(Retry.none(p19({} as never))),
+        SearchAllResources: probeOutcome(Retry.none(p20({} as never))),
       }),
     };
   }).pipe(
     Effect.provide(
-      Layer.mergeAll(Layer.mergeAll(GCP.CloudAsset.GetFeedHttp, GCP.CloudAsset.GetSavedQueryHttp)),
+      Layer.mergeAll(
+        Layer.mergeAll(
+          GCP.CloudAsset.AnalyzeIamPolicyHttp,
+          GCP.CloudAsset.AnalyzeIamPolicyLongrunningHttp,
+          GCP.CloudAsset.AnalyzeMoveHttp,
+          GCP.CloudAsset.AnalyzeOrgPoliciesHttp,
+          GCP.CloudAsset.AnalyzeOrgPolicyGovernedAssetsHttp,
+          GCP.CloudAsset.AnalyzeOrgPolicyGovernedContainersHttp,
+          GCP.CloudAsset.BatchEffectiveIamPolicyGetHttp,
+          GCP.CloudAsset.BatchGetAssetsHistoryHttp,
+          GCP.CloudAsset.DeleteFeedHttp,
+          GCP.CloudAsset.DeleteSavedQueryHttp,
+          GCP.CloudAsset.ExportAssetsHttp,
+          GCP.CloudAsset.GetFeedHttp,
+          GCP.CloudAsset.GetSavedQueryHttp,
+          GCP.CloudAsset.ListAssetsHttp,
+          GCP.CloudAsset.ListFeedsHttp,
+          GCP.CloudAsset.ListSavedQueriesHttp,
+          GCP.CloudAsset.PatchFeedHttp,
+          GCP.CloudAsset.PatchSavedQueryHttp,
+          GCP.CloudAsset.QueryAssetsHttp,
+          GCP.CloudAsset.SearchAllIamPoliciesHttp,
+          GCP.CloudAsset.SearchAllResourcesHttp,
+        ),
+      ),
     ),
   ),
 ) {}

@@ -26,7 +26,7 @@ export const CompleteCompletionConfigQueryHttp = Layer.effect(
           ["dataStores", "dataStore"],
           ["completionConfig", ""],
         ],
-        role: "roles/discoveryengine.agentspaceEditor",
+        role: "roles/discoveryengine.agentspaceViewer",
       },
     ],
   }),

@@ -37,5 +37,7 @@ export * from "./ListRules.ts";
 export * from "./ListRulesHttp.ts";
 export * from "./RunEvaluationExecution.ts";
 export * from "./RunEvaluationExecutionHttp.ts";
+export * from "./WriteInsight.ts";
+export * from "./WriteInsightHttp.ts";
 export * from "./DeploymentsActuationAuditLogs.ts";
 export * from "./EvaluationAuditLogs.ts";

@@ -2415,32 +2415,32 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("TensorboardsExperimentsRunsTimeSeries", { concurrent: true }, () => {
       test.provider(
-        "ExportTimeSeryTensorboardTimeSeries (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.exportTensorboardTimeSeries)",
-        () => probe("ExportTimeSeryTensorboardTimeSeries", false),
+        "ExportTensorboardTimeSeries (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.exportTensorboardTimeSeries)",
+        () => probe("ExportTensorboardTimeSeries", false),
         {
           tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
           timeout: 600_000,
         },
       );
       test.provider(
-        "GetTimeSery (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.get)",
-        () => probe("GetTimeSery", true),
+        "GetTimeSeries (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.get)",
+        () => probe("GetTimeSeries", true),
         {
           tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
           timeout: 600_000,
         },
       );
       test.provider(
-        "ReadTimeSery (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.read)",
-        () => probe("ReadTimeSery", false),
+        "ReadTimeSeries (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.read)",
+        () => probe("ReadTimeSeries", false),
         {
           tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
           timeout: 600_000,
         },
       );
       test.provider(
-        "ReadTimeSeryBlobData (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.readBlobData)",
-        () => probe("ReadTimeSeryBlobData", false),
+        "ReadTimeSeriesBlobData (aiplatform.projects.locations.tensorboards.experiments.runs.timeSeries.readBlobData)",
+        () => probe("ReadTimeSeriesBlobData", false),
         {
           tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
           timeout: 600_000,

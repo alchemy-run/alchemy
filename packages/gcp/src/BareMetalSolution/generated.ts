@@ -23,6 +23,8 @@ export * from "./GetNetwork.ts";
 export * from "./GetNetworkHttp.ts";
 export * from "./GetNfsShare.ts";
 export * from "./GetNfsShareHttp.ts";
+export * from "./GetOsImage.ts";
+export * from "./GetOsImageHttp.ts";
 export * from "./GetSnapshot.ts";
 export * from "./GetSnapshotHttp.ts";
 export * from "./GetVolume.ts";

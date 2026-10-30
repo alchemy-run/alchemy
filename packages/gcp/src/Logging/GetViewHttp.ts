@@ -34,12 +34,6 @@ export const GetViewHttp = Layer.effect(
         iam: { role: "roles/logging.privateLogViewer" },
       },
       {
-        resource: "GCP.Logging.LocationsBucketsView",
-        operation: logging.getLocationsBucketsViews,
-        param: "name",
-        iam: { role: "roles/logging.privateLogViewer" },
-      },
-      {
         resource: "GCP.Logging.OrganizationBucketsView",
         operation: logging.getOrganizationsLocationsBucketsViews,
         param: "name",

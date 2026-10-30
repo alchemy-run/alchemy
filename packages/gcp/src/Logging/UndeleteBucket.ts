@@ -5,7 +5,6 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
 import type { BillingBucket } from "./BillingBucket.ts";
 import type { FolderBucket } from "./FolderBucket.ts";
-import type { LocationsBucket } from "./LocationsBucket.ts";
 import type { LogBucket } from "./LogBucket.ts";
 import type { OrganizationLogBucket } from "./OrganizationLogBucket.ts";
 
@@ -15,7 +14,7 @@ export interface UndeleteBucketRequest extends Omit<
 > {}
 
 export type UndeleteBucketShape = (
-  resource: LogBucket | BillingBucket | FolderBucket | LocationsBucket | OrganizationLogBucket,
+  resource: LogBucket | BillingBucket | FolderBucket | OrganizationLogBucket,
 ) => Effect.Effect<
   (
     request?: UndeleteBucketRequest,
@@ -24,7 +23,6 @@ export type UndeleteBucketShape = (
     | logging.UndeleteProjectsLocationsBucketsError
     | logging.UndeleteBillingAccountsLocationsBucketsError
     | logging.UndeleteFoldersLocationsBucketsError
-    | logging.UndeleteLocationsBucketsError
     | logging.UndeleteOrganizationsLocationsBucketsError,
     RuntimeContext
   >
@@ -33,7 +31,7 @@ export type UndeleteBucketShape = (
 /**
  * Undeletes a log bucket.
  *
- * Bind it to a {@link LogBucket} or {@link BillingBucket} or {@link FolderBucket} or {@link LocationsBucket} or {@link OrganizationLogBucket} and provide {@link UndeleteBucketHttp}. The
+ * Bind it to a {@link LogBucket} or {@link BillingBucket} or {@link FolderBucket} or {@link OrganizationLogBucket} and provide {@link UndeleteBucketHttp}. The
  * host gets `roles/logging.configWriter` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage

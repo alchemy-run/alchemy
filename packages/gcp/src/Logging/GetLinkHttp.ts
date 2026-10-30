@@ -34,12 +34,6 @@ export const GetLinkHttp = Layer.effect(
         iam: { role: "roles/logging.linkViewer" },
       },
       {
-        resource: "GCP.Logging.LocationsBucketsLink",
-        operation: logging.getLocationsBucketsLinks,
-        param: "name",
-        iam: { role: "roles/logging.linkViewer" },
-      },
-      {
         resource: "GCP.Logging.OrganizationBucketsLink",
         operation: logging.getOrganizationsLocationsBucketsLinks,
         param: "name",
