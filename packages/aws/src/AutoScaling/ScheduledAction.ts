@@ -5,7 +5,6 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -262,10 +261,12 @@ export const ScheduledActionProvider = () =>
             ScheduledActionName: scheduledActionName,
             Recurrence: news.recurrence,
             StartTime: news.startTime
-              ? DateTime.toDateUtc(DateTime.makeUnsafe(news.startTime))
+              ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                new Date(news.startTime)
               : undefined,
             EndTime: news.endTime
-              ? DateTime.toDateUtc(DateTime.makeUnsafe(news.endTime))
+              ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                new Date(news.endTime)
               : undefined,
             TimeZone: news.timeZone,
             MinSize: news.minSize,

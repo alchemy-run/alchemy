@@ -3,7 +3,6 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -260,11 +259,13 @@ export const ScheduledActionProvider = () =>
               Timezone: news.timezone,
               StartTime:
                 news.startTime !== undefined
-                  ? DateTime.toDateUtc(DateTime.makeUnsafe(news.startTime))
+                  ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                    new Date(news.startTime)
                   : undefined,
               EndTime:
                 news.endTime !== undefined
-                  ? DateTime.toDateUtc(DateTime.makeUnsafe(news.endTime))
+                  ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                    new Date(news.endTime)
                   : undefined,
               ScalableTargetAction: news.scalableTargetAction,
             }),
