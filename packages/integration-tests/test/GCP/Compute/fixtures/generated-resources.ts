@@ -12,6 +12,8 @@ import { CERT_A_PEM, KEY_A_PEM } from "./https-proxy-cert.ts";
 const zone = "us-central1-a";
 const region = "us-central1";
 const DEFAULT_NETWORK = "default";
+/** Load balancers and packet mirroring take a network URL, not a bare name. */
+const DEFAULT_NETWORK_URL = "global/networks/default";
 
 const redirect = {
   defaultUrlRedirect: { httpsRedirect: true, hostRedirect: "example.com", stripQuery: false },
@@ -428,7 +430,7 @@ const IlbBackend = Effect.gen(function* () {
     region,
     protocol: "TCP",
     loadBalancingScheme: "INTERNAL",
-    network: DEFAULT_NETWORK,
+    network: DEFAULT_NETWORK_URL,
     healthChecks: [check.selfLink.as<string>()],
   });
 });
@@ -450,7 +452,7 @@ const ProducerRule = Effect.gen(function* () {
     region,
     loadBalancingScheme: "INTERNAL",
     backendService: backend.selfLink.as<string>(),
-    network: DEFAULT_NETWORK,
+    network: DEFAULT_NETWORK_URL,
     subnetwork: subnet.selfLink.as<string>(),
     ipProtocol: "TCP",
     allPorts: true,
@@ -472,14 +474,14 @@ const CollectorRule = Effect.gen(function* () {
     region,
     protocol: "TCP",
     loadBalancingScheme: "INTERNAL",
-    network: DEFAULT_NETWORK,
+    network: DEFAULT_NETWORK_URL,
     healthChecks: [(yield* IlbCheck).selfLink.as<string>()],
   });
   return yield* GCP.Compute.ForwardingRule("ProbeCollectorRule", {
     region,
     loadBalancingScheme: "INTERNAL",
     backendService: backend.selfLink.as<string>(),
-    network: DEFAULT_NETWORK,
+    network: DEFAULT_NETWORK_URL,
     ipProtocol: "TCP",
     allPorts: true,
     isMirroringCollector: true,
@@ -489,7 +491,7 @@ export const PacketMirroring = Effect.gen(function* () {
   const collector = yield* CollectorRule;
   return yield* GCP.Compute.PacketMirroring("ProbeMirroring", {
     region,
-    network: DEFAULT_NETWORK,
+    network: DEFAULT_NETWORK_URL,
     collectorIlb: collector.selfLink.as<string>(),
     mirroredResources: { tags: ["alchemy-probe-pm"] },
   });
