@@ -4,7 +4,6 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare/CloudflareEnviron
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import { MinimumLogLevel } from "effect/References";
 import * as pathe from "pathe";
 import { cloneFixture } from "../Utils/Fixture.ts";
@@ -45,17 +44,6 @@ const prismaGenerate = (cwd: string) =>
         );
       }),
   );
-
-// The site's latest `alchemy dev` log, where the Vite dev server's output lands.
-const readDevLog = (id: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const logRoot = pathe.resolve(".alchemy/log");
-    const logs = (yield* fs.readDirectory(logRoot, { recursive: true }))
-      .filter((file) => file.includes(`/${id}/`))
-      .sort();
-    return yield* fs.readFileString(pathe.join(logRoot, logs.at(-1)!));
-  });
 
 describe("Website.Vite Prisma", () => {
   for (const mode of ["live", "dev"] as const) {
@@ -103,7 +91,7 @@ describe("Website.Vite Prisma", () => {
           });
           if (mode === "dev") {
             // Prisma's dependencies are pre-bundled before the first request.
-            const log = yield* readDevLog(id);
+            const log = yield* Test.resourceLog(id);
             expect(log).not.toContain("optimized dependencies changed. reloading");
             expect(log).not.toContain("[vite] program reload");
           } else {

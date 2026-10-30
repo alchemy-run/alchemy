@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import { AdoptPolicy } from "alchemy/AdoptPolicy";
 import { AlchemyContext, AlchemyContextLive } from "alchemy/AlchemyContext";
 import { ArtifactStore, provideFreshArtifactStore } from "alchemy/Artifacts";
@@ -29,7 +30,7 @@ import { Stage } from "alchemy/Stage";
 import * as State from "alchemy/State";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { loadConfigProvider, StackConfigOverrides } from "alchemy/Util/ConfigProvider";
-import { kindOf } from "alchemy/Util/LogRecord";
+import { kindOf, type LogRecord, recordOf } from "alchemy/Util/LogRecord";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Config from "effect/Config";
@@ -427,24 +428,69 @@ const alchemyLayer = Layer.mergeAll(
   AlchemyContextLive,
 );
 
+/** Most records kept per resource; older ones are dropped first. */
+const RESOURCE_LOG_LIMIT = 5_000;
+
+const resourceRecords = new Map<string, Array<LogRecord>>();
+
+/**
+ * Keeps every record tagged with a resource (`fqn`), across the whole test
+ * process: records a sidecar's resources log (a dev Worker's console, a Vite
+ * dev server's output) reach the spawner's loggers, not the test that
+ * deployed them, so a test reads them back with {@link resourceLog}.
+ */
+const resourceRecorder = Logger.make<unknown, void>((options) => {
+  const record = recordOf(options);
+  const fqn = record.attributes.fqn;
+  if (typeof fqn !== "string" || (record.kind !== "log" && record.kind !== "output")) return;
+  let records = resourceRecords.get(fqn);
+  if (records === undefined) resourceRecords.set(fqn, (records = []));
+  records.push(record);
+  if (records.length > RESOURCE_LOG_LIMIT) records.splice(0, records.length - RESOURCE_LOG_LIMIT);
+});
+
+/**
+ * The text of every record logged so far for the resource `fqn` — its
+ * processes' output and alchemy's lines about it — one line per record,
+ * without ANSI styling. Works whether the resource's provider runs in the
+ * dev sidecar or in-process.
+ */
+export const resourceLog = (fqn: string): Effect.Effect<string> =>
+  Effect.sync(() =>
+    (resourceRecords.get(fqn) ?? [])
+      .map((record) =>
+        stripVTControlCharacters(
+          record.kind === "log"
+            ? record.data.message
+            : record.kind === "output"
+              ? record.data.text
+              : "",
+        ),
+      )
+      .join("\n"),
+  );
+
 /**
  * The runner's loggers, minus typed event records: deploys draw their
  * progress through `AlchemyDeploy.applyAndRender` (the `LoggingCli` lines), so printing each
  * event object too would only repeat it. `onEvent` subscribers installed
- * inside still see every event.
+ * inside still see every event. Adds the {@link resourceRecorder}.
  */
 const withoutEventRecords = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   Effect.flatMap(Logger.CurrentLoggers, (loggers) =>
     effect.pipe(
       Effect.provideService(
         Logger.CurrentLoggers,
-        new Set(
-          [...loggers].map((logger) =>
-            Logger.make<unknown, void>((options) => {
-              if (kindOf(options) !== "event") logger.log(options);
-            }),
-          ),
-        ),
+        new Set([
+          ...[...loggers]
+            .filter((logger) => logger !== resourceRecorder)
+            .map((logger) =>
+              Logger.make<unknown, void>((options) => {
+                if (kindOf(options) !== "event") logger.log(options);
+              }),
+            ),
+          resourceRecorder,
+        ]),
       ),
     ),
   );

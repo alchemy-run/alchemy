@@ -1202,16 +1202,11 @@ describe.concurrent(
           yield* expectResponse(`${url}/request-url`, (res) =>
             res.body.startsWith("http:") ? undefined : `url ${res.body}`,
           );
-          // The Worker's console output reaches its dev log, including the
+          // The Worker's console output reaches its resource log, including the
           // shared chunk's log that proves entry signatures are preserved,
           // and no unhandled rejection.
-          const fs = yield* FileSystem.FileSystem;
-          const logRoot = pathe.resolve(".alchemy/log");
           yield* Effect.gen(function* () {
-            const logs = (yield* fs.readDirectory(logRoot, { recursive: true }))
-              .filter((file) => file.includes("/ViteWorkerdevdefault/"))
-              .sort();
-            const log = yield* fs.readFileString(pathe.join(logRoot, logs.at(-1)!));
+            const log = yield* Test.resourceLog("ViteWorkerdevdefault");
             for (const line of [
               "__preserves-entry-signatures__",
               "__console log__",

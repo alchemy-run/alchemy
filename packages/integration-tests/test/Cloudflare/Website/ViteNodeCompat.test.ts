@@ -60,17 +60,6 @@ const expectJson = (url: string, check: (body: unknown) => void) =>
     }
   });
 
-// The site's latest `alchemy dev` log, where the Vite dev server's output lands.
-const readDevLog = (id: string) =>
-  Effect.gen(function* () {
-    const fs = yield* FileSystem.FileSystem;
-    const logRoot = pathe.resolve(".alchemy/log");
-    const logs = (yield* fs.readDirectory(logRoot, { recursive: true }))
-      .filter((file) => file.includes(`/${id}/`))
-      .sort();
-    return yield* fs.readFileString(pathe.join(logRoot, logs.at(-1)!));
-  });
-
 const VARIANTS: ReadonlyArray<Variant> = [
   {
     name: "cloudflare-node",
@@ -87,7 +76,7 @@ const VARIANTS: ReadonlyArray<Variant> = [
         yield* expectText(url, "OK!");
         // It won't log any Node.js compat warnings.
         if (mode === "dev") {
-          expect(yield* readDevLog(id)).not.toContain("Unexpected Node.js imports");
+          expect(yield* Test.resourceLog(id)).not.toContain("Unexpected Node.js imports");
         }
       }),
   },
@@ -202,7 +191,7 @@ const VARIANTS: ReadonlyArray<Variant> = [
     check: (url, _mode, id) =>
       Effect.gen(function* () {
         yield* expectText(url, "OK!");
-        const log = yield* readDevLog(id).pipe(
+        const log = yield* Test.resourceLog(id).pipe(
           Effect.filterOrFail((log) => log.includes("__node:dns__")),
           Effect.retry({ times: 10, schedule: Schedule.spaced("1 second") }),
         );
