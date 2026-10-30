@@ -38,7 +38,8 @@ interface Variant {
   check: (
     url: string,
     mode: Mode,
-    id: string,
+    /** The site's log since this attempt's deploy. */
+    log: Effect.Effect<string>,
   ) => Effect.Effect<void, unknown, FileSystem.FileSystem>;
 }
 
@@ -71,12 +72,12 @@ const VARIANTS: ReadonlyArray<Variant> = [
     name: "als",
     date: "2024-12-30",
     flags: ["nodejs_als"],
-    check: (url, mode, id) =>
+    check: (url, mode, log) =>
       Effect.gen(function* () {
         yield* expectText(url, "OK!");
         // It won't log any Node.js compat warnings.
         if (mode === "dev") {
-          expect(yield* Test.resourceLog(id)).not.toContain("Unexpected Node.js imports");
+          expect(yield* log).not.toContain("Unexpected Node.js imports");
         }
       }),
   },
@@ -188,10 +189,10 @@ const VARIANTS: ReadonlyArray<Variant> = [
     flags: ["nodejs_compat"],
     config: "resolve-externals",
     modes: ["dev"],
-    check: (url, _mode, id) =>
+    check: (url, _mode, devLog) =>
       Effect.gen(function* () {
         yield* expectText(url, "OK!");
-        const log = yield* Test.resourceLog(id).pipe(
+        const log = yield* devLog.pipe(
           Effect.filterOrFail((log) => log.includes("__node:dns__")),
           Effect.retry({ times: 10, schedule: Schedule.spaced("1 second") }),
         );
@@ -331,16 +332,17 @@ describe("Website.Vite Node.js compatibility", () => {
           Effect.gen(function* () {
             yield* stack.destroy();
             const pgPort = yield* mockPostgres;
+            const log = yield* Test.captureResourceLog(id(variant, mode));
             const site = yield* deployVariant(stack, variant, mode, pgPort);
             const url = site.url!.replace(/\/$/, "");
             if (mode === "live") {
               const { accountId } = yield* yield* CloudflareEnvironment;
               yield* expectWorkerExists(site.workerName, accountId);
-              yield* variant.check(url, mode, id(variant, mode));
+              yield* variant.check(url, mode, log);
               yield* stack.destroy();
               yield* waitForWorkerToBeDeleted(site.workerName, accountId);
             } else {
-              yield* variant.check(url, mode, id(variant, mode));
+              yield* variant.check(url, mode, log);
             }
           }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
         {

@@ -59,6 +59,7 @@ describe("Website.Vite Prisma", () => {
             entries: ["package.json", "prisma", "migrations", "seed.sql", "src"],
           });
           yield* prismaGenerate(rootDir);
+          const devLog = yield* Test.captureResourceLog(id);
           const site = yield* stack.deploy(
             Cloudflare.Website.Vite(id, {
               rootDir,
@@ -91,14 +92,14 @@ describe("Website.Vite Prisma", () => {
           });
           if (mode === "dev") {
             // Prisma's dependencies are pre-bundled before the first request.
-            const log = yield* Test.resourceLog(id);
+            const log = yield* devLog;
             expect(log).not.toContain("optimized dependencies changed. reloading");
             expect(log).not.toContain("[vite] program reload");
           } else {
             yield* stack.destroy();
             yield* waitForWorkerToBeDeleted(site.workerName, accountId);
           }
-        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+        }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       {
         tags: [
           "provider:cloudflare:d1",

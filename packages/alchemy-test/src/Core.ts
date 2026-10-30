@@ -30,7 +30,7 @@ import { Stage } from "alchemy/Stage";
 import * as State from "alchemy/State";
 import { TelemetryLive } from "alchemy/Telemetry/Layer";
 import { loadConfigProvider, StackConfigOverrides } from "alchemy/Util/ConfigProvider";
-import { kindOf, type LogRecord, recordOf } from "alchemy/Util/LogRecord";
+import { kindOf, recordOf } from "alchemy/Util/LogRecord";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
 /** @effect-diagnostics anyUnknownInErrorContext:off */
 import * as Config from "effect/Config";
@@ -428,47 +428,58 @@ const alchemyLayer = Layer.mergeAll(
   AlchemyContextLive,
 );
 
-/** Most records kept per resource; older ones are dropped first. */
+/** Most lines one capture keeps; older ones are dropped first. */
 const RESOURCE_LOG_LIMIT = 5_000;
 
-const resourceRecords = new Map<string, Array<LogRecord>>();
+/** The open {@link captureResourceLog} buffers, by resource fqn. */
+const resourceCaptures = new Map<string, Set<Array<string>>>();
 
 /**
- * Keeps every record tagged with a resource (`fqn`), across the whole test
- * process: records a sidecar's resources log (a dev Worker's console, a Vite
- * dev server's output) reach the spawner's loggers, not the test that
- * deployed them, so a test reads them back with {@link resourceLog}.
+ * Copies each record tagged with a captured resource (`fqn`) into its open
+ * captures. Installed beside the runner's loggers, so it also sees the shared
+ * sidecar's records, which the spawner logs in whichever file started the
+ * sidecar rather than in the test that deployed the resource.
  */
 const resourceRecorder = Logger.make<unknown, void>((options) => {
+  if (resourceCaptures.size === 0) return;
   const record = recordOf(options);
   const fqn = record.attributes.fqn;
-  if (typeof fqn !== "string" || (record.kind !== "log" && record.kind !== "output")) return;
-  let records = resourceRecords.get(fqn);
-  if (records === undefined) resourceRecords.set(fqn, (records = []));
-  records.push(record);
-  if (records.length > RESOURCE_LOG_LIMIT) records.splice(0, records.length - RESOURCE_LOG_LIMIT);
+  const captures = typeof fqn === "string" ? resourceCaptures.get(fqn) : undefined;
+  if (captures === undefined || (record.kind !== "log" && record.kind !== "output")) return;
+  const line = stripVTControlCharacters(
+    record.kind === "log" ? record.data.message : record.data.text,
+  );
+  for (const lines of captures) {
+    lines.push(line);
+    if (lines.length > RESOURCE_LOG_LIMIT) lines.splice(0, lines.length - RESOURCE_LOG_LIMIT);
+  }
 });
 
 /**
- * The text of every record logged so far for the resource `fqn` — its
- * processes' output and alchemy's lines about it — one line per record,
- * without ANSI styling. Works whether the resource's provider runs in the
- * dev sidecar or in-process.
+ * Start capturing what the resource `fqn` logs — its processes' output (a dev
+ * Worker's console, a Vite dev server) and alchemy's lines about it — whether
+ * its provider runs in the dev sidecar or in-process. Start it before the
+ * deploy; the returned effect reads every line since, without ANSI styling.
+ * The capture ends with the enclosing scope.
  */
-export const resourceLog = (fqn: string): Effect.Effect<string> =>
-  Effect.sync(() =>
-    (resourceRecords.get(fqn) ?? [])
-      .map((record) =>
-        stripVTControlCharacters(
-          record.kind === "log"
-            ? record.data.message
-            : record.kind === "output"
-              ? record.data.text
-              : "",
-        ),
-      )
-      .join("\n"),
-  );
+export const captureResourceLog = (
+  fqn: string,
+): Effect.Effect<Effect.Effect<string>, never, Scope.Scope> =>
+  Effect.acquireRelease(
+    Effect.sync(() => {
+      const lines: Array<string> = [];
+      let captures = resourceCaptures.get(fqn);
+      if (captures === undefined) resourceCaptures.set(fqn, (captures = new Set()));
+      captures.add(lines);
+      return lines;
+    }),
+    (lines) =>
+      Effect.sync(() => {
+        const captures = resourceCaptures.get(fqn);
+        captures?.delete(lines);
+        if (captures?.size === 0) resourceCaptures.delete(fqn);
+      }),
+  ).pipe(Effect.map((lines) => Effect.sync(() => lines.join("\n"))));
 
 /**
  * The runner's loggers, minus typed event records: deploys draw their

@@ -1182,6 +1182,7 @@ describe.concurrent(
       (stack) =>
         Effect.gen(function* () {
           yield* stack.destroy();
+          const devLog = yield* Test.captureResourceLog("ViteWorkerdevdefault");
           const url = yield* deployWorkerSite(stack, "dev", "default");
           const host = new URL(url).host;
           yield* expectText(url, "Hello World!");
@@ -1206,7 +1207,7 @@ describe.concurrent(
           // shared chunk's log that proves entry signatures are preserved,
           // and no unhandled rejection.
           yield* Effect.gen(function* () {
-            const log = yield* Test.resourceLog("ViteWorkerdevdefault");
+            const log = yield* devLog;
             for (const line of [
               "__preserves-entry-signatures__",
               "__console log__",
@@ -1218,7 +1219,7 @@ describe.concurrent(
             }
             expect(log).not.toContain("__unhandled rejection__");
           }).pipe(Effect.retry({ times: 10, schedule: Schedule.spaced("1 second") }));
-        }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
+        }).pipe(Effect.scoped, Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       { tags: ["provider:cloudflare:worker", "local"], timeout: 300_000 },
     );
 
