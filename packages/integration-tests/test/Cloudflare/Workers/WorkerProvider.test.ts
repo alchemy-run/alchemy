@@ -7,6 +7,7 @@ import {
   resolveWorkerDomain,
   resolveWorkerDomainZone,
   resolveWorkersDev,
+  retryableScriptPut,
   shouldRecreateWorkerDomainAttachment,
   shouldObserveWorkerCrons,
   shouldObserveWorkerDomains,
@@ -15,6 +16,7 @@ import {
   stateWorkerDomain,
 } from "@alchemy.run/cloudflare/Workers/WorkerProvider";
 import { describe, expect, test } from "@alchemy.run/test";
+import * as workers from "@distilled.cloud/cloudflare/workers";
 import { deepEqual } from "alchemy/Diff";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
@@ -482,6 +484,30 @@ describe(
 
       test("observes when prior state has crons (e.g. Effect-native cron())", () => {
         expect(shouldObserveWorkerCrons({}, { crons: ["0 * * * *"] })).toBe(true);
+      });
+    });
+
+    describe("retryableScriptPut", () => {
+      const startupError = (message: string) =>
+        new workers.ScriptStartupError({ code: 10021, message });
+
+      test("retries the startup CPU time limit", () => {
+        expect(
+          retryableScriptPut(
+            startupError(
+              "Script startup exceeded CPU time limit. To learn more, visit https://developers.cloudflare.com/workers/platform/limits/#worker-startup-time",
+            ),
+          ),
+        ).toBe(true);
+      });
+
+      test("fails other startup errors at once", () => {
+        expect(
+          retryableScriptPut(startupError("Uncaught Error: boom\n  at worker.js:1:7 in <module>")),
+        ).toBe(false);
+        expect(retryableScriptPut(startupError("Script startup exceeded memory limits."))).toBe(
+          false,
+        );
       });
     });
 

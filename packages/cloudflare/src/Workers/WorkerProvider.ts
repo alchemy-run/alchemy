@@ -780,8 +780,26 @@ const bindingTargetNotFoundRetrySchedule = () =>
 const isScriptPutTransportError = (e: { _tag?: string }): boolean =>
   isHttpClientError(e) && e.reason._tag === "TransportError";
 
-const retryableScriptPut = (e: Parameters<typeof isBindingTargetNotFound>[0]): boolean =>
-  isBindingTargetNotFound(e) || isScriptPutTransportError(e);
+/**
+ * Cloudflare's measurement of a script's startup CPU time varies 2-2.5x
+ * between uploads of the same bundle, so a Worker near the limit that is
+ * rejected once passes on another upload. Other `10021` startup failures
+ * (a throwing top-level scope, the startup memory limit) are deterministic.
+ */
+const isScriptStartupCpuLimit = (e: Parameters<typeof isBindingTargetNotFound>[0]): boolean =>
+  e._tag === "ScriptStartupError" && e.message.includes("Script startup exceeded CPU time limit");
+
+/** @internal exported for unit testing. */
+export const retryableScriptPut = (e: Parameters<typeof isBindingTargetNotFound>[0]): boolean =>
+  isBindingTargetNotFound(e) || isScriptPutTransportError(e) || isScriptStartupCpuLimit(e);
+
+const warnScriptStartupCpuLimit =
+  (scriptName: string) => (e: Parameters<typeof isBindingTargetNotFound>[0]) =>
+    isScriptStartupCpuLimit(e)
+      ? Effect.logWarning(
+          `Cloudflare Worker put: ${scriptName} exceeded the startup CPU time limit; retrying the upload`,
+        )
+      : Effect.void;
 
 /**
  * Upsert a Worker script, routing to the dispatch-namespace endpoint when
@@ -863,6 +881,7 @@ export const putWorkerScript = (params: {
           files: params.files,
         })
         .pipe(
+          Effect.tapError(warnScriptStartupCpuLimit(params.scriptName)),
           Effect.retry({
             while: retryableScriptPut,
             schedule: bindingTargetNotFoundRetrySchedule(),
@@ -877,6 +896,7 @@ export const putWorkerScript = (params: {
         files: params.files,
       })
       .pipe(
+        Effect.tapError(warnScriptStartupCpuLimit(params.scriptName)),
         Effect.retry({ while: retryableScriptPut, schedule: bindingTargetNotFoundRetrySchedule() }),
       );
   });
