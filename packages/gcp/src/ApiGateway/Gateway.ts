@@ -16,6 +16,7 @@ import {
   parseName,
   replaceOnIdentity,
   sameText,
+  MAX_GATEWAY_ID_LENGTH,
   toPhysicalId,
   userLabels,
   waitForOperation,
@@ -186,7 +187,13 @@ export const GatewayProvider = () =>
 
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
-      const gatewayId = yield* toPhysicalId(id, olds?.gatewayId, output?.gatewayId);
+      const gatewayId = yield* toPhysicalId(
+        id,
+        olds?.gatewayId,
+        output?.gatewayId,
+        "apigw",
+        MAX_GATEWAY_ID_LENGTH,
+      );
       const location = olds?.location ?? output?.location ?? DEFAULT_REGION;
       const existing = yield* getByName(
         output?.name ?? gatewayName(env.project, location, gatewayId),
@@ -211,7 +218,13 @@ export const GatewayProvider = () =>
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
       const location = news.location ?? output?.location ?? DEFAULT_REGION;
-      const gatewayId = yield* toPhysicalId(id, news.gatewayId, output?.gatewayId);
+      const gatewayId = yield* toPhysicalId(
+        id,
+        news.gatewayId,
+        output?.gatewayId,
+        "apigw",
+        MAX_GATEWAY_ID_LENGTH,
+      );
       const name = output?.name ?? gatewayName(env.project, location, gatewayId);
       const displayName = news.displayName ?? gatewayId;
       const apiConfig = canonicalConfig(news.apiConfig, env.project)!;
