@@ -61,12 +61,12 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           yield* TpuApi;
           return yield* GCP.TPU.QueuedResource("Trainer", {
-            location: "us-central1-c",
+            location: "us-central1-a",
             nodeSpec: [
               {
                 node: {
-                  acceleratorType: "v2-8",
-                  runtimeVersion: "tpu-ubuntu2204-base",
+                  acceleratorType: "v5litepod-1",
+                  runtimeVersion: "v2-alpha-tpuv5-lite",
                   description: "alchemy-test-qr",
                   labels: { env: "test" },
                 },
@@ -80,7 +80,7 @@ test.provider.skipIf(!runLifecycle)(
       expect(created.queuedResourceId).toEqual(expect.any(String));
       expect(created.location).toEqual("us-central1-c");
       expect(created.nodeSpec.length).toBeGreaterThan(0);
-      expect(created.nodeSpec[0]?.node?.acceleratorType).toEqual("v2-8");
+      expect(created.nodeSpec[0]?.node?.acceleratorType).toEqual("v5litepod-1");
       expect(created.nodeSpec[0]?.node?.description).toEqual("alchemy-test-qr");
       expect(created.nodeSpec[0]?.node?.labels).toMatchObject({ env: "test" });
 
@@ -88,7 +88,7 @@ test.provider.skipIf(!runLifecycle)(
         name: created.name,
       });
       expect(fetched.name).toEqual(created.name);
-      expect(fetched.tpu?.nodeSpec?.[0]?.node?.acceleratorType).toEqual("v2-8");
+      expect(fetched.tpu?.nodeSpec?.[0]?.node?.acceleratorType).toEqual("v5litepod-1");
       expect(fetched.tpu?.nodeSpec?.[0]?.node?.labels?.env).toEqual("test");
 
       yield* stack.destroy();

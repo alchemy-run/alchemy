@@ -15,13 +15,15 @@ export const Trainer = GCP.TPU.Node("Trainer", {
   runtimeVersion: "tpu-ubuntu2204-base",
 });
 
+// A queued resource waits for capacity instead of needing it: v5e requests
+// queue (WAITING_FOR_RESOURCES) where a v2-8 request is refused.
 export const QueuedTrainer = GCP.TPU.QueuedResource("QueuedTrainer", {
-  location: "us-central1-c",
+  location: "us-central1-a",
   nodeSpec: [
     {
       node: {
-        acceleratorType: "v2-8",
-        runtimeVersion: "tpu-ubuntu2204-base",
+        acceleratorType: "v5litepod-1",
+        runtimeVersion: "v2-alpha-tpuv5-lite",
       },
     },
   ],

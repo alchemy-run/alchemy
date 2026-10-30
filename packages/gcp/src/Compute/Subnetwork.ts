@@ -391,6 +391,14 @@ const requireSubnetwork = (project: string, region: string, subnetworkName: stri
     }),
   );
 
+/** Purposes whose subnets host load-balancer proxies or endpoints, not VMs. */
+const NO_VM_PURPOSES: ReadonlySet<string> = new Set([
+  "REGIONAL_MANAGED_PROXY",
+  "GLOBAL_MANAGED_PROXY",
+  "INTERNAL_HTTPS_LOAD_BALANCER",
+  "PRIVATE_SERVICE_CONNECT",
+]);
+
 export const SubnetworkProvider = () =>
   Provider.succeed(Subnetwork, {
     nuke: {
@@ -487,6 +495,10 @@ export const SubnetworkProvider = () =>
       );
       const region = normalizeRegion(news.region ?? output?.region, env.region);
       const network = networkRef(env.project, news.network);
+      // Proxy-only and Private Service Connect subnets host no VMs and reject
+      // the field ("Invalid field set in subnetwork with purpose
+      // REGIONAL_MANAGED_PROXY").
+      const hostsVms = news.purpose === undefined || !NO_VM_PURPOSES.has(news.purpose);
       const privateIpGoogleAccess = news.privateIpGoogleAccess ?? DEFAULT_PRIVATE_GOOGLE_ACCESS;
       const stackType = news.stackType ?? DEFAULT_STACK_TYPE;
       const internal = yield* createInternalLabels(id);
@@ -500,7 +512,7 @@ export const SubnetworkProvider = () =>
           network,
           ipCidrRange: news.ipCidrRange,
           description: desiredDescription,
-          privateIpGoogleAccess,
+          ...(hostsVms ? { privateIpGoogleAccess } : {}),
           stackType,
         };
         if (news.purpose !== undefined) body.purpose = news.purpose;
@@ -536,7 +548,7 @@ export const SubnetworkProvider = () =>
         current = yield* requireSubnetwork(env.project, region, subnetworkName);
       }
 
-      if ((current.privateIpGoogleAccess === true) !== privateIpGoogleAccess) {
+      if (hostsVms && (current.privateIpGoogleAccess === true) !== privateIpGoogleAccess) {
         const updated = yield* compute.setPrivateIpGoogleAccessSubnetworks({
           project: env.project,
           region,
