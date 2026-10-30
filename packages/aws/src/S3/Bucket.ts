@@ -668,13 +668,16 @@ export const BucketProvider = () =>
       const ensureBucketExists = Effect.fn(function* ({
         id,
         news = {},
+        bucketName: knownBucketName,
       }: {
         id: string;
         news: BucketProps;
+        /** The name a previous reconcile recorded; the engine owns it. */
+        bucketName?: string;
       }) {
         const { region } = yield* AWSEnvironment.current;
         const { accountId } = yield* AWSEnvironment.current;
-        const bucketName = yield* createBucketName(id, news);
+        const bucketName = knownBucketName ?? (yield* createBucketName(id, news));
 
         yield* Effect.logInfo(`S3 Bucket create: bucket=${bucketName} region=${region} `);
 
@@ -2060,12 +2063,31 @@ export const BucketProvider = () =>
           session,
           bindings,
         }) {
-          const operation = output === undefined ? "create" : "update";
-          const resolved = output ?? (yield* ensureBucketExists({ id, news }));
+          // `output` caches the bucket's identity, not its existence: a
+          // bucket deleted out of band (or lost with a restarted emulator)
+          // is created again under the same name.
+          const { accountId } = yield* AWSEnvironment.current;
+          const exists =
+            output !== undefined &&
+            (yield* s3
+              .getBucketLocation({
+                Bucket: output.bucketName,
+                ExpectedBucketOwner: accountId,
+              })
+              .pipe(
+                Effect.as(true),
+                Effect.catchTag("NoSuchBucket", () => Effect.succeed(false)),
+              ));
+          const operation = exists ? "update" : "create";
+          // The last observed attributes, only while they describe a bucket
+          // that still exists.
+          const prior = exists ? output : undefined;
+          const resolved =
+            prior ?? (yield* ensureBucketExists({ id, news, bucketName: output?.bucketName }));
 
           const tags = yield* syncBucketTags({
             bucketName: resolved.bucketName,
-            previous: output?.tags,
+            previous: prior?.tags,
             // Omit `oldTags` so syncBucketTags fetches the cloud's actual
             // current tags. This makes drift detection correct even after
             // a cold-start adoption where olds.tags would equal news.tags.
@@ -2078,14 +2100,14 @@ export const BucketProvider = () =>
           // grants public access, else those puts can fail with AccessDenied.
           const objectOwnership = yield* syncBucketOwnershipControls({
             bucketName: resolved.bucketName,
-            previous: output?.objectOwnership,
+            previous: prior?.objectOwnership,
             objectOwnership: news.objectOwnership,
             session,
           });
 
           const publicAccessBlock = yield* syncPublicAccessBlock({
             bucketName: resolved.bucketName,
-            previous: output?.publicAccessBlock,
+            previous: prior?.publicAccessBlock,
             publicAccessBlock: news.publicAccessBlock,
             session,
           });
@@ -2094,16 +2116,16 @@ export const BucketProvider = () =>
           const versioning = yield* syncBucketVersioning({
             bucketName: resolved.bucketName,
             previous:
-              output?.versioning === undefined && output?.mfaDelete === undefined
+              prior?.versioning === undefined && prior?.mfaDelete === undefined
                 ? undefined
-                : { versioning: output.versioning, mfaDelete: output.mfaDelete },
+                : { versioning: prior.versioning, mfaDelete: prior.mfaDelete },
             versioning: news.versioning,
             mfaDelete: news.mfaDelete,
             session,
           });
 
           if (
-            yield* syncBucketEncryption(resolved.bucketName, news.encryption, output?.encryption)
+            yield* syncBucketEncryption(resolved.bucketName, news.encryption, prior?.encryption)
           ) {
             yield* session.note(`Updated bucket encryption: ${resolved.bucketName}`);
           }
@@ -2111,49 +2133,49 @@ export const BucketProvider = () =>
 
           const cors = yield* syncBucketCors({
             bucketName: resolved.bucketName,
-            previous: output?.cors,
+            previous: prior?.cors,
             cors: news.cors,
             session,
           });
 
           const lifecycleRules = yield* syncBucketLifecycle({
             bucketName: resolved.bucketName,
-            previous: output?.lifecycleRules,
+            previous: prior?.lifecycleRules,
             lifecycleRules: news.lifecycleRules,
             session,
           });
 
           const logging = yield* syncBucketLogging({
             bucketName: resolved.bucketName,
-            previous: output?.logging,
+            previous: prior?.logging,
             logging: news.logging,
             session,
           });
 
           const transferAcceleration = yield* syncTransferAcceleration({
             bucketName: resolved.bucketName,
-            previous: output?.transferAcceleration,
+            previous: prior?.transferAcceleration,
             transferAcceleration: news.transferAcceleration,
             session,
           });
 
           const requestPayer = yield* syncRequestPayment({
             bucketName: resolved.bucketName,
-            previous: output?.requestPayer,
+            previous: prior?.requestPayer,
             requestPayer: news.requestPayer,
             session,
           });
 
           const website = yield* syncBucketWebsite({
             bucketName: resolved.bucketName,
-            previous: output?.website,
+            previous: prior?.website,
             website: news.website,
             session,
           });
 
           const replication = yield* syncBucketReplication({
             bucketName: resolved.bucketName,
-            previous: output?.replication,
+            previous: prior?.replication,
             replication: news.replication,
             session,
           });
@@ -2167,7 +2189,7 @@ export const BucketProvider = () =>
 
           const objectLockConfiguration = yield* syncObjectLockRetention({
             bucketName: resolved.bucketName,
-            previous: output?.objectLockConfiguration,
+            previous: prior?.objectLockConfiguration,
             objectLockConfiguration: news.objectLockConfiguration,
             session,
           });
@@ -2175,14 +2197,14 @@ export const BucketProvider = () =>
           // ACL after ownership/public-access-block.
           const aclGrants = yield* syncBucketAcl({
             bucketName: resolved.bucketName,
-            previous: output?.aclGrants,
+            previous: prior?.aclGrants,
             acl: news.acl,
             session,
           });
 
           const policy = yield* syncBucketPolicy({
             bucketName: resolved.bucketName,
-            previous: output?.policy,
+            previous: prior?.policy,
             bindings,
             explicitStatements: news.policy,
             session,
@@ -2192,7 +2214,7 @@ export const BucketProvider = () =>
           const notifications = yield* syncBucketNotifications({
             bucketName: resolved.bucketName,
             bindings,
-            previous: yield* readManagedNotifications(fqn, instanceId, output),
+            previous: yield* readManagedNotifications(fqn, instanceId, prior),
             session,
             operation,
           });

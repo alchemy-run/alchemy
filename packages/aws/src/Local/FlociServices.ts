@@ -14,7 +14,7 @@ import { AWSEnvironment } from "../Environment.ts";
 import * as Region from "../Region.ts";
 import * as Floci from "./Floci.ts";
 import type { FlociError } from "./Floci.ts";
-import { provideProviderContext } from "./ProviderContext.ts";
+import { provideProviderContext, recreateMissing } from "./ProviderContext.ts";
 
 /**
  * Fixed dummy account used for every floci-emulated resource. Attributes
@@ -95,7 +95,9 @@ export const flociDual = <R extends ResourceLike, ROut, E, RIn>(
 ) =>
   ProviderLayer.dual(cls, {
     live,
-    local: () => provideProviderContext(live(), flociServices()),
+    // The emulator forgets everything when its container restarts, so a
+    // resource local state records may be gone: recreate it (#2724).
+    local: () => provideProviderContext(live(), flociServices(), recreateMissing),
     // Registered as the resource's local data plane so deploy-time binding
     // clients (Action bodies, plan-time `execute`) route their API calls to
     // the emulator whenever the bound resource resolves to local mode.

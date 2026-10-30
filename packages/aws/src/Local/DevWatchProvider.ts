@@ -47,7 +47,7 @@ import * as Layer from "effect/Layer";
 import * as Scope from "effect/Scope";
 import * as Semaphore from "effect/Semaphore";
 import { flociServices } from "./FlociServices.ts";
-import { withProviderContext } from "./ProviderContext.ts";
+import { recreateMissing, withProviderContext } from "./ProviderContext.ts";
 
 /**
  * The AWS provider group module ([Local.ts](./Local.ts)) — every
@@ -259,7 +259,9 @@ export const makeDevWatchProvider = <
         scope,
       ).pipe(Effect.orDie);
       const live = liveCtx.mapUnsafe.get(cls.Type) as ProviderService<R>;
-      const wrapped = withProviderContext(live, services);
+      // A resource the emulator lost (a restarted container) reconciles as
+      // a create (#2724).
+      const wrapped = recreateMissing(withProviderContext(live, services));
 
       // Sidecar-process watch registry, keyed by logical id. `instanceId`
       // guards a create-first replacement's old-generation delete against
