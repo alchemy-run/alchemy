@@ -313,7 +313,9 @@ export interface ProviderService<
    * `Unresolved` when the identity depends on props that have not resolved
    * yet: the engine then checks the resolved identity before `reconcile`.
    *
-   * The attributes may be partial. During a replacement, `previous` holds
+   * The attributes may be partial and establish ownership only. They do not
+   * populate persisted state or reconciliation output; implement `read` to
+   * supply complete adoption attributes. During a replacement, `previous` holds
    * the attributes of the generation being replaced: report a resource that
    * is that generation as owned. The engine compares no attributes itself.
    *

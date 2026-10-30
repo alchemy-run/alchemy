@@ -237,9 +237,10 @@ const observeResolved = Effect.fn(function* (
   previous?: any,
 ) {
   if (node.provider.read) {
-    return yield* node.provider
+    const observed = yield* node.provider
       .read({ id: logicalId, fqn, instanceId, olds: news, output: undefined, previous })
       .pipe(instrumentLifecycle("read", fqn, node.resource.Type, logicalId, instanceId));
+    return { observed, attributes: observed };
   }
   const observed = yield* node.provider.observe!({
     id: logicalId,
@@ -255,7 +256,7 @@ const observeResolved = Effect.fn(function* (
       }),
     );
   }
-  return observed;
+  return { observed, attributes: undefined };
 });
 
 export const apply = <P extends Plan>(
@@ -930,7 +931,7 @@ const executeNode = (
         // Some resources need a placeholder physical resource before their real
         // create can finish. Persist that stub so downstream evaluation can proceed.
         yield* report("pre-creating");
-        attr = yield* node.provider
+        const stub = yield* node.provider
           .precreate({
             id: logicalId,
             fqn,
@@ -940,6 +941,7 @@ const executeNode = (
             bindings: excludeDeletedBindings(node.bindings),
           })
           .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
+        attr = admitted ? stub : undefined;
         yield* commit<CreatingResourceState>({
           status: "creating",
           fqn,
@@ -949,7 +951,7 @@ const executeNode = (
           props: node.props,
           // A stub for an unresolved identity claims nothing. Leave the
           // checkpoint without it, so a retry checks the identity again.
-          attr: admitted ? attr : undefined,
+          attr,
           providerVersion: node.provider.version ?? 0,
           bindings: excludeDeletedBindings(node.bindings),
           downstream: node.downstream,
@@ -957,7 +959,7 @@ const executeNode = (
           providerMode: node.mode,
           adoptionBlocked: node.adoptionBlocked,
         });
-        yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
+        yield* storeAndSignal({ output: stub, props: {}, bindings: [], instanceId });
       }
 
       // While we're waiting on upstream outputs the resource isn't actually
@@ -995,7 +997,13 @@ const executeNode = (
         // Refusal or interruption must retain identity, never foreign
         // attributes, nor a stub for an identity not yet checked.
         yield* checkpoint(undefined);
-        const observed = yield* observeResolved(node, news, fqn, logicalId, instanceId);
+        const { observed, attributes } = yield* observeResolved(
+          node,
+          news,
+          fqn,
+          logicalId,
+          instanceId,
+        );
         if (observed !== undefined) {
           if (Unowned.is(observed) && !node.deferredAdoption?.adopt) {
             return yield* new OwnedBySomeoneElse({
@@ -1008,8 +1016,7 @@ const executeNode = (
               logicalId,
             });
           }
-          // Reconcile keeps a precreated stub as its output.
-          attr ??= stripUnowned(observed);
+          if (attributes !== undefined) attr ??= stripUnowned(attributes);
           // A creating checkpoint retains olds: undefined on retry.
           yield* checkpoint(attr);
         }
@@ -1316,7 +1323,7 @@ const executeNode = (
       let admitted = attr !== undefined || node.deferredAdoption === undefined;
       const admit = Effect.fn(function* (props: Record<string, any>) {
         admitted = true;
-        const observed = yield* observeResolved(
+        const { observed, attributes } = yield* observeResolved(
           node,
           props,
           fqn,
@@ -1339,7 +1346,7 @@ const executeNode = (
         // A delete-first target may be the previous generation itself, which
         // is about to be deleted — never hand its attributes to reconcile.
         // Reconcile keeps a precreated stub as its output.
-        if (!node.deleteFirst) attr ??= stripUnowned(observed);
+        if (!node.deleteFirst && attributes !== undefined) attr ??= stripUnowned(attributes);
       });
 
       // A cycle precreates on the props its upstreams outside the cycle
@@ -1397,7 +1404,7 @@ const executeNode = (
 
       if (inCycle && node.provider.precreate && attr === undefined) {
         yield* report("pre-creating");
-        attr = yield* node.provider
+        const stub = yield* node.provider
           .precreate({
             id: logicalId,
             fqn,
@@ -1407,6 +1414,7 @@ const executeNode = (
             bindings: excludeDeletedBindings(node.bindings),
           })
           .pipe(instrumentLifecycle("precreate", fqn, node.resource.Type, logicalId, instanceId));
+        attr = admitted ? stub : undefined;
         yield* commit<ReplacingResourceState>({
           status: "replacing",
           fqn,
@@ -1416,7 +1424,7 @@ const executeNode = (
           props: node.props,
           // A stub for an unresolved identity claims nothing. Leave the
           // checkpoint without it, so a retry checks the identity again.
-          attr: admitted ? attr : undefined,
+          attr,
           providerVersion: node.provider.version ?? 0,
           bindings: excludeDeletedBindings(node.bindings),
           downstream: node.downstream,
@@ -1425,7 +1433,7 @@ const executeNode = (
           removalPolicy: node.resource.RemovalPolicy,
           providerMode: node.mode,
         });
-        yield* storeAndSignal({ output: attr, props: {}, bindings: [], instanceId });
+        yield* storeAndSignal({ output: stub, props: {}, bindings: [], instanceId });
       }
 
       // See create-flow note: while we're waiting on upstream outputs
