@@ -140,6 +140,9 @@ export type Backup = Resource<
  * @resource
  * @category SQL
  */
+/** Cloud SQL rejects backup descriptions over 140 characters. */
+const MAX_BACKUP_DESCRIPTION_LENGTH = 140;
+
 export const Backup = Resource<Backup>("GCP.SQL.Backup");
 
 export class BackupNotResolved extends Data.TaggedError("GCP.SQL.BackupNotResolved")<{
@@ -384,7 +387,11 @@ export const BackupProvider = () =>
       const instance = instanceIdOf(news.instance);
       const ownership = yield* createInternalLabels(id);
       const userDescription = yield* toUserDescription(id, news.description, output?.description);
-      const desiredDescription = encodeDescription(ownership, userDescription);
+      const desiredDescription = encodeDescription(
+        ownership,
+        userDescription,
+        MAX_BACKUP_DESCRIPTION_LENGTH,
+      );
       const name =
         output?.name ?? (news.backupId ? backupNameOf(env.project, news.backupId) : undefined);
 

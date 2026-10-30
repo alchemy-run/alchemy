@@ -30,7 +30,11 @@ const waitUntilGone = (instance: string, backupRunId: string) =>
         })
         .pipe(
           Effect.as("found" as const),
-          Effect.catchTag("NotFound", () => Effect.succeed("gone" as const)),
+          // Destroy also removes the test's instance; Cloud SQL hides a missing
+          // instance behind SqlInstanceNotAuthorized.
+          Effect.catchTag(["NotFound", "SqlInstanceNotAuthorized"], () =>
+            Effect.succeed("gone" as const),
+          ),
           Effect.repeat({
             schedule: Schedule.spaced("2 seconds"),
             until: (status) => status === "gone",
