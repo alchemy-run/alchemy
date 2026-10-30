@@ -1,6 +1,7 @@
 import * as NodeCrypto from "node:crypto";
 import * as NodeHttp from "node:http";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as HttpServerError from "effect/http/HttpServerError";
 import type * as HttpServerRequest from "effect/http/HttpServerRequest";
@@ -41,7 +42,7 @@ export const LoopbackServerLive = Layer.effect(
   LoopbackServer,
   Effect.gen(function* () {
     const routes = MutableHashMap.empty<string, RawHandler>();
-    const secret = crypto.randomUUID();
+    const secret = yield* (yield* SecureRandom.SecureRandom).uuidV4();
     const server = yield* Effect.sync(() =>
       NodeHttp.createServer(async (req, res) => {
         const secretHeader = req.headers[LoopbackServerHeaders.SECRET] as string | undefined;

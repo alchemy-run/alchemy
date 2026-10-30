@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "../Providers.ts";
@@ -163,7 +164,8 @@ export const KxDatabaseProvider = () =>
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };
           // One idempotency token per reconcile, reused across create+update.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
 
           // Observe — cloud state is authoritative.
           let attrs = yield* readDatabase(environmentId, databaseName);
@@ -227,7 +229,8 @@ export const KxDatabaseProvider = () =>
           return final;
         }),
         delete: Effect.fn(function* ({ output }) {
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           yield* finspace
             .deleteKxDatabase({
               environmentId: output.environmentId,

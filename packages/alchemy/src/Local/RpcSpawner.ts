@@ -209,18 +209,20 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
     );
     const url = yield* Deferred.await(stdout.address);
     const ws = yield* Effect.acquireRelease(
-      Effect.sync(() => {
-        const ws = new WebSocket(new URL("/parent", url));
-        // Keep the parent link active so no idle timer on either end can
-        // close it; the sidecar ignores messages on this link.
-        const heartbeat = setInterval(() => {
-          if (ws.readyState === WebSocket.OPEN) ws.send("heartbeat");
-        }, 30_000);
-        heartbeat.unref?.();
-        ws.addEventListener("close", () => clearInterval(heartbeat));
-        return ws;
-      }),
+      Effect.sync(() => new WebSocket(new URL("/parent", url))),
       (ws) => Effect.sync(() => ws.close()),
+    );
+    // Keep the parent link active so no idle timer on either end can
+    // close it; the sidecar ignores messages on this link.
+    yield* Effect.sleep("30 seconds").pipe(
+      Effect.andThen(
+        Effect.sync(() => {
+          if (ws.readyState === WebSocket.OPEN) ws.send("heartbeat");
+          return ws.readyState;
+        }),
+      ),
+      Effect.repeat({ while: (state) => state !== WebSocket.CLOSED }),
+      Effect.forkScoped,
     );
     return {
       url,

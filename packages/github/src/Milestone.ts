@@ -3,6 +3,7 @@ import * as Repos from "@distilled.cloud/github/repos";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
@@ -259,7 +260,9 @@ export const MilestoneProvider = () =>
         const dueOn =
           requestedDueOn === undefined
             ? null
-            : yield* Effect.try(() => new Date(requestedDueOn).toISOString().replace(".000Z", "Z"));
+            : yield* Effect.try(() =>
+                DateTime.formatIso(DateTime.makeUnsafe(requestedDueOn)).replace(".000Z", "Z"),
+              );
 
         // Observe — probe for an existing milestone by title. GitHub's list
         // endpoint supports filtering by state, but we need to check both open

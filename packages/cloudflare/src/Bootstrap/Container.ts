@@ -14,6 +14,7 @@ import {
  * the user's `main`, nothing else — see `alchemy/Runtime/Bootstrap` for why.
  */
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -42,6 +43,7 @@ export const bootstrapContainer = (
   const platform = Layer.mergeAll(
     runtime.services,
     FetchHttpClient.layer,
+    SecureRandom.layerWebCrypto,
     // TODO(sam): wire this up to telemetry more directly
     Logger.layer([Logger.consolePretty()]),
   );

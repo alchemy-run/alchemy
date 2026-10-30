@@ -1,5 +1,6 @@
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { expect, it } from "@effect/vitest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { Docker, DockerLive } from "../Docker.ts";
@@ -36,7 +37,16 @@ it.live(
           Effect.andThen(Effect.ignore(docker("rmi", image))),
         ),
       ),
-      Effect.provide(Layer.provide(DockerLive, NodeServices.layer)),
+      Effect.provide(
+        Layer.provide(
+          DockerLive,
+          Layer.mergeAll(
+            NodeServices.layer,
+            SecureRandom.layerWebCrypto,
+            SecureRandom.layerWebCrypto,
+          ),
+        ),
+      ),
     );
   },
   60_000,

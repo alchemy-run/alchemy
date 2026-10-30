@@ -11,6 +11,7 @@ import {
   hasAlchemyTags,
   tagRecord,
 } from "alchemy/Tags";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
@@ -196,7 +197,10 @@ export const RotationProvider = () =>
           const arn = output?.rotationArn ?? (yield* rotationArn(name));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
-          const desiredStart = news.startTime !== undefined ? new Date(news.startTime) : undefined;
+          const desiredStart =
+            news.startTime !== undefined
+              ? DateTime.toDateUtc(DateTime.makeUnsafe(news.startTime))
+              : undefined;
 
           // 1. OBSERVE
           let rotation = yield* getRotation(arn);

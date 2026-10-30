@@ -24,6 +24,7 @@
 import * as NodeRuntime from "@effect/platform-node/NodeRuntime";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { Argument, Command } from "effect/cli";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
@@ -157,7 +158,7 @@ const bundleDistilled = Effect.fn(function* (root: string) {
   const stale = yield* staleDistilled(root);
   if (stale.length === 0) return;
   yield* Effect.logInfo(`Bundling stale distilled packages: ${stale.join(", ")}`);
-  const pathEnv = yield* Effect.sync(() => process.env.PATH ?? "");
+  const pathEnv = yield* Config.String("PATH").pipe(Config.withDefault(""));
   const exitCode = yield* spawner.exitCode(
     ChildProcess.make(
       "node",

@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -260,8 +261,12 @@ export const ScheduledActionProvider = () =>
             AutoScalingGroupName: autoScalingGroupName,
             ScheduledActionName: scheduledActionName,
             Recurrence: news.recurrence,
-            StartTime: news.startTime ? new Date(news.startTime) : undefined,
-            EndTime: news.endTime ? new Date(news.endTime) : undefined,
+            StartTime: news.startTime
+              ? DateTime.toDateUtc(DateTime.makeUnsafe(news.startTime))
+              : undefined,
+            EndTime: news.endTime
+              ? DateTime.toDateUtc(DateTime.makeUnsafe(news.endTime))
+              : undefined,
             TimeZone: news.timeZone,
             MinSize: news.minSize,
             MaxSize: news.maxSize,

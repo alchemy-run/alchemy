@@ -1,3 +1,4 @@
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Semaphore from "effect/Semaphore";
@@ -95,7 +96,7 @@ const memo = <A>(make: (key: string) => A) => {
 export const make = (
   options: Options = {},
 ): {
-  readonly layer: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine>;
+  readonly layer: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom>;
   readonly control: Control;
 } => {
   const now = options.now ?? (() => Date.now());
@@ -1135,6 +1136,7 @@ export const make = (
     layer: Layer.mergeAll(
       Layer.succeed(Platform, platform),
       Layer.succeed(WorkflowEngine.WorkflowEngine, workflows),
+      SecureRandom.layerWebCrypto,
     ),
     control,
   };
@@ -1159,9 +1161,9 @@ export const make = (
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export const InMemory: Layer.Layer<Platform | WorkflowEngine.WorkflowEngine> = Layer.suspend(
-  () => make().layer,
-);
+export const InMemory: Layer.Layer<
+  Platform | WorkflowEngine.WorkflowEngine | SecureRandom.SecureRandom
+> = Layer.suspend(() => make().layer);
 
 /** Is a stream write's origin after the last one applied? @internal */
 export const isAfter = (

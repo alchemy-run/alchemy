@@ -18,6 +18,7 @@ import { HttpServer, safeHttpEffect } from "alchemy/Http";
 import { reifyBoundConfigProvider } from "alchemy/Runtime";
 import { entrypointLayer, resolveProgram, stackFromEnv } from "alchemy/Runtime/Bootstrap";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -123,6 +124,7 @@ export const makeHandler = (entrypoint: unknown) => {
     const platform = Layer.mergeAll(
       NodeServices.layer,
       FetchHttpClient.layer,
+      SecureRandom.layerWebCrypto,
       Logger.layer([Logger.consolePretty()]),
     );
     const program = resolveProgram("program", { telemetry: true }).pipe(

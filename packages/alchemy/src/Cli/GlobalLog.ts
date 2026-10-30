@@ -3,6 +3,7 @@ import * as Flag from "effect/cli/Flag";
 import * as GlobalFlag from "effect/cli/GlobalFlag";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import * as DateTime from "effect/DateTime";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
@@ -233,8 +234,7 @@ export const lazyRunLog = Effect.fn(function* (
 export const GlobalLogLive = Layer.unwrap(
   Effect.gen(function* () {
     const path = yield* Path;
-    const stamp = new Date(yield* Clock.currentTimeMillis)
-      .toISOString()
+    const stamp = DateTime.formatIso(yield* DateTime.now)
       .slice(0, 19)
       .replaceAll(":", "-");
     const name = `${stamp}-pid${process.pid}.ndjson`;

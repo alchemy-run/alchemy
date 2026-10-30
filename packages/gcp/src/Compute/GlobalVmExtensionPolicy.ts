@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -399,7 +400,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
       if (observed === undefined) return;
       const retryUuid =
         observed.scopedResourceStatus === "SCOPED_RESOURCE_STATUS_DELETING"
-          ? yield* Effect.sync(() => crypto.randomUUID())
+          ? yield* (yield* SecureRandom.SecureRandom).uuidV4()
           : undefined;
       yield* requestDelete(retryUuid);
       // Deletion is itself a rollout; the policy stays readable until the
