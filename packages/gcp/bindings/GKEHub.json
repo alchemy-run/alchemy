@@ -7,9 +7,10 @@
     }
   },
   "probes": {
-    "resources": {},
-    "untestable": {
-      "MembershipsFeature": "needs GCP_TEST_GKE_MEMBERSHIP (an external prerequisite the testing project lacks)"
-    }
+    "resources": {
+      "MembershipsFeature": "ProbeFeature"
+    },
+    "untestable": {},
+    "deployMinutes": 45
   }
 }

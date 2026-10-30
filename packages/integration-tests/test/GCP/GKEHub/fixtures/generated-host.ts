@@ -4,6 +4,7 @@ import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
+import { ProbeFeature } from "./generated-resources.ts";
 
 /**
  * Cloud Run service calling every generated GKEHub binding as its own
@@ -15,13 +16,21 @@ export default class GKEHubGeneratedHost extends GCP.Function<GKEHubGeneratedHos
   "GKEHubGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
-    const p0 = yield* GCP.GKEHub.ListMembershipFeatures();
+    const p0 = yield* GCP.GKEHub.GetFeature(ProbeFeature);
+    const p1 = yield* GCP.GKEHub.ListMembershipFeatures();
     return {
       fetch: serveProbes({
+        GetFeature: probeOutcome(Retry.none(p0({} as never))),
         ListMembershipFeatures: probeOutcome(
-          Retry.none(p0({ membership: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p1({ membership: "alchemy-missing", location: "us-central1" } as never)),
         ),
       }),
     };
-  }).pipe(Effect.provide(Layer.mergeAll(Layer.mergeAll(GCP.GKEHub.ListMembershipFeaturesHttp)))),
+  }).pipe(
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.mergeAll(GCP.GKEHub.GetFeatureHttp, GCP.GKEHub.ListMembershipFeaturesHttp),
+      ),
+    ),
+  ),
 ) {}

@@ -1478,6 +1478,10 @@ import {
   RestorePlansRestore,
   RestorePlansRestoreProvider,
 } from "./GKEBackup/RestorePlansRestore.ts";
+import {
+  Membership as GkeHubMembership,
+  MembershipProvider as GkeHubMembershipProvider,
+} from "./GKEHub/Membership.ts";
 import { MembershipsFeature, MembershipsFeatureProvider } from "./GKEHub/MembershipsFeature.ts";
 import { BareMetalCluster, BareMetalClusterProvider } from "./GKEOnPrem/BareMetalCluster.ts";
 import {
@@ -3443,6 +3447,7 @@ const makeProviders = () =>
           RestorePlan,
           RestorePlansRestore,
           MembershipsFeature,
+          GkeHubMembership,
           InstancesBackup,
           BareMetalCluster,
           BareMetalClustersBareMetalNodePool,
@@ -4325,7 +4330,7 @@ const makeProviders = () =>
             RestorePlanProvider(),
             RestorePlansRestoreProvider(),
           ),
-          Layer.mergeAll(MembershipsFeatureProvider()),
+          Layer.mergeAll(MembershipsFeatureProvider(), GkeHubMembershipProvider()),
           Layer.mergeAll(InstancesBackupProvider(), JobTemplateProvider()),
           Layer.mergeAll(
             BareMetalClusterProvider(),

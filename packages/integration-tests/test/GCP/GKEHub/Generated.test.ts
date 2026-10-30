@@ -59,15 +59,19 @@ describe.skipIf(!!process.env.FAST)(
         );
         baseUrl = out.uri!;
       }),
-      { timeout: 1_800_000 },
+      { timeout: 2_700_000 },
     );
 
-    afterAll(sharedStack.destroy(), { timeout: 1_800_000 });
+    afterAll(sharedStack.destroy(), { timeout: 2_700_000 });
 
     describe("MembershipsFeature", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetFeature (gkehub.projects.locations.memberships.features.get): MembershipsFeature: needs GCP_TEST_GKE_MEMBERSHIP (an external prerequisite the testing project lacks)",
-        () => Effect.void,
+      test.provider(
+        "GetFeature (gkehub.projects.locations.memberships.features.get)",
+        () => probe("GetFeature", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:gkehub", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
