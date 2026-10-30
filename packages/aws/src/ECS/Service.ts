@@ -801,9 +801,11 @@ export interface ImageOwningServicePropsBase
   /**
    * Secrets injected into the primary container as environment variables:
    * env-var name → SSM Parameter Store parameter ARN or Secrets Manager
-   * secret ARN. Wired as container `secrets` (`valueFrom`), with the
-   * execution role granted `ssm:GetParameters` /
-   * `secretsmanager:GetSecretValue` on exactly the referenced ARNs.
+   * secret ARN, optionally narrowed to one JSON key
+   * (`<secret-arn>:<json-key>::`). Wired as container `secrets`
+   * (`valueFrom`), with the execution role granted `ssm:GetParameters` /
+   * `secretsmanager:GetSecretValue` on exactly the referenced parameters
+   * and secrets.
    */
   secrets?: Record<string, string>;
 
@@ -2405,6 +2407,13 @@ const composeServiceScaling = (
 const SECRETS_POLICY_NAME = "alchemy-secrets";
 
 /**
+ * The Secrets Manager secret ARN behind a `valueFrom`, which can name one JSON
+ * key (`<secret-arn>:<json-key>:<version-stage>:<version-id>`). IAM only
+ * matches `secretsmanager:GetSecretValue` against the secret's own ARN.
+ */
+export const secretArnOf = (valueFrom: string) => valueFrom.split(":").slice(0, 7).join(":");
+
+/**
  * Sync the execution role's inline secrets-read policy to exactly the
  * SSM parameter / Secrets Manager ARNs referenced by the `secrets` prop
  * (deleted when no secrets remain).
@@ -2427,7 +2436,9 @@ const syncTaskSecretsPolicy = Effect.fn(function* ({
   }
   const serviceOf = (arn: string) => arn.split(":")[2];
   const ssmArns = secretArns.filter((arn) => serviceOf(arn) === "ssm");
-  const secretsManagerArns = secretArns.filter((arn) => serviceOf(arn) === "secretsmanager");
+  const secretsManagerArns = [
+    ...new Set(secretArns.filter((arn) => serviceOf(arn) === "secretsmanager").map(secretArnOf)),
+  ];
   yield* iam.putRolePolicy({
     RoleName: roleName,
     PolicyName: SECRETS_POLICY_NAME,
