@@ -59,6 +59,8 @@ export interface ViteChildConfig {
     cache: RuntimeWorker["cache"];
     /** `request.cf` override (`dev: { cf: {...} }`). */
     cf: RuntimeWorker["cf"];
+    /** workerd process overrides (`dev: { workerd: {...} }`). */
+    workerd: RuntimeWorker["workerd"];
     assets: RuntimeWorker["assets"];
   };
 }
