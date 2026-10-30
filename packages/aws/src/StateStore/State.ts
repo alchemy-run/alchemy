@@ -4,7 +4,7 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { type BucketObjects, makeBucketState } from "alchemy/State/BucketState";
 import * as Provisioning from "alchemy/State/Provisioning";
-import { isReadOnlyState, State, StateStoreError } from "alchemy/State/State";
+import { ReadOnlyState, State, StateStoreError } from "alchemy/State/State";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
 import { globalLogs } from "alchemy/Util/LogRecord";
 import * as Effect from "effect/Effect";
@@ -246,7 +246,7 @@ export const makeS3State = (options: S3StateOptions = {}) =>
       // First use creates the bucket (except in CI); every use but a
       // read-only one converges its settings.
       yield* (yield* stateBucketExists(bucketName))
-        ? (yield* isReadOnlyState)
+        ? (yield* ReadOnlyState)
           ? Effect.void
           : ensure
         : Provisioning.deployMissing(

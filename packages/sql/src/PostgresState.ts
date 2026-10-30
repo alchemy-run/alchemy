@@ -1,7 +1,7 @@
 import { STATE_STORE_VERSION } from "alchemy/State/HttpStateApi";
 import type { ReplacedResourceState } from "alchemy/State/ResourceState";
 import {
-  isReadOnlyState,
+  ReadOnlyState,
   readOnlyStateError,
   State,
   StateStoreError,
@@ -200,7 +200,7 @@ export const makePostgresState = <E = never, R = never>(
 ) =>
   Effect.gen(function* () {
     const prefix = options.lockKeyPrefix ?? "alchemy";
-    const readOnly = yield* isReadOnlyState;
+    const readOnly = yield* ReadOnlyState;
     const ttlMs = options.leaseCheckTtlMs ?? DEFAULT_LEASE_CHECK_TTL_MS;
     // Captured once, so a `url` Effect that needs services (a custom
     // ConfigProvider, say) can still be resolved later — from inside the

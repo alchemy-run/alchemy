@@ -6,7 +6,7 @@ import * as s3 from "@distilled.cloud/aws/s3";
 import { STATE_STORE_VERSION } from "alchemy/State/HttpStateApi";
 import * as Provisioning from "alchemy/State/Provisioning";
 import {
-  isReadOnlyState,
+  ReadOnlyState,
   type PersistedState,
   readOnlyStateError,
   State,
@@ -350,7 +350,7 @@ export const makeDynamoDBState = (options: DynamoDBStateOptions = {}) =>
 
 const makeStore = Effect.fn(function* (options: DynamoDBStateOptions) {
   const leaseScope = yield* Effect.scope;
-  const readOnly = yield* isReadOnlyState;
+  const readOnly = yield* ReadOnlyState;
   // Captured under `withoutSdkDebugLogs` (below), so every store call runs
   // with the raised floor: request payloads are state, and state holds
   // secrets.

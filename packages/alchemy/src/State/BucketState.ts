@@ -7,7 +7,7 @@ import * as Semaphore from "effect/Semaphore";
 import { decodeFqn, encodeFqn } from "../FQN.ts";
 import { STATE_STORE_VERSION } from "./HttpStateApi.ts";
 import {
-  isReadOnlyState,
+  ReadOnlyState,
   readOnlyStateError,
   StateStoreError,
   type PersistedState,
@@ -180,7 +180,7 @@ const parseLease = (text: string): LeaseRecord => {
 export const makeBucketState = (options: BucketStateOptions) =>
   Effect.gen(function* () {
     const leaseScope = yield* Effect.scope;
-    const readOnly = yield* isReadOnlyState;
+    const readOnly = yield* ReadOnlyState;
     const prefix = options.prefix ? `${options.prefix.replace(/\/+$/, "")}/` : "";
     const objects = yield* Effect.cached(options.objects);
     const use = <A>(
