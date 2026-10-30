@@ -5,6 +5,7 @@ import { StatementLine } from "@bank/domain/Account/Statement.view";
 import { CustomerId } from "@bank/domain/Customer/Customer.id";
 import { Username } from "@bank/domain/Customer/Username";
 import { CustomerApi } from "@bank/domain/CustomerApi.api";
+import { LedgerRow } from "@bank/domain/Ledger/LedgerStore";
 import * as Array from "effect/Array";
 import * as Effect from "effect/Effect";
 import * as Match from "effect/Match";
@@ -62,6 +63,12 @@ export const Model = Schema.Struct({
   feedState: Schema.Literals(["CatchingUp", "Live", "Failed"]),
   lines: Schema.Array(Line),
   error: Schema.Option(Schema.String),
+  /** Ledger rows read so far through the AccountLedger query, oldest first. */
+  history: Schema.Array(LedgerRow),
+  /** The cursor of the next history page; none on the last page. */
+  historyCursor: Schema.Option(Schema.String),
+  /** The request id of the history page in flight. A reply with another id is stale. */
+  historyRequest: Schema.Option(Schema.String),
 });
 export type Model = typeof Model.Type;
 
@@ -79,6 +86,8 @@ export const Message = defineMessageUnion({
   ClickedDeposit: {},
   ClickedWithdraw: {},
   ClickedRetryLine: { commandId: Schema.String },
+  ClickedShowHistory: {},
+  ClickedMoreHistory: {},
   ReceivedBankResult: { result: BankClient.Message },
   CompletedDeliver: { outcomes: Schema.Array(Outcome) },
   CompletedSaveIntents: {},
@@ -276,6 +285,37 @@ const confirm = (model: Model, commandId: string, line: StatementLine, cursor: n
   });
 };
 
+const historyPage = 5;
+
+/** Ask the AccountLedger query for one page; the reply comes back as a ReceivedBankResult. */
+const readHistory = (
+  model: Model,
+  after: Option.Option<string>,
+): Update.Return<Model, Message, Bank> => {
+  const { commandId: requestId, commandIds } = DomainFoldkit.next(model.commandIds);
+  return {
+    model: modifyFields(model, {
+      commandIds: () => commandIds,
+      historyRequest: () => Option.some(requestId),
+      ...(Option.isNone(after) ? { history: () => [], historyCursor: () => Option.none() } : {}),
+    }),
+    commands: [
+      Command.mapMessage(
+        BankClient.AccountLedger({
+          input: { account: model.accountId },
+          requestId,
+          take: historyPage,
+          ...Option.match(after, { onNone: () => ({}), onSome: (cursor) => ({ after: cursor }) }),
+        }),
+        (result) => Message.ReceivedBankResult({ result }),
+      ),
+    ],
+  };
+};
+
+const isCurrent = (model: Model, requestId: string) =>
+  Option.contains(model.historyRequest, requestId);
+
 export const update = (model: Model, message: Message) =>
   Message.match<Update.Return<Model, Message, Bank>>(message, {
     ClickedRegister: () => {
@@ -294,6 +334,11 @@ export const update = (model: Model, message: Message) =>
         ],
       };
     },
+    ClickedShowHistory: () => readHistory(model, Option.none()),
+    ClickedMoreHistory: () =>
+      Option.isSome(model.historyCursor) && Option.isNone(model.historyRequest)
+        ? readHistory(model, model.historyCursor)
+        : { model },
     ClickedDeposit: () => ask(model, "deposit", 1_000),
     ClickedWithdraw: () => ask(model, "withdrawal", 1_000),
     ClickedRetryLine: ({ commandId }) => {
@@ -313,6 +358,31 @@ export const update = (model: Model, message: Message) =>
         Match.withReturnType<Update.Return<Model, Message, Bank>>(),
         Match.tag("FailedRegisterCustomer", ({ failure }) => ({
           model: modifyFields(model, { error: () => Option.some(failure._tag) }),
+        })),
+        Match.tag("SucceededAccountLedger", ({ requestId, result }) => ({
+          model: isCurrent(model, requestId)
+            ? modifyFields(model, {
+                history: (rows) => [...rows, ...result.entries],
+                historyCursor: () => Option.fromNullishOr(result.cursor),
+                historyRequest: () => Option.none(),
+              })
+            : model,
+        })),
+        Match.tag("FailedAccountLedger", ({ requestId, failure }) => ({
+          model: isCurrent(model, requestId)
+            ? modifyFields(model, {
+                historyRequest: () => Option.none(),
+                // TimedOut and Unknown can be asked again; a refusal is final.
+                error: () =>
+                  Option.some(
+                    failure._tag === "Rejected"
+                      ? failure.rejection._tag
+                      : failure._tag === "Denied"
+                        ? failure.error._tag
+                        : "History unavailable, try again",
+                  ),
+              })
+            : model,
         })),
         Match.orElse(() => ({ model: modifyFields(model, { error: () => Option.none() }) })),
       ),
@@ -370,6 +440,9 @@ export const init = (flags: Flags): Update.Return<Model, Message, Bank> => {
       )
       .reverse(),
     error: Option.none(),
+    history: [],
+    historyCursor: Option.none(),
+    historyRequest: Option.none(),
   });
   return model.online ? flush(model) : { model };
 };
@@ -475,6 +548,31 @@ const lineView = (line: Line, h: HtmlBuilder<Message>) => {
     Match.exhaustive,
   );
 };
+const historyView = (model: Model, h: HtmlBuilder<Message>) => {
+  const isLoading = Option.isSome(model.historyRequest);
+  const action = Array.isReadonlyArrayEmpty(model.history)
+    ? Option.some(h.button([h.OnClick(Message.ClickedShowHistory()), h.Class(button)], ["History"]))
+    : Option.map(model.historyCursor, () =>
+        h.button([h.OnClick(Message.ClickedMoreHistory()), h.Class(button)], ["More"]),
+      );
+  return h.div(
+    [h.Class("flex flex-col gap-2")],
+    [
+      h.ul(
+        [],
+        model.history.map((row) =>
+          h.keyed("li")(
+            row.id,
+            [],
+            [`${row.kind} ${cents(row.amount)}, balance ${cents(row.balanceAfter)}`],
+          ),
+        ),
+      ),
+      ...(isLoading ? [h.p([h.Class("text-gray-400 italic")], ["Loading history"])] : []),
+      ...(isLoading ? [] : Option.toArray(action)),
+    ],
+  );
+};
 export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
   const balance = shownBalance(model);
   const isUnacknowledged = model.lines.some(
@@ -528,6 +626,7 @@ export const view = (model: Model, h: HtmlBuilder<Message>): Document => {
           [],
           model.lines.map((line) => lineView(line, h)),
         ),
+        historyView(model, h),
       ],
     ),
   };
