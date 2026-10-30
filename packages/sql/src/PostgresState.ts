@@ -1,6 +1,8 @@
 import { STATE_STORE_VERSION } from "alchemy/State/HttpStateApi";
 import type { ReplacedResourceState } from "alchemy/State/ResourceState";
 import {
+  isReadOnlyState,
+  readOnlyStateError,
   State,
   StateStoreError,
   type PersistedState,
@@ -127,7 +129,9 @@ interface Lease {
  * single-connection client, which would have the lock holder vouch for
  * itself, is refused instead of silently trusted. If the process crashes,
  * Postgres releases the session lock when the connection drops; no recovery
- * bookkeeping is needed.
+ * bookkeeping is needed. `alchemy plan` and a drift check read without the
+ * lock and never write, so they need only `select` on the tables and never
+ * block a deploy.
  *
  * ### Using the Postgres State Store
  * **Example:** Connection URL from configuration
@@ -196,6 +200,7 @@ export const makePostgresState = <E = never, R = never>(
 ) =>
   Effect.gen(function* () {
     const prefix = options.lockKeyPrefix ?? "alchemy";
+    const readOnly = yield* isReadOnlyState;
     const ttlMs = options.leaseCheckTtlMs ?? DEFAULT_LEASE_CHECK_TTL_MS;
     // Captured once, so a `url` Effect that needs services (a custom
     // ConfigProvider, say) can still be resolved later — from inside the
@@ -253,6 +258,15 @@ export const makePostgresState = <E = never, R = never>(
         )
         .pipe(stateError);
 
+    const tablesExist = (sql: SqlClient.SqlClient) =>
+      sql`
+        select to_regclass('alchemy_resource_state') is not null
+          and to_regclass('alchemy_stack_output') is not null as exist
+      `.pipe(
+        Effect.map((rows) => rows[0]?.exist === true),
+        stateError,
+      );
+
     /**
      * Builds a store-owned `@effect/sql-pg` pool. Its `end` finalizer is
      * registered on `scope`, so the pool closes with the state layer.
@@ -292,7 +306,9 @@ export const makePostgresState = <E = never, R = never>(
         // The store reads columns by the exact names written below, so a
         // client configured with name transforms must not rewrite them.
         const sql = resolved.withoutTransforms();
-        yield* migrate(sql);
+        // `create table if not exists` needs `create` on the schema even
+        // when the tables exist, which a read-only role lacks.
+        if (!readOnly || !(yield* tablesExist(sql))) yield* migrate(sql);
         return sql;
       }),
     );
@@ -448,6 +464,21 @@ export const makePostgresState = <E = never, R = never>(
         Effect.andThen(op),
       );
 
+    /** A read-only run reads without the lock. */
+    const guardedRead = <A>(
+      request: { stack: string; stage: string },
+      op: Effect.Effect<A, StateStoreError>,
+    ): Effect.Effect<A, StateStoreError> => (readOnly ? op : guarded(request, op));
+
+    /** A read-only run refuses every write. */
+    const guardedWrite = <A>(
+      request: { stack: string; stage: string },
+      op: Effect.Effect<A, StateStoreError>,
+    ): Effect.Effect<A, StateStoreError> =>
+      readOnly
+        ? Effect.fail(readOnlyStateError("Postgres", request.stack, request.stage))
+        : guarded(request, op);
+
     // Operations without a stage cannot name a single lease, so they
     // re-verify every lease this store currently holds instead.
     const verifyHeldLeases: Effect.Effect<void, StateStoreError> = Effect.suspend(() =>
@@ -498,7 +529,7 @@ export const makePostgresState = <E = never, R = never>(
           Effect.map((rows) => rows.map((row) => String(row.stage))),
         ),
       get: (request) =>
-        guarded(
+        guardedRead(
           request,
           run(
             (sql) =>
@@ -518,7 +549,7 @@ export const makePostgresState = <E = never, R = never>(
       // re-fetching each one — same semantics as LocalState, without the
       // N+1 round-trips.
       getReplacedResources: (request) =>
-        guarded(
+        guardedRead(
           request,
           run(
             (sql) =>
@@ -530,7 +561,7 @@ export const makePostgresState = <E = never, R = never>(
           ),
         ),
       set: (request) =>
-        guarded(
+        guardedWrite(
           request,
           run(
             (sql) => sql`
@@ -542,7 +573,7 @@ export const makePostgresState = <E = never, R = never>(
           ).pipe(Effect.map(() => request.value)),
         ),
       delete: (request) =>
-        guarded(
+        guardedWrite(
           request,
           run(
             (sql) =>
@@ -554,27 +585,29 @@ export const makePostgresState = <E = never, R = never>(
       // fails the lock instead of racing the delete. The stack-wide sweep
       // that follows runs while all of those stage locks are still held.
       deleteStack: ({ stack, stage }) =>
-        stage === undefined
-          ? verifyHeldLeases.pipe(
-              Effect.andThen(service.listStages(stack)),
-              Effect.flatMap((stages) =>
-                Effect.forEach(
-                  stages,
-                  (found) => guarded({ stack, stage: found }, deleteStage(stack, found)),
-                  { discard: true },
+        readOnly
+          ? Effect.fail(readOnlyStateError("Postgres", stack, stage ?? "*"))
+          : stage === undefined
+            ? verifyHeldLeases.pipe(
+                Effect.andThen(service.listStages(stack)),
+                Effect.flatMap((stages) =>
+                  Effect.forEach(
+                    stages,
+                    (found) => guarded({ stack, stage: found }, deleteStage(stack, found)),
+                    { discard: true },
+                  ),
                 ),
-              ),
-              Effect.andThen(
-                run((sql) => sql`delete from alchemy_resource_state where stack = ${stack}`),
-              ),
-              Effect.andThen(
-                run((sql) => sql`delete from alchemy_stack_output where stack = ${stack}`),
-              ),
-              Effect.asVoid,
-            )
-          : guarded({ stack, stage }, deleteStage(stack, stage)),
+                Effect.andThen(
+                  run((sql) => sql`delete from alchemy_resource_state where stack = ${stack}`),
+                ),
+                Effect.andThen(
+                  run((sql) => sql`delete from alchemy_stack_output where stack = ${stack}`),
+                ),
+                Effect.asVoid,
+              )
+            : guarded({ stack, stage }, deleteStage(stack, stage)),
       list: (request) =>
-        guarded(
+        guardedRead(
           request,
           run(
             (sql) =>
@@ -582,7 +615,7 @@ export const makePostgresState = <E = never, R = never>(
           ).pipe(Effect.map((rows) => rows.map((row) => String(row.fqn)))),
         ),
       getOutput: (request) =>
-        guarded(
+        guardedRead(
           request,
           run(
             (sql) =>
@@ -595,7 +628,7 @@ export const makePostgresState = <E = never, R = never>(
           ),
         ),
       setOutput: (request) =>
-        guarded(
+        guardedWrite(
           request,
           run(
             (sql) => sql`

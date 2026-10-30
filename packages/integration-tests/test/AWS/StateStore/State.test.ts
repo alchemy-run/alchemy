@@ -1,6 +1,8 @@
 import { createHash } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import * as AWS from "@alchemy.run/aws";
 import { makeS3State } from "@alchemy.run/aws";
+import { AWSEnvironment } from "@alchemy.run/aws/Environment";
 import { createStateBucketName } from "@alchemy.run/aws/StateStore/State";
 import { describe, expect } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
@@ -8,10 +10,15 @@ import * as Core from "@alchemy.run/test/Core";
 import * as kms from "@distilled.cloud/aws/kms";
 import * as s3 from "@distilled.cloud/aws/s3";
 import * as sqs from "@distilled.cloud/aws/sqs";
+import * as sts from "@distilled.cloud/aws/sts";
 import * as Alchemy from "alchemy";
+import * as Output from "alchemy/Output";
 import { StateStoreError, type ResourceState, type StateService } from "alchemy/State";
+import { PlatformServices } from "alchemy/Util/PlatformServices";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Logger from "effect/Logger";
+import * as ChildProcess from "effect/process/ChildProcess";
 import * as Redacted from "effect/Redacted";
 import * as References from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -852,6 +859,146 @@ test.provider(
   {
     tags: ["provider:aws", "provider:aws:s3", "provider:aws:statestore", "live"],
     timeout: 120_000,
+  },
+);
+
+const CLI = fileURLToPath(new URL("../../../../alchemy/bin/cli.js", import.meta.url));
+/** The CLI discovers providers from this package's `package.json`. */
+const PROJECT = fileURLToPath(new URL("../../..", import.meta.url));
+const READ_ONLY_FIXTURE = fileURLToPath(new URL("./fixtures/read-only-state.ts", import.meta.url));
+
+/** Run the CLI non-interactively with only `env`'s AWS credentials. */
+const runCli = (args: ReadonlyArray<string>, env: Record<string, string>) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const home = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-read-only-state-" });
+    const { ALCHEMY_PROFILE: _, AWS_PROFILE: __, ...inherited } = process.env;
+    const handle = yield* ChildProcess.make("bun", [CLI, ...args], {
+      cwd: PROJECT,
+      env: { ...inherited, ALCHEMY_HOME: home, CI: "1", NO_COLOR: "1", ...env },
+      extendEnv: false,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+      killSignal: "SIGTERM",
+      forceKillAfter: "1 second",
+    });
+    const [stdout, stderr, exitCode] = yield* Effect.all(
+      [
+        handle.stdout.pipe(Stream.decodeText, Stream.mkString),
+        handle.stderr.pipe(Stream.decodeText, Stream.mkString),
+        handle.exitCode,
+      ],
+      { concurrency: 3 },
+    );
+    return { output: `${stdout}${stderr}`, exitCode };
+  }).pipe(Effect.scoped, Effect.provide(PlatformServices));
+
+// #2751: `alchemy plan` and `alchemy drift` only read state. They need only
+// read access to the bucket, and a deploy holding the stage's lease does not
+// block them.
+test.provider(
+  "plan and drift read S3 state as a read-only role while a deploy holds the lease",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { accountId, region } = yield* AWSEnvironment.current;
+      const { bucket, role } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const bucket = yield* AWS.S3.Bucket("StateBucket", { forceDestroy: true });
+          const role = yield* AWS.IAM.Role("ReadStateRole", {
+            assumeRolePolicyDocument: {
+              Version: "2012-10-17",
+              Statement: [
+                {
+                  Effect: "Allow",
+                  Principal: { AWS: `arn:aws:iam::${accountId}:root` },
+                  Action: ["sts:AssumeRole"],
+                },
+              ],
+            },
+            inlinePolicies: {
+              ReadState: {
+                Version: "2012-10-17",
+                Statement: [
+                  { Effect: "Allow", Action: ["s3:ListBucket"], Resource: bucket.bucketArn },
+                  {
+                    Effect: "Allow",
+                    Action: ["s3:GetObject"],
+                    Resource: Output.interpolate`${bucket.bucketArn}/*`,
+                  },
+                ],
+              },
+            },
+          });
+          return { bucket, role };
+        }),
+      );
+      const stage = stack.stage;
+      const leaseKey = `read-only/S3ReadOnlyState/${stage}/__lease__.json`;
+      const leaseToken = s3.getObject({ Bucket: bucket.bucketName, Key: leaseKey }).pipe(
+        Effect.flatMap((object) => Stream.mkString(Stream.decodeText(object.Body!))),
+        Effect.map((text) => (JSON.parse(text) as { token: string }).token),
+      );
+
+      // A freshly created role's trust policy takes a few seconds to apply.
+      const assumed = yield* sts
+        .assumeRole({ RoleArn: role.roleArn, RoleSessionName: "alchemy-read-only-state" })
+        .pipe(
+          Effect.retry({
+            while: (error) => error._tag === "AccessDeniedException",
+            schedule: Schedule.exponential("1 second"),
+            times: 8,
+          }),
+        );
+      const credentials = assumed.Credentials!;
+      const readOnlyEnv = {
+        AWS_ACCESS_KEY_ID: credentials.AccessKeyId,
+        AWS_SECRET_ACCESS_KEY: Redacted.isRedacted(credentials.SecretAccessKey)
+          ? Redacted.value(credentials.SecretAccessKey)
+          : credentials.SecretAccessKey,
+        AWS_SESSION_TOKEN: credentials.SessionToken,
+        AWS_REGION: region,
+        READ_ONLY_STATE_BUCKET: bucket.bucketName,
+      };
+      // The role's policy can lag its trust policy, so a first denied read
+      // is retried; a refused lease write fails every attempt.
+      const runAsReadOnlyRole = (command: string) =>
+        runCli([command, "--config", READ_ONLY_FIXTURE, "--stage", stage], readOnlyEnv).pipe(
+          Effect.repeat({
+            until: ({ exitCode, output }) => exitCode === 0 || !output.includes("s3:GetObject"),
+            schedule: Schedule.spaced("3 seconds"),
+            times: 5,
+          }),
+        );
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          // A deploy of the stage, holding its lease.
+          const deploy = yield* makeS3State({ bucketName: bucket.bucketName, prefix: "read-only" });
+          yield* deploy.setOutput({ stack: "S3ReadOnlyState", stage, value: {} });
+          const held = yield* leaseToken;
+
+          for (const command of ["plan", "drift"]) {
+            const { exitCode, output } = yield* runAsReadOnlyRole(command);
+            // A failure shows the CLI's output.
+            expect({ command, exitCode, output: exitCode === 0 ? "" : output }).toEqual({
+              command,
+              exitCode: 0,
+              output: "",
+            });
+          }
+          // The deploy still holds its lease and can keep writing.
+          expect(yield* leaseToken).toBe(held);
+          yield* deploy.setOutput({ stack: "S3ReadOnlyState", stage, value: { done: true } });
+          yield* deploy.deleteStack({ stack: "S3ReadOnlyState", stage });
+        }),
+      );
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:s3", "provider:aws:statestore", "live"],
+    timeout: 180_000,
   },
 );
 

@@ -4,7 +4,7 @@ import * as storage from "@distilled.cloud/gcp/storage_v1";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { type BucketObjects, makeBucketState } from "alchemy/State/BucketState";
 import * as Provisioning from "alchemy/State/Provisioning";
-import { State, StateStoreError } from "alchemy/State/State";
+import { isReadOnlyState, State, StateStoreError } from "alchemy/State/State";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
 import { globalLogs } from "alchemy/Util/LogRecord";
 import * as Effect from "effect/Effect";
@@ -191,8 +191,11 @@ export const makeGcsState = (options: GcsStateOptions = {}) =>
       if (options.name !== undefined) yield* Provisioning.storeName(options.name);
       const bucketName = options.bucketName ?? createStateBucketName(project, options.name);
       const ensure = ensureStateBucket(bucketName, project, options.location ?? region);
+      // A read-only run leaves an existing bucket's settings alone.
       yield* (yield* stateBucketExists(bucketName))
-        ? ensure
+        ? (yield* isReadOnlyState)
+          ? Effect.void
+          : ensure
         : Provisioning.deployMissing(
             {
               backend: "gcp",

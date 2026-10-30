@@ -1,6 +1,8 @@
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import { AlchemyContext } from "../AlchemyContext.ts";
 import { UserFacingError } from "../UserFacingError.ts";
 import type { ActionState } from "./ActionState.ts";
 import type { ReplacedResourceState, ResourceState } from "./ResourceState.ts";
@@ -30,6 +32,28 @@ export class StateStoreError extends Data.TaggedError("StateStoreError")<{
 }> {
   readonly [UserFacingError] = true;
 }
+
+/**
+ * Whether the run only reads state (see `AlchemyContext.readOnlyState`). A
+ * store that leases stages takes no lease in a read-only run and fails
+ * every write with {@link readOnlyStateError}.
+ */
+export const isReadOnlyState: Effect.Effect<boolean> = Effect.serviceOption(AlchemyContext).pipe(
+  Effect.map((context) => Option.isSome(context) && context.value.readOnlyState === true),
+);
+
+/** Run `effect` as a read-only run: its state stores take no lease and refuse writes. */
+export const readOnlyState = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  Effect.updateService(effect, AlchemyContext, (context) => ({
+    ...context,
+    readOnlyState: true,
+  }));
+
+/** The error a store fails a write with in a read-only run. */
+export const readOnlyStateError = (label: string, stack: string, stage: string) =>
+  new StateStoreError({
+    message: `the ${label} state store is read-only in this run; refusing to write '${stack}/${stage}'`,
+  });
 
 export class State extends Context.Service<State, Effect.Effect<StateService>>()("alchemy/State") {}
 

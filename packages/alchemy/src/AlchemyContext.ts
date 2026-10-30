@@ -28,6 +28,14 @@ export class AlchemyContext extends EffectContext.Service<
      * @default false
      */
     updateStateStore?: boolean;
+    /**
+     * When `true`, the run only reads state: state stores take no stage
+     * lease and refuse writes. `alchemy plan` and a non-interactive
+     * `alchemy drift` without `--repair` set it, so they need only read
+     * access to the store and never block a concurrent deploy.
+     * @default false
+     */
+    readOnlyState?: boolean;
   }
 >()("alchemy/Context") {}
 
