@@ -248,6 +248,6 @@ yield* transfers.schedule(source, new ExpireTransfer(), { after: APPROVAL_WINDOW
 );
 ```
 
-Scheduling fails with `AlreadyExecuted` when the transfer already handled a command with that id.
+Scheduling fails with `AlreadyExecuted` when the transfer already handled a command with that id, unless you pass `replace: "always"` (see [Arm it again](/domain/deadlines#arm-it-again)).
 
 Next, [Event](/domain/event): what a command records when it succeeds.

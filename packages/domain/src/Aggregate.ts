@@ -221,13 +221,28 @@ export class NotScheduled extends Data.TaggedError("NotScheduled")<{
 }> {}
 
 /**
- * Options for {@link Client.schedule}: when to send, absolutely or after a delay.
+ * Options for {@link Client.schedule}: when to send, absolutely or after a
+ * delay, and what an earlier command with the same id it replaces.
  */
-export type ScheduleOptions = SendOptions &
-  (
+export type ScheduleOptions = SendOptions & {
+  /**
+   * What the schedule replaces when an earlier command used the same command
+   * id. `"pending"` (the default) replaces a pending command; once a command
+   * with the id ran, `schedule` fails with `AlreadyExecuted`. `"always"` also
+   * replaces a command that already ran: it drops that receipt, and the
+   * command runs again when due. Use it to arm a timer again under a
+   * deterministic id, e.g. a deadline that fired as a stale no-op. A
+   * redelivered policy then arms it again too, so the command must be safe to
+   * run more than once (as every scheduled command should be).
+   */
+  readonly replace?: Replace;
+} & (
     | { readonly at: DateTime.Utc; readonly after?: never }
     | { readonly after: Duration.Input; readonly at?: never }
   );
+
+/** What a schedule replaces: see {@link ScheduleOptions.replace}. */
+export type Replace = "pending" | "always";
 
 /**
  * When a scheduled command is due: an epoch-millisecond time, or a delay the
@@ -317,7 +332,7 @@ export interface Client<Def extends AnyDefinition> {
    * window closed") and records nothing when it no longer applies.
    * Scheduling again with the same command id replaces the earlier one.
    * Returns the command id to `unschedule` it by, and when it is due. Fails with `AlreadyExecuted` when the instance already handled a command
-   * with that id.
+   * with that id, unless `replace` is `"always"`.
    */
   readonly schedule: <Cmd extends InstanceOf<Schedulable<Def>>>(
     target: Target<Def>,

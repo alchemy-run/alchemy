@@ -276,11 +276,13 @@ export const make = (
         const executed = (id: string, commandId: string) => instance(id).receipts.has(commandId);
         return {
           send,
-          schedule: (id, command, meta, due) =>
+          schedule: (id, command, meta, due, replace = "pending") =>
             lock.withPermits(1)(
               Effect.suspend(() => {
                 const fields = { aggregate: kit.name, id, commandId: meta.commandId };
-                if (executed(id, meta.commandId)) return Effect.fail(new AlreadyExecuted(fields));
+                if (replace === "always") instance(id).receipts.delete(meta.commandId);
+                else if (executed(id, meta.commandId))
+                  return Effect.fail(new AlreadyExecuted(fields));
                 instance(id).cancelled.delete(meta.commandId);
                 const at = "at" in due ? due.at : now() + due.afterMillis;
                 return timer(
