@@ -20,6 +20,17 @@ const MODULE_REFERENCE_PATTERN = `__CLOUDFLARE_MODULE__(${MODULE_RULES.map((rule
 export const MODULE_REFERENCE_REGEX = new RegExp(MODULE_REFERENCE_PATTERN);
 const MODULE_REFERENCE_GLOBAL_REGEX = new RegExp(MODULE_REFERENCE_PATTERN, "g");
 
+/**
+ * Every file this process has turned into a module reference. The dev
+ * server's module fallback reads a file only when workerd asks for one of
+ * these, so a request naming any other path (from another local user, or a
+ * page rebinding a hostname to 127.0.0.1) can't read arbitrary files.
+ */
+const referencedModulePaths = new Set<string>();
+
+/** Whether `path` was resolved as an additional module in this process. */
+export const isReferencedModulePath = (path: string) => referencedModulePaths.has(path);
+
 export const additionalModulesPlugin = createPlugin("additional-modules", () => {
   const additionalModulePaths = new Set<string>();
   return {
@@ -50,6 +61,7 @@ export const additionalModulesPlugin = createPlugin("additional-modules", () => 
 
           const filePath = sanitizePath(resolved.id);
           additionalModulePaths.add(filePath);
+          referencedModulePaths.add(filePath);
 
           return {
             id: moduleReferenceId(rule.type, filePath),
