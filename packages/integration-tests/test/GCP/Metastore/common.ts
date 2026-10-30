@@ -1,5 +1,6 @@
 import * as GCP from "@alchemy.run/gcp";
 import { GcpEnvironment } from "@alchemy.run/gcp/Environment";
+import * as Output from "alchemy/Output";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -22,11 +23,24 @@ export const MetastoreApi = GCP.ServiceUsage.ProjectService("MetastoreApi", {
 
 /** The smallest Dataproc Metastore service: a developer-tier Hive metastore (20–40 minutes to provision). */
 export const hiveService = (labels: Record<string, string>) =>
-  GCP.Metastore.Service("Hive", {
-    location,
-    hiveMetastoreConfig: { version: "3.1.2" },
-    tier: "DEVELOPER",
-    labels,
+  Effect.gen(function* () {
+    // Create needs a warehouse directory ("Must specify config override
+    // hive.metastore.warehouse.dir").
+    const warehouse = yield* GCP.Storage.Bucket("Warehouse", {
+      location: "US-CENTRAL1",
+      forceDestroy: true,
+    });
+    return yield* GCP.Metastore.Service("Hive", {
+      location,
+      hiveMetastoreConfig: {
+        version: "3.1.2",
+        configOverrides: {
+          "hive.metastore.warehouse.dir": Output.interpolate`gs://${warehouse.bucketName}/hive`,
+        },
+      },
+      tier: "DEVELOPER",
+      labels,
+    });
   });
 
 /** Poll `get` until it answers NotFound. */
