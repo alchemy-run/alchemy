@@ -2464,6 +2464,10 @@ import {
   GlossariesGlossaryEntryProvider,
 } from "./Translate/GlossariesGlossaryEntry.ts";
 import {
+  Glossary as TranslateGlossary,
+  GlossaryProvider as TranslateGlossaryProvider,
+} from "./Translate/Glossary.ts";
+import {
   Model as TranslateModel,
   ModelProvider as TranslateModelProvider,
 } from "./Translate/Model.ts";
@@ -3501,6 +3505,7 @@ const makeProviders = () =>
           ProjectsLocationsGlobalPolicyOrchestrator,
           AdaptiveMtDataset,
           GlossariesGlossaryEntry,
+          TranslateGlossary,
           TranslateModel,
           WorkstationCluster,
           WorkstationClustersWorkstationConfig,
@@ -4616,6 +4621,7 @@ const makeProviders = () =>
                 ProjectsLocationsGlobalPolicyOrchestratorProvider(),
                 AdaptiveMtDatasetProvider(),
                 GlossariesGlossaryEntryProvider(),
+                TranslateGlossaryProvider(),
                 TranslateModelProvider(),
               ),
               Layer.mergeAll(

@@ -5,6 +5,9 @@
     "AdaptiveMtDataset": {
       "pattern": "projects/*/locations/*/adaptiveMtDatasets/*"
     },
+    "Glossary": {
+      "pattern": "projects/*/locations/*/glossaries/*"
+    },
     "GlossariesGlossaryEntry": {
       "pattern": "projects/*/locations/*/glossaries/*/glossaryEntries/*"
     },
@@ -24,11 +27,12 @@
   },
   "probes": {
     "resources": {
-      "AdaptiveMtDataset": "Dataset"
+      "AdaptiveMtDataset": "Dataset",
+      "Glossary": "EnEsGlossary",
+      "GlossariesGlossaryEntry": "Hello"
     },
     "untestable": {
-      "Model": "a custom model trains for hours from a prepared dataset (GCP_TEST_TRANSLATE_MODEL_DATASET)",
-      "GlossariesGlossaryEntry": "needs an existing glossary built from a CSV in Cloud Storage (GCP_TEST_TRANSLATE_GLOSSARY)"
+      "Model": "a custom model trains for hours from a prepared dataset (GCP_TEST_TRANSLATE_MODEL_DATASET)"
     },
     "enable": ["translate.googleapis.com"]
   }

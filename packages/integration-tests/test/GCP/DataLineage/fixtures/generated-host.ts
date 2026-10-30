@@ -26,14 +26,14 @@ export default class DataLineageGeneratedHost extends GCP.Function<DataLineageGe
     const p7 = yield* GCP.DataLineage.PatchConfig();
     return {
       fetch: serveProbes({
-        GetConfig: probeOutcome(Retry.none(p0({ location: "us-central1" } as never))),
+        GetConfig: probeOutcome(Retry.none(p0({ location: "global" } as never))),
         GetLineageEvent: probeOutcome(Retry.none(p1({} as never))),
         GetProcess: probeOutcome(Retry.none(p2({} as never))),
         GetRun: probeOutcome(Retry.none(p3({} as never))),
         ListProcesses: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
         ListProcessRuns: probeOutcome(Retry.none(p5({} as never))),
         ListRunLineageEvents: probeOutcome(Retry.none(p6({} as never))),
-        PatchConfig: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
+        PatchConfig: probeOutcome(Retry.none(p7({ location: "global" } as never))),
       }),
     };
   }).pipe(

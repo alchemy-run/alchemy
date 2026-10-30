@@ -18,6 +18,10 @@
       "ProcessesRun": "ProbeRun",
       "ProcessesRunsLineageEvent": "ProbeLineageEvent"
     },
-    "untestable": {}
+    "untestable": {},
+    "locations": {
+      "GetConfig": "global",
+      "PatchConfig": "global"
+    }
   }
 }

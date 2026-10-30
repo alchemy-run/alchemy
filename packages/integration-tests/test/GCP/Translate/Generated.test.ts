@@ -126,6 +126,25 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
+    describe("Glossary", { concurrent: true }, () => {
+      test.provider(
+        "GetGlossary (translate.projects.locations.glossaries.get)",
+        () => probe("GetGlossary", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:translate", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListGlossaryEntries (translate.projects.locations.glossaries.glossaryEntries.list)",
+        () => probe("ListGlossaryEntries", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:translate", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
     describe("project", { concurrent: true }, () => {
       test.provider(
         "CreateDataset (translate.projects.locations.datasets.create)",
@@ -136,24 +155,8 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "CreateGlossary (translate.projects.locations.glossaries.create)",
-        () => probe("CreateGlossary", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "DeleteDataset (translate.projects.locations.datasets.delete)",
         () => probe("DeleteDataset", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "DeleteGlossary (translate.projects.locations.glossaries.delete)",
-        () => probe("DeleteGlossary", false),
         {
           tags: ["provider:gcp", "provider:gcp:translate", "live"],
           timeout: 600_000,
@@ -178,14 +181,6 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "GetDataset (translate.projects.locations.datasets.get)",
         () => probe("GetDataset", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "GetGlossary (translate.projects.locations.glossaries.get)",
-        () => probe("GetGlossary", false),
         {
           tags: ["provider:gcp", "provider:gcp:translate", "live"],
           timeout: 600_000,
@@ -240,24 +235,8 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
-        "ListGlossaryEntries (translate.projects.locations.glossaries.glossaryEntries.list)",
-        () => probe("ListGlossaryEntries", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
         "ListModels (translate.projects.locations.models.list)",
         () => probe("ListModels", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:translate", "live"],
-          timeout: 600_000,
-        },
-      );
-      test.provider(
-        "PatchGlossary (translate.projects.locations.glossaries.patch)",
-        () => probe("PatchGlossary", false),
         {
           tags: ["provider:gcp", "provider:gcp:translate", "live"],
           timeout: 600_000,

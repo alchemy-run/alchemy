@@ -3,20 +3,18 @@ import type * as translate from "@distilled.cloud/gcp/translate_v3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import type * as Effect from "effect/Effect";
+import type { Glossary } from "./Glossary.ts";
 
 export interface GetGlossaryRequest extends Omit<
   translate.GetProjectsLocationsGlossariesRequest,
   "name"
-> {
-  /** Location to call in (`projects/{project}/locations/{location}`). */
-  location: string;
-  /** Id of the glossary (`glossaries/{glossary}`). */
-  glossary: string;
-}
+> {}
 
-export type GetGlossaryShape = () => Effect.Effect<
+export type GetGlossaryShape = (
+  resource: Glossary,
+) => Effect.Effect<
   (
-    request: GetGlossaryRequest,
+    request?: GetGlossaryRequest,
   ) => Effect.Effect<
     translate.Glossary,
     translate.GetProjectsLocationsGlossariesError,
@@ -27,14 +25,14 @@ export type GetGlossaryShape = () => Effect.Effect<
 /**
  * Gets a glossary.
  *
- * A call on the stack's project or one of its locations, so it takes no resource.
- * Provide {@link GetGlossaryHttp}. The host gets `roles/cloudtranslate.viewer` on the project.
+ * Bind it to a {@link Glossary} and provide {@link GetGlossaryHttp}. The
+ * host gets `roles/cloudtranslate.viewer` on the project (the service has no per-resource IAM policy).
  *
  * ### Usage
  * **Example:** Call `glossaries.get`
  * ```typescript
- * const getGlossary = yield* GCP.Translate.GetGlossary();
- * const response = yield* getGlossary({ location: "us-central1", glossary: "..." });
+ * const getGlossary = yield* GCP.Translate.GetGlossary(glossary);
+ * const response = yield* getGlossary();
  * ```
  *
  * @binding

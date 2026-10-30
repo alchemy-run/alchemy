@@ -8,6 +8,7 @@ export * from "./GetGlossariesGlossaryEntryHttp.ts";
 export * from "./GetModel.ts";
 export * from "./GetModelHttp.ts";
 export * from "./GlossariesGlossaryEntry.ts";
+export * from "./Glossary.ts";
 export * from "./Model.ts";
 export * from "./TranslateText.ts";
 export * from "./TranslateTextHttp.ts";
