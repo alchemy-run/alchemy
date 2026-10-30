@@ -76,25 +76,28 @@ test.provider.skipIf(!runLifecycle)(
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          const parent = yield* GCP.ApiGateway.Api("Parent", {});
-          const config = yield* GCP.ApiGateway.ApisConfig("V1", {
-            api: parent.name,
-            displayName: "v1",
-            openapiDocuments: [
-              {
-                document: {
-                  path: "openapi.yaml",
-                  contents: openApi,
-                },
+      const v1 = Effect.gen(function* () {
+        const parent = yield* GCP.ApiGateway.Api("Parent", {});
+        const config = yield* GCP.ApiGateway.ApisConfig("V1", {
+          api: parent.name,
+          displayName: "v1",
+          openapiDocuments: [
+            {
+              document: {
+                path: "openapi.yaml",
+                contents: openApi,
               },
-            ],
-            labels: { env: "test" },
-          });
-          return { parent, config };
-        }),
-      );
+            },
+          ],
+          labels: { env: "test" },
+        });
+        return { parent, config };
+      });
+      const created = yield* stack.deploy(v1);
+      // An unchanged redeploy plans no change: an omitted gatewayServiceAccount
+      // leaves Google's default in the output, which isn't a change.
+      const plan = yield* stack.plan(v1);
+      expect(plan.resources.V1.action).toBe("noop");
       const api = created.parent.name;
       expect(created.parent.state).toEqual("ACTIVE");
 
