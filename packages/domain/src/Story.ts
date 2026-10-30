@@ -915,10 +915,13 @@ const make =
               // Once a step has run at the current time, the clock only moves forward.
               const started = steps.slice(0, index).some((earlier) => earlier._tag !== "Provide");
               if (started && at < clockState.now) {
-                const now = new Date(clockState.now).toISOString();
+                const now = DateTime.formatIso(DateTime.makeUnsafe(clockState.now));
                 return yield* fail(
-                  `the clock cannot move back, from ${now} to ${new Date(at).toISOString()}`,
-                  { expected: `${now} or later`, actual: new Date(at).toISOString() },
+                  `the clock cannot move back, from ${now} to ${DateTime.formatIso(DateTime.makeUnsafe(at))}`,
+                  {
+                    expected: `${now} or later`,
+                    actual: DateTime.formatIso(DateTime.makeUnsafe(at)),
+                  },
                 );
               }
               clockState.now = at;

@@ -299,8 +299,12 @@ const makeWorkflowRunner = <ROut, E, RIn>(
 > =>
   Effect.gen(function* () {
     const context = yield* Effect.context<LambdaServices>();
+    // Facts about the executing process, read raw: a Config read here would be
+    // bound into the function's env at plan time (reserved Lambda keys).
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- reads the executing Lambda's identity
     const functionName = yield* Effect.sync(() => process.env.AWS_LAMBDA_FUNCTION_NAME);
     // Child workflows start on the version this function is running.
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- reads the executing Lambda's identity
     const version = yield* Effect.sync(() => process.env.AWS_LAMBDA_FUNCTION_VERSION ?? "$LATEST");
     const handlers = new Map<string, Registration>();
     const calls = makeCalls(

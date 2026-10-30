@@ -27,9 +27,13 @@ import * as path from "node:path";
  * queues/tables/functions stay warm between runs and the next session
  * reattaches via the health probe in milliseconds.
  */
+import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as Option from "effect/Option";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
@@ -114,26 +118,33 @@ export const FLOCI_TLS_DIR = path.join(os.homedir(), ".floci", "tls");
  * filesystem error) just leaves the previous bundle in place.
  */
 const syncCaBundle = (endpoint: string): Effect.Effect<void> =>
-  Effect.tryPromise({
-    try: async (signal) => {
-      const res = await fetch(`${endpoint}/_floci/tls/ca`, { signal });
-      if (!res.ok) return;
-      const pem = await res.text();
-      if (!pem.includes("BEGIN CERTIFICATE")) return;
-      await fs.mkdir(path.dirname(FLOCI_CA_PATH), { recursive: true });
-      await fs.writeFile(FLOCI_CA_PATH, pem);
-      // Point local workerd (and any other child process spawned after this)
-      // at the emulator CA so cross-cloud MicroVM data-plane TLS is trusted
-      // under `alchemy dev` — Node reads NODE_EXTRA_CA_CERTS once at startup,
-      // so setting it here (before local workers spawn during the apply) only
-      // affects children, which is exactly the target. Never clobber a value
-      // the caller set deliberately.
-      if (process.env.NODE_EXTRA_CA_CERTS === undefined) {
-        process.env.NODE_EXTRA_CA_CERTS = FLOCI_CA_PATH;
-      }
-    },
-    catch: (cause) => new FlociError({ message: "ca sync failed", cause }),
-  }).pipe(Effect.ignore);
+  Effect.gen(function* () {
+    const client = yield* HttpClient.HttpClient;
+    const res = yield* client.get(`${endpoint}/_floci/tls/ca`);
+    if (res.status < 200 || res.status >= 300) return;
+    const pem = yield* res.text;
+    if (!pem.includes("BEGIN CERTIFICATE")) return;
+    yield* Effect.tryPromise({
+      try: async () => {
+        await fs.mkdir(path.dirname(FLOCI_CA_PATH), { recursive: true });
+        await fs.writeFile(FLOCI_CA_PATH, pem);
+      },
+      catch: (cause) => new FlociError({ message: "ca sync failed", cause }),
+    });
+    // Point local workerd (and any other child process spawned after this)
+    // at the emulator CA so cross-cloud MicroVM data-plane TLS is trusted
+    // under `alchemy dev` — Node reads NODE_EXTRA_CA_CERTS once at startup,
+    // so setting it here (before local workers spawn during the apply) only
+    // affects children, which is exactly the target. Never clobber a value
+    // the caller set deliberately.
+    // Reads and writes the real process env: children inherit it, while
+    // Config may also resolve `.env` values that children never see.
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- checks what child processes will inherit
+    if (process.env.NODE_EXTRA_CA_CERTS === undefined) {
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports the CA path to child processes; Config is read-only
+      process.env.NODE_EXTRA_CA_CERTS = FLOCI_CA_PATH;
+    }
+  }).pipe(Effect.provide(FetchHttpClient.layer), Effect.ignore);
 
 export class FlociError extends Data.TaggedError("FlociError")<{
   readonly message: string;
@@ -250,37 +261,45 @@ const docker = (args: ReadonlyArray<string>) =>
  * error status — counts as serving; only a transport failure means down.
  */
 export const isServing = (endpoint: string): Effect.Effect<boolean> =>
-  Effect.tryPromise({
-    try: async (signal) => {
-      await fetch(`${endpoint}/_floci/health`, { signal });
-      return true;
-    },
-    catch: () => new FlociError({ message: "unreachable" }),
-  }).pipe(Effect.orElseSucceed(() => false));
+  HttpClient.get(`${endpoint}/_floci/health`).pipe(
+    Effect.as(true),
+    Effect.orElseSucceed(() => false),
+    Effect.provide(FetchHttpClient.layer),
+  );
 
 /** Fail unless `GET /_floci/health` answers 200. */
 export const checkHealth = (endpoint: string): Effect.Effect<void, FlociError> =>
-  Effect.tryPromise({
-    try: async (signal) => {
-      const res = await fetch(`${endpoint}/_floci/health`, { signal });
-      if (!res.ok) {
-        throw new Error(`health returned ${res.status}`);
-      }
-    },
-    catch: (cause) =>
-      new FlociError({
-        message: `floci health check failed: ${String(cause)}`,
-        cause,
-      }),
-  });
+  HttpClient.get(`${endpoint}/_floci/health`).pipe(
+    Effect.mapError(
+      (cause) =>
+        new FlociError({
+          message: `floci health check failed: ${String(cause)}`,
+          cause,
+        }),
+    ),
+    Effect.flatMap((res) =>
+      res.status >= 200 && res.status < 300
+        ? Effect.void
+        : Effect.fail(
+            new FlociError({
+              message: `floci health check failed: Error: health returned ${res.status}`,
+            }),
+          ),
+    ),
+    Effect.provide(FetchHttpClient.layer),
+  );
 
 /** Resolve the image to run: env override, config, pinned default. */
 export const resolveImage = (config?: FlociConfig): Effect.Effect<string> =>
-  Effect.sync(
-    () =>
-      // `|| undefined`: an empty env var (`ALCHEMY_FLOCI_IMAGE= cmd`) means
-      // "no override", not "run the image named ''" (an unrunnable docker ref).
-      (process.env.ALCHEMY_FLOCI_IMAGE || undefined) ?? config?.image ?? DEFAULT_FLOCI_IMAGE,
+  // An empty env var (`ALCHEMY_FLOCI_IMAGE= cmd`) means "no override", not
+  // "run the image named ''" (an unrunnable docker ref) — the env provider
+  // treats empty strings as missing.
+  Config.option(Config.String("ALCHEMY_FLOCI_IMAGE")).pipe(
+    Effect.map((override) =>
+      Option.getOrUndefined(Option.filter(override, (image) => image !== "")),
+    ),
+    Effect.orElseSucceed(() => undefined),
+    Effect.map((override) => override ?? config?.image ?? DEFAULT_FLOCI_IMAGE),
   );
 
 /** Whether a host TCP port is free (nothing is listening on it). */
@@ -410,7 +429,12 @@ const ensureFlociUnsynchronized = (
   Effect.gen(function* () {
     const port = config?.port ?? DEFAULT_FLOCI_PORT;
     const endpoint = `http://localhost:${port}`;
-    if (config?.external ?? process.env.ALCHEMY_FLOCI_EXTERNAL === "1") {
+    const externalEnv = yield* Config.option(Config.String("ALCHEMY_FLOCI_EXTERNAL")).pipe(
+      Effect.mapError(
+        (cause) => new FlociError({ message: "invalid ALCHEMY_FLOCI_EXTERNAL", cause }),
+      ),
+    );
+    if (config?.external ?? Option.getOrUndefined(externalEnv) === "1") {
       yield* checkHealth(endpoint).pipe(
         Effect.timeout("5 seconds"),
         Effect.mapError(

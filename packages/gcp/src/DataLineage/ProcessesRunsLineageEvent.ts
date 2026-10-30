@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import { GcpEnvironment } from "../Environment.ts";
 import type { Providers } from "../Providers.ts";
@@ -159,7 +160,7 @@ export class ProcessesRunsLineageEventNotResolved extends Data.TaggedError(
 const resourceName = (run: string, lineageEventId: string) =>
   `${run}/lineageEvents/${lineageEventId}`;
 
-const nowIso = () => Effect.sync(() => new Date().toISOString());
+const nowIso = () => Effect.map(DateTime.now, DateTime.formatIso);
 
 const runOf = (run: string, process: string | undefined, project: string, location: string) => {
   if (run.includes("/")) return run.replace(/\/+$/, "");

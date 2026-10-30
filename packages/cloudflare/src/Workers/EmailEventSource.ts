@@ -323,12 +323,10 @@ export const EmailEventSourceLive = Layer.effect(
         // mail with nothing left to retry from.
         return process(message).pipe(
           Effect.tapCause((cause) =>
-            Effect.sync(() => {
-              console.error(
-                `[EmailEventSource] handler failed for message to ` +
-                  `"${message.to}": ${Cause.pretty(cause)}`,
-              );
-            }),
+            Effect.logError(
+              `[EmailEventSource] handler failed for message to ` +
+                `"${message.to}": ${Cause.pretty(cause)}`,
+            ),
           ),
           // The listener contract is `E = never`, so surface the failure as
           // a defect rather than discarding it: the invocation fails, which

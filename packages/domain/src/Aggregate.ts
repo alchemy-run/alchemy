@@ -1,6 +1,7 @@
 import { CurrentActivity } from "alchemy/WorkflowEncoding";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import type * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
@@ -641,7 +642,10 @@ export class PolicyRun extends Context.Service<PolicyRun, { readonly next: () =>
  *
  * @internal
  */
-export const commandIdFor = (options: SendOptions | undefined): Effect.Effect<string> =>
+export const commandIdFor = (
+  options: SendOptions | undefined,
+  random: SecureRandom.SecureRandom["Service"],
+): Effect.Effect<string> =>
   options?.commandId !== undefined
     ? Effect.succeed(options.commandId)
     : Effect.gen(function* () {
@@ -650,7 +654,7 @@ export const commandIdFor = (options: SendOptions | undefined): Effect.Effect<st
         if (Option.isSome(step)) return step.value.next();
         const policy = yield* Effect.serviceOption(PolicyRun);
         if (Option.isSome(policy)) return policy.value.next();
-        return yield* Effect.sync(() => crypto.randomUUID());
+        return yield* random.uuidV4();
       });
 
 /**

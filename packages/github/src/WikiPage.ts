@@ -322,7 +322,11 @@ const gitEnvironment = Effect.fn(function* (repository: WikiRepository, director
   const config = path.join(directory, "gitconfig");
   yield* fs.writeFileString(config, "");
   return yield* Effect.sync(() => ({
+    // Git runs with `extendEnv: false`, so it needs the real process PATH,
+    // not a configured value.
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- forwards the real env to the git child
     PATH: process.env.PATH,
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- forwards the real env to the git child
     SystemRoot: process.env.SystemRoot,
     HOME: directory,
     LC_ALL: "C",

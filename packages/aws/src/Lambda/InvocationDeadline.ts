@@ -1,5 +1,6 @@
 import type * as lambda from "aws-lambda";
 import * as Clock from "effect/Clock";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -247,7 +248,14 @@ export const withInvocationDeadline: {
       }
       const remainingMs = context.getRemainingTimeInMillis();
       const graceMs =
-        options?.interrupt === false ? 0 : readTimeoutGrace(process.env[TIMEOUT_GRACE_ENV]);
+        options?.interrupt === false
+          ? 0
+          : readTimeoutGrace(
+              yield* Config.option(Config.String(TIMEOUT_GRACE_ENV)).pipe(
+                Effect.map(Option.getOrUndefined),
+                Effect.orElseSucceed(() => undefined),
+              ),
+            );
       const budgetMs = remainingMs - graceMs;
       // Leave room for the interrupt to land before the backstop; with no
       // grace the backstop carves its margin out of the budget, as before.

@@ -60,6 +60,7 @@ export const InvokeFunctionHttp = Layer.effect(
               });
             return yield* Effect.tryPromise({
               try: (signal) =>
+                // oxlint-disable-next-line effecttsgo/global-fetch-in-effect -- public InvokeFunction.fetch contract takes RequestInit and returns a web Response
                 fetch(target, {
                   ...init,
                   signal: init?.signal ? AbortSignal.any([signal, init.signal]) : signal,

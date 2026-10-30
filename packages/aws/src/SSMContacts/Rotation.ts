@@ -196,7 +196,11 @@ export const RotationProvider = () =>
           const arn = output?.rotationArn ?? (yield* rotationArn(name));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...news.tags, ...internalTags };
-          const desiredStart = news.startTime !== undefined ? new Date(news.startTime) : undefined;
+          const desiredStart =
+            news.startTime !== undefined
+              ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                new Date(news.startTime)
+              : undefined;
 
           // 1. OBSERVE
           let rotation = yield* getRotation(arn);

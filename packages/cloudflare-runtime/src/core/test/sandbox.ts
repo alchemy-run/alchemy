@@ -2,8 +2,10 @@
 
 import * as Credentials from "@distilled.cloud/cloudflare/Credentials";
 import * as NodeServices from "@effect/platform-node/NodeServices";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import { KvNamespace } from "../../../dist/core/node/bindings/index.mjs";
 import * as WorkerProxy from "../../../dist/core/node/proxy/WorkerProxy.mjs";
@@ -31,22 +33,27 @@ const main = Effect.gen(function* () {
     ],
   });
   yield* proxyInstance.set(upstreamUrl);
-  console.log(proxyInstance.url.href);
-  const res = yield* Effect.promise(async () => {
-    const res = await fetch(new URL("/", proxyInstance.url));
-    return {
-      status: res.status,
-      body: await res.text(),
-    };
-  });
-  console.log(res);
+  yield* Effect.log(proxyInstance.url.href);
+  const response = yield* HttpClient.get(new URL("/", proxyInstance.url)).pipe(Effect.orDie);
+  const res = {
+    status: response.status,
+    body: yield* response.text.pipe(Effect.orDie),
+  };
+  yield* Effect.log(res);
   return res;
 });
 
 const services = RuntimeServices.layerRuntime({
   api: { accountId: process.env.CLOUDFLARE_ACCOUNT_ID! },
 }).pipe(
-  Layer.provide(Layer.mergeAll(Credentials.fromEnv(), NodeServices.layer, FetchHttpClient.layer)),
+  Layer.provideMerge(
+    Layer.mergeAll(
+      Credentials.fromEnv(),
+      NodeServices.layer,
+      FetchHttpClient.layer,
+      SecureRandom.layerWebCrypto,
+    ),
+  ),
 );
 
 await main.pipe(Effect.provide(services), Effect.scoped, Effect.runPromise);

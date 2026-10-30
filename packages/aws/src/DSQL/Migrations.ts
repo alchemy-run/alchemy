@@ -9,6 +9,7 @@ import {
   type StampedMigrationsState,
   withPgClient,
 } from "@alchemy.run/sql/Migrations";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -216,7 +217,8 @@ export const withDsqlMigrationLock = <A, E, R>(
   use: Effect.Effect<A, E, R>,
 ) =>
   Effect.gen(function* () {
-    const owner = crypto.randomUUID();
+    const random = yield* SecureRandom.SecureRandom;
+    const owner = yield* random.uuidV4();
     yield* executor.query(
       `CREATE TABLE IF NOT EXISTS "__alchemy_dsql_migration_lock" (id integer PRIMARY KEY, owner uuid NOT NULL)`,
     );

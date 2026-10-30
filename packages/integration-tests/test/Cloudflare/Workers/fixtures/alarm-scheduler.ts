@@ -10,6 +10,7 @@ import {
 } from "@alchemy.run/cloudflare/Workers/DurableObjectState";
 import type * as cf from "@cloudflare/workers-types";
 import { RuntimeContext } from "alchemy/RuntimeContext";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as TestClock from "effect/testing/TestClock";
 
@@ -109,6 +110,7 @@ export const makeAlarmScheduler = Effect.gen(function* () {
     storage: native,
   } as unknown as cf.DurableObjectState;
   const state = fromDurableObjectState(raw);
+  const random = yield* SecureRandom.SecureRandom;
   let seal = initializeAlarmCallbacks(raw);
   return {
     db,
@@ -117,7 +119,7 @@ export const makeAlarmScheduler = Effect.gen(function* () {
     get alarm() {
       return alarm;
     },
-    register: makeDurableObjectCallbackFactory(raw),
+    register: makeDurableObjectCallbackFactory(raw, random),
     seal: () => seal(),
     restart: () => {
       seal = initializeAlarmCallbacks(raw);
@@ -131,4 +133,4 @@ export const makeAlarmScheduler = Effect.gen(function* () {
       );
     }),
   };
-}).pipe(Effect.provide(RuntimeContext.phantom));
+}).pipe(Effect.provide(RuntimeContext.phantom), Effect.provide(SecureRandom.layerWebCrypto));

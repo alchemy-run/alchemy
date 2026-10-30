@@ -1,4 +1,5 @@
 import * as NodeChildProcess from "node:child_process";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -144,17 +145,20 @@ const make = (
     compatibilityDate: workerd.compatibilityDate,
     serve: Effect.fn("Workerd.serve")(
       function* (serveConfig, args, options) {
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- workerd knobs for this process, read from the real env
         const config = withV8Flags(serveConfig, parseV8Flags(process.env[V8_FLAGS_ENV]));
         // Debug facility: dump each serve's full workerd config as JSON.
         // `WORKERD_DUMP_CONFIG=<dir>` writes one timestamped file per serve.
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- workerd knobs for this process, read from the real env
         const dumpDir = process.env.WORKERD_DUMP_CONFIG;
         if (dumpDir) {
+          const now = yield* Clock.currentTimeMillis;
           yield* Effect.promise(async () => {
             const fs = await import("node:fs/promises");
             const path = await import("node:path");
             await fs.mkdir(dumpDir, { recursive: true });
             await fs.writeFile(
-              path.join(dumpDir, `workerd-config-${Date.now()}.json`),
+              path.join(dumpDir, `workerd-config-${now}.json`),
               JSON.stringify(config, null, 2),
             );
           });
@@ -177,6 +181,7 @@ const make = (
           }
         }
         const handle = yield* spawn(
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- workerd knobs for this process, read from the real env
           options?.bin || process.env[PATH_ENV] || workerd.bin,
           [
             "serve",

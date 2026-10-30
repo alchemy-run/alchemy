@@ -8,6 +8,7 @@ import {
 } from "alchemy/State/State";
 import { encodeState, reviveStateRecursive } from "alchemy/State/StateEncoding";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -91,17 +92,13 @@ const amortizeCheck = (
   ttlMs: number,
 ): Effect.Effect<void, StateStoreError> => {
   let lastOkAt: number | undefined;
-  return Effect.suspend(() => {
-    if (lastOkAt !== undefined && Date.now() - lastOkAt < ttlMs) {
-      return Effect.void;
+  return Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    if (lastOkAt !== undefined && now - lastOkAt < ttlMs) {
+      return;
     }
-    return checkLive.pipe(
-      Effect.tap(() =>
-        Effect.sync(() => {
-          lastOkAt = Date.now();
-        }),
-      ),
-    );
+    yield* checkLive;
+    lastOkAt = yield* Clock.currentTimeMillis;
   });
 };
 

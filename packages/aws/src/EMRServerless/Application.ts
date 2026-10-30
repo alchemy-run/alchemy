@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireMinutes } from "alchemy/Util/Duration";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
@@ -402,7 +403,8 @@ export const ApplicationProvider = () =>
             yield* awaitApplicationStopped(application.applicationId);
             // Fresh token per update: distinct desired states must never be
             // deduplicated against each other.
-            const updateToken = yield* Effect.sync(() => crypto.randomUUID());
+            const random = yield* SecureRandom.SecureRandom;
+            const updateToken = yield* random.uuidV4();
             const updated = yield* emr.updateApplication({
               applicationId: application.applicationId,
               clientToken: updateToken,

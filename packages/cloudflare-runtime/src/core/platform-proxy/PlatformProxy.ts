@@ -41,6 +41,7 @@
  *   `env.DB.batch([env.DB.prepare("...")])`); cross-binding stub arguments
  *   are rejected.
  */
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import type * as Scope from "effect/Scope";
@@ -189,7 +190,8 @@ export const open = Effect.fn("PlatformProxy.open")(function* <
   Env = Record<string, unknown>,
 >(options: PlatformProxyOptions<B>) {
   const runtime = yield* Runtime.Runtime;
-  const token = crypto.randomUUID();
+  const random = yield* SecureRandom.SecureRandom;
+  const token = yield* random.uuidV4();
   const modules = yield* makeModules(options as PlatformProxyOptions);
   const url = yield* runtime.start({
     name: options.name ?? "platform-proxy",

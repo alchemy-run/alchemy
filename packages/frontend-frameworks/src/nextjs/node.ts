@@ -317,19 +317,21 @@ const spawnNextDev = (options: {
         catch: failFramework("Failed to spawn the next dev CLI (is `node` on PATH?)"),
       }),
     ),
-    ({ child }) =>
-      Effect.callback<void>((resume) => {
-        if (child.exitCode !== null) {
-          resume(Effect.void);
-          return;
-        }
-        const killTimer = setTimeout(() => child.kill("SIGKILL"), 3000);
-        child.once("exit", () => {
-          clearTimeout(killTimer);
-          resume(Effect.void);
+    ({ child }) => {
+      const stop = (signal: NodeJS.Signals) =>
+        Effect.callback<void>((resume) => {
+          if (child.exitCode !== null || child.signalCode !== null) {
+            resume(Effect.void);
+            return;
+          }
+          child.once("exit", () => resume(Effect.void));
+          child.kill(signal);
         });
-        child.kill("SIGTERM");
-      }),
+      return stop("SIGTERM").pipe(
+        Effect.interruptible,
+        Effect.timeoutOrElse({ duration: "3 seconds", orElse: () => stop("SIGKILL") }),
+      );
+    },
   ).pipe(Effect.map(({ handle }) => handle));
 
 /**

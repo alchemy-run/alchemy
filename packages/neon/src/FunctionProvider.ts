@@ -7,6 +7,7 @@ import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -118,13 +119,14 @@ export const FunctionLogs = Effect.fn(function* (
     return yield* new FunctionLogQueryError({ reason: "invalid-limit" });
   // https://neon.com/docs/introduction/monitor-logs documents this service identity.
   const service = `neon-function/${output.slug}`;
+  const endTime = DateTime.formatIso(yield* DateTime.now);
   const query = yield* Effect.sync(() => ({
     project_id: output.projectId,
     branch_id: output.branchId,
     source: "function" as const,
     service_name: service,
     ...(options.since ? { start_time: options.since.toISOString() } : { since: "1h" }),
-    end_time: new Date().toISOString(),
+    end_time: endTime,
     limit: Math.min(limit, 1000),
     sort_order: "desc" as const,
   }));

@@ -73,6 +73,7 @@ const makeStub = <Shape>(options: { readonly baseUrl: string; readonly token: st
             }
             const response = yield* Effect.tryPromise({
               try: () =>
+                // oxlint-disable-next-line effecttsgo/global-fetch-in-effect -- untyped Proxy RPC stub; an HttpClient requirement would be invisible to callers' Shape and unsatisfied at runtime
                 fetch(`${baseUrl}${RPC_PATH_PREFIX}${encodeURIComponent(prop)}`, {
                   method: "POST",
                   headers: {

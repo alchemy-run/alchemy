@@ -10,6 +10,7 @@ import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
+import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -120,13 +121,17 @@ export const initializeAlarmCallbacks = (state: cf.DurableObjectState) => {
 };
 
 /** @internal */
-export const makeDurableObjectCallbackFactory = (raw: cf.DurableObjectState): CallbackFactory => {
+export const makeDurableObjectCallbackFactory = (
+  raw: cf.DurableObjectState,
+  random: SecureRandom.SecureRandom["Service"],
+): CallbackFactory => {
   const state = fromDurableObjectState(raw);
-  return (name, handler, options) => makeAlarmCallback(state, name, handler, options);
+  return (name, handler, options) => makeAlarmCallback(state, random, name, handler, options);
 };
 
 const makeAlarmCallback = <Payload, E, R>(
   state: DurableObjectState["Service"],
+  random: SecureRandom.SecureRandom["Service"],
   name: string,
   handler: (payload: Payload) => Effect.Effect<unknown, E, R>,
   options?: CallbackOptions,
@@ -287,7 +292,7 @@ const makeAlarmCallback = <Payload, E, R>(
               attempts === 0
                 ? null
                 : (yield* Clock.currentTimeMillis) + recoveryDelay(retry, attempts, parked);
-            const version = yield* Effect.sync(() => crypto.randomUUID());
+            const version = yield* random.uuidV4();
             yield* Effect.sync(() =>
               raw.sql.exec(
                 `INSERT INTO alchemy_alarm_callbacks

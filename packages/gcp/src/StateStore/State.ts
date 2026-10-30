@@ -7,6 +7,7 @@ import * as Provisioning from "alchemy/State/Provisioning";
 import { State, StateStoreError } from "alchemy/State/State";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
 import { globalLogs } from "alchemy/Util/LogRecord";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
@@ -148,7 +149,7 @@ export const state = (options: GcsStateOptions = {}) =>
     State,
     Effect.gen(function* () {
       const scope = yield* Effect.scope;
-      const context = yield* Effect.context<GcsDeps | GcpEnvironment>();
+      const context = yield* Effect.context<GcsDeps | GcpEnvironment | SecureRandom.SecureRandom>();
 
       // Bind the lease to this layer's scope. The cached effect runs on the
       // first state operation, which may sit in a shorter scope.
@@ -170,7 +171,7 @@ export const state = (options: GcsStateOptions = {}) =>
  */
 export const makeGcsState = (options: GcsStateOptions = {}) =>
   Effect.gen(function* () {
-    const context = yield* Effect.context<GcsDeps | GcpEnvironment>();
+    const context = yield* Effect.context<GcsDeps | GcpEnvironment | SecureRandom.SecureRandom>();
 
     const toError = (cause: unknown) =>
       new StateStoreError({

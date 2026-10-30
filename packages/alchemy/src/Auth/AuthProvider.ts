@@ -1,6 +1,7 @@
 import * as Config from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
@@ -351,7 +352,7 @@ export const AuthProvider =
       | Effect.Effect<AuthProviderImpl<Config, Credentials, R>, never, ImplReq>,
   ) =>
     Effect.gen(function* () {
-      // FileSystem/Path back the cross-process credentials lock that wraps
+      // FileSystem/Path/SecureRandom back the cross-process credentials lock that wraps
       // `logout`/`read`/`details` below, so capture them with the impl's own services.
       //
       // `Effect.context()` snapshots the ENTIRE fiber context (the type
@@ -369,8 +370,12 @@ export const AuthProvider =
       // re-declares as a requirement anyway, so no call site can rely on the
       // capture satisfying it.
       const ctx = Context.omit(Interaction)(
-        yield* Effect.context<FileSystem.FileSystem | Path.Path | R | ImplReq>(),
-      ) as Context.Context<FileSystem.FileSystem | Path.Path | R | ImplReq>;
+        yield* Effect.context<
+          FileSystem.FileSystem | Path.Path | SecureRandom.SecureRandom | R | ImplReq
+        >(),
+      ) as Context.Context<
+        FileSystem.FileSystem | Path.Path | SecureRandom.SecureRandom | R | ImplReq
+      >;
       // `read` and `readEnvironment` resolve credentials for a caller that
       // has already chosen its ConfigProvider (`resolveProviderConfig`
       // checks `presentEnvironment` under it), so they read through that

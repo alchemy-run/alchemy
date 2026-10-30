@@ -11,6 +11,7 @@ import { layer as nodeServicesLayer } from "@effect/platform-node/NodeServices";
 import { reifyBoundConfigProvider } from "alchemy/Runtime";
 import { entrypointLayer, entrypointTag, stackFromEnv } from "alchemy/Runtime/Bootstrap";
 import * as ConfigProvider from "effect/ConfigProvider";
+import { layerWebCrypto as secureRandomLayer } from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { layer as fetchHttpClientLayer } from "effect/http/FetchHttpClient";
@@ -40,6 +41,7 @@ export const bootstrap = async (entrypoint: unknown): Promise<unknown> => {
   const platform = Layer.mergeAll(
     nodeServicesLayer,
     fetchHttpClientLayer,
+    secureRandomLayer,
     // TODO(sam): wire this up to telemetry more directly
     Logger.layer([Logger.consolePretty()]),
   );

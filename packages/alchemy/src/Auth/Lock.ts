@@ -1,4 +1,5 @@
 import * as Clock from "effect/Clock";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -50,7 +51,8 @@ const acquireFileLock = Effect.fn(function* (lockPath: string, timeout: Duration
   const fs = yield* FileSystem.FileSystem;
   const path = yield* Path.Path;
   const ownerPath = path.join(lockPath, "owner");
-  const owner = yield* Effect.sync(() => crypto.randomUUID());
+  const random = yield* SecureRandom.SecureRandom;
+  const owner = yield* random.uuidV4();
 
   yield* fs.makeDirectory(path.dirname(lockPath), { recursive: true });
 

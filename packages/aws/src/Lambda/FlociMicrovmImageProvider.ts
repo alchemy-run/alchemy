@@ -42,6 +42,7 @@ import * as Artifacts from "alchemy/Artifacts";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { hashDirectory } from "alchemy/Command/Memo";
 import { sha256 } from "alchemy/Util/sha256";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -212,13 +213,13 @@ export const FlociMicrovmImageProvider = () =>
             // it. Running VMs keep their session (deliberately not killed).
             Stream.runForEach(() =>
               Effect.gen(function* () {
-                const startedAt = Date.now();
+                const startedAt = yield* Clock.currentTimeMillis;
                 yield* Effect.logInfo(`microvm source changed — rebuilding`);
                 const previous = yield* ctx.currentAttrs;
                 const attrs = yield* ctx.rerunReconcile;
                 if (attrs.codeArtifact?.hash !== previous.codeArtifact?.hash) {
                   yield* Effect.logInfo(
-                    `microvm image rebuilt (v${attrs.latestActiveImageVersion}) in ${Date.now() - startedAt}ms`,
+                    `microvm image rebuilt (v${attrs.latestActiveImageVersion}) in ${(yield* Clock.currentTimeMillis) - startedAt}ms`,
                   );
                 }
               }).pipe(

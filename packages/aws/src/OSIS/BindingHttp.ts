@@ -22,6 +22,8 @@ import * as SigV4 from "@distilled.cloud/aws/SigV4";
 import type * as Output from "alchemy/Output";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import * as AWSBindings from "../AWSBindings.ts";
 import type { Pipeline } from "./Pipeline.ts";
@@ -149,7 +151,7 @@ export interface IngestRequest {
 export const makeOsisIngestBinding = Effect.gen(function* () {
   const bind = yield* AWSBindings.Bind;
   const services = yield* AWSBindings.withCredentials(
-    Effect.context<Credentials.Credentials | Region.Region>(),
+    Effect.context<Credentials.Credentials | Region.Region | HttpClient.HttpClient>(),
   );
 
   return Effect.fn(function* (pipeline: Pipeline) {
@@ -191,12 +193,13 @@ export const makeOsisIngestBinding = Effect.gen(function* () {
       const url = new URL(request.path.startsWith("/") ? request.path : `/${request.path}`, base);
 
       // Resolve credentials fresh per request (STS sessions rotate).
-      const { credentials, region } = yield* Effect.gen(function* () {
+      const { credentials, region, client } = yield* Effect.gen(function* () {
         const credentials = yield* yield* Credentials.Credentials;
         const region =
           /\.([a-z0-9-]+)\.osis\.amazonaws\.com$/.exec(url.hostname)?.[1] ??
           (yield* yield* Region.Region);
-        return { credentials, region };
+        const client = yield* HttpClient.HttpClient;
+        return { credentials, region, client };
       }).pipe(Effect.provideContext(services));
 
       const body = JSON.stringify(request.events);
@@ -213,31 +216,23 @@ export const makeOsisIngestBinding = Effect.gen(function* () {
         allHeaders: true,
       });
 
-      const response = yield* Effect.tryPromise({
-        try: () =>
-          fetch(signed.url, {
-            method: signed.method,
-            headers: signed.headers,
-            body,
-          }),
-        catch: (cause) =>
-          new PipelineIngestError({
-            pipelineName,
-            path: request.path,
-            status: 0,
-            body: cause instanceof Error ? cause.message : String(cause),
-          }),
-      });
-      const text = yield* Effect.tryPromise({
-        try: () => response.text(),
-        catch: (cause) =>
-          new PipelineIngestError({
-            pipelineName,
-            path: request.path,
-            status: response.status,
-            body: cause instanceof Error ? cause.message : String(cause),
-          }),
-      });
+      const toError = (status: number) => (cause: unknown) =>
+        new PipelineIngestError({
+          pipelineName,
+          path: request.path,
+          status,
+          body: cause instanceof Error ? cause.message : String(cause),
+        });
+      const response = yield* client
+        .execute(
+          HttpClientRequest.post(signed.url).pipe(
+            HttpClientRequest.bodyText(body),
+            // The signed headers (content-type included) win over the body's.
+            HttpClientRequest.setHeaders(signed.headers),
+          ),
+        )
+        .pipe(Effect.mapError(toError(0)));
+      const text = yield* response.text.pipe(Effect.mapError(toError(response.status)));
       if (response.status < 200 || response.status >= 300) {
         return yield* fail(response.status, text);
       }

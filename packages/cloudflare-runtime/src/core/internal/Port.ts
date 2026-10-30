@@ -248,6 +248,9 @@ export const make = (options: PortsOptions) =>
     const reserveLocal = (port: number) => Cache.set(cache, port, false);
     const reserve = (port: number) =>
       Effect.sync(() => {
+        // Expiry is checked against `Date.now()` in the sync `isReserved`:
+        // the process-wide map must use one real clock, not the fiber's.
+        // oxlint-disable-next-line effecttsgo/global-date-in-effect -- shares a real-time map with sync code
         globalReservations.set(port, Date.now() + RESERVATION_TTL_MS);
       }).pipe(Effect.andThen(reserveLocal(port)));
     // Serializes the search loop so that concurrent lookups for the same

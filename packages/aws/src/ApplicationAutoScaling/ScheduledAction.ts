@@ -257,8 +257,16 @@ export const ScheduledActionProvider = () =>
               ScalableDimension: news.scalableDimension,
               Schedule: news.schedule,
               Timezone: news.timezone,
-              StartTime: news.startTime !== undefined ? new Date(news.startTime) : undefined,
-              EndTime: news.endTime !== undefined ? new Date(news.endTime) : undefined,
+              StartTime:
+                news.startTime !== undefined
+                  ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                    new Date(news.startTime)
+                  : undefined,
+              EndTime:
+                news.endTime !== undefined
+                  ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                    new Date(news.endTime)
+                  : undefined,
               ScalableTargetAction: news.scalableTargetAction,
             }),
           );

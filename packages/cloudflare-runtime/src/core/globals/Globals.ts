@@ -1,7 +1,9 @@
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Cron from "effect/Cron";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Result from "effect/Result";
@@ -59,15 +61,21 @@ export class Globals extends Plugin.Service<Globals>()("cloudflare-runtime/plugi
  * Trigger failures are logged and the loop continues. The loop runs on the
  * worker's start `Scope`, so it dies with the worker.
  */
-const cronLoop = (workerName: string, expression: string, cron: Cron.Cron, port: number) => {
+const cronLoop = (
+  http: HttpClient.HttpClient,
+  workerName: string,
+  expression: string,
+  cron: Cron.Cron,
+  port: number,
+) => {
   const fire = Effect.gen(function* () {
-    const time = yield* Effect.sync(() => Date.now());
+    const time = yield* Clock.currentTimeMillis;
     const url =
       `http://127.0.0.1:${port}${PATH_SCHEDULED}` +
       `?cron=${encodeURIComponent(expression)}&time=${time}`;
-    const response = yield* Effect.tryPromise(() => fetch(url, { method: "POST" }));
-    const body = yield* Effect.tryPromise(() => response.text());
-    if (response.ok) {
+    const response = yield* http.post(url);
+    const body = yield* response.text;
+    if (response.status >= 200 && response.status < 300) {
       yield* Effect.logInfo(`[cron:${workerName}] "${expression}" triggered scheduled(): ${body}`);
     } else {
       yield* Effect.logWarning(
@@ -89,6 +97,7 @@ export const GlobalsLive = Layer.effect(
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
+    const http = yield* HttpClient.HttpClient;
     const internet = yield* Internet.Internet;
     const storage = yield* Storage.Storage;
     const cf = yield* Cf.Cf;
@@ -285,7 +294,7 @@ export const GlobalsLive = Layer.effect(
                     yield* Effect.forEach(
                       crons,
                       ({ expression, cron }) =>
-                        Effect.forkScoped(cronLoop(worker.name, expression, cron, port)),
+                        Effect.forkScoped(cronLoop(http, worker.name, expression, cron, port)),
                       { discard: true },
                     );
                   }),

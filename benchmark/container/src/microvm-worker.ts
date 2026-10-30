@@ -1,5 +1,6 @@
 import * as AWS from "@alchemy.run/aws";
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as HttpBody from "effect/http/HttpBody";
@@ -162,7 +163,7 @@ export default Cloudflare.Worker(
 
     const boot = (v: Variant) =>
       Effect.gen(function* () {
-        const start = yield* Effect.sync(() => Date.now());
+        const start = yield* Clock.currentTimeMillis;
         const vm = yield* v.run({
           idlePolicy: {
             maxIdleDurationSeconds: 900,
@@ -191,7 +192,7 @@ export default Cloudflare.Worker(
               times: 14,
             }),
           );
-          const readyMs = (yield* Effect.sync(() => Date.now())) - start;
+          const readyMs = (yield* Clock.currentTimeMillis) - start;
           return yield* HttpServerResponse.json({ id: vm.microvmId, readyMs });
         }).pipe(
           Effect.onError(() => v.term({ microvmIdentifier: vm.microvmId }).pipe(Effect.ignore)),
