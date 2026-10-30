@@ -15,6 +15,7 @@ import type { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import * as Cause from "effect/Cause";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -261,6 +262,7 @@ const getSharedBuild = (entrypoint: any, stack: { name: string; stage: string })
   const platform = Layer.mergeAll(
     platformServices,
     FetchHttpClient.layer,
+    SecureRandom.layerWebCrypto,
     // TODO(sam): wire this up to telemetry more directly
     Logger.layer([Logger.consolePretty()]),
   );

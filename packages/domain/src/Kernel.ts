@@ -1,4 +1,5 @@
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
 import * as Context from "effect/Context";
 import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
@@ -790,7 +791,7 @@ const build = (
           } as HandleResult;
         });
         return Effect.gen(function* () {
-          const started = yield* Effect.sync(() => Date.now());
+          const started = yield* Clock.currentTimeMillis;
           const result = yield* decideAndCommit.pipe(
             Effect.annotateLogs(base),
             Effect.withSpan(`Domain.decide ${aggregate.aggregateName}.${tag}`, {
@@ -811,7 +812,7 @@ const build = (
           yield* Telemetry.record(
             Telemetry.commandDuration,
             tags,
-            (yield* Effect.sync(() => Date.now())) - started,
+            (yield* Clock.currentTimeMillis) - started,
           );
           return result;
         });
@@ -1002,7 +1003,7 @@ const build = (
           ),
           Effect.onExit((exit) =>
             Effect.gen(function* () {
-              const now = yield* Effect.sync(() => Date.now());
+              const now = yield* Clock.currentTimeMillis;
               const tags = { "domain.kind": "policy", "domain.consumer": policy.policyName };
               yield* Telemetry.record(Telemetry.lag, tags, now - delivery.envelope.at);
               yield* Telemetry.record(Telemetry.runs, {

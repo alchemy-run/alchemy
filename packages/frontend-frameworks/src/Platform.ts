@@ -1,3 +1,4 @@
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 
@@ -39,4 +40,10 @@ const NodeServices = {
   ),
 };
 
-export const PlatformServices = typeof Bun === "undefined" ? NodeServices.layer : BunServices.layer;
+// effect 4.1 dropped crypto from the platform `*Services` bundles.
+const WebCryptoServices = SecureRandom.layerWebCrypto;
+
+export const PlatformServices = Layer.merge(
+  typeof Bun === "undefined" ? NodeServices.layer : BunServices.layer,
+  WebCryptoServices,
+);

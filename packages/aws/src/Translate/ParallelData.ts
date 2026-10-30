@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -204,7 +205,8 @@ export const ParallelDataProvider = () =>
             // concurrent create of the same name; fall through to observe.
             // The client token only needs to be unique per submission;
             // idempotency across crashed runs comes from observing first.
-            const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+            const random = yield* SecureRandom.SecureRandom;
+            const clientToken = yield* random.uuidV4();
             yield* translate
               .createParallelData({
                 Name: name,
@@ -231,7 +233,8 @@ export const ParallelDataProvider = () =>
             if (drift) {
               // Computed outside the retry so replays of the same submission
               // reuse one idempotency token.
-              const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+              const random = yield* SecureRandom.SecureRandom;
+              const clientToken = yield* random.uuidV4();
               yield* translate
                 .updateParallelData({
                   Name: name,

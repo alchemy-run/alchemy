@@ -1,4 +1,5 @@
 import * as NodeCrypto from "node:crypto";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
@@ -63,6 +64,7 @@ export const RegistryProxyLive = Layer.effect(
   Effect.gen(function* () {
     const registry = yield* Registry.Registry;
     const http = yield* HttpClient.HttpClient;
+    const random = yield* SecureRandom.SecureRandom;
 
     return RegistryProxy.of(
       Effect.gen(function* () {
@@ -147,7 +149,7 @@ export const RegistryProxyLive = Layer.effect(
                     scriptName: worker.name,
                     debugPortAddress: `127.0.0.1:${debugPort}`,
                     // `start` runs again for a replacement process on the same ports.
-                    instanceId: crypto.randomUUID(),
+                    instanceId: yield* random.uuidV4(),
                     services: [
                       {
                         kind: "worker",

@@ -4,6 +4,7 @@ import type { NodeServices } from "@effect/platform-node/NodeServices";
 import * as ConfigError from "effect/Config";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import type * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Effectable from "effect/Effectable";
 import type { HttpClient } from "effect/http/HttpClient";
@@ -125,6 +126,7 @@ export type MakeShape<Shape, BaseShape> = [Exclude<Shape, void | undefined>] ext
 export type PlatformServices =
   | NodeServices
   | HttpClient
+  | SecureRandom.SecureRandom
   | Provider<any>
   | ProviderCollectionLike
   | Stack

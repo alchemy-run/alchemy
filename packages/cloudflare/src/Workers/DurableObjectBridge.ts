@@ -4,6 +4,7 @@ import { buildEventTelemetry } from "alchemy/TelemetryRuntime";
 import type { DurableObject as DurableObjectClass } from "cloudflare:workers";
 import * as Cause from "effect/Cause";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import { HttpServerResponse } from "effect/http";
@@ -70,7 +71,10 @@ export const makeDurableObjectBridge =
               const { constructor, services } = exported;
               const instanceRuntimeContext = {
                 ...runtimeContext,
-                makeCallback: makeDurableObjectCallbackFactory(this.#state),
+                makeCallback: makeDurableObjectCallbackFactory(
+                  this.#state,
+                  Context.get(context, SecureRandom.SecureRandom),
+                ),
               };
               const doContext = Layer.succeed(
                 DurableObjectState,

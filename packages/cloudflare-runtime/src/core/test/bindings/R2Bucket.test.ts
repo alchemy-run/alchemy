@@ -26,6 +26,7 @@ import * as crypto from "node:crypto";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, it, layer } from "@effect/vitest";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
@@ -2152,7 +2153,9 @@ describe("R2Bucket binding persistence", () => {
           Layer.provide(Paths.PathsLive),
           Layer.provide(Docker.DockerLive),
           Layer.provide(Workerd.WorkerdLive),
-          Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer)),
+          Layer.provideMerge(
+            Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer, SecureRandom.layerWebCrypto),
+          ),
         );
 
         const runAgainstStorage = Effect.fn(

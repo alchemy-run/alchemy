@@ -34,6 +34,7 @@ export const ConnectCacheClusterHttp = Layer.effect(
       }
       return Effect.gen(function* () {
         const endpoints = unpackEnvValue<Array<{ address: string; port: number }>>(
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- unpackEnvValue needs the raw env; Config would unwrap packed values
           process.env[`${prefix}_ENDPOINTS`],
         );
         if (endpoints !== undefined) {
@@ -44,6 +45,7 @@ export const ConnectCacheClusterHttp = Layer.effect(
           }
           return {
             endpoints,
+            // oxlint-disable-next-line effecttsgo/process-env-in-effect -- unpackEnvValue needs the raw env; Config would unwrap packed values
             tls: unpackEnvValue<boolean>(process.env[`${prefix}_TLS`]) ?? false,
           };
         }

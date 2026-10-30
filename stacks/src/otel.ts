@@ -2,6 +2,7 @@ import * as Axiom from "@alchemy.run/axiom";
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as GitHub from "@alchemy.run/github";
 import * as Alchemy from "alchemy";
+import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import { CliOverviewDashboard } from "./otel/Dashboard.ts";
@@ -75,7 +76,10 @@ export default Alchemy.Stack(
       RELAY_URL: relay.url,
     };
 
-    if (process.env.SYNC_GITHUB_SECRETS === "1") {
+    const syncGithubSecrets = yield* Config.String("SYNC_GITHUB_SECRETS").pipe(
+      Config.withDefault(undefined),
+    );
+    if (syncGithubSecrets === "1") {
       yield* GitHub.Secrets({
         owner: "alchemy-run",
         repository: "alchemy",

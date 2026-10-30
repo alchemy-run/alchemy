@@ -7,6 +7,7 @@ import * as Provisioning from "alchemy/State/Provisioning";
 import { State, StateStoreError } from "alchemy/State/State";
 import { recordStateStoreInit } from "alchemy/Telemetry/Metrics";
 import { globalLogs } from "alchemy/Util/LogRecord";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
@@ -192,7 +193,7 @@ export const s3State = (options: S3StateOptions = {}) =>
     State,
     Effect.gen(function* () {
       const scope = yield* Effect.scope;
-      const context = yield* Effect.context<S3Deps | AWSEnvironment>();
+      const context = yield* Effect.context<S3Deps | AWSEnvironment | SecureRandom.SecureRandom>();
 
       // Bind the lease to this layer's scope. The cached effect runs on
       // the first state operation, which may sit in a shorter scope.

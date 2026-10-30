@@ -6,6 +6,7 @@ import { AuthProviders } from "alchemy/Auth/AuthProvider";
 import { ProfileStore } from "alchemy/Auth/Profile";
 import * as Interaction from "alchemy/Interaction";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
@@ -26,7 +27,7 @@ const testLayer = (config: Record<string, string>, options: { storedToken?: stri
       Layer.succeed(ProfileStore, makeProfile(options.storedToken ?? "test-token")),
     ),
     Layer.provideMerge(ConfigProvider.layer(ConfigProvider.fromUnknown(config))),
-    Layer.provideMerge(NodeServices.layer),
+    Layer.provideMerge(Layer.merge(NodeServices.layer, SecureRandom.layerWebCrypto)),
     Layer.provideMerge(Interaction.layerNonInteractive()),
   );
 };

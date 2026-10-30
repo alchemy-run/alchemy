@@ -689,6 +689,7 @@ export const buildInChild = (config: VinextBuildChildConfig) =>
   Effect.gen(function* () {
     const path = yield* Path.Path;
     const root = path.resolve(config.rootDir);
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- flags the vite plugin injection via process.env, not config reading
     process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
     const cachePlugin = yield* makeVinextCachePlugin(root, "kv");
     const pluginOptions = makeVinextPluginOptions({
@@ -869,6 +870,7 @@ export const makeVinextSourceProvider = (options: VinextSourceOptions): SourcePr
     dev: Effect.fn(function* (ctx) {
       const path = yield* Path.Path;
       const rootDir = rootDirOf(path);
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- flags the vite plugin injection via process.env, not config reading
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
       const cachePlugin = yield* makeVinextCachePlugin(rootDir, "kv");
       const vite = yield* Effect.promise(() => loadVite(rootDir));

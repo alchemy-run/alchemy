@@ -1,9 +1,11 @@
 import { expect, layer } from "@effect/vitest";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Layer from "effect/Layer";
 import * as LoopbackServer from "../../globals/LoopbackServer.ts";
 
-layer(LoopbackServer.LoopbackServerLive)((it) => {
+layer(LoopbackServer.LoopbackServerLive.pipe(Layer.provide(SecureRandom.layerWebCrypto)))((it) => {
   it.effect("starts a loopback server", () =>
     Effect.gen(function* () {
       const loopbackServer = yield* LoopbackServer.LoopbackServer;

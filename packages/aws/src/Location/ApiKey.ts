@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags, type Tags } from "alchemy/Tags";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as EffectStream from "effect/Stream";
@@ -246,7 +247,9 @@ export const ApiKeyProvider = () =>
                 KeyName: keyName,
                 Restrictions: desiredRestrictions,
                 Description: news.description,
-                ExpireTime: news.expireTime ? new Date(news.expireTime) : undefined,
+                ExpireTime: news.expireTime
+                  ? DateTime.toDateUtc(DateTime.makeUnsafe(news.expireTime))
+                  : undefined,
                 NoExpiry: news.expireTime ? undefined : (news.noExpiry ?? true),
                 Tags: desiredTags,
               })
@@ -260,7 +263,7 @@ export const ApiKeyProvider = () =>
           }
 
           const desiredExpireTime = news.expireTime
-            ? new Date(news.expireTime).toISOString()
+            ? DateTime.formatIso(DateTime.makeUnsafe(news.expireTime))
             : undefined;
           if (
             state.description !== (news.description ?? undefined) ||
@@ -271,7 +274,9 @@ export const ApiKeyProvider = () =>
               KeyName: keyName,
               Description: news.description,
               Restrictions: desiredRestrictions,
-              ExpireTime: desiredExpireTime ? new Date(desiredExpireTime) : undefined,
+              ExpireTime: desiredExpireTime
+                ? DateTime.toDateUtc(DateTime.makeUnsafe(desiredExpireTime))
+                : undefined,
               NoExpiry: desiredExpireTime ? undefined : true,
               // Required to update a key that has been used recently.
               ForceUpdate: true,

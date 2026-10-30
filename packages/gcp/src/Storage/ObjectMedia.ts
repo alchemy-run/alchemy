@@ -1,6 +1,7 @@
 import { Credentials } from "@distilled.cloud/gcp/Credentials";
 import type * as storage from "@distilled.cloud/gcp/storage_v1";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -94,6 +95,7 @@ const transportFailure = (bucket: string, object: string) => (cause: { message?:
  * distilled operation).
  */
 export const makeObjectMedia = Effect.gen(function* () {
+  const random = yield* SecureRandom.SecureRandom;
   const context = yield* GCPBindings.withCredentials(
     Effect.context<Credentials | HttpClient.HttpClient>(),
   );
@@ -160,7 +162,7 @@ export const makeObjectMedia = Effect.gen(function* () {
         (typeof options.body === "string"
           ? "text/plain; charset=utf-8"
           : "application/octet-stream");
-      const boundary = yield* Effect.sync(() => `alchemy-${crypto.randomUUID()}`);
+      const boundary = `alchemy-${yield* random.uuidV4()}`;
       const metadata = JSON.stringify({
         name: options.name,
         contentType,

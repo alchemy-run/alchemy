@@ -4,6 +4,7 @@ import { isResolved } from "alchemy/Diff";
 import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -296,7 +297,8 @@ export const MultiRegionAccessPointProvider = () =>
           //    token only needs to be unique per submission; idempotency
           //    across crashed runs comes from observing before creating.
           if (report === undefined) {
-            const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+            const random = yield* SecureRandom.SecureRandom;
+            const clientToken = yield* random.uuidV4();
             yield* session.note(
               `Creating Multi-Region Access Point ${name} (takes several minutes)...`,
             );
@@ -340,7 +342,8 @@ export const MultiRegionAccessPointProvider = () =>
           // Deletion is also asynchronous; only submit when the access
           // point is not already being torn down.
           if (report.Status !== "DELETING") {
-            const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+            const random = yield* SecureRandom.SecureRandom;
+            const clientToken = yield* random.uuidV4();
             yield* session.note(
               `Deleting Multi-Region Access Point ${name} (takes several minutes)...`,
             );

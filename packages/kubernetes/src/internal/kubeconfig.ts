@@ -6,10 +6,13 @@
  * path: AKS/GKE/EKS CLI-managed contexts work through their exec plugins
  * (`kubelogin`, `gke-gcloud-auth-plugin`, `aws eks get-token`).
  */
+import * as Clock from "effect/Clock";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Option from "effect/Option";
 import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
@@ -76,7 +79,10 @@ const decodeBase64 = (value: string) => Buffer.from(value, "base64").toString("u
 
 const expandHome = Effect.fn(function* (input: string) {
   if (!input.startsWith("~")) return input;
-  const home = yield* Effect.sync(() => process.env.HOME ?? process.env.USERPROFILE);
+  const home = yield* Config.String("HOME").pipe(
+    Config.orElse(() => Config.String("USERPROFILE")),
+    Effect.orElseSucceed(() => undefined),
+  );
   if (!home) {
     return yield* new KubeConfigError({
       message: `Cannot expand '${input}': no HOME environment variable`,
@@ -199,7 +205,7 @@ export const runExecCredential = Effect.fn(function* (options: {
 }) {
   const cacheKey = JSON.stringify([options.command, options.args ?? [], options.env ?? {}]);
   const cached = execCache.get(cacheKey);
-  const now = yield* Effect.sync(() => Date.now());
+  const now = yield* Clock.currentTimeMillis;
   if (cached && cached.expiresAt > now) {
     return cached.credentials;
   }
@@ -270,12 +276,16 @@ export const runExecCredential = Effect.fn(function* (options: {
         : undefined,
   };
 
-  const expiresAt = status.expirationTimestamp
-    ? // Re-mint 30s before the declared expiry.
-      new Date(status.expirationTimestamp).getTime() - 30_000
-    : // No declared expiry: cache briefly so bursts of requests share one
-      // plugin invocation without holding a stale credential for long.
-      now + 60_000;
+  const declaredExpiry = status.expirationTimestamp
+    ? DateTime.make(status.expirationTimestamp)
+    : Option.none();
+  const expiresAt = Option.match(declaredExpiry, {
+    // Re-mint 30s before the declared expiry.
+    onSome: (expiry) => DateTime.toEpochMillis(expiry) - 30_000,
+    // No (valid) declared expiry: cache briefly so bursts of requests share
+    // one plugin invocation without holding a stale credential for long.
+    onNone: () => now + 60_000,
+  });
   execCache.set(cacheKey, { credentials, expiresAt });
 
   return credentials;

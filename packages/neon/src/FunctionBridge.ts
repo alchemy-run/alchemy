@@ -7,6 +7,7 @@ import { Self } from "alchemy/Self";
 import { StackContext } from "alchemy/StackContext";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -36,6 +37,7 @@ export const makeFunctionBridge = (entrypoint: unknown) => {
   const platform = Layer.mergeAll(
     NodeServices.layer,
     FetchHttpClient.layer,
+    SecureRandom.layerWebCrypto,
     Layer.succeed(FunctionEnvironment, process.env),
     Layer.succeed(
       ConfigProvider.ConfigProvider,

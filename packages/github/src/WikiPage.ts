@@ -3,6 +3,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { dedent } from "alchemy/Util/dedent";
 import { exec } from "alchemy/Util/exec";
+import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
@@ -321,9 +322,13 @@ const gitEnvironment = Effect.fn(function* (repository: WikiRepository, director
   const fs = yield* FileSystem.FileSystem;
   const config = path.join(directory, "gitconfig");
   yield* fs.writeFileString(config, "");
+  const optionalEnv = (name: string) =>
+    Config.String(name).pipe(Effect.orElseSucceed(() => undefined));
+  const PATH = yield* optionalEnv("PATH");
+  const SystemRoot = yield* optionalEnv("SystemRoot");
   return yield* Effect.sync(() => ({
-    PATH: process.env.PATH,
-    SystemRoot: process.env.SystemRoot,
+    PATH,
+    SystemRoot,
     HOME: directory,
     LC_ALL: "C",
     GIT_TERMINAL_PROMPT: "0",

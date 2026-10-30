@@ -106,6 +106,7 @@ export const viteDev = (
 ) =>
   Effect.gen(function* () {
     yield* Effect.sync(() => {
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- writes a process-wide flag the Vite plugin reads; Config is read-only
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
     });
     const vite = yield* Effect.promise(() => loadVite(rootDir));
@@ -212,6 +213,7 @@ export const viteBuildInProcess = (
     });
     const context = yield* Effect.context<never>();
     const foldkit = yield* Effect.promise(async () => {
+      // oxlint-disable-next-line effecttsgo/process-env-in-effect -- writes a process-wide flag the Vite plugin reads; Config is read-only
       process.env[ALCHEMY_CLOUDFLARE_VITE_INJECTED] = "1";
       const vite = await loadVite(rootDir);
       const builder = await vite.createBuilder(

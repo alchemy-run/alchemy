@@ -1,4 +1,5 @@
 import * as Clock from "effect/Clock";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -133,17 +134,13 @@ const amortizeCheck = (
   ttlMs: number,
 ): Effect.Effect<void, StateStoreError> => {
   let lastOkAt: number | undefined;
-  return Effect.suspend(() => {
-    if (lastOkAt !== undefined && Date.now() - lastOkAt < ttlMs) {
-      return Effect.void;
+  return Effect.gen(function* () {
+    const now = yield* Clock.currentTimeMillis;
+    if (lastOkAt !== undefined && now - lastOkAt < ttlMs) {
+      return;
     }
-    return checkLive.pipe(
-      Effect.tap(() =>
-        Effect.sync(() => {
-          lastOkAt = Date.now();
-        }),
-      ),
-    );
+    yield* checkLive;
+    lastOkAt = yield* Clock.currentTimeMillis;
   });
 };
 
@@ -172,6 +169,7 @@ const parseLease = (text: string): LeaseRecord => {
 export const makeBucketState = (options: BucketStateOptions) =>
   Effect.gen(function* () {
     const leaseScope = yield* Effect.scope;
+    const random = yield* SecureRandom.SecureRandom;
     const prefix = options.prefix ? `${options.prefix.replace(/\/+$/, "")}/` : "";
     const objects = yield* Effect.cached(options.objects);
     const use = <A>(
@@ -247,7 +245,7 @@ export const makeBucketState = (options: BucketStateOptions) =>
     const acquireLease = (stack: string, stage: string) =>
       Effect.gen(function* () {
         const key = leaseKey({ stack, stage });
-        const token = yield* Effect.sync(() => crypto.randomUUID());
+        const token = yield* random.uuidV4();
         const now = yield* Clock.currentTimeMillis;
         const fresh: LeaseRecord = { token, expiresAt: now + LEASE_TTL_MS };
         let version = yield* putLease(key, fresh, { ifAbsent: true });

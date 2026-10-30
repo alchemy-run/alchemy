@@ -27,6 +27,7 @@ export const AccessLive = Layer.effect(
   Effect.gen(function* () {
     const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
     const domainUsesAccess = yield* cachedFunction((domain: string) =>
+      // oxlint-disable-next-line effecttsgo/global-fetch-in-effect -- probe needs redirect: "manual"; the ambient Http1FetchHttpClient overrides RequestInit, so HttpClient would follow the 302
       Effect.promise((signal) => fetch(`https://${domain}`, { redirect: "manual", signal })).pipe(
         Effect.map(
           (response) =>

@@ -3,6 +3,7 @@ import {
   createServicePromote,
   createServiceRollback,
 } from "@distilled.cloud/prisma/management";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -41,12 +42,12 @@ export const waitForAppDeploymentTarget = Effect.fn(function* (
   }
 
   const timeoutMs = timeoutSeconds * 1_000;
-  const deadline = yield* Effect.sync(() => Date.now() + timeoutMs);
+  const deadline = (yield* Clock.currentTimeMillis) + timeoutMs;
   let lastLatestDeploymentId: string | null | undefined;
   let lastError: unknown;
 
   while (true) {
-    const remainingBeforeObservation = yield* Effect.sync(() => deadline - Date.now());
+    const remainingBeforeObservation = deadline - (yield* Clock.currentTimeMillis);
     if (remainingBeforeObservation <= 0) break;
 
     const observationOption = yield* getService({ serviceId: appId }).pipe(
@@ -66,7 +67,7 @@ export const waitForAppDeploymentTarget = Effect.fn(function* (
       lastError = observation.failure;
     }
 
-    const remainingAfterObservation = yield* Effect.sync(() => deadline - Date.now());
+    const remainingAfterObservation = deadline - (yield* Clock.currentTimeMillis);
     if (remainingAfterObservation <= 0) break;
     yield* Effect.sleep(Duration.millis(Math.min(intervalMs, remainingAfterObservation)));
   }

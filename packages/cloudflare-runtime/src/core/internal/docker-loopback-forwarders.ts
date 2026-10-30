@@ -1,4 +1,5 @@
 import * as Cause from "effect/Cause";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as FiberMap from "effect/FiberMap";
@@ -27,6 +28,7 @@ export const makeDockerLoopbackForwarders = Effect.fnUntraced(function* (options
   socketPath: string;
 }) {
   const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+  const random = yield* SecureRandom.SecureRandom;
   const lock = yield* Semaphore.make(1);
   const forwards = yield* FiberMap.make<string, void>();
   const attachedPorts = new Map<string, string>();
@@ -43,7 +45,7 @@ export const makeDockerLoopbackForwarders = Effect.fnUntraced(function* (options
 
   const forward = (name: string, ports: number[], ready: Deferred.Deferred<void, SystemError>) =>
     Effect.gen(function* () {
-      const helper = `alchemy-loopback-${crypto.randomUUID()}`;
+      const helper = `alchemy-loopback-${yield* random.uuidV4()}`;
       // Registered before spawn: stopping the CLI does not remove its container.
       yield* Effect.addFinalizer(() =>
         docker(["rm", "--force", helper]).pipe(

@@ -1,6 +1,8 @@
 import * as NodePath from "node:path";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Schedule from "effect/Schedule";
@@ -709,6 +711,7 @@ export const make = (
         // waku's CLI sets this before loading anything; waku's
         // environmentsPlugin bakes `process.env.NODE_ENV` into `define`.
         yield* Effect.sync(() => {
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- sets NODE_ENV for waku, not config reading
           process.env.NODE_ENV = INITIAL_NODE_ENV ?? "production";
         });
         const wakuConfig = yield* makeConfig(project, root, hooks);
@@ -794,6 +797,7 @@ export const make = (
           phase: "dev",
         });
         yield* Effect.sync(() => {
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- sets NODE_ENV for waku, not config reading
           process.env.NODE_ENV = INITIAL_NODE_ENV ?? "development";
         });
         const wakuConfig = yield* makeConfig(project, root, hooks);
@@ -839,13 +843,13 @@ export const make = (
         const url = resolved.replace(/\/+$/, "");
         // Bounded readiness probe: any HTTP response counts (waku's
         // first RSC compile is lazy; we only need the listener to answer).
-        yield* Effect.tryPromise({
-          try: async () => {
-            const response = await fetch(`${url}/`, { redirect: "manual" });
-            await response.arrayBuffer().catch(() => {});
-          },
-          catch: fail("The waku dev server did not become reachable"),
-        }).pipe(Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }));
+        yield* HttpClient.get(`${url}/`).pipe(
+          Effect.flatMap((response) => Effect.ignore(response.arrayBuffer)),
+          Effect.provide(FetchHttpClient.layer),
+          Effect.provideService(FetchHttpClient.RequestInit, { redirect: "manual" }),
+          Effect.mapError(fail("The waku dev server did not become reachable")),
+          Effect.retry({ schedule: Schedule.spaced("250 millis"), times: 40 }),
+        );
         return { url };
       }),
     });

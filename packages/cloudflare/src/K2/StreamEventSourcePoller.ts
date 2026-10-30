@@ -3,6 +3,7 @@ import * as Namespace from "alchemy/Namespace";
 import { ServerHost } from "alchemy/Runtime/Process";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
@@ -56,6 +57,7 @@ export const StreamEventSourcePolling = Layer.effect(
   Effect.gen(function* () {
     const { run } = yield* ServerHost;
     const readSubscription = yield* ReadSubscription;
+    const random = yield* SecureRandom.SecureRandom;
 
     return Effect.fn(function* (
       stream: K2Stream<any>,
@@ -82,9 +84,7 @@ export const StreamEventSourcePolling = Layer.effect(
 
       yield* run(
         Effect.gen(function* () {
-          const workerId =
-            props.workerId ??
-            `${hostId}-${(yield* Effect.sync(() => crypto.randomUUID())).slice(0, 8)}`;
+          const workerId = props.workerId ?? `${hostId}-${(yield* random.uuidV4()).slice(0, 8)}`;
           yield* pollSubscription({
             client,
             workerId,

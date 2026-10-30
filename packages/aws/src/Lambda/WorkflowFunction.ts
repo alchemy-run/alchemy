@@ -12,7 +12,7 @@ import {
   payloadCodec,
 } from "alchemy/WorkflowEncoding";
 import { type Implemented, implemented } from "alchemy/Workflows";
-import type { ConfigError } from "effect/Config";
+import * as Config from "effect/Config";
 import * as Context from "effect/Context";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -71,7 +71,7 @@ export interface WorkflowFunctionClass<
   make<ROut, E, RIn, PropsReq = never>(
     props:
       | InputProps<DurableFunctionProps>
-      | Effect.Effect<InputProps<DurableFunctionProps>, ConfigError, PropsReq>,
+      | Effect.Effect<InputProps<DurableFunctionProps>, Config.ConfigError, PropsReq>,
     workflows: Layer.Layer<ROut, E, RIn> & ImplementsAll<ROut, WorkflowNames<W>>,
   ): Layer.Layer<
     Self,
@@ -299,9 +299,15 @@ const makeWorkflowRunner = <ROut, E, RIn>(
 > =>
   Effect.gen(function* () {
     const context = yield* Effect.context<LambdaServices>();
-    const functionName = yield* Effect.sync(() => process.env.AWS_LAMBDA_FUNCTION_NAME);
+    const functionName = yield* Config.option(Config.String("AWS_LAMBDA_FUNCTION_NAME")).pipe(
+      Effect.map(Option.getOrUndefined),
+      Effect.orElseSucceed(() => undefined),
+    );
     // Child workflows start on the version this function is running.
-    const version = yield* Effect.sync(() => process.env.AWS_LAMBDA_FUNCTION_VERSION ?? "$LATEST");
+    const version = yield* Config.String("AWS_LAMBDA_FUNCTION_VERSION").pipe(
+      Config.withDefault("$LATEST"),
+      Effect.orElseSucceed(() => "$LATEST"),
+    );
     const handlers = new Map<string, Registration>();
     const calls = makeCalls(
       (effect) => effect.pipe(Effect.provide(context)),

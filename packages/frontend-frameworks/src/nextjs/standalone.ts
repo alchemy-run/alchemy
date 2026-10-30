@@ -20,6 +20,7 @@
  */
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
@@ -170,7 +171,7 @@ export const buildStandalone = Effect.fn(function* (options: {
     NEXT_PRIVATE_STANDALONE: "true",
   }));
   yield* run("node", [options.cli, "build"], root, env);
-  const buildTime = yield* Effect.sync(() => Date.now());
+  const buildTime = yield* Clock.currentTimeMillis;
 
   const nextDir = path.join(root, ".next");
   const serverFilesPath = path.join(nextDir, "required-server-files.json");

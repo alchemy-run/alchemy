@@ -4,7 +4,9 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { tagRecord } from "alchemy/Tags";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { GcpEnvironment } from "../Environment.ts";
@@ -564,10 +566,10 @@ const desiredAlgorithm = (
   template?.algorithm ?? (purpose === "ENCRYPT_DECRYPT" ? DEFAULT_ALGORITHM : template?.algorithm);
 
 const nextRotationFromPeriod = (period: string) =>
-  Effect.sync(() => {
+  Effect.map(Clock.currentTimeMillis, (now) => {
     const match = /^(\d+)s$/.exec(period);
     const seconds = match ? Number(match[1]) : 86_400;
-    return new Date(Date.now() + seconds * 1000).toISOString();
+    return DateTime.formatIso(DateTime.makeUnsafe(now + seconds * 1000));
   });
 
 const destroyVersion = (name: string) =>

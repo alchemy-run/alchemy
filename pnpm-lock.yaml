@@ -238,8 +238,8 @@ catalogs:
       specifier: ^4.1.0
       version: 4.1.0
     '@effect/tsgo':
-      specifier: ^0.57.0
-      version: 0.57.0
+      specifier: ^0.63.0
+      version: 0.63.0
     '@effect/vitest':
       specifier: ^4.1.0
       version: 4.1.0
@@ -386,10 +386,10 @@ catalogs:
       version: 4.3.3
     '@tanstack/devtools-vite':
       specifier: latest
-      version: 0.8.5
+      version: 0.8.6
     '@tanstack/react-devtools':
       specifier: latest
-      version: 0.10.13
+      version: 0.10.14
     '@tanstack/react-router':
       specifier: ^1.170.46
       version: 1.170.46
@@ -809,7 +809,7 @@ importers:
         version: link:packages/alchemy-test
       '@effect/tsgo':
         specifier: 'catalog:'
-        version: 0.57.0
+        version: 0.63.0
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
@@ -9746,7 +9746,7 @@ importers:
         version: 4.3.3(vite@8.3.5(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@tanstack/react-devtools':
         specifier: 'catalog:'
-        version: 0.10.13(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(csstype@3.2.3)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(solid-js@1.9.17)
+        version: 0.10.14(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(csstype@3.2.3)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(solid-js@1.9.17)
       '@tanstack/react-router':
         specifier: 'catalog:'
         version: 1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -9786,7 +9786,7 @@ importers:
         version: 0.5.20(tailwindcss@4.3.3)
       '@tanstack/devtools-vite':
         specifier: 'catalog:'
-        version: 0.8.5(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(vite@8.3.5(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.8.6(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(vite@8.3.5(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@types/node':
         specifier: catalog:tanstack-start-legacy
         version: 22.20.1
@@ -10363,10 +10363,10 @@ importers:
         version: 4.3.3(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@tanstack/devtools-vite':
         specifier: 'catalog:'
-        version: 0.8.5(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
+        version: 0.8.6(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))
       '@tanstack/react-devtools':
         specifier: 'catalog:'
-        version: 0.10.13(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(csstype@3.2.3)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(solid-js@1.9.17)
+        version: 0.10.14(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(csstype@3.2.3)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(solid-js@1.9.17)
       '@tanstack/react-router':
         specifier: 'catalog:'
         version: 1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -14222,43 +14222,43 @@ packages:
     peerDependencies:
       effect: 4.1.0
 
-  '@effect/tsgo-darwin-arm64@0.57.0':
-    resolution: {integrity: sha512-SazXZovd34gNVUQcHJdE7vUl5NZjTx0l4s9LEwsDXdD9Yq40q94AHpair5cNTz0XuN6aSPB+Pz06RVlJ4NUykw==}
+  '@effect/tsgo-darwin-arm64@0.63.0':
+    resolution: {integrity: sha512-KBvYatuEol71+i+BERWuDRU9XE+4sTK78N83Ko6VNF5gy6yXiujj/bgtWs2P3cDGXsevAV6L+HtpuAWjAQKC6Q==}
     cpu: [arm64]
     os: [darwin]
 
-  '@effect/tsgo-darwin-x64@0.57.0':
-    resolution: {integrity: sha512-/rw1xowT6UtfUsfz58Uz3zK5Z6W3gmM6lc+wc5t08Q6zbwzDWKbiwucL3bYKigv9pyPqXqEmkHCuZI5fE3+o7w==}
+  '@effect/tsgo-darwin-x64@0.63.0':
+    resolution: {integrity: sha512-Qxp51/OFaHx5D+z5f1FtRKAiUH5rkMzaqjv/4ppUGNS0ppdqlcQ5rwQqbY6CiZOxqUlcnmKRirtWpmuxUgHP7w==}
     cpu: [x64]
     os: [darwin]
 
-  '@effect/tsgo-linux-arm64@0.57.0':
-    resolution: {integrity: sha512-eEw73C7Z5Xo5G8sr9L1r9U0Plyhmi1JOodwUCj+ciZEZN7RxhwHm9lCf40SAipMwQkVeKkdS8eo4z42z9oQfIg==}
+  '@effect/tsgo-linux-arm64@0.63.0':
+    resolution: {integrity: sha512-uwnM3kSwaHDKPeU1WSMxijdZaM1NxpDREgJtyyIx2qdqB6HnRYhEZB8RrhWvYYPw1QDKaWHd+byzq5p49+o7+Q==}
     cpu: [arm64]
     os: [linux]
 
-  '@effect/tsgo-linux-arm@0.57.0':
-    resolution: {integrity: sha512-3R1CFCUlikUoeJ4Ws6O1CtyTby1M4jWAffPUJEte+2CBGe0oRYWm/8TsV2y6MOfS5L6epuJCmR98X7MO/5t6+A==}
+  '@effect/tsgo-linux-arm@0.63.0':
+    resolution: {integrity: sha512-tVwlTyAqmDVPvDrr0oogCnlRVs96X19Ny9OD/XJ/6QQSp/1hIjXAvKjo9HAyncF2sAUQyVdF1E7Q7X3wFXvSnQ==}
     cpu: [arm]
     os: [linux]
 
-  '@effect/tsgo-linux-x64@0.57.0':
-    resolution: {integrity: sha512-KQMa66r5QxVGhE77EOGoutv1oJHl4LFxRcJtk3EkAzx6/xc0nSFVRsQHhkT5loQgoSl4m+jNDzebGDkCmCMP/Q==}
+  '@effect/tsgo-linux-x64@0.63.0':
+    resolution: {integrity: sha512-fM3pJIhAZEX8LMbd/pN9iYNxkdVEkx68vMtILYGT4qazwxWelvouD/5fNV0SHDmY13Mv04NJ/550vTLC2hU8VA==}
     cpu: [x64]
     os: [linux]
 
-  '@effect/tsgo-win32-arm64@0.57.0':
-    resolution: {integrity: sha512-EtPRWiAg+w2iu+n8rlOwayp0yGoMiLfMYbKbT/WLltupRwCGam0t9CgfehIFHzK5BsNrnn4Oos4jjJka667rUA==}
+  '@effect/tsgo-win32-arm64@0.63.0':
+    resolution: {integrity: sha512-LTS0CrEqZmQO0AJAIfFaETjIN/3d/Nda1Mi5zl90y/9BKZr4yyFfClCkz+DMl6/P/+TOuEQ5Wi8LvRiEdwWT4g==}
     cpu: [arm64]
     os: [win32]
 
-  '@effect/tsgo-win32-x64@0.57.0':
-    resolution: {integrity: sha512-oWU4sdD4XhGTPKm8+Ri34nuS3++snrzsWa3EfJ43K9VZlbWVhTRy+3qR6d/n75cSP9KzAYstmTdGK1wYgvtafQ==}
+  '@effect/tsgo-win32-x64@0.63.0':
+    resolution: {integrity: sha512-28s5YrwL26/7EUnUOu81IOJGJZLkPf2lPkiSIsd4EnFhimeBqP279bhAoDAEwLW1gv45GKM/49JKduXmdLyT1g==}
     cpu: [x64]
     os: [win32]
 
-  '@effect/tsgo@0.57.0':
-    resolution: {integrity: sha512-L6ld3X5urPKLozMngSJK6XflqZhrA+o34Rd0X3qVu3vAK/girV+mt4RE3TxWZqOusfthPnOVIhLsC8Lke+pkMA==}
+  '@effect/tsgo@0.63.0':
+    resolution: {integrity: sha512-bRbvVj+YLE/nBmcBWGAwsul3mjEYlqqOmWMxvwSVKq/oNnJEuZYgi2OFDeUf7q49E2g3w+oMHMWyN2QayZ77RQ==}
     hasBin: true
 
   '@effect/vitest@4.0.0-rc.112':
@@ -19577,8 +19577,8 @@ packages:
       csstype:
         optional: true
 
-  '@tanstack/devtools-bundler-core@0.1.3':
-    resolution: {integrity: sha512-F0tlxIyfFqXkZ1mJP1EjtkiSeJA+ztXY2AYOHf7r4goCIEAOp86N9PFJ/yv8vu1TnmxGS6vKsZCS3Kyls9xQQA==}
+  '@tanstack/devtools-bundler-core@0.1.4':
+    resolution: {integrity: sha512-NaDbpESGyGLV4XPbLsL1b7XeGnYovbnRjoTZ9LoAwllaaposdcrgtBsAcbdr0n4p+mltEVrUB6AFpvAmjj0VGQ==}
     engines: {node: '>=18'}
 
   '@tanstack/devtools-client@0.0.8':
@@ -19594,25 +19594,23 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
-  '@tanstack/devtools-ui@0.7.1':
-    resolution: {integrity: sha512-3xQ/ezZ2qVNszhjpCN2N3jn7uHc2J1PMgcyjHzH4XZBt9xAQyMMcPNoR2cd7rzReyxWoJpZUWiDBmOJiCtLj9A==}
+  '@tanstack/devtools-ui@0.7.2':
+    resolution: {integrity: sha512-Ij6EpEXkx13OOVMJPCJpMzWzVV/mcsqfXM4d+ZjqCrQtgbt7cd2rsCseuKuYNmuGhJiOLYNXzYU5da7UqCY54g==}
     engines: {node: '>=18'}
     peerDependencies:
-      solid-js: '>=1.9.7'
+      solid-js: ^1.9.13
 
-  '@tanstack/devtools-vite@0.8.5':
-    resolution: {integrity: sha512-xaifCEmiwwzizlbp973oISXNsnmuU/BugLa66gryAZaPJJ/qo1kJd2DxY5X960eHwmyIS3SN0KYrL3/aRhucmA==}
+  '@tanstack/devtools-vite@0.8.6':
+    resolution: {integrity: sha512-CkaVqh3P7cJmQ6mMIxQfEmmR8gwlmgRCcoiWOMLigHaPobrrwTqsZvKqvYRHBybZ3ZT1ZSBj5TwlP7ukJJcRlg==}
     engines: {node: '>=18'}
-    hasBin: true
     peerDependencies:
       vite: ^6.0.0 || ^7.0.0 || ^8.0.0
 
-  '@tanstack/devtools@0.15.0':
-    resolution: {integrity: sha512-KyS7Qi82Eq9yG8C+uae3ikAPb+D5rfzVhvOOjXVAHZ/64s6TWJlDWpREw1FrHIYZaI7paErpsExSSKlF5BKA/A==}
+  '@tanstack/devtools@0.16.0':
+    resolution: {integrity: sha512-SgmsZ1RwWgohY+S2GhZ1bCttZ+bICb8EKaI1DUFBrs/CXL67IaW25TouoHflj5fGzrppfDM2ld56+TLuzMwJSA==}
     engines: {node: '>=18'}
-    hasBin: true
     peerDependencies:
-      solid-js: '>=1.9.7'
+      solid-js: ^1.9.13
 
   '@tanstack/directive-functions-plugin@1.134.5':
     resolution: {integrity: sha512-J3oawV8uBRBbPoLgMdyHt+LxzTNuWRKNJJuCLWsm/yq6v0IQSvIVCgfD2+liIiSnDPxGZ8ExduPXy8IzS70eXw==}
@@ -19627,8 +19625,8 @@ packages:
   '@tanstack/query-core@5.103.1':
     resolution: {integrity: sha512-rms8HqTGp6zA00dM+cUQ2eBcgzNJefuu5CAMB37i/6MiGT1zulPOytCFu2a0qjLqVR2n1jENPj9woqFQNuCzWA==}
 
-  '@tanstack/react-devtools@0.10.13':
-    resolution: {integrity: sha512-r0cdB/14+st2Vxl/1Bodlyq4VC8pf9SykLQDYbGHDc1+V146WQo5B3KlYLkfyxD9Q/6+9NPRQHZyl8fvZVMdRA==}
+  '@tanstack/react-devtools@0.10.14':
+    resolution: {integrity: sha512-wFoNpqiU03MDbY1RljhX4vMUoGWwqpa5AZthWEaJRrojBFWFoB57lzzIM5r+EPGi+BsEX+OcXkn8Zkfoe4hGiA==}
     engines: {node: '>=18'}
     peerDependencies:
       '@types/react': '>=16.8'
@@ -30843,36 +30841,36 @@ snapshots:
     dependencies:
       effect: 4.1.0
 
-  '@effect/tsgo-darwin-arm64@0.57.0':
+  '@effect/tsgo-darwin-arm64@0.63.0':
     optional: true
 
-  '@effect/tsgo-darwin-x64@0.57.0':
+  '@effect/tsgo-darwin-x64@0.63.0':
     optional: true
 
-  '@effect/tsgo-linux-arm64@0.57.0':
+  '@effect/tsgo-linux-arm64@0.63.0':
     optional: true
 
-  '@effect/tsgo-linux-arm@0.57.0':
+  '@effect/tsgo-linux-arm@0.63.0':
     optional: true
 
-  '@effect/tsgo-linux-x64@0.57.0':
+  '@effect/tsgo-linux-x64@0.63.0':
     optional: true
 
-  '@effect/tsgo-win32-arm64@0.57.0':
+  '@effect/tsgo-win32-arm64@0.63.0':
     optional: true
 
-  '@effect/tsgo-win32-x64@0.57.0':
+  '@effect/tsgo-win32-x64@0.63.0':
     optional: true
 
-  '@effect/tsgo@0.57.0':
+  '@effect/tsgo@0.63.0':
     optionalDependencies:
-      '@effect/tsgo-darwin-arm64': 0.57.0
-      '@effect/tsgo-darwin-x64': 0.57.0
-      '@effect/tsgo-linux-arm': 0.57.0
-      '@effect/tsgo-linux-arm64': 0.57.0
-      '@effect/tsgo-linux-x64': 0.57.0
-      '@effect/tsgo-win32-arm64': 0.57.0
-      '@effect/tsgo-win32-x64': 0.57.0
+      '@effect/tsgo-darwin-arm64': 0.63.0
+      '@effect/tsgo-darwin-x64': 0.63.0
+      '@effect/tsgo-linux-arm': 0.63.0
+      '@effect/tsgo-linux-arm64': 0.63.0
+      '@effect/tsgo-linux-x64': 0.63.0
+      '@effect/tsgo-win32-arm64': 0.63.0
+      '@effect/tsgo-win32-x64': 0.63.0
 
   '@effect/vitest@4.0.0-rc.112(effect@4.1.0)':
     dependencies:
@@ -38017,7 +38015,7 @@ snapshots:
       - preact
       - react
 
-  '@tanstack/devtools-bundler-core@0.1.3(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)':
+  '@tanstack/devtools-bundler-core@0.1.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)':
     dependencies:
       '@tanstack/devtools-client': 0.0.8
       '@tanstack/devtools-event-bus': 0.4.3
@@ -38045,7 +38043,7 @@ snapshots:
 
   '@tanstack/devtools-event-client@0.5.0': {}
 
-  '@tanstack/devtools-ui@0.7.1(csstype@3.2.3)(solid-js@1.9.17)':
+  '@tanstack/devtools-ui@0.7.2(csstype@3.2.3)(solid-js@1.9.17)':
     dependencies:
       clsx: 2.1.1
       dayjs: 1.11.21
@@ -38054,9 +38052,9 @@ snapshots:
     transitivePeerDependencies:
       - csstype
 
-  '@tanstack/devtools-vite@0.8.5(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(vite@8.3.5(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))':
+  '@tanstack/devtools-vite@0.8.6(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(vite@8.3.5(@types/node@22.20.1)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:
-      '@tanstack/devtools-bundler-core': 0.1.3(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)
+      '@tanstack/devtools-bundler-core': 0.1.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)
       '@tanstack/devtools-client': 0.0.8
       '@tanstack/devtools-event-bus': 0.4.3
       chalk: 5.6.2
@@ -38067,9 +38065,9 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@tanstack/devtools-vite@0.8.5(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))':
+  '@tanstack/devtools-vite@0.8.6(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)(vite@8.3.5(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:
-      '@tanstack/devtools-bundler-core': 0.1.3(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)
+      '@tanstack/devtools-bundler-core': 0.1.4(@emnapi/core@1.11.3)(@emnapi/runtime@1.11.3)
       '@tanstack/devtools-client': 0.0.8
       '@tanstack/devtools-event-bus': 0.4.3
       chalk: 5.6.2
@@ -38080,7 +38078,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@tanstack/devtools@0.15.0(csstype@3.2.3)(solid-js@1.9.17)':
+  '@tanstack/devtools@0.16.0(csstype@3.2.3)(solid-js@1.9.17)':
     dependencies:
       '@neodrag/core': 3.0.0-next.11
       '@neodrag/solid': 3.0.0-next.11(@neodrag/core@3.0.0-next.11)(solid-js@1.9.17)
@@ -38089,7 +38087,7 @@ snapshots:
       '@solid-primitives/resize-observer': 2.2.0(solid-js@1.9.17)
       '@tanstack/devtools-client': 0.0.8
       '@tanstack/devtools-event-bus': 0.4.3
-      '@tanstack/devtools-ui': 0.7.1(csstype@3.2.3)(solid-js@1.9.17)
+      '@tanstack/devtools-ui': 0.7.2(csstype@3.2.3)(solid-js@1.9.17)
       clsx: 2.1.1
       goober: 2.1.19(csstype@3.2.3)
       solid-js: 1.9.17
@@ -38116,9 +38114,9 @@ snapshots:
 
   '@tanstack/query-core@5.103.1': {}
 
-  '@tanstack/react-devtools@0.10.13(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(csstype@3.2.3)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(solid-js@1.9.17)':
+  '@tanstack/react-devtools@0.10.14(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(csstype@3.2.3)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(solid-js@1.9.17)':
     dependencies:
-      '@tanstack/devtools': 0.15.0(csstype@3.2.3)(solid-js@1.9.17)
+      '@tanstack/devtools': 0.16.0(csstype@3.2.3)(solid-js@1.9.17)
       '@types/react': 19.3.0
       '@types/react-dom': 19.3.0(@types/react@19.3.0)
       react: 19.3.1

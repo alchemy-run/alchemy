@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireMinutes } from "alchemy/Util/Duration";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
@@ -248,7 +249,8 @@ export const ImagePipelineProvider = () =>
         reconcile: Effect.fn(function* ({ id, news, olds, output, session }) {
           // One idempotency token per reconcile — retries within this run
           // are deduplicated by the API.
-          const clientToken = yield* Effect.sync(() => crypto.randomUUID());
+          const random = yield* SecureRandom.SecureRandom;
+          const clientToken = yield* random.uuidV4();
           const name = output?.imagePipelineName ?? (yield* toName(id, news));
           const internalTags = yield* createInternalTags(id);
           const desiredTags = { ...internalTags, ...news.tags };

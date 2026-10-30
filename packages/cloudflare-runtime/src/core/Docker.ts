@@ -4,6 +4,7 @@ import * as Cache from "effect/Cache";
 import * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
 import * as Context from "effect/Context";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -197,6 +198,7 @@ export const DockerLive = Layer.effect(
     const fs = yield* FileSystem.FileSystem;
     const path = yield* Path.Path;
     const runFork = yield* FiberSet.makeRuntime();
+    const random = yield* SecureRandom.SecureRandom;
 
     const bin = yield* DockerBin;
     const containerEgressInterceptorImage = yield* ContainerEgressInterceptorImage;
@@ -204,7 +206,7 @@ export const DockerLive = Layer.effect(
     // Every container created through the proxy carries this runtime's label.
     // Native containers can start from images nobody prepared (snapshots,
     // managed `cloudflare/*` images), so per-image cleanup cannot find them.
-    const runtimeLabels = { [RUNTIME_LABEL]: crypto.randomUUID() };
+    const runtimeLabels = { [RUNTIME_LABEL]: yield* random.uuidV4() };
 
     const registeredLoopbackPorts = () => {
       const ports = new Set<number>();

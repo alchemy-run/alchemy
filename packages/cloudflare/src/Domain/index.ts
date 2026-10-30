@@ -27,6 +27,8 @@ import {
 import { makeCallback } from "alchemy/Callback";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Cause from "effect/Cause";
+import * as Clock from "effect/Clock";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as Headers from "effect/http/Headers";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -161,8 +163,8 @@ const queue = <Row>(name: string, process: (row: Row) => Effect.Effect<void>) =>
     const acquire = exclusively(
       Effect.gen(function* () {
         const held = yield* state.storage.get<number>(lease);
-        if (held !== undefined && held > Date.now()) return false;
-        yield* state.storage.put(lease, Date.now() + LEASE_MS);
+        if (held !== undefined && held > (yield* Clock.currentTimeMillis)) return false;
+        yield* state.storage.put(lease, (yield* Clock.currentTimeMillis) + LEASE_MS);
         return true;
       }),
     );
@@ -337,7 +339,7 @@ const connectTo = (namespace: Namespace) => (key: string, subscription: Subscrip
     return response;
   });
 
-const aggregateObject = (kit: AggregateKit) =>
+const aggregateObject = (kit: AggregateKit, random: SecureRandom.SecureRandom["Service"]) =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
     return Effect.gen(function* () {
@@ -368,7 +370,7 @@ const aggregateObject = (kit: AggregateKit) =>
             command,
             commandId: meta.commandId,
             context: meta.context,
-            now: yield* Effect.sync(() => Date.now()),
+            now: yield* Clock.currentTimeMillis,
             correlationId: meta.correlationId,
             trace: meta.trace,
             link: meta.link,
@@ -457,9 +459,8 @@ const aggregateObject = (kit: AggregateKit) =>
         schedule: (id: string, command: Json, meta: Aggregate.SendMeta, due: Aggregate.Due) =>
           Effect.gen(function* () {
             if (yield* executed(meta.commandId)) return "AlreadyExecuted" as const;
-            const token = yield* Effect.sync(() => crypto.randomUUID());
-            const at =
-              "at" in due ? due.at : (yield* Effect.sync(() => Date.now())) + due.afterMillis;
+            const token = yield* random.uuidV4();
+            const at = "at" in due ? due.at : (yield* Clock.currentTimeMillis) + due.afterMillis;
             yield* state.storage.put(`scheduled:${meta.commandId}`, token);
             yield* timers.schedule(meta.commandId, {
               at,
@@ -634,8 +635,8 @@ const projectionObject = (kit: ProjectionKit) =>
       const acquire = exclusively(
         Effect.gen(function* () {
           const held = yield* state.storage.get<number>(lease);
-          if (held !== undefined && held > Date.now()) return false;
-          yield* state.storage.put(lease, Date.now() + LEASE_MS);
+          if (held !== undefined && held > (yield* Clock.currentTimeMillis)) return false;
+          yield* state.storage.put(lease, (yield* Clock.currentTimeMillis) + LEASE_MS);
           return true;
         }),
       );
@@ -656,7 +657,11 @@ const projectionObject = (kit: ProjectionKit) =>
               });
               const run = [...rows.values()];
               if (run.length === 0) return;
-              if (run.length < size && waitMillis > 0 && Date.now() - run[0]!.at < waitMillis) {
+              if (
+                run.length < size &&
+                waitMillis > 0 &&
+                (yield* Clock.currentTimeMillis) - run[0]!.at < waitMillis
+              ) {
                 return yield* wake(run[0]!.at + waitMillis);
               }
               yield* kit.run(meta.key, run);
@@ -683,7 +688,7 @@ const projectionObject = (kit: ProjectionKit) =>
         yield* state.storage.delete(lease).pipe(Effect.ignore);
         if (exit._tag === "Failure") {
           yield* Effect.logError(`projection ${kit.name} failed; retrying`, exit.cause);
-          yield* wake(Date.now() + PROJECTION_RETRY_MS);
+          yield* wake((yield* Clock.currentTimeMillis) + PROJECTION_RETRY_MS);
         }
       }) as Effect.Effect<void>;
       const callback = yield* makeCallback("domain:projection", () => drain);
@@ -703,7 +708,7 @@ const projectionObject = (kit: ProjectionKit) =>
                     yield* state.storage.put(`in:${pad(position)}`, {
                       position,
                       delivery,
-                      at: Date.now(),
+                      at: yield* Clock.currentTimeMillis,
                     } satisfies Accepted);
                     yield* state.storage.put("meta", {
                       ...meta,
@@ -842,13 +847,14 @@ const pollAfter = <A>(
 /** The aggregates, views, policies, projections and streams, each on its own Durable Object class. */
 const durableObjectPlatform = (
   jurisdiction: DurableObjectJurisdiction | undefined,
-): Layer.Layer<Platform, never, Worker> =>
+): Layer.Layer<Platform, never, Worker | SecureRandom.SecureRandom> =>
   Layer.effect(
     Platform,
     Effect.gen(function* () {
       // Factories run while the Domain's Layer is built, inside the Worker's
       // init phase; declaring a Durable Object needs that context.
       const init = yield* captureContext<Worker>();
+      const random = yield* SecureRandom.SecureRandom;
       const inInit = <A, E>(effect: Effect.Effect<A, E, Worker>): Effect.Effect<A, E> =>
         Effect.provide(effect, init);
       // Every kind of object is declared through here, so none is left
@@ -864,7 +870,7 @@ const durableObjectPlatform = (
             Effect.gen(function* () {
               const namespace = yield* declareIn(
                 `${aggregate.aggregateName}Aggregate`,
-                aggregateObject(kit),
+                aggregateObject(kit, random),
               );
               return {
                 send: (id, command, meta) =>
@@ -1083,7 +1089,7 @@ const durableObjectPlatform = (
 export function layerDurableObjects({ jurisdiction }: DurableObjectsOptions = {}): Layer.Layer<
   Platform | WorkflowEngine.WorkflowEngine,
   never,
-  Worker
+  Worker | SecureRandom.SecureRandom
 > {
   // The same options return the same Layer, so models that each provide it
   // share one platform and one workflow engine.
@@ -1123,5 +1129,5 @@ export interface DurableObjectsOptions {
 
 const platforms = new Map<
   DurableObjectJurisdiction | undefined,
-  Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker>
+  Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker | SecureRandom.SecureRandom>
 >();

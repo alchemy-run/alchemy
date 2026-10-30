@@ -5,6 +5,7 @@ import * as Namespace from "alchemy/Namespace";
 import * as Provider from "alchemy/Provider";
 import { Resource, type ResourceBinding } from "alchemy/Resource";
 import { normalizeNulls } from "alchemy/Util/stable";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import { CloudflareEnvironment } from "../CloudflareEnvironment.ts";
@@ -369,7 +370,7 @@ export const LocalDurableObjectApplicationProvider = () =>
         applicationName: yield* createContainerApplicationName(id, undefined),
         accountId: yield* localAccountId,
         className: news.className,
-        createdAt: new Date().toISOString(),
+        createdAt: DateTime.formatIso(yield* DateTime.now),
       });
     }),
     reconcile: Effect.fn(function* ({ id, news, bindings, output }) {
@@ -378,7 +379,7 @@ export const LocalDurableObjectApplicationProvider = () =>
         applicationName: yield* createContainerApplicationName(id, undefined),
         accountId: yield* localAccountId,
         className: news.className,
-        createdAt: output?.createdAt || new Date().toISOString(),
+        createdAt: output?.createdAt || DateTime.formatIso(yield* DateTime.now),
         durableObjects: yield* boundNamespace(news.className, bindings),
         settings: yield* boundSettings(news.className, bindings),
       });

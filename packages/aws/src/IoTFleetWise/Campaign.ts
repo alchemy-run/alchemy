@@ -7,6 +7,7 @@ import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
 import { toWireMillis, toWireSeconds } from "alchemy/Util/Duration";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
@@ -470,8 +471,14 @@ export const CampaignProvider = () =>
                 collectionScheme: toWireCollectionScheme(news.collectionScheme),
                 signalsToCollect: toWireSignalsToCollect(news.signalsToCollect),
                 dataDestinationConfigs: news.dataDestinationConfigs,
-                startTime: news.startTime !== undefined ? new Date(news.startTime) : undefined,
-                expiryTime: news.expiryTime !== undefined ? new Date(news.expiryTime) : undefined,
+                startTime:
+                  news.startTime !== undefined
+                    ? DateTime.toDateUtc(DateTime.makeUnsafe(news.startTime))
+                    : undefined,
+                expiryTime:
+                  news.expiryTime !== undefined
+                    ? DateTime.toDateUtc(DateTime.makeUnsafe(news.expiryTime))
+                    : undefined,
                 postTriggerCollectionDuration: toWireSeconds(news.postTriggerCollectionDuration),
                 diagnosticsMode: news.diagnosticsMode,
                 spoolingMode: news.spoolingMode,

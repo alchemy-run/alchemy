@@ -12,6 +12,7 @@ import { Stack } from "alchemy/Stack";
 import { Stage } from "alchemy/Stage";
 import { State, type ResourceState } from "alchemy/State";
 import * as ConfigProvider from "effect/ConfigProvider";
+import * as SecureRandom from "effect/crypto/SecureRandom";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
@@ -51,7 +52,11 @@ it.live(
             ConfigProvider.fromUnknown({ ALCHEMY_PROFILE: `non-existent-${uuidv4()}` }),
           ),
           ProfileStoreLive,
-        ).pipe(Layer.provideMerge(Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer))),
+        ).pipe(
+          Layer.provideMerge(
+            Layer.mergeAll(NodeServices.layer, FetchHttpClient.layer, SecureRandom.layerWebCrypto),
+          ),
+        ),
       ),
     ),
   { tags: ["unit", "provider:aws", "local"] },

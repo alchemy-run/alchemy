@@ -349,6 +349,7 @@ const command = Command.make(
     const setEnv = (values: Record<string, string>, overwrite: boolean) =>
       Effect.sync(() => {
         for (const [name, value] of Object.entries(values)) {
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- writes the real env so in-process helpers and the child inherit it
           if (overwrite || process.env[name] === undefined) process.env[name] = value;
         }
       });

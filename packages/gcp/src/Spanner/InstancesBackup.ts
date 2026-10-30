@@ -3,7 +3,9 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Clock from "effect/Clock";
 import * as Data from "effect/Data";
+import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
@@ -185,7 +187,9 @@ const toId = (id: string, backupId: string | undefined, existing?: string) =>
   toPhysicalId(id, backupId, existing, MAX_BACKUP_ID_LENGTH);
 
 const defaultExpireTime = () =>
-  Effect.sync(() => new Date(Date.now() + DEFAULT_EXPIRE_MS).toISOString());
+  Effect.map(Clock.currentTimeMillis, (now) =>
+    DateTime.formatIso(DateTime.makeUnsafe(now + DEFAULT_EXPIRE_MS)),
+  );
 
 const encryptionKey = (config: BackupEncryptionConfig | undefined) =>
   JSON.stringify({
