@@ -27,6 +27,7 @@ import {
   hosted,
   Increment,
 } from "./fixtures/HostContract.ts";
+import { concurrentCompletion, rollbackBetweenDeletes } from "./fixtures/RetentionRace.ts";
 
 /** A fresh in-memory SQLite database with the cluster host on it. */
 const onSqlite = (options: Domain.Cluster.SingleRunnerOptions = {}) =>
@@ -299,6 +300,31 @@ describe("Domain.Cluster on SQLite", () => {
       ),
     ),
   );
+
+  for (const [title, race] of [
+    [
+      "retention: a request that completes during a sweep keeps its message and reply",
+      concurrentCompletion,
+    ],
+    ["retention: a failed message delete rolls back its reply delete", rollbackBetweenDeletes],
+  ] as const) {
+    it.live(title, () =>
+      race(
+        { messages: "cluster_messages", replies: "cluster_replies", name: "retention_probe" },
+        "Domain.Policy/Mirror",
+      ).pipe(
+        Effect.scoped,
+        Effect.provide(
+          hosted(
+            onSqlite({
+              sweep: { intervalMillis: 100, afterMillis: 30_000 },
+              retention: { receipts: "forever", cancelled: "forever", messages: 0 },
+            }),
+          ),
+        ),
+      ),
+    );
+  }
 
   it.live("state, pending deliveries and timers survive a restart on the same file", () =>
     Effect.gen(function* () {
