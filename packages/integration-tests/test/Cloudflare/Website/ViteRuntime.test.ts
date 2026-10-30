@@ -7,6 +7,8 @@ import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
+import * as ChildProcess from "effect/process/ChildProcess";
+import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
@@ -727,6 +729,19 @@ describe.concurrent(
             yield* expectText(`${url}${prefix}/status`, "true");
             yield* expectText(`${url}${prefix}/fetch`, "Hello World!");
           }
+          // Deleting the site stops the containers its Workers started.
+          yield* stack.destroy();
+          const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
+          const containers = yield* spawner.lines(
+            ChildProcess.make("docker", ["ps", "--all", "--format", "{{.Names}}"]),
+          );
+          expect(
+            containers.filter(
+              (name) =>
+                name.startsWith("workerd-cloudflare-website-viteruntime") &&
+                /-(DockerfileContainer|NamedImagesContainer)-/.test(name),
+            ),
+          ).toEqual([]);
         }).pipe(Effect.ensuring(stack.destroy().pipe(Effect.ignore)), logLevel),
       {
         tags: ["provider:cloudflare:container", "provider:cloudflare:worker", "local"],
