@@ -197,7 +197,8 @@ const serve = Effect.fn(function* <B extends BindingHooks = BindingHooks>(
   const moduleFallback = yield* makeModuleFallbackService;
 
   const name =
-    options.worker?.name ?? `vite-dev-${yield* (yield* SecureRandom.SecureRandom).uuidV4()}`;
+    options.worker?.name ??
+    `vite-dev-${yield* SecureRandom.SecureRandom.pipe(Effect.flatMap((random) => random.uuidV4()))}`;
   return yield* runtime.start({
     // Everything the caller configured on the Worker (crons, tail consumers,
     // Cache API, request.cf, ...) reaches workerd; the fields below are the

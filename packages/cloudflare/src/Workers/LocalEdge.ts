@@ -138,7 +138,10 @@ export const LocalEdgeLive = Layer.effect(
     const rootScope = yield* Effect.scope;
     const lock = yield* Semaphore.make(1);
     // Unique per edge: the router registers in the machine-wide dev registry.
-    const routerName = `alchemy-edge-${(yield* (yield* SecureRandom.SecureRandom).uuidV4()).slice(0, 8)}`;
+    const routerName = `alchemy-edge-${yield* SecureRandom.SecureRandom.pipe(
+      Effect.flatMap((random) => random.uuidV4()),
+      Effect.map((id) => id.slice(0, 8)),
+    )}`;
 
     const routes = new Map<string, ReadonlyArray<LocalEdgeRoute>>();
     const domains = new Map<string, LocalEdgeDomain>();

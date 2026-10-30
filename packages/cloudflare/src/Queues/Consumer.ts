@@ -775,7 +775,7 @@ export const ConsumerProviderLocal = () =>
             consumerId:
               output?.consumerId && !isLiveId(output.consumerId)
                 ? output.consumerId
-                : `dev:${yield* (yield* SecureRandom.SecureRandom).uuidV4()}`,
+                : `dev:${yield* SecureRandom.SecureRandom.pipe(Effect.flatMap((random) => random.uuidV4()))}`,
             queueId: news.queueId,
             scriptName: news.scriptName,
             deadLetterQueue: news.deadLetterQueue,

@@ -400,7 +400,7 @@ export const GlobalVmExtensionPolicyProvider = () =>
       if (observed === undefined) return;
       const retryUuid =
         observed.scopedResourceStatus === "SCOPED_RESOURCE_STATUS_DELETING"
-          ? yield* (yield* SecureRandom.SecureRandom).uuidV4()
+          ? yield* SecureRandom.SecureRandom.pipe(Effect.flatMap((random) => random.uuidV4()))
           : undefined;
       yield* requestDelete(retryUuid);
       // Deletion is itself a rollout; the policy stays readable until the
