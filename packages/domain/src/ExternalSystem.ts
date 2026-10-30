@@ -5,8 +5,8 @@ import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import { DefinitionError, ReservedOperation } from "./DefinitionError.ts";
 import type { Fields } from "./Event.ts";
-import { DefinitionError } from "./internal.ts";
 import * as Telemetry from "./Telemetry.ts";
 
 type OpImpl = (args: unknown) => Effect.Effect<unknown, unknown, unknown>;
@@ -328,9 +328,9 @@ export const make = <const Name extends string, const Ops extends Record<string,
           const clash = Object.keys(ops).find((op) => reserved.has(op));
           if (clash !== undefined) {
             return yield* Effect.die(
-              new DefinitionError(
-                `ExternalSystem '${name}' cannot declare an operation named '${clash}'`,
-              ),
+              DefinitionError.make({
+                reason: ReservedOperation.make({ system: name, operation: clash }),
+              }),
             );
           }
           const checks = options?.validate === false ? undefined : yield* compileChecks(name, ops);

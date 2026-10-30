@@ -355,7 +355,7 @@ describe("Domain Api exposing an aggregate", () => {
       const exit = yield* Effect.exit(VaultStateApi.clientInProcess);
       expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
         _tag: "DefinitionError",
-        message: "Vault has no `read` contract, so an Api cannot expose it",
+        reason: { _tag: "Unreadable", aggregate: "Vault" },
       });
     }).pipe(
       Effect.scoped,

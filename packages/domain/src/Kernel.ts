@@ -6,8 +6,29 @@ import * as Exit from "effect/Exit";
 import * as Schema from "effect/Schema";
 import * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
+import {
+  ConsumesItself,
+  DefinitionError,
+  DuplicateDefinition,
+  DuplicateEventTag,
+  DuplicateName,
+  InvalidInitial,
+  MissingInitial,
+  MissingKeyOf,
+  NoEmitter,
+  type Reason,
+  TwoWriters,
+  UndeclaredEmit,
+  UndeclaredEvent,
+  UnhandledCommand,
+  UnknownEvent,
+  UnknownSource,
+  UnknownStream,
+  UnmatchedRoute,
+  WriterKeyMismatch,
+} from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
-import { DefinitionError, judge, rejectionTag, settle } from "./internal.ts";
+import { judge, rejectionTag, settle } from "./internal.ts";
 import * as Key from "./Key.ts";
 import type {
   Accepted,
@@ -213,13 +234,13 @@ const build = (
   telemetry: Telemetry.Resolved,
   report: (problem: DefinitionError) => void,
 ): Kernel => {
-  const problem = (message: string) => report(new DefinitionError(message));
+  const problem = (reason: Reason) => report(DefinitionError.make({ reason }));
   // ---------------------------------------------------------------- events
   const eventCodecs = new Map<string, { readonly cls: Event.Any; readonly codec: JsonCodec }>();
   const registerEvent = (cls: Event.Any) => {
     const existing = eventCodecs.get(cls.tag);
     if (existing && existing.cls !== cls) {
-      return problem(`Two different events are tagged '${cls.tag}'`);
+      return problem(DuplicateEventTag.make({ tag: cls.tag }));
     }
     if (!existing) eventCodecs.set(cls.tag, { cls, codec: jsonCodec(cls) });
   };
@@ -230,7 +251,7 @@ const build = (
     const entry = eventCodecs.get(tag);
     return entry
       ? Effect.succeed(entry.codec)
-      : Effect.die(new DefinitionError(`Unknown event '${tag}'`));
+      : Effect.die(DefinitionError.make({ reason: UnknownEvent.make({ event: tag }) }));
   };
   const encodeEvent = (event: { readonly _tag: string }): Effect.Effect<Json> =>
     Effect.map(eventCodec(event._tag), (codec) => codec.encode(event));
@@ -255,7 +276,7 @@ const build = (
   const aggregateByName = new Map<string, Aggregate.Any>();
   for (const aggregate of definitions.aggregates) {
     if (aggregateByName.has(aggregate.aggregateName)) {
-      problem(`Duplicate aggregate '${aggregate.aggregateName}'`);
+      problem(DuplicateDefinition.make({ kind: "aggregate", entity: aggregate.aggregateName }));
       continue;
     }
     aggregateByName.set(aggregate.aggregateName, aggregate);
@@ -274,12 +295,16 @@ const build = (
         if (!rejections.has(tag)) rejections.set(tag, jsonCodec(rejection));
       }
     }
-    let initial: Json = null;
-    try {
-      initial = state.encode(def.initial);
-    } catch (error) {
+    const encodedInitial = Schema.encodeUnknownExit(Schema.toCodecJson(def.state as any) as any)(
+      def.initial,
+    );
+    const initial: Json = Exit.isSuccess(encodedInitial) ? encodedInitial.value : null;
+    if (Exit.isFailure(encodedInitial)) {
       problem(
-        `${aggregate.aggregateName}.initial does not match its state schema: ${error instanceof Error ? error.message : String(error)}`,
+        InvalidInitial.make({
+          owner: aggregate.aggregateName,
+          cause: Cause.squash(encodedInitial.cause),
+        }),
       );
     }
     aggregateCodecs.set(aggregate.aggregateName, {
@@ -298,7 +323,7 @@ const build = (
     | { readonly kind: "view"; readonly view: View.Any };
   const sources = new Map<string, SourceEntry>();
   const addSource = (name: string, entry: SourceEntry) => {
-    if (sources.has(name)) return problem(`Two entities are named '${name}'`);
+    if (sources.has(name)) return problem(DuplicateName.make({ entity: name }));
     sources.set(name, entry);
   };
   for (const aggregate of definitions.aggregates) {
@@ -316,7 +341,7 @@ const build = (
     const entry = sources.get(nameOf(source));
     const entity = entry?.kind === "aggregate" ? entry.aggregate : entry?.view;
     if (entity !== source) {
-      problem(`${owner} consumes ${nameOf(source)}, which is not in the Domain`);
+      problem(UnknownSource.make({ consumer: owner, source: nameOf(source) }));
       return undefined;
     }
     return entry;
@@ -327,7 +352,7 @@ const build = (
 
   for (const stream of definitions.streams) {
     if (sources.has(stream.streamName)) {
-      problem(`Two entities are named '${stream.streamName}'`);
+      problem(DuplicateName.make({ entity: stream.streamName }));
     }
     for (const event of stream.definition.entries) registerEvent(event);
   }
@@ -357,7 +382,7 @@ const build = (
       return declared;
     }
     if (visiting.has(view.viewName)) {
-      problem(`${view.viewName} consumes itself through other views`);
+      problem(ConsumesItself.make({ view: view.viewName }));
       return new Set();
     }
     visiting.add(view.viewName);
@@ -447,7 +472,12 @@ const build = (
     if (keyOfSource(upstream) === def.key)
       return (input) => [{ key: Aggregate.targetId(input.source) }];
     problem(
-      `${owner} consumes '${tag}' from ${source}, which is not keyed by ${Key.isAggregate(def.key) ? def.key.aggregateName : "its key schema"}: add keyOf.${tag}`,
+      MissingKeyOf.make({
+        consumer: owner,
+        event: tag,
+        source,
+        keyedBy: Key.isAggregate(def.key) ? def.key.aggregateName : undefined,
+      }),
     );
     return () => [];
   };
@@ -455,7 +485,7 @@ const build = (
   for (const view of definitions.views) {
     const def = view.definition;
     if (def.state !== undefined && def.initial === undefined) {
-      problem(`${view.viewName} declares state without initial`);
+      problem(MissingInitial.make({ view: view.viewName }));
     }
     // Route-keyed handlers need the same routes in keyOf.
     for (const field of ["evolve", "emit"] as const) {
@@ -465,7 +495,7 @@ const build = (
         for (const route of Object.keys(handler)) {
           if (typeof routes !== "object" || !(route in routes)) {
             problem(
-              `${view.viewName}.${field}.${name}.${route} has no matching route in keyOf.${name}`,
+              UnmatchedRoute.make({ view: view.viewName, handler: field, source: name, route }),
             );
           }
         }
@@ -515,7 +545,7 @@ const build = (
         });
       }
       if (!produced) {
-        problem(`${owner}: none of ${from.map(nameOf).join(", ")} emits '${event.tag}'`);
+        problem(NoEmitter.make({ consumer: owner, sources: from.map(nameOf), event: event.tag }));
       }
     }
   };
@@ -523,7 +553,7 @@ const build = (
   const policyByName = new Map<string, Policy.Any>();
   for (const policy of definitions.policies) {
     if (policyByName.has(policy.policyName)) {
-      problem(`Duplicate policy '${policy.policyName}'`);
+      problem(DuplicateDefinition.make({ kind: "policy", entity: policy.policyName }));
       continue;
     }
     policyByName.set(policy.policyName, policy);
@@ -543,7 +573,7 @@ const build = (
   for (const projection of definitions.projections) {
     const name = projection.projectionName;
     if (projectionByName.has(name)) {
-      problem(`Duplicate projection '${name}'`);
+      problem(DuplicateDefinition.make({ kind: "projection", entity: name }));
       continue;
     }
     projectionByName.set(name, projection);
@@ -554,19 +584,28 @@ const build = (
     );
     for (const stream of def.writes ?? []) {
       if (!streamNames.has(stream.streamName)) {
-        problem(`${owner} writes ${stream.streamName}, which is not in the Domain`);
+        problem(UnknownStream.make({ writer: owner, stream: stream.streamName }));
         continue;
       }
       const existing = writers.get(stream.streamName);
       if (existing && existing !== projection) {
         problem(
-          `${stream.streamName} has two writers, ${existing.projectionName} and ${name}: a stream key has exactly one`,
+          TwoWriters.make({
+            stream: stream.streamName,
+            first: existing.projectionName,
+            second: name,
+          }),
         );
         continue;
       }
       if (stream.definition.key !== def.key) {
         problem(
-          `${owner} is keyed by ${Key.describe(def.key)}, so it cannot write ${stream.streamName}, keyed by ${Key.describe(stream.definition.key)}`,
+          WriterKeyMismatch.make({
+            writer: owner,
+            key: Key.describe(def.key),
+            stream: stream.streamName,
+            streamKey: Key.describe(stream.definition.key),
+          }),
         );
         continue;
       }
@@ -633,9 +672,12 @@ const build = (
       for (const [index, event] of decided.entries()) {
         if (!codecs.events.has(event._tag)) {
           return yield* Effect.die(
-            new DefinitionError(
-              `${aggregate.aggregateName} does not declare event '${event._tag}'`,
-            ),
+            DefinitionError.make({
+              reason: UndeclaredEvent.make({
+                aggregate: aggregate.aggregateName,
+                event: event._tag,
+              }),
+            }),
           );
         }
         const envelope: Aggregate.Envelope = {
@@ -713,7 +755,9 @@ const build = (
           const command = codecs.commands.get(tag);
           if (!command) {
             return yield* Effect.die(
-              new DefinitionError(`${aggregate.aggregateName} does not handle '${tag}'`),
+              DefinitionError.make({
+                reason: UnhandledCommand.make({ aggregate: aggregate.aggregateName, command: tag }),
+              }),
             );
           }
           const decoded = command.codec.decode(input.command) as { readonly _tag: string };
@@ -933,9 +977,9 @@ const build = (
               if (out === undefined) continue;
               if (declared && !declared.has(out._tag)) {
                 return yield* Effect.die(
-                  new DefinitionError(
-                    `${view.viewName} emitted '${out._tag}', which it does not declare in events`,
-                  ),
+                  DefinitionError.make({
+                    reason: UndeclaredEmit.make({ view: view.viewName, event: out._tag }),
+                  }),
                 );
               }
               seq += 1;
@@ -1126,7 +1170,12 @@ const build = (
       return entry
         ? Effect.sync(() => entry.codec.encode(command))
         : Effect.die(
-            new DefinitionError(`${aggregate.aggregateName} does not handle '${command._tag}'`),
+            DefinitionError.make({
+              reason: UnhandledCommand.make({
+                aggregate: aggregate.aggregateName,
+                command: command._tag,
+              }),
+            }),
           );
     },
     decodeRejection: (aggregate, json) =>

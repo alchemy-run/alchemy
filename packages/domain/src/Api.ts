@@ -29,8 +29,8 @@ import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import type * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
+import { DefinitionError, Unreadable, UnroutedCommand } from "./DefinitionError.ts";
 import { type Filter, matches } from "./Filter.ts";
-import { DefinitionError } from "./internal.ts";
 import { decodeEnvelope } from "./Kernel.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
@@ -500,7 +500,7 @@ const handlersOf = (
         const aggregate = internals.commands.get(entry.tag);
         if (!aggregate) {
           return yield* Effect.die(
-            new DefinitionError(`No aggregate in the Domain handles ${entry.tag}`),
+            DefinitionError.make({ reason: UnroutedCommand.make({ command: entry.tag }) }),
           );
         }
         const declared = declaredOnly(entry.rpc);
@@ -522,9 +522,7 @@ const handlersOf = (
       // Serving an aggregate's state without its read contract would skip its middleware.
       if (entry.kind === "Aggregate" && !entry.definition.read) {
         return yield* Effect.die(
-          new DefinitionError(
-            `${entry.aggregateName} has no \`read\` contract, so an Api cannot expose it`,
-          ),
+          DefinitionError.make({ reason: Unreadable.make({ aggregate: entry.aggregateName }) }),
         );
       }
       const name = nameOf(entry);

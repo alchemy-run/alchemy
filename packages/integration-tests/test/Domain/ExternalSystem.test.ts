@@ -187,7 +187,7 @@ describe("Domain ExternalSystem", () => {
       );
       expect(defectOf(exit)).toMatchObject({
         _tag: "DefinitionError",
-        message: "ExternalSystem 'Clash' cannot declare an operation named 'toLayer'",
+        reason: { _tag: "ReservedOperation", system: "Clash", operation: "toLayer" },
       });
     }),
   );

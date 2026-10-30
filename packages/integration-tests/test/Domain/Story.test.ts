@@ -883,7 +883,7 @@ describe("Domain Story", () => {
       Effect.map((exit) =>
         expect(Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined).toMatchObject({
           _tag: "DefinitionError",
-          message: "Loud emitted 'Capped', which it does not declare in events",
+          reason: { _tag: "UndeclaredEmit", view: "Loud", event: "Capped" },
         }),
       ),
     );

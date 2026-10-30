@@ -9,6 +9,7 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
+import { DefinitionError, ForeignAppend, MissingWorkflowEngine } from "./DefinitionError.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import type * as Key from "./Key.ts";
@@ -359,9 +360,9 @@ const build = <A, E, R>(
       const engine = yield* Effect.serviceOption(WorkflowEngine.WorkflowEngine);
       if (Option.isNone(engine)) {
         return yield* Effect.die(
-          new Kernel.DefinitionError(
-            `${sagas.map((saga) => saga.sagaName).join(", ")} need a platform that runs workflows`,
-          ),
+          DefinitionError.make({
+            reason: MissingWorkflowEngine.make({ sagas: sagas.map((saga) => saga.sagaName) }),
+          }),
         );
       }
       for (const saga of sagas) hosts = Context.add(hosts, saga, Saga.client(saga, engine.value));
@@ -769,9 +770,7 @@ const streamHost = (
         const writer = kernel.writerOf(stream);
         if (!meta || !writer || writer.projectionName !== meta.projection) {
           return Effect.die(
-            new Kernel.DefinitionError(
-              `Only the projection that lists ${stream.streamName} in \`writes\` may append to it, with the input it is handling`,
-            ),
+            DefinitionError.make({ reason: ForeignAppend.make({ stream: stream.streamName }) }),
           );
         }
         meta.appends += 1;
