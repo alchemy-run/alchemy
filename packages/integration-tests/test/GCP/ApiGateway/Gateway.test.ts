@@ -101,5 +101,6 @@ test.provider.skipIf(!!process.env.FAST)(
       yield* stack.destroy();
       expect(yield* waitUntilGone(v1.gateway.name)).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:apigateway", "live"], timeout: 1_500_000 },
+  // Gateway create ~11 min, config rollout ~6 min, delete several more.
+  { tags: ["provider:gcp", "provider:gcp:apigateway", "live"], timeout: 2_700_000 },
 );
