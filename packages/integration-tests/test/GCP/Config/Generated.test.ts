@@ -108,29 +108,53 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("Preview", { concurrent: true }, () => {
-      test.provider.skip(
-        "ExportPreview (config.projects.locations.previews.export): Preview: a preview runs Terraform through Cloud Build as a service account that needs Infra Manager roles the testing project doesn't grant (GCP_TEST_CONFIG)",
-        () => Effect.void,
+      test.provider(
+        "ExportPreview (config.projects.locations.previews.export)",
+        () => probe("ExportPreview", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:config", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetPreview (config.projects.locations.previews.get): Preview: a preview runs Terraform through Cloud Build as a service account that needs Infra Manager roles the testing project doesn't grant (GCP_TEST_CONFIG)",
-        () => Effect.void,
+      test.provider(
+        "GetPreview (config.projects.locations.previews.get)",
+        () => probe("GetPreview", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:config", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetPreviewResourceChange (config.projects.locations.previews.resourceChanges.get): Preview: a preview runs Terraform through Cloud Build as a service account that needs Infra Manager roles the testing project doesn't grant (GCP_TEST_CONFIG)",
-        () => Effect.void,
+      test.provider(
+        "GetPreviewResourceChange (config.projects.locations.previews.resourceChanges.get)",
+        () => probe("GetPreviewResourceChange", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:config", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetPreviewResourceDrift (config.projects.locations.previews.resourceDrifts.get): Preview: a preview runs Terraform through Cloud Build as a service account that needs Infra Manager roles the testing project doesn't grant (GCP_TEST_CONFIG)",
-        () => Effect.void,
+      test.provider(
+        "GetPreviewResourceDrift (config.projects.locations.previews.resourceDrifts.get)",
+        () => probe("GetPreviewResourceDrift", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:config", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListPreviewResourceChanges (config.projects.locations.previews.resourceChanges.list): Preview: a preview runs Terraform through Cloud Build as a service account that needs Infra Manager roles the testing project doesn't grant (GCP_TEST_CONFIG)",
-        () => Effect.void,
+      test.provider(
+        "ListPreviewResourceChanges (config.projects.locations.previews.resourceChanges.list)",
+        () => probe("ListPreviewResourceChanges", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:config", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListPreviewResourceDrifts (config.projects.locations.previews.resourceDrifts.list): Preview: a preview runs Terraform through Cloud Build as a service account that needs Infra Manager roles the testing project doesn't grant (GCP_TEST_CONFIG)",
-        () => Effect.void,
+      test.provider(
+        "ListPreviewResourceDrifts (config.projects.locations.previews.resourceDrifts.list)",
+        () => probe("ListPreviewResourceDrifts", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:config", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
