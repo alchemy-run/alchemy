@@ -77,7 +77,9 @@ const suite = (
           );
           for (const id of ids) {
             expect(yield* counters.state(id)).toEqual({ total: 40 });
-            yield* api.Totals.get(id, { atLeast: { stream: `Counter/${id}`, version: 40 } });
+            expect(
+              yield* api.Totals.get(id, { atLeast: { stream: `Counter/${id}`, version: 40 } }),
+            ).toEqual({ total: 40 });
             yield* eventually(
               counters.state(`mirror-${id}`).pipe(
                 Effect.filterOrFail(
