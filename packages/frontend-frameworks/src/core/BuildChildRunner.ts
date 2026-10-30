@@ -18,6 +18,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import type { BuildChildModule, BuildChildPayload } from "./BuildChild.ts";
 import { writeBuildOutput } from "./BuildOutput.ts";
+import { childProcessLogger } from "./ChildOutput.ts";
 
 const payload = JSON.parse(process.argv[2] ?? "{}") as BuildChildPayload;
 
@@ -43,7 +44,7 @@ const program = Effect.gen(function* () {
     ),
   );
   yield* writeBuildOutput(payload.outputPath, output);
-}).pipe(Effect.provide(NodeServices.layer));
+}).pipe(Effect.provide([NodeServices.layer, childProcessLogger]));
 
 void Effect.runPromise(program).then(
   // The macrotask hop lets buffered stdout/stderr drain before exiting.

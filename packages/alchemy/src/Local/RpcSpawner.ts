@@ -2,12 +2,12 @@ import { fileURLToPath } from "node:url";
 import * as Cache from "effect/Cache";
 import type * as Cause from "effect/Cause";
 import * as Config from "effect/Config";
-import * as Console from "effect/Console";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Fiber from "effect/Fiber";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpServer from "effect/http/HttpServer";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
@@ -22,9 +22,12 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import { LOG_FORMAT_ENV, logChildLine } from "../Util/LogRecord.ts";
 import { nodeLoaderArgs } from "../Util/Node.ts";
 import { httpServer } from "../Util/PlatformServices.ts";
+import { timedShutdownStep } from "../Util/Shutdown.ts";
 import { pipedColorEnv } from "../Util/Terminal.ts";
+import { traceParentEnv } from "../Util/TraceParent.ts";
 import { SPAWNER_URL_ENV_KEY } from "./RpcProviderProxy.ts";
 import { RPC_SERVER_ENVIRONMENT_KEY, type RpcServerEnvironment } from "./RpcServerEnvironment.ts";
 
@@ -108,10 +111,9 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
         for (const notify of subscribers) notify(line);
         return Effect.void;
       }
-      // Fallback path (no exec child subscribed): sidecar lines already carry
-      // the sidecar's logger prefix, so print verbatim rather than stamping
-      // this process's logger prefix on top.
-      return line.channel === "stderr" ? Console.error(line.line) : Console.log(line.line);
+      // Fallback path (no exec child subscribed): render the sidecar's
+      // records through this process's loggers.
+      return logChildLine(line.line, { stream: line.channel, process: "sidecar" });
     });
 
   const spawn = Effect.fn(function* (serverEntryUrl: string) {
@@ -162,6 +164,13 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
         env: {
           ...(omitEnv.length > 0 ? yield* inheritedEnv(omitEnv) : {}),
           [RPC_SERVER_ENVIRONMENT_KEY]: JSON.stringify(environment),
+          // Its startup joins the trace of the call that spawned it; each
+          // provider call then carries its caller's span (RpcSerialization).
+          ...(yield* traceParentEnv),
+          // Log records, not rendered text: see `forwardSidecarLogs`.
+          [LOG_FORMAT_ENV]: "json",
+          // Tools further down (vite, workerd) still style their own output;
+          // records keep that text as written.
           ...pipedColorEnv(),
         },
         // With variables to withhold, the full environment is built above.
@@ -169,20 +178,36 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
       },
     );
     const handle = yield* spawner.spawn(command);
-    yield* handle.stderr.pipe(
+    const stderrReader = yield* handle.stderr.pipe(
       Stream.decodeText,
       Stream.splitLines,
       Stream.runForEach((line) => publish({ channel: "stderr", line })),
       Effect.ignore,
       Effect.forkScoped,
     );
+    const stdout = yield* readRpcOutput(handle.stdout, (line) =>
+      publish({ channel: "stdout", line }),
+    );
     // This scope is the child handle's sole owner. Graceful shutdown runs this
     // finalizer; abrupt parent loss closes the RPC parent connection and the
     // child self-terminates (both paths are covered by RpcSpawnerCleanup).
     // Command cleanup allows 1s for TERM and 1s for KILL; reserve 1s for sidecar teardown.
     const kill = handle.kill({ forceKillAfter: "3 seconds" });
-    yield* Effect.addFinalizer(() => kill.pipe(Effect.ignore));
-    const url = yield* getRpcAddress(handle.stdout, (line) => publish({ channel: "stdout", line }));
+    // Registered after the readers, so it runs before they are interrupted:
+    // the sidecar's own shutdown records drain until its pipes close.
+    yield* Effect.addFinalizer(() =>
+      kill.pipe(
+        Effect.ignore,
+        Effect.andThen(
+          Fiber.joinAll([stderrReader, stdout.reader]).pipe(
+            Effect.timeout("1 second"),
+            Effect.ignore,
+          ),
+        ),
+        timedShutdownStep(`stopped sidecar pid ${handle.pid}`),
+      ),
+    );
+    const url = yield* Deferred.await(stdout.address);
     const ws = yield* Effect.acquireRelease(
       Effect.sync(() => {
         const ws = new WebSocket(new URL("/parent", url));
@@ -224,8 +249,8 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
         new Error(`Failed to spawn RPC server for "${serverEntryUrl}" after ${attempt} attempts.`),
       );
     }
-    yield* Console.error(
-      `[alchemy] RPC sidecar for ${serverEntryUrl} is no longer running; respawning (attempt ${attempt + 1})`,
+    yield* Effect.logWarning(
+      `RPC sidecar for ${serverEntryUrl} is no longer running; respawning (attempt ${attempt + 1})`,
     );
     // The sidecar is usually already gone, and killing an exited process fails.
     yield* child.kill.pipe(Effect.ignore);
@@ -325,28 +350,29 @@ export const layerServer = (environment: RpcSpawnerOptions) =>
 
 const RPC_ADDRESS_REGEX = /(<ALCHEMY_RPC_ADDRESS>)(.+)(<\/ALCHEMY_RPC_ADDRESS>)/;
 
-const getRpcAddress = (
+/**
+ * Read the sidecar's stdout: its log lines and the RPC address line. The
+ * reader runs until the pipe closes, so a caller can drain it on shutdown.
+ */
+const readRpcOutput = (
   stdout: Stream.Stream<Uint8Array, PlatformError>,
   publish: (line: string) => Effect.Effect<void>,
 ) =>
   Effect.gen(function* () {
     const address = yield* Deferred.make<string>();
-    // Set once the address line is seen; lines before it are handshake noise.
-    let addressSeen = false;
-    yield* stdout.pipe(
+    // Every line but the address is published, including what the sidecar
+    // logs while starting: a layer that fails to build says why there.
+    const reader = yield* stdout.pipe(
       Stream.decodeText,
       Stream.splitLines,
       Stream.runForEach((line) => {
         const match = line.match(RPC_ADDRESS_REGEX);
-        if (match) {
-          addressSeen = true;
-          return Deferred.succeed(address, match[2]);
-        }
-        return addressSeen ? publish(line) : Effect.void;
+        return match ? Deferred.succeed(address, match[2]) : publish(line);
       }),
+      Effect.ignore,
       Effect.forkScoped,
     );
-    return yield* Deferred.await(address);
+    return { address, reader };
   });
 
 export const parseSidecarLogLine = (raw: string): SidecarLogLine | undefined => {
@@ -360,19 +386,16 @@ export const parseSidecarLogLine = (raw: string): SidecarLogLine | undefined => 
 };
 
 /**
- * Pull sidecar output from the spawner (the outer `alchemy dev` process)
- * into THIS process's Console. The exec child owns the terminal renderer —
- * Sigil patches its `console`, so lines printed here are inserted cleanly
- * above the repainting progress region instead of racing it on the shared
- * tty. Forks in the ambient scope and never fails: when no spawner is
+ * Pull the sidecars' log records from the spawner (the outer `alchemy dev`
+ * process) into THIS process's loggers. The exec child owns the terminal
+ * renderer, so the records render above the repainting progress region
+ * instead of racing it on the shared tty; it forwards them on to the
+ * supervisor, which writes the run log. Forks in the ambient scope and never fails: when no spawner is
  * configured (`ALCHEMY_RPC_SPAWNER_URL` absent — plain deploy/destroy) it is
  * a no-op, and if the connection drops the spawner's own fallback printing
  * takes over.
  */
-export const forwardSidecarLogs = (
-  /** Mirrors every forwarded line (e.g. into a dev log file). */
-  tee?: (line: SidecarLogLine) => void,
-): Effect.Effect<void, never, HttpClient.HttpClient | Scope.Scope> =>
+export const forwardSidecarLogs: Effect.Effect<void, never, HttpClient.HttpClient | Scope.Scope> =
   Config.String(SPAWNER_URL_ENV_KEY).pipe(
     Effect.flatMap((spawnerUrl) => {
       const streamOnce = Effect.gen(function* () {
@@ -385,13 +408,9 @@ export const forwardSidecarLogs = (
             Effect.suspend(() => {
               const parsed = parseSidecarLogLine(raw);
               if (parsed === undefined) return Effect.void;
-              tee?.(parsed);
-              // Sidecar lines already carry the sidecar's own logger prefix
-              // (timestamp/level/fiber) — print them verbatim; routing through
-              // this process's logger would stamp a second prefix on top.
-              return parsed.channel === "stderr"
-                ? Console.error(parsed.line)
-                : Console.log(parsed.line);
+              // Sidecar lines are log records: replay them through this
+              // process's loggers, which render them (or pass them on as JSON).
+              return logChildLine(parsed.line, { stream: parsed.channel, process: "sidecar" });
             }),
           ),
         );

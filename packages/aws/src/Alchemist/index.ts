@@ -1,5 +1,5 @@
 import * as Auth from "@distilled.cloud/aws/Auth";
-import type { Target } from "alchemy/Alchemist/Session";
+import type * as Alchemist from "alchemy/Alchemist";
 import { loadConfigProvider } from "alchemy/Util/ConfigProvider";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as EffectConsole from "effect/Console";
@@ -15,7 +15,7 @@ import * as AWSCredentials from "../Credentials.ts";
 import { AWSEnvironment } from "../Environment.ts";
 import * as AWSRegion from "../Region.ts";
 
-export interface AwsTarget extends Target {
+export interface AwsTarget extends Alchemist.Target {
   readonly profile: string;
   readonly region?: string;
 }

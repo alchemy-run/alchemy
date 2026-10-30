@@ -145,6 +145,11 @@ export interface NuxtDevPlatformContext {
    * to the framework half — see `NuxtOptions.dev.services`).
    */
   readonly services?: unknown;
+  /**
+   * Overrides for the dev platform's workerd process (opaque to the
+   * framework half — see `NuxtOptions.dev.workerd`).
+   */
+  readonly workerd?: unknown;
 }
 
 /**
@@ -267,6 +272,12 @@ export interface NuxtOptions {
          * local-only.
          */
         readonly services?: unknown;
+        /**
+         * Overrides for the dev platform's workerd process (opaque to the
+         * framework half; the Cloudflare target takes `cloudflare-runtime`
+         * `WorkerdOptions`).
+         */
+        readonly workerd?: unknown;
       }
     | undefined;
 }
@@ -478,6 +489,7 @@ export const make: (
                 env: options?.dev?.env,
                 bindings: options?.dev?.bindings,
                 services: options?.dev?.services,
+                workerd: options?.dev?.workerd,
               })
               .pipe(Effect.mapError((error) => fail(error.message, error.cause)))
           : undefined;

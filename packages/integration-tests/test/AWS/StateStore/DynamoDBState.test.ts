@@ -669,7 +669,7 @@ test.provider(
       const name = yield* stageName("kms", stack.stage);
       const table = `alchemy-state-${name}`;
       const bucket = createOverflowBucketName(accountId, region, name);
-      const target = { _tag: "Provider", backend: "aws", name } as const;
+      const target = { type: "provider", backend: "aws", name } as const;
       const alchemist = Alchemist.layer();
       const teardown = Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));
 
@@ -714,7 +714,7 @@ test.provider(
       )}`;
       const table = `alchemy-state-${name}`;
       const bucket = `alchemy-state-overflow-${name}-${accountId}-${region}-an`;
-      const target = { _tag: "Provider", backend: "aws", name } as const;
+      const target = { type: "provider", backend: "aws", name } as const;
       const alchemist = Alchemist.layer();
 
       yield* Alchemist.State.teardown(target).pipe(Effect.provide(alchemist));

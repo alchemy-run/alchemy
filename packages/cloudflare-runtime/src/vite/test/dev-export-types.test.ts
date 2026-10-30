@@ -60,6 +60,7 @@ async function startDevServer(source: string) {
   const server = await vite.createServer({
     root,
     configFile: false,
+    cacheDir: path.join(root, ".vite"),
     logLevel: "silent",
     server: { port: 0 },
     plugins: [

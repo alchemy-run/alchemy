@@ -57,6 +57,7 @@ describe("dev plugin", () => {
     vite.createServer({
       ...config,
       configFile: false,
+      cacheDir: path.resolve(import.meta.dirname, "../.cache/dev-plugin-vite"),
       root,
       logLevel: "silent",
       plugins: [plugins],

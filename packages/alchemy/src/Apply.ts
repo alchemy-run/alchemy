@@ -3,7 +3,6 @@ import type { ConfigError } from "effect/Config";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
 import * as Formatter from "effect/Formatter";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
@@ -34,6 +33,7 @@ import {
   demandPlanCredentials,
 } from "./Auth/Demand.ts";
 import { havePropsChanged, isResolved, stripEffects, stripUnresolved } from "./Diff.ts";
+import { captureEmit, type ApplyEvent, type ApplyStatus } from "./Events.ts";
 import type { Input } from "./Input.ts";
 import { generateInstanceId } from "./InstanceId.ts";
 import * as Output from "./Output.ts";
@@ -46,14 +46,7 @@ import {
   tryFindProviderByType,
 } from "./Provider.ts";
 import { stampedMode, type ProviderMode } from "./ProviderMode.ts";
-import {
-  type PlanDisplayOptions,
-  type PlanStatusSession,
-  type ScopedPlanStatusSession,
-  Cli,
-  noopSession,
-} from "./Report.ts";
-import type { ApplyStatus } from "./Report.ts";
+import { resourceSession } from "./Report.ts";
 import type { ResourceBinding } from "./Resource.ts";
 import { ResourceContext } from "./ResourceContext.ts";
 import { RuntimeContext } from "./RuntimeContext.ts";
@@ -78,6 +71,7 @@ import {
   StateStoreError,
 } from "./State/index.ts";
 import { type ResourceOp, recordResourceOp } from "./Telemetry/Metrics.ts";
+import { LogAnnotation } from "./Util/LogAnnotation.ts";
 import { hashInput } from "./Util/sha256.ts";
 
 export type AppliedPlan<P extends Plan> = {
@@ -86,11 +80,11 @@ export type AppliedPlan<P extends Plan> = {
     : Simplify<P["resources"][id]["resource"]["attr"]>;
 };
 
-export interface ApplyOptions {
-  planDisplay?: PlanDisplayOptions;
-  /** Structured event sink for non-CLI callers. */
-  session?: PlanStatusSession;
-}
+/**
+ * Where the engine reports apply progress. Every event goes out as a log
+ * record; renderers observe them with `onEvent`.
+ */
+type Reporter = (event: ApplyEvent) => Effect.Effect<void>;
 
 interface ResourceTracker {
   output: any;
@@ -166,6 +160,8 @@ const instrumentLifecycle =
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
     effect.pipe(
       provideLifecycleScope({ logicalId, fqn, instanceId, type: resourceType }),
+      // Every log a provider writes during the op carries its resource.
+      Effect.annotateLogs(LogAnnotation.fqn, fqn),
       recordResourceOp(resourceType, op),
       Effect.withSpan(`provider.${op}`, {
         attributes: {
@@ -264,7 +260,6 @@ const observeResolved = Effect.fn(function* (
 
 export const apply = <P extends Plan>(
   plan: P,
-  options: ApplyOptions = {},
 ): Effect.Effect<
   Input.Resolve<P["output"]>,
   | Output.InvalidReferenceError
@@ -293,144 +288,146 @@ export const apply = <P extends Plan>(
       yield* demandPlanCredentials(plan);
     }
 
-    // Renderer resolution: an explicit session wins, then the ambient Cli
-    // renderer service (the bundled CLI, LoggingCli in tests, or a custom
-    // implementation), else events are dropped.
-    const session =
-      options.session ??
-      (yield* Effect.serviceOption(Cli).pipe(
-        Effect.flatMap(
-          Option.match({
-            onNone: () => Effect.succeed(noopSession),
-            onSome: (cli) => cli.startApplySession(plan, options.planDisplay),
-          }),
-        ),
-      ));
-    // The nested gen exists so `onExit` can settle the session on every
-    // exit path without introducing a scope: local dev providers start
-    // long-running processes in the AMBIENT scope during reconcile, so
-    // wrapping this body in Effect.scoped would kill them when apply
-    // returns.
-    return yield* Effect.gen(function* () {
-      const state = yield* yield* State;
-      const stack = yield* Stack;
-      const stage = yield* Stage;
-      const stackName = stack.name;
+    const emitEvent = yield* captureEmit;
+    // The last status each resource announced, so the post-convergence
+    // flush below re-emits only what is still unannounced (cycle members).
+    const announced = new Map<string, ApplyStatus>();
+    const reportEvent: Reporter = (event) => {
+      if (event.type === "apply.resource.status") announced.set(event.fqn, event.status);
+      return emitEvent(event);
+    };
+    // No Effect.scoped around apply: local dev providers start long-running
+    // processes in the AMBIENT scope during reconcile, which a scope here
+    // would kill when apply returns.
+    const state = yield* yield* State;
+    const stack = yield* Stack;
+    const stage = yield* Stage;
+    const stackName = stack.name;
 
-      const tracker: Record<string, ResourceTracker> = {};
-      const outputs: Record<string, any> = {};
-      const terminalStatuses = new Map<
-        string,
-        {
-          fqn: string;
-          id: string;
-          type: string;
-          status: Extract<ApplyStatus, "created" | "updated" | "adopted" | "ran" | "skipped">;
-          providerMode?: ProviderMode;
-        }
-      >();
-
-      // ── FQN migrations (renamedFrom) ──
-      // Persist renames before any lifecycle operation runs: a node whose row
-      // was found under a former FQN carries that row pre-remapped in
-      // `node.state` (see Plan's rename resolution). Commit it at the current
-      // FQN FIRST, then drop the former row — in that order, so an
-      // interruption leaves rows at both FQNs with the same instanceId, which
-      // the next plan recognizes as an in-flight migration (and never as an
-      // orphan to delete).
-      //
-      // In a same-deploy shift (A→B while B→C), C's former FQN `B` is
-      // simultaneously B's migration TARGET. C must NOT delete it: B's own
-      // `state.set` supersedes the stale copy, and the migrations run
-      // concurrently — the delete could land after B's write and destroy the
-      // freshly migrated row.
-      const migrationTargets = new Set(
-        Object.values(plan.resources)
-          .filter((node) => node.renamedFrom?.length && node.state !== undefined)
-          .map((node) => node.resource.FQN),
-      );
-      yield* Effect.forEach(
-        Object.values(plan.resources),
-        (node) => {
-          const { renamedFrom, state: row } = node;
-          return renamedFrom === undefined || renamedFrom.length === 0 || row === undefined
-            ? Effect.void
-            : Effect.gen(function* () {
-                yield* state.set({ stack: stackName, stage, fqn: node.resource.FQN, value: row });
-                yield* Effect.forEach(
-                  renamedFrom.filter((formerFqn) => !migrationTargets.has(formerFqn)),
-                  (formerFqn) => state.delete({ stack: stackName, stage, fqn: formerFqn }),
-                  { concurrency: "unbounded" },
-                );
-              });
-        },
-        { concurrency: "unbounded" },
-      );
-
-      yield* executePlan(
-        plan,
-        tracker,
-        outputs,
-        terminalStatuses,
-        session,
-        state,
-        stackName,
-        stage,
-      );
-
-      // TODO(sam): support roll back to previous state if errors occur during expansion
-      // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
-      // TODO(sam): should pivot be done separately? E.g shift traffic?
-
-      yield* collectGarbage(plan, session);
-
-      yield* converge(plan, tracker, outputs, terminalStatuses, session, state, stackName, stage);
-
-      yield* Effect.forEach(
-        Array.from(terminalStatuses.values()),
-        ({ fqn, id, type, status, providerMode }) =>
-          session.emit({ _tag: "apply.resource.status", fqn, id, type, status, providerMode }),
-        { concurrency: "unbounded" },
-      );
-
-      if (plan.destroy) {
-        // The destroy converged: every resource row was deleted above. Drop
-        // the rest of the stage's persisted state — notably the stack output
-        // record written by the last deploy — so `getOutput` returns
-        // undefined and `listStages` no longer reports the stage.
-        // https://github.com/alchemy-run/alchemy/issues/961
-        yield* state.deleteStack({ stack: stackName, stage });
-        // Invariant: a successful destroy leaves the stage EMPTY. If rows
-        // survive, this destroy session could not actually see (or delete)
-        // the stack's state — e.g. its plan listed an empty store while
-        // committed rows existed — and reporting success here would silently
-        // leak every cloud resource those rows track. Fail loudly instead so
-        // the leak surfaces in the run that caused it.
-        const remaining = yield* state.list({ stack: stackName, stage });
-        if (remaining.length > 0) {
-          return yield* new StateStoreError({
-            message:
-              `destroy of ${stackName}/${stage} reported success but ${remaining.length} ` +
-              `state row(s) remain (${remaining.join(", ")}) — the destroy session could ` +
-              `not see the stack's persisted state, so its cloud resources were NOT deleted`,
-          });
-        }
-        return undefined;
+    const tracker: Record<string, ResourceTracker> = {};
+    const outputs: Record<string, any> = {};
+    const terminalStatuses = new Map<
+      string,
+      {
+        fqn: string;
+        id: string;
+        type: string;
+        status: Extract<ApplyStatus, "created" | "updated" | "adopted" | "ran" | "skipped">;
+        providerMode?: ProviderMode;
       }
+    >();
 
-      if (plan.selectedFqns !== undefined || !plan.output) {
-        return undefined;
+    // ── FQN migrations (renamedFrom) ──
+    // Persist renames before any lifecycle operation runs: a node whose row
+    // was found under a former FQN carries that row pre-remapped in
+    // `node.state` (see Plan's rename resolution). Commit it at the current
+    // FQN FIRST, then drop the former row — in that order, so an
+    // interruption leaves rows at both FQNs with the same instanceId, which
+    // the next plan recognizes as an in-flight migration (and never as an
+    // orphan to delete).
+    //
+    // In a same-deploy shift (A→B while B→C), C's former FQN `B` is
+    // simultaneously B's migration TARGET. C must NOT delete it: B's own
+    // `state.set` supersedes the stale copy, and the migrations run
+    // concurrently — the delete could land after B's write and destroy the
+    // freshly migrated row.
+    const migrationTargets = new Set(
+      Object.values(plan.resources)
+        .filter((node) => node.renamedFrom?.length && node.state !== undefined)
+        .map((node) => node.resource.FQN),
+    );
+    yield* Effect.forEach(
+      Object.values(plan.resources),
+      (node) => {
+        const { renamedFrom, state: row } = node;
+        return renamedFrom === undefined || renamedFrom.length === 0 || row === undefined
+          ? Effect.void
+          : Effect.gen(function* () {
+              yield* state.set({ stack: stackName, stage, fqn: node.resource.FQN, value: row });
+              yield* Effect.forEach(
+                renamedFrom.filter((formerFqn) => !migrationTargets.has(formerFqn)),
+                (formerFqn) => state.delete({ stack: stackName, stage, fqn: formerFqn }),
+                { concurrency: "unbounded" },
+              );
+            });
+      },
+      { concurrency: "unbounded" },
+    );
+
+    yield* executePlan(
+      plan,
+      tracker,
+      outputs,
+      terminalStatuses,
+      reportEvent,
+      state,
+      stackName,
+      stage,
+    );
+
+    // TODO(sam): support roll back to previous state if errors occur during expansion
+    // -> RISK: some UPDATEs may not be reversible (i.e. trigger replacements)
+    // TODO(sam): should pivot be done separately? E.g shift traffic?
+
+    yield* collectGarbage(plan, reportEvent);
+
+    yield* converge(plan, tracker, outputs, terminalStatuses, reportEvent, state, stackName, stage);
+
+    // Cycle members hold their terminal status until `converge` settles
+    // it; everything else announced it as it finished.
+    yield* Effect.forEach(
+      Array.from(terminalStatuses.values()).filter(
+        ({ fqn, status }) => announced.get(fqn) !== status,
+      ),
+      ({ fqn, id, type, status, providerMode }) =>
+        reportEvent({
+          type: "apply.resource.status",
+          fqn,
+          id,
+          resourceType: type,
+          status,
+          providerMode,
+        }),
+      { concurrency: "unbounded" },
+    );
+
+    if (plan.destroy) {
+      // The destroy converged: every resource row was deleted above. Drop
+      // the rest of the stage's persisted state — notably the stack output
+      // record written by the last deploy — so `getOutput` returns
+      // undefined and `listStages` no longer reports the stage.
+      // https://github.com/alchemy-run/alchemy/issues/961
+      yield* state.deleteStack({ stack: stackName, stage });
+      // Invariant: a successful destroy leaves the stage EMPTY. If rows
+      // survive, this destroy session could not actually see (or delete)
+      // the stack's state — e.g. its plan listed an empty store while
+      // committed rows existed — and reporting success here would silently
+      // leak every cloud resource those rows track. Fail loudly instead so
+      // the leak surfaces in the run that caused it.
+      const remaining = yield* state.list({ stack: stackName, stage });
+      if (remaining.length > 0) {
+        return yield* new StateStoreError({
+          message:
+            `destroy of ${stackName}/${stage} reported success but ${remaining.length} ` +
+            `state row(s) remain (${remaining.join(", ")}) — the destroy session could ` +
+            `not see the stack's persisted state, so its cloud resources were NOT deleted`,
+        });
       }
+      return undefined;
+    }
 
-      const resolved = yield* Output.evaluate(plan.output, outputs);
+    if (plan.selectedFqns !== undefined || !plan.output) {
+      return undefined;
+    }
 
-      // Persist the stack's evaluated outputs so cross-stack references
-      // (`yield* OtherStack` / `OtherStack.stage.<name>` / `Output.stackRef`)
-      // can read them back out of the state store.
-      yield* state.setOutput({ stack: stackName, stage, value: resolved });
+    const resolved = yield* Output.evaluate(plan.output, outputs);
 
-      return resolved;
-    }).pipe(Effect.onExit((exit) => session.done(Exit.isSuccess(exit) ? "success" : "failure")));
+    // Persist the stack's evaluated outputs so cross-stack references
+    // (`yield* OtherStack` / `OtherStack.stage.<name>` / `Output.stackRef`)
+    // can read them back out of the state store.
+    yield* state.setOutput({ stack: stackName, stage, value: resolved });
+
+    return resolved;
   }).pipe(
     ensureArtifactStore,
     Effect.withSpan("apply", {
@@ -462,7 +459,7 @@ const executePlan = Effect.fn(function* (
       providerMode?: ProviderMode;
     }
   >,
-  session: PlanStatusSession,
+  reportEvent: Reporter,
   state: {
     set: <V extends PersistedState>(req: {
       stack: string;
@@ -541,7 +538,7 @@ const executePlan = Effect.fn(function* (
             ready,
             readyStable,
             terminalStatuses,
-            session,
+            reportEvent,
             state,
             stackName,
             stage,
@@ -556,7 +553,7 @@ const executePlan = Effect.fn(function* (
             ready,
             readyStable,
             terminalStatuses as any,
-            session,
+            reportEvent,
             state,
             stackName,
             stage,
@@ -631,7 +628,7 @@ const executeNode = (
       providerMode?: ProviderMode;
     }
   >,
-  session: PlanStatusSession,
+  reportEvent: Reporter,
   state: {
     set: <V extends ResourceState>(req: {
       stack: string;
@@ -679,17 +676,7 @@ const executeNode = (
         } as S,
       });
 
-    const scopedSession = {
-      ...session,
-      note: (note, options?) =>
-        session.emit({
-          fqn,
-          id: logicalId,
-          _tag: "apply.resource.note",
-          message: note,
-          kind: options?.kind,
-        }),
-    } satisfies ScopedPlanStatusSession;
+    const scopedSession = resourceSession(reportEvent, fqn, logicalId);
 
     // On a mode-switch replacement (local ⇄ live) surface the transition:
     // the old generation's stamped mode → the mode resolved for this run.
@@ -702,11 +689,11 @@ const executeNode = (
         : undefined;
 
     const report = (status: ApplyStatus) =>
-      session.emit({
-        _tag: "apply.resource.status",
+      reportEvent({
+        type: "apply.resource.status",
         fqn,
         id: logicalId,
-        type: node.resource.Type,
+        resourceType: node.resource.Type,
         status,
         providerMode: node.mode,
         fromProviderMode,
@@ -744,11 +731,11 @@ const executeNode = (
         // terminal status is known. Their final status is flushed from
         // `terminalStatuses` after `converge` completes.
         if (inCycle) return;
-        yield* session.emit({
-          _tag: "apply.resource.status",
+        yield* reportEvent({
+          type: "apply.resource.status",
           fqn,
           id: logicalId,
-          type: node.resource.Type,
+          resourceType: node.resource.Type,
           status,
           providerMode: node.mode,
         });
@@ -1538,18 +1525,18 @@ const executeNode = (
     Effect.catchCause((cause) =>
       // Record the failure, propagate it to any downstream resources waiting on
       // our Deferred (so their waitForDeps short-circuits instead of deadlocking),
-      // emit a "fail" status to the session, and resolve to void so Effect.all
+      // emit a "fail" status, and resolve to void so Effect.all
       // does not interrupt sibling fibers. The aggregated cause is raised at
       // the end of executePlan.
       Effect.gen(function* () {
         failures.push({ fqn, logicalId: node.resource.LogicalId, type: node.resource.Type, cause });
         yield* Deferred.failCause(ready[fqn], cause as Cause.Cause<never>);
         yield* Deferred.failCause(readyStable[fqn], cause as Cause.Cause<never>);
-        yield* session.emit({
-          _tag: "apply.resource.status",
+        yield* reportEvent({
+          type: "apply.resource.status",
           fqn,
           id: node.resource.LogicalId,
-          type: node.resource.Type,
+          resourceType: node.resource.Type,
           status: "fail",
           message: failureMessage(cause),
           providerMode: node.mode,
@@ -1609,7 +1596,7 @@ const executeActionNode = (
       providerMode?: ProviderMode;
     }
   >,
-  session: PlanStatusSession,
+  reportEvent: Reporter,
   state: {
     set: <V extends PersistedState>(req: {
       stack: string;
@@ -1632,7 +1619,13 @@ const executeActionNode = (
       state.set({ stack: stackName, stage, fqn, value: { ...value, namespace } as S });
 
     const report = (status: ApplyStatus) =>
-      session.emit({ _tag: "apply.resource.status", fqn, id: logicalId, type: task.Type, status });
+      reportEvent({
+        type: "apply.resource.status",
+        fqn,
+        id: logicalId,
+        resourceType: task.Type,
+        status,
+      });
 
     const signalReady = Deferred.succeed(ready[fqn], void 0);
     const signalReadyStable = Deferred.succeed(readyStable[fqn], void 0);
@@ -1723,11 +1716,11 @@ const executeActionNode = (
         failures.push({ fqn, logicalId: node.def.LogicalId, type: node.def.Type, cause });
         yield* Deferred.failCause(ready[fqn], cause as Cause.Cause<never>);
         yield* Deferred.failCause(readyStable[fqn], cause as Cause.Cause<never>);
-        yield* session.emit({
-          _tag: "apply.resource.status",
+        yield* reportEvent({
+          type: "apply.resource.status",
           fqn,
           id: node.def.LogicalId,
-          type: node.def.Type,
+          resourceType: node.def.Type,
           status: "fail",
           message: failureMessage(cause),
         });
@@ -1766,7 +1759,7 @@ const converge = Effect.fn(function* (
       providerMode?: ProviderMode;
     }
   >,
-  session: PlanStatusSession,
+  reportEvent: Reporter,
   state: {
     set: <V extends PersistedState>(req: {
       stack: string;
@@ -1803,17 +1796,7 @@ const converge = Effect.fn(function* (
       const namespace = node.resource.Namespace;
       const instanceId = tracker[fqn].instanceId;
 
-      const scopedSession = {
-        ...session,
-        note: (note, options?) =>
-          session.emit({
-            fqn,
-            id: logicalId,
-            _tag: "apply.resource.note",
-            message: note,
-            kind: options?.kind,
-          }),
-      } satisfies ScopedPlanStatusSession;
+      const scopedSession = resourceSession(reportEvent, fqn, logicalId);
 
       // A cycle peer resolves against its peers' first outputs, so an
       // identity checked then may resolve differently now. Check the identity
@@ -2019,7 +2002,7 @@ export class DestroyError extends Data.TaggedError("DestroyError")<{
   }
 }
 
-const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSession) {
+const collectGarbage = Effect.fn(function* (plan: Plan, reportEvent: Reporter) {
   const state = yield* yield* State;
   const stack = yield* Stack;
   const stackName = stack.name;
@@ -2034,19 +2017,19 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
       node === undefined
         ? Effect.void
         : Effect.gen(function* () {
-            yield* session.emit({
-              _tag: "apply.resource.status",
+            yield* reportEvent({
+              type: "apply.resource.status",
               fqn,
               id: node.def.LogicalId,
-              type: node.def.Type,
+              resourceType: node.def.Type,
               status: "deleting",
             });
             yield* state.delete({ stack: stackName, stage, fqn });
-            yield* session.emit({
-              _tag: "apply.resource.status",
+            yield* reportEvent({
+              type: "apply.resource.status",
               fqn,
               id: node.def.LogicalId,
-              type: node.def.Type,
+              resourceType: node.def.Type,
               status: "deleted",
             });
           }),
@@ -2180,26 +2163,16 @@ const collectGarbage = Effect.fn(function* (plan: Plan, session: PlanStatusSessi
           });
 
         const report = (status: ApplyStatus) =>
-          session.emit({
-            _tag: "apply.resource.status",
+          reportEvent({
+            type: "apply.resource.status",
             fqn,
             id: logicalId,
-            type: resourceType,
+            resourceType,
             status,
             providerMode,
           });
 
-        const scopedSession = {
-          ...session,
-          note: (note, options?) =>
-            session.emit({
-              fqn,
-              id: logicalId,
-              _tag: "apply.resource.note",
-              message: note,
-              kind: options?.kind,
-            }),
-        } satisfies ScopedPlanStatusSession;
+        const scopedSession = resourceSession(reportEvent, fqn, logicalId);
 
         return yield* (deletions[fqn] ??= yield* Effect.cached(
           Effect.gen(function* () {
