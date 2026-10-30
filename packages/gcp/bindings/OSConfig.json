@@ -13,12 +13,11 @@
     }
   },
   "probes": {
-    "resources": {
-      "ProjectsLocationsGlobalPolicyOrchestrator": "ProbeOrchestrator"
-    },
+    "resources": {},
     "untestable": {
       "FoldersLocationsGlobalPolicyOrchestrator": "folder-level: needs a folder and folder IAM the testing account lacks",
-      "OrganizationsLocationsGlobalPolicyOrchestrator": "organization-level: needs org IAM the testing account lacks"
+      "OrganizationsLocationsGlobalPolicyOrchestrator": "organization-level: needs org IAM the testing account lacks",
+      "ProjectsLocationsGlobalPolicyOrchestrator": "creating an orchestrator fails on the testing project with \"Create RolloutPlan failed ...: Permission denied\" even with OS Config and Progressive Rollout enabled and their service agents created: the rollout service agent lacks a grant Google doesn't document for project-only setups"
     },
     "enable": [
       "osconfig.googleapis.com",
