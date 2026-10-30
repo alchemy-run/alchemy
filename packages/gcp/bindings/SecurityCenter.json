@@ -51,15 +51,7 @@
   "probes": {
     "resources": {},
     "untestable": {
-      "FolderBigQueryExport": "folder-level: needs a folder and folder IAM the testing account lacks",
-      "FolderMuteConfig": "folder-level: needs a folder and folder IAM the testing account lacks",
-      "OrganizationBigQueryExport": "organization-level: needs org IAM the testing account lacks",
-      "OrganizationMuteConfig": "organization-level: needs org IAM the testing account lacks",
-      "BigQueryExport": "Security Command Center is activated per organization; the testing project has none",
-      "MuteConfig": "Security Command Center is activated per organization; the testing project has none"
-    },
-    "enable": [
-      "securitycenter.googleapis.com"
-    ]
+      "*": "Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have"
+    }
   }
 }

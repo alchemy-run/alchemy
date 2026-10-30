@@ -51,19 +51,8 @@ describe.skipIf(!!process.env.FAST)(
     beforeAll(
       Effect.gen(function* () {
         yield* sharedStack.destroy();
-        // The APIs first: the probe resources need them enabled to deploy.
-        yield* sharedStack.deploy(
-          Effect.gen(function* () {
-            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
-              service: "securitycenter.googleapis.com",
-            });
-          }),
-        );
         const out = yield* sharedStack.deploy(
           Effect.gen(function* () {
-            yield* GCP.ServiceUsage.ProjectService("ProbeApi0", {
-              service: "securitycenter.googleapis.com",
-            });
             const host = yield* SecurityCenterGeneratedHost;
             return { uri: host.uri };
           }),
@@ -77,166 +66,106 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("BigQueryExport", { concurrent: true }, () => {
       test.provider.skip(
-        "GetBigQueryExport@BigQueryExport (securitycenter.projects.bigQueryExports.get): BigQueryExport: Security Command Center is activated per organization; the testing project has none",
+        "GetBigQueryExport@BigQueryExport (securitycenter.projects.bigQueryExports.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
         () => Effect.void,
       );
     });
 
     describe("FolderBigQueryExport", { concurrent: true }, () => {
       test.provider.skip(
-        "GetBigQueryExport@FolderBigQueryExport (securitycenter.folders.bigQueryExports.get): FolderBigQueryExport: folder-level: needs a folder and folder IAM the testing account lacks",
+        "GetBigQueryExport@FolderBigQueryExport (securitycenter.folders.bigQueryExports.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
         () => Effect.void,
       );
     });
 
     describe("FolderMuteConfig", { concurrent: true }, () => {
       test.provider.skip(
-        "GetMuteConfig@FolderMuteConfig (securitycenter.folders.muteConfigs.get): FolderMuteConfig: folder-level: needs a folder and folder IAM the testing account lacks",
+        "GetMuteConfig@FolderMuteConfig (securitycenter.folders.muteConfigs.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
         () => Effect.void,
       );
     });
 
     describe("MuteConfig", { concurrent: true }, () => {
       test.provider.skip(
-        "GetMuteConfig@MuteConfig (securitycenter.projects.muteConfigs.get): MuteConfig: Security Command Center is activated per organization; the testing project has none",
+        "GetMuteConfig@MuteConfig (securitycenter.projects.muteConfigs.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
         () => Effect.void,
       );
     });
 
     describe("OrganizationBigQueryExport", { concurrent: true }, () => {
       test.provider.skip(
-        "GetBigQueryExport@OrganizationBigQueryExport (securitycenter.organizations.bigQueryExports.get): OrganizationBigQueryExport: organization-level: needs org IAM the testing account lacks",
+        "GetBigQueryExport@OrganizationBigQueryExport (securitycenter.organizations.bigQueryExports.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
         () => Effect.void,
       );
     });
 
     describe("OrganizationMuteConfig", { concurrent: true }, () => {
       test.provider.skip(
-        "GetMuteConfig@OrganizationMuteConfig (securitycenter.organizations.muteConfigs.get): OrganizationMuteConfig: organization-level: needs org IAM the testing account lacks",
+        "GetMuteConfig@OrganizationMuteConfig (securitycenter.organizations.muteConfigs.get): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
         () => Effect.void,
       );
     });
 
     describe("project", { concurrent: true }, () => {
-      test.provider(
-        "BulkFindingMute (securitycenter.projects.findings.bulkMute)",
-        () => probe("BulkFindingMute", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "BulkFindingMute (securitycenter.projects.findings.bulkMute): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
-      test.provider(
-        "DeleteMuteConfig (securitycenter.projects.locations.muteConfigs.delete)",
-        () => probe("DeleteMuteConfig", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "DeleteMuteConfig (securitycenter.projects.locations.muteConfigs.delete): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
-      test.provider(
-        "GroupAsset (securitycenter.projects.assets.group)",
-        () => probe("GroupAsset", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "GroupAsset (securitycenter.projects.assets.group): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
-      test.provider(
-        "GroupSourceFinding (securitycenter.projects.sources.findings.group)",
-        () => probe("GroupSourceFinding", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "GroupSourceFinding (securitycenter.projects.sources.findings.group): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
-      test.provider(
-        "ListAssets (securitycenter.projects.assets.list)",
-        () => probe("ListAssets", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListAssets (securitycenter.projects.assets.list): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
-      test.provider(
-        "ListBigQueryExports (securitycenter.projects.bigQueryExports.list)",
-        () => probe("ListBigQueryExports", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListBigQueryExports (securitycenter.projects.bigQueryExports.list): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
-      test.provider(
-        "ListMuteConfigs (securitycenter.projects.muteConfigs.list)",
-        () => probe("ListMuteConfigs", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListMuteConfigs (securitycenter.projects.muteConfigs.list): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
-      test.provider(
-        "ListSourceFindings (securitycenter.projects.sources.findings.list)",
-        () => probe("ListSourceFindings", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListSourceFindings (securitycenter.projects.sources.findings.list): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
-      test.provider(
-        "ListSources (securitycenter.projects.sources.list)",
-        () => probe("ListSources", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListSources (securitycenter.projects.sources.list): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
-      test.provider(
-        "PatchMuteConfig (securitycenter.projects.locations.muteConfigs.patch)",
-        () => probe("PatchMuteConfig", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "PatchMuteConfig (securitycenter.projects.locations.muteConfigs.patch): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
-      test.provider(
-        "PatchSourceFinding (securitycenter.projects.sources.findings.patch)",
-        () => probe("PatchSourceFinding", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "PatchSourceFinding (securitycenter.projects.sources.findings.patch): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
-      test.provider(
-        "PatchSourceFindingExternalSystem (securitycenter.projects.sources.findings.externalSystems.patch)",
-        () => probe("PatchSourceFindingExternalSystem", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "PatchSourceFindingExternalSystem (securitycenter.projects.sources.findings.externalSystems.patch): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
-      test.provider(
-        "SetFindingMute (securitycenter.projects.sources.findings.setMute)",
-        () => probe("SetFindingMute", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "SetFindingMute (securitycenter.projects.sources.findings.setMute): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
-      test.provider(
-        "SetFindingState (securitycenter.projects.sources.findings.setState)",
-        () => probe("SetFindingState", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "SetFindingState (securitycenter.projects.sources.findings.setState): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
-      test.provider(
-        "UpdateFindingSecurityMarks (securitycenter.projects.sources.findings.updateSecurityMarks)",
-        () => probe("UpdateFindingSecurityMarks", false),
-        {
-          tags: ["provider:gcp", "provider:gcp:securitycenter", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "UpdateFindingSecurityMarks (securitycenter.projects.sources.findings.updateSecurityMarks): Security Command Center isn't activated on the testing project: calls answer 'Security Command Center Legacy has been permanently disabled', and the Standard or Premium tier is activated on an organization, which the testing account doesn't have",
+        () => Effect.void,
       );
     });
 
