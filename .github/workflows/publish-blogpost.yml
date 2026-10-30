@@ -13,7 +13,7 @@ on:
       paths:
         description: "Space-separated folders copied from main onto the release"
         type: string
-        default: "website/src/content/docs/blog website/public/blog"
+        default: "website/src/content/docs/blog website/src/components/blog website/public/blog"
 
 # Same group as production deploys in website.yml, so the two never race.
 concurrency:
