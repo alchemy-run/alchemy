@@ -192,6 +192,72 @@ RefundTransfer: (s, cmd) =>
 
 `RefundStranded` tells a policy or a person that the account closed before the money came back. The [saga](/domain/saga) that sent the refund never has to handle a refusal it can do nothing about.
 
+## Declare its phases
+
+An instance usually has a lifecycle: an order is a draft, then submitted, then approved. Each `decide` handler can check that by hand. When the lifecycle is the rule, declare it as data instead. All three fields are optional, and they go together.
+
+```typescript title="packages/domain/src/Order/Order.aggregate.ts"
+export class Order extends Domain.Aggregate("Order", {
+  id: OrderId,
+  state: OrderState,
+  initial: { status: "draft" },
+  commands: [Submit, Approve, Cancel, AddNote],
+  decide: {/* the rules phases don't state */},
+  evolve: {/* ... */},
+  phases: {
+    draft: { on: { OrderSubmitted: "submitted", OrderCancelled: "cancelled" } },
+    submitted: { on: { OrderApproved: "approved", OrderCancelled: "cancelled" } },
+    approved: {},
+    cancelled: {},
+  },
+  phaseOf: (s) => s.status,
+  when: {
+    Submit: ["draft"],
+    Approve: ["submitted"],
+    Cancel: ["draft", "submitted"],
+    AddNote: "*",
+  },
+}) {}
+```
+
+- `phases` lists every phase. `on` lists the events that may move an instance out of it, and where to. An event can name a list when `evolve` picks the phase from its data. An event with no entry leaves the instance where it is.
+- `phaseOf` reads the phase from the state. Nothing new is stored, so you can add phases to an aggregate with history.
+- `when` lists the phases in which each command may run, or `"*"` for all of them.
+
+The state stays the source of truth, and `decide` still runs for every command `when` allows. Keep the rules that need more than the phase there, like an amount limit.
+
+### What the host does
+
+The host checks `when` before `decide` runs. `decide` never sees a command outside its phases.
+
+A command that may be refused declares `Domain.WrongPhase` in `rejects`, and its caller gets that rejection with the command, the phase and the allowed phases:
+
+```typescript
+export class Approve extends Domain.Command("Approve", {
+  target: OrderId,
+  events: [OrderApproved],
+  rejects: [Domain.WrongPhase],
+}) {}
+```
+
+A command that declares no rejections can't be refused, so outside its phases it records nothing. That is what you want for a [deadline](/domain/deadlines): one that fires late does nothing.
+
+An event that moves an instance in a way `phases` doesn't declare is a defect, as an event its command doesn't declare is. Nothing commits. Seeded history skips this check, so a story's `given` can start in any phase.
+
+### What verify checks
+
+`Domain.verify` reads the table, and each problem also fails the model's Layer build:
+
+- a phase no move reaches from the phase of `initial`
+- a command with no phase
+- a move no event can make: no command that runs in that phase records the event
+- a command `when` limits that declares rejections but not `Domain.WrongPhase`
+- a name in the table that doesn't exist
+
+### Ask what comes next
+
+`Order.nextCommands(state)` gives the tags of the commands that may run in that state, and `Order.phase(state)` gives the phase. Both are plain functions of the state, so a client can use them with no second copy of the rule. `Order.predict` refuses a command outside its phases as the host does.
+
 ## Use context in decisions
 
 Some rules need more than the state and the command. Only the account's owner may withdraw from it, so `decide` needs to know who's asking.
