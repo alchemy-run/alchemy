@@ -141,6 +141,7 @@ const SECTIONS: Section[] = [
         "environments/secret-providers",
         "environments/doppler",
         "environments/infisical",
+        "environments/1password",
         "environments/local-development",
         "environments/worktrees",
         "environments/ci",

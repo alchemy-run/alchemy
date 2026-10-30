@@ -82,6 +82,7 @@ Stages, credential profiles, auth providers, secrets and config, local developme
 - [Secret providers](https://alchemy.run/environments/secret-providers) — Configure a stack with dotenv files, environment variables, Doppler, or Infisical.
 - [Doppler](https://alchemy.run/environments/doppler) — Load a Doppler config into your Stack — log in with the browser on your machine, use a service token in CI.
 - [Infisical](https://alchemy.run/environments/infisical) — Load an Infisical environment into your Stack — a machine identity on your machine, the platform's own OIDC token in CI.
+- [1Password](https://alchemy.run/environments/1password) — Read 1Password Environments and op:// vault references into Effect Config using desktop authorization or a service account token.
 - [Local development](https://alchemy.run/environments/local-development) — How alchemy dev provides hot reloading, local execution, and local emulation with per-resource opt-in to real cloud services.
 - [Worktrees](https://alchemy.run/environments/worktrees) — Run alchemy deploy, dev, and tests from several git worktrees at once — one stage per worktree, so parallel agents never touch each other's resources.
 - [CI](https://alchemy.run/environments/ci) — Set up CI/CD pipelines for alchemy projects with GitHub Actions, automated deployments, and PR previews — with provider credentials managed as code.

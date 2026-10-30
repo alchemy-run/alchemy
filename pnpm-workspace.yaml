@@ -46,6 +46,7 @@ packages:
   - packages/frontend-frameworks/src/nextjs/wrangler-stub
 
 catalog:
+  "@1password/sdk": "0.5.0"
   "@alchemy.run/sigil": "0.1.0-alpha.1"
   "@astrojs/check": "0.9.10"
   "@astrojs/internal-helpers": "0.13.0"

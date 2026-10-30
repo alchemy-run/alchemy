@@ -106,6 +106,9 @@
       "path": "./packages/infisical/tsconfig.json"
     },
     {
+      "path": "./packages/1password/tsconfig.json"
+    },
+    {
       "path": "./packages/turso/tsconfig.json"
     },
     {
