@@ -97,5 +97,6 @@ More: [Observability](https://alchemy.run/domain/observability).
 - Durable Object calls right after a fresh deploy can briefly hit alchemy's placeholder script. The Domain platform retries its own calls, so make test readiness probes retry the first real request.
 - Never keep per-request objects (sockets, promises) across events in a Durable Object or Worker. Resolve services at init, and do I/O per request.
 - Handlers may require `RuntimeContext` (for bindings); every platform provides it when it runs them.
+- Models never share data. Two models that list the same aggregate each get their own instances: on Cloudflare, a Durable Object class per model by default (`BillingAccountAggregate`), or one shared class with model-named instances (`layerDurableObjects({ isolate: "key" })`). Two models with the same name on one platform fail.
 
-More: [Cloudflare: Know what runs where](https://alchemy.run/domain/cloudflare#know-what-runs-where).
+More: [Cloudflare: Know what runs where](https://alchemy.run/domain/cloudflare#know-what-runs-where), [Cloudflare: Host several models in one Worker](https://alchemy.run/domain/cloudflare#host-several-models-in-one-worker).

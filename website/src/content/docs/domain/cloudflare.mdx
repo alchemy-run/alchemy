@@ -183,6 +183,18 @@ Pass a `jurisdiction` to `DomainCloudflare.layerDurableObjects` in `BankLive` to
 
 A Durable Object in a jurisdiction is a different object from the one with the same name outside it. A model that already has data starts empty when you add a jurisdiction, and its old objects stay where they were. Other resources the Worker uses, like the ledger's D1 database, take their own `jurisdiction`. `alchemy dev` doesn't emulate jurisdictions: local workerd runs the model unrestricted.
 
+## Host several models in one Worker
+
+Each model gets its own Durable Object classes, named after the model: `BillingAccountAggregate` and `AuditAccountAggregate` when both list `Account`. Their data never mixes.
+
+To keep one class per definition instead, pass `isolate: "key"`. Models then share `AccountAggregate`, and each instance is named after its model, like `Billing/a-1`:
+
+```typescript
+  Layer.provide(DomainCloudflare.layerDurableObjects({ isolate: "key" })),
+```
+
+Saga runs always get a class per model. Changing `isolate`, or a model's name, doesn't move data: the model starts empty under the new names. To keep two models fully apart, host each in its own Worker.
+
 ## Count on these guarantees
 
 Commands to one aggregate instance run one at a time. Its events, new state and reply commit together, or not at all.

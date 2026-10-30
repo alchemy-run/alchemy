@@ -1146,6 +1146,25 @@ const durableObjectPlatform = ({
  * ) {}
  * ```
  *
+ * ### Hosting several models in one Worker
+ * Each model gets its own Durable Object classes, named after the model
+ * (`BillingAccountAggregate`), so models that list the same aggregate never
+ * share its data. With `isolate: "key"`, they share one class per
+ * definition (`AccountAggregate`) and each instance is named after its
+ * model (`Billing/a-1`).
+ *
+ * **Example:** Two models on one class per definition
+ * ```typescript
+ * import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
+ * import * as Layer from "effect/Layer";
+ * import { Audit, AuditHandlers } from "./Audit.ts";
+ * import { Billing, BillingHandlers } from "./Billing.ts";
+ *
+ * const Platform = DomainCloudflare.layerDurableObjects({ isolate: "key" });
+ * const BillingLive = Billing.layer(BillingHandlers).pipe(Layer.provide(Platform));
+ * const AuditLive = Audit.layer(AuditHandlers).pipe(Layer.provide(Platform));
+ * ```
+ *
  * ### Restricting a model to a jurisdiction
  * **Example:** Every Durable Object of the model in the EU
  * ```typescript
