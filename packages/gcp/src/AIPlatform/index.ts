@@ -50,6 +50,7 @@ export * from "./PipelineJob.ts";
 export * from "./QueryReasoningEngine.ts";
 export * from "./QueryReasoningEngineHttp.ts";
 export * from "./RagCorpora.ts";
+export * from "./RagEngineConfig.ts";
 export * from "./ReasoningEngine.ts";
 export * from "./ReasoningEnginesMemory.ts";
 export * from "./ReasoningEnginesSandboxEnvironment.ts";

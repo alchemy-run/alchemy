@@ -369,3 +369,31 @@ export const ProbeEvaluationRun = Effect.gen(function* () {
     },
   });
 });
+
+/** The agent a semantic governance policy governs. */
+export const ProbeGovernedAgent = GCP.AIPlatform.Agent("ProbeGovernedAgent", {
+  location,
+  systemInstruction: "Answer briefly.",
+});
+export const ProbeSemanticGovernancePolicy = Effect.gen(function* () {
+  const agent = yield* ProbeGovernedAgent;
+  return yield* GCP.AIPlatform.SemanticGovernancePolicy("ProbeSemanticGovernancePolicy", {
+    location,
+    displayName: "alchemy-probe",
+    agent: agent.name,
+    naturalLanguageConstraint: "Never share customer PII.",
+  });
+});
+
+/** A corpus, once the region's RAG Engine is serverless (Spanner mode is allowlisted here). */
+export const ProbeRagEngine = GCP.AIPlatform.RagEngineConfig("ProbeRagEngine", {
+  location,
+  mode: "serverless",
+});
+export const ProbeRagCorpora = Effect.gen(function* () {
+  const rag = yield* ProbeRagEngine;
+  return yield* GCP.AIPlatform.RagCorpora("ProbeRagCorpora", {
+    location: rag.location,
+    displayName: "alchemy-probe",
+  });
+});

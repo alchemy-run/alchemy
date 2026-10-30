@@ -11,12 +11,14 @@ const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// New projects must switch RAG Engine to Serverless mode first; otherwise
-// create fails with BadRequest "For new projects, using Spanner mode with
-// RAG Engine in us-central1, us-east1, and us-east4 is restricted to only
-// allowlisted projects." Set GCP_TEST_AIPLATFORM_RAG=1 once the project's
-// RagEngineConfig is Serverless.
-const runLifecycle = !process.env.FAST && !!process.env.GCP_TEST_AIPLATFORM_RAG;
+// New projects can't create corpora in Spanner mode in us-central1 (BadRequest
+// "For new projects, using Spanner mode with RAG Engine in us-central1,
+// us-east1, and us-east4 is restricted to only allowlisted projects."), so the
+// lifecycle switches the region's RAG Engine to serverless first.
+const Rag = GCP.AIPlatform.RagEngineConfig("Rag", {
+  location: "us-central1",
+  mode: "serverless",
+});
 
 const waitUntilGone = (name: string) =>
   aiplatform.getProjectsLocationsRagCorpora({ name }).pipe(
@@ -59,28 +61,7 @@ test.provider(
   },
 );
 
-test.provider.skipIf(runLifecycle)(
-  "createProjectsLocationsRagCorpora is rejected until RAG Engine is Serverless",
-  (stack) =>
-    Effect.gen(function* () {
-      const { project } = yield* GcpEnvironment.current;
-      yield* stack.destroy();
-      const error = yield* Effect.flip(
-        aiplatform.createProjectsLocationsRagCorpora({
-          parent: `projects/${project}/locations/us-central1`,
-          body: { displayName: "alchemy-rag-probe" },
-        }),
-      );
-      expect(error._tag).toEqual("BadRequest");
-      expect(String(error.message)).toContain("Spanner mode");
-    }).pipe(logLevel),
-  {
-    tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
-    timeout: 90_000,
-  },
-);
-
-test.provider.skipIf(!runLifecycle)(
+test.provider(
   "create, update, and delete a rag corpus",
   (stack) =>
     Effect.gen(function* () {
@@ -88,8 +69,9 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          const rag = yield* Rag;
           return yield* GCP.AIPlatform.RagCorpora("Docs", {
-            location: "us-central1",
+            location: rag.location,
             displayName: "product-docs",
             description: "product manuals",
           });
@@ -97,6 +79,10 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(created.name).toContain("/ragCorpora/");
+      const config = yield* aiplatform.getRagEngineConfigProjectsLocations({
+        name: created.name.replace(/\/ragCorpora\/.*$/, "/ragEngineConfig"),
+      });
+      expect(config.ragManagedDbConfig?.serverless).toBeDefined();
       expect(created.location).toEqual("us-central1");
       expect(created.displayName).toEqual("product-docs");
       expect(created.description).toEqual("product manuals");
@@ -108,8 +94,9 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          const rag = yield* Rag;
           return yield* GCP.AIPlatform.RagCorpora("Docs", {
-            location: "us-central1",
+            location: rag.location,
             displayName: "product-docs-v2",
             description: "product manuals v2",
           });

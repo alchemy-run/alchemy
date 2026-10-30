@@ -1867,25 +1867,45 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("RagCorpora", { concurrent: true }, () => {
-      test.provider.skip(
-        "DeleteRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.delete): RagCorpora: new projects must switch RAG Engine to Serverless mode first; Spanner mode is restricted in us-central1",
-        () => Effect.void,
+      test.provider(
+        "DeleteRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.delete)",
+        () => probe("DeleteRagCorporaRagFile", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetRagCorpora (aiplatform.projects.locations.ragCorpora.get): RagCorpora: new projects must switch RAG Engine to Serverless mode first; Spanner mode is restricted in us-central1",
-        () => Effect.void,
+      test.provider(
+        "GetRagCorpora (aiplatform.projects.locations.ragCorpora.get)",
+        () => probe("GetRagCorpora", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "GetRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.get): RagCorpora: new projects must switch RAG Engine to Serverless mode first; Spanner mode is restricted in us-central1",
-        () => Effect.void,
+      test.provider(
+        "GetRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.get)",
+        () => probe("GetRagCorporaRagFile", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ImportRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.import): RagCorpora: new projects must switch RAG Engine to Serverless mode first; Spanner mode is restricted in us-central1",
-        () => Effect.void,
+      test.provider(
+        "ImportRagCorporaRagFile (aiplatform.projects.locations.ragCorpora.ragFiles.import)",
+        () => probe("ImportRagCorporaRagFile", false),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "ListRagCorporaRagFiles (aiplatform.projects.locations.ragCorpora.ragFiles.list): RagCorpora: new projects must switch RAG Engine to Serverless mode first; Spanner mode is restricted in us-central1",
-        () => Effect.void,
+      test.provider(
+        "ListRagCorporaRagFiles (aiplatform.projects.locations.ragCorpora.ragFiles.list)",
+        () => probe("ListRagCorporaRagFiles", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 
@@ -2209,9 +2229,13 @@ describe.skipIf(!!process.env.FAST)(
     });
 
     describe("SemanticGovernancePolicy", { concurrent: true }, () => {
-      test.provider.skip(
-        "GetSemanticGovernancePolicy (aiplatform.projects.locations.semanticGovernancePolicies.get): SemanticGovernancePolicy: a policy governs an existing Vertex AI Agent, which the v1 API cannot create (GCP_TEST_AGENT)",
-        () => Effect.void,
+      test.provider(
+        "GetSemanticGovernancePolicy (aiplatform.projects.locations.semanticGovernancePolicies.get)",
+        () => probe("GetSemanticGovernancePolicy", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:aiplatform", "live"],
+          timeout: 600_000,
+        },
       );
     });
 

@@ -125,6 +125,7 @@ import { PersistentResource, PersistentResourceProvider } from "./AIPlatform/Per
 import { PipelineJob, PipelineJobProvider } from "./AIPlatform/PipelineJob.ts";
 import { QueryReasoningEngineHttp } from "./AIPlatform/QueryReasoningEngineHttp.ts";
 import { RagCorpora, RagCorporaProvider } from "./AIPlatform/RagCorpora.ts";
+import { RagEngineConfig, RagEngineConfigProvider } from "./AIPlatform/RagEngineConfig.ts";
 import { ReasoningEngine, ReasoningEngineProvider } from "./AIPlatform/ReasoningEngine.ts";
 import {
   ReasoningEnginesMemory,
@@ -3543,6 +3544,7 @@ const makeProviders = () =>
           PersistentResource,
           PipelineJob,
           RagCorpora,
+          RagEngineConfig,
           ReasoningEnginesMemory,
           AnalyticsDatastore,
           ApimServiceExtension,
@@ -4668,6 +4670,7 @@ const makeProviders = () =>
                 PersistentResourceProvider(),
                 PipelineJobProvider(),
                 RagCorporaProvider(),
+                RagEngineConfigProvider(),
                 ReasoningEnginesMemoryProvider(),
                 AnalyticsDatastoreProvider(),
                 ApimServiceExtensionProvider(),
