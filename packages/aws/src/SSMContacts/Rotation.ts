@@ -11,7 +11,6 @@ import {
   hasAlchemyTags,
   tagRecord,
 } from "alchemy/Tags";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { AWSEnvironment } from "../Environment.ts";
@@ -199,7 +198,8 @@ export const RotationProvider = () =>
           const desiredTags = { ...news.tags, ...internalTags };
           const desiredStart =
             news.startTime !== undefined
-              ? DateTime.toDateUtc(DateTime.makeUnsafe(news.startTime))
+              ? // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                new Date(news.startTime)
               : undefined;
 
           // 1. OBSERVE

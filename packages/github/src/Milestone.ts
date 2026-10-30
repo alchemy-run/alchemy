@@ -3,7 +3,6 @@ import * as Repos from "@distilled.cloud/github/repos";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
-import * as DateTime from "effect/DateTime";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import { withBaseUrl, gitHubBaseUrlChanged } from "./BaseUrl.ts";
@@ -261,7 +260,8 @@ export const MilestoneProvider = () =>
           requestedDueOn === undefined
             ? null
             : yield* Effect.try(() =>
-                DateTime.formatIso(DateTime.makeUnsafe(requestedDueOn)).replace(".000Z", "Z"),
+                // oxlint-disable-next-line effecttsgo/global-date-in-effect -- `new Date` reads timezone-less date-times as local time; `DateTime.makeUnsafe` would read them as UTC
+                new Date(requestedDueOn).toISOString().replace(".000Z", "Z"),
               );
 
         // Observe — probe for an existing milestone by title. GitHub's list

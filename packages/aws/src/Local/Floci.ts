@@ -137,8 +137,10 @@ const syncCaBundle = (endpoint: string): Effect.Effect<void> =>
     // so setting it here (before local workers spawn during the apply) only
     // affects children, which is exactly the target. Never clobber a value
     // the caller set deliberately.
-    const existing = yield* Config.option(Config.String("NODE_EXTRA_CA_CERTS"));
-    if (Option.isNone(existing)) {
+    // Reads and writes the real process env: children inherit it, while
+    // Config may also resolve `.env` values that children never see.
+    // oxlint-disable-next-line effecttsgo/process-env-in-effect -- checks what child processes will inherit
+    if (process.env.NODE_EXTRA_CA_CERTS === undefined) {
       // oxlint-disable-next-line effecttsgo/process-env-in-effect -- exports the CA path to child processes; Config is read-only
       process.env.NODE_EXTRA_CA_CERTS = FLOCI_CA_PATH;
     }
