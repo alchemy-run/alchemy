@@ -53,7 +53,8 @@ export interface CertificateProps {
    * omitted, the most specific PUBLIC hosted zone in the account
    * containing `domainName` is inferred; if none matches, validation is
    * left to the caller (external DNS) and the certificate is returned
-   * pending.
+   * pending with `domainValidationOptions` filled in, as with
+   * `dnsValidation: "external"`.
    */
   hostedZoneId?: string;
   /**
@@ -626,7 +627,7 @@ export const CertificateProvider = () =>
           // the explicit `hostedZoneId` when given, or the most specific
           // public zone containing `domainName`; when neither yields a zone,
           // validation is left to the caller (external DNS) and the
-          // certificate is returned pending — the pre-inference behavior.
+          // certificate is returned pending with its validation records.
           // For an already-issued cert this is a fast-path: we only wait
           // for validation records when the cert isn't already issued.
           if (
@@ -644,6 +645,10 @@ export const CertificateProvider = () =>
                 const withRecords = yield* waitForValidationRecords(certificateArn);
                 yield* upsertValidationRecords(validationZoneId, withRecords);
                 certificate = yield* waitForIssued(certificateArn);
+              } else {
+                // No Route 53 zone: as with "external", return the records
+                // for the caller to publish elsewhere.
+                certificate = yield* waitForValidationRecords(certificateArn);
               }
             }
           }

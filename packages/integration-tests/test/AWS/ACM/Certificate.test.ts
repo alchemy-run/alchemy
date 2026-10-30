@@ -116,6 +116,31 @@ test.provider.skipIf(!!process.env.FAST)(
 
 class CertificateNotListed extends Data.TaggedError("CertificateNotListed") {}
 
+// No Route 53 zone contains `example.com`, so validation is left to the
+// caller: the certificate comes back pending with the CNAMEs to publish.
+test.provider.skipIf(!!process.env.FAST)(
+  "returns the validation records when no Route 53 zone matches",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const cert = yield* stack.deploy(
+        Certificate("UnzonedCertificate", {
+          domainName: "alchemy-acm-unzoned-test.example.com",
+        }),
+      );
+
+      expect(cert.status).toBe("PENDING_VALIDATION");
+      expect(cert.domainValidationOptions).toHaveLength(1);
+      expect(cert.domainValidationOptions[0]?.ResourceRecord).toMatchObject({
+        Type: "CNAME",
+      });
+
+      yield* stack.destroy();
+    }),
+  { tags: ["provider:aws", "provider:aws:acm", "live"], timeout: 180_000 },
+);
+
 // Exportability is fixed at request time — ACM rejects
 // `UpdateCertificateOptions` for the export option ("Export option for
 // certificates cannot be updated"), so changing `export` must REPLACE the
