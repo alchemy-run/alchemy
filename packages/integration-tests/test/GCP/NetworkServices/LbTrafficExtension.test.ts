@@ -7,7 +7,7 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { withNetworkSlot } from "../networkQuota.ts";
-import { InternalAlb } from "./fixtures/internal-alb.ts";
+import { InternalAlb } from "../internalAlb.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 

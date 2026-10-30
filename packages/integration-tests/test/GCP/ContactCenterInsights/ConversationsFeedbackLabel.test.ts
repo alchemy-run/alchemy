@@ -45,9 +45,12 @@ test.provider(
   },
 );
 
-// Feedback label create fails with BadRequest "Request contains an invalid
-// argument." on the testing project (cause not yet isolated).
-// Set GCP_TEST_CCI_FEEDBACK_LABELS=1 to run it.
+// A feedback label names the resource it labels (an issue model, a QA
+// question, or a generator); without one create fails with BadRequest
+// "Request contains an invalid argument." An issue model needs 100 analyzed
+// conversations (BadRequest "has too few conversations ... Minimum
+// requirement is: 100."), so set GCP_TEST_CCI_FEEDBACK_LABELS=1 on a project
+// that has them.
 test.provider.skipIf(!!process.env.FAST || !process.env.GCP_TEST_CCI_FEEDBACK_LABELS)(
   "create, update, and delete a conversation feedback label",
   (stack) =>

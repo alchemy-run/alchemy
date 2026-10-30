@@ -6,6 +6,8 @@ import * as networksecurity from "@distilled.cloud/gcp/networksecurity_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { InternalAlb } from "../internalAlb.ts";
+import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -64,7 +66,7 @@ test.provider(
             action: "ALLOW",
             target: {
               loadBalancingScheme: "INTERNAL_MANAGED",
-              resources: [forwardingRule],
+              resources: [alb.rule],
             },
             httpRules: [
               {
@@ -86,24 +88,23 @@ test.provider(
   },
 );
 
-// Needs an existing application load balancer forwarding rule; set
-// GCP_TEST_AUTHZ_POLICY_TARGET to its resource name.
-test.provider.skipIf(!process.env.GCP_TEST_AUTHZ_POLICY_TARGET)(
+// A policy targets an Application Load Balancer, which takes minutes to
+// build, so `--fast` skips the lifecycle.
+test.provider.skipIf(!!process.env.FAST)(
   "create, update, and delete an authz policy",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
-      const forwardingRule = process.env.GCP_TEST_AUTHZ_POLICY_TARGET!;
-
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          const alb = yield* InternalAlb;
           return yield* GCP.NetworkSecurity.AuthzPolicy("AllowAdmin", {
             location: "us-central1",
             action: "ALLOW",
             target: {
               loadBalancingScheme: "INTERNAL_MANAGED",
-              resources: [forwardingRule],
+              resources: [alb.rule],
             },
             httpRules: [
               {
@@ -131,13 +132,14 @@ test.provider.skipIf(!process.env.GCP_TEST_AUTHZ_POLICY_TARGET)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          const alb = yield* InternalAlb;
           return yield* GCP.NetworkSecurity.AuthzPolicy("AllowAdmin", {
             authzPolicyId: created.authzPolicyId,
             location: "us-central1",
             action: "ALLOW",
-            target: created.target ?? {
+            target: {
               loadBalancingScheme: "INTERNAL_MANAGED",
-              resources: [forwardingRule],
+              resources: [alb.rule],
             },
             httpRules: [
               {
@@ -160,9 +162,9 @@ test.provider.skipIf(!process.env.GCP_TEST_AUTHZ_POLICY_TARGET)(
 
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
+    }).pipe(withNetworkSlot, logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
-    timeout: 90_000,
+    timeout: 900_000,
   },
 );
