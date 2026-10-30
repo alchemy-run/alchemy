@@ -24,15 +24,17 @@ export default class TPUGeneratedHost extends GCP.Function<TPUGeneratedHost>()(
     return {
       fetch: serveProbes({
         GetAcceleratorType: probeOutcome(
-          Retry.none(p0({ acceleratorType: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(
+            p0({ acceleratorType: "alchemy-missing", location: "us-central1-a" } as never),
+          ),
         ),
         GetRuntimeVersion: probeOutcome(
-          Retry.none(p1({ runtimeVersion: "alchemy-missing", location: "us-central1" } as never)),
+          Retry.none(p1({ runtimeVersion: "alchemy-missing", location: "us-central1-a" } as never)),
         ),
-        ListAcceleratorTypes: probeOutcome(Retry.none(p2({ location: "us-central1" } as never))),
-        ListNodes: probeOutcome(Retry.none(p3({ location: "us-central1" } as never))),
-        ListQueuedResources: probeOutcome(Retry.none(p4({ location: "us-central1" } as never))),
-        ListRuntimeVersions: probeOutcome(Retry.none(p5({ location: "us-central1" } as never))),
+        ListAcceleratorTypes: probeOutcome(Retry.none(p2({ location: "us-central1-a" } as never))),
+        ListNodes: probeOutcome(Retry.none(p3({ location: "us-central1-a" } as never))),
+        ListQueuedResources: probeOutcome(Retry.none(p4({ location: "us-central1-a" } as never))),
+        ListRuntimeVersions: probeOutcome(Retry.none(p5({ location: "us-central1-a" } as never))),
       }),
     };
   }).pipe(

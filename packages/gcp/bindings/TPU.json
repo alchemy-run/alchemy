@@ -21,6 +21,7 @@
     },
     "enable": [
       "tpu.googleapis.com"
-    ]
+    ],
+    "location": "us-central1-a"
   }
 }
