@@ -4,8 +4,8 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import { AuthError } from "alchemy/Auth/AuthProvider";
 import { CredentialsStore } from "alchemy/Auth/Credentials";
 import { currentProfileName } from "alchemy/Auth/Profile";
+import { emit } from "alchemy/Events";
 import * as Interaction from "alchemy/Interaction";
-import { Progress } from "alchemy/Report";
 import { StateApi } from "alchemy/State/HttpStateApi";
 import {
   checkHttpStateStoreAuth,
@@ -16,6 +16,7 @@ import { makeLocalState } from "alchemy/State/LocalState";
 import * as Provisioning from "alchemy/State/Provisioning";
 import { State, StateStoreError } from "alchemy/State/State";
 import { recordStateStoreInit, recordStateStoreOp } from "alchemy/Telemetry/Metrics";
+import { globalLogs } from "alchemy/Util/LogRecord";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
@@ -198,7 +199,8 @@ export const state = (options: CloudflareStateOptions = {}) =>
           );
         }
         return yield* deployMissing;
-      }).pipe(recordStateStoreInit, Effect.orDie);
+        // Account-level: filed in the global run log, not the project's.
+      }).pipe(recordStateStoreInit, globalLogs, Effect.orDie);
 
       return yield* Effect.cached(init.pipe(Effect.provideContext(context)));
     }),
@@ -238,10 +240,9 @@ const withStateBootstrapEvents =
   (store: string) =>
   <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Effect.gen(function* () {
-      const report = yield* Progress;
-      yield* report({ _tag: "state.bootstrap.started", store });
+      yield* emit({ type: "state.bootstrap.started", store });
       const result = yield* effect;
-      yield* report({ _tag: "state.bootstrap.completed", store });
+      yield* emit({ type: "state.bootstrap.completed", store });
       return result;
     });
 
@@ -300,6 +301,8 @@ export const bootstrap = (options: BootstrapOptions = {}) =>
           "alchemy.state_store.script_name": options.workerName ?? STATE_STORE_SCRIPT_NAME,
         },
       }),
+      // Account-level: filed in the global run log, not the project's.
+      globalLogs,
     ),
   );
 

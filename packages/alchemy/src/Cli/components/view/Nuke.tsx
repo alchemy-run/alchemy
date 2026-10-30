@@ -2,10 +2,14 @@
 /** @jsxImportSource @alchemy.run/sigil */
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
+import * as LogLevel from "effect/LogLevel";
+import * as Match from "effect/Match";
+import { onEvent, type Event } from "../../../Events.ts";
 import { Interaction } from "../../../Interaction.ts";
 import type { Result as NukeResult, Target } from "../../../Nuke.ts";
 import type { ProviderMode } from "../../../ProviderMode.ts";
-import { Progress, type ProgressEvent } from "../../../Report.ts";
+import { currentConsoleSettings } from "../../GlobalLog.ts";
+import { present } from "../../Present.ts";
 import {
   LiveStore,
   ProgressBar,
@@ -31,24 +35,25 @@ export class NukeProgressStore extends LiveStore<NukeProgressState> {
     super({ total: 0, completed: 0, resources: 0, inFlight: [] });
   }
 
-  emit(event: ProgressEvent) {
-    this.update((state) => {
-      switch (event._tag) {
-        case "nuke.scan.started":
-          return { ...state, total: event.total };
-        case "nuke.scan.provider.started":
-          return { ...state, inFlight: [...state.inFlight, event.provider] };
-        case "nuke.scan.provider.completed":
-          return {
+  emit(event: Event) {
+    this.update((state) =>
+      Match.value(event).pipe(
+        Match.discriminators("type")({
+          "nuke.scan.started": (event) => ({ ...state, total: event.total }),
+          "nuke.scan.provider.started": (event) => ({
+            ...state,
+            inFlight: [...state.inFlight, event.provider],
+          }),
+          "nuke.scan.provider.completed": (event) => ({
             ...state,
             completed: state.completed + 1,
             resources: state.resources + event.resources,
             inFlight: state.inFlight.filter((id) => id !== event.provider),
-          };
-        default:
-          return state;
-      }
-    });
+          }),
+        }),
+        Match.orElse(() => state),
+      ),
+    );
   }
 }
 
@@ -92,19 +97,32 @@ export function NukeProgress({ store }: { store: NukeProgressStore }) {
   );
 }
 
-const logNukeEvent = (event: ProgressEvent, interactive: boolean) => {
-  if (event._tag === "nuke.scan.provider.completed") {
-    if (event.error !== undefined) return Effect.logWarning(`${event.provider}: ${event.error}`);
-    if (!interactive) return Effect.logInfo(`scanned ${event.provider} (${event.resources})`);
-  } else if (event._tag === "nuke.resource.failed") {
-    return Effect.logWarning(`${event.provider} ${event.resource}: ${event.message}`);
-  } else if (!interactive && event._tag === "nuke.resource.deleted") {
-    return Effect.logInfo(`deleted ${event.provider} ${event.resource}`);
-  }
-  return Effect.void;
-};
+const logNukeEvent = (event: Event, interactive: boolean) =>
+  Match.value(event).pipe(
+    Match.discriminators("type")({
+      "nuke.scan.provider.completed": (event) =>
+        event.error !== undefined
+          ? present(`${event.provider}: ${event.error}`, { level: "Warn" })
+          : interactive
+            ? Effect.void
+            : present(`scanned ${event.provider} (${event.resources})`),
+      "nuke.resource.failed": (event) =>
+        present(`${event.provider} ${event.resource}: ${event.message}`, { level: "Warn" }),
+      "nuke.resource.deleted": (event) =>
+        interactive ? Effect.void : present(`deleted ${event.provider} ${event.resource}`),
+    }),
+    Match.orElse(() => Effect.void),
+  );
 
 /** Scan progress stays separate until the inventory is ready to review. */
+/**
+ * `--log-level debug` (or lower) streams debug records to the console; the
+ * live progress view would repaint over them, so it falls back to plain lines.
+ */
+const debugConsole = Effect.map(currentConsoleSettings, ({ floor }) =>
+  LogLevel.isLessThan(floor, "Info"),
+);
+
 export const renderNukeScan =
   () =>
   <A, E, R>(effect: Effect.Effect<A, E, R>) =>
@@ -112,11 +130,11 @@ export const renderNukeScan =
       const cli = yield* Interaction;
       const store = new NukeProgressStore();
       const live =
-        cli.terminal.input && !process.env.DEBUG
+        cli.terminal.input && !(yield* debugConsole)
           ? yield* cli.live(<NukeProgress store={store} />)
           : undefined;
       return yield* effect.pipe(
-        Effect.provideService(Progress, (event) =>
+        onEvent((event) =>
           Effect.gen(function* () {
             if (live) store.emit(event);
             yield* logNukeEvent(event, live !== undefined);
@@ -128,7 +146,10 @@ export const renderNukeScan =
 
 /** Drive the same resource rows used by the preview through their deletion lifecycle. */
 export const renderNukeDelete =
-  (targets: ReadonlyArray<Pick<Target, "providerId" | "displayName">>, mode: ProviderMode) =>
+  (
+    targets: ReadonlyArray<Pick<Target, "key" | "providerId" | "displayName">>,
+    mode: ProviderMode,
+  ) =>
   <A extends NukeResult, E, R>(effect: Effect.Effect<A, E, R>) =>
     Effect.gen(function* () {
       const cli = yield* Interaction;
@@ -138,18 +159,22 @@ export const renderNukeDelete =
         busy: true,
       });
       const live =
-        cli.terminal.input && !process.env.DEBUG
+        cli.terminal.input && !(yield* debugConsole)
           ? yield* cli.live(<Plan tree={tree} />, { persistOnClose: true })
           : undefined;
       return yield* effect.pipe(
-        Effect.provideService(Progress, (event) =>
-          Effect.gen(function* () {
-            if (event._tag === "apply.resource.status" || event._tag === "apply.resource.note")
-              tree.emit(event);
-            else if (event._tag === "nuke.pass.started")
-              tree.setLabel(`Deleting resources · pass ${event.pass}`);
-            yield* logNukeEvent(event, live !== undefined);
-          }),
+        onEvent((event) =>
+          Effect.sync(() =>
+            Match.value(event).pipe(
+              Match.discriminators("type")({
+                "apply.resource.status": (event) => tree.emit(event),
+                "apply.resource.note": (event) => tree.emit(event),
+                "nuke.pass.started": (event) =>
+                  tree.setLabel(`Deleting resources · pass ${event.pass}`),
+              }),
+              Match.orElse(() => undefined),
+            ),
+          ).pipe(Effect.andThen(logNukeEvent(event, live !== undefined))),
         ),
         Effect.onExit((exit) =>
           Effect.sync(() => {
@@ -170,13 +195,13 @@ export const renderNukeDelete =
 
 /** Cloud inventory rows carry display identity only, never fabricated stack state. */
 export const nukePlan = (
-  targets: ReadonlyArray<Pick<Target, "providerId" | "displayName">>,
+  targets: ReadonlyArray<Pick<Target, "key" | "providerId" | "displayName">>,
   options: { mode: ProviderMode },
 ): PlanTreeData => ({
   defaultMode: options.mode,
   rows: targets
-    .map((target, index) => ({
-      key: `nuke/${index}`,
+    .map((target) => ({
+      key: target.key,
       type: "resource" as const,
       id: target.providerId,
       resourceType: target.providerId,
@@ -203,7 +228,7 @@ export const nukePlan = (
 });
 
 export const reviewNuke = Effect.fn(function* (
-  targets: ReadonlyArray<Pick<Target, "providerId" | "displayName">>,
+  targets: ReadonlyArray<Pick<Target, "key" | "providerId" | "displayName">>,
   options: {
     mode: ProviderMode;
     yes: boolean;

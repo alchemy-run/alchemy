@@ -21,7 +21,7 @@ import { SessionLive } from "./Session.middleware.ts";
 
 const BankLive = SessionLive.pipe(
   Layer.provideMerge(Bank.layer(BankHandlers)),
-  Layer.provide(DomainCloudflare.DurableObjects),
+  Layer.provide(DomainCloudflare.layerDurableObjects()),
 );
 
 export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
@@ -34,7 +34,7 @@ export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
 ) {}
 ```
 
-`DomainCloudflare.DurableObjects` hosts the model: every aggregate, view and policy becomes a Durable Object class on this Worker, with no bindings to write. `SessionLive` is the middleware the Api's entries declare. `yield* BankApi` serves the Api, and its `fetch` becomes the Worker's.
+`DomainCloudflare.layerDurableObjects()` hosts the model: every aggregate, view and policy becomes a Durable Object class on this Worker, with no bindings to write. `SessionLive` is the middleware the Api's entries declare. `yield* BankApi` serves the Api, and its `fetch` becomes the Worker's.
 
 ## Declare the stack
 

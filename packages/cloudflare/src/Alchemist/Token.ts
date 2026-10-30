@@ -1,7 +1,7 @@
 import * as accounts from "@distilled.cloud/cloudflare/accounts";
 import { apiKeyCredentials, apiTokenCredentials } from "@distilled.cloud/cloudflare/Credentials";
 import * as user from "@distilled.cloud/cloudflare/user";
-import { AlchemistInvalidInput, type Diagnostic } from "alchemy/Alchemist/Errors";
+import * as Alchemist from "alchemy/Alchemist";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
@@ -58,7 +58,7 @@ export interface CreatedToken {
   /** Echoed back by Cloudflare; may contain effects we never request. */
   readonly policies: ReadonlyArray<unknown>;
   readonly verificationStatus?: string;
-  readonly diagnostics: ReadonlyArray<Diagnostic>;
+  readonly diagnostics: ReadonlyArray<Alchemist.Diagnostic>;
 }
 
 /** Cloudflare accepted the create call but returned no usable token. */
@@ -124,7 +124,7 @@ export const plan = Effect.fn("Alchemist.cloudflare.token.plan")(function* (inpu
           const group = tokenCatalog.permissionGroups.find((candidate) => candidate.id === id);
           if (group === undefined) {
             return Effect.fail(
-              new AlchemistInvalidInput({
+              new Alchemist.AlchemistInvalidInput({
                 field: "permissionGroupIds",
                 message: `Unknown Cloudflare permission group '${id}'.`,
               }),
@@ -135,7 +135,7 @@ export const plan = Effect.fn("Alchemist.cloudflare.token.plan")(function* (inpu
   const currentUser = yield* user.getUser({}).pipe(withGlobalKey(input.credentials));
   const resolved = tokenPolicies(input.accountIds, currentUser.id, selected);
   if (resolved.length === 0) {
-    return yield* new AlchemistInvalidInput({
+    return yield* new Alchemist.AlchemistInvalidInput({
       field: "permissionGroupIds",
       message: "No selected permission groups can be expressed as token policies.",
     });

@@ -318,7 +318,7 @@ describe.concurrent(
             fqn: "ObservedBranch",
             instanceId: "observed-branch",
             bindings: [],
-            session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+            session: { note: () => Effect.void },
           };
           const news = {
             project: { projectId: initial.project.projectId },
@@ -493,8 +493,6 @@ describe.concurrent(
               output: undefined,
               bindings: [],
               session: {
-                emit: () => Effect.void,
-                done: () => Effect.void,
                 note: () => Effect.void,
               },
             })
@@ -742,7 +740,7 @@ describe.concurrent(
             fqn: "LateBranch",
             instanceId: "late-branch",
             bindings: [],
-            session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+            session: { note: () => Effect.void },
           };
           const news = { project: { projectId: initial.project.projectId }, name, protected: true };
           const late = yield* provider
