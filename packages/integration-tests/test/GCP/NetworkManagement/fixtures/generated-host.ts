@@ -18,18 +18,20 @@ export default class NetworkManagementGeneratedHost extends GCP.Function<Network
   Effect.gen(function* () {
     const p0 = yield* GCP.NetworkManagement.GetConnectivityTest(ProbeConnectivityTest);
     const p1 = yield* GCP.NetworkManagement.GetVpcFlowLogsConfig(ProbeFlowLogs);
-    const p2 = yield* GCP.NetworkManagement.ListVpcFlowLogsConfigs();
-    const p3 = yield* GCP.NetworkManagement.QueryOrgVpcFlowLogsConfigs();
-    const p4 = yield* GCP.NetworkManagement.RerunConnectivityTest(ProbeConnectivityTest);
+    const p2 = yield* GCP.NetworkManagement.ListConnectivityTests();
+    const p3 = yield* GCP.NetworkManagement.ListVpcFlowLogsConfigs();
+    const p4 = yield* GCP.NetworkManagement.QueryOrgVpcFlowLogsConfigs();
+    const p5 = yield* GCP.NetworkManagement.RerunConnectivityTest(ProbeConnectivityTest);
     return {
       fetch: serveProbes({
         GetConnectivityTest: probeOutcome(Retry.none(p0({} as never))),
         "GetVpcFlowLogsConfig@VpcFlowLogsConfig": probeOutcome(Retry.none(p1({} as never))),
-        ListVpcFlowLogsConfigs: probeOutcome(Retry.none(p2({ location: "global" } as never))),
+        ListConnectivityTests: probeOutcome(Retry.none(p2({ location: "global" } as never))),
+        ListVpcFlowLogsConfigs: probeOutcome(Retry.none(p3({ location: "global" } as never))),
         QueryOrgVpcFlowLogsConfigs: probeOutcome(
-          Retry.none(p3({ location: "us-central1" } as never)),
+          Retry.none(p4({ location: "us-central1" } as never)),
         ),
-        RerunConnectivityTest: probeOutcome(Retry.none(p4({} as never))),
+        RerunConnectivityTest: probeOutcome(Retry.none(p5({} as never))),
       }),
     };
   }).pipe(
@@ -38,6 +40,7 @@ export default class NetworkManagementGeneratedHost extends GCP.Function<Network
         Layer.mergeAll(
           GCP.NetworkManagement.GetConnectivityTestHttp,
           GCP.NetworkManagement.GetVpcFlowLogsConfigHttp,
+          GCP.NetworkManagement.ListConnectivityTestsHttp,
           GCP.NetworkManagement.ListVpcFlowLogsConfigsHttp,
           GCP.NetworkManagement.QueryOrgVpcFlowLogsConfigsHttp,
           GCP.NetworkManagement.RerunConnectivityTestHttp,

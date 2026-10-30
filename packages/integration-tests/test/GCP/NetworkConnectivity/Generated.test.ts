@@ -289,6 +289,14 @@ describe.skipIf(!!process.env.FAST)(
         },
       );
       test.provider(
+        "ListHubs (networkconnectivity.projects.locations.global.hubs.list)",
+        () => probe("ListHubs", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "ListInternalRanges (networkconnectivity.projects.locations.internalRanges.list)",
         () => probe("ListInternalRanges", true),
         {
@@ -307,6 +315,14 @@ describe.skipIf(!!process.env.FAST)(
       test.provider(
         "ListMulticloudDataTransferSupportedServices (networkconnectivity.projects.locations.multicloudDataTransferSupportedServices.list)",
         () => probe("ListMulticloudDataTransferSupportedServices", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
+        "ListPolicyBasedRoutes (networkconnectivity.projects.locations.global.policyBasedRoutes.list)",
+        () => probe("ListPolicyBasedRoutes", true),
         {
           tags: ["provider:gcp", "provider:gcp:networkconnectivity", "live"],
           timeout: 600_000,
@@ -452,14 +468,6 @@ describe.skipIf(!!process.env.FAST)(
       );
       test.provider.skip(
         "networkconnectivity.projects.locations.automatedDnsRecords.list: no predefined role grants its permission",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "networkconnectivity.projects.locations.global.hubs.list: `projects/*/locations/global` has no Alchemy resource to bind",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "networkconnectivity.projects.locations.global.policyBasedRoutes.list: `projects/*/locations/global` has no Alchemy resource to bind",
         () => Effect.void,
       );
       test.provider.skip(

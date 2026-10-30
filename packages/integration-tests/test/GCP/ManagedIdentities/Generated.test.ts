@@ -221,15 +221,22 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
-    // Discovery methods with no binding, and why.
-    describe("not generated", () => {
-      test.provider.skip(
-        "managedidentities.projects.locations.global.domains.list: `projects/*/locations/global` has no Alchemy resource to bind",
-        () => Effect.void,
+    describe("project", { concurrent: true }, () => {
+      test.provider(
+        "ListDomains (managedidentities.projects.locations.global.domains.list)",
+        () => probe("ListDomains", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedidentities", "live"],
+          timeout: 600_000,
+        },
       );
-      test.provider.skip(
-        "managedidentities.projects.locations.global.peerings.list: `projects/*/locations/global` has no Alchemy resource to bind",
-        () => Effect.void,
+      test.provider(
+        "ListPeerings (managedidentities.projects.locations.global.peerings.list)",
+        () => probe("ListPeerings", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:managedidentities", "live"],
+          timeout: 600_000,
+        },
       );
     });
   },

@@ -131,6 +131,14 @@ describe.skipIf(!!process.env.FAST)(
 
     describe("project", { concurrent: true }, () => {
       test.provider(
+        "ListConnectivityTests (networkmanagement.projects.locations.global.connectivityTests.list)",
+        () => probe("ListConnectivityTests", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:networkmanagement", "live"],
+          timeout: 600_000,
+        },
+      );
+      test.provider(
         "ListVpcFlowLogsConfigs (networkmanagement.projects.locations.vpcFlowLogsConfigs.list)",
         () => probe("ListVpcFlowLogsConfigs", true),
         {
@@ -161,10 +169,6 @@ describe.skipIf(!!process.env.FAST)(
 
     // Discovery methods with no binding, and why.
     describe("not generated", () => {
-      test.provider.skip(
-        "networkmanagement.projects.locations.global.connectivityTests.list: `projects/*/locations/global` has no Alchemy resource to bind",
-        () => Effect.void,
-      );
       test.provider.skip(
         "networkmanagement.projects.locations.vpcFlowLogsConfigs.showEffectiveFlowLogsConfigs: no distilled operation showEffectiveFlowLogsConfigsProjectsLocationsVpcFlowLogsConfigs",
         () => Effect.void,

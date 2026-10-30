@@ -28,12 +28,14 @@ export default class ManagedIdentitiesGeneratedHost extends GCP.Function<Managed
     const p9 = yield* GCP.ManagedIdentities.GetDomainLdapssettings(ProbeDomain);
     const p10 = yield* GCP.ManagedIdentities.GetDomainSqlIntegration(ProbeDomain);
     const p11 = yield* GCP.ManagedIdentities.ListDomainBackups(ProbeDomain);
-    const p12 = yield* GCP.ManagedIdentities.ListDomainSqlIntegrations(ProbeDomain);
-    const p13 = yield* GCP.ManagedIdentities.ReconfigureDomainTrust(ProbeDomain);
-    const p14 = yield* GCP.ManagedIdentities.ResetDomainAdminPassword(ProbeDomain);
-    const p15 = yield* GCP.ManagedIdentities.RestoreDomain(ProbeDomain);
-    const p16 = yield* GCP.ManagedIdentities.UpdateDomainLdapssettings(ProbeDomain);
-    const p17 = yield* GCP.ManagedIdentities.ValidateDomainTrust(ProbeDomain);
+    const p12 = yield* GCP.ManagedIdentities.ListDomains();
+    const p13 = yield* GCP.ManagedIdentities.ListDomainSqlIntegrations(ProbeDomain);
+    const p14 = yield* GCP.ManagedIdentities.ListPeerings();
+    const p15 = yield* GCP.ManagedIdentities.ReconfigureDomainTrust(ProbeDomain);
+    const p16 = yield* GCP.ManagedIdentities.ResetDomainAdminPassword(ProbeDomain);
+    const p17 = yield* GCP.ManagedIdentities.RestoreDomain(ProbeDomain);
+    const p18 = yield* GCP.ManagedIdentities.UpdateDomainLdapssettings(ProbeDomain);
+    const p19 = yield* GCP.ManagedIdentities.ValidateDomainTrust(ProbeDomain);
     return {
       fetch: serveProbes({
         AttachDomainTrust: probeOutcome(Retry.none(p0({} as never))),
@@ -50,14 +52,16 @@ export default class ManagedIdentitiesGeneratedHost extends GCP.Function<Managed
           Retry.none(p10({ sqlIntegration: "alchemy-missing" } as never)),
         ),
         ListDomainBackups: probeOutcome(Retry.none(p11({} as never))),
-        ListDomainSqlIntegrations: probeOutcome(Retry.none(p12({} as never))),
-        ReconfigureDomainTrust: probeOutcome(Retry.none(p13({} as never))),
-        ResetDomainAdminPassword: probeOutcome(Retry.none(p14({} as never))),
+        ListDomains: probeOutcome(Retry.none(p12({ location: "global" } as never))),
+        ListDomainSqlIntegrations: probeOutcome(Retry.none(p13({} as never))),
+        ListPeerings: probeOutcome(Retry.none(p14({ location: "global" } as never))),
+        ReconfigureDomainTrust: probeOutcome(Retry.none(p15({} as never))),
+        ResetDomainAdminPassword: probeOutcome(Retry.none(p16({} as never))),
         RestoreDomain: probeOutcome(
-          Retry.none(p15({ body: { alchemyProbe: "alchemy-missing" } } as never)),
+          Retry.none(p17({ body: { alchemyProbe: "alchemy-missing" } } as never)),
         ),
-        UpdateDomainLdapssettings: probeOutcome(Retry.none(p16({} as never))),
-        ValidateDomainTrust: probeOutcome(Retry.none(p17({} as never))),
+        UpdateDomainLdapssettings: probeOutcome(Retry.none(p18({} as never))),
+        ValidateDomainTrust: probeOutcome(Retry.none(p19({} as never))),
       }),
     };
   }).pipe(
@@ -76,7 +80,9 @@ export default class ManagedIdentitiesGeneratedHost extends GCP.Function<Managed
           GCP.ManagedIdentities.GetDomainLdapssettingsHttp,
           GCP.ManagedIdentities.GetDomainSqlIntegrationHttp,
           GCP.ManagedIdentities.ListDomainBackupsHttp,
+          GCP.ManagedIdentities.ListDomainsHttp,
           GCP.ManagedIdentities.ListDomainSqlIntegrationsHttp,
+          GCP.ManagedIdentities.ListPeeringsHttp,
           GCP.ManagedIdentities.ReconfigureDomainTrustHttp,
           GCP.ManagedIdentities.ResetDomainAdminPasswordHttp,
           GCP.ManagedIdentities.RestoreDomainHttp,

@@ -20,6 +20,14 @@
     "untestable": {
       "Peering": "Domain peering is cross-project only. Same-project create returns `BadRequest` (\"DomainPeering should be used when network and domain resource belong to different projects\"). Full lifecycle needs a (GCP_TEST_MANAGEDIDENTITIES)"
     },
-    "deployMinutes": 90
+    "deployMinutes": 90,
+    "locations": {
+      "ListDomains": "global",
+      "ListPeerings": "global"
+    }
+  },
+  "names": {
+    "ListGlobalDomains": "ListDomains",
+    "ListGlobalPeerings": "ListPeerings"
   }
 }

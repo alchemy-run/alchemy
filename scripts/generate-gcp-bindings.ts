@@ -584,6 +584,15 @@ const classify = (options: {
       });
       continue;
     }
+    // `projects/{p}/locations/global` is a location like any other: the
+    // caller passes `location: "global"`.
+    if (
+      target.segments.length === 4 &&
+      target.segments[2] === "locations" &&
+      target.segments[3] === "global"
+    ) {
+      target.segments = [...target.segments.slice(0, 3), "*"];
+    }
     // A `/`-separated suffix is the target's last segment, filled from the
     // request (`fhir/{type}/{id}`): match the resource on the rest.
     if (config.suffix?.[id]?.[0] === "/") {

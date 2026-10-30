@@ -25,12 +25,16 @@
       "OrganizationsVpcFlowLogsConfig": "Organization flow-log configs need Network Management admin on the org; the (GOOGLE_ORGANIZATION_ID)"
     },
     "locations": {
-      "ListVpcFlowLogsConfigs": "global"
+      "ListVpcFlowLogsConfigs": "global",
+      "ListConnectivityTests": "global"
     }
   },
   "permissions": {
     "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadServerConnectConfig": "networkmanagement.monitoringpoints.downloadConfig",
     "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadInstallScript": "networkmanagement.monitoringpoints.downloadConfig",
     "networkmanagement.projects.locations.networkMonitoringProviders.monitoringPoints.downloadRecreateInstallScript": "networkmanagement.monitoringpoints.downloadConfig"
+  },
+  "names": {
+    "ListGlobalConnectivityTests": "ListConnectivityTests"
   }
 }

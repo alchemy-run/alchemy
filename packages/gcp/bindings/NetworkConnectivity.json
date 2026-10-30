@@ -58,6 +58,14 @@
       "ServiceConnectionMap": "A service connection map publishes a producer service class, which must be registered for the project first (BadRequest \"serviceClass gcp-cloud-sql (GCP_TEST_SERVICE_CONNECTION_MAP)",
       "Transport": "Transports are Cross-Cloud Interconnect to a partner cloud: they need an allowlisted remote profile and a real peer account (the probe asserts the (GCP_TEST_TRANSPORT)",
       "SpokesGatewayAdvertisedRoute": "a gateway spoke provisions managed routers and takes well over 5 minutes (slow-gated in SpokesGatewayAdvertisedRoute.test.ts)"
+    },
+    "locations": {
+      "ListHubs": "global",
+      "ListPolicyBasedRoutes": "global"
     }
+  },
+  "names": {
+    "ListGlobalHubs": "ListHubs",
+    "ListGlobalPolicyBasedRoutes": "ListPolicyBasedRoutes"
   }
 }

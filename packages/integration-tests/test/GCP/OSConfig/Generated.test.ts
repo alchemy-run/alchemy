@@ -95,6 +95,17 @@ describe.skipIf(!!process.env.FAST)(
       );
     });
 
+    describe("project", { concurrent: true }, () => {
+      test.provider(
+        "ListPolicyOrchestrators (osconfig.projects.locations.global.policyOrchestrators.list)",
+        () => probe("ListPolicyOrchestrators", true),
+        {
+          tags: ["provider:gcp", "provider:gcp:osconfig", "live"],
+          timeout: 600_000,
+        },
+      );
+    });
+
     describe("ProjectsLocationsGlobalPolicyOrchestrator", { concurrent: true }, () => {
       test.provider.skip(
         'GetPolicyOrchestrator@ProjectsLocationsGlobalPolicyOrchestrator (osconfig.projects.locations.global.policyOrchestrators.get): ProjectsLocationsGlobalPolicyOrchestrator: creating an orchestrator fails on the testing project with "Create RolloutPlan failed ...: Permission denied" even with OS Config and Progressive Rollout enabled and their service agents created: the rollout service agent lacks a grant Google doesn\'t document for project-only setups',
@@ -106,10 +117,6 @@ describe.skipIf(!!process.env.FAST)(
     describe("not generated", () => {
       test.provider.skip(
         "osconfig.organizations.locations.global.policyOrchestrators.list: addressed under `organizations/`, not a project",
-        () => Effect.void,
-      );
-      test.provider.skip(
-        "osconfig.projects.locations.global.policyOrchestrators.list: `projects/*/locations/global` has no Alchemy resource to bind",
         () => Effect.void,
       );
       test.provider.skip(

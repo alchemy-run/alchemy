@@ -2,6 +2,7 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Retry from "@distilled.cloud/gcp/Retry";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import { probeOutcome, serveProbes } from "../../bindingHost.ts";
 
 /**
@@ -14,8 +15,11 @@ export default class OSConfigGeneratedHost extends GCP.Function<OSConfigGenerate
   "OSConfigGeneratedHost",
   { main: import.meta.url, invokerIamDisabled: true },
   Effect.gen(function* () {
+    const p0 = yield* GCP.OSConfig.ListPolicyOrchestrators();
     return {
-      fetch: serveProbes({}),
+      fetch: serveProbes({
+        ListPolicyOrchestrators: probeOutcome(Retry.none(p0({ location: "global" } as never))),
+      }),
     };
-  }),
+  }).pipe(Effect.provide(Layer.mergeAll(Layer.mergeAll(GCP.OSConfig.ListPolicyOrchestratorsHttp)))),
 ) {}

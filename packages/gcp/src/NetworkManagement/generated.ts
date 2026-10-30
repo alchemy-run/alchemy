@@ -15,6 +15,8 @@ export * from "./GetNetworkMonitoringProviderWebPath.ts";
 export * from "./GetNetworkMonitoringProviderWebPathHttp.ts";
 export * from "./GetVpcFlowLogsConfig.ts";
 export * from "./GetVpcFlowLogsConfigHttp.ts";
+export * from "./ListConnectivityTests.ts";
+export * from "./ListConnectivityTestsHttp.ts";
 export * from "./ListNetworkMonitoringProviderMonitoringPoints.ts";
 export * from "./ListNetworkMonitoringProviderMonitoringPointsHttp.ts";
 export * from "./ListNetworkMonitoringProviderNetworkPaths.ts";
