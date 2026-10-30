@@ -5525,7 +5525,8 @@ const contentTypeFromExtension = (extension: string) => {
  * are inconclusive because pagination is not an atomic account snapshot.
  */
 const listDurableObjectNamespaces = (accountId: string, dispatchNamespace?: string) =>
-  durableObjectsApi.listNamespaces.items({ accountId }).pipe(
+  // The default page of 20 costs one rate-limited API call per 20 namespaces; 1000 is the maximum.
+  durableObjectsApi.listNamespaces.items({ accountId, perPage: 1000 }).pipe(
     Stream.runCollect,
     Effect.map((namespaces) =>
       Array.from(namespaces).flatMap((ns) =>
