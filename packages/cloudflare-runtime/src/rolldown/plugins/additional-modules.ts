@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import MagicString from "magic-string";
 import type {
+  NormalizedOutputOptions,
   Plugin,
   PluginContext,
   RenderedChunk,
@@ -40,7 +41,7 @@ export const additionalModulesPlugin = createPlugin("additional-modules", (optio
         ? userRules.find((rule) => rule.test(sanitizePath(resolved.id)))
         : undefined;
     if (userRule) {
-      return userRule.type ?? typeFromExtension(resolved.id) ?? "Data";
+      return userRule.type ?? uploadedType(resolved.id) ?? "Data";
     }
     return builtinFilter.some((pattern) => pattern.test(source))
       ? MODULE_RULES.find((rule) => rule.pattern.test(resolved.id))?.type
@@ -82,7 +83,7 @@ export const additionalModulesPlugin = createPlugin("additional-modules", (optio
       },
       renderChunk: {
         filter: { code: { include: MODULE_REFERENCE_REGEX } },
-        handler: withMagicString(async function (code, chunk, magicString) {
+        handler: withMagicString(async function (code, chunk, magicString, outputOptions) {
           const matches = code.matchAll(MODULE_REFERENCE_GLOBAL_REGEX);
           for (const match of matches) {
             const [full, type, id] = match as unknown as [string, ModuleType, string];
@@ -93,9 +94,17 @@ export const additionalModulesPlugin = createPlugin("additional-modules", (optio
             const name = moduleFileName(type, path.basename(id));
             const ext = path.extname(name);
             const hash = createHash("sha256").update(type).update(source).digest("hex").slice(0, 8);
+            const pattern =
+              typeof outputOptions.assetFileNames === "string"
+                ? outputOptions.assetFileNames
+                : "assets/[name]-[hash][extname]";
             const referenceId = this.emitFile({
               type: "asset",
-              fileName: `assets/${name.slice(0, name.length - ext.length)}-${hash}${ext}`,
+              fileName: pattern
+                .replaceAll("[name]", name.slice(0, name.length - ext.length))
+                .replaceAll("[hash]", hash)
+                .replaceAll("[extname]", ext)
+                .replaceAll("[ext]", ext.slice(1)),
               source,
             });
             const fileName = this.getFileName(referenceId);
@@ -117,16 +126,21 @@ function typeFromExtension(name: string): ModuleType | undefined {
 }
 
 /**
- * Uploads infer a module's type from its extension (unknown ones are Data),
- * so a file whose rule picks another type gets that type's extension.
+ * The module type uploads give a file name: the built-in rules' types, Text
+ * for `.custom`, nothing for code and source maps, and Data otherwise.
+ */
+function uploadedType(name: string): ModuleType | undefined {
+  if (/\.([cm]?js|py|map)$/.test(name)) return undefined;
+  if (name.endsWith(".custom")) return "Text";
+  return typeFromExtension(name) ?? "Data";
+}
+
+/**
+ * Uploads infer a module's type from its extension, so a file whose rule
+ * picks another type gets that type's extension.
  */
 function moduleFileName(type: ModuleType, name: string) {
-  const inferred = /\.([cm]?js|py|map)$/.test(name)
-    ? undefined
-    : name.endsWith(".custom")
-      ? "Text"
-      : (typeFromExtension(name) ?? "Data");
-  if (inferred === type) return name;
+  if (uploadedType(name) === type) return name;
   return `${name}${type === "Text" ? ".txt" : type === "Data" ? ".bin" : ".wasm"}`;
 }
 
@@ -154,11 +168,12 @@ function withMagicString(
     code: string,
     chunk: RenderedChunk,
     magicString: MagicString | RolldownMagicString,
+    outputOptions: NormalizedOutputOptions,
   ) => Promise<void>,
 ): PluginHandler<"renderChunk"> {
   return async function (code, chunk, outputOptions, meta) {
     const magicString = meta.magicString ?? new MagicString(code);
-    await renderChunk.call(this, code, chunk, magicString);
+    await renderChunk.call(this, code, chunk, magicString, outputOptions);
     if ("isRolldownMagicString" in magicString && magicString.isRolldownMagicString) {
       return magicString;
     }

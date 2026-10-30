@@ -137,15 +137,23 @@ layer(NodeServices.layer)("WorkerBundle", (it) => {
         expect(entry).toContain(path.basename(notes!.path));
 
         // `!` globs exclude, as in the prebuilt walk: the excluded import is
-        // left to rolldown, which can't load it.
+        // left to rolldown. Its text parses as JavaScript, so the build fails
+        // on the missing default export, and the hint still names the rule.
         const excluded = yield* Effect.flip(
           build([{ globs: ["**/*.ttf", "**/*.png", "**/*.md", `!${root}/src/font.ttf`] }]),
         );
-        expect(String(excluded.cause ?? excluded.message)).toContain("font.ttf");
+        expect(excluded.message).toContain('add rules: [{ type: "Data", globs: ["**/*.ttf"] }]');
 
         // Without rules, the error names the rule that would import them.
         const error = yield* Effect.flip(build(undefined));
-        expect(error.message).toMatch(/add rules: \[\{ globs: \[.*"\*\*\/\*\.md"/);
+        expect(error.message).toContain('{ type: "Text", globs: ["**/*.md"] }');
+
+        // `../` globs match files outside the entry's directory.
+        const relative = yield* build([
+          { globs: ["**/*.ttf", "../shared/*.png"] },
+          { type: "Text", globs: ["**/*.md"] },
+        ]);
+        expect(relative.files.some((file) => file.path.endsWith(".png"))).toBe(true);
       }),
     { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   );

@@ -86,9 +86,9 @@ export const workerBundleOptions = (options: {
  * Lower the Worker's `rules` to bundler module rules: an import whose
  * resolved file matches a rule's glob is emitted as its own module, of the
  * rule's type, instead of being loaded by rolldown. Globs match the path
- * relative to the entry's directory, or an absolute path; `!` globs exclude
- * across all rules, as in the prebuilt (`bundle: false`) walk. JavaScript,
- * TypeScript and JSON are always bundled.
+ * relative to the entry's directory (`../` included), or an absolute path;
+ * `!` globs exclude across all user rules, as in the prebuilt
+ * (`bundle: false`) walk. JavaScript, TypeScript and JSON are always bundled.
  */
 const toModuleRules = (main: string, rules: readonly ModuleRule[] | undefined) => {
   const globs = rules?.flatMap((rule) => rule.globs) ?? [];
@@ -96,12 +96,13 @@ const toModuleRules = (main: string, rules: readonly ModuleRule[] | undefined) =
   const root = path.dirname(main);
   const isExcluded = exclude.length ? picomatch(exclude, { dot: true }) : () => false;
   // Absolute globs match any file; relative ones match from the entry's
-  // directory, or from the filesystem root for files outside it.
+  // directory (`../shared/*.png` too), and `**` globs from the filesystem
+  // root for files outside it.
   const targetsOf = (id: string) => {
     const file = path.normalize(id);
     const relative = path.relative(root, file);
     const outside = relative.startsWith("../") || path.isAbsolute(relative);
-    return [file, outside ? file.replace(/^\//, "") : relative];
+    return outside ? [file, relative, file.replace(/^\//, "")] : [file, relative];
   };
   const moduleRules = (rules ?? []).flatMap((rule) => {
     const include = rule.globs.filter((glob) => !glob.startsWith("!"));
@@ -126,29 +127,47 @@ const toModuleRules = (main: string, rules: readonly ModuleRule[] | undefined) =
 
 /**
  * Point rolldown's failure to load an imported non-JavaScript file (a font,
- * markdown, an image) at the `rules` that upload it as a module.
+ * markdown, an image) at the `rules` that upload it as a module. A text file
+ * that happens to parse as JavaScript fails later, without a default export.
  */
 const withRulesHint = (error: Bundle.BundleError): Bundle.BundleError => {
   const errors = (
     error.cause as { errors?: Array<{ code?: string; id?: string; message?: string }> }
   )?.errors;
-  const files = (errors ?? []).flatMap((e) => {
+  const exts = (errors ?? []).flatMap((e) => {
+    const message = e.message ? stripVTControlCharacters(e.message) : "";
     const file =
       e.code === "UNLOADABLE_DEPENDENCY"
-        ? (e.message && stripVTControlCharacters(e.message))?.match(/Could not load (\S+)/)?.[1]
+        ? message.match(/Could not load (\S+)/)?.[1]
         : e.code === "PARSE_ERROR"
           ? e.id
-          : undefined;
+          : e.code === "MISSING_EXPORT"
+            ? message.match(/is not exported by "([^"]+)"/)?.[1]
+            : undefined;
     const ext = file && path.extname(file);
     return ext && !/^\.([cm]?[jt]sx?|json|css)$/.test(ext) ? [ext] : [];
   });
-  if (files.length === 0) return error;
-  const globs = [...new Set(files)].map((ext) => `"**/*${ext}"`).join(", ");
+  if (exts.length === 0) return error;
+  const unique = [...new Set(exts)];
+  const isText = (ext: string) => TEXT_EXTENSIONS.test(ext);
+  const rules = [
+    { type: "Text", exts: unique.filter(isText) },
+    { type: "Data", exts: unique.filter((ext) => !isText(ext)) },
+  ]
+    .filter((rule) => rule.exts.length)
+    .map(
+      (rule) =>
+        `{ type: "${rule.type}", globs: [${rule.exts.map((ext) => `"**/*${ext}"`).join(", ")}] }`,
+    );
   return Bundle.BundleError.make({
-    message: `${error.message}\nTo import these files as Worker modules, add rules: [{ globs: [${globs}] }] to the Worker.`,
+    message: `${error.message}\nTo import these files as Worker modules, add rules: [${rules.join(", ")}] to the Worker.`,
     cause: error.cause,
   });
 };
+
+/** Extensions the hint suggests importing as `Text` rather than `Data`. */
+const TEXT_EXTENSIONS =
+  /^\.(md|markdown|mdx|csv|tsv|ya?ml|toml|ini|xml|svg|graphql|gql|glsl|wgsl|vert|frag|prompt)$/;
 
 /**
  * Rebuild any `builtin:esm-external-require` plugin instance with OUR copy of

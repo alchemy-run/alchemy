@@ -956,18 +956,23 @@ export interface WorkerProps<
    * Each rule's `type` decides how a file is imported: `Text` as a `string`,
    * `Data` as an `ArrayBuffer`, `CompiledWasm` as a `WebAssembly.Module`.
    * Without one, the extension decides (`.wasm` CompiledWasm,
-   * `.txt`/`.html`/`.sql` Text), and other files are Data.
+   * `.txt`/`.html`/`.sql` Text), and other files are Data. When rules
+   * overlap, the first match decides.
    *
    * When Alchemy bundles {@link main}, rules add to the built-in ones
    * (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`) and are checked first: an
    * imported file that matches is uploaded as a module instead of bundled.
    * JavaScript, TypeScript and JSON are always bundled, and imports inside
-   * nested `?worker` modules don't use rules. Globs may also be absolute,
-   * for files outside the entry's directory, and `!` globs exclude across
-   * all rules.
+   * nested `?worker` modules don't use rules. For files outside the entry's
+   * directory, globs may start with `../` or be absolute. `!` globs exclude
+   * across your rules; an excluded `.txt` or `.wasm` still matches the
+   * built-in rules.
    *
    * When {@link bundle} is `false`, every file in the entry's directory that
    * matches is uploaded, and the rules replace {@link defaultModuleRules}.
+   *
+   * Rules don't apply to an inline {@link script}, a {@link source}
+   * provider or a Python {@link main}.
    *
    * ```ts
    * // worker.ts
