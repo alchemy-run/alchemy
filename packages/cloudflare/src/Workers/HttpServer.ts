@@ -10,7 +10,7 @@ import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 import { Request } from "./Request.ts";
 import type { WorkerServices } from "./Worker.ts";
-import { isWorkerEvent, WorkerExecutionContext } from "./WorkerRuntime.ts";
+import { isWorkerEvent } from "./WorkerRuntime.ts";
 
 export type HttpEffect = Http.HttpEffect<WorkerServices>;
 
@@ -18,13 +18,16 @@ export const makeRequestHandler =
   <Req = never>(handler: Http.HttpEffect<Req> | Effect.Effect<Http.HttpEffect<Req>>) =>
   (event: any) =>
     isWorkerEvent(event) && event.type === "fetch"
-      ? makeRequestEffect(event.input, handler)
+      ? makeRequestEffect(event.input, handler, event.context)
       : undefined;
 
 export const makeRequestEffect = <Req = never>(
   webRequest: cf.Request,
   handler: Http.HttpEffect<Req> | Effect.Effect<Http.HttpEffect<Req>>,
+  /** A Worker fetch's context. With it, a client abort interrupts the handler. */
+  ctx?: cf.ExecutionContext,
 ) => {
+  const signal = ctx && (webRequest as any as globalThis.Request).signal;
   const safeHandler = Http.safeHttpEffect(handler);
   return Effect.gen(function* () {
     const request = HttpServerRequest.fromWeb(webRequest as any as globalThis.Request).modify({
@@ -40,13 +43,17 @@ export const makeRequestEffect = <Req = never>(
         }),
     });
 
-    return yield* toHandledWebResponse(safeHandler).pipe(
+    // `toHandled` runs the request uninterruptibly; the handler opts back in,
+    // as `HttpRouter` routes do, so a client abort reaches it.
+    return yield* toHandledWebResponse(
+      signal ? Effect.interruptible(safeHandler) : safeHandler,
+    ).pipe(
       Effect.provide([
         Layer.succeed(HttpServerRequest.HttpServerRequest, request),
         Layer.succeed(Request, webRequest as any),
       ]),
     );
-  }).pipe(interruptOnClientAbort((webRequest as any as globalThis.Request).signal)) as any;
+  }).pipe(interruptOnClientAbort(signal, ctx)) as any;
 };
 
 /**
@@ -60,25 +67,23 @@ export const makeRequestEffect = <Req = never>(
  * finalizers finish.
  */
 const interruptOnClientAbort =
-  (signal: AbortSignal | undefined) =>
+  (signal: AbortSignal | undefined, ctx: cf.ExecutionContext | undefined) =>
   <A, E, R>(self: Effect.Effect<A, E, R>) =>
-    signal === undefined
+    signal === undefined || ctx === undefined
       ? self
-      : Effect.flatMap(WorkerExecutionContext.asEffect(), (ctx) =>
-          Effect.withFiber((fiber) => {
-            const onAbort = () => {
-              ctx.raw.waitUntil(new Promise<void>((resolve) => fiber.addObserver(() => resolve())));
-              fiber.interruptUnsafe(undefined, ClientAbort.annotation);
-            };
-            if (signal.aborted) {
-              onAbort();
-            } else {
-              signal.addEventListener("abort", onAbort, { once: true });
-              fiber.addObserver(() => signal.removeEventListener("abort", onAbort));
-            }
-            return self;
-          }),
-        );
+      : Effect.withFiber((fiber) => {
+          const onAbort = () => {
+            ctx.waitUntil(new Promise<void>((resolve) => fiber.addObserver(() => resolve())));
+            fiber.interruptUnsafe(undefined, ClientAbort.annotation);
+          };
+          if (signal.aborted) {
+            onAbort();
+          } else {
+            signal.addEventListener("abort", onAbort, { once: true });
+            fiber.addObserver(() => signal.removeEventListener("abort", onAbort));
+          }
+          return self;
+        });
 
 const toHandledWebResponse = <Req>(
   handler: Effect.Effect<HttpServerResponse.HttpServerResponse, never, Req>,
@@ -89,9 +94,7 @@ const toHandledWebResponse = <Req>(
     const context = yield* Effect.context();
     const webResponse = yield* Deferred.make<Response>();
 
-    // `toHandled` runs the request uninterruptibly; the handler opts back in,
-    // as `HttpRouter` routes do, so a client abort reaches it.
-    yield* EffectHttp.toHandled(Effect.interruptible(handler), (request, response) => {
+    yield* EffectHttp.toHandled(handler, (request, response) => {
       const withoutBody = request.method === "HEAD";
       if (!HttpServerResponse.omitsBody(response, withoutBody)) {
         response = EffectHttp.scopeTransferToStream(response);
