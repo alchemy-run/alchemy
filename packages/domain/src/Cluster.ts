@@ -265,6 +265,9 @@ const FORWARD_TIMEOUT = "30 seconds";
 /** Wake the storage reader at a due time this close; later ones wait for its poll. */
 const WAKE_WITHIN_MS = 60_000;
 
+/** Processed cluster messages one retention transaction deletes. */
+const PRUNE_BATCH = 500;
+
 /** Outbox rows a drain reads at a time. */
 const DRAIN_BATCH = 100;
 
@@ -711,6 +714,16 @@ const make = (options: Options) =>
       mssql: () => sql.literal("1"),
       orElse: () => sql.literal("TRUE"),
     });
+    // SQLite returns big integers as rounded numbers: read snowflake ids as text.
+    const messageId = sql.onDialectOrElse({
+      sqlite: () => sql.literal("CAST(id AS TEXT)"),
+      orElse: () => sql.literal("id"),
+    });
+    const forUpdate = sql.onDialectOrElse({
+      pg: () => sql.literal("FOR UPDATE"),
+      mysql: () => sql.literal("FOR UPDATE"),
+      orElse: () => sql.literal(""),
+    });
     /** Delete the rows `retention` no longer keeps. */
     const prune = Effect.gen(function* () {
       const at = yield* now;
@@ -730,8 +743,22 @@ const make = (options: Options) =>
         // This platform's entity types only: another model on the same
         // cluster keeps its own retention.
         const ours = sql.in("entity_type", [...owned]);
-        yield* sql`DELETE FROM ${clusterTables.replies} WHERE request_id IN (SELECT id FROM ${clusterTables.messages} WHERE id < ${before} AND processed = ${sqlTrue} AND ${ours})`;
-        yield* sql`DELETE FROM ${clusterTables.messages} WHERE id < ${before} AND processed = ${sqlTrue} AND ${ours}`;
+        // One fixed, locked set of ids per transaction, and both deletes on
+        // exactly that set: a request that completes meanwhile is not in it,
+        // so it never loses its message row while keeping its reply.
+        const batch = transact(
+          Effect.gen(function* () {
+            const rows = yield* sql<{
+              id: string | number;
+            }>`SELECT ${messageId} AS id FROM ${clusterTables.messages} WHERE id < ${before} AND processed = ${sqlTrue} AND ${ours} ORDER BY id ${limit(PRUNE_BATCH)} ${forUpdate}`;
+            if (rows.length === 0) return 0;
+            const ids = rows.map((row) => String(row.id));
+            yield* sql`DELETE FROM ${clusterTables.replies} WHERE ${sql.in("request_id", ids)}`;
+            yield* sql`DELETE FROM ${clusterTables.messages} WHERE ${sql.in("id", ids)}`;
+            return rows.length;
+          }),
+        );
+        while ((yield* batch) === PRUNE_BATCH) {}
       }
     });
 
