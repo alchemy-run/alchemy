@@ -35,36 +35,34 @@ const call = (url: string, method: "GET" | "POST", path: string) =>
     Effect.retry({ schedule: Schedule.spaced("1 second"), times: 10 }),
   );
 
-for (const isolate of ["class", "key"] as const) {
-  test(
-    `two models with the same definitions in one Worker keep separate data (isolate: "${isolate}")`,
-    Effect.gen(function* () {
-      const { url } = yield* stack;
-      const base = `${url.replace(/\/+$/, "")}/${isolate}`;
-      const id = `a-${yield* Effect.sync(() => crypto.randomUUID())}`;
+test(
+  "two models with the same definitions in one Worker keep separate data",
+  Effect.gen(function* () {
+    const { url } = yield* stack;
+    const base = url.replace(/\/+$/, "");
+    const id = `a-${yield* Effect.sync(() => crypto.randomUUID())}`;
 
-      yield* call(base, "POST", `/Billing/open/${id}/sam`);
-      yield* call(base, "POST", `/Audit/open/${id}/alex`);
+    yield* call(base, "POST", `/Billing/open/${id}/sam`);
+    yield* call(base, "POST", `/Audit/open/${id}/alex`);
 
-      // each model's aggregate holds only its own command
-      expect(yield* call(base, "GET", `/Billing/state/${id}`)).toEqual({ owner: "sam" });
-      expect(yield* call(base, "GET", `/Audit/state/${id}`)).toEqual({ owner: "alex" });
+    // each model's aggregate holds only its own command
+    expect(yield* call(base, "GET", `/Billing/state/${id}`)).toEqual({ owner: "sam" });
+    expect(yield* call(base, "GET", `/Audit/state/${id}`)).toEqual({ owner: "alex" });
 
-      // each model's view hears only its own aggregate's events
-      const owners = (model: string, owner: string) =>
-        call(base, "GET", `/${model}/owners/${id}`).pipe(
-          Effect.repeat({
-            schedule: Schedule.spaced("1 second"),
-            until: (state) => (state as { owner?: string } | null)?.owner === owner,
-            times: 30,
-          }),
-        );
-      expect(yield* owners("Billing", "sam")).toEqual({ owner: "sam" });
-      expect(yield* owners("Audit", "alex")).toEqual({ owner: "alex" });
-    }),
-    { timeout: 180_000 },
-  );
-}
+    // each model's view hears only its own aggregate's events
+    const owners = (model: string, owner: string) =>
+      call(base, "GET", `/${model}/owners/${id}`).pipe(
+        Effect.repeat({
+          schedule: Schedule.spaced("1 second"),
+          until: (state) => (state as { owner?: string } | null)?.owner === owner,
+          times: 30,
+        }),
+      );
+    expect(yield* owners("Billing", "sam")).toEqual({ owner: "sam" });
+    expect(yield* owners("Audit", "alex")).toEqual({ owner: "alex" });
+  }),
+  { timeout: 180_000 },
+);
 
 test(
   "two models running the same saga in one Worker keep separate runs",

@@ -1,7 +1,6 @@
 import type * as Aggregate from "@alchemy.run/domain/Aggregate";
 import { AlreadyCancelled, AlreadyExecuted, NotScheduled } from "@alchemy.run/domain/Aggregate";
 import { isAfter, mergeCheckpoints } from "@alchemy.run/domain/InMemory";
-import { DefinitionError } from "@alchemy.run/domain/Kernel";
 import {
   type Accepted,
   type AggregateKit,
@@ -47,7 +46,7 @@ import {
 } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
-import { Worker } from "../Workers/Worker.ts";
+import type { Worker } from "../Workers/Worker.ts";
 import { layerDurableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
 
 const pad = (n: number) => n.toString().padStart(12, "0");
@@ -845,50 +844,10 @@ const pollAfter = <A>(
 /** A Durable Object class name segment for a model name. */
 const classSegment = (modelName: string) => modelName.replace(/[^A-Za-z0-9_]/g, "_");
 
-/** Address a shared namespace's instances under a model's prefix. */
-const prefixed = (namespace: Namespace, prefix: string): Namespace => ({
-  getByName: (name) => namespace.getByName(`${prefix}${name}`),
-  jurisdiction: (jurisdiction) => prefixed(namespace.jurisdiction(jurisdiction), prefix),
-});
-
-/**
- * `isolate: "key"`: one class per definition, shared by every model, per host
- * Worker. Models may be hosted by separate builds of the platform (each
- * provided on its own), so the classes are tracked per Worker, not per
- * platform: a second declaration would replace the first with fewer models.
- */
-const sharedClasses = new WeakMap<
-  object,
-  Map<string, { readonly namespace: Namespace; readonly impls: Map<string, ObjectImpl> }>
->();
-
-/**
- * A shared class's instance runs the kit of the model its name starts with
- * (`<model>/<key>`). Every model registers its kit while the Worker's Layer
- * is built, before any instance is constructed.
- */
-const routeToModel = (name: string, impls: ReadonlyMap<string, ObjectImpl>): ObjectImpl =>
-  Effect.gen(function* () {
-    const state = yield* DurableObjectState;
-    // While planning, the constructor runs once on a mock state with no id to
-    // discover bindings; every model's kit declares the same ones.
-    const id = state.id as typeof state.id | undefined;
-    if (id === undefined) return yield* impls.values().next().value!;
-    const instance = id.name ?? "";
-    const impl = impls.get(instance.slice(0, instance.indexOf("/")));
-    if (!impl) {
-      return yield* Effect.die(
-        new DefinitionError(`${name} instance '${instance}' belongs to no model hosted here`),
-      );
-    }
-    return yield* impl;
-  });
-
 /** The aggregates, views, policies, projections and streams, each on its own Durable Object class. */
-const durableObjectPlatform = ({
-  jurisdiction,
-  isolate = "class",
-}: DurableObjectsOptions): Layer.Layer<Platform, never, Worker> =>
+const durableObjectPlatform = (
+  jurisdiction: DurableObjectJurisdiction | undefined,
+): Layer.Layer<Platform, never, Worker> =>
   Layer.effect(
     Platform,
     Effect.gen(function* () {
@@ -905,31 +864,11 @@ const durableObjectPlatform = ({
         );
 
       const claim = hostedModels();
-      const declareShared = (name: string, modelName: string, impl: ObjectImpl) =>
-        Effect.gen(function* () {
-          const host = yield* Worker;
-          let shared = sharedClasses.get(host);
-          if (shared === undefined) sharedClasses.set(host, (shared = new Map()));
-          const found = shared.get(name);
-          if (found) {
-            found.impls.set(modelName, impl);
-            return found.namespace;
-          }
-          const impls = new Map([[modelName, impl]]);
-          const namespace = yield* declareIn(name, routeToModel(name, impls));
-          shared.set(name, { namespace, impls });
-          return namespace;
-        });
-
       const hostFor = (modelName: string): ModelHost => {
-        // Every object of the model is declared through here, so none is left
-        // outside the model's isolation.
+        // Every object of the model is declared through here, named after
+        // the model, so models that share a definition never share its data.
         const object = (name: string, impl: ObjectImpl) =>
-          isolate === "key"
-            ? Effect.map(declareShared(name, modelName, impl), (namespace) =>
-                prefixed(namespace, `${modelName}/`),
-              )
-            : declareIn(`${classSegment(modelName)}${name}`, impl);
+          declareIn(`${classSegment(modelName)}${name}`, impl);
         return {
           aggregate: (aggregate, kit) =>
             inInit(
@@ -1149,18 +1088,16 @@ const durableObjectPlatform = ({
  * ### Hosting several models in one Worker
  * Each model gets its own Durable Object classes, named after the model
  * (`BillingAccountAggregate`), so models that list the same aggregate never
- * share its data. With `isolate: "key"`, they share one class per
- * definition (`AccountAggregate`) and each instance is named after its
- * model (`Billing/a-1`).
+ * share its data.
  *
- * **Example:** Two models on one class per definition
+ * **Example:** Two models that both list `Account`
  * ```typescript
  * import * as DomainCloudflare from "@alchemy.run/cloudflare/Domain";
  * import * as Layer from "effect/Layer";
  * import { Audit, AuditHandlers } from "./Audit.ts";
  * import { Billing, BillingHandlers } from "./Billing.ts";
  *
- * const Platform = DomainCloudflare.layerDurableObjects({ isolate: "key" });
+ * const Platform = DomainCloudflare.layerDurableObjects();
  * const BillingLive = Billing.layer(BillingHandlers).pipe(Layer.provide(Platform));
  * const AuditLive = Audit.layer(AuditHandlers).pipe(Layer.provide(Platform));
  * ```
@@ -1181,19 +1118,19 @@ const durableObjectPlatform = ({
  * @provides Domain.Platform
  * @provides WorkflowEngine
  */
-export function layerDurableObjects(
-  options: DurableObjectsOptions = {},
-): Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker> {
+export function layerDurableObjects({ jurisdiction }: DurableObjectsOptions = {}): Layer.Layer<
+  Platform | WorkflowEngine.WorkflowEngine,
+  never,
+  Worker
+> {
   // The same options return the same Layer, so models that each provide it
   // share one platform and one workflow engine.
-  const { jurisdiction, isolate = "class" } = options;
-  const key = `${jurisdiction ?? ""}/${isolate}`;
-  let platform = platforms.get(key);
+  let platform = platforms.get(jurisdiction);
   if (platform === undefined)
     platforms.set(
-      key,
+      jurisdiction,
       (platform = Layer.merge(
-        durableObjectPlatform({ jurisdiction, isolate }),
+        durableObjectPlatform(jurisdiction),
         layerDurableObjectEngine({ jurisdiction }),
       )),
     );
@@ -1220,23 +1157,9 @@ export interface DurableObjectsOptions {
    * @default undefined (no jurisdiction restriction)
    */
   readonly jurisdiction?: DurableObjectJurisdiction;
-  /**
-   * How models hosted in one Worker keep their data apart. With `"class"`,
-   * each model declares its own Durable Object classes
-   * (`BillingAccountAggregate`). With `"key"`, models share one class per
-   * definition (`AccountAggregate`) and each instance is named after its
-   * model (`Billing/a-1`). Either way, two models that use the same
-   * definition never share its data.
-   *
-   * Changing it on a model that already has data does not move that data:
-   * the model starts empty under the new names.
-   *
-   * @default "class"
-   */
-  readonly isolate?: "class" | "key";
 }
 
 const platforms = new Map<
-  string,
+  DurableObjectJurisdiction | undefined,
   Layer.Layer<Platform | WorkflowEngine.WorkflowEngine, never, Worker>
 >();

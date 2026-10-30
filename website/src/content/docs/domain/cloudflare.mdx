@@ -185,15 +185,9 @@ A Durable Object in a jurisdiction is a different object from the one with the s
 
 ## Host several models in one Worker
 
-Each model gets its own Durable Object classes, named after the model: `BillingAccountAggregate` and `AuditAccountAggregate` when both list `Account`. Their data never mixes.
+Each model's Durable Object classes are named after the model: `BillingAccountAggregate` and `AuditAccountAggregate` when both list `Account`, and `Billing_OpenAccountWorkflow` for a saga. Their data never mixes, so several models can share one Worker and one `layerDurableObjects()`.
 
-To keep one class per definition instead, pass `isolate: "key"`. Models then share `AccountAggregate`, and each instance is named after its model, like `Billing/a-1`:
-
-```typescript
-  Layer.provide(DomainCloudflare.layerDurableObjects({ isolate: "key" })),
-```
-
-Saga runs always get a class per model. Changing `isolate`, or a model's name, doesn't move data: the model starts empty under the new names. To keep two models fully apart, host each in its own Worker.
+Renaming a model renames its classes, and the model starts empty under the new names.
 
 ## Count on these guarantees
 
