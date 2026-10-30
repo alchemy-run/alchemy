@@ -2,7 +2,6 @@ import { createHash } from "node:crypto";
 import path from "node:path";
 import MagicString from "magic-string";
 import type {
-  NormalizedOutputOptions,
   Plugin,
   PluginContext,
   RenderedChunk,
@@ -24,6 +23,8 @@ const MODULE_REFERENCE_GLOBAL_REGEX = new RegExp(MODULE_REFERENCE_PATTERN, "g");
 
 export const additionalModulesPlugin = createPlugin("additional-modules", (options) => {
   const additionalModulePaths = new Set<string>();
+  // The first module type emitted per content hash, for each output.
+  const emittedTypes = new Map<string, ModuleType>();
   const userRules = options.moduleRules ?? [];
   // Subpath imports (`#html`) resolve to a module type only once resolved,
   // as in `@cloudflare/vite-plugin`.
@@ -81,32 +82,33 @@ export const additionalModulesPlugin = createPlugin("additional-modules", (optio
           };
         },
       },
+      renderStart() {
+        emittedTypes.clear();
+      },
       renderChunk: {
         filter: { code: { include: MODULE_REFERENCE_REGEX } },
-        handler: withMagicString(async function (code, chunk, magicString, outputOptions) {
+        handler: withMagicString(async function (code, chunk, magicString) {
           const matches = code.matchAll(MODULE_REFERENCE_GLOBAL_REGEX);
           for (const match of matches) {
             const [full, type, id] = match as unknown as [string, ModuleType, string];
             const source = await this.fs.readFile(id);
-            // An explicit file name keyed by type and content: rolldown merges
-            // assets with identical bytes, which would give a Data import the
-            // Text module of another file.
             const name = moduleFileName(type, path.basename(id));
-            const ext = path.extname(name);
-            const hash = createHash("sha256").update(type).update(source).digest("hex").slice(0, 8);
-            const pattern =
-              typeof outputOptions.assetFileNames === "string"
-                ? outputOptions.assetFileNames
-                : "assets/[name]-[hash][extname]";
-            const referenceId = this.emitFile({
-              type: "asset",
-              fileName: pattern
-                .replaceAll("[name]", name.slice(0, name.length - ext.length))
-                .replaceAll("[hash]", hash)
-                .replaceAll("[extname]", ext)
-                .replaceAll("[ext]", ext.slice(1)),
-              source,
-            });
+            // Rolldown merges assets with identical bytes, which would give a
+            // Data import the Text module of another file. Only then is the
+            // name explicit, keyed by type and content; otherwise rolldown
+            // names the asset (`assetFileNames`, collisions).
+            const content = createHash("sha256").update(source).digest("hex");
+            const firstType = emittedTypes.get(content) ?? type;
+            emittedTypes.set(content, firstType);
+            const referenceId = this.emitFile(
+              firstType === type
+                ? { type: "asset", name, source }
+                : {
+                    type: "asset",
+                    fileName: uniqueFileName(name, type, content),
+                    source,
+                  },
+            );
             const fileName = this.getFileName(referenceId);
             const relativePath = toPosixPath(path.relative(path.dirname(chunk.fileName), fileName));
             const importPath = relativePath.startsWith(".") ? relativePath : `./${relativePath}`;
@@ -144,6 +146,12 @@ function moduleFileName(type: ModuleType, name: string) {
   return `${name}${type === "Text" ? ".txt" : type === "Data" ? ".bin" : ".wasm"}`;
 }
 
+function uniqueFileName(name: string, type: ModuleType, content: string) {
+  const ext = path.extname(name);
+  const hash = createHash("sha256").update(type).update(content).digest("hex").slice(0, 8);
+  return `assets/${name.slice(0, name.length - ext.length)}-${hash}${ext}`;
+}
+
 function isPlainFile(id: string) {
   return path.isAbsolute(id) && !/[?#]/.test(id.replace(/\?module$/, ""));
 }
@@ -168,12 +176,11 @@ function withMagicString(
     code: string,
     chunk: RenderedChunk,
     magicString: MagicString | RolldownMagicString,
-    outputOptions: NormalizedOutputOptions,
   ) => Promise<void>,
 ): PluginHandler<"renderChunk"> {
   return async function (code, chunk, outputOptions, meta) {
     const magicString = meta.magicString ?? new MagicString(code);
-    await renderChunk.call(this, code, chunk, magicString, outputOptions);
+    await renderChunk.call(this, code, chunk, magicString);
     if ("isRolldownMagicString" in magicString && magicString.isRolldownMagicString) {
       return magicString;
     }
