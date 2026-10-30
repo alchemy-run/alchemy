@@ -515,8 +515,16 @@ export const RegionCompositeHealthCheck = Effect.gen(function* () {
   });
 });
 
-/** Hyperdisks in a disk consistency group, so a group snapshot has members. */
+/**
+ * Hyperdisks in a disk consistency group, so a group snapshot has members.
+ * One group per snapshot kind: a zonal snapshot group needs every disk in
+ * its group zonal and in its zone, so the regional disk gets its own.
+ */
 const ConsistencyGroup = GCP.Compute.ResourcePolicy("ProbeConsistencyGroup", {
+  region,
+  diskConsistencyGroupPolicy: {},
+});
+const RegionConsistencyGroup = GCP.Compute.ResourcePolicy("ProbeRegionConsistencyGroup", {
   region,
   diskConsistencyGroupPolicy: {},
 });
@@ -537,7 +545,7 @@ export const InstantSnapshotGroup = Effect.gen(function* () {
   });
 });
 export const RegionInstantSnapshotGroup = Effect.gen(function* () {
-  const group = yield* ConsistencyGroup;
+  const group = yield* RegionConsistencyGroup;
   const member = yield* GCP.Compute.RegionDisk("ProbeRegionGroupMember", {
     region,
     replicaZones: ["us-central1-a", "us-central1-b"],
