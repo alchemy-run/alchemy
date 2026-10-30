@@ -228,6 +228,46 @@ export class UnreachablePhase extends Data.TaggedError("UnreachablePhase")<{
   }
 }
 
+/** A timer in a phase's `after` that the host can't run. */
+export class InvalidPhaseTimer extends Data.TaggedError("InvalidPhaseTimer")<{
+  readonly aggregate: string;
+  readonly phase: string;
+  /** The key in `after`, such as `"24 hours"`. */
+  readonly delay: string;
+  /** The command the timer sends, when it names a command class. */
+  readonly command?: string;
+  /**
+   * What is wrong: the delay is no duration, the timer is no command of the
+   * aggregate, its command declares rejections or has middleware, `when` does
+   * not let it run in the phase, or its command takes input.
+   */
+  readonly issue:
+    | "NotADuration"
+    | "UnknownCommand"
+    | "Rejects"
+    | "Middleware"
+    | "WrongPhase"
+    | "TakesInput";
+}> {
+  override get message() {
+    const where = `${this.aggregate}.phases.${this.phase}.after["${this.delay}"]`;
+    switch (this.issue) {
+      case "NotADuration":
+        return `${where} is not a duration: write it like "24 hours"`;
+      case "UnknownCommand":
+        return `${where} is not a command of ${this.aggregate}`;
+      case "Rejects":
+        return `${where}: ${this.command} declares rejections, and nobody waits for a timer`;
+      case "Middleware":
+        return `${where}: ${this.command} has middleware, and a timer has no caller`;
+      case "WrongPhase":
+        return `${where}: when does not let ${this.command} run in '${this.phase}'`;
+      case "TakesInput":
+        return `${where}: ${this.command} takes input: use a function of the state`;
+    }
+  }
+}
+
 // ---------------------------------------------------------------- runtime
 
 /** An aggregate receives a command it does not list. */
@@ -475,6 +515,7 @@ export type Reason =
   | UnknownPhaseEvent
   | ImpossibleMove
   | UnreachablePhase
+  | InvalidPhaseTimer
   | UnhandledCommand
   | UndeclaredMove
   | UnroutedCommand

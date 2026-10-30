@@ -121,7 +121,9 @@ When the lifecycle is the rule, declare it as data. The three fields are optiona
 - `Domain.verify` finds an unreachable phase, a command with no phase, and a move no command in that phase can record.
 - `Order.nextCommands(state)` and `Order.phase(state)` are pure: use them in a client, with no second copy of the rule. `predict` applies `when` too.
 
-More: [Aggregate: Declare its phases](https://alchemy.run/domain/aggregate#declare-its-phases).
+- A phase owns its timers: `triage: { on: {...}, after: { "24 hours": MarkStalled } }`. Entering arms, leaving cancels, entering again arms again, with an id the host derives. Prefer it to a policy that arms and cancels a deadline. The command never rejects, and `when` allows it in that phase. The value can be `(state) => new MarkStalled({...})`. It fires once per entry. Seeded history (`given`) moves no timers, so send the command that enters the phase.
+
+More: [Aggregate: Declare its phases](https://alchemy.run/domain/aggregate#declare-its-phases), [Deadlines: Let a phase own the timer](https://alchemy.run/domain/deadlines#let-a-phase-own-the-timer).
 
 ### Patterns for decide, evolve and reply
 
