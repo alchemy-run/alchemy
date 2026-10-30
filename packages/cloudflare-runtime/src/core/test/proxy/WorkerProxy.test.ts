@@ -676,10 +676,9 @@ layer(services, { excludeTestServices: true })((it) => {
 
         // Whether the tail is still in the client socket's write buffer when
         // the upstream closes is a timing question, so ask it many times.
-        const missing: Array<number> = [];
-        for (let i = 0; i < 40; i++) {
-          missing.push(yield* Effect.promise(() => bytesMissingSlowly(instance.url)));
-        }
+        const missing = yield* Effect.forEach(Array.from({ length: 40 }), () =>
+          bytesMissingSlowly(instance.url),
+        );
         expect(missing.filter((bytes) => bytes !== 0)).toEqual([]);
       }),
     60_000,
@@ -745,7 +744,7 @@ const SLOW_BODY = "x".repeat(4 * 1024 * 1024);
  * Resolves with how many bytes fewer arrived than the response announced.
  */
 const bytesMissingSlowly = (url: URL) =>
-  new Promise<number>((resolve) => {
+  Effect.callback<number>((resume) => {
     const socket = NodeNet.connect(Number(url.port), url.hostname);
     let head = "";
     let received = 0;
@@ -763,9 +762,16 @@ const bytesMissingSlowly = (url: URL) =>
     socket.on("close", () => {
       const end = head.indexOf("\r\n\r\n");
       const length = Number(/content-length: (\d+)/i.exec(head)?.[1] ?? Number.NaN);
-      resolve(
-        end === -1 || Number.isNaN(length) ? Number.POSITIVE_INFINITY : end + 4 + length - received,
+      resume(
+        Effect.succeed(
+          end === -1 || Number.isNaN(length)
+            ? Number.POSITIVE_INFINITY
+            : end + 4 + length - received,
+        ),
       );
+    });
+    return Effect.sync(() => {
+      socket.destroy();
     });
   });
 
