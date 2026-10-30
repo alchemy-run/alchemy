@@ -12,10 +12,12 @@ import type * as Aggregate from "./Aggregate.ts";
 import type * as Api from "./Api.ts";
 import type * as DomainCommand from "./Command.ts";
 import * as Key from "./Key.ts";
+import type * as Middleware from "./Middleware.ts";
+import type * as Query from "./Query.ts";
 import * as Read from "./Read.ts";
 import { nameOf } from "./ReadRpcs.ts";
 import type * as DomainStream from "./Stream.ts";
-import type * as View from "./View.ts";
+import * as View from "./View.ts";
 
 /** Per-call headers, resolved at execution time and excluded from replayable args. */
 export class CommandHeaders extends Context.Service<
@@ -47,7 +49,38 @@ export type Failure<C extends DomainCommand.Any> =
   | Readonly<{ _tag: "Denied"; error: Denial<C> }>
   | Readonly<{ _tag: "Unknown" }>;
 
-type Cases<A extends Api.Any> = {
+type QueryRejection<Q extends Query.Any> = Aggregate.InstanceOf<
+  NonNullable<Q["definition"]["rejects"]>[number]
+>;
+
+type QueryRefusal<Q extends Query.Any> =
+  | Readonly<{ _tag: "Rejected"; rejection: QueryRejection<Q> }>
+  | Readonly<{ _tag: "Denied"; error: Middleware.Errors<Q["middleware"]> }>
+  | Readonly<{ _tag: "Unknown" }>;
+
+/**
+ * A query refusal (`Rejected`, `Denied`) is final. `TimedOut` (only for a query that reads
+ * projections) means they did not reach `atLeast` in time; `Unknown` is transport or a defect.
+ * Both can be asked again.
+ */
+export type QueryFailure<Q extends Query.Any> =
+  NonNullable<Q["definition"]["from"]> extends readonly []
+    ? QueryRefusal<Q>
+    : QueryRefusal<Q> | Readonly<{ _tag: "TimedOut" }>;
+
+type QueryCases<A extends Api.Any> = {
+  readonly [Q in Api.QueriesOf<A> as `Succeeded${Q["queryName"]}`]: {
+    requestId: typeof Schema.String;
+    result: Schema.Schema<Query.ResultOf<Q>>;
+  };
+} & {
+  readonly [Q in Api.QueriesOf<A> as `Failed${Q["queryName"]}`]: {
+    requestId: typeof Schema.String;
+    failure: Schema.Schema<QueryFailure<Q>>;
+  };
+};
+
+type Cases<A extends Api.Any> = QueryCases<A> & {
   readonly [C in Api.CommandsOf<A> as `Succeeded${C["tag"]}`]: {
     commandId: typeof Schema.String;
     reply: Schema.Schema<Reply<C>>;
@@ -70,8 +103,31 @@ type Result<A extends Api.Any, C extends DomainCommand.Any> = Extract<
   { readonly _tag: `Succeeded${C["tag"]}` | `Failed${C["tag"]}` }
 >;
 
+type QueryArgs<Q extends Query.Any> = {
+  input: Schema.Schema<Query.InputOf<Q>>;
+  requestId: typeof Schema.String;
+  atLeast: Schema.optional<typeof Receipt>;
+  after: Schema.optional<typeof Schema.String>;
+  take: Schema.optional<typeof Schema.Number>;
+};
+type QueryResult<A extends Api.Any, Q extends Query.Any> = Extract<
+  MessageUnion<Cases<A>>["Type"],
+  { readonly _tag: `Succeeded${Q["queryName"]}` | `Failed${Q["queryName"]}` }
+>;
+
 /** Typed Command definitions and their result Message union, derived from an Api. */
 type CommandDefinitions<A extends Api.Any> = {
+  readonly [Q in Api.QueriesOf<A> as Q["queryName"]]: Command.CommandDefinitionWithArgs<
+    Q["queryName"],
+    QueryArgs<Q>,
+    Effect.Effect<
+      QueryResult<A, Q>,
+      never,
+      // A query client call needs no services of its own (Api.QueryClient).
+      A["Client"]["Identifier"]
+    >
+  >;
+} & {
   readonly [C in Api.CommandsOf<A> as C["tag"]]: Command.CommandDefinitionWithArgs<
     C["tag"],
     Args<C>,
@@ -106,8 +162,32 @@ function commandDefinitions(api: Api.Any): unknown {
       ]),
     };
   }
+  const queries = api.entries.filter((entry): entry is Query.Any => entry.kind === "Query");
+  for (const query of queries) {
+    const name = query.queryName;
+    cases[`Succeeded${name}`] = {
+      requestId: Schema.String,
+      result: (query.rpc as Rpc.AnyWithProps).successSchema,
+    };
+    cases[`Failed${name}`] = {
+      requestId: Schema.String,
+      failure: Schema.Union([
+        Schema.TaggedStruct("Rejected", {
+          rejection: Schema.Union(query.definition.rejects ?? []),
+        }),
+        Schema.TaggedStruct("Denied", {
+          error: Schema.Union(query.middleware.map((middleware) => middleware.error)),
+        }),
+        Schema.TaggedStruct("TimedOut", {}),
+        Schema.TaggedStruct("Unknown", {}),
+      ]),
+    };
+  }
   const Message = defineMessageUnion(cases);
   const definitions: Record<string, unknown> = { Message };
+  for (const query of queries) {
+    definitions[query.queryName] = queryDefinition(api, query, Message);
+  }
   for (const command of api.commands) {
     const { payloadSchema } = command.rpc as Rpc.AnyWithProps;
     definitions[command.tag] = Command.define(command.tag, {
@@ -165,6 +245,71 @@ function commandDefinitions(api: Api.Any): unknown {
   }
   return definitions;
 }
+
+/** One Foldkit Command for one Api query; the reply Message carries the caller's `requestId`. */
+const queryDefinition = (api: Api.Any, query: Query.Any, Message: Schema.Top) => {
+  const name = query.queryName;
+  const { payloadSchema } = query.rpc as Rpc.AnyWithProps;
+  return Command.define(name, {
+    args: {
+      input: Schema.toType((payloadSchema as Schema.Struct<{ input: Schema.Top }>).fields.input),
+      requestId: Schema.String,
+      atLeast: Schema.optional(Receipt),
+      after: Schema.optional(Schema.String),
+      take: Schema.optional(Schema.Number),
+    },
+    messages: [Message],
+    execute: Effect.fn(
+      function* ({ input, requestId, atLeast, after, take }) {
+        const client = (yield* Effect.service(api.Client)) as Record<
+          string,
+          (
+            input: unknown,
+            options: Query.RunOptions & { readonly headers?: Headers.Input | undefined },
+          ) => Effect.Effect<unknown, unknown>
+        >;
+        const headersService = yield* Effect.serviceOption(CommandHeaders);
+        const headers =
+          headersService._tag === "Some" ? yield* headersService.value.get(name) : undefined;
+        const result = yield* client[name](input, {
+          headers,
+          ...(atLeast === undefined ? {} : { atLeast }),
+          ...(after === undefined ? {} : { after }),
+          ...(take === undefined ? {} : { take }),
+        });
+        return { _tag: `Succeeded${name}`, requestId, result };
+      },
+      (effect, { requestId }) =>
+        effect.pipe(
+          Effect.catchCauseIf(
+            (cause) => Cause.hasFails(cause) || Cause.hasDies(cause),
+            (cause) =>
+              Effect.succeed({
+                _tag: `Failed${name}`,
+                requestId,
+                failure: Cause.hasDies(cause)
+                  ? { _tag: "Unknown" }
+                  : classifyQueryFailure(
+                      query,
+                      cause.pipe(Cause.findErrorOption, Option.getOrUndefined),
+                    ),
+              }),
+          ),
+        ),
+    ),
+  });
+};
+
+const classifyQueryFailure = (query: Query.Any, error: unknown) => {
+  if ((query.definition.rejects ?? []).some((rejection) => Schema.is(rejection)(error))) {
+    return { _tag: "Rejected", rejection: error };
+  }
+  if (query.middleware.some((middleware) => Schema.is(middleware.error)(error))) {
+    return { _tag: "Denied", error };
+  }
+  if (Schema.is(View.ConsistencyTimeout)(error)) return { _tag: "TimedOut" };
+  return { _tag: "Unknown" };
+};
 
 const classifyFailure = (command: DomainCommand.Any, error: unknown) => {
   if (command.rejects.some((rejection) => Schema.is(rejection)(error))) {

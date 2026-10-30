@@ -1,4 +1,5 @@
 import * as Domain from "@alchemy.run/domain";
+import * as Foldkit from "@alchemy.run/domain/Foldkit";
 import { InMemory } from "@alchemy.run/domain/InMemory";
 import { Story } from "@alchemy.run/domain/Story";
 import { describe, expect, it } from "@alchemy.run/test";
@@ -465,4 +466,151 @@ describe("Domain Query", () => {
       "Api 'Twice' exposes two entries named 'Deposit'",
     );
   });
+});
+
+// ---------------------------------------------------------------- Foldkit Commands for queries
+
+describe("Domain Query through Foldkit", () => {
+  const Wallets$ = Foldkit.make(WalletApi);
+  const as = (viewer: string | undefined) =>
+    Effect.provideService(Foldkit.CommandHeaders, {
+      get: () => Effect.succeed(viewer === undefined ? {} : { "x-viewer": viewer }),
+    });
+
+  it.live("answers a query with its result and the caller's request id, after atLeast", () =>
+    Effect.gen(function* () {
+      const wallets = yield* Wallet;
+      yield* wallets.send(sam, new Open({ owner: "sam" }));
+      const api = yield* WalletApi.clientInProcess;
+      const receipt = yield* api.Deposit("sam-1", { amounts: [1, 2, 3, 4] });
+      const page = yield* Wallets$.WalletMovements({
+        input: { wallet: "sam-1" },
+        requestId: "q:0",
+        atLeast: { stream: receipt.stream, version: receipt.version },
+        take: 3,
+      }).effect.pipe(as("sam"));
+      expect(page).toMatchObject({
+        _tag: "SucceededWalletMovements",
+        requestId: "q:0",
+        result: { entries: [{ amount: 1 }, { amount: 2 }, { amount: 3 }] },
+      });
+      expect(Schema.is(Wallets$.Message)(page)).toBe(true);
+      if (page._tag !== "SucceededWalletMovements") return;
+      const next = yield* Wallets$.WalletMovements({
+        input: { wallet: "sam-1" },
+        requestId: "q:1",
+        after: page.result.cursor!,
+      }).effect.pipe(as("sam"));
+      expect(next).toMatchObject({ result: { entries: [{ amount: 4 }], cursor: null } });
+      const total = yield* Wallets$.Total({
+        input: { wallet: "sam-1" },
+        requestId: "q:2",
+      }).effect.pipe(as("sam"));
+      expect(total).toEqual({
+        _tag: "SucceededTotal",
+        requestId: "q:2",
+        result: { total: 10, movements: 4 },
+      });
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        WalletApi.layerClientInProcess.pipe(
+          Layer.provideMerge(
+            Wallets.layer(handlers({ batch: { size: 100, wait: "100 millis" } })).pipe(
+              Layer.provideMerge(Layer.mergeAll(InMemory, Movements.memory, ViewerSessionLive)),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  it.live("turns a projection that did not reach atLeast into TimedOut", () =>
+    Effect.gen(function* () {
+      const client = yield* WalletApi.Client;
+      const lagging = Layer.succeed(WalletApi.Client, {
+        ...client,
+        Total: () =>
+          Effect.fail(
+            new Domain.ConsistencyTimeout({
+              view: "Ledger",
+              key: "sam-1",
+              stream: "Wallet/sam-1",
+              version: 9,
+            }),
+          ),
+      });
+      const result = yield* Wallets$.Total({
+        input: { wallet: "sam-1" },
+        requestId: "q:6",
+        atLeast: { stream: "Wallet/sam-1", version: 9 },
+      }).effect.pipe(as("sam"), Effect.provide(lagging));
+      expect(result).toEqual({
+        _tag: "FailedTotal",
+        requestId: "q:6",
+        failure: { _tag: "TimedOut" },
+      });
+      expect(Schema.is(Wallets$.Message)(result)).toBe(true);
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        WalletApi.layerClientInProcess.pipe(
+          Layer.provideMerge(
+            Wallets.layer(handlers()).pipe(
+              Layer.provideMerge(Layer.mergeAll(InMemory, Movements.memory, ViewerSessionLive)),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
+  it.live("classifies a rejection, a middleware refusal and a defect", () =>
+    Effect.gen(function* () {
+      const wallets = yield* Wallet;
+      const opened = yield* wallets.send(sam, new Open({ owner: "sam" }));
+      // `validate` reads this view: wait for it so the refusal is certain.
+      const owners = yield* WalletOwner;
+      yield* owners.query(sam, { atLeast: opened }).pipe(Effect.orDie);
+      const rejected = yield* Wallets$.WalletMovements({
+        input: { wallet: "sam-1" },
+        requestId: "q:3",
+      }).effect.pipe(as("kim"));
+      expect(rejected).toMatchObject({
+        _tag: "FailedWalletMovements",
+        requestId: "q:3",
+        failure: { _tag: "Rejected", rejection: { _tag: "NotYours", wallet: "sam-1" } },
+      });
+      const denied = yield* Wallets$.WalletMovements({
+        input: { wallet: "sam-1" },
+        requestId: "q:4",
+      }).effect.pipe(as(undefined));
+      expect(denied).toMatchObject({
+        _tag: "FailedWalletMovements",
+        failure: { _tag: "Denied", error: { _tag: "Unauthenticated" } },
+      });
+      const broken = yield* Wallets$.WalletMovements({
+        input: { wallet: "sam-1" },
+        requestId: "q:5",
+      }).effect.pipe(
+        Effect.provideService(Foldkit.CommandHeaders, { get: () => Effect.die("no headers") }),
+      );
+      expect(broken).toEqual({
+        _tag: "FailedWalletMovements",
+        requestId: "q:5",
+        failure: { _tag: "Unknown" },
+      });
+    }).pipe(
+      Effect.scoped,
+      Effect.provide(
+        WalletApi.layerClientInProcess.pipe(
+          Layer.provideMerge(
+            Wallets.layer(handlers()).pipe(
+              Layer.provideMerge(Layer.mergeAll(InMemory, Movements.memory, ViewerSessionLive)),
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
 });

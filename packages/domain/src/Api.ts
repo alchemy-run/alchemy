@@ -1389,6 +1389,9 @@ export interface Any {
 /** The command classes an Api exposes. */
 export type CommandsOf<A extends Any> = A["commands"][number];
 
+/** The query classes an Api exposes. */
+export type QueriesOf<A extends Any> = Extract<A["entries"][number], Query.Any>;
+
 /** The rejection classes the commands of an Api declare. */
 export type RejectionsOf<A extends Any> = CommandsOf<A>["rejects"][number];
 
