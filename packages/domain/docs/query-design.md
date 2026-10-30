@@ -143,7 +143,7 @@ export class CustomerApi extends Domain.Api(
 The client calls a query as a method, like a command:
 
 ```ts
-const receipt = yield* bank.WithdrawMoney({ target: accountId, amount: 10 }, mfa);
+const receipt = yield* bank.WithdrawMoney(accountId, { amount: 10 }, mfa);
 const page = yield* bank.AccountLedger(
   { account: accountId },
   { atLeast: receipt, take: 20 },
@@ -178,7 +178,7 @@ A query is a security boundary, like a view: to show an audience different rows,
 A client that has just sent a command passes its receipt:
 
 ```ts
-const receipt = yield* bank.DepositMoney({ target: accountId, amount: 100 });
+const receipt = yield* bank.DepositMoney(accountId, { amount: 100 });
 const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt });
 ```
 
@@ -263,7 +263,7 @@ The `domain.queries` counter counts runs by `domain.query` and `domain.outcome`.
 
 Nothing in `Platform` changes. A query runs wherever the Api's handlers run, and reads the app's store plus the platform's read paths.
 
-- **InMemory:** in the process. Stories and `testClient` use it.
+- **InMemory:** in the process. Stories and `clientInProcess` use it.
 - **Cloudflare:** in the Worker, inside the Api's RPC handler, like a view's `get` and `list`. It never runs in a Durable Object: it has no key, so no object owns it, and the app's store (D1, a search index) is bound to the Worker. `validate` reading a view calls that view's Durable Object. `atLeast` reads the aggregate's events from its Durable Object once, then polls the projection keys' Durable Objects for checkpoints every 25ms, as a view's `atLeast` does.
 - **A storage platform** (PR #2392): the same. A query only needs `AggregateStore.state` and `tail`, and `ProjectionStore.checkpoints`, which every platform provides.
 

@@ -192,7 +192,7 @@ A page `visible` trimmed can be shorter than `take` without being the last one, 
 The projection's store is eventually consistent with the model. A client that has just sent a command passes the command's result as `atLeast`, and the query waits until every projection in `from` has handled that command's events.
 
 ```typescript
-const receipt = yield* bank.WithdrawMoney({ target: accountId, amount: 30 }, mfa);
+const receipt = yield* bank.WithdrawMoney(accountId, { amount: 30 }, mfa);
 const page = yield* bank.AccountLedger({ account: accountId }, { atLeast: receipt });
 ```
 
@@ -219,7 +219,7 @@ it.effect("the ledger is as private as the account: agents read it, other custom
 
 Expect the rows in order, each a partial match; a partial result, for a query with one result; or a function over the result, to check a cursor. Without an expectation, the query must be rejected, and the next step asserts how. Projections run to the end after every `when`, so a story needs no `atLeast`.
 
-To check the middleware and `atLeast` too, ask it through the Api's `testClient`. See [Testing an Api](/domain/testing-apis).
+To check the middleware and `atLeast` too, ask it through the Api's `clientInProcess`. See [Testing an Api](/domain/testing-apis).
 
 ## Where it runs
 

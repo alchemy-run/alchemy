@@ -116,8 +116,8 @@ it.live(
         const alex = yield* asCustomer("c-2");
         const support = yield* asAgent("support-7");
         const accountId = yield* register(sam, "c-1", "sam");
-        yield* sam.DepositMoney({ target: accountId, amount: 100 });
-        const receipt = yield* sam.WithdrawMoney({ target: accountId, amount: 30 }, mfa);
+        yield* sam.DepositMoney(accountId, { amount: 100 });
+        const receipt = yield* sam.WithdrawMoney(accountId, { amount: 30 }, mfa);
 
         // The Ledger projection batches its writes; `atLeast` waits until it has this one.
         const first = yield* sam.AccountLedger(

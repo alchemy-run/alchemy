@@ -69,7 +69,7 @@ class Movements extends Context.Service<
     readonly page: (
       where: (row: Movement) => boolean,
       page: Domain.Query.PageRequest,
-    ) => Effect.Effect<Domain.View.Page<Movement>>;
+    ) => Effect.Effect<Domain.Query.Page<Movement>>;
   }
 >()("Test/Movements") {
   static readonly memory = Layer.effect(
@@ -245,6 +245,7 @@ describe("Domain Query", () => {
     story(
       Story.given(sam, new Opened({ owner: "sam" })),
       Story.when(sam, new Deposit({ amounts: [10, 20] })),
+      Story.then(sam, new Deposited({ amount: 10 }), new Deposited({ amount: 20 })),
       asSam,
       Story.query(WalletMovements, { wallet: "sam-1" }, [{ amount: 10 }, { amount: 20 }]),
       asKim,
@@ -257,6 +258,14 @@ describe("Domain Query", () => {
     story(
       Story.given(sam, new Opened({ owner: "sam" })),
       Story.when(sam, new Deposit({ amounts: [1, 2, 3, 4, 5] })),
+      Story.then(
+        sam,
+        new Deposited({ amount: 1 }),
+        new Deposited({ amount: 2 }),
+        new Deposited({ amount: 3 }),
+        new Deposited({ amount: 4 }),
+        new Deposited({ amount: 5 }),
+      ),
       asSam,
       // The default page size.
       Story.query(WalletMovements, { wallet: "sam-1" }, (page) => {
@@ -284,7 +293,9 @@ describe("Domain Query", () => {
       const { tracer, named } = recording();
       yield* story(
         Story.when(sam, new Deposit({ amounts: [500, 5] })),
+        Story.then(sam, new Deposited({ amount: 500 }), new Deposited({ amount: 5 })),
         Story.when(kim, new Deposit({ amounts: [700] })),
+        Story.then(kim, new Deposited({ amount: 700 })),
         asSam,
         Story.query(LargeMovements, { min: 100, note: Redacted.make("audit") }, [
           { wallet: "sam-1", amount: 500 },
@@ -304,6 +315,7 @@ describe("Domain Query", () => {
   it.effect("answers a single result", () =>
     story(
       Story.when(sam, new Deposit({ amounts: [10, 32] })),
+      Story.then(sam, new Deposited({ amount: 10 }), new Deposited({ amount: 32 })),
       Story.query(Total, { wallet: "sam-1" }, { total: 42, movements: 2 }),
     ).pipe(Effect.provide(Movements.memory)),
   );
@@ -344,12 +356,12 @@ describe("Domain Query", () => {
     Effect.gen(function* () {
       const wallets = yield* Wallet;
       yield* wallets.send(sam, new Open({ owner: "sam" }));
-      const api = yield* WalletApi.testClient;
+      const api = yield* WalletApi.clientInProcess;
       const asSam = { headers: { "x-viewer": "sam" } };
       // The projection batches for 200ms; `atLeast` waits for it, through a
       // command with more events than the first window reads.
       const amounts = Array.from({ length: 20 }, (_, i) => i + 1);
-      const receipt = yield* api.Deposit({ target: "sam-1", amounts });
+      const receipt = yield* api.Deposit("sam-1", { amounts });
       const total = yield* api.Total({ wallet: "sam-1" }, { ...asSam, atLeast: receipt });
       expect(total).toEqual({ total: 210, movements: 20 });
 
