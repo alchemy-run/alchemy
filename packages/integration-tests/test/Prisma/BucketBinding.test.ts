@@ -83,8 +83,11 @@ const untilOk = <E, R>(eff: Effect.Effect<HttpClientResponse.HttpClientResponse,
 // observes the write. `untilOk` above only rides out endpoint readiness.
 
 /** GET `${base}/get?key=` — the stored body plus `contentType` / `metadata`. */
-const getObject = (base: string, key: string) =>
-  untilOk(HttpClient.get(`${base}/get?key=${encodeURIComponent(key)}`)).pipe(
+const getObject = (base: string, key: string, range?: { offset: number; length?: number }) => {
+  const params = new URLSearchParams({ key });
+  if (range) params.set("offset", String(range.offset));
+  if (range?.length !== undefined) params.set("length", String(range.length));
+  return untilOk(HttpClient.get(`${base}/get?${params}`)).pipe(
     Effect.flatMap((res) => res.json),
     Effect.map(
       (body) =>
@@ -95,6 +98,7 @@ const getObject = (base: string, key: string) =>
         },
     ),
   );
+};
 
 /** HEAD-equivalent: `/head` returns `{ exists, size }` (metadata only, no body). */
 const headObject = (base: string, key: string) =>
@@ -105,24 +109,40 @@ const headObject = (base: string, key: string) =>
 
 /** `PutOptions` the `/put` route rebuilds from query params. */
 interface PutQuery {
+  as?: "bytes" | "stream" | "stream-sized";
   contentType?: string;
+  cacheControl?: string;
+  contentDisposition?: string;
   metaKey?: string;
   metaValue?: string;
 }
 
-const put = (base: string, key: string, value: string, options?: PutQuery) => {
+const put = (base: string, key: string, value: string | Uint8Array, options?: PutQuery) => {
   const params = new URLSearchParams({ key });
+  if (options?.as) params.set("as", options.as);
   if (options?.contentType) params.set("contentType", options.contentType);
+  if (options?.cacheControl) params.set("cacheControl", options.cacheControl);
+  if (options?.contentDisposition) params.set("contentDisposition", options.contentDisposition);
   if (options?.metaKey) {
     params.set("metaKey", options.metaKey);
     params.set("metaValue", options.metaValue ?? "");
   }
   return untilOk(
     HttpClient.execute(
-      HttpClientRequest.put(`${base}/put?${params}`).pipe(HttpClientRequest.bodyText(value)),
+      HttpClientRequest.put(`${base}/put?${params}`).pipe(
+        typeof value === "string"
+          ? HttpClientRequest.bodyText(value)
+          : HttpClientRequest.bodyUint8Array(value),
+      ),
     ),
   );
 };
+
+const putResult = (base: string, key: string, value: string | Uint8Array, options?: PutQuery) =>
+  put(base, key, value, options).pipe(
+    Effect.flatMap((res) => res.json),
+    Effect.map((body) => body as { ok: boolean; error?: string }),
+  );
 
 const del = (base: string, key: string) =>
   untilOk(
@@ -265,6 +285,57 @@ const exercise = (label: string, writeBase: string, readBase: string) =>
   });
 
 /**
+ * The request shapes the bucket client builds itself: encoded keys, `Range`,
+ * binary and streamed bodies, the optional object headers, the presigned
+ * response content type, and keys it must refuse to send.
+ */
+const exerciseEdgeCases = (base: string) =>
+  Effect.gen(function* () {
+    const prefix = "edge/";
+
+    const odd = `${prefix}dir/ü space+plus(1)!'*.txt`;
+    expect((yield* putResult(base, odd, "odd")).ok).toBe(true);
+    expect((yield* getObject(base, odd)).value).toBe("odd");
+    expect((yield* listPage(base, { prefix: `${prefix}dir/` })).keys).toEqual([odd]);
+
+    const ranged = `${prefix}ranged`;
+    yield* put(base, ranged, "hello world");
+    expect((yield* getObject(base, ranged, { offset: 6, length: 3 })).value).toBe("wor");
+    expect((yield* getObject(base, ranged, { offset: 6 })).value).toBe("world");
+
+    const binary = `${prefix}binary`;
+    const bytes = new Uint8Array([0, 1, 2, 254, 255]);
+    yield* put(base, binary, bytes, { as: "bytes" });
+    expect((yield* headObject(base, binary)).size).toBe(5);
+    const downloaded = yield* HttpClient.get(yield* presign(base, "presign-get", binary));
+    expect([...new Uint8Array(yield* downloaded.arrayBuffer)]).toEqual([...bytes]);
+
+    for (const as of ["stream", "stream-sized"] as const) {
+      const key = `${prefix}${as}`;
+      expect((yield* putResult(base, key, "streamed body", { as })).ok).toBe(true);
+      expect((yield* getObject(base, key)).value).toBe("streamed body");
+    }
+
+    const headed = `${prefix}headed`;
+    yield* put(base, headed, "h", {
+      cacheControl: "max-age=60",
+      contentDisposition: 'attachment; filename="report.txt"',
+    });
+    const withType = yield* presign(base, "presign-get", headed, "application/x-alchemy-test");
+    const response = yield* HttpClient.get(withType);
+    expect(response.status).toBe(200);
+    expect(response.headers["cache-control"]).toBe("max-age=60");
+    expect(response.headers["content-disposition"]).toBe('attachment; filename="report.txt"');
+    expect(response.headers["content-type"]).toBe("application/x-alchemy-test");
+
+    const escaping = yield* putResult(base, `${prefix}../escape`, "x");
+    expect(escaping.ok).toBe(false);
+    expect(escaping.error).toContain('"." or ".." segments');
+
+    expect((yield* getObject(base, `${prefix}missing`)).value).toBeNull();
+  });
+
+/**
  * Deploys three Prisma Compute apps that all bind one shared Object Store
  * bucket — read / write / read-write — via {@link Stack}, then drives the
  * binding over `fetch`:
@@ -305,6 +376,15 @@ describe(
       Effect.gen(function* () {
         const out = yield* stack;
         yield* exercise("rw-bind", out.readWrite, out.readWrite);
+      }).pipe(logLevel),
+      { timeout: TEST_TIMEOUT },
+    );
+
+    test(
+      "keys, ranges, bodies and headers the client encodes itself",
+      Effect.gen(function* () {
+        const out = yield* stack;
+        yield* exerciseEdgeCases(out.readWrite);
       }).pipe(logLevel),
       { timeout: TEST_TIMEOUT },
     );

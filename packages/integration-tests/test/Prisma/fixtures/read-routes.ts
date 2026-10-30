@@ -12,7 +12,16 @@ export const readRoutes = (store: ReadBucketClient, url: URL) =>
   Effect.gen(function* () {
     if (url.pathname === "/get") {
       const key = url.searchParams.get("key") ?? "";
-      const object = yield* store.get(key).pipe(Effect.orDie);
+      const offset = url.searchParams.get("offset");
+      const length = url.searchParams.get("length");
+      const object = yield* store
+        .get(key, {
+          range:
+            offset === null
+              ? undefined
+              : { offset: Number(offset), length: length === null ? undefined : Number(length) },
+        })
+        .pipe(Effect.orDie);
       const value = object ? yield* object.text().pipe(Effect.orDie) : null;
       return yield* HttpServerResponse.json({
         value,

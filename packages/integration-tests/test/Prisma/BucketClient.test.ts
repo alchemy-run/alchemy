@@ -1,12 +1,15 @@
 import { describe, expect, it } from "@alchemy.run/test";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
-import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import type * as HttpClientRequest from "effect/http/HttpClientRequest";
+import * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
-import { makeBucketAccess } from "../../../prisma/src/internal/BucketClient.ts";
-import { makeReadWriteBucketClient } from "../../../prisma/src/ReadWriteBucket.ts";
+import { makeS3Client } from "../../../prisma/src/internal/BucketClient.ts";
+import { writeBucketOperations } from "../../../prisma/src/WriteBucket.ts";
 
 const credentials = {
   endpoint: Effect.succeed("https://t3.storage.dev/"),
@@ -22,44 +25,44 @@ interface SentRequest {
   url: string;
   headers: Record<string, string>;
   body: string | undefined;
-  streamed: boolean;
 }
 
-/**
- * A fetch that records each request and answers from `respond`, so the client
- * runs end to end without the network.
- */
-const fakeStore = (respond: (request: Request) => Response) => {
-  const sent: SentRequest[] = [];
-  const fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const request = new Request(input, init);
-    sent.push({
-      method: request.method,
-      url: request.url,
-      headers: Object.fromEntries(request.headers),
-      body: init?.body == null ? undefined : await new Response(init.body).text(),
-      streamed: init?.body instanceof ReadableStream,
-    });
-    return respond(request);
-  }) as typeof globalThis.fetch;
-  return {
-    sent,
-    run: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      effect.pipe(
-        Effect.provideService(FetchHttpClient.Fetch, fetch),
-        Effect.provideService(RuntimeContext, {
-          Type: "Test",
-          id: "test",
-          env: {},
-          get: () => Effect.undefined,
-          set: (id) => Effect.succeed(id),
-        }),
-      ),
-  };
-};
+interface Reply {
+  status: number;
+  body?: string;
+  headers?: Record<string, string>;
+}
 
-const signedHeaders = (request: SentRequest) =>
-  /SignedHeaders=([^,]+)/.exec(request.headers.authorization ?? "")?.[1];
+const bodyText = (request: HttpClientRequest.HttpClientRequest) =>
+  request.body._tag === "Uint8Array" ? new TextDecoder().decode(request.body.body) : undefined;
+
+/**
+ * An `HttpClient` that records each request and answers from `respond`, so the
+ * client runs end to end without the network.
+ */
+const fakeStore = (respond: (request: SentRequest) => Reply) => {
+  const sent: SentRequest[] = [];
+  const layer = Layer.succeed(
+    HttpClient.HttpClient,
+    HttpClient.make((request, url) =>
+      Effect.sync(() => {
+        const recorded = {
+          method: request.method,
+          url: url.toString(),
+          headers: { ...request.headers },
+          body: bodyText(request),
+        };
+        sent.push(recorded);
+        const reply = respond(recorded);
+        return HttpClientResponse.fromWeb(
+          request,
+          new Response(reply.body ?? null, { status: reply.status, headers: reply.headers }),
+        );
+      }),
+    ),
+  );
+  return { sent, client: makeS3Client(credentials, layer) };
+};
 
 const objectHeaders = {
   "content-length": "5",
@@ -69,19 +72,21 @@ const objectHeaders = {
   "x-amz-meta-owner": "api",
 };
 
+const encode = (text: string) => Effect.sync(() => new TextEncoder().encode(text));
+
 describe("Prisma bucket client", { tags: ["unit", "provider:prisma", "local"] }, () => {
-  // Expected URLs were produced by the previous `@distilled.cloud/aws` client
-  // for the same credentials, keys and signing time.
+  // Expected values were produced by the previous `@distilled.cloud/aws`
+  // client for the same credentials, keys and signing time.
   it.effect("presigns GET and PUT URLs exactly as the AWS SDK client did", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(SIGNING_TIME);
-      const access = makeBucketAccess(credentials);
+      const { client } = fakeStore(() => ({ status: 500 }));
 
-      expect(yield* access.presign({ method: "GET", key: "reports/2026 q1+final.json" })).toBe(
+      expect(yield* client.presign({ method: "GET", key: "reports/2026 q1+final.json" })).toBe(
         "https://t3.storage.dev/user-abc123/reports/2026%20q1%2Bfinal.json?X-Amz-Expires=900&X-Amz-Date=20261030T120000Z&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=tid_testkey%2F20261030%2Fauto%2Fs3%2Faws4_request&X-Amz-SignedHeaders=host&X-Amz-Signature=c149217af584bfcfc9fa5b9fc43dfb3e969467a8485cccaca7363729b17d9176",
       );
       const download = new URL(
-        yield* access.presign({
+        yield* client.presign({
           method: "GET",
           key: "a.txt",
           expiresIn: 60,
@@ -93,7 +98,7 @@ describe("Prisma bucket client", { tags: ["unit", "provider:prisma", "local"] },
         "27e8cb04ae2312d8558080cdfa9315645b05cb4bb7cb0e9866b4081663c510db",
       );
       expect(
-        yield* access.presign({
+        yield* client.presign({
           method: "PUT",
           key: "uploads/avatar.png",
           contentType: "image/png",
@@ -102,18 +107,18 @@ describe("Prisma bucket client", { tags: ["unit", "provider:prisma", "local"] },
         "https://t3.storage.dev/user-abc123/uploads/avatar.png?X-Amz-Expires=900&X-Amz-Date=20261030T120000Z&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=tid_testkey%2F20261030%2Fauto%2Fs3%2Faws4_request&X-Amz-SignedHeaders=content-type%3Bhost&X-Amz-Signature=c47ad65853608828842e71d3eab9baa8ff7a58be50dee00c14a6df9357cbc9de",
       );
       expect(
-        yield* access.presign({ method: "PUT", key: "uploads/raw.bin", expiresIn: 3600 }),
+        yield* client.presign({ method: "PUT", key: "uploads/raw.bin", expiresIn: 3600 }),
       ).toBe(
         "https://t3.storage.dev/user-abc123/uploads/raw.bin?X-Amz-Expires=3600&X-Amz-Date=20261030T120000Z&X-Amz-Algorithm=AWS4-HMAC-SHA256&X-Amz-Credential=tid_testkey%2F20261030%2Fauto%2Fs3%2Faws4_request&X-Amz-SignedHeaders=host&X-Amz-Signature=36be6ebbc7734c74c9f271df8b9ae0db884475f171e981588ab9e43798eefe6d",
       );
     }),
   );
 
-  it.effect("signs a path-style HEAD and reads object metadata from headers", () =>
+  it.effect("signs a HEAD exactly as the AWS SDK client did", () =>
     Effect.gen(function* () {
       yield* TestClock.setTime(SIGNING_TIME);
-      const store = fakeStore(() => new Response(null, { status: 200, headers: objectHeaders }));
-      const object = yield* store.run(makeBucketAccess(credentials).headObject("a/b c.txt"));
+      const store = fakeStore(() => ({ status: 200, headers: objectHeaders }));
+      const object = yield* store.client.headObject("a/b c.txt");
 
       expect(object).toEqual({
         key: "a/b c.txt",
@@ -123,93 +128,93 @@ describe("Prisma bucket client", { tags: ["unit", "provider:prisma", "local"] },
         contentType: "text/plain",
         metadata: { owner: "api" },
       });
-      const [request] = store.sent;
-      expect(request?.method).toBe("HEAD");
-      expect(request?.url).toBe("https://t3.storage.dev/user-abc123/a/b%20c.txt");
-      expect(request?.headers["x-amz-date"]).toBe("20261030T120000Z");
-      expect(request?.headers["x-amz-content-sha256"]).toBe("UNSIGNED-PAYLOAD");
-      expect(request?.headers.authorization).toContain(
-        "Credential=tid_testkey/20261030/auto/s3/aws4_request",
-      );
-      expect(signedHeaders(request!)).toBe("host;x-amz-content-sha256;x-amz-date");
+      expect(store.sent).toMatchObject([
+        {
+          method: "HEAD",
+          url: "https://t3.storage.dev/user-abc123/a/b%20c.txt",
+          headers: {
+            authorization:
+              "AWS4-HMAC-SHA256 Credential=tid_testkey/20261030/auto/s3/aws4_request, SignedHeaders=host;x-amz-content-sha256;x-amz-date, Signature=78f61c8600ccf2eae3f844f9cf1aacfbfc91eb16bc839bd1045596fa24c21e6c",
+            "x-amz-content-sha256": "UNSIGNED-PAYLOAD",
+            "x-amz-date": "20261030T120000Z",
+          },
+          body: undefined,
+        },
+      ]);
     }),
   );
 
   it.effect("sends a ranged GET and streams the body", () =>
     Effect.gen(function* () {
-      const store = fakeStore(
-        () =>
-          new Response("llo", {
-            status: 206,
-            headers: { ...objectHeaders, "content-length": "3" },
-          }),
-      );
-      const object = yield* store.run(
-        makeBucketAccess(credentials).getObject("a.txt", { range: { offset: 2, length: 3 } }),
-      );
+      const store = fakeStore(() => ({
+        status: 206,
+        body: "llo",
+        headers: { ...objectHeaders, "content-length": "3" },
+      }));
+      const object = yield* store.client.getObject("a.txt", { range: { offset: 2, length: 3 } });
 
       expect(store.sent[0]?.headers.range).toBe("bytes=2-4");
       expect(object?.size).toBe(3);
-      expect(yield* object!.text()).toBe("llo");
+      expect(yield* object?.text() ?? Effect.succeed(undefined)).toBe("llo");
     }),
   );
 
   it.effect("reads an open-ended range to the end of the object", () =>
     Effect.gen(function* () {
-      const store = fakeStore(() => new Response("lo", { status: 206, headers: objectHeaders }));
-      yield* store.run(makeBucketAccess(credentials).getObject("a.txt", { range: { offset: 3 } }));
+      const store = fakeStore(() => ({ status: 206, body: "lo", headers: objectHeaders }));
+      yield* store.client.getObject("a.txt", { range: { offset: 3 } });
       expect(store.sent[0]?.headers.range).toBe("bytes=3-");
     }),
   );
 
   it.effect("treats a missing key as null and a missing bucket as an error", () =>
     Effect.gen(function* () {
-      const access = makeBucketAccess(credentials);
-      const missingKey = fakeStore(
-        () => new Response("<Error><Code>NoSuchKey</Code></Error>", { status: 404 }),
-      );
-      expect(yield* missingKey.run(access.getObject("gone"))).toBeNull();
-      expect(yield* missingKey.run(access.headObject("gone"))).toBeNull();
+      const missingKey = fakeStore(() => ({
+        status: 404,
+        body: "<Error><Code>NoSuchKey</Code></Error>",
+      }));
+      expect(yield* missingKey.client.getObject("gone")).toBeNull();
+      expect(yield* missingKey.client.headObject("gone")).toBeNull();
+      yield* missingKey.client.deleteObject("gone");
 
-      const missingBucket = fakeStore(
-        () => new Response("<Error><Code>NoSuchBucket</Code></Error>", { status: 404 }),
-      );
-      const error = yield* missingBucket.run(access.getObject("k")).pipe(Effect.flip);
-      expect(error._tag).toBe("BucketError");
+      const headWithoutBody = fakeStore(() => ({ status: 404 }));
+      expect(yield* headWithoutBody.client.headObject("gone")).toBeNull();
+
+      const missingBucket = fakeStore(() => ({
+        status: 404,
+        body: "<Error><Code>NoSuchBucket</Code></Error>",
+      }));
+      const error = yield* missingBucket.client.getObject("k").pipe(Effect.flip);
       expect(error.message).toBe("GetObject failed with HTTP 404 (NoSuchBucket)");
-      const deleteError = yield* missingBucket.run(access.deleteObject("k")).pipe(Effect.flip);
+      expect(error.cause).toMatchObject({ _tag: "NoSuchBucket", status: 404 });
+      const deleteError = yield* missingBucket.client.deleteObject("k").pipe(Effect.flip);
       expect(deleteError.message).toBe("DeleteObject failed with HTTP 404 (NoSuchBucket)");
     }),
   );
 
-  it.effect("fails with the store's error code on other statuses", () =>
+  it.effect("fails with the store's error code and message on other statuses", () =>
     Effect.gen(function* () {
-      const store = fakeStore(
-        () =>
-          new Response(
-            "<Error><Code>AccessDenied</Code><Message>Access Denied.</Message></Error>",
-            { status: 403 },
-          ),
-      );
-      const error = yield* store
-        .run(makeBucketAccess(credentials).putObject("k", "v"))
-        .pipe(Effect.flip);
+      const store = fakeStore(() => ({
+        status: 403,
+        body: "<Error><Code>AccessDenied</Code><Message>Access Denied.</Message></Error>",
+      }));
+      const error = yield* store.client.putObject("k", "v").pipe(Effect.flip);
       expect(error.message).toBe("PutObject failed with HTTP 403 (AccessDenied): Access Denied.");
+      expect(error.cause).toMatchObject({ _tag: "S3ServiceError", code: "AccessDenied" });
+      expect(store.sent.length).toBe(1);
     }),
   );
 
   it.effect("sends PUT headers and signs metadata", () =>
     Effect.gen(function* () {
-      const store = fakeStore(() => new Response(null, { status: 200, headers: { etag: '"e1"' } }));
-      const object = yield* store.run(
-        makeBucketAccess(credentials).putObject("k.json", '{"ok":true}', {
-          contentType: "application/json",
-          cacheControl: "no-cache",
-          contentDisposition: "inline",
-          contentEncoding: "identity",
-          metadata: { owner: "api" },
-        }),
-      );
+      const store = fakeStore(() => ({ status: 200, headers: { etag: '"e1"' } }));
+      const object = yield* store.client.putObject("k.json", '{"ok":true}', {
+        contentType: "application/json",
+        cacheControl: "no-cache",
+        contentDisposition: "inline",
+        contentEncoding: "identity",
+        metadata: { owner: "api" },
+      });
 
       expect(object).toEqual({
         key: "k.json",
@@ -230,68 +235,51 @@ describe("Prisma bucket client", { tags: ["unit", "provider:prisma", "local"] },
         "content-encoding": "identity",
         "x-amz-meta-owner": "api",
       });
-      expect(signedHeaders(request!)).toBe(
-        "cache-control;content-disposition;content-encoding;host;x-amz-content-sha256;x-amz-date;x-amz-meta-owner",
+      expect(request?.headers.authorization).toContain(
+        "SignedHeaders=cache-control;content-disposition;content-encoding;host;x-amz-content-sha256;x-amz-date;x-amz-meta-owner,",
       );
     }),
   );
 
   it.effect("defaults the content type by body kind", () =>
     Effect.gen(function* () {
-      const store = fakeStore(() => new Response(null, { status: 200 }));
-      const access = makeBucketAccess(credentials);
-      yield* store.run(access.putObject("s.txt", "hi"));
-      yield* store.run(access.putObject("raw.bin", new Uint8Array([1, 2, 3])));
+      const store = fakeStore(() => ({ status: 200 }));
+      yield* store.client.putObject("s.txt", "hi");
+      yield* store.client.putObject("raw.bin", new Uint8Array([1, 2, 3]));
 
       expect(store.sent[0]?.headers["content-type"]).toBe("text/plain");
       expect(store.sent[1]?.headers["content-type"]).toBe("application/octet-stream");
     }),
   );
 
-  it.effect("buffers a stream without a known length", () =>
+  it.effect("buffers a stream body, with or without a length", () =>
     Effect.gen(function* () {
-      const store = fakeStore(() => new Response(null, { status: 200 }));
-      const encoder = new TextEncoder();
-      yield* store.run(
-        makeBucketAccess(credentials).putObject(
-          "stream.txt",
-          Stream.make(encoder.encode("hel"), encoder.encode("lo")),
-        ),
-      );
-      expect(store.sent[0]?.streamed).toBe(false);
-      expect(store.sent[0]?.body).toBe("hello");
+      const store = fakeStore(() => ({ status: 200 }));
+      const chunks = [yield* encode("hel"), yield* encode("lo")];
+      yield* store.client.putObject("a.txt", Stream.fromIterable(chunks));
+      yield* store.client.putObject("b.txt", Stream.fromIterable(chunks), { contentLength: 5 });
+
+      expect(store.sent.map((request) => request.body)).toEqual(["hello", "hello"]);
     }),
   );
 
   it.effect("lists with ListObjectsV2 parameters and parses the page", () =>
     Effect.gen(function* () {
-      const store = fakeStore(
-        () =>
-          new Response(
-            `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>user-abc123</Name><IsTruncated>true</IsTruncated><Contents><Key>p/a &amp; b.txt</Key><LastModified>2026-10-01T00:00:00.000Z</LastModified><ETag>&quot;abc&quot;</ETag><Size>5</Size></Contents><CommonPrefixes><Prefix>p/dir/</Prefix></CommonPrefixes><NextContinuationToken>tok==</NextContinuationToken></ListBucketResult>`,
-            { status: 200 },
-          ),
-      );
-      const page = yield* store.run(
-        makeBucketAccess(credentials).listObjectsV2({
-          prefix: "p/",
-          delimiter: "/",
-          limit: 2,
-          cursor: "c1",
-          startAfter: "p/0",
-        }),
-      );
-
-      const url = new URL(store.sent[0]!.url);
-      expect(url.pathname).toBe("/user-abc123");
-      expect(Object.fromEntries(url.searchParams)).toEqual({
-        "list-type": "2",
+      const store = fakeStore(() => ({
+        status: 200,
+        body: `<?xml version="1.0" encoding="UTF-8"?><ListBucketResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/"><Name>user-abc123</Name><IsTruncated>true</IsTruncated><Contents><Key>p/a &amp; b.txt</Key><LastModified>2026-10-01T00:00:00.000Z</LastModified><ETag>&quot;abc&quot;</ETag><Size>5</Size></Contents><CommonPrefixes><Prefix>p/dir/</Prefix></CommonPrefixes><NextContinuationToken>tok==</NextContinuationToken></ListBucketResult>`,
+      }));
+      const page = yield* store.client.listObjectsV2({
         prefix: "p/",
         delimiter: "/",
-        "continuation-token": "c1",
-        "max-keys": "2",
-        "start-after": "p/0",
+        limit: 2,
+        cursor: "c1",
+        startAfter: "p/0",
       });
+
+      expect(store.sent[0]?.url).toBe(
+        "https://t3.storage.dev/user-abc123?list-type=2&prefix=p%2F&delimiter=%2F&continuation-token=c1&max-keys=2&start-after=p%2F0",
+      );
       expect(page).toEqual({
         objects: [
           {
@@ -312,93 +300,103 @@ describe("Prisma bucket client", { tags: ["unit", "provider:prisma", "local"] },
 
   it.effect("reports the last page as not truncated", () =>
     Effect.gen(function* () {
-      const store = fakeStore(
-        () =>
-          new Response(
-            "<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>a</Key><Size>1</Size></Contents><Contents><Key>b</Key><Size>2</Size></Contents></ListBucketResult>",
-            { status: 200 },
-          ),
-      );
-      const page = yield* store.run(makeBucketAccess(credentials).listObjectsV2());
+      const store = fakeStore(() => ({
+        status: 200,
+        body: "<ListBucketResult><IsTruncated>false</IsTruncated><Contents><Key>a</Key><Size>1</Size></Contents><Contents><Key>b</Key><Size>2</Size></Contents></ListBucketResult>",
+      }));
+      const page = yield* store.client.listObjectsV2();
 
-      expect(new URL(store.sent[0]!.url).search).toBe("?list-type=2");
+      expect(store.sent[0]?.url).toBe("https://t3.storage.dev/user-abc123?list-type=2");
       expect(page.truncated).toBe(false);
       expect(page.objects.map((object) => object.key)).toEqual(["a", "b"]);
     }),
   );
 
-  it.effect("deletes a key and tolerates one that is already gone", () =>
+  it.effect("rejects a list response it cannot trust", () =>
     Effect.gen(function* () {
-      const store = fakeStore(
-        (request) => new Response(null, { status: request.url.endsWith("/x") ? 204 : 404 }),
-      );
-      const access = makeBucketAccess(credentials);
-      yield* store.run(access.deleteObject("x"));
-      yield* store.run(access.deleteObject("y/z"));
+      const messageFor = (body: string) =>
+        fakeStore(() => ({ status: 200, body }))
+          .client.listObjectsV2()
+          .pipe(
+            Effect.flip,
+            Effect.map((error) => error.message),
+          );
 
-      expect(store.sent.map((request) => `${request.method} ${request.url}`)).toEqual([
-        "DELETE https://t3.storage.dev/user-abc123/x",
-        "DELETE https://t3.storage.dev/user-abc123/y/z",
-      ]);
+      expect(yield* messageFor("<Other/>")).toBe(
+        "ListObjectsV2 returned a response that is not a ListBucketResult",
+      );
+      expect(
+        yield* messageFor("<ListBucketResult><IsTruncated>true</IsTruncated></ListBucketResult>"),
+      ).toBe("ListObjectsV2 returned IsTruncated without a NextContinuationToken");
+      expect(
+        yield* messageFor(
+          "<ListBucketResult><Contents><Key>a</Key><Size>x</Size></Contents></ListBucketResult>",
+        ),
+      ).toBe("ListObjectsV2 returned an invalid Size for a");
     }),
-  );
-
-  it.effect("retries a transient failure", () =>
-    Effect.gen(function* () {
-      let calls = 0;
-      const store = fakeStore(() =>
-        ++calls === 1
-          ? new Response("<Error><Code>SlowDown</Code></Error>", { status: 503 })
-          : new Response(null, { status: 200, headers: objectHeaders }),
-      );
-      const object = yield* store.run(makeBucketAccess(credentials).headObject("k"));
-
-      expect(store.sent.length).toBe(2);
-      expect(object?.etag).toBe("e2");
-    }).pipe(TestClock.withLive),
   );
 
   it.effect("percent-encodes list parameters", () =>
     Effect.gen(function* () {
-      const store = fakeStore(
-        () => new Response("<ListBucketResult></ListBucketResult>", { status: 200 }),
+      const store = fakeStore(() => ({
+        status: 200,
+        body: "<ListBucketResult></ListBucketResult>",
+      }));
+      yield* store.client.listObjectsV2({ prefix: "a b+c/" });
+
+      expect(store.sent[0]?.url).toBe(
+        "https://t3.storage.dev/user-abc123?list-type=2&prefix=a%20b%2Bc%2F",
       );
-      yield* store.run(makeBucketAccess(credentials).listObjectsV2({ prefix: "a b+c/" }));
-
-      expect(new URL(store.sent[0]!.url).search).toBe("?list-type=2&prefix=a%20b%2Bc%2F");
     }),
   );
 
-  it.effect("fails with a BucketError for a key that cannot be encoded", () =>
+  it.effect("retries a transient failure but not a client error", () =>
     Effect.gen(function* () {
-      const error = yield* makeBucketAccess(credentials).headObject("bad\uD800").pipe(Effect.flip);
-      expect(error._tag).toBe("BucketError");
+      let calls = 0;
+      const flaky = fakeStore(() =>
+        ++calls === 1
+          ? { status: 503, body: "<Error><Code>SlowDown</Code></Error>" }
+          : { status: 200, headers: objectHeaders },
+      );
+      expect((yield* flaky.client.headObject("k"))?.etag).toBe("e2");
+      expect(flaky.sent.length).toBe(2);
+
+      const down = fakeStore(() => ({ status: 503 }));
+      yield* down.client.headObject("k").pipe(Effect.flip);
+      expect(down.sent.length).toBe(6);
+    }).pipe(TestClock.withLive),
+  );
+
+  it.effect("rejects keys that cannot be addressed safely", () =>
+    Effect.gen(function* () {
+      const store = fakeStore(() => ({ status: 200 }));
+      for (const key of ["a/../b", "..", "./a", "../other-bucket/x", "bad\uD800"]) {
+        const error = yield* store.client.putObject(key, "v").pipe(Effect.flip);
+        expect(error._tag).toBe("BucketError");
+      }
+      expect(store.sent).toEqual([]);
     }),
   );
 
-  it.effect("maps the public client's options onto the requests", () =>
+  it.effect("deletes many keys one request at a time", () =>
     Effect.gen(function* () {
-      yield* TestClock.setTime(SIGNING_TIME);
-      const store = fakeStore(() => new Response(null, { status: 204 }));
-      const client = makeReadWriteBucketClient(credentials);
-      yield* store.run(client.delete(["x", "y/z"]));
+      const store = fakeStore((request) => ({ status: request.url.endsWith("/x") ? 204 : 404 }));
+      yield* writeBucketOperations(store.client)
+        .delete(["x", "y/z"])
+        .pipe(
+          Effect.provideService(RuntimeContext, {
+            Type: "Test",
+            id: "test",
+            env: {},
+            get: () => Effect.undefined,
+            set: (id) => Effect.succeed(id),
+          }),
+        );
 
       expect(store.sent.map((request) => `${request.method} ${request.url}`).sort()).toEqual([
         "DELETE https://t3.storage.dev/user-abc123/x",
         "DELETE https://t3.storage.dev/user-abc123/y/z",
       ]);
-      const download = new URL(
-        yield* store.run(client.presignGet("a.txt", { expiresIn: 60, contentType: "text/plain" })),
-      );
-      expect(download.searchParams.get("X-Amz-Signature")).toBe(
-        "27e8cb04ae2312d8558080cdfa9315645b05cb4bb7cb0e9866b4081663c510db",
-      );
-      const upload = new URL(
-        yield* store.run(client.presignPut("uploads/avatar.png", { contentType: "image/png" })),
-      );
-      expect(upload.searchParams.get("X-Amz-Signature")).toBe(
-        "c47ad65853608828842e71d3eab9baa8ff7a58be50dee00c14a6df9357cbc9de",
-      );
     }),
   );
 });

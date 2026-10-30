@@ -12,7 +12,7 @@ import type {
   PresignPutOptions,
   PutOptions,
 } from "./BucketTypes.ts";
-import { makeBucketAccess, type BucketAccess } from "./internal/BucketClient.ts";
+import { makeS3Client, type S3Client } from "./internal/BucketClient.ts";
 
 export interface WriteBucket extends Binding.Service<
   WriteBucket,
@@ -99,7 +99,7 @@ export const WriteBucket = Binding.Service<WriteBucket>("Prisma.WriteBucket");
  * Build the write operations over an already-resolved transport. Shared with
  * {@link ReadWriteBucket} so both levels run the same code.
  */
-export const writeBucketOperations = (access: BucketAccess): WriteBucketClient => ({
+export const writeBucketOperations = (access: S3Client): WriteBucketClient => ({
   put: access.putObject,
   // Deletes are issued one key at a time rather than through the batch
   // `DeleteObjects` operation, whose signed-payload digest requirement is not
@@ -122,7 +122,7 @@ export const writeBucketOperations = (access: BucketAccess): WriteBucketClient =
  * Build a write-only bucket client from a bound bucket key's credentials.
  */
 export const makeWriteBucketClient = (credentials: BucketCredentials): WriteBucketClient =>
-  writeBucketOperations(makeBucketAccess(credentials));
+  writeBucketOperations(makeS3Client(credentials));
 
 /**
  * Implementation layer for {@link WriteBucket}. Provide it on the host

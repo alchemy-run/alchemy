@@ -4,7 +4,7 @@ import * as Layer from "effect/Layer";
 import type { Bucket } from "./Bucket.ts";
 import { makeBucketBinding } from "./BucketBinding.ts";
 import type { BucketCredentials } from "./BucketTypes.ts";
-import { makeBucketAccess } from "./internal/BucketClient.ts";
+import { makeS3Client } from "./internal/BucketClient.ts";
 import { readBucketOperations, type ReadBucketClient } from "./ReadBucket.ts";
 import { writeBucketOperations, type WriteBucketClient } from "./WriteBucket.ts";
 
@@ -68,7 +68,7 @@ export const ReadWriteBucket = Binding.Service<ReadWriteBucket>("Prisma.ReadWrit
 export const makeReadWriteBucketClient = (
   credentials: BucketCredentials,
 ): ReadWriteBucketClient => {
-  const access = makeBucketAccess(credentials);
+  const access = makeS3Client(credentials);
   return {
     ...readBucketOperations(access),
     ...writeBucketOperations(access),

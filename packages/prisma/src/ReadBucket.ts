@@ -14,7 +14,7 @@ import type {
   ListResult,
   PresignGetOptions,
 } from "./BucketTypes.ts";
-import { makeBucketAccess, type BucketAccess } from "./internal/BucketClient.ts";
+import { makeS3Client, type S3Client } from "./internal/BucketClient.ts";
 
 export interface ReadBucket extends Binding.Service<
   ReadBucket,
@@ -99,7 +99,7 @@ export const ReadBucket = Binding.Service<ReadBucket>("Prisma.ReadBucket");
  * Build the read operations over an already-resolved transport. Shared with
  * {@link ReadWriteBucket} so both levels run the same code.
  */
-export const readBucketOperations = (access: BucketAccess): ReadBucketClient => ({
+export const readBucketOperations = (access: S3Client): ReadBucketClient => ({
   head: access.headObject,
   get: access.getObject,
   list: access.listObjectsV2,
@@ -116,7 +116,7 @@ export const readBucketOperations = (access: BucketAccess): ReadBucketClient => 
  * Build a read-only bucket client from a bound bucket key's credentials.
  */
 export const makeReadBucketClient = (credentials: BucketCredentials): ReadBucketClient =>
-  readBucketOperations(makeBucketAccess(credentials));
+  readBucketOperations(makeS3Client(credentials));
 
 /**
  * Implementation layer for {@link ReadBucket}. Provide it on the host
