@@ -32,6 +32,7 @@ import { Resource, type ResourceBinding } from "alchemy/Resource";
 import type { ProcessContext, ProcessServices } from "alchemy/Runtime/Process";
 import { RuntimeContext } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
+import { logChildLine } from "alchemy/Util/LogRecord";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
@@ -2090,11 +2091,22 @@ const startDev = Effect.fn(function* (id: string, props: ComputeProps) {
     cwd,
     env,
     extendEnv: true,
-    stdin: "inherit",
-    stdout: "inherit",
-    stderr: "inherit",
+    stdin: "ignore",
+    stdout: "pipe",
+    stderr: "pipe",
     detached: false,
   });
+  // The dev server's output becomes log records instead of raw writes over
+  // the CLI's renderer; each drain ends when the process does.
+  for (const name of ["stdout", "stderr"] as const) {
+    yield* handle[name].pipe(
+      Stream.decodeText,
+      Stream.splitLines,
+      Stream.runForEach((line) => logChildLine(line, { stream: name })),
+      Effect.ignore,
+      Effect.forkDetach,
+    );
+  }
   devProcesses.set(processKey, handle);
   return localUrl;
 });
