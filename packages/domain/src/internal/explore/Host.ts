@@ -577,19 +577,12 @@ export const explorePlatform = (rt: Rt) =>
               if (mode === "abstract") return;
               for (const d of deliveries) enqueue(rt, "view", name, d);
             }),
-          read: (key) =>
-            mode === "abstract"
-              ? abstract("read")
-              : Effect.sync(() => {
-                  return snap(key);
-                }),
+          read: (key) => (mode === "abstract" ? abstract("read") : Effect.sync(() => snap(key))),
           changes: () => unsupportedStream(`view ${name}.changes (live reads are not explored)`),
           list: (key) =>
             mode === "abstract"
               ? abstract("list")
-              : Effect.sync(() => {
-                  return [...(rt.world.views[name]?.[key]?.entries ?? [])];
-                }),
+              : Effect.sync(() => [...(rt.world.views[name]?.[key]?.entries ?? [])]),
           tail: () => unsupportedStream(`view ${name}.tail (live reads are not explored)`),
         };
       }),
@@ -638,10 +631,7 @@ export const explorePlatform = (rt: Rt) =>
                 tag: delivery.tag,
               });
             }),
-          checkpoints: (key) =>
-            Effect.sync(() => {
-              return { ...rt.world.proj[name]?.[key]?.checkpoints };
-            }),
+          checkpoints: (key) => Effect.sync(() => ({ ...rt.world.proj[name]?.[key]?.checkpoints })),
         };
       }),
     stream: (stream) =>
@@ -684,6 +674,7 @@ export const worldClock = (rt: Rt): Clock.Clock =>
 /** Run `f` with hidden randomness refused and `Date.now` on the world clock. */
 export const sandboxed = <A>(rt: Rt, f: () => A): A => {
   const random = Math.random;
+  // oxlint-disable-next-line typescript/unbound-method -- put back as it was, on the same object
   const uuid = globalThis.crypto?.randomUUID;
   const dateNow = Date.now;
   const refuse = (what: string) => () => {

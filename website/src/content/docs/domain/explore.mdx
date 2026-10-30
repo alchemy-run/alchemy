@@ -1,0 +1,310 @@
+---
+title: Explore a model
+description: Run your real model under every order of moves inside bounds, check rules after each step, and turn a broken rule into a failing Story.
+---
+
+A [story](/domain/story) checks the one schedule you wrote. A bug that needs another order of events stays hidden: a timer fires before a policy runs, a command arrives twice, a redelivery lands after a crash.
+
+`@alchemy.run/domain/Explore` runs your real `decide`, `evolve`, policies, views and projections under every order of moves inside the bounds you set. It checks your rules after each step. A broken rule gives a trace you can replay and a Story that fails on that rule.
+
+:::caution
+A green run is not a proof. Every report has `proof: false`. See [Know what a green run does not prove](#know-what-a-green-run-does-not-prove).
+:::
+
+## Write a scenario
+
+A scenario names the model, the actors that can send commands, the fakes for what is outside the model, the rules, and the bounds. This model has a bug. The hold's expiry has a fixed command id. A paused hold ignores the expiry, so the command runs and records nothing. A later resume asks for the same id, gets `AlreadyExecuted`, and the policy swallows it. The hold now never expires.
+
+```typescript
+import * as Domain from "@alchemy.run/domain";
+import * as Explore from "@alchemy.run/domain/Explore";
+import * as DateTime from "effect/DateTime";
+import * as Effect from "effect/Effect";
+
+class HoldExpiry extends Domain.Policy("HoldExpiry", { from: Hold, on: [HoldArmed] }) {}
+const HoldExpiryLive = HoldExpiry.toLayer(
+  Effect.gen(function* () {
+    const holds = yield* Hold;
+    return Effect.fn(function* ({ source, event }) {
+      yield* holds
+        .schedule(source, new ExpireHold(), {
+          at: DateTime.makeUnsafe(event.expiresAt),
+          commandId: `expire:${source.id}`,
+        })
+        .pipe(Effect.catchTag("AlreadyExecuted", () => Effect.void));
+    });
+  }),
+);
+
+class Holds extends Domain.Model("Holds", { aggregates: [Hold], policies: [HoldExpiry] }) {}
+
+const start = Date.parse("2030-01-01T00:00:00Z");
+const day = 86_400_000;
+
+// An actor has a stable key, a guard, and the sends it makes. Each one runs once.
+const actor = (
+  key: string,
+  command: Domain.Aggregate.CommandOf<typeof Hold>,
+  enabled: (status: string | undefined) => boolean,
+): Explore.Actor => ({
+  key,
+  enabled: (s) => s.budget(key) > 0 && enabled(s.state("Hold", "h1")?.status),
+  run: (ctx) =>
+    Effect.suspend(() => {
+      Explore.spend(key);
+      return Explore.send(ctx, Hold, "h1", command, { commandId: `api:${key}` });
+    }),
+});
+
+const heldHasTimer: Explore.Rule = {
+  id: "HELD-HAS-TIMER",
+  kind: "quiescent",
+  reachable: {
+    text: "a hold is held",
+    state: (s) => s.instances("Hold").some(([, hold]) => hold.status === "held"),
+  },
+  check: (s) => {
+    for (const [id, hold] of s.instances("Hold"))
+      if (hold.status === "held" && s.timers({ agg: "Hold", id }).length === 0)
+        return `${id} is held and has no expiry timer`;
+    return undefined;
+  },
+};
+
+const scenario: Explore.Scenario = {
+  name: "holds",
+  model: Holds,
+  layer: Holds.layer(HoldExpiryLive),
+  fakes: [],
+  actors: [
+    actor("place", new PlaceHold({ expiresAt: start + day }), (status) => status === undefined),
+    actor("pause", new PauseHold(), (status) => status === "held"),
+    actor("resume", new ResumeHold(), (status) => status === "paused"),
+  ],
+  rules: [heldHasTimer],
+  bounds: { depth: 12, budgets: { place: 1, pause: 1, resume: 1 } },
+  startTimeMillis: start,
+};
+
+const report = await Explore.run(scenario);
+```
+
+The run takes milliseconds. It visits 15 states, ends `Exhausted`, and breaks `HELD-HAS-TIMER` and the derived rule `TIMER-REARM`:
+
+```text
+HELD-HAS-TIMER: h1 is held and has no expiry timer
+  place
+  pause
+  HoldExpiry ← HoldArmed (Hold/h1#1)
+  timer ExpireHold on Hold/h1 at +1d
+  resume
+  HoldExpiry ← HoldArmed (Hold/h1#4)
+```
+
+`Explore.run` returns a Promise. `Explore.explore` is the Effect form: it fails with `ExploreError` on an engine error, and a broken rule stays data in the report.
+
+## Choose a rule kind
+
+A rule returns a message when it breaks, and `undefined` when it holds.
+
+| Kind         | Checked                                                 | Use it for                                                       |
+| ------------ | ------------------------------------------------------- | ---------------------------------------------------------------- |
+| `state`      | Each state                                              | What must never be true, even for one step                       |
+| `step`       | Each step, with its commits, calls and failures         | What must never happen: a call with no gate, a commit by a policy |
+| `quiescent`  | Each state with no runnable work and no due timer       | What must be true once the system settles                        |
+| `eventually` | At a quiescent state where `when` holds, after a run-out | What must follow in time: `goal` after `horizonMillis`           |
+
+Use `quiescent` for a rule that a lag can break. A `state` rule on a view fails on the normal lag between a commit and the view.
+
+`eventually` runs only timers and work, with default choices and no faults, for `horizonMillis` of model time. It checks one schedule. It is not temporal liveness.
+
+Rules read a `Snapshot`: `state`, `version`, `instances`, `timers`, `work`, `dead`, `fake`, `budget`, `view`, `clock` and `quiescent`.
+
+Three derived rules run with no code from you. Turn one off in `derived`.
+
+| Rule          | Breaks when                                                                                     |
+| ------------- | ----------------------------------------------------------------------------------------------- |
+| `DEFECT`      | A command, policy, view or projection dies of a defect                                          |
+| `DEAD-LETTER` | A delivery fails more than `maxTries` times                                                     |
+| `TIMER-REARM` | `schedule` answered `AlreadyExecuted` to a new input, the command had run stale before it, and the run went on |
+
+`host.retryDefects` names the `_tag`s of a deliberate die that means "retry this delivery": a policy handler has no error channel. The report lists each one.
+
+## Name the trigger
+
+A rule with no way to fire says nothing. Give it `reachable`: a `state` or a `step` that must occur for the verdict to mean anything.
+
+| Verdict     | Meaning                                                                                   |
+| ----------- | ----------------------------------------------------------------------------------------- |
+| `BROKEN`    | A counterexample exists                                                                   |
+| `VACUOUS`   | The rule named a trigger, and the run never saw it. The rule was not tested               |
+| `HELD`      | No break, in a run that closed its bounds or stopped only at the depth bound              |
+| `NOT-FOUND` | No break, in a run that was cut off or sampled                                            |
+
+Treat `VACUOUS` as a failure of the scenario. Widen the actors or the bounds until the trigger fires. `report.vacuous` lists these rules.
+
+## Write fakes as assumptions
+
+A fake stands for what is outside the model. Its state lives in the search state, so it must be plain JSON. A `Date`, `Map` or class instance is an engine error, not a silent change.
+
+```typescript
+import * as Explore from "@alchemy.run/domain/Explore";
+
+const Payments = {
+  name: "payments",
+  initial: () => ({ charged: [] as Array<string> }),
+};
+
+// Inside a Layer that implements the external system.
+const charge = (id: string) =>
+  Effect.sync(() => {
+    const outcome = Explore.choose("payments.charge", ["ok", "declined"]);
+    Explore.recordCall({ system: "payments", op: "charge", args: { id }, outcome });
+    if (outcome === "ok") Explore.fakeState<{ charged: Array<string> }>("payments").charged.push(id);
+    return outcome;
+  });
+```
+
+- `choose(label, options)` makes a branch. The search runs every option. Option 0 is the default.
+- `spend(name)` takes one unit of a budget, and returns `false` when it is spent. `budgetLeft(name)` reads it.
+- `fakeState(name)` is the fake's state, and you can change it inside a move.
+- `recordCall` lets a `step` rule see the call.
+- `now()` is the world clock. `runningAs()` says who runs.
+
+Every fake is an assumption about a real system. A fake that never fails hides a failure path. A fake that does what the real system cannot gives a false break. Write down what each fake assumes, and check that assumption with a contract test against the real system. A verdict rests on these assumptions: name them in `rule.assumes`.
+
+Layers must hold no state outside the fake's state. A counter in a closure gives a state the search cannot see. The engine replays on a second build to find this, every `freshEvery` states and for each counterexample.
+
+## Set pools and bounds
+
+Keep the pools small. A pool of 2 ids and 3 actors finds most order bugs. Each new actor multiplies the states.
+
+```typescript
+bounds: {
+  depth: 20,          // moves on one path
+  actorSteps: 6,      // actor moves on one path (budget `actors`)
+  redeliveries: 1,    // redeliver the last delivered item of a partition
+  faults: 1,          // a host fault on a send that `host.faultable` allows
+  ticks: 1,           // clock moves with no fire
+  clockSteps: [3_600_000], // tick sizes, on top of "to the next timer"
+  budgets: { place: 1 },   // your own budgets
+},
+```
+
+A timer that is due fires in any order. With none due, the earliest one fires and the clock jumps. `ticks` lets an actor act at a deadline before its timer fires. Without a tick, the search never sees that order.
+
+Each view runs `queued` by default. `host.views` sets one to `inline` (no lag) or `abstract` (not run, and nothing may read it or consume it) to cut states. `host.projections` does the same for `inline`. A projection with a `batch` option must be `inline`. The report lists each choice in `abstractions`.
+
+Streams and sagas are not explored. A model that has them is refused at setup, and the report says so.
+
+## Choose a search
+
+| Search  | Option                                                | Gives                                                | Use it                       |
+| ------- | ----------------------------------------------------- | ---------------------------------------------------- | ---------------------------- |
+| `bfs`   | `{ kind: "bfs" }`                                     | Every state inside the bounds, shortest paths first  | Small bounds, on each commit |
+| `swarm` | `{ kind: "swarm", seeds, walks or timeMillis, depth }` | Seeded random walks, biased to timers, then shrunk   | Bounds that BFS cannot close |
+
+BFS ends with coverage `Exhausted`, `WithinDepth` or `CutOff`. A swarm ends `Sampled`: same seed and same walk count give the same result, and `timeMillis` is not the same across machines.
+
+`limits` caps `states`, `elapsedMillis` and `memoryBytes`. A run that hits one says `CutOff` and never says `HELD`.
+
+`identity: "digest"` compares states by a 128-bit truncated SHA-256, and a match counts as the same state with no compare. `identity: "exact"` compares the canonical text, counts collisions, and costs more memory. The report gives the bound.
+
+For more speed, run the search on worker threads. Both Bun and Node run them.
+
+```typescript
+// explore.worker.ts
+import * as Explore from "@alchemy.run/domain/Explore";
+Explore.serveWorker(() => scenario);
+
+// main
+await Explore.run(scenario, {
+  workers: { count: 4, url: new URL("./explore.worker.ts", import.meta.url), init: {} },
+});
+```
+
+The coordinator refuses a worker that builds another scenario. One worker and N workers give the same counts and traces.
+
+## Read a counterexample
+
+Each entry of `report.violations` has `rule`, `message`, `path`, `world` and `trace`.
+
+- `path` is for you: each step's label, time, choices, commits, calls, failures, faults and sends.
+- `trace` is for the machine: moves, choices, and the digest after each step.
+- `world` is the last state.
+
+Read the path from the end. Find the move that made the rule false, then ask why the state before it let that move run. A step in the path that looks impossible usually means a fake or an actor guard is wrong, not the model.
+
+The engine replays each counterexample on a fresh build before it reports it. A different digest or message is an engine error, not a clean result.
+
+`Explore.replay(scenario, trace)` runs a trace again. It refuses a trace made on another model: `modelHash` covers the schemas and the wiring of the model, not handler bodies. A change of behaviour fails on the step digests.
+
+## Turn a break into a Story
+
+A trace is not a test you keep. A rule's `storyTail` gives the steps a Story adds after the trace, as code and as real steps. It must throw `ruleFails(id)` when the rule breaks.
+
+```typescript
+const heldHasTimer: Explore.Rule = {
+  // ...
+  storyTail: () => ({
+    code: [
+      `    Story.clock("2030-01-03T00:00:00.000Z"),`,
+      `    Story.state(Hold.ref("h1"), (s) => { if (s.status !== "expired") throw new Error(ruleFails("HELD-HAS-TIMER")); }),`,
+    ],
+    steps: [
+      Story.clock("2030-01-03T00:00:00.000Z"),
+      Story.state(Hold.ref("h1"), (s) => {
+        if (s.status !== "expired") throw new Error(Explore.ruleFails("HELD-HAS-TIMER"));
+      }),
+    ],
+  }),
+};
+
+const story = Story.make(Holds, { layer: HoldExpiryLive });
+const out = await Explore.toStory(scenario, broken, {
+  ref: (aggregate, id) => `${aggregate}.ref(${JSON.stringify(id)})`,
+  aggregate: () => Hold,
+  header: () => `import { Story } from "@alchemy.run/domain/Story";\n`,
+  run: (steps) => story(...steps),
+});
+```
+
+`toStory` runs the steps on the real Story runner. It gives code only when that run fails on the rule's own assertion. Any other result is `UnsupportedStoryTrace` with the reason: a redelivery or a fault that a Story cannot show, a schedule that settles the break away, or a rule with no tail.
+
+Save the code as a test. It is red until you fix the model. Pass `modelGuard` to make the test refuse a changed model through `assertModelHash`.
+
+## Stop on engine errors
+
+An engine error means the engine could not run the model as a host would. It is never a clean result: the run ends `CutOff("engine-error")`, with `complete: false`.
+
+| Kind               | Cause                                                                            |
+| ------------------ | -------------------------------------------------------------------------------- |
+| `AsyncEffect`      | A move did not finish synchronously. Moves run on the synchronous runner         |
+| `ClockSleep`       | `Clock.sleep` or a `retry` schedule in a move                                    |
+| `HiddenRandomness` | `Math.random` or `crypto.randomUUID` in a move                                   |
+| `NonJsonState`     | A state or fake value that is not plain JSON                                     |
+| `HiddenState`      | A second build reached another state: a layer holds state outside the fakes      |
+| `ReplayDiverged`   | A replay took another branch or another choice                                   |
+| `ModelChanged`     | A trace or a Story fixture was made on another model                             |
+| `Unsupported`      | A stream, a saga, or a view or projection setting the engine refuses             |
+| `Worker`           | A worker failed, timed out or runs another scenario                              |
+
+Move time and ids into the model's inputs or into a fake. Inside a move, `Date.now` reads the world clock.
+
+## Know what a green run does not prove
+
+- **Bounds.** `HELD` covers these actors, pools and depths only. `Exhausted` means the graph inside the bounds closed.
+- **Fakes.** The run checks the model against your assumptions, not against the real systems.
+- **The host.** One actor run, one policy run and one view or projection run is one atomic step. Crash points inside a run come only from host faults on sends. Policy order is FIFO per `(policy, key)` in commit order, not the transport of any real platform.
+- **Redelivery.** Only the last delivered item of a partition is redelivered. Retry time is not modeled. Receipts stay forever.
+- **What did not run.** Api handlers, middleware outside the actors, live reads, streams, sagas, real stores, queues and clocks.
+- **`modelHash` and the fingerprint** are structural. Handler bodies, actors and layers are not in them.
+- **`effectsExecuted`** is what the scenario declares, not a measure.
+- **Purity.** The sandbox guards moves only. Guards, rules and layers must be pure.
+- **Swarm.** A sample finds bugs and proves nothing about what it did not visit.
+
+Use Explore next to stories, not in place of them. A story holds a behaviour you chose. Explore looks for an order you did not think of.
+
+:::note
+Stories are in [Testing a model](/domain/testing-models). Timers are in [Deadlines](/domain/deadlines).
+:::

@@ -28,14 +28,13 @@ export type EngineErrorKind =
   | "Worker";
 
 /** Thrown inside the host; the move runner turns it into an engine error. */
-export class EngineFault extends Error {
-  readonly _tag = "EngineFault";
+export class EngineFault extends Data.TaggedError("EngineFault")<{
   readonly kind: EngineErrorKind;
   readonly detail: string;
+  readonly message: string;
+}> {
   constructor(kind: EngineErrorKind, detail: string) {
-    super(`${kind}: ${detail}`);
-    this.kind = kind;
-    this.detail = detail;
+    super({ kind, detail, message: `${kind}: ${detail}` });
   }
 }
 
@@ -56,11 +55,11 @@ export class UnsupportedStoryTrace extends Data.TaggedError("UnsupportedStoryTra
 }> {}
 
 /** The platform lost the call (crash, deploy, network): a modeled fault, not a defect. */
-export class HostFault extends Error {
-  readonly _tag = "HostFault";
+export class HostFault extends Data.TaggedError("HostFault")<{
   readonly where: string;
+  readonly message: string;
+}> {
   constructor(where: string) {
-    super(`host fault: ${where}`);
-    this.where = where;
+    super({ where, message: `host fault: ${where}` });
   }
 }

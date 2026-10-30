@@ -171,8 +171,7 @@ describe("the docs example", () => {
       ref: (aggregate, id) => `${aggregate}.ref(${JSON.stringify(id)})`,
       aggregate: () => Hold,
       header: () => "",
-      run: (steps) =>
-        (story as (...steps: ReadonlyArray<unknown>) => Effect.Effect<void>)(...steps),
+      run: (steps) => story(...steps),
     });
     expect(out).not.toBeInstanceOf(Explore.UnsupportedStoryTrace);
     expect((out as { code: string }).code).toContain("new ResumeHold");
