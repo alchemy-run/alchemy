@@ -305,6 +305,7 @@ test.provider(
       const result = yield* Nuke.destroy({
         targets: [
           {
+            key: bucket.bucketName,
             providerId: Cloudflare.R2.Bucket.Type,
             displayName: bucket.bucketName,
             attributes: { ...bucket },
@@ -312,7 +313,7 @@ test.provider(
           },
         ],
         context: yield* Effect.context<never>(),
-        strategy: { _tag: "independent", retries: 0 },
+        strategy: { type: "independent", retries: 0 },
       });
       expect(result.failed).toEqual([]);
       expect(result.deleted).toHaveLength(1);
