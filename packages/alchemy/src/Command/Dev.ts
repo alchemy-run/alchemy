@@ -1,15 +1,11 @@
 import { stripVTControlCharacters } from "node:util";
-import * as ConsoleService from "effect/Console";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
-import { FQN_SEPARATOR } from "../FQN.ts";
-import { makeDevLogOpener } from "../Local/DevLog.ts";
 import * as LocalProvider from "../Local/LocalProvider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Stage } from "../Stage.ts";
 import { moduleExtension } from "../Util/Node.ts";
 import { makeResourceOutput } from "../Util/ResourceOutput.ts";
 import { CommandExecutor, UnexpectedExit, makeCommandError, type CommandProps } from "./Command.ts";
@@ -140,9 +136,6 @@ export const DevProviderLocal = () =>
     import.meta.resolve(`./Local${moduleExtension(import.meta.url)}`, import.meta.url),
     Effect.gen(function* () {
       const { spawn } = yield* CommandExecutor;
-      const stage = yield* Stage;
-      const openDevLog = yield* makeDevLogOpener;
-      const baseConsole = yield* ConsoleService.Console;
 
       return {
         // The dev process is spawned into the instance scope the helper
@@ -151,16 +144,10 @@ export const DevProviderLocal = () =>
         start: Effect.fn(function* ({ fqn, news: props, invalidate }) {
           const child = yield* spawn(props);
           const redactor = makeCommandRedactor(props.env);
-          // One log file per process generation, closed with the instance
-          // scope: log/{stage}/{fqn…}/{timestamp}.log (namespaces nest as dirs). Terminal lines
-          // carry the resource's pnpm-style prefix; the file gets raw text.
-          const devLog = yield* openDevLog(stage, ...fqn.split(FQN_SEPARATOR));
-          yield* Effect.log(`[${fqn}] Logs → ${devLog.path}`);
-          // Through the Console SERVICE, never a raw fd write: the process
-          // that owns the terminal runs an ink renderer, and a bare write
-          // to its stdout tears the animated region. The CLI's console
-          // capture inserts these lines above it instead.
-          const prefixed = makeResourceOutput(fqn, baseConsole);
+          // Through the logger, never a raw fd write: the process that owns
+          // the terminal renders the records and writes them to the run log
+          // (and a bare write to its stdout would tear the animated region).
+          const prefixed = yield* makeResourceOutput(fqn);
           yield* Effect.addFinalizer(() =>
             Effect.sync(() => {
               prefixed.stdout.flush();
@@ -182,12 +169,7 @@ export const DevProviderLocal = () =>
             child[sink].pipe(
               Stream.decodeText,
               redactor.stream,
-              Stream.tap((text) =>
-                Effect.sync(() => {
-                  prefixed[sink].push(text);
-                  devLog.write(text);
-                }),
-              ),
+              Stream.tap((text) => Effect.sync(() => prefixed[sink].push(text))),
               Stream.tap((text) =>
                 Effect.sync(() => {
                   if (Deferred.isDoneUnsafe(deferred)) return;

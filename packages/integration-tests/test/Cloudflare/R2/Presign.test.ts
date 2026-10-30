@@ -1,5 +1,5 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
-import { s3CredentialsPolicy } from "@alchemy.run/cloudflare/R2/S3CredentialsBinding";
+import { liveEndpoint, s3CredentialsPolicy } from "@alchemy.run/cloudflare/R2/S3CredentialsBinding";
 import { expect, it } from "@alchemy.run/test";
 import * as Test from "@alchemy.run/test/Alchemy";
 import * as Data from "effect/Data";
@@ -171,6 +171,10 @@ it(
     expect(s3CredentialsPolicy("acct", "gov", "fedramp", "write").resources).toEqual({
       "com.cloudflare.edge.r2.bucket.acct_fedramp_gov": "*",
     });
+    expect(s3CredentialsPolicy("acct", "records", "us", "read").resources).toEqual({
+      "com.cloudflare.edge.r2.bucket.acct_us_records": "*",
+    });
+    expect(liveEndpoint("acct", "us")).toBe("https://acct.us.r2.cloudflarestorage.com");
   },
   { tags: ["unit", "provider:cloudflare", "provider:cloudflare:r2", "local"] },
 );

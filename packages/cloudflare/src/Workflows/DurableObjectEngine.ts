@@ -22,7 +22,10 @@ import * as Schedule from "effect/Schedule";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 import { Workflow, WorkflowEngine } from "effect/workflow";
-import { DurableObject as CloudflareDurableObject } from "../Workers/DurableObject.ts";
+import {
+  DurableObject as CloudflareDurableObject,
+  type DurableObjectJurisdiction,
+} from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import type { Worker } from "../Workers/Worker.ts";
 
@@ -75,18 +78,63 @@ import type { Worker } from "../Workers/Worker.ts";
  *   }).pipe(
  *     Effect.provide(
  *       SendWelcomeLive.pipe(
- *         Layer.provideMerge(Cloudflare.Workflows.DurableObjectEngine),
+ *         Layer.provideMerge(Cloudflare.Workflows.layerDurableObjectEngine()),
  *       ),
  *     ),
  *   ),
  * ) {}
  * ```
  *
+ * ### Running executions in a jurisdiction
+ * **Example:** Every execution in the EU
+ * ```typescript
+ * import * as Cloudflare from "@alchemy.run/cloudflare";
+ * import * as Layer from "effect/Layer";
+ * import { SendWelcomeLive } from "./SendWelcome.ts";
+ *
+ * const WorkflowsLive = SendWelcomeLive.pipe(
+ *   Layer.provideMerge(Cloudflare.Workflows.layerDurableObjectEngine({ jurisdiction: "eu" })),
+ * );
+ * ```
+ *
  * @layer
  * @provides WorkflowEngine
  * @product Durable Objects
  */
-export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =
+export function layerDurableObjectEngine({
+  jurisdiction,
+}: DurableObjectEngineOptions = {}): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> {
+  // The same options return the same Layer, so providing it in several places
+  // builds one engine.
+  let engine = engines.get(jurisdiction);
+  if (engine === undefined) engines.set(jurisdiction, (engine = makeEngine(jurisdiction)));
+  return engine;
+}
+
+/** Options for {@link layerDurableObjectEngine}. */
+export interface DurableObjectEngineOptions {
+  /**
+   * Create and store every workflow execution object only inside this
+   * jurisdiction, e.g. `"eu"`. An execution in a jurisdiction is a different
+   * object from the one with the same name outside it, so setting this does
+   * not move executions that already exist.
+   *
+   * Enforced when deployed, not emulated in `alchemy dev` (local workerd does
+   * not implement jurisdictions).
+   *
+   * @default undefined (no jurisdiction restriction)
+   */
+  readonly jurisdiction?: DurableObjectJurisdiction;
+}
+
+const engines = new Map<
+  DurableObjectJurisdiction | undefined,
+  Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker>
+>();
+
+const makeEngine = (
+  jurisdiction: DurableObjectJurisdiction | undefined,
+): Layer.Layer<WorkflowEngine.WorkflowEngine, never, Worker> =>
   Layer.effect(
     WorkflowEngine.WorkflowEngine,
     Effect.gen(function* () {
@@ -113,7 +161,10 @@ export const DurableObjectEngine: Layer.Layer<WorkflowEngine.WorkflowEngine, nev
               `${workflow._tag.replace(/[^A-Za-z0-9_]/g, "_")}Workflow`,
               executionObject({ workflow: workflow as AnyWorkflow, execute, engine: () => engine }),
             ).pipe(Effect.provide(init));
-            namespaces.set(workflow._tag, namespace);
+            namespaces.set(
+              workflow._tag,
+              jurisdiction === undefined ? namespace : namespace.jurisdiction(jurisdiction),
+            );
           }),
 
         execute: (workflow, options) =>
@@ -539,6 +590,7 @@ interface Stub {
 
 interface Namespace {
   readonly getByName: (name: string) => Stub;
+  readonly jurisdiction: (jurisdiction: DurableObjectJurisdiction) => Namespace;
 }
 
 type ObjectImpl = Effect.Effect<

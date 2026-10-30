@@ -4,7 +4,7 @@ import { describe, expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { ArtifactStore, createArtifactStore } from "alchemy/Artifacts";
-import { AuthProviders } from "alchemy/Auth/AuthProvider";
+import { AuthProviders, AuthProvidersLive } from "alchemy/Auth/AuthProvider";
 import * as Interaction from "alchemy/Interaction";
 import * as Provider from "alchemy/Provider";
 import { PlatformServices } from "alchemy/Util/PlatformServices";
@@ -36,7 +36,7 @@ const providePrismaDev = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
       Prisma.providers().pipe(
         // The dual registration always carries the (lazy) management-api
         // layer; it registers auth at build without resolving credentials.
-        Layer.provideMerge(Layer.succeed(AuthProviders, {})),
+        Layer.provideMerge(AuthProvidersLive),
         Layer.provide(stackProvidedServices),
       ),
     ),
@@ -269,7 +269,7 @@ describe("Prisma providers", { tags: ["unit", "provider:prisma", "local"] }, () 
       }).pipe(
         Effect.provide(
           Prisma.providers().pipe(
-            Layer.provideMerge(Layer.succeed(AuthProviders, {})),
+            Layer.provideMerge(AuthProvidersLive),
             Layer.provide(stackProvidedServices),
           ),
         ),
