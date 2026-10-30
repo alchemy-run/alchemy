@@ -104,6 +104,10 @@
       "DataStoresConversation": "Conversations need the Large Language Model add-on (BadRequest \"This feature is only available when Large Language Model add-on is enabled.\"). (GCP_TEST_DISCOVERYENGINE_LLM)",
       "IdentityMappingStore": "Identity mapping stores need a workforce identity provider configured for the project (BadRequest \"IdP must be configured before creating an Identity (GCP_TEST_DISCOVERYENGINE_IDP)"
     },
-    "location": "global"
+    "location": "global",
+    "skip": {
+      "ListEngineConversations": "conversations need the paid Large Language Model add-on ('only available when Large Language Model add-on is enabled')",
+      "ListDataStoreConversations": "conversations need the paid Large Language Model add-on ('only available when Large Language Model add-on is enabled')"
+    }
   }
 }

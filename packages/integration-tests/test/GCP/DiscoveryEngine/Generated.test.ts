@@ -153,13 +153,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "ListDataStoreConversations@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.conversations.list)",
-        () => probe("ListDataStoreConversations@CollectionsDataStore", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListDataStoreConversations@CollectionsDataStore (discoveryengine.projects.locations.collections.dataStores.conversations.list): conversations need the paid Large Language Model add-on ('only available when Large Language Model add-on is enabled')",
+        () => Effect.void,
       );
       test.provider(
         "ListDataStoreCustomModels (discoveryengine.projects.locations.collections.dataStores.customModels.list)",
@@ -409,13 +405,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "ListEngineConversations (discoveryengine.projects.locations.collections.engines.conversations.list)",
-        () => probe("ListEngineConversations", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListEngineConversations (discoveryengine.projects.locations.collections.engines.conversations.list): conversations need the paid Large Language Model add-on ('only available when Large Language Model add-on is enabled')",
+        () => Effect.void,
       );
       test.provider(
         "ListEngineServingConfigs (discoveryengine.projects.locations.collections.engines.servingConfigs.list)",
@@ -671,13 +663,9 @@ describe.skipIf(!!process.env.FAST)(
           timeout: 600_000,
         },
       );
-      test.provider(
-        "ListDataStoreConversations@DataStore (discoveryengine.projects.locations.dataStores.conversations.list)",
-        () => probe("ListDataStoreConversations@DataStore", true),
-        {
-          tags: ["provider:gcp", "provider:gcp:discoveryengine", "live"],
-          timeout: 600_000,
-        },
+      test.provider.skip(
+        "ListDataStoreConversations@DataStore (discoveryengine.projects.locations.dataStores.conversations.list): conversations need the paid Large Language Model add-on ('only available when Large Language Model add-on is enabled')",
+        () => Effect.void,
       );
       test.provider(
         "ListDataStoreSchemas@DataStore (discoveryengine.projects.locations.dataStores.schemas.list)",
