@@ -1,4 +1,3 @@
-import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
@@ -15,15 +14,7 @@ import type {
   ListResult,
   PresignGetOptions,
 } from "./BucketTypes.ts";
-import {
-  makeBucketAccess,
-  objectBodyFrom,
-  objectFrom,
-  objectFromListEntry,
-  rangeHeader,
-  toBucketError,
-  type BucketAccess,
-} from "./internal/BucketClient.ts";
+import { makeBucketAccess, type BucketAccess } from "./internal/BucketClient.ts";
 
 export interface ReadBucket extends Binding.Service<
   ReadBucket,
@@ -109,60 +100,9 @@ export const ReadBucket = Binding.Service<ReadBucket>("Prisma.ReadBucket");
  * {@link ReadWriteBucket} so both levels run the same code.
  */
 export const readBucketOperations = (access: BucketAccess): ReadBucketClient => ({
-  head: (key: string) =>
-    access.bucketName.pipe(
-      Effect.flatMap((Bucket) => access.authorize(S3.headObject({ Bucket, Key: key }))),
-      Effect.map((response) => objectFrom(key, response)),
-      // A missing key is absence, not a failure — mirror the native bucket
-      // clients that resolve `null`.
-      Effect.catchTag("NotFound", () => Effect.succeed(null)),
-      Effect.mapError(toBucketError),
-    ),
-  get: (key: string, options?: GetOptions) =>
-    access.bucketName.pipe(
-      Effect.flatMap((Bucket) =>
-        access.authorize(
-          S3.getObject({
-            Bucket,
-            Key: key,
-            Range: rangeHeader(options?.range),
-          }),
-        ),
-      ),
-      Effect.map((response) => objectBodyFrom(key, response)),
-      Effect.catchTag("NoSuchKey", () => Effect.succeed(null)),
-      Effect.mapError(toBucketError),
-    ),
-  list: (options?: ListOptions) =>
-    access.bucketName.pipe(
-      Effect.flatMap((Bucket) =>
-        access.authorize(
-          S3.listObjectsV2({
-            Bucket,
-            Prefix: options?.prefix,
-            Delimiter: options?.delimiter,
-            ContinuationToken: options?.cursor,
-            MaxKeys: options?.limit,
-            StartAfter: options?.startAfter,
-          }),
-        ),
-      ),
-      Effect.map((response): ListResult => {
-        const objects = (response.Contents ?? []).map(objectFromListEntry);
-        const delimitedPrefixes = (response.CommonPrefixes ?? []).flatMap((prefix) =>
-          prefix.Prefix === undefined ? [] : [prefix.Prefix],
-        );
-        return response.IsTruncated && response.NextContinuationToken
-          ? {
-              objects,
-              delimitedPrefixes,
-              truncated: true,
-              cursor: response.NextContinuationToken,
-            }
-          : { objects, delimitedPrefixes, truncated: false };
-      }),
-      Effect.mapError(toBucketError),
-    ),
+  head: access.headObject,
+  get: access.getObject,
+  list: access.listObjects,
   presignGet: (key: string, options?: PresignGetOptions) =>
     access.presign({
       method: "GET",

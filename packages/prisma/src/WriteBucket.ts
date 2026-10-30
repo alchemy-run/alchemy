@@ -1,4 +1,3 @@
-import * as S3 from "@distilled.cloud/aws/s3";
 import * as Binding from "alchemy/Binding";
 import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
@@ -13,12 +12,7 @@ import type {
   PresignPutOptions,
   PutOptions,
 } from "./BucketTypes.ts";
-import {
-  makeBucketAccess,
-  objectFrom,
-  toBucketError,
-  type BucketAccess,
-} from "./internal/BucketClient.ts";
+import { makeBucketAccess, type BucketAccess } from "./internal/BucketClient.ts";
 
 export interface WriteBucket extends Binding.Service<
   WriteBucket,
@@ -106,47 +100,15 @@ export const WriteBucket = Binding.Service<WriteBucket>("Prisma.WriteBucket");
  * {@link ReadWriteBucket} so both levels run the same code.
  */
 export const writeBucketOperations = (access: BucketAccess): WriteBucketClient => ({
-  put: (key: string, value: BucketBody, options?: PutOptions) =>
-    access.bucketName.pipe(
-      Effect.flatMap((Bucket) =>
-        access.authorize(
-          S3.putObject({
-            Bucket,
-            Key: key,
-            Body: value,
-            ContentType: options?.contentType,
-            ContentLength: options?.contentLength,
-            CacheControl: options?.cacheControl,
-            ContentDisposition: options?.contentDisposition,
-            ContentEncoding: options?.contentEncoding,
-            Metadata: options?.metadata,
-          }),
-        ),
-      ),
-      Effect.map((response) =>
-        objectFrom(key, {
-          ETag: response.ETag,
-          ContentLength: options?.contentLength,
-          ContentType: options?.contentType,
-          Metadata: options?.metadata,
-        }),
-      ),
-      Effect.mapError(toBucketError),
-    ),
+  put: access.putObject,
   // Deletes are issued one key at a time rather than through the batch
   // `DeleteObjects` operation, whose signed-payload digest requirement is not
   // uniformly supported by S3-compatible stores.
   delete: (keys: string | string[]) =>
-    access.bucketName.pipe(
-      Effect.flatMap((Bucket) =>
-        Effect.forEach(
-          typeof keys === "string" ? [keys] : keys,
-          (key) => access.authorize(S3.deleteObject({ Bucket, Key: key })),
-          { concurrency: 16, discard: true },
-        ),
-      ),
-      Effect.mapError(toBucketError),
-    ),
+    Effect.forEach(typeof keys === "string" ? [keys] : keys, access.deleteObject, {
+      concurrency: 16,
+      discard: true,
+    }),
   presignPut: (key: string, options?: PresignPutOptions) =>
     access.presign({
       method: "PUT",
