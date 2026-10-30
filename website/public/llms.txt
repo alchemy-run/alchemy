@@ -911,6 +911,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Deadlines](https://alchemy.run/domain/deadlines) — Give a waiting process a time limit with a scheduled command, and let the aggregate decide whether the deadline or the action wins.
 - [Cloudflare Durable Objects](https://alchemy.run/domain/cloudflare) — Host a domain model on Durable Objects behind a Worker, with live reads over WebSockets.
 - [History at scale](https://alchemy.run/domain/backfill) — How a deploy backfills new views and projections on Cloudflare, how long it takes, and how to run a large Domain within Cloudflare's limits.
+- [Effect Cluster and SQL](https://alchemy.run/domain/cluster) — Host a domain model on effect/cluster with its data in SQLite, Postgres, MySQL or MariaDB, in one process or on several runners.
 - [In memory](https://alchemy.run/domain/in-memory) — Run a domain model in a single process, for tests and for apps that don't need Cloudflare.
 - [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api) — Publish an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
 - [CLI](https://alchemy.run/domain/cli) — Run an Api's calls from a terminal, as a person or an agent, against the deployed Api.
