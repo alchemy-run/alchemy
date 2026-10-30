@@ -18,6 +18,7 @@ import * as HttpBody from "effect/http/HttpBody";
 import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import type * as HttpClientResponse from "effect/http/HttpClientResponse";
+import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import {
   BucketError,
@@ -79,13 +80,13 @@ export interface BucketAccess {
   /** `DeleteObject`. Deleting a key that does not exist succeeds. */
   deleteObject: (key: string) => Effect.Effect<void, BucketError>;
   /** One page of `ListObjectsV2`. */
-  listObjects: (options?: ListOptions) => Effect.Effect<ListResult, BucketError>;
+  listObjectsV2: (options?: ListOptions) => Effect.Effect<ListResult, BucketError>;
   /** SigV4 query-string presigning. No request is sent. */
   presign: (request: PresignRequest) => Effect.Effect<string, BucketError>;
 }
 
 /** A non-2xx response from the store, with the S3 error code when it sent one. */
-export class BucketResponseError extends Data.TaggedError("BucketResponseError")<{
+class S3ErrorResponse extends Data.TaggedError("S3ErrorResponse")<{
   message: string;
   status: number;
   code: string | undefined;
@@ -100,6 +101,8 @@ export const toBucketError = (error: unknown): BucketError =>
     cause: error instanceof Error ? error : new Error(String(error)),
   });
 
+const invalidInput = (message: string) => new BucketError({ message, cause: new Error(message) });
+
 /** Render a {@link BucketRange} as an HTTP `Range` header value. */
 export const rangeHeader = (range: BucketRange | undefined) => {
   if (range === undefined) return undefined;
@@ -108,19 +111,17 @@ export const rangeHeader = (range: BucketRange | undefined) => {
 };
 
 /**
- * Percent-encode an object key for the URL path: every character except RFC
- * 3986 unreserved ones, keeping the `/` separators.
+ * Percent-encode a URL component: every character except RFC 3986 unreserved
+ * ones. Throws on a lone surrogate, which has no UTF-8 encoding.
  */
-export const encodeKey = (key: string) =>
-  key
-    .split("/")
-    .map((segment) =>
-      encodeURIComponent(segment).replace(
-        /[!'()*]/g,
-        (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
-      ),
-    )
-    .join("/");
+const encodeComponent = (value: string) =>
+  encodeURIComponent(value).replace(
+    /[!'()*]/g,
+    (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`,
+  );
+
+/** Percent-encode an object key for the URL path, keeping the `/` separators. */
+const encodeKey = (key: string) => key.split("/").map(encodeComponent).join("/");
 
 const stripQuotes = (etag: string | undefined) =>
   etag === undefined ? "" : etag.replaceAll('"', "");
@@ -207,26 +208,49 @@ const xmlList = (value: XmlValue | undefined): XmlValue[] =>
 const xmlChild = (value: XmlValue, name: string): XmlValue | undefined =>
   typeof value === "object" && !Array.isArray(value) ? value[name] : undefined;
 
-const errorCodeOf = (body: string) =>
+const errorDetailsOf = (body: string) =>
   body.trim() === ""
-    ? Effect.undefined
+    ? Effect.succeed({ code: undefined, message: undefined })
     : parseXml(body).pipe(
-        Effect.map((document) => xmlText(xmlChild(document.Error ?? {}, "Code"))),
-        Effect.orElseSucceed(() => undefined),
+        Effect.map((document) => {
+          const error = document.Error ?? {};
+          return {
+            code: xmlText(xmlChild(error, "Code")),
+            message: xmlText(xmlChild(error, "Message")),
+          };
+        }),
+        Effect.orElseSucceed(() => ({ code: undefined, message: undefined })),
       );
 
 const responseError = (operation: string, response: HttpClientResponse.HttpClientResponse) =>
   response.text.pipe(
     Effect.orElseSucceed(() => ""),
-    Effect.flatMap(errorCodeOf),
-    Effect.flatMap((code) =>
+    Effect.flatMap(errorDetailsOf),
+    Effect.flatMap(({ code, message }) =>
       Effect.fail(
-        new BucketResponseError({
-          message: `${operation} failed with HTTP ${response.status}${code === undefined ? "" : ` (${code})`}`,
+        new S3ErrorResponse({
+          message: [
+            `${operation} failed with HTTP ${response.status}`,
+            code === undefined ? "" : ` (${code})`,
+            message === undefined ? "" : `: ${message}`,
+          ].join(""),
           status: response.status,
           code,
         }),
       ),
+    ),
+  );
+
+/**
+ * A 404 for a missing key is absence; a 404 for a missing bucket is a failure.
+ */
+const absentUnlessNoSuchBucket = (
+  operation: string,
+  response: HttpClientResponse.HttpClientResponse,
+) =>
+  responseError(operation, response).pipe(
+    Effect.catchTag("S3ErrorResponse", (error) =>
+      error.code === "NoSuchBucket" ? Effect.fail(error) : Effect.succeed(null),
     ),
   );
 
@@ -284,6 +308,13 @@ const putHeaders = (options: PutOptions | undefined): Record<string, string> => 
 
 const listResultFrom = (body: string) =>
   parseXml(body).pipe(
+    Effect.mapError(
+      (error) =>
+        new BucketError({
+          message: `ListObjectsV2 returned malformed XML: ${error.message}`,
+          cause: error,
+        }),
+    ),
     Effect.map((document): ListResult => {
       const result = document.ListBucketResult ?? {};
       const objects = xmlList(xmlChild(result, "Contents")).map((entry): BucketObject => ({
@@ -321,7 +352,14 @@ export const makeBucketAccess = (credentials: BucketCredentials): BucketAccess =
     Effect.map(({ endpoint, bucket }) => `${endpoint.replace(/\/+$/, "")}/${bucket}`),
   );
   const objectUrl = (key: string) =>
-    bucketUrl.pipe(Effect.map((url) => `${url}/${encodeKey(key)}`));
+    bucketUrl.pipe(
+      Effect.flatMap((url) =>
+        Effect.try({
+          try: () => `${url}/${encodeKey(key)}`,
+          catch: () => invalidInput(`Object key is not valid UTF-16: ${JSON.stringify(key)}`),
+        }),
+      ),
+    );
 
   const send = (request: HttpClientRequest.HttpClientRequest) =>
     resolved.pipe(
@@ -333,6 +371,17 @@ export const makeBucketAccess = (credentials: BucketCredentials): BucketAccess =
               service: "s3",
               region: BUCKET_SIGNING_REGION,
             }),
+          ),
+          // A streamed body is read once, so its request cannot be replayed.
+          Effect.map((client) =>
+            request.body._tag === "Stream"
+              ? client
+              : client.pipe(
+                  HttpClient.retryTransient({
+                    schedule: Schedule.exponential("200 millis"),
+                    times: 5,
+                  }),
+                ),
           ),
           Effect.flatMap((client) => client.execute(request)),
         ),
@@ -365,13 +414,9 @@ export const makeBucketAccess = (credentials: BucketCredentials): BucketAccess =
         Effect.flatMap(send),
         Effect.flatMap((response) => {
           if (isOk(response)) return Effect.succeed(objectBodyFrom(key, response));
-          if (response.status !== 404) return responseError("GetObject", response);
-          // A missing bucket is also a 404; only a missing key is absence.
-          return responseError("GetObject", response).pipe(
-            Effect.catchTag("BucketResponseError", (error) =>
-              error.code === "NoSuchBucket" ? Effect.fail(error) : Effect.succeed(null),
-            ),
-          );
+          return response.status === 404
+            ? absentUnlessNoSuchBucket("GetObject", response)
+            : responseError("GetObject", response);
         }),
         Effect.mapError(toBucketError),
       ),
@@ -406,26 +451,37 @@ export const makeBucketAccess = (credentials: BucketCredentials): BucketAccess =
       objectUrl(key).pipe(
         Effect.flatMap((url) => send(HttpClientRequest.delete(url))),
         Effect.flatMap((response) =>
-          isOk(response) || response.status === 404
+          isOk(response)
             ? Effect.void
-            : responseError("DeleteObject", response),
+            : response.status === 404
+              ? Effect.asVoid(absentUnlessNoSuchBucket("DeleteObject", response))
+              : responseError("DeleteObject", response),
         ),
         Effect.mapError(toBucketError),
       ),
-    listObjects: (options) =>
+    listObjectsV2: (options) =>
       bucketUrl.pipe(
-        Effect.map((url) => {
-          const params = new URLSearchParams({ "list-type": "2" });
-          const set = (name: string, value: string | number | undefined) => {
-            if (value !== undefined) params.set(name, String(value));
-          };
-          set("prefix", options?.prefix);
-          set("delimiter", options?.delimiter);
-          set("continuation-token", options?.cursor);
-          set("max-keys", options?.limit);
-          set("start-after", options?.startAfter);
-          return HttpClientRequest.get(`${url}?${params}`);
-        }),
+        Effect.flatMap((url) =>
+          Effect.try({
+            try: () => {
+              const params: Array<[string, string | number | undefined]> = [
+                ["list-type", 2],
+                ["prefix", options?.prefix],
+                ["delimiter", options?.delimiter],
+                ["continuation-token", options?.cursor],
+                ["max-keys", options?.limit],
+                ["start-after", options?.startAfter],
+              ];
+              const query = params
+                .flatMap(([name, value]) =>
+                  value === undefined ? [] : [`${name}=${encodeComponent(String(value))}`],
+                )
+                .join("&");
+              return HttpClientRequest.get(`${url}?${query}`);
+            },
+            catch: () => invalidInput("List options are not valid UTF-16"),
+          }),
+        ),
         Effect.flatMap(send),
         Effect.flatMap((response): Effect.Effect<ListResult, unknown> =>
           isOk(response)
@@ -439,22 +495,28 @@ export const makeBucketAccess = (credentials: BucketCredentials): BucketAccess =
         Effect.flatMap(([url, { accessKeyId, secretAccessKey }]) => {
           const responseContentType =
             request.method === "GET" ? request.responseContentType : undefined;
-          const target =
-            responseContentType === undefined
-              ? url
-              : `${url}?response-content-type=${encodeURIComponent(responseContentType)}`;
           const contentType = request.method === "PUT" ? request.contentType : undefined;
-          return AwsClient.presign(target, {
-            credentials: { accessKeyId, secretAccessKey },
-            service: "s3",
-            region: BUCKET_SIGNING_REGION,
-            method: request.method,
-            expiresIn: request.expiresIn ?? DEFAULT_PRESIGN_EXPIRES_IN,
-            headers: contentType === undefined ? undefined : { "content-type": contentType },
-            // `content-type` is left out of a signature by default; a PUT URL
-            // must pin it so the uploader cannot send another type.
-            allHeaders: contentType !== undefined,
-          });
+          return Effect.try({
+            try: () =>
+              responseContentType === undefined
+                ? url
+                : `${url}?response-content-type=${encodeComponent(responseContentType)}`,
+            catch: () => invalidInput("Response content type is not valid UTF-16"),
+          }).pipe(
+            Effect.flatMap((target) =>
+              AwsClient.presign(target, {
+                credentials: { accessKeyId, secretAccessKey },
+                service: "s3",
+                region: BUCKET_SIGNING_REGION,
+                method: request.method,
+                expiresIn: request.expiresIn ?? DEFAULT_PRESIGN_EXPIRES_IN,
+                headers: contentType === undefined ? undefined : { "content-type": contentType },
+                // `content-type` is left out of a signature by default; a PUT URL
+                // must pin it so the uploader cannot send another type.
+                allHeaders: contentType !== undefined,
+              }),
+            ),
+          );
         }),
         Effect.mapError(toBucketError),
       ),

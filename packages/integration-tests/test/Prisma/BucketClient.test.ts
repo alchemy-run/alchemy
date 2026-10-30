@@ -1,10 +1,12 @@
 import { describe, expect, it } from "@alchemy.run/test";
+import { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Redacted from "effect/Redacted";
 import * as Stream from "effect/Stream";
 import * as TestClock from "effect/testing/TestClock";
 import { makeBucketAccess } from "../../../prisma/src/internal/BucketClient.ts";
+import { makeReadWriteBucketClient } from "../../../prisma/src/ReadWriteBucket.ts";
 
 const credentials = {
   endpoint: Effect.succeed("https://t3.storage.dev/"),
@@ -43,7 +45,16 @@ const fakeStore = (respond: (request: Request) => Response) => {
   return {
     sent,
     run: <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-      effect.pipe(Effect.provideService(FetchHttpClient.Fetch, fetch)),
+      effect.pipe(
+        Effect.provideService(FetchHttpClient.Fetch, fetch),
+        Effect.provideService(RuntimeContext, {
+          Type: "Test",
+          id: "test",
+          env: {},
+          get: () => Effect.undefined,
+          set: (id) => Effect.succeed(id),
+        }),
+      ),
   };
 };
 
@@ -166,18 +177,24 @@ describe("Prisma bucket client", { tags: ["unit", "provider:prisma", "local"] },
       const error = yield* missingBucket.run(access.getObject("k")).pipe(Effect.flip);
       expect(error._tag).toBe("BucketError");
       expect(error.message).toBe("GetObject failed with HTTP 404 (NoSuchBucket)");
+      const deleteError = yield* missingBucket.run(access.deleteObject("k")).pipe(Effect.flip);
+      expect(deleteError.message).toBe("DeleteObject failed with HTTP 404 (NoSuchBucket)");
     }),
   );
 
   it.effect("fails with the store's error code on other statuses", () =>
     Effect.gen(function* () {
       const store = fakeStore(
-        () => new Response("<Error><Code>AccessDenied</Code></Error>", { status: 403 }),
+        () =>
+          new Response(
+            "<Error><Code>AccessDenied</Code><Message>Access Denied.</Message></Error>",
+            { status: 403 },
+          ),
       );
       const error = yield* store
         .run(makeBucketAccess(credentials).putObject("k", "v"))
         .pipe(Effect.flip);
-      expect(error.message).toBe("PutObject failed with HTTP 403 (AccessDenied)");
+      expect(error.message).toBe("PutObject failed with HTTP 403 (AccessDenied): Access Denied.");
     }),
   );
 
@@ -256,7 +273,7 @@ describe("Prisma bucket client", { tags: ["unit", "provider:prisma", "local"] },
           ),
       );
       const page = yield* store.run(
-        makeBucketAccess(credentials).listObjects({
+        makeBucketAccess(credentials).listObjectsV2({
           prefix: "p/",
           delimiter: "/",
           limit: 2,
@@ -302,7 +319,7 @@ describe("Prisma bucket client", { tags: ["unit", "provider:prisma", "local"] },
             { status: 200 },
           ),
       );
-      const page = yield* store.run(makeBucketAccess(credentials).listObjects());
+      const page = yield* store.run(makeBucketAccess(credentials).listObjectsV2());
 
       expect(new URL(store.sent[0]!.url).search).toBe("?list-type=2");
       expect(page.truncated).toBe(false);
@@ -323,6 +340,65 @@ describe("Prisma bucket client", { tags: ["unit", "provider:prisma", "local"] },
         "DELETE https://t3.storage.dev/user-abc123/x",
         "DELETE https://t3.storage.dev/user-abc123/y/z",
       ]);
+    }),
+  );
+
+  it.effect("retries a transient failure", () =>
+    Effect.gen(function* () {
+      let calls = 0;
+      const store = fakeStore(() =>
+        ++calls === 1
+          ? new Response("<Error><Code>SlowDown</Code></Error>", { status: 503 })
+          : new Response(null, { status: 200, headers: objectHeaders }),
+      );
+      const object = yield* store.run(makeBucketAccess(credentials).headObject("k"));
+
+      expect(store.sent.length).toBe(2);
+      expect(object?.etag).toBe("e2");
+    }).pipe(TestClock.withLive),
+  );
+
+  it.effect("percent-encodes list parameters", () =>
+    Effect.gen(function* () {
+      const store = fakeStore(
+        () => new Response("<ListBucketResult></ListBucketResult>", { status: 200 }),
+      );
+      yield* store.run(makeBucketAccess(credentials).listObjectsV2({ prefix: "a b+c/" }));
+
+      expect(new URL(store.sent[0]!.url).search).toBe("?list-type=2&prefix=a%20b%2Bc%2F");
+    }),
+  );
+
+  it.effect("fails with a BucketError for a key that cannot be encoded", () =>
+    Effect.gen(function* () {
+      const error = yield* makeBucketAccess(credentials).headObject("bad\uD800").pipe(Effect.flip);
+      expect(error._tag).toBe("BucketError");
+    }),
+  );
+
+  it.effect("maps the public client's options onto the requests", () =>
+    Effect.gen(function* () {
+      yield* TestClock.setTime(SIGNING_TIME);
+      const store = fakeStore(() => new Response(null, { status: 204 }));
+      const client = makeReadWriteBucketClient(credentials);
+      yield* store.run(client.delete(["x", "y/z"]));
+
+      expect(store.sent.map((request) => `${request.method} ${request.url}`).sort()).toEqual([
+        "DELETE https://t3.storage.dev/user-abc123/x",
+        "DELETE https://t3.storage.dev/user-abc123/y/z",
+      ]);
+      const download = new URL(
+        yield* store.run(client.presignGet("a.txt", { expiresIn: 60, contentType: "text/plain" })),
+      );
+      expect(download.searchParams.get("X-Amz-Signature")).toBe(
+        "27e8cb04ae2312d8558080cdfa9315645b05cb4bb7cb0e9866b4081663c510db",
+      );
+      const upload = new URL(
+        yield* store.run(client.presignPut("uploads/avatar.png", { contentType: "image/png" })),
+      );
+      expect(upload.searchParams.get("X-Amz-Signature")).toBe(
+        "c47ad65853608828842e71d3eab9baa8ff7a58be50dee00c14a6df9357cbc9de",
+      );
     }),
   );
 });

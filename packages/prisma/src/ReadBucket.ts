@@ -102,7 +102,7 @@ export const ReadBucket = Binding.Service<ReadBucket>("Prisma.ReadBucket");
 export const readBucketOperations = (access: BucketAccess): ReadBucketClient => ({
   head: access.headObject,
   get: access.getObject,
-  list: access.listObjects,
+  list: access.listObjectsV2,
   presignGet: (key: string, options?: PresignGetOptions) =>
     access.presign({
       method: "GET",
