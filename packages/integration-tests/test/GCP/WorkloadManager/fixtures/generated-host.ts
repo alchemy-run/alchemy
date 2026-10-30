@@ -23,9 +23,8 @@ export default class WorkloadManagerGeneratedHost extends GCP.Function<WorkloadM
     const p5 = yield* GCP.WorkloadManager.GetDiscoveredprofileHealth();
     const p6 = yield* GCP.WorkloadManager.ListDeploymentActuations();
     const p7 = yield* GCP.WorkloadManager.ListDeployments();
-    const p8 = yield* GCP.WorkloadManager.ListDiscoveredprofiles();
-    const p9 = yield* GCP.WorkloadManager.ListEvaluations();
-    const p10 = yield* GCP.WorkloadManager.ListRules();
+    const p8 = yield* GCP.WorkloadManager.ListEvaluations();
+    const p9 = yield* GCP.WorkloadManager.ListRules();
     return {
       fetch: serveProbes({
         CreateDeployment: probeOutcome(
@@ -60,9 +59,8 @@ export default class WorkloadManagerGeneratedHost extends GCP.Function<WorkloadM
           Retry.none(p6({ deployment: "alchemy-missing", location: "us-central1" } as never)),
         ),
         ListDeployments: probeOutcome(Retry.none(p7({ location: "us-central1" } as never))),
-        ListDiscoveredprofiles: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
-        ListEvaluations: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
-        ListRules: probeOutcome(Retry.none(p10({ location: "us-central1" } as never))),
+        ListEvaluations: probeOutcome(Retry.none(p8({ location: "us-central1" } as never))),
+        ListRules: probeOutcome(Retry.none(p9({ location: "us-central1" } as never))),
       }),
     };
   }).pipe(
@@ -77,7 +75,6 @@ export default class WorkloadManagerGeneratedHost extends GCP.Function<WorkloadM
           GCP.WorkloadManager.GetDiscoveredprofileHealthHttp,
           GCP.WorkloadManager.ListDeploymentActuationsHttp,
           GCP.WorkloadManager.ListDeploymentsHttp,
-          GCP.WorkloadManager.ListDiscoveredprofilesHttp,
           GCP.WorkloadManager.ListEvaluationsHttp,
           GCP.WorkloadManager.ListRulesHttp,
         ),

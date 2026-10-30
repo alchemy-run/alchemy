@@ -17,6 +17,9 @@
     },
     "enable": [
       "workloadmanager.googleapis.com"
-    ]
+    ],
+    "skip": {
+      "ListDiscoveredprofiles": "discovered profiles come from Workload Manager's service agent scanning the project; the agent doesn't exist until an evaluation or deployment runs, so the list answers NotFound for the agent"
+    }
   }
 }
