@@ -99,6 +99,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/hetzner/src",
   },
   {
+    srcRoot: "packages/digitalocean/src",
+    providerPrefix: "DigitalOcean",
+    sourceDisplayPrefix: "packages/digitalocean/src",
+  },
+  {
     srcRoot: "packages/railway/src",
     providerPrefix: "Railway",
     sourceDisplayPrefix: "packages/railway/src",

@@ -39,6 +39,7 @@ function providersSidebarEntry() {
       { label: "Hetzner", link: "/hetzner" },
       { label: "Fly", link: "/fly" },
       { label: "Railway", link: "/railway" },
+      { label: "DigitalOcean", link: "/digitalocean" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
@@ -1287,6 +1288,14 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Railway"),
+          ],
+        },
+        {
+          label: "DigitalOcean",
+          items: [
+            { label: "Overview", link: "/digitalocean" },
+            { label: "Setup", link: "/digitalocean/setup" },
+            providerResourcesEntry("DigitalOcean"),
           ],
         },
         {
