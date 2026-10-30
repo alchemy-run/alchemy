@@ -7,7 +7,6 @@ import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import { withNetworkSlot } from "../networkQuota.ts";
-import { withNetworkSlot } from "../networkQuota.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
@@ -43,7 +42,7 @@ test.provider(
       expect(error._tag).toEqual("NotFound");
 
       yield* stack.destroy();
-    }).pipe(withNetworkSlot, logLevel),
+    }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:networksecurity", "live"],
     timeout: 90_000,
