@@ -370,15 +370,15 @@ export const ProbeEvaluationRun = Effect.gen(function* () {
   });
 });
 
-/** The agent a semantic governance policy governs. */
+/** The agent a semantic governance policy governs (AgentService is served only in `global`). */
 export const ProbeGovernedAgent = GCP.AIPlatform.Agent("ProbeGovernedAgent", {
-  location,
+  location: "global",
   systemInstruction: "Answer briefly.",
 });
 export const ProbeSemanticGovernancePolicy = Effect.gen(function* () {
   const agent = yield* ProbeGovernedAgent;
   return yield* GCP.AIPlatform.SemanticGovernancePolicy("ProbeSemanticGovernancePolicy", {
-    location,
+    location: "global",
     displayName: "alchemy-probe",
     agent: agent.name,
     naturalLanguageConstraint: "Never share customer PII.",

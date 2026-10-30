@@ -13,7 +13,7 @@ const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Deb
 
 // A policy governs a Vertex AI Agent; the lifecycle creates one.
 const Governed = GCP.AIPlatform.Agent("Governed", {
-  location: "us-central1",
+  location: "global",
   systemInstruction: "Answer briefly.",
 });
 
@@ -37,7 +37,7 @@ test.provider(
 
       const error = yield* Effect.flip(
         aiplatform.getProjectsLocationsSemanticGovernancePolicies({
-          name: `projects/${project}/locations/us-central1/semanticGovernancePolicies/alchemy-sgp-missing`,
+          name: `projects/${project}/locations/global/semanticGovernancePolicies/alchemy-sgp-missing`,
         }),
       );
       expect(error._tag).toEqual("NotFound");
@@ -60,7 +60,7 @@ test.provider(
         Effect.gen(function* () {
           const governed = yield* Governed;
           return yield* GCP.AIPlatform.SemanticGovernancePolicy("Safety", {
-            location: "us-central1",
+            location: "global",
             displayName: "safety",
             description: "no pii",
             agent: governed.name,
@@ -83,7 +83,7 @@ test.provider(
         Effect.gen(function* () {
           const governed = yield* Governed;
           return yield* GCP.AIPlatform.SemanticGovernancePolicy("Safety", {
-            location: "us-central1",
+            location: "global",
             semanticGovernancePolicyId: created.semanticGovernancePolicyId,
             displayName: "safety-v2",
             description: "no pii v2",

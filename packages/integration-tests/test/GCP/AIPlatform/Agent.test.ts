@@ -30,7 +30,7 @@ test.provider(
   (stack) =>
     Effect.gen(function* () {
       const { project } = yield* GcpEnvironment.current;
-      const parent = `projects/${project}/locations/us-central1`;
+      const parent = `projects/${project}/locations/global`;
       yield* stack.destroy();
 
       const error = yield* Effect.flip(
@@ -57,7 +57,7 @@ test.provider.skipIf(!runLifecycle)(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.AIPlatform.Agent("Support", {
-            location: "us-central1",
+            location: "global",
             systemInstruction: "Answer briefly.",
             metadata: { env: "test" },
           });
@@ -65,7 +65,7 @@ test.provider.skipIf(!runLifecycle)(
       );
 
       expect(created.name).toContain("/agents/");
-      expect(created.location).toEqual("us-central1");
+      expect(created.location).toEqual("global");
       expect(created.metadata).toMatchObject({ env: "test" });
 
       const fetched = yield* aiplatform.getProjectsLocationsAgents({
@@ -77,7 +77,7 @@ test.provider.skipIf(!runLifecycle)(
         Effect.gen(function* () {
           return yield* GCP.AIPlatform.Agent("Support", {
             agentId: created.agentId,
-            location: "us-central1",
+            location: "global",
             systemInstruction: "Answer in one sentence.",
             metadata: { env: "prod" },
           });

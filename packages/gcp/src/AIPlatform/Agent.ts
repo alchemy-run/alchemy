@@ -28,7 +28,6 @@ import {
   userLabels,
   waitForOperation,
 } from "./internal.ts";
-import { listLocations } from "./names.ts";
 
 export type AgentTool = {
   /**
@@ -61,8 +60,10 @@ export type AgentProps = {
    */
   agentId?: string;
   /**
-   * Region. Immutable — changing it replaces the agent.
-   * @default the stack's GCP region (`GCP.Region`, else the profile region, else `us-central1`)
+   * Location. AgentService is served only in `global` (any region answers
+   * BadRequest "AgentService not supported in this location"). Immutable —
+   * changing it replaces the agent.
+   * @default "global"
    */
   location?: string;
   /**
@@ -224,19 +225,18 @@ const getByName = (name: string) =>
     .getProjectsLocationsAgents({ name })
     .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
-const listAgents = (project: string, region: string) => {
-  const collect = (parent: string) =>
-    aiplatform.listProjectsLocationsAgents.pages({ parent, pageSize: 100 }).pipe(
+// AgentService is served only in `global`.
+const AGENT_LOCATION = "global";
+
+const listAgents = (project: string) =>
+  aiplatform.listProjectsLocationsAgents
+    .pages({ parent: `projects/${project}/locations/${AGENT_LOCATION}`, pageSize: 100 })
+    .pipe(
       Stream.flatMap((page) => Stream.fromIterable(page.agents ?? [])),
       Stream.runCollect,
       Effect.map((chunk) => Array.from(chunk)),
+      Effect.catchTag("NotFound", () => Effect.succeed([])),
     );
-  const fallback = Effect.forEach(listLocations(region), (location) =>
-    collect(`projects/${project}/locations/${location}`),
-  ).pipe(Effect.map((pages) => pages.flat()));
-  // Vertex AI has no `locations/-` wildcard; scan known locations.
-  return fallback.pipe(Effect.catchTag("NotFound", () => Effect.succeed([])));
-};
 
 const isOwnedAgent = (agent: aiplatform.GoogleCloudAiplatformV1beta1Agent, id: string) =>
   Effect.gen(function* () {
@@ -245,13 +245,13 @@ const isOwnedAgent = (agent: aiplatform.GoogleCloudAiplatformV1beta1Agent, id: s
     return yield* hasAlchemyLabels(id, labels);
   });
 
-const findOwned = (id: string, project: string, region: string, hinted?: string) =>
+const findOwned = (id: string, project: string, hinted?: string) =>
   Effect.gen(function* () {
     if (hinted !== undefined && hinted.length > 0) {
       const existing = yield* getByName(hinted);
       if (existing !== undefined) return existing;
     }
-    const agents = yield* listAgents(project, region);
+    const agents = yield* listAgents(project);
     for (const agent of agents) {
       if (yield* isOwnedAgent(agent, id)) return agent;
     }
@@ -291,10 +291,13 @@ export const AgentProvider = () =>
       if (!isResolved(news)) return undefined;
       const previousId = olds?.agentId ?? output?.agentId;
       const nextId = news.agentId ?? previousId;
-      const previousLocation = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const previousLocation = normalizeLocation(
+        olds?.location ?? output?.location,
+        AGENT_LOCATION,
+      );
       const nextLocation = normalizeLocation(
         news.location ?? olds?.location ?? output?.location,
-        env.region,
+        AGENT_LOCATION,
       );
       const previousBase = olds?.baseAgent ?? output?.baseAgent ?? DEFAULT_BASE_AGENT;
       const nextBase = news.baseAgent ?? previousBase;
@@ -315,9 +318,9 @@ export const AgentProvider = () =>
     read: Effect.fn(function* ({ id, olds, output }) {
       const env = yield* GcpEnvironment.current;
       const agentId = yield* toId(id, olds?.agentId, output?.agentId);
-      const location = normalizeLocation(olds?.location ?? output?.location, env.region);
+      const location = normalizeLocation(olds?.location ?? output?.location, AGENT_LOCATION);
       const name = output?.name ?? resourceName(env.project, location, agentId);
-      const existing = yield* findOwned(id, env.project, env.region, name);
+      const existing = yield* findOwned(id, env.project, name);
       if (existing === undefined) return undefined;
       const attrs = toAttrs(existing, env.project);
       return (yield* isOwnedAgent(existing, id)) ? attrs : Unowned(attrs);
@@ -326,7 +329,7 @@ export const AgentProvider = () =>
     list: () =>
       Effect.gen(function* () {
         const env = yield* GcpEnvironment.current;
-        const agents = yield* listAgents(env.project, env.region);
+        const agents = yield* listAgents(env.project);
         return agents
           .filter(
             (agent) => hasAlchemyLabelKeys(agent.metadata) || hasOwnershipMarker(agent.description),
@@ -336,7 +339,7 @@ export const AgentProvider = () =>
 
     reconcile: Effect.fn(function* ({ id, news, output }) {
       const env = yield* GcpEnvironment.current;
-      const location = normalizeLocation(news.location ?? output?.location, env.region);
+      const location = normalizeLocation(news.location ?? output?.location, AGENT_LOCATION);
       const agentId = yield* toId(id, news.agentId, output?.agentId);
       const name = resourceName(env.project, location, agentId);
       const internal = yield* createInternalLabels(id);
@@ -348,7 +351,7 @@ export const AgentProvider = () =>
       const baseAgent = news.baseAgent ?? DEFAULT_BASE_AGENT;
       const tools = toolsOf(news.tools);
 
-      let current = yield* findOwned(id, env.project, env.region, output?.name ?? name);
+      let current = yield* findOwned(id, env.project, output?.name ?? name);
 
       if (current === undefined) {
         const created = yield* aiplatform
@@ -371,7 +374,7 @@ export const AgentProvider = () =>
           current = yield* waitUntilExists(createdName);
         }
         if (current === undefined) {
-          current = yield* findOwned(id, env.project, env.region, name);
+          current = yield* findOwned(id, env.project, name);
         }
       }
 
