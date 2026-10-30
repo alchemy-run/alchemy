@@ -219,6 +219,16 @@ export const RuntimeLive = Layer.effect(
           ...config.sockets,
         ];
         const exits = yield* Queue.unbounded<Workerd.WorkerdExit>();
+        // Debug facility: expose workerd's V8 inspector (the Chrome DevTools
+        // protocol) for one worker. `WORKERD_INSPECTOR_WORKER=<worker name>`
+        // selects it; `WORKERD_INSPECTOR_ADDR` overrides the default listen
+        // address. Scoped to a single named worker because every worker runs
+        // in its own workerd process, so an unconditional fixed address
+        // would collide across them.
+        const inspectorAddr =
+          process.env.WORKERD_INSPECTOR_WORKER === worker.name
+            ? (process.env.WORKERD_INSPECTOR_ADDR ?? "127.0.0.1:9229")
+            : undefined;
         /**
          * Serves the Worker. `pinned` reuses the ports of a previous process,
          * so a replacement is reachable through the same URL, proxy target
@@ -262,6 +272,7 @@ export const RuntimeLive = Layer.effect(
             },
             {
               "debug-port": `127.0.0.1:${pinned?.[SOCKET_DEBUG_PORT] ?? 0}`,
+              ...(inspectorAddr ? { "inspector-addr": inspectorAddr } : undefined),
               ...(worker.logging?.verbose ? { verbose: true } : undefined),
             },
             {
