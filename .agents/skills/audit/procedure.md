@@ -191,10 +191,10 @@ remove any a contributor committed.
 - **Leave every PR with CI passing.** After each push, wait for every check
   on the new head to finish (`gh pr checks <n>`). When one fails, read its log
   (`gh run view <id> --log-failed`), fix the cause, push, and wait again.
-  Don't end your turn while a suite or CI is still running: ending it is
-  your report, and "still running, I'll report back" is never a report. Wait
-  in the same turn (`gh pr checks <n> --watch --fail-fast`, or
-  `t3_background_wait` on a background suite).
+  Don't end your turn while a local suite is still running: wait on it with
+  `t3_background_wait`, since ending the turn is your report. A delegated
+  thread can't watch CI, so once the push is done, hand back with the checks'
+  state; the coordinator watches the PR and sends you the log if one fails.
 - Make sure CI actually runs. First-time contributors' runs sit at
   `action_required` and pushes don't start them. Read the whole diff first:
   approve the runs (`gh run approve <id>`) only when it doesn't touch

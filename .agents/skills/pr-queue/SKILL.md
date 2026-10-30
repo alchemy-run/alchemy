@@ -103,8 +103,9 @@ asks a question. Then `t3_thread_read` its `childThreadId`, update the table,
 and relay its recommendation per
 [audit/procedure.md §7](../audit/procedure.md#7-report-and-ask). Before
 relaying "ready", run `gh pr checks <N>` yourself. A failing, pending or empty
-check list isn't ready: send the child back to fix it with the failing step's
-log. Pass the
+check list isn't ready. Children can't watch CI, so when checks are pending,
+`watch_pull_request` the PR yourself and relay it once they pass; when one
+fails, send the child back with the failing step's log. Pass the
 user's answers to a waiting child with `t3_thread_send` to its
 `childThreadId`. A re-check or second review is a new `delegate_task`, not a
 message to the old child. Stop a child the user parks or closes with
