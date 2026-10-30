@@ -8,6 +8,7 @@ import * as Output from "alchemy/Output";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as Cookies from "effect/http/Cookies";
 import * as HttpClient from "effect/http/HttpClient";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
@@ -205,6 +206,12 @@ describe("AWS.Website.Router local", { tags: ["provider:aws", "provider:aws:webs
           excludes: ["router-inline-url"],
         });
 
+        // Every Set-Cookie the URL origin sends reaches the viewer, as on
+        // CloudFront, not just the last one (#2197).
+        const cookies = yield* fetchRouter(routerUrl, "/api/__cookies");
+        expect(cookies.status).toBe(200);
+        expect(Cookies.toRecord(cookies.cookies)).toEqual({ first: "1", second: "2" });
+
         yield* stack.destroy();
       }),
     { tags: ["local"], timeout: 120_000 },
@@ -290,6 +297,11 @@ describe("AWS.Website.Router local", { tags: ["provider:aws", "provider:aws:webs
         // rewrites the origin — the site's dev server sees the hostname the
         // request arrived on, exactly as a deployed server origin would.
         expect(echoed.headers["x-forwarded-host"]).toBe(new URL(routerUrl).host);
+
+        // ── A dev server's cookies all reach the viewer (#2197) ────────────
+        const cookies = yield* fetchRouter(routerUrl, "/site-a/__cookies");
+        expect(cookies.status).toBe(200);
+        expect(Cookies.toRecord(cookies.cookies)).toEqual({ first: "1", second: "2" });
 
         // ── Live edit: the dev server reads from disk per request, so the
         // next edge request serves the new content without re-applying ─────
