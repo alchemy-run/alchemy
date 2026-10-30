@@ -1,7 +1,6 @@
 import * as NodeNet from "node:net";
 import * as NodeOs from "node:os";
 import * as Cache from "effect/Cache";
-import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Result from "effect/Result";
 import * as Schedule from "effect/Schedule";
@@ -248,14 +247,12 @@ export const make = (options: PortsOptions) =>
     );
     const reserveLocal = (port: number) => Cache.set(cache, port, false);
     const reserve = (port: number) =>
-      Clock.currentTimeMillis.pipe(
-        Effect.flatMap((now) =>
-          Effect.sync(() => {
-            globalReservations.set(port, now + RESERVATION_TTL_MS);
-          }),
-        ),
-        Effect.andThen(reserveLocal(port)),
-      );
+      Effect.sync(() => {
+        // Expiry is checked against `Date.now()` in the sync `isReserved`:
+        // the process-wide map must use one real clock, not the fiber's.
+        // oxlint-disable-next-line effecttsgo/global-date-in-effect -- shares a real-time map with sync code
+        globalReservations.set(port, Date.now() + RESERVATION_TTL_MS);
+      }).pipe(Effect.andThen(reserveLocal(port)));
     // Serializes the search loop so that concurrent lookups for the same
     // starting port each reserve a distinct port. Without this, concurrent
     // callers all observe the starting port as available and return it. On
