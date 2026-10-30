@@ -100,7 +100,10 @@ for (const mode of Playwright.SERVER_METHODS) {
     });
 
     // Asserts on the served HTML, not the hydrated DOM: this proves the page
-    // rendered inside workerd with bindings, and hydration is covered above.
+    // rendered inside workerd with bindings. Hydrating this route in a
+    // browser intermittently failed in CI with React #412 ("Connection
+    // closed") on Windows and macOS for reasons not yet understood, so the
+    // browser check was dropped; other routes cover hydration.
     it("serves the page with a top-level cloudflare:workers import", async ({ server }) => {
       const response = await server.fetch("/ssg-env");
       expect(response.status).toBe(200);
