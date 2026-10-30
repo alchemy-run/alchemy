@@ -45,8 +45,10 @@ import * as Stream from "effect/Stream";
 import type { WorkflowEngine } from "effect/workflow";
 import { DurableObject as CloudflareDurableObject } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
+import { makeRpcStub } from "../Workers/Rpc.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
 import { Worker as CloudflareWorker, type Worker } from "../Workers/Worker.ts";
+import { WorkerEnvironment } from "../Workers/WorkerRuntime.ts";
 import { DurableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
 import { sleep, task, Workflow, type WorkflowImpl } from "../Workflows/Workflow.ts";
 import { Backfill as BackfillRun } from "./Backfill.ts";
@@ -1402,6 +1404,8 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
     // Factories run while the Domain's Layer is built, inside the Worker's
     // init phase; declaring a Durable Object needs that context.
     const init = yield* captureContext<Worker>();
+    // The Worker's bindings, at runtime: see `bound`.
+    const env = Option.getOrUndefined(yield* Effect.serviceOption(WorkerEnvironment));
     const inInit = <A, E>(effect: Effect.Effect<A, E, Worker>): Effect.Effect<A, E> =>
       Effect.provide(effect, init);
 
@@ -1416,9 +1420,31 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
     const sources = new Map<string, Namespace>();
     const consumers = new Map<string, Namespace>();
     const nodeStub = (path: string) => directory!.getByName(`node:${path}`);
+    /**
+     * A class by its binding name, from the Worker's bindings. An isolate that
+     * hosts only directory nodes never builds the model, so its maps are empty:
+     * it still reaches every aggregate, view and projection this way.
+     */
+    const bound = (binding: string): Namespace | undefined => {
+      const namespace = env?.[binding];
+      return namespace !== undefined && typeof namespace.getByName === "function"
+        ? { getByName: (name: string) => makeRpcStub(namespace.getByName(name)) }
+        : undefined;
+    };
+    const sourceNamespace = (source: string) =>
+      sources.get(source) ?? bound(`${source}Aggregate`) ?? bound(`${source}View`);
     const consumerStub = (target: string, key: string) => {
       const { kind, name } = Backfill.consumerOf(target);
-      return consumers.get(`${kind}:${name}`)?.getByName(key);
+      return (
+        consumers.get(`${kind}:${name}`) ??
+        bound(`${name}${kind === "view" ? "View" : "Projection"}`)
+      )?.getByName(key);
+    };
+    const consumerOf = (target: string, key: string) => {
+      const stub = consumerStub(target, key);
+      return stub === undefined
+        ? Effect.die(new Error(`backfill: ${target} isn't in the code this object runs yet`))
+        : Effect.succeed(stub);
     };
     const net: Backfill.Network = {
       node: {
@@ -1436,51 +1462,51 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       source: {
         // A source no longer in the model has nothing to give.
         scan: (ref, target) => {
-          const namespace = sources.get(ref.source);
+          const namespace = sourceNamespace(ref.source);
           return namespace
             ? unwrapDefects(namespace.getByName(ref.id).bfScan(ref.id, target))
             : Effect.succeed("discovered" as const);
         },
         ready: (ref, target, reportTo) => {
-          const namespace = sources.get(ref.source);
+          const namespace = sourceNamespace(ref.source);
           return namespace
             ? unwrapDefects(namespace.getByName(ref.id).bfReady(ref.id, target, reportTo))
             : Effect.succeed("settled" as const);
         },
         pull: (ref, target, key, after) => {
-          const namespace = sources.get(ref.source);
+          const namespace = sourceNamespace(ref.source);
           return namespace
             ? unwrapDefects(namespace.getByName(ref.id).bfPull(ref.id, target, key, after))
             : Effect.succeed({ deliveries: [], live: true });
         },
         log: (ref, after, limit) => {
-          const namespace = sources.get(ref.source);
+          const namespace = sourceNamespace(ref.source);
           return namespace
             ? unwrapDefects(namespace.getByName(ref.id).bfLog(ref.id, after, limit))
             : Effect.succeed([]);
         },
         handoff: (ref, target, key, through) => {
-          const namespace = sources.get(ref.source);
+          const namespace = sourceNamespace(ref.source);
           return namespace
             ? unwrapDefects(namespace.getByName(ref.id).bfHandoff(ref.id, target, key, through))
             : Effect.succeed("live" as const);
         },
       },
+      // A consumer this isolate can't reach runs code older than the announcement
+      // (its class is new): fail the call, and the caller asks again once it can.
       consumer: {
-        source: (target, key, stream, ref) => {
-          const stub = consumerStub(target, key);
-          return stub ? unwrapDefects(stub.bfFeed(key, target, stream, ref)) : Effect.void;
-        },
-        ready: (target, key) => {
-          const stub = consumerStub(target, key);
-          return stub ? unwrapDefects(stub.bfConsumerReady(key, target)) : Effect.void;
-        },
-        start: (target, key, ref) => {
-          const stub = consumerStub(target, key);
-          return stub
-            ? unwrapDefects(stub.bfStart(key, target, ref))
-            : Effect.succeed("settled" as const);
-        },
+        source: (target, key, stream, ref) =>
+          Effect.flatMap(consumerOf(target, key), (stub) =>
+            unwrapDefects(stub.bfFeed(key, target, stream, ref)),
+          ),
+        ready: (target, key) =>
+          Effect.flatMap(consumerOf(target, key), (stub) =>
+            unwrapDefects(stub.bfConsumerReady(key, target)),
+          ),
+        start: (target, key, ref) =>
+          Effect.flatMap(consumerOf(target, key), (stub) =>
+            unwrapDefects(stub.bfStart(key, target, ref)),
+          ),
       },
     };
     directory = yield* inInit(declare("DomainDirectory", directoryObject(net, consumerPlans)));
@@ -1490,23 +1516,30 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
     const backfill = yield* inInit(
       Workflow(
         "DomainBackfill",
-        Effect.succeed((params: { readonly targets: ReadonlyArray<string> }) =>
-          Effect.gen(function* () {
-            yield* task(
-              "announce",
-              net.node.news("", params.targets, plansOf(params.targets, planOf)),
-            );
-            for (let check = 0; ; check++) {
-              const { complete } = yield* task(`check-${check}`, net.node.status(""));
-              if (params.targets.every((target) => complete.includes(target)))
-                return { complete: true };
-              yield* sleep(
-                `wait-${check}`,
-                // Soon at first, then less often: each check is a step (an instance has 10,000).
-                `${Math.min(30_000, Math.round(1_000 * 1.5 ** check))} millis`,
+        Effect.succeed(
+          (params: {
+            readonly targets: ReadonlyArray<string>;
+            readonly plans?: Readonly<Record<string, Backfill.Plan>>;
+          }) =>
+            Effect.gen(function* () {
+              yield* task(
+                "announce",
+                net.node.news("", params.targets, {
+                  ...plansOf(params.targets, planOf),
+                  ...params.plans,
+                }),
               );
-            }
-          }),
+              for (let check = 0; ; check++) {
+                const { complete } = yield* task(`check-${check}`, net.node.status(""));
+                if (params.targets.every((target) => complete.includes(target)))
+                  return { complete: true };
+                yield* sleep(
+                  `wait-${check}`,
+                  // Soon at first, then less often: each check is a step (an instance has 10,000).
+                  `${Math.min(30_000, Math.round(1_000 * 1.5 ** check))} millis`,
+                );
+              }
+            }),
         ) as unknown as Effect.Effect<WorkflowImpl<any, any, unknown>>,
       ),
     );
@@ -1717,6 +1750,10 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
                   scriptName: worker.workerName as unknown as string,
                   workflowName: backfill.workflowName as string,
                   targets: [...targets],
+                  plans: plansOf(targets, plansOfTarget) as Record<
+                    string,
+                    { sources?: string[]; singleSource: boolean }
+                  >,
                 }) as unknown as Effect.Effect<unknown>;
               }),
             );

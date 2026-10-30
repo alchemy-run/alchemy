@@ -19,6 +19,12 @@ export interface BackfillProps {
    */
   targets: string[];
   /**
+   * What the backfill needs to know of each consumer (the sources it reads, and
+   * whether a key reads its one source's log itself), by target id. The run
+   * announces them, so it doesn't depend on what an isolate has loaded.
+   */
+  plans?: Record<string, { sources?: string[]; singleSource: boolean }>;
+  /**
    * How long a deploy waits for the backfill, in seconds. Past it the deploy
    * fails while the backfill keeps running in Cloudflare; the next deploy waits
    * on the same run.
@@ -135,7 +141,7 @@ const BackfillLive = () =>
           accountId,
           workflowName: news.workflowName,
           instanceId,
-          params: { targets: news.targets },
+          params: { targets: news.targets, plans: news.plans ?? {} },
         })
         .pipe(
           Effect.asVoid,

@@ -1331,6 +1331,19 @@ export const makeNode = (
   /** The plan the announcement carried, else this code's. */
   const planFor = (target: string) =>
     Effect.map(storage.get<Plan>(planKey(target)), (stored) => stored ?? planOf(target));
+  /**
+   * The children a sweep waits for: at the root, only the subtrees of the
+   * sources the consumer reads, by the plan it has now (one that arrives after
+   * the sweep began still narrows it).
+   */
+  const sweptChildren = (path: string, target: string, children: ReadonlyArray<string>) =>
+    Effect.gen(function* () {
+      if (path !== "") return children;
+      const sources = (yield* planFor(target))?.sources;
+      return sources === undefined
+        ? children
+        : children.filter((child) => sources.includes(sourceOfPath(child) ?? ""));
+    });
   const keepPlan = (target: string, plan: Plan | undefined) =>
     Effect.gen(function* () {
       if (plan !== undefined && (yield* storage.get(planKey(target))) === undefined)
@@ -1604,7 +1617,8 @@ export const makeNode = (
       const reported = new Set(
         reports.map(([key]) => key.slice(reportPrefix(target, sweep.phase).length)),
       );
-      if (sweep.children.some((child) => !reported.has(child))) return;
+      const children = yield* sweptChildren(path, target, sweep.children);
+      if (children.some((child) => !reported.has(child))) return;
       if (
         sweep.phase === "ready" &&
         (yield* storage.list({ prefix: unsettledPrefix(target), limit: 1 })).length > 0
@@ -1636,7 +1650,7 @@ export const makeNode = (
       yield* storage.put({ [hopKey(target, sweep.phase)]: trail });
       if (path === "")
         yield* Effect.logInfo(
-          `backfill trail ${JSON.stringify({ target, phase: sweep.phase, trail })}`,
+          `backfill trail ${JSON.stringify({ target, phase: sweep.phase, plan: (yield* planFor(target)) ?? null, children: sweep.children, trail })}`,
         );
       if (path !== "") return yield* jobs.schedule(`report:${target}`, 0);
       yield* begin(path, target, sweep.phase === "discover" ? "ready" : "complete");
@@ -1651,8 +1665,9 @@ export const makeNode = (
       // takes part in the phase (its report is no longer waited for).
       const plan = yield* planFor(target);
       if (!sweep.told) {
+        const children = yield* sweptChildren(path, target, sweep.children);
         const told = yield* Effect.forEach(
-          sweep.children,
+          children,
           (child) =>
             net.node.sweep(child, target, sweep.phase, plan).pipe(
               Effect.as(true),
@@ -1664,8 +1679,8 @@ export const makeNode = (
           path,
           target,
           phase: sweep.phase,
-          children: sweep.children,
-          failed: sweep.children.filter((_, i) => !told[i]),
+          children,
+          failed: children.filter((_, i) => !told[i]),
         });
         // A child that could not be told is told on the next step.
         if (told.includes(false)) return yield* retry.later(`step:${target}`, RETRY_MS);
