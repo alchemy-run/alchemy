@@ -15,8 +15,10 @@ export interface GetWorkstationClusterRequest extends Omit<
  * Bind this operation to a {@link WorkstationCluster} in a Function/Action
  * init phase. Provide {@link GetWorkstationClusterHttp}.
  *
- * Grants `roles/workstations.viewer` on the project because workstation
- * clusters have no IAM policy of their own.
+ * Grants `roles/workstations.workstationCreator` on the project:
+ * workstation clusters have no IAM policy of their own, and it is the
+ * smallest role the project accepts that reads clusters (the viewer role
+ * can't be granted on a project).
  *
  * ### Observing Clusters
  * **Example:** Read the bound cluster

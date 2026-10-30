@@ -26,7 +26,7 @@ export type ListWorkstationUsableShape = (
  * Returns all workstations using the specified workstation configuration on which the caller has the "workstations.workstations.use" permission.
  *
  * Bind it to a {@link WorkstationClustersWorkstationConfig} and provide {@link ListWorkstationUsableHttp}. The
- * host gets `roles/workstations.user` on the bound resource.
+ * host gets `roles/workstations.editor` on the bound resource.
  *
  * ### Usage
  * **Example:** Call `workstations.listUsable`

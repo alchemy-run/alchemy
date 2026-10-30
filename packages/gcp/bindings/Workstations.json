@@ -21,5 +21,8 @@
       "WorkstationClustersWorkstationConfigsWorkstation": "ProbeWorkstation"
     },
     "location": "us-west1"
+  },
+  "roles": {
+    "workstations.projects.locations.workstationClusters.workstationConfigs.workstations.listUsable": "roles/workstations.editor"
   }
 }

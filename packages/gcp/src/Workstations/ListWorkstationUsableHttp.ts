@@ -20,7 +20,7 @@ export const ListWorkstationUsableHttp = Layer.effect(
         operation:
           workstations.listUsableProjectsLocationsWorkstationClustersWorkstationConfigsWorkstations,
         param: "parent",
-        iam: { role: "roles/workstations.user", on: "workstations.workstationConfig" },
+        iam: { role: "roles/workstations.editor", on: "workstations.workstationConfig" },
       },
     ],
   }),
