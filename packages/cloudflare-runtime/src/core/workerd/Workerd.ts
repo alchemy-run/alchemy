@@ -1,6 +1,5 @@
 import * as NodeChildProcess from "node:child_process";
 import * as Clock from "effect/Clock";
-import * as EffectConfig from "effect/Config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -130,9 +129,6 @@ export const PATH_ENV = "ALCHEMY_WORKERD_PATH";
 export const parseV8Flags = (value: string | undefined): Array<string> =>
   (value ?? "").split(/\s+/).filter((flag) => flag.length > 0);
 
-const optionalEnv = (name: string) =>
-  EffectConfig.String(name).pipe(Effect.catchTag("ConfigError", () => Effect.undefined));
-
 const withV8Flags = (config: Config, flags: Array<string>): Config =>
   flags.length === 0 ? config : { ...config, v8Flags: [...flags, ...(config.v8Flags ?? [])] };
 
@@ -149,10 +145,12 @@ const make = (
     compatibilityDate: workerd.compatibilityDate,
     serve: Effect.fn("Workerd.serve")(
       function* (serveConfig, args, options) {
-        const config = withV8Flags(serveConfig, parseV8Flags(yield* optionalEnv(V8_FLAGS_ENV)));
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- workerd knobs for this process, read from the real env
+        const config = withV8Flags(serveConfig, parseV8Flags(process.env[V8_FLAGS_ENV]));
         // Debug facility: dump each serve's full workerd config as JSON.
         // `WORKERD_DUMP_CONFIG=<dir>` writes one timestamped file per serve.
-        const dumpDir = yield* optionalEnv("WORKERD_DUMP_CONFIG");
+        // oxlint-disable-next-line effecttsgo/process-env-in-effect -- workerd knobs for this process, read from the real env
+        const dumpDir = process.env.WORKERD_DUMP_CONFIG;
         if (dumpDir) {
           const now = yield* Clock.currentTimeMillis;
           yield* Effect.promise(async () => {
@@ -183,7 +181,8 @@ const make = (
           }
         }
         const handle = yield* spawn(
-          options?.bin || (yield* optionalEnv(PATH_ENV)) || workerd.bin,
+          // oxlint-disable-next-line effecttsgo/process-env-in-effect -- workerd knobs for this process, read from the real env
+          options?.bin || process.env[PATH_ENV] || workerd.bin,
           [
             "serve",
             "--binary",
