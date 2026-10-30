@@ -837,9 +837,17 @@ const aggregateObject = (
       return {
         send: (id: string, command: Json, meta: Aggregate.SendMeta) =>
           reportDefects(send(id, command, meta)),
-        schedule: (id: string, command: Json, meta: Aggregate.SendMeta, due: Aggregate.Due) =>
+        schedule: (
+          id: string,
+          command: Json,
+          meta: Aggregate.SendMeta,
+          due: Aggregate.Due,
+          replace: Aggregate.Replace = "pending",
+        ) =>
           Effect.gen(function* () {
-            if (yield* executed(meta.commandId)) return "AlreadyExecuted" as const;
+            // Replacing a command that ran drops its receipt, so the new one commits when due.
+            if (replace === "always") yield* state.storage.delete(`receipt:${meta.commandId}`);
+            else if (yield* executed(meta.commandId)) return "AlreadyExecuted" as const;
             const token = yield* random.uuidV4();
             const at = "at" in due ? due.at : (yield* Clock.currentTimeMillis) + due.afterMillis;
             yield* state.storage.put(`scheduled:${meta.commandId}`, token);
@@ -1846,9 +1854,9 @@ const durableObjectPlatform = (
                         ),
                       ),
                     // The object answers with a tag (RPC loses typed failures); fail with it here.
-                    schedule: (id, command, meta, due) =>
+                    schedule: (id, command, meta, due, replace) =>
                       unwrapDefects<{ readonly at: number } | "AlreadyExecuted">(
-                        namespace.getByName(id).schedule(id, command, meta, due),
+                        namespace.getByName(id).schedule(id, command, meta, due, replace),
                       ).pipe(
                         Effect.flatMap((outcome) =>
                           outcome === "AlreadyExecuted"

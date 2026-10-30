@@ -69,7 +69,7 @@ export const TransferApprovalDeadlineLive = TransferApprovalDeadline.toLayer(
 
 The schedule is durable: it fires even if everything restarted in between. Scheduling again with the same command id replaces the earlier one.
 
-A scheduled command takes its command id like any other command, so it runs once. Scheduling an id the transfer already handled fails with `AlreadyExecuted`, because that command would never run again. Here it means the policy ran a second time for the same event, after the expiry fired, so there's nothing to do.
+A scheduled command takes its command id like any other command, so it runs once. Scheduling an id the transfer already handled fails with `AlreadyExecuted`, because that command would never run again. Here it means the policy ran a second time for the same event, after the expiry fired, so there's nothing to do. To arm a timer again under an id that already ran, see [Arm it again](#arm-it-again).
 
 ## Let the aggregate decide the race
 
@@ -138,6 +138,22 @@ yield* transfers.unschedule(source, `expire:${source.id}`).pipe(
   Effect.catchTag(["AlreadyExecuted", "AlreadyCancelled"], () => Effect.void),
 );
 ```
+
+## Arm it again
+
+A timer can need to run again under the same command id. For example, a ticket stalls an hour after it opens or resumes, under `stall:<id>`. The ticket is paused when the timer fires, so `MarkStalled` records nothing. But the instance keeps a receipt for `stall:<id>`. When the ticket resumes, the policy schedules `stall:<id>` again, `schedule` fails with `AlreadyExecuted`, and a policy that catches it as "already scheduled" loses the timer.
+
+Pass `replace: "always"` to arm it again:
+
+```typescript
+yield* tickets.schedule(source, new MarkStalled(), {
+  after: "1 hour",
+  commandId: `stall:${source.id}`,
+  replace: "always",
+});
+```
+
+The default, `replace: "pending"`, replaces only a pending command. `replace: "always"` also replaces one that already ran: it drops that receipt, and the command runs again when due. A policy that runs again for the same event then arms the timer again too, so the command must record nothing when it no longer applies (as every scheduled command should).
 
 ## Test it with the clock
 
