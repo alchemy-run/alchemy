@@ -104,7 +104,7 @@ test.provider(
           .reconcile({
             ...context,
             bindings: [],
-            session: { emit: () => Effect.void, done: () => Effect.void, note: () => Effect.void },
+            session: { note: () => Effect.void },
             olds: undefined,
             news: { ...props, project: { projectId: "other-project" } },
             output: {

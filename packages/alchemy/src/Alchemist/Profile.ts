@@ -1,17 +1,18 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import { AuthError } from "../../Auth/AuthProvider.ts";
-import { CredentialsStore } from "../../Auth/Credentials.ts";
-import { inspectProvider, type ProviderConnection } from "../../Auth/Inspect.ts";
-import { withProfileCredentialsLock } from "../../Auth/Lock.ts";
-import { ProfileStore, reloadProviderConfig } from "../../Auth/Profile.ts";
-import type { Interaction } from "../../Interaction.ts";
-import { AlchemistInvalidInput, AlchemistNotFound } from "../Errors.ts";
-import { Progress } from "../Progress.ts";
-import { collectAuthProviders, DEFAULT_ENTRYPOINT, type Target } from "../Session.ts";
+import { AuthError } from "../Auth/AuthProvider.ts";
+import { CredentialsStore } from "../Auth/Credentials.ts";
+import { inspectProvider, type ProviderConnection } from "../Auth/Inspect.ts";
+import { withProfileCredentialsLock } from "../Auth/Lock.ts";
+import { ProfileStore, reloadProviderConfig } from "../Auth/Profile.ts";
+import { emit } from "../Events.ts";
+import type { Interaction } from "../Interaction.ts";
+import { collectAuthProviders } from "./AuthRegistry.ts";
+import { DEFAULT_ENTRYPOINT, type Target } from "./Entrypoint.ts";
+import { AlchemistInvalidInput, AlchemistNotFound } from "./Errors.ts";
 
-/** Which project/profile pair a provider-scoped route resolves against. */
+/** Which project/profile pair a provider-scoped operation resolves against. */
 export interface ProviderContext extends Target {
   readonly profile: string;
 }
@@ -25,7 +26,7 @@ export interface ProfileSummary {
   }>;
 }
 
-export type { ProviderConnection } from "../../Auth/Inspect.ts";
+export type { ProviderConnection } from "../Auth/Inspect.ts";
 
 export interface ProfileSnapshot {
   readonly name: string;
@@ -234,15 +235,14 @@ export const configureForm = Effect.fn("Alchemist.profile.configureForm")(functi
 
 /**
  * Connect or reconfigure a provider in a profile. Reported through
- * {@link Progress} as `ProviderConfigureStarted`; interactive providers drive
+ * the `provider.configure.started` event; interactive providers drive
  * their own prompts.
  */
 export const configure = Effect.fn("Alchemist.profile.configure")(function* (
   input: ConfigureInput,
 ) {
-  const report = yield* Progress;
-  yield* report({
-    _tag: "provider.configure.started",
+  yield* emit({
+    type: "provider.configure.started",
     provider: input.provider,
   });
   const profiles = yield* ProfileStore;
@@ -278,8 +278,8 @@ export const configure = Effect.fn("Alchemist.profile.configure")(function* (
             : undefined,
         );
   yield* profiles.setProviderConfig(input.profile, input.provider, config);
-  yield* report({
-    _tag: "provider.configure.completed",
+  yield* emit({
+    type: "provider.configure.completed",
     provider: input.provider,
   });
   return yield* get({
@@ -317,14 +317,13 @@ export const removeProvider = Effect.fn("Alchemist.profile.removeProvider")(func
 
 /**
  * Re-run login for connected providers without reconfiguring them. Each
- * provider is reported through {@link Progress} as `ProviderRefreshStarted`.
+ * provider is reported as the `provider.refresh.started` event.
  */
 export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
   input: ProviderContext & {
     readonly providers?: ReadonlyArray<string>;
   },
 ) {
-  const report = yield* Progress;
   const profiles = yield* ProfileStore;
   const stored = yield* profiles.ensureProfile(input.profile);
   const registered = yield* registry(input);
@@ -356,7 +355,7 @@ export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
         message: `Provider '${name}' is not connected or registered.`,
       });
     }
-    yield* report({ _tag: "provider.refresh.started", provider: name });
+    yield* emit({ type: "provider.refresh.started", provider: name });
     const refreshed = yield* provider.login(
       input.profile,
       yield* provider.decodeConfig(input.profile, config),
@@ -374,7 +373,7 @@ export const refresh = Effect.fn("Alchemist.profile.refresh")(function* (
     if (refreshed !== undefined) {
       yield* profiles.setProviderConfig(input.profile, name, refreshed);
     }
-    yield* report({ _tag: "provider.refresh.completed", provider: name });
+    yield* emit({ type: "provider.refresh.completed", provider: name });
   }
   return yield* get({
     name: input.profile,

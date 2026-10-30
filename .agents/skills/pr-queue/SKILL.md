@@ -87,8 +87,10 @@ A PR's brief starts with `/audit <N>`; an issue's says to fix it per
 `Fixes #<N>`. Every brief adds: `pnpm install` first, no subagents of its
 own, one live suite at a time with `--concurrency 8`, `link_pull_request` on
 every PR, no `watch_pull_request`, for features post the proposed API and
-wait before building, and end with the line
-`PR <url>, head <sha>, checks and reviews <state>` plus the recommendation.
+wait before building, leave the PR with every CI check passing on its final
+head ([audit/procedure.md §6](../audit/procedure.md#6-push-and-update-the-pr)),
+and end with the line `PR <url>, head <sha>, checks and reviews <state>` plus
+the recommendation.
 
 If a child fails in preparation, `task_cancel` it and delegate a fresh one;
 don't relaunch into the same branch by hand.
@@ -99,7 +101,11 @@ Don't do an item's work here, and don't poll children (`task_status`,
 `sleep`, `t3_thread_wait`): T3 notifies this thread when a child finishes or
 asks a question. Then `t3_thread_read` its `childThreadId`, update the table,
 and relay its recommendation per
-[audit/procedure.md §7](../audit/procedure.md#7-report-and-ask). Pass the
+[audit/procedure.md §7](../audit/procedure.md#7-report-and-ask). Before
+relaying "ready", run `gh pr checks <N>` yourself. A failing, pending or empty
+check list isn't ready. Children can't watch CI, so when checks are pending,
+`watch_pull_request` the PR yourself and relay it once they pass; when one
+fails, send the child back with the failing step's log. Pass the
 user's answers to a waiting child with `t3_thread_send` to its
 `childThreadId`. A re-check or second review is a new `delegate_task`, not a
 message to the old child. Stop a child the user parks or closes with
