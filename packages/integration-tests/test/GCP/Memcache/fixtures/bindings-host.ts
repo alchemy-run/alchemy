@@ -1,20 +1,22 @@
 import * as GCP from "@alchemy.run/gcp";
 import * as Effect from "effect/Effect";
 import { serveProbes } from "../../bindingHost.ts";
+import { CacheNetwork } from "./network.ts";
 
 /**
- * Memcached instances need Private Service Access on the project's default
- * network (without it create fails with BadRequest "Google private service
- * access is not enabled.") and take ~10 minutes to provision, so
- * `GCP_TEST_PRIVATE_SERVICE_ACCESS=1` opts in, and `--fast` skips it.
- * The gate is forwarded to the host's environment so the deployed runtime binds the
- * same set.
+ * Memcached instances take ~10 minutes to provision, so the suite is skipped
+ * under `--fast`. `FAST` is forwarded to the host's environment so the
+ * deployed runtime binds the same set.
  */
-export const memcacheEnabled = !!process.env.GCP_TEST_PRIVATE_SERVICE_ACCESS && !process.env.FAST;
+export const memcacheEnabled = !process.env.FAST;
 
-/** Instance the binding is granted for; declared only when enabled. */
-export const Cache = GCP.Memcache.Instance("Cache", {
-  location: "us-central1",
+/** Instance the binding is granted for, on its own Private Service Access network. */
+export const Cache = Effect.gen(function* () {
+  const authorizedNetwork = yield* CacheNetwork;
+  return yield* GCP.Memcache.Instance("Cache", {
+    location: "us-central1",
+    authorizedNetwork,
+  });
 });
 
 const instanceProbes = Effect.gen(function* () {
@@ -31,10 +33,7 @@ export default class MemcacheBindingsHost extends GCP.Function<MemcacheBindingsH
   {
     main: import.meta.url,
     invokerIamDisabled: true,
-    env: {
-      GCP_TEST_PRIVATE_SERVICE_ACCESS: memcacheEnabled ? "1" : "",
-      FAST: memcacheEnabled ? "" : "1",
-    },
+    env: { FAST: memcacheEnabled ? "" : "1" },
   },
   Effect.gen(function* () {
     const instance = memcacheEnabled ? yield* instanceProbes : {};

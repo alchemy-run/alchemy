@@ -6,17 +6,18 @@ import * as memcache from "@distilled.cloud/gcp/memcache_v1";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
+import { withNetworkSlot } from "../networkQuota.ts";
+import { CacheNetwork } from "./fixtures/network.ts";
 
 const { test } = Test.make({ providers: GCP.providers() });
 
 const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
 
-// Memcached instances need Private Service Access on the project's default
-// network — without it create fails with BadRequest "Google private service
-// access is not enabled." — and take ~10 minutes to provision. Set
-// GCP_TEST_PRIVATE_SERVICE_ACCESS=1 on a project with PSA configured.
-const privateServiceAccess = !!process.env.GCP_TEST_PRIVATE_SERVICE_ACCESS;
-const runLifecycle = privateServiceAccess && !process.env.FAST;
+// Memcached instances need Private Service Access — on the `default` network
+// create fails with BadRequest "Google private service access is not
+// enabled." — so the lifecycle builds its own network. Instances take ~10
+// minutes to provision, so `--fast` skips it.
+const runLifecycle = !process.env.FAST;
 
 const waitUntilGone = (name: string) =>
   memcache.getProjectsLocationsInstances({ name }).pipe(
@@ -56,7 +57,7 @@ test.provider(
   { tags: ["provider:gcp", "provider:gcp:memcache", "live"], timeout: 90_000 },
 );
 
-test.provider.skipIf(privateServiceAccess)(
+test.provider(
   "createProjectsLocationsInstances without private service access fails with PrivateServiceAccessNotEnabled",
   (stack) =>
     Effect.gen(function* () {
@@ -85,8 +86,10 @@ test.provider.skipIf(!runLifecycle)(
 
       const created = yield* stack.deploy(
         Effect.gen(function* () {
+          const authorizedNetwork = yield* CacheNetwork;
           return yield* GCP.Memcache.Instance("Cache", {
             location: "us-central1",
+            authorizedNetwork,
             nodeCount: 1,
             nodeConfig: { cpuCount: 1, memorySizeMb: 1024 },
             displayName: "alchemy-test-memcache",
@@ -115,9 +118,11 @@ test.provider.skipIf(!runLifecycle)(
 
       const updated = yield* stack.deploy(
         Effect.gen(function* () {
+          const authorizedNetwork = yield* CacheNetwork;
           return yield* GCP.Memcache.Instance("Cache", {
             instanceId: created.instanceId,
             location: "us-central1",
+            authorizedNetwork,
             nodeCount: 1,
             nodeConfig: { cpuCount: 1, memorySizeMb: 1024 },
             displayName: "alchemy-prod-memcache",
@@ -141,7 +146,7 @@ test.provider.skipIf(!runLifecycle)(
 
       const gone = yield* waitUntilGone(created.name);
       expect(gone).toEqual("gone");
-    }).pipe(logLevel),
+    }).pipe(withNetworkSlot, logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:memcache", "live"],
     timeout: 1_800_000,

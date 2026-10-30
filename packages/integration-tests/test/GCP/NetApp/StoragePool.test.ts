@@ -59,6 +59,9 @@ test.provider(
       const created = yield* stack.deploy(
         Effect.gen(function* () {
           return yield* GCP.NetApp.StoragePool("Pool", {
+            // A region no other NetApp suite uses: one 2 TiB pool fills a
+            // region's default STANDARD capacity quota.
+            location: "us-east5",
             network: "default",
             serviceLevel: "STANDARD",
             capacityGib: 2048,
@@ -84,6 +87,7 @@ test.provider(
         Effect.gen(function* () {
           return yield* GCP.NetApp.StoragePool("Pool", {
             storagePoolId: created.storagePoolId,
+            location: "us-east5",
             network: "default",
             serviceLevel: "STANDARD",
             capacityGib: 2048,
