@@ -47,7 +47,7 @@ import {
 } from "../Workers/DurableObject.ts";
 import { DurableObjectState } from "../Workers/DurableObjectState.ts";
 import { upgrade, type WebSocket } from "../Workers/WebSocket.ts";
-import type { Worker } from "../Workers/Worker.ts";
+import { Worker } from "../Workers/Worker.ts";
 import { layerDurableObjectEngine } from "../Workflows/DurableObjectEngine.ts";
 
 const pad = (n: number) => n.toString().padStart(12, "0");
@@ -852,6 +852,17 @@ const prefixed = (namespace: Namespace, prefix: string): Namespace => ({
 });
 
 /**
+ * `isolate: "key"`: one class per definition, shared by every model, per host
+ * Worker. Models may be hosted by separate builds of the platform (each
+ * provided on its own), so the classes are tracked per Worker, not per
+ * platform: a second declaration would replace the first with fewer models.
+ */
+const sharedClasses = new WeakMap<
+  object,
+  Map<string, { readonly namespace: Namespace; readonly impls: Map<string, ObjectImpl> }>
+>();
+
+/**
  * A shared class's instance runs the kit of the model its name starts with
  * (`<model>/<key>`). Every model registers its kit while the Worker's Layer
  * is built, before any instance is constructed.
@@ -859,7 +870,11 @@ const prefixed = (namespace: Namespace, prefix: string): Namespace => ({
 const routeToModel = (name: string, impls: ReadonlyMap<string, ObjectImpl>): ObjectImpl =>
   Effect.gen(function* () {
     const state = yield* DurableObjectState;
-    const instance = state.id.name ?? "";
+    // While planning, the constructor runs once on a mock state with no id to
+    // discover bindings; every model's kit declares the same ones.
+    const id = state.id as typeof state.id | undefined;
+    if (id === undefined) return yield* impls.values().next().value!;
+    const instance = id.name ?? "";
     const impl = impls.get(instance.slice(0, instance.indexOf("/")));
     if (!impl) {
       return yield* Effect.die(
@@ -890,14 +905,11 @@ const durableObjectPlatform = ({
         );
 
       const claim = hostedModels();
-      // `isolate: "key"`: one class per definition, shared by every model.
-      // Each instance is named `<model>/<key>` and runs its model's kit.
-      const shared = new Map<
-        string,
-        { readonly namespace: Namespace; readonly impls: Map<string, ObjectImpl> }
-      >();
       const declareShared = (name: string, modelName: string, impl: ObjectImpl) =>
         Effect.gen(function* () {
+          const host = yield* Worker;
+          let shared = sharedClasses.get(host);
+          if (shared === undefined) sharedClasses.set(host, (shared = new Map()));
           const found = shared.get(name);
           if (found) {
             found.impls.set(modelName, impl);
