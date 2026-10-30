@@ -271,6 +271,7 @@ const build = (
         `${aggregate.aggregateName}.initial does not match its state schema: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
+    for (const message of Aggregate.phaseProblems(aggregate)) problem(message);
     aggregateCodecs.set(aggregate.aggregateName, {
       state,
       initial,
@@ -633,11 +634,17 @@ const build = (
           commandId,
           correlationId,
         };
+        const before = next;
         next = (def.evolve as Record<string, (...args: any[]) => unknown>)[event._tag](
           next,
           event,
           envelope,
         );
+        // Seeded history is the past: it may start anywhere.
+        const undeclared = history
+          ? undefined
+          : Aggregate.undeclaredMove(aggregate, event._tag, before, next);
+        if (undeclared) throw undeclared;
         const stored: StoredEvent = {
           event: encodeEvent(event),
           envelope: encodeEnvelope(envelope, trace),
@@ -706,17 +713,19 @@ const build = (
           const state = codecs.state.decode(input.state ?? codecs.initial);
           const id = decodeId(input.id) as string;
           const now = DateTime.makeUnsafe(input.now);
-          let decision = (def.decide as Record<string, (...args: any[]) => unknown>)[decoded._tag](
-            state,
-            decoded,
-            {
-              id,
-              now,
-              commandId: input.commandId,
-              stream: `${aggregate.aggregateName}/${id}`,
-              version: input.version,
-            },
-          );
+          let decision =
+            Aggregate.refusal(aggregate, command.cls, state) ??
+            (def.decide as Record<string, (...args: any[]) => unknown>)[decoded._tag](
+              state,
+              decoded,
+              {
+                id,
+                now,
+                commandId: input.commandId,
+                stream: `${aggregate.aggregateName}/${id}`,
+                version: input.version,
+              },
+            );
           // An effectful decision runs here, inside the decide span, with the
           // context the command was sent with (its only requirement, enforced
           // by `Aggregate.Decision`).

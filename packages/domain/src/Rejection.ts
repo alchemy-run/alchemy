@@ -91,6 +91,22 @@ export const make = <const Tag extends string, const F extends Fields = {}>(
 };
 
 /**
+ * The rejection the host returns for a command outside the phases its
+ * aggregate's `when` allows, before `decide` runs. A command in `when` declares
+ * it in `rejects`. A command with no rejections can't be refused: outside its
+ * phases it records nothing, so a late scheduled command stays harmless.
+ */
+export class WrongPhase extends make(
+  "WrongPhase",
+  {
+    command: Schema.String,
+    phase: Schema.String,
+    allowed: Schema.Array(Schema.String),
+  },
+  { httpApiStatus: 409, description: "The command can't run in the current phase." },
+) {}
+
+/**
  * The class type returned by {@link make}.
  */
 export interface RejectionClass<Tag extends string, F extends Fields> extends Schema.Class<

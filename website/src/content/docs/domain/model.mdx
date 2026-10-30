@@ -211,7 +211,7 @@ export const BankHandlers = MainAccountProvisioningLive;
 
 ## Check the declaration
 
-Some mistakes in a declaration only show when the model is hosted: a view that reads a source keyed by another aggregate without `keyOf`, a view with `state` but no `initial`, a policy that waits for an event no source emits, a stream with two writers. Building the model's Layer fails on the first one. `Domain.verify` finds all of them without hosting anything, so one unit test covers the whole model:
+Some mistakes in a declaration only show when the model is hosted: a view that reads a source keyed by another aggregate without `keyOf`, a view with `state` but no `initial`, a policy that waits for an event no source emits, a stream with two writers, a [phase](/domain/aggregate#declare-its-phases) nothing can reach. Building the model's Layer fails on the first one. `Domain.verify` finds all of them without hosting anything, so one unit test covers the whole model:
 
 ```typescript
 // packages/domain/test/Bank.model.test.ts
