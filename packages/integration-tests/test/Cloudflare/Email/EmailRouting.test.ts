@@ -93,42 +93,45 @@ describe.sequential.skipIf(!emailRoutingScoped)(
     // Subaddressing is a zone setting beside `enabled`: deploy it on, then
     // off, checking the live setting each time. Destroying the stack
     // disables routing on the zone, so capture-and-restore both settings.
-    test.provider("subaddressing converges in place", (stack) =>
-      Effect.gen(function* () {
-        const zoneId = yield* resolveZoneId;
-        yield* stack.destroy();
-        const before = yield* getEmailRouting(zoneId);
+    test.provider(
+      "subaddressing converges in place",
+      (stack) =>
+        Effect.gen(function* () {
+          const zoneId = yield* resolveZoneId;
+          yield* stack.destroy();
+          const before = yield* getEmailRouting(zoneId);
 
-        const routing = (subaddressing?: boolean) =>
-          Effect.gen(function* () {
-            return yield* Cloudflare.Email.Routing("Routing", { zone: zoneId, subaddressing });
-          });
+          const routing = (subaddressing?: boolean) =>
+            Effect.gen(function* () {
+              return yield* Cloudflare.Email.Routing("Routing", { zone: zoneId, subaddressing });
+            });
 
-        const on = yield* stack.deploy(routing(true));
-        expect(on.subaddressing).toEqual(true);
-        expect((yield* getEmailRouting(zoneId)).supportSubaddress).toEqual(true);
+          const on = yield* stack.deploy(routing(true));
+          expect(on.subaddressing).toEqual(true);
+          expect((yield* getEmailRouting(zoneId)).supportSubaddress).toEqual(true);
 
-        // Unchanged, or omitted (keep the zone's setting), plans no update.
-        expect((yield* stack.plan(routing(true))).resources.Routing?.action).toBe("noop");
-        expect((yield* stack.plan(routing())).resources.Routing?.action).toBe("noop");
-        expect((yield* stack.plan(routing(false))).resources.Routing?.action).toBe("update");
+          // Unchanged, or omitted (keep the zone's setting), plans no update.
+          expect((yield* stack.plan(routing(true))).resources.Routing?.action).toBe("noop");
+          expect((yield* stack.plan(routing())).resources.Routing?.action).toBe("noop");
+          expect((yield* stack.plan(routing(false))).resources.Routing?.action).toBe("update");
 
-        const off = yield* stack.deploy(routing(false));
-        expect(off.subaddressing).toEqual(false);
-        expect((yield* getEmailRouting(zoneId)).supportSubaddress).toEqual(false);
+          const off = yield* stack.deploy(routing(false));
+          expect(off.subaddressing).toEqual(false);
+          expect((yield* getEmailRouting(zoneId)).supportSubaddress).toEqual(false);
 
-        yield* stack.destroy();
-        yield* setEnabled(zoneId, before.enabled);
-        yield* emailRouting
-          .edit({ zoneId, supportSubaddress: before.supportSubaddress ?? false })
-          .pipe(
-            Effect.retry({
-              while: (e) => e._tag === "Forbidden",
-              schedule: forbiddenRetrySchedule,
-              times: 8,
-            }),
-          );
-      }).pipe(logLevel),
+          yield* stack.destroy();
+          yield* setEnabled(zoneId, before.enabled);
+          yield* emailRouting
+            .edit({ zoneId, supportSubaddress: before.supportSubaddress ?? false })
+            .pipe(
+              Effect.retry({
+                while: (e) => e._tag === "Forbidden",
+                schedule: forbiddenRetrySchedule,
+                times: 8,
+              }),
+            );
+        }).pipe(logLevel),
+      { exclusive: EMAIL_ROUTING_ZONE },
     );
   },
 );
