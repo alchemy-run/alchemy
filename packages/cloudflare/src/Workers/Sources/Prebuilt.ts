@@ -4,18 +4,26 @@ import { sha256 } from "alchemy/Util/sha256";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import path from "pathe";
+import picomatch from "picomatch";
 import { glob } from "tinyglobby";
 import type { SourceProvider } from "../Source.ts";
 import { bundleSource, resolveMainPath, watchBundleDirectory } from "./shared.ts";
 
 /**
- * A rule selecting additional module files to upload alongside the entry
- * of a prebuilt Worker (`bundle: false`). Globs are matched against
- * POSIX-style paths relative to the directory containing the Worker's
- * entry module, mirroring Wrangler's `rules` configuration.
+ * A rule selecting files uploaded as their own Worker modules, mirroring
+ * Wrangler's `rules` configuration. Globs match POSIX-style paths relative
+ * to the directory containing the Worker's entry module; `**\/` matches any
+ * depth, and `!` globs exclude across all rules.
  */
 export interface ModuleRule {
   readonly globs: readonly string[];
+  /**
+   * How matching files are imported: `Text` as a `string`, `Data` as an
+   * `ArrayBuffer`, `CompiledWasm` as a `WebAssembly.Module`. Defaults to the
+   * extension's type (`.wasm` CompiledWasm, `.txt`/`.html`/`.sql` Text),
+   * otherwise Data. JavaScript files are always ES modules.
+   */
+  readonly type?: "Text" | "Data" | "CompiledWasm" | undefined;
 }
 
 /**
@@ -65,6 +73,19 @@ export const readPrebuiltWorkerBundle = Effect.fn(function* (options: PrebuiltWo
   const root = path.dirname(main);
   const entryName = path.basename(main);
 
+  const rules = options.rules ?? defaultModuleRules;
+  const typed = rules
+    .filter((rule) => rule.type)
+    .map((rule) => ({
+      type: rule.type,
+      test: picomatch(
+        rule.globs.filter((glob) => !glob.startsWith("!")),
+        { dot: true },
+      ),
+    }));
+  const typeOf = (name: string) =>
+    /\.[cm]?js$/.test(name) ? undefined : typed.find((rule) => rule.test(name))?.type;
+
   const readModuleFile = Effect.fn(function* (name: string) {
     const file = path.join(root, name);
     const content = yield* fs.readFile(file).pipe(
@@ -76,7 +97,10 @@ export const readPrebuiltWorkerBundle = Effect.fn(function* (options: PrebuiltWo
       ),
     );
     const hash = yield* sha256(content);
-    return { path: name, content, hash } satisfies Bundle.BundleFile;
+    const type = typeOf(name);
+    return (
+      type ? { path: name, content, hash, type } : { path: name, content, hash }
+    ) satisfies Bundle.BundleFile;
   });
 
   return yield* readModuleFile(entryName).pipe(
@@ -84,7 +108,7 @@ export const readPrebuiltWorkerBundle = Effect.fn(function* (options: PrebuiltWo
       Effect.tryPromise({
         try: () =>
           glob(
-            (options.rules ?? defaultModuleRules).flatMap((rule) => rule.globs),
+            rules.flatMap((rule) => rule.globs),
             {
               cwd: root,
               onlyFiles: true,

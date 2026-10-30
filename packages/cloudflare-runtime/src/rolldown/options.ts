@@ -76,15 +76,19 @@ export interface BasePluginOptions {
    * @default []
    * @example
    * ```ts
-   * cloudflare({ moduleRules: [{ type: "Data", test: (path) => path.endsWith(".ttf") }] });
+   * cloudflare({ moduleRules: [{ type: "Text", test: (path) => path.endsWith(".md") }] });
    * ```
    */
-  moduleRules?: Array<ModuleRule>;
+  moduleRules?: Array<AdditionalModuleRule>;
 }
 
 /** A rule that emits matching imports as a separate Worker module. */
-export interface ModuleRule {
-  type: "CompiledWasm" | "Data" | "Text";
+export interface AdditionalModuleRule {
+  /**
+   * The module type. Without one, the built-in rules decide by extension
+   * and other files are Data.
+   */
+  type?: "CompiledWasm" | "Data" | "Text" | undefined;
   /** Whether the resolved file path belongs to this rule. */
   test: (path: string) => boolean;
 }

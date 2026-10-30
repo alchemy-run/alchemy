@@ -950,28 +950,39 @@ export interface WorkerProps<
    */
   bundle?: boolean;
   /**
-   * Module rules selecting files uploaded as additional modules, mirroring
-   * Wrangler's `rules` configuration. Each rule's globs are matched against
-   * POSIX-style paths relative to the directory containing {@link main}.
+   * Module rules selecting files uploaded as their own Worker modules,
+   * mirroring Wrangler's `rules`. Globs match POSIX-style paths relative to
+   * the directory containing {@link main}, and `**\/` matches any depth.
+   * Each rule's `type` decides how a file is imported: `Text` as a `string`,
+   * `Data` as an `ArrayBuffer`, `CompiledWasm` as a `WebAssembly.Module`.
+   * Without one, the extension decides (`.wasm` CompiledWasm,
+   * `.txt`/`.html`/`.sql` Text), and other files are Data.
    *
-   * When {@link bundle} is `false`, every matching file in that directory is
-   * uploaded and these rules replace {@link defaultModuleRules}.
+   * When Alchemy bundles {@link main}, rules add to the built-in ones
+   * (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`) and are checked first: an
+   * imported file that matches is uploaded as a module instead of bundled.
+   * JavaScript, TypeScript and JSON are always bundled, and imports inside
+   * nested `?worker` modules don't use rules. Globs may also be absolute,
+   * for files outside the entry's directory, and `!` globs exclude across
+   * all rules.
    *
-   * When Alchemy bundles {@link main} (not `vite`), an import whose file
-   * matches is emitted as its own module instead of being bundled, ahead of
-   * the built-in rules (`.wasm`, `.bin`, `.txt`, `.html`, `.sql`). Globs may also be absolute (files outside the
-   * entry's directory only match those or `**`), `!` globs exclude, and
-   * JavaScript, TypeScript and JSON are always bundled. Rules don't apply
-   * inside nested `?worker` imports.
-   * The module type follows the extension; unknown ones upload as Data:
+   * When {@link bundle} is `false`, every file in the entry's directory that
+   * matches is uploaded, and the rules replace {@link defaultModuleRules}.
    *
    * ```ts
+   * // worker.ts
    * import font from "./font.ttf"; // ArrayBuffer
+   * import readme from "./README.md"; // string
    *
-   * rules: [{ globs: ["**\/*.ttf"] }]
+   * // alchemy.run.ts
+   * rules: [{ globs: ["**\/*.ttf"] }, { type: "Text", globs: ["**\/*.md"] }]
+   *
+   * // modules.d.ts, so TypeScript knows the imports
+   * declare module "*.ttf" { const data: ArrayBuffer; export default data; }
+   * declare module "*.md" { const text: string; export default text; }
    * ```
    *
-   * @default defaultModuleRules — ESModule (`**\/*.js`, `**\/*.mjs`), CompiledWasm (`**\/*.wasm`), Text (`**\/*.txt`, `**\/*.html`, `**\/*.sql`), Data (`**\/*.bin`)
+   * @default none when bundling; {@link defaultModuleRules} with `bundle: false`
    */
   rules?: ModuleRule[];
   /**

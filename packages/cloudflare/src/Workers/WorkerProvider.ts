@@ -2310,7 +2310,7 @@ export const LiveWorkerProvider = () =>
               files: bundle?.files.map(
                 (file) =>
                   new File([file.content as BlobPart], file.path, {
-                    type: contentTypeForModule(file.path),
+                    type: contentTypeForModule(file.path, file.type),
                   }),
               ),
             },
@@ -5471,8 +5471,11 @@ export const LiveWorkerProvider = () =>
     }),
   );
 
-/** @internal Upload content type of a bundled module, by path. */
-export const contentTypeForModule = (filePath: string) => {
+/** @internal Upload content type of a bundled module, by its rule's type or path. */
+export const contentTypeForModule = (filePath: string, type?: string) => {
+  if (type === "Text") return "text/plain";
+  if (type === "Data") return "application/octet-stream";
+  if (type === "CompiledWasm") return "application/wasm";
   // Vendored Python packages upload as opaque data, mirroring Wrangler's
   // vendored-module rules — with one exception: the `workers-runtime-sdk`
   // JS shims under `python_modules/workers/` must be ES modules so the

@@ -100,7 +100,8 @@ layer(NodeServices.layer)("WorkerBundle", (it) => {
           "src/font.ttf": "FONT_BYTES",
           "src/skip.ttf": "SKIP_BYTES",
           "shared/logo.png": "LOGO_BYTES",
-          "src/worker.mjs": `import font from "./font.ttf"; import logo from "../shared/logo.png"; export default { fetch: () => new Response(font + logo) };`,
+          "src/notes.md": "# NOTES",
+          "src/worker.mjs": `import font from "./font.ttf"; import logo from "../shared/logo.png"; import notes from "./notes.md"; export default { fetch: () => new Response(font + logo + notes) };`,
         });
         const bundler = yield* WorkerBundle;
         const build = (rules: WorkerBundleOptions["rules"]) =>
@@ -114,7 +115,10 @@ layer(NodeServices.layer)("WorkerBundle", (it) => {
             rules,
           });
 
-        const output = yield* build([{ globs: ["**/*.ttf", `${root}/shared/*.png`] }]);
+        const output = yield* build([
+          { globs: ["**/*.ttf", `${root}/shared/*.png`] },
+          { type: "Text", globs: ["**/*.md"] },
+        ]);
         const entry = decode(output.files[0].content);
         // `font.ttf` is in the entry's directory; `logo.png` is outside it
         // and matches an absolute glob.
@@ -126,16 +130,22 @@ layer(NodeServices.layer)("WorkerBundle", (it) => {
           expect(file && decode(file.content)).toBe(bytes);
           expect(entry).toContain(path.basename(file!.path));
         }
+        // A `Text` rule over an extension uploads would read as Data gets
+        // the `.txt` extension the upload types it by.
+        const notes = output.files.find((file) => /notes.*\.txt$/.test(file.path));
+        expect(notes && decode(notes.content)).toBe("# NOTES");
+        expect(entry).toContain(path.basename(notes!.path));
 
         // `!` globs exclude, as in the prebuilt walk: the excluded import is
         // left to rolldown, which can't load it.
         const excluded = yield* Effect.flip(
-          build([{ globs: ["**/*.ttf", "**/*.png", `!${root}/src/font.ttf`] }]),
+          build([{ globs: ["**/*.ttf", "**/*.png", "**/*.md", `!${root}/src/font.ttf`] }]),
         );
         expect(String(excluded.cause ?? excluded.message)).toContain("font.ttf");
 
+        // Without rules, the error names the rule that would import them.
         const error = yield* Effect.flip(build(undefined));
-        expect(String(error.cause ?? error.message)).toContain("font.ttf");
+        expect(error.message).toMatch(/add rules: \[\{ globs: \[.*"\*\*\/\*\.md"/);
       }),
     { tags: ["unit", "provider:cloudflare", "provider:cloudflare:worker", "local"] },
   );
@@ -379,7 +389,7 @@ describe(
         const moduleRules = yield* Cloudflare.Worker("ModuleRulesWorker", {
           main: new URL("./fixtures/module-rules/worker.mjs", import.meta.url).href,
           compatibility: { date: "2025-04-01" },
-          rules: [{ globs: ["**/*.ttf"] }],
+          rules: [{ globs: ["**/*.ttf"] }, { type: "Text", globs: ["**/*.md"] }],
         });
         return {
           url: worker.url.as<string>(),
@@ -419,7 +429,7 @@ describe(
     // font's bytes cover every value, so any text decoding along the way
     // (bundle, upload, runtime) would change them.
     test(
-      "bundled worker serves imports matched by rules as Data modules",
+      "bundled worker serves imports matched by rules as modules of their type",
       Effect.gen(function* () {
         const { moduleRulesUrl } = yield* stack;
         const client = yield* HttpClient.HttpClient;
@@ -435,6 +445,7 @@ describe(
           font: { type: "[object ArrayBuffer]", hex: hex(yield* fixture("font.ttf")) },
           data: hex(yield* fixture("data.bin")),
           notice: "module-rules-notice\n",
+          readme: "module-rules-readme\n",
         });
       }),
     );

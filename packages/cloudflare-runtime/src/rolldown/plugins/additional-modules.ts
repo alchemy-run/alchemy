@@ -29,17 +29,22 @@ export const additionalModulesPlugin = createPlugin("additional-modules", (optio
   // Built-in rules see the same imports as without user rules. User rules
   // only claim plain imported files: entries, externals, virtual ids and
   // query imports (`?init`, `?raw`, ...) belong to other plugins.
-  const matchRule = (
+  const matchType = (
     source: string,
     resolved: { id: string; external?: boolean | string },
     importer: string | undefined,
-  ) =>
-    (importer && !resolved.external && isPlainFile(resolved.id)
-      ? userRules.find((rule) => rule.test(sanitizePath(resolved.id)))
-      : undefined) ??
-    (builtinFilter.some((pattern) => pattern.test(source))
-      ? MODULE_RULES.find((rule) => rule.pattern.test(resolved.id))
-      : undefined);
+  ) => {
+    const userRule =
+      importer && !resolved.external && isPlainFile(resolved.id)
+        ? userRules.find((rule) => rule.test(sanitizePath(resolved.id)))
+        : undefined;
+    if (userRule) {
+      return userRule.type ?? typeFromExtension(resolved.id) ?? "Data";
+    }
+    return builtinFilter.some((pattern) => pattern.test(source))
+      ? MODULE_RULES.find((rule) => rule.pattern.test(resolved.id))?.type
+      : undefined;
+  };
   return {
     vite: {
       enforce: "pre",
@@ -60,8 +65,8 @@ export const additionalModulesPlugin = createPlugin("additional-modules", (optio
             return;
           }
 
-          const rule = matchRule(source, resolved, importer);
-          if (!rule) {
+          const type = matchType(source, resolved, importer);
+          if (!type) {
             return resolved;
           }
 
@@ -69,7 +74,7 @@ export const additionalModulesPlugin = createPlugin("additional-modules", (optio
           additionalModulePaths.add(filePath);
 
           return {
-            id: moduleReferenceId(rule.type, filePath),
+            id: moduleReferenceId(type, filePath),
             external: true,
           };
         },
@@ -79,11 +84,11 @@ export const additionalModulesPlugin = createPlugin("additional-modules", (optio
         handler: withMagicString(async function (code, chunk, magicString) {
           const matches = code.matchAll(MODULE_REFERENCE_GLOBAL_REGEX);
           for (const match of matches) {
-            const [full, , id] = match;
+            const [full, type, id] = match as unknown as [string, ModuleType, string];
             const source = await this.fs.readFile(id);
             const referenceId = this.emitFile({
               type: "asset",
-              name: path.basename(id),
+              name: moduleFileName(type, path.basename(id)),
               source,
             });
             const fileName = this.getFileName(referenceId);
@@ -97,11 +102,32 @@ export const additionalModulesPlugin = createPlugin("additional-modules", (optio
   };
 });
 
+type ModuleType = (typeof MODULE_RULES)[number]["type"];
+
+/** The module type the uploader infers from a file name, as Wrangler does. */
+function typeFromExtension(name: string): ModuleType | undefined {
+  return MODULE_RULES.find((rule) => rule.pattern.test(name))?.type;
+}
+
+/**
+ * Uploads infer a module's type from its extension (unknown ones are Data),
+ * so a file whose rule picks another type gets that type's extension.
+ */
+function moduleFileName(type: ModuleType, name: string) {
+  const inferred = /\.([cm]?js|py|map)$/.test(name)
+    ? undefined
+    : /\.custom$/.test(name)
+      ? "Text"
+      : (typeFromExtension(name) ?? "Data");
+  if (inferred === type) return name;
+  return `${name}${type === "Text" ? ".txt" : type === "Data" ? ".bin" : ".wasm"}`;
+}
+
 function isPlainFile(id: string) {
   return path.isAbsolute(id) && !/[?#]/.test(id.replace(/\?module$/, ""));
 }
 
-function moduleReferenceId(type: "CompiledWasm" | "Data" | "Text", id: string) {
+function moduleReferenceId(type: ModuleType, id: string) {
   return `__CLOUDFLARE_MODULE__${type}__${id}__CLOUDFLARE_MODULE__` as const;
 }
 

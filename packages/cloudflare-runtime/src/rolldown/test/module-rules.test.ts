@@ -22,6 +22,18 @@ describe("module rules", () => {
     expect(getEntryChunk(built.output).code).toContain(asset.fileName);
   });
 
+  it("uploads a match as its rule's type", async () => {
+    const built = await buildFixture({
+      fixture,
+      pluginOptions: { compatibilityDate: "2025-07-01", moduleRules: [{ ...ttf, type: "Text" }] },
+    });
+    expect(getAsset(built.output, /font.*\.txt$/)).toBeDefined();
+    await using miniflare = await createMiniflareFromRolldown(built.output, {
+      compatibilityDate: "2025-07-01",
+    });
+    expect(await miniflare.fetchJson("/")).toEqual({ type: "[object String]" });
+  });
+
   it("leaves an unmatched extension to rolldown", async () => {
     await expect(buildFixture({ fixture })).rejects.toThrow(/font\.ttf/);
   });
@@ -31,7 +43,7 @@ describe("module rules", () => {
       fixture: "additional-modules/index.ts",
       pluginOptions: {
         compatibilityDate: "2025-07-01",
-        moduleRules: [{ type: "Data", test: () => true }],
+        moduleRules: [{ test: () => true }],
       },
     });
     await using miniflare = await createMiniflareFromRolldown(built.output, {

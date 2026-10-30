@@ -274,8 +274,14 @@ export const LocalWorkerProvider = () =>
             );
             continue;
           }
-          const ext = path.extname(file.path);
-          const type = moduleTypeFromExtension(ext);
+          const type =
+            file.type === "Text"
+              ? "Text"
+              : file.type === "Data"
+                ? "Data"
+                : file.type === "CompiledWasm"
+                  ? "Wasm"
+                  : moduleTypeFromExtension(path.extname(file.path));
           if (type === "SourceMap") continue;
           if (type === "Data" && typeof file.content === "string") {
             modules.push({

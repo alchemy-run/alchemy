@@ -83,39 +83,70 @@ export const workerBundleOptions = (options: {
 
 /**
  * Lower the Worker's `rules` to bundler module rules: an import whose
- * resolved file matches a glob is emitted as its own module instead of being
- * loaded by rolldown. Globs match the path relative to the entry's directory,
- * or an absolute path; `!` globs exclude, as in the
- * prebuilt (`bundle: false`) walk. JavaScript, TypeScript and JSON are always
- * bundled. The uploaded module type follows the file extension, and unknown
- * extensions upload as Data.
+ * resolved file matches a rule's glob is emitted as its own module, of the
+ * rule's type, instead of being loaded by rolldown. Globs match the path
+ * relative to the entry's directory, or an absolute path; `!` globs exclude
+ * across all rules, as in the prebuilt (`bundle: false`) walk. JavaScript,
+ * TypeScript and JSON are always bundled.
  */
 const toModuleRules = (main: string, rules: readonly ModuleRule[] | undefined) => {
   const globs = rules?.flatMap((rule) => rule.globs) ?? [];
-  const include = globs.filter((glob) => !glob.startsWith("!"));
-  if (include.length === 0) return undefined;
   const exclude = globs.filter((glob) => glob.startsWith("!")).map((glob) => glob.slice(1));
   const root = path.dirname(main);
-  const isIncluded = picomatch(include, { dot: true });
   const isExcluded = exclude.length ? picomatch(exclude, { dot: true }) : () => false;
-  return [
-    {
-      type: "Data" as const,
-      test: (id: string) => {
-        const file = path.normalize(id);
-        if (/\.([cm]?[jt]sx?|json)$/.test(file)) return false;
-        const relative = path.relative(root, file);
-        // Absolute globs match any file; relative ones match from the entry's
-        // directory, or from the filesystem root for files outside it.
-        const outside = relative.startsWith("../") || path.isAbsolute(relative);
-        const targets = [file, outside ? file.replace(/^\//, "") : relative];
-        return (
-          targets.some((target) => isIncluded(target)) &&
-          !targets.some((target) => isExcluded(target))
-        );
+  // Absolute globs match any file; relative ones match from the entry's
+  // directory, or from the filesystem root for files outside it.
+  const targetsOf = (id: string) => {
+    const file = path.normalize(id);
+    const relative = path.relative(root, file);
+    const outside = relative.startsWith("../") || path.isAbsolute(relative);
+    return [file, outside ? file.replace(/^\//, "") : relative];
+  };
+  const moduleRules = (rules ?? []).flatMap((rule) => {
+    const include = rule.globs.filter((glob) => !glob.startsWith("!"));
+    if (include.length === 0) return [];
+    const isIncluded = picomatch(include, { dot: true });
+    return [
+      {
+        type: rule.type,
+        test: (id: string) => {
+          if (/\.([cm]?[jt]sx?|json)$/.test(id)) return false;
+          const targets = targetsOf(id);
+          return (
+            targets.some((target) => isIncluded(target)) &&
+            !targets.some((target) => isExcluded(target))
+          );
+        },
       },
-    },
-  ];
+    ];
+  });
+  return moduleRules.length ? moduleRules : undefined;
+};
+
+/**
+ * Point rolldown's failure to load an imported non-JavaScript file (a font,
+ * markdown, an image) at the `rules` that upload it as a module.
+ */
+const withRulesHint = (error: Bundle.BundleError): Bundle.BundleError => {
+  const errors = (
+    error.cause as { errors?: Array<{ code?: string; id?: string; message?: string }> }
+  )?.errors;
+  const files = (errors ?? []).flatMap((e) => {
+    const file =
+      e.code === "UNLOADABLE_DEPENDENCY"
+        ? e.message?.replace(/\u001b\[[0-9;]*m/g, "").match(/Could not load (\S+)/)?.[1]
+        : e.code === "PARSE_ERROR"
+          ? e.id
+          : undefined;
+    const ext = file && path.extname(file);
+    return ext && !/^\.([cm]?[jt]sx?|json|css)$/.test(ext) ? [ext] : [];
+  });
+  if (files.length === 0) return error;
+  const globs = [...new Set(files)].map((ext) => `"**/*${ext}"`).join(", ");
+  return Bundle.BundleError.make({
+    message: `${error.message}\nTo import these files as Worker modules, add rules: [{ globs: [${globs}] }] to the Worker.`,
+    cause: error.cause,
+  });
 };
 
 /**
@@ -310,12 +341,16 @@ export const WorkerBundle = Effect.gen(function* () {
       Effect.flatMap((resolved) =>
         Bundle.build(resolved.inputOptions, resolved.outputOptions, resolved.extraOptions),
       ),
+      Effect.mapError(withRulesHint),
     ),
     watch: flow(
       makeOptions,
       Stream.fromEffect,
       Stream.flatMap((resolved) =>
         Bundle.watch(resolved.inputOptions, resolved.outputOptions, resolved.extraOptions),
+      ),
+      Stream.map((event) =>
+        event._tag === "Error" ? { ...event, error: withRulesHint(event.error) } : event,
       ),
     ),
   };
