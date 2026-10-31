@@ -300,12 +300,22 @@ export const ClusterProvider = () =>
 
           // Sync cluster config — call updateCluster to converge settings,
           // configuration, and serviceConnectDefaults to desired state.
-          yield* ecs.updateCluster({
-            cluster: clusterArn,
-            settings: news.settings,
-            configuration: news.configuration,
-            serviceConnectDefaults: news.serviceConnectDefaults,
-          });
+          yield* ecs
+            .updateCluster({
+              cluster: clusterArn,
+              settings: news.settings,
+              configuration: news.configuration,
+              serviceConnectDefaults: news.serviceConnectDefaults,
+            })
+            .pipe(
+              // A cluster just created can read back ACTIVE while UpdateCluster
+              // still reports it missing.
+              Effect.retry({
+                while: (e) => e._tag === "ClusterNotFoundException",
+                schedule: Schedule.spaced("2 seconds"),
+                times: 10,
+              }),
+            );
 
           // Sync capacity providers — observed ↔ desired.
           yield* applyCapacityProviders({
