@@ -125,10 +125,34 @@ over 32. Never run a sequential monster file unfiltered in a fix iteration
    stream in (`grep -E "\] ✗ |failed to run|^Tests:"`). A test running far
    past its timeout is a hang. Read its log under `.alchemy/log/test/` and fix
    the cause.
-3. **Census.** Once the run has finished, save `pnpm nuke --dry-run --profile
-   testing` to `census-<step>-after.txt` and diff it against `-before`. Every
-   new line is a leak, even from a green test. Leave leaks live while you fix
-   them, since they're your evidence.
+3. **Census: the account must be empty.** Passing tests aren't enough. Each
+   test destroys its own stack, so once the run has finished the account
+   should be back to the baseline. Check with nuke:
+   ```sh
+   pnpm nuke --dry-run --profile testing > /tmp/release/census-<step>-after.txt
+   diff /tmp/release/census-<step>-before.txt /tmp/release/census-<step>-after.txt
+   ```
+   Every new line is a leak, even when every test is green. Treat a leak as
+   evidence of a bug in that resource's provider, and find the cause. Usually
+   it's one of these:
+   - `delete` returns before the cloud has finished, gives up on a
+     dependency violation, or treats an error as not-found.
+   - `reconcile` creates something it never records in its attributes, like a
+     sub-resource, a role, a log group, or a version. Then `delete` can't find
+     it.
+   - `reconcile` replaces the physical name, or creates before observing,
+     which orphans the previous one.
+   - A failed create leaves a half-made resource that state never saw.
+   - `list` (the nuke census) returns objects the provider doesn't own.
+
+   Leave the leaked resources live while you investigate, since they're your
+   evidence. Read their tags and creation time to match each one to the test
+   that made it, and read that resource's lifecycle code. Fix the provider,
+   re-run the test that leaked, and confirm with `pnpm nuke --dry-run` that
+   the leak is gone. Never fix a leak with test-side cleanup, a direct SDK
+   delete, adoption or a new `scripts/nuke.sh` exclude. A resource is residue
+   only when the platform gives it no delete API (e.g. `AWS.BackupSearch`
+   records). Then add the exclude with a comment saying why.
 4. **Fix**, using the buckets and root-cause priority in
    [prepare-release §4](../prepare-release/SKILL.md#4-triage):
    provider bug > distilled patch > test fix. Never paper over a leak or an
@@ -141,9 +165,11 @@ over 32. Never run a sequential monster file unfiltered in a fix iteration
    If the blocker is the account (billing, token permissions, a retired
    service), mark the step `blocked` with the exact error and move on. Never
    enable billing or edit shared tokens.
-6. **Confirm.** Nuke and clear state (§3.1), then run the **whole step once more** and take another
-   census. The step is `done` only when that single run is green and the
-   census diff is empty. Record the HEAD sha in `Passed at`.
+6. **Confirm.** Nuke and clear state (§3.1), then run the **whole step once
+   more** and take the §3.3 census again. The step is `done` only when that
+   single run is green and the account is back to its baseline. A leak in the
+   confirming run sends you back to §3.3. Leaks have no gating escape hatch.
+   The §3.5 budget covers failing tests, not leaks. Record the HEAD sha in `Passed at`.
 7. **Gate and push.** Run `pnpm exec tsrs -b` and `pnpm docs:check-jsdoc` if
    any props changed. Commit one commit per fix, scoped (`fix(aws/ec2): …`),
    then push the alchemy branch and any distilled/floci branch (§5).
