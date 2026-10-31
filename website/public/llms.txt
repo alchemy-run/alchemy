@@ -908,6 +908,7 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 - [Deadlines](https://alchemy.run/domain/deadlines) — Give a waiting process a time limit with a scheduled command, and let the aggregate decide whether the deadline or the action wins.
 - [Cloudflare Durable Objects](https://alchemy.run/domain/cloudflare) — Host a domain model on Durable Objects behind a Worker, with live reads over WebSockets.
 - [In memory](https://alchemy.run/domain/in-memory) — Run a domain model in a single process, for tests and for apps that don't need Cloudflare.
+- [Plain HTTP and OpenAPI](https://alchemy.run/domain/http-api) — Publish chosen calls of an Api as a plain HTTP JSON API, with an OpenAPI document, from the same Api.
 - [Observability](https://alchemy.run/domain/observability) — Trace how commands, events and reactions flow through an @alchemy.run/domain model, across Durable Objects and over hours. Automatic spans, correlation ids and metrics, plus the attributes you choose to record.
 
 ## API reference

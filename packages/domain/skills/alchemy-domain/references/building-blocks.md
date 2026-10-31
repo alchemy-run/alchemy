@@ -342,6 +342,8 @@ Clients call commands as methods (`bank.WithdrawMoney(accountId, { amount }, { c
 
 More: [Api](https://alchemy.run/domain/api).
 
+`toHttpApi(CustomerApi)` from `@alchemy.run/domain/Http` publishes every call of the Api as a plain HTTP JSON API with an OpenAPI document. See [hosting.md](hosting.md#plain-http-and-openapi).
+
 ## Model
 
 ```ts
