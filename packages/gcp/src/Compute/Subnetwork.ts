@@ -398,7 +398,10 @@ const requireSubnetwork = (project: string, region: string, subnetworkName: stri
   );
 
 /** Purposes of proxy-only subnets, which need a `role`. */
-const PROXY_PURPOSES: ReadonlySet<string> = new Set(["REGIONAL_MANAGED_PROXY", "GLOBAL_MANAGED_PROXY"]);
+const PROXY_PURPOSES: ReadonlySet<string> = new Set([
+  "REGIONAL_MANAGED_PROXY",
+  "GLOBAL_MANAGED_PROXY",
+]);
 
 /** Purposes whose subnets host load-balancer proxies or endpoints, not VMs. */
 const NO_VM_PURPOSES: ReadonlySet<string> = new Set([
