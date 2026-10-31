@@ -14,23 +14,27 @@ tester.run("no-throw", noThrow, {
     `const f = Effect.fn(function* () { return yield* new NotOpen(); });`,
     `const f = (s) => (s.open ? new AlreadyOpen() : []);`,
     `const e = new Error("built, not thrown");`,
-    // A guard written in `evolve`: the event cannot apply, so the command dies and nothing commits.
     account(
-      `evolve: { MoneyDeposited: (s, e) => { if (!isOpen(s)) throw new Error("closed"); return s; } },`,
-    ),
-    // The pattern: one pure predicate; `decide` rejects, `evolve` throws, `reply` reads state.
-    account(
-      `decide: { WithdrawMoney: (s) => (isOpen(s) ? [] : new NotOpen()) },
-  evolve: {
-    MoneyWithdrawn: (s, e) => {
-      if (!isOpen(s)) throw new Error("MoneyWithdrawn on a closed account");
-      return { ...s, balance: e.balanceAfter };
-    },
-  },
-  reply: { WithdrawMoney: (s) => ({ balance: s.balance }) },`,
+      `evolve: { MoneyDeposited: (s, e) => isOpen(s) ? { ...s, balance: e.balanceAfter } : s },`,
     ),
   ],
   invalid: [
+    {
+      code: account(
+        `evolve: { MoneyDeposited: (s, e) => { if (!isOpen(s)) throw new Error("closed"); return s; } },`,
+      ),
+      errors: [{ messageId: "throw" }],
+    },
+    {
+      code: account(
+        `evolve: {
+          MoneyDeposited: (s) => { throw new Error("closed"); },
+          MoneyWithdrawn: (s) => { throw new Error("closed"); },
+        },`,
+      ),
+      errors: [{ messageId: "throw" }, { messageId: "throw" }],
+    },
+
     {
       code: mustBeOpen,
       errors: [{ messageId: "throw" }],
@@ -42,7 +46,7 @@ tester.run("no-throw", noThrow, {
       errors: [{ messageId: "throw" }],
     },
     {
-      // ... and when `reply` calls it too (examples/cloudflare-domain before #2549).
+      // The same helper is reported when `reply` also calls it.
       code: account(
         `evolve: { MoneyDeposited: (s) => mustBeOpen(s) },
   reply: { DepositMoney: (s) => ({ balance: mustBeOpen(s).balance }) },`,

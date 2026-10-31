@@ -104,24 +104,18 @@ decide: { WithdrawMoney: (s) => (s.frozen ? new Frozen() : []) }, // error: Froz
 
 ### `no-throw`
 
-No `throw` for an outcome a caller handles. Fail with a `Domain.Rejection` or a `Schema.TaggedError`. The one exception is a guard written in an aggregate's `evolve`: an event that cannot apply to the state is a bug in `decide`, so `evolve` throws, the command dies, and nothing commits.
-
-The exception is lexical, so you check it by reading one function: a `throw` in a helper is reported, also when only `evolve` calls it, and so is any `throw` in `reply`. Share the condition as a pure predicate instead: `decide` returns a rejection, `evolve` throws, `reply` only reads state.
+No `throw` in the domain. Reject invalid commands in `decide` with a declared tagged error. `evolve` and `reply` are total. `evolve` leaves the state unchanged when an event cannot apply. The rule also reports throws in helpers.
 
 ```ts
 const isOpen = (s: AccountState) => s._tag === "Open";
 
 decide: { WithdrawMoney: (s) => (isOpen(s) ? [] : new NotOpen()) }, // ok
 evolve: {
-  MoneyWithdrawn: (s, e) => {
-    if (!isOpen(s)) throw new Error("MoneyWithdrawn on a closed account"); // ok: a guard in evolve
-    return { ...s, balance: e.balanceAfter };
-  },
+  MoneyWithdrawn: (s, e) => isOpen(s) ? { ...s, balance: e.balanceAfter } : s, // ok
 },
-reply: { WithdrawMoney: (s) => ({ balance: s.balance }) }, // ok
 
 const mustBeOpen = (s: AccountState) => {
-  if (!isOpen(s)) throw new Error("closed"); // error: a throwing helper
+  if (!isOpen(s)) throw new Error("closed"); // error, also when written inside evolve
   return s;
 };
 ```
