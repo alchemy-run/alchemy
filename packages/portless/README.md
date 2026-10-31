@@ -51,6 +51,16 @@ export default Alchemy.Stack(
 
 `alchemy dev` starts the proxy when it isn't running, reuses it when it is, and never stops it. The first run asks the operating system once to trust the proxy's certificate authority; later runs, stages and worktrees prompt for nothing. `alchemy deploy` ignores these resources, and `PORTLESS=0` skips the proxy: `Dev` then serves `http://localhost:<port>`.
 
+A local resource's URL gets a Portless name through `dev.ingress`, such as a Worker's:
+
+```ts
+const worker = yield* Cloudflare.Worker("Builder", {
+  main: "./src/worker.ts",
+  dev: { ingress: Portless.Ingress(proxy) },
+});
+worker.url; // "https://dev-alice.builder.myapp.localhost"
+```
+
 ## Learn more
 
 - [Portless on alchemy.run](https://alchemy.run/portless)

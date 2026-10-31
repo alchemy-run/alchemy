@@ -6,4 +6,10 @@ export default Contributions.make({
     () => import("./internal/DevTrust.ts"),
     (module) => module.devTrust,
   ),
+  ingress: {
+    portless: Contributions.lazy(
+      () => import("./internal/IngressAdapter.ts"),
+      (module) => module.factory,
+    ),
+  },
 });

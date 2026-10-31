@@ -116,6 +116,27 @@ starts a proxy. `PORTLESS=0 alchemy dev` skips the proxy: `Dev` serves
 `http://localhost:<port>`, `Alias` returns its `url`, and `Origin` returns
 `http://localhost:<port>`.
 
+## Naming a Worker or a site
+
+`Portless.Ingress(proxy)` gives a local resource's URL a Portless name. Pass it
+as the resource's `dev.ingress`:
+
+```typescript
+const proxy = yield* Portless.Proxy("Proxy", { domain: "myapp" });
+
+const worker = yield* Cloudflare.Worker("Builder", {
+  main: "./src/worker.ts",
+  dev: { ingress: Portless.Ingress(proxy) },
+});
+worker.url; // "https://dev-alice.builder.myapp.localhost"
+```
+
+The name is the one `Origin` gives the same id, or the `name` you pass
+(`Portless.Ingress(proxy, { name: "Site" })`). The raw listener stays the
+address everything inside the dev session dials. The route belongs to the dev
+sidecar and goes with the resource. With `PORTLESS=0` nothing is routed and the
+resource keeps its own address.
+
 ## Routes
 
 A `Dev` or `Alias` route belongs to the dev sidecar, the process that outlives
@@ -131,3 +152,4 @@ already routes is rejected, not taken over.
 - [`Dev`](/providers/portless/dev)
 - [`Alias`](/providers/portless/alias)
 - [`Origin`](/providers/portless/origin)
+- [`Ingress`](/providers/portless/ingress)
