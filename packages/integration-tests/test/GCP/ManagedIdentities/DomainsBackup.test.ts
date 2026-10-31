@@ -149,6 +149,6 @@ test.provider.skipIf(!runLifecycle)(
     }).pipe(logLevel),
   {
     tags: ["provider:gcp", "provider:gcp:managedidentities", "live"],
-    timeout: 240_000,
+    timeout: 4_800_000,
   },
 );

@@ -3,11 +3,11 @@ import * as Effect from "effect/Effect";
 
 /**
  * Managed Microsoft AD resources the generated bindings bind. Its reserved
- * range differs from Domain.test.ts's so the two domains can share the
+ * range differs from Domain.test.ts's and DomainsBackup.test.ts's so the three domains can share the
  * `default` network.
  */
 export const ProbeDomain = GCP.ManagedIdentities.Domain("ProbeDomain", {
-  reservedIpRange: "172.16.1.0/24",
+  reservedIpRange: "172.16.2.0/24",
   locations: ["us-central1"],
   authorizedNetworks: ["default"],
 });

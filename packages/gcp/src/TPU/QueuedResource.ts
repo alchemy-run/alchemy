@@ -48,6 +48,7 @@ export type NodeSpec = {
   /**
    * Unqualified node id when requesting a single node. Mutually exclusive
    * with `multisliceParams`.
+   * @default the queued resource id (with `-{index}` when there are several specs)
    */
   nodeId?: string;
   /**
@@ -328,18 +329,27 @@ const desiredSpecs = (
   news: QueuedResourceProps,
   parent: string,
   desiredLabels: Record<string, string>,
+  queuedResourceId: string,
 ): tpu.NodeSpec[] => {
   const specs =
     news.nodeSpec !== undefined && news.nodeSpec.length > 0
       ? news.nodeSpec
       : [{ node: {} as NodeProps }];
-  return specs.map((spec) => {
+  return specs.map((spec, index) => {
     const node = spec.node ?? {};
     const description = encodeDescription(desiredLabels, node.description);
     const labels = { ...toLabels(node.labels), ...desiredLabels };
     return {
       parent: spec.parent ?? parent,
-      nodeId: spec.nodeId,
+      // A single-node spec needs a node id (the API rejects one without);
+      // name it after the queued resource.
+      nodeId:
+        spec.nodeId ??
+        (spec.multisliceParams === undefined
+          ? specs.length === 1
+            ? queuedResourceId
+            : `${queuedResourceId}-${index}`
+          : undefined),
       multisliceParams: spec.multisliceParams,
       node: toNodeBody({ ...node, labels }, labels, { description }),
     };
@@ -401,7 +411,13 @@ const specIdentityChanged = (
   const previousSpecs = (previous?.nodeSpec ?? []).map((spec) => nodeSpecOf(spec, parent));
   const nextSpecs =
     next.nodeSpec !== undefined && next.nodeSpec.length > 0
-      ? next.nodeSpec.map((spec) => nodeSpecOf(spec, parent))
+      ? next.nodeSpec.map((spec, index) => {
+          const mapped = nodeSpecOf(spec, parent);
+          // An omitted node id takes the default the provider filled in.
+          return mapped.nodeId === undefined && mapped.multisliceParams === undefined
+            ? { ...mapped, nodeId: previousSpecs[index]?.nodeId }
+            : mapped;
+        })
       : previousSpecs;
   if (previousSpecs.length === 0) return false;
   return specsKey(previousSpecs) !== specsKey(nextSpecs);
@@ -507,7 +523,7 @@ export const QueuedResourceProvider = () =>
               spot: news.spot === true ? {} : undefined,
               guaranteed: news.guaranteed,
               queueingPolicy: news.queueingPolicy,
-              tpu: { nodeSpec: desiredSpecs(news, parent, desiredLabels) },
+              tpu: { nodeSpec: desiredSpecs(news, parent, desiredLabels, queuedResourceId) },
             },
           })
           .pipe(Effect.catchTag("Conflict", () => Effect.undefined));

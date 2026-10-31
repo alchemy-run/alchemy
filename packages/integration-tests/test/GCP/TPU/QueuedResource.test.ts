@@ -57,24 +57,23 @@ test.provider.skipIf(!runLifecycle)(
       yield* stack.destroy();
       yield* stack.deploy(TpuApi);
 
-      const created = yield* stack.deploy(
-        Effect.gen(function* () {
-          yield* TpuApi;
-          return yield* GCP.TPU.QueuedResource("Trainer", {
-            location: "us-central1-a",
-            nodeSpec: [
-              {
-                node: {
-                  acceleratorType: "v5litepod-1",
-                  runtimeVersion: "v2-alpha-tpuv5-lite",
-                  description: "alchemy-test-qr",
-                  labels: { env: "test" },
-                },
+      const trainer = Effect.gen(function* () {
+        yield* TpuApi;
+        return yield* GCP.TPU.QueuedResource("Trainer", {
+          location: "us-central1-a",
+          nodeSpec: [
+            {
+              node: {
+                acceleratorType: "v5litepod-1",
+                runtimeVersion: "v2-alpha-tpuv5-lite",
+                description: "alchemy-test-qr",
+                labels: { env: "test" },
               },
-            ],
-          });
-        }),
-      );
+            },
+          ],
+        });
+      });
+      const created = yield* stack.deploy(trainer);
 
       expect(created.name).toContain("/queuedResources/");
       expect(created.queuedResourceId).toEqual(expect.any(String));
@@ -90,6 +89,12 @@ test.provider.skipIf(!runLifecycle)(
       expect(fetched.name).toEqual(created.name);
       expect(fetched.tpu?.nodeSpec?.[0]?.node?.acceleratorType).toEqual("v5litepod-1");
       expect(fetched.tpu?.nodeSpec?.[0]?.node?.labels?.env).toEqual("test");
+      // The provider named the node after the queued resource.
+      expect(fetched.tpu?.nodeSpec?.[0]?.nodeId).toEqual(created.queuedResourceId);
+
+      // That default node id must not read as a change on the next deploy.
+      const plan = yield* stack.plan(trainer);
+      expect(plan.resources.Trainer?.action).toEqual("noop");
 
       yield* stack.destroy();
 

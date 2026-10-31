@@ -61,5 +61,9 @@ test.provider.skipIf(!!process.env.FAST)(
       );
       expect(gone).toEqual("gone");
     }).pipe(logLevel),
-  { tags: ["provider:gcp", "provider:gcp:metastore", "live"], timeout: 3_600_000 },
+  {
+    tags: ["provider:gcp", "provider:gcp:metastore", "live"],
+    timeout: 3_600_000,
+    exclusive: "gcp:metastore",
+  },
 );
