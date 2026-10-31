@@ -71,7 +71,10 @@ export type ServiceProps = {
   mcpServerSpec?: ServiceSpec;
   /** Registers the service as a plain endpoint. */
   endpointSpec?: ServiceSpec;
-  /** How callers reach the service. */
+  /**
+   * How callers reach the service. Each URL can belong to one service in the
+   * project ("Interface URL ... is already in use by another service").
+   */
   interfaces?: ServiceInterface[];
 };
 

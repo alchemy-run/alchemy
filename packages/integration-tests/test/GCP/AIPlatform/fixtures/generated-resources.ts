@@ -378,7 +378,9 @@ export const ProbeGovernedAgent = Effect.gen(function* () {
   return yield* GCP.AgentRegistry.Service("ProbeGovernedAgent", {
     location,
     agentSpec: { type: "NO_SPEC" },
-    interfaces: [{ url: "https://example.com/agent", protocolBinding: "HTTP_JSON" }],
+    interfaces: [
+      { url: "https://example.com/alchemy/probe-governed-agent", protocolBinding: "HTTP_JSON" },
+    ],
   });
 });
 export const ProbeSemanticGovernancePolicy = Effect.gen(function* () {

@@ -19,7 +19,9 @@ const Governed = Effect.gen(function* () {
   return yield* GCP.AgentRegistry.Service("Governed", {
     location: "us-central1",
     agentSpec: { type: "NO_SPEC" },
-    interfaces: [{ url: "https://example.com/agent", protocolBinding: "HTTP_JSON" }],
+    interfaces: [
+      { url: "https://example.com/alchemy/governed-agent", protocolBinding: "HTTP_JSON" },
+    ],
   });
 });
 
