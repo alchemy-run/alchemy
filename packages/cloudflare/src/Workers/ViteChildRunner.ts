@@ -123,6 +123,7 @@ const program = Effect.scoped(
                   cf: runtimeWorker.cf,
                   zone: runtimeWorker.zone,
                   access: devAccess,
+                  workerd: runtimeWorker.workerd,
                 },
               },
               runtimeContext,

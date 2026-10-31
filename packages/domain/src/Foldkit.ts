@@ -177,7 +177,7 @@ const classifyFailure = (command: DomainCommand.Any, error: unknown) => {
 };
 
 type ReadEntry = View.Any | Aggregate.Any | DomainStream.Any;
-type Reads<A extends Api.Any> = Extract<A["entries"][number], ReadEntry>;
+type Reads<A extends Api.Any> = Extract<A["serves"][number], ReadEntry>;
 type ReadName<V extends ReadEntry> = V extends View.Any
   ? V["viewName"]
   : V extends Aggregate.Any
@@ -238,7 +238,7 @@ export function make(api: Api.Any): unknown {
   // The signature rejects an Api with an entry named Message; the result union is assigned last.
   const definitions = commandDefinitions(api) as Record<string, unknown>;
   const { Message } = definitions;
-  for (const entry of api.entries) {
+  for (const entry of api.serves) {
     if (entry.kind !== "View" && entry.kind !== "Aggregate" && entry.kind !== "Stream") {
       continue;
     }

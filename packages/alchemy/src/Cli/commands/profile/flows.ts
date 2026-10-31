@@ -2,7 +2,7 @@ import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
-import * as Profiles from "../../../Alchemist/routes/profile.ts";
+import * as Alchemist from "../../../Alchemist/index.ts";
 import * as Interaction from "../../../Interaction.ts";
 import { glyphsFor } from "../../../Util/Theme.ts";
 import { confirmOrDecline } from "../confirm.ts";
@@ -23,7 +23,7 @@ export const showProfileFlow = Effect.fn(function* (options: {
   envFile: Option.Option<string>;
   main: string;
 }) {
-  const profile = yield* Profiles.get({
+  const profile = yield* Alchemist.Profile.get({
     name: options.profileName,
     includeProviderStatus: true,
     entrypoint: options.main,
@@ -55,7 +55,7 @@ export const renameProfileFlow = Effect.fn(function* (
       validate: (value) => (value.trim().length > 0 ? undefined : "Profile name is required"),
     }))
   ).trim();
-  yield* Profiles.rename({ name, newName });
+  yield* Alchemist.Profile.rename({ name, newName });
   yield* Interaction.success(`Renamed profile '${name}' to '${newName}'.`);
   return newName;
 });
@@ -68,7 +68,7 @@ export const deleteProfileFlow = Effect.fn(function* (options: {
 }) {
   // Existence check only — skip the provider-status probe (it imports the
   // stack entrypoint and reaches provider APIs).
-  const exists = yield* Profiles.get({
+  const exists = yield* Alchemist.Profile.get({
     name: options.name,
     includeProviderStatus: false,
   }).pipe(Effect.option);
@@ -84,7 +84,7 @@ export const deleteProfileFlow = Effect.fn(function* (options: {
     confirmLabel: "Delete",
     cancelLabel: "Cancel",
   });
-  yield* Profiles.deleteProfile({ name: options.name });
+  yield* Alchemist.Profile.deleteProfile({ name: options.name });
   yield* Interaction.success(`Deleted profile '${options.name}' and its credentials.`);
   return true;
 });
@@ -116,11 +116,11 @@ export const editProfileFlow = Effect.fn(function* (options: {
   if (plan.length === 0) {
     // Only connected names/methods are needed for the cycle prompt; the
     // status probe would import the entrypoint and reach provider APIs.
-    const profile = yield* Profiles.get({
+    const profile = yield* Alchemist.Profile.get({
       name: options.selectedProfile,
       includeProviderStatus: false,
     });
-    const available = yield* Profiles.providers({
+    const available = yield* Alchemist.Profile.providers({
       profile: options.selectedProfile,
       entrypoint: options.main,
       envFile: Option.getOrUndefined(options.envFile),
@@ -171,13 +171,13 @@ export const editProfileFlow = Effect.fn(function* (options: {
   for (const step of plan) {
     const run =
       step.action === "remove"
-        ? Profiles.removeProvider({
+        ? Alchemist.Profile.removeProvider({
             profile: options.selectedProfile,
             provider: step.provider,
             entrypoint: options.main,
             envFile: Option.getOrUndefined(options.envFile),
           })
-        : Profiles.configure({
+        : Alchemist.Profile.configure({
             profile: options.selectedProfile,
             provider: step.provider,
             entrypoint: options.main,
