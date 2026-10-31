@@ -15,6 +15,7 @@
     "skip": {
       "GetInstanceTags": "Memcache tags sit behind a Google experiment: the call answers Forbidden \"UseTaggingRemoteExtension experiment flag is not enabled\"",
       "SetInstanceTags": "Memcache tags sit behind a Google experiment: the call answers Forbidden \"UseTaggingRemoteExtension experiment flag is not enabled\""
-    }
+    },
+    "deployMinutes": 60
   }
 }

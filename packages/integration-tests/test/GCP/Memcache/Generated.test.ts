@@ -61,11 +61,11 @@ describe.skipIf(!!process.env.FAST)(
         );
         baseUrl = out.uri!;
       }),
-      { timeout: 1_800_000 },
+      { timeout: 3_600_000 },
     );
 
     afterAll(sharedStack.destroy().pipe(Effect.ensuring(releaseNetworkSlots(1))), {
-      timeout: 1_800_000,
+      timeout: 3_600_000,
     });
 
     describe("Instance", { concurrent: true }, () => {
