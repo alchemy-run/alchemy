@@ -32,6 +32,7 @@ import {
 import { handleCliErrors } from "./commands/errors.ts";
 import { VersionCheck } from "./commands/instrument.ts";
 import { GlobalLogLive, LogFormatFlag, LogLevelFlag } from "./GlobalLog.ts";
+import * as JsonConsole from "./JsonConsole.ts";
 import { selectCliServices } from "./selectCli.ts";
 
 const commandMetadata = [
@@ -166,6 +167,9 @@ const root = Command.make("alchemy", {}, () =>
     ),
   ]),
   Command.withGlobalFlags([NoInput, FastDistilled, LogLevelFlag, LogFormatFlag]),
+  // Built per command, once the flags are parsed: `--log-format json`
+  // swaps in the JSON console's renderer.
+  Command.provide(JsonConsole.override),
 );
 
 /**

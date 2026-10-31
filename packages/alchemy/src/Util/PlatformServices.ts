@@ -1,3 +1,4 @@
+import * as Cause from "effect/Cause";
 import * as Digest from "effect/crypto/Digest";
 import * as SecureRandom from "effect/crypto/SecureRandom";
 import type { Input as DurationInput } from "effect/Duration";
@@ -6,9 +7,10 @@ import type { FileSystem } from "effect/FileSystem";
 import type { HttpServer } from "effect/http/HttpServer";
 import type { ServeError } from "effect/http/HttpServerError";
 import * as Layer from "effect/Layer";
+import * as Logger from "effect/Logger";
 import type { Path } from "effect/Path";
 import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
-import { defaultTeardown, type Teardown } from "effect/Runtime";
+import { defaultTeardown, getErrorReported, type Teardown } from "effect/Runtime";
 import type { WebSocketConstructor } from "effect/socket/Socket";
 import type { Stdio } from "effect/Stdio";
 import type { Terminal } from "effect/Terminal";
@@ -121,7 +123,18 @@ export const runMain = <E, A>(
   const opts = {
     ...options,
     teardown: options?.teardown ?? exitingTeardown,
+    // Reported below instead.
+    disableErrorReporting: true,
   };
+  // The runtime's report of an unhandled failure, on stderr: stdout carries
+  // only a command's output (`--log-format json` records, for one).
+  if (options?.disableErrorReporting !== true) {
+    effect = Effect.tapCause(effect, (cause) =>
+      Cause.hasInterruptsOnly(cause) || !getErrorReported(Cause.squash(cause))
+        ? Effect.void
+        : Effect.logError(cause).pipe(Effect.provideService(Logger.LogToStderr, true)),
+    );
+  }
   if (isBun) {
     void importPlatformPeer(
       "@effect/platform-bun",
