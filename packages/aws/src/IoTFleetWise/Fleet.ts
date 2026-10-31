@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
@@ -15,6 +16,13 @@ import {
   syncFleetWiseTags,
   toFleetWiseTagList,
 } from "./internal.ts";
+
+export class IoTFleetWiseFleetUnexpectedResponse extends Data.TaggedError(
+  "IoTFleetWiseFleetUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface FleetProps {
   /**
@@ -83,7 +91,7 @@ export const FleetProvider = () =>
       const readFleet = Effect.fn(function* (fleetId: string) {
         return yield* iotfleetwise.getFleet({ fleetId }).pipe(
           inFleetWiseRegion,
-          Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
         );
       });
 
@@ -140,7 +148,11 @@ export const FleetProvider = () =>
             observed = yield* readFleet(fleetId).pipe(
               Effect.flatMap((fleet) =>
                 fleet === undefined
-                  ? Effect.fail(new Error(`Fleet '${fleetId}' not found`))
+                  ? Effect.fail(
+                      new IoTFleetWiseFleetUnexpectedResponse({
+                        message: `Fleet '${fleetId}' not found`,
+                      }),
+                    )
                   : Effect.succeed(fleet),
               ),
               retryObservation,

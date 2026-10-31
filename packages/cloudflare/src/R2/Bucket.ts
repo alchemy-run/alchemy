@@ -15,6 +15,11 @@ import type * as Cloudflare from "../Providers.ts";
 import * as Zone from "../Zone/index.ts";
 import { abortMultipartUploads } from "./internal/MultipartUploads.ts";
 
+export class BucketOperationFailed extends Data.TaggedError("BucketOperationFailed")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export const isBucket = (value: any): value is Bucket =>
   isResourceOfType(value, "Cloudflare.R2.Bucket");
 
@@ -192,7 +197,10 @@ export type BucketProps = {
    */
   storageClass?: Bucket.StorageClass;
   /**
-   * Jurisdiction where objects in this bucket are guaranteed to be stored.
+   * Jurisdiction where objects in this bucket are guaranteed to be stored:
+   * `"eu"` (the European Union), `"us"` (the United States), or `"fedramp"`
+   * (FedRAMP-compliant data centers). `"default"` places no restriction.
+   * Changing it replaces the bucket.
    * @default "default"
    */
   jurisdiction?: Bucket.Jurisdiction;
@@ -622,7 +630,7 @@ export const Bucket = Resource<Bucket>("Cloudflare.R2.Bucket", {
 
 export declare namespace Bucket {
   export type StorageClass = "Standard" | "InfrequentAccess";
-  export type Jurisdiction = "default" | "eu" | "fedramp";
+  export type Jurisdiction = "default" | "eu" | "us" | "fedramp";
   export type Location = "apac" | "eeur" | "enam" | "weur" | "wnam" | "oc";
   export type LifecycleRule = {
     id: string;
@@ -745,7 +753,7 @@ export const ProviderLive = () =>
               )
         ).pipe(
           Effect.map((response) => response.domains.map(toCustomDomainAttributes)),
-          Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchBucket", () => Effect.undefined),
         );
       });
 
@@ -759,9 +767,9 @@ export const ProviderLive = () =>
           const { accountId } = yield* yield* CloudflareEnvironment;
           const observed = yield* listCustomDomains(bucketName, jurisdiction);
           if (!observed) {
-            return yield* Effect.fail(
-              new Error(`Cannot reconcile custom domains for missing R2 bucket "${bucketName}"`),
-            );
+            return yield* new BucketOperationFailed({
+              message: `Cannot reconcile custom domains for missing R2 bucket "${bucketName}"`,
+            });
           }
           const observedByDomain = new Map(observed.map((domain) => [domain.domain, domain]));
           const desiredDomains = new Set(desired.map((domain) => domain.name));
@@ -892,7 +900,7 @@ export const ProviderLive = () =>
           // The hostname exists whether or not public access is on; a
           // disabled domain serves 401, so only report it while enabled.
           Effect.map((response) => (response.enabled ? response.domain : undefined)),
-          Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+          Effect.catchTag("NoSuchBucket", () => Effect.undefined),
         );
       });
 
@@ -1173,7 +1181,7 @@ export const ProviderLive = () =>
             // R2 buckets are account-scoped but partitioned by jurisdiction, so
             // enumerate each jurisdiction. Accounts not entitled to a given
             // jurisdiction (e.g. `fedramp`) reject the route — treat as empty.
-            const jurisdictions: Bucket.Jurisdiction[] = ["default", "eu", "fedramp"];
+            const jurisdictions: Bucket.Jurisdiction[] = ["default", "eu", "us", "fedramp"];
             const perJurisdiction = yield* Effect.forEach(
               jurisdictions,
               (jurisdiction) =>
@@ -1181,7 +1189,6 @@ export const ProviderLive = () =>
                   // An account not entitled to a jurisdiction rejects the list
                   // route with `Forbidden` ("Access Denied") or `InvalidRoute`
                   // — there are simply no buckets there, so treat as empty.
-                  // @ts-expect-error
                   Effect.catchTag(["InvalidRoute", "Forbidden"], () => Effect.succeed([])),
                 ),
               { concurrency: jurisdictions.length },
@@ -1350,7 +1357,7 @@ export const ProviderLive = () =>
               bucketName: name,
               jurisdiction,
             })
-            .pipe(Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("NoSuchBucket", () => Effect.undefined));
 
           // Ensure — create if missing. R2 reports a concurrent create
           // (or partial state-persistence failure) as
@@ -1475,8 +1482,9 @@ export const ProviderLive = () =>
           };
         }),
         delete: Effect.fn(function* ({ olds = {}, output, force }) {
-          yield* Effect.all(
-            (output.domains ?? []).map((domain) =>
+          yield* Effect.forEach(
+            output.domains ?? [],
+            (domain) =>
               r2
                 .deleteBucketDomainCustom({
                   accountId: output.accountId,
@@ -1485,7 +1493,6 @@ export const ProviderLive = () =>
                   jurisdiction: output.jurisdiction,
                 })
                 .pipe(Effect.catchTag(["DomainNotFound", "NoSuchBucket"], () => Effect.void)),
-            ),
             { concurrency: "unbounded" },
           );
 
@@ -1599,7 +1606,7 @@ export const ProviderLive = () =>
                 localUploads: output?.localUploads,
                 publicDomain: output?.publicDomain,
               })),
-              Effect.catchTag("NoSuchBucket", () => Effect.succeed(undefined)),
+              Effect.catchTag("NoSuchBucket", () => Effect.undefined),
             );
         }),
       };

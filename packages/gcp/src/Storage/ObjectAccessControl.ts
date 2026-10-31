@@ -144,7 +144,7 @@ const getByEntity = (bucketName: string, object: string, entity: string, generat
       entity,
       generation,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listOnObject = (bucketName: string, object: string) =>
   storage.listObjectAccessControls({ bucket: bucketName, object }).pipe(

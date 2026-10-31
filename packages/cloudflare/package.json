@@ -783,6 +783,7 @@
     "@distilled.cloud/iceberg": "workspace:*",
     "@effect/sql-d1": "catalog:",
     "pathe": "catalog:",
+    "picomatch": "catalog:",
     "rolldown": "catalog:",
     "tinyglobby": "catalog:"
   },
@@ -794,6 +795,7 @@
     "@effect/platform-node": "catalog:",
     "@types/bun": "catalog:",
     "@types/node": "catalog:",
+    "@types/picomatch": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
     "typescript": "catalog:",
@@ -806,7 +808,7 @@
     "@effect/platform-node": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
-    "vite": "catalog:"
+    "vite": "catalog:frontend-peer"
   },
   "peerDependenciesMeta": {
     "@alchemy.run/domain": {

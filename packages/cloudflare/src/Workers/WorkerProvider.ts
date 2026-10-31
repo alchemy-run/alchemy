@@ -5,7 +5,6 @@ import * as workers from "@distilled.cloud/cloudflare/workers";
 import * as wfp from "@distilled.cloud/cloudflare/workers-for-platforms";
 import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
 import { dotAlchemyDirectory } from "alchemy/AlchemyContext";
-import * as Artifacts from "alchemy/Artifacts";
 import { havePropsChanged, isResolved, stripEffects } from "alchemy/Diff";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
 import * as Provider from "alchemy/Provider";
@@ -14,16 +13,13 @@ import { type ResourceBinding } from "alchemy/Resource";
 import { isRedactedMarker } from "alchemy/RuntimeContext";
 import { Stack } from "alchemy/Stack";
 import { cachedFunction } from "alchemy/Util/cached-function";
-import { initialCwd } from "alchemy/Util/Node";
 import { sha256Object } from "alchemy/Util/sha256";
 import * as Config from "effect/Config";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
-import * as FileSystem from "effect/FileSystem";
 import { isHttpClientError } from "effect/http/HttpClientError";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
-import * as Path from "effect/Path";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
@@ -49,10 +45,7 @@ import { isDurableObjectExport } from "./DurableObject.ts";
 import { LocalWorkerProvider } from "./LocalWorkerProvider.ts";
 import { placeholderResetReason } from "./Placeholder.ts";
 import { routePatternUrl } from "./RoutePattern.ts";
-import { makeSourceContext, resolveSource } from "./Source.ts";
-import { readPrebuiltWorkerBundle } from "./Sources/Prebuilt.ts";
-import { isPythonMain, readPythonWorkerBundle } from "./Sources/Python.ts";
-import { WorkerBundle } from "./Sources/Rolldown.ts";
+import { isAssetsOnly, makeSourceContext, resolveSource } from "./Source.ts";
 import { assertCloudflareTelemetryCompatibility } from "./Telemetry.ts";
 import {
   Worker,
@@ -598,6 +591,25 @@ export const resolveWorkerDomain = (
     };
   });
 
+/**
+ * Preserve the resolved domain metadata only while the declared canonical
+ * hostname is attached. Alias, redirect, and unknown-hostname classification
+ * is supplied by `read`; zone and previews retain reconcile's persisted shape.
+ */
+const resolveObservedWorkerDomain = (
+  serving: readonly string[],
+  redirects: string[],
+  declared: ResolvedWorkerDomain | undefined,
+): ResolvedWorkerDomain | undefined =>
+  serving.length > 0
+    ? {
+        ...(declared?.name === serving[0] ? declared : {}),
+        name: serving[0],
+        aliases: serving.slice(1),
+        redirects,
+      }
+    : undefined;
+
 const isWorkersDevHostname = (hostname: string) => hostname.endsWith(".workers.dev");
 
 // Hostnames that only appear in local-dev state (the dev server's
@@ -717,8 +729,9 @@ const findDispatchNamespaceScript = (
   wfp
     .getDispatchNamespaceScript({ accountId, dispatchNamespace, scriptName })
     .pipe(
-      Effect.catchTag(["DispatchNamespaceNotFound", "DispatchNamespaceScriptNotFound"], () =>
-        Effect.succeed(undefined),
+      Effect.catchTag(
+        ["DispatchNamespaceNotFound", "DispatchNamespaceScriptNotFound"],
+        () => Effect.undefined,
       ),
     );
 
@@ -832,7 +845,7 @@ const findWorkerId = (accountId: string, scriptName: string) =>
     }),
   );
 
-const putWorkerScript = (params: {
+export const putWorkerScript = (params: {
   accountId: string;
   scriptName: string;
   dispatchNamespace: string | undefined;
@@ -1049,10 +1062,9 @@ const resolveMetadataHashValue = (value: unknown): Effect.Effect<MetadataHashVal
       return resolved.toISOString();
     }
     if (Array.isArray(resolved)) {
-      return yield* Effect.all(
-        resolved.map((item) => resolveMetadataHashValue(item)),
-        { concurrency: "unbounded" },
-      );
+      return yield* Effect.forEach(resolved, (item) => resolveMetadataHashValue(item), {
+        concurrency: "unbounded",
+      });
     }
     if (Predicate.isObject(resolved)) {
       // Only plain objects round-trip predictably. A class instance would
@@ -1061,12 +1073,12 @@ const resolveMetadataHashValue = (value: unknown): Effect.Effect<MetadataHashVal
       if (prototype !== Object.prototype && prototype !== null) {
         return undefined;
       }
-      const entries = yield* Effect.all(
-        Object.entries(resolved).map(([key, nested]) =>
+      const entries = yield* Effect.forEach(
+        Object.entries(resolved),
+        ([key, nested]) =>
           resolveMetadataHashValue(nested).pipe(
             Effect.map((materializedNested) => [key, materializedNested] as const),
           ),
-        ),
         { concurrency: "unbounded" },
       );
       return Object.fromEntries(entries.filter(([, nested]) => nested !== undefined));
@@ -1192,9 +1204,6 @@ export const LiveWorkerProvider = () =>
   Provider.effect(
     Worker,
     Effect.gen(function* () {
-      const path = yield* Path.Path;
-
-      const bundler = yield* WorkerBundle;
       const stack = yield* Stack;
       const dotAlchemy = yield* dotAlchemyDirectory;
 
@@ -1385,12 +1394,12 @@ export const LiveWorkerProvider = () =>
           // Detach what's no longer wanted. Use the live list so we
           // don't try to delete domains we no longer track.
           const toRemove = liveAll.filter((d) => !desiredSet.has(d.hostname));
-          yield* Effect.all(
-            toRemove.map((d) =>
+          yield* Effect.forEach(
+            toRemove,
+            (d) =>
               workers
                 .deleteDomain({ accountId, domainId: d.id })
                 .pipe(Effect.catchTag("DomainNotFound", () => Effect.void)),
-            ),
             { concurrency: "unbounded" },
           );
 
@@ -1475,7 +1484,7 @@ export const LiveWorkerProvider = () =>
             return { hostname, id: res.id ?? "", zoneId: res.zoneId ?? zoneId };
           });
 
-          const applied = yield* Effect.all(desired.map(attachDomain), {
+          const applied = yield* Effect.forEach(desired, attachDomain, {
             concurrency: "unbounded",
           });
           return applied;
@@ -1610,7 +1619,7 @@ export const LiveWorkerProvider = () =>
             // Only a missing entrypoint means no rules yet. Any other failure must
             // stop here: the PUT below replaces the whole phase, so reading it as
             // empty would delete every other rule in the zone.
-            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
           const existingRules = entrypoint?.rules ?? [];
           const ourDesired = desired
             .filter((hostname) => params.zoneIdByHostname.get(hostname) === zoneId)
@@ -1703,7 +1712,7 @@ export const LiveWorkerProvider = () =>
             // Only a missing entrypoint means no rules yet. Any other failure must
             // stop here: the PUT below replaces the whole phase, so reading it as
             // empty would delete every other rule in the zone.
-            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.succeed(undefined)));
+            .pipe(Effect.catchTag("RulesetNotFound", () => Effect.undefined));
           const existingRules = entrypoint?.rules ?? [];
           const isOurs = (rule: { description?: string | null }) =>
             (rule.description ?? "").startsWith(prefix);
@@ -1819,8 +1828,9 @@ export const LiveWorkerProvider = () =>
           return Effect.succeed([] as Worker["Attributes"]["routes"]);
         }
 
-        const routesByZone = Effect.all(
-          uniqueZoneIds.map((zoneId) =>
+        const routesByZone = Effect.forEach(
+          uniqueZoneIds,
+          (zoneId) =>
             workers.listRoutes({ zoneId }).pipe(
               Effect.map((response): Worker["Attributes"]["routes"] =>
                 (response.result ?? []).flatMap((route) =>
@@ -1838,7 +1848,6 @@ export const LiveWorkerProvider = () =>
               ),
               Effect.orElseSucceed(() => []),
             ),
-          ),
           // Bounded: this issues one request per zone, so a Worker with routes
           // spread across many zones would otherwise burst the account's whole
           // API budget in a single tick (#926).
@@ -1894,12 +1903,12 @@ export const LiveWorkerProvider = () =>
           const liveByKey = new Map(liveAll.map((route) => [routeKey(route), route]));
 
           const toRemove = liveAll.filter((route) => !desiredKeys.has(routeKey(route)));
-          yield* Effect.all(
-            toRemove.map((route) =>
+          yield* Effect.forEach(
+            toRemove,
+            (route) =>
               workers
                 .deleteRoute({ zoneId: route.zoneId, routeId: route.id })
                 .pipe(Effect.catchTag("RouteNotFound", () => Effect.void)),
-            ),
             { concurrency: "unbounded" },
           );
 
@@ -1970,7 +1979,7 @@ export const LiveWorkerProvider = () =>
             };
           });
 
-          return yield* Effect.all(desired.map(attachRoute), { concurrency: "unbounded" });
+          return yield* Effect.forEach(desired, attachRoute, { concurrency: "unbounded" });
         });
 
       const createAlchemyWorkerTags = (id: string) => [
@@ -2049,12 +2058,11 @@ export const LiveWorkerProvider = () =>
                 params.observedNamespaces.some((ns) => ns.script === script)));
           const settings = yield* getScriptSettings(params.accountId, script, undefined).pipe(
             Effect.catchTags({
-              WorkerNotFound: (error) =>
-                knownSource ? Effect.fail(error) : Effect.succeed(undefined),
+              WorkerNotFound: (error) => (knownSource ? Effect.fail(error) : Effect.undefined),
               WorkerHasNoVersions: (error) =>
                 knownSource || params.sources.includes(script)
                   ? Effect.fail(error)
-                  : Effect.succeed(undefined),
+                  : Effect.undefined,
             }),
           );
           if (
@@ -2124,7 +2132,7 @@ export const LiveWorkerProvider = () =>
                         binding.scriptName != null &&
                         binding.scriptName !== script)),
                 )
-                  ? Effect.succeed(undefined)
+                  ? Effect.undefined
                   : Effect.fail(error),
               ),
             );
@@ -2235,31 +2243,6 @@ export const LiveWorkerProvider = () =>
         return yield* readAssets(typeof assets === "string" ? { directory: assets } : assets);
       });
 
-      const prepareBundle = (id: string, fqn: string, props: WorkerProps) =>
-        (isPythonMain(props.main)
-          ? readPythonWorkerBundle({
-              id,
-              fqn,
-              main: props.main,
-              compatibility: getCompatibility(props),
-            })
-          : props.bundle === false
-            ? readPrebuiltWorkerBundle({ main: props.main!, rules: props.rules })
-            : bundler.build({
-                id,
-                main: props.main!,
-                compatibility: getCompatibility(props),
-                entry: props.isExternal
-                  ? { kind: "external" }
-                  : { kind: "effect", exports: props.exports ?? {} },
-                stack: { name: stack.name, stage: stack.stage },
-                extraOptions: props.build,
-              })
-        ).pipe(Artifacts.cached("build"));
-
-      const hashScript = (script: string) =>
-        Effect.sync(() => crypto.createHash("sha256").update(script).digest("hex"));
-
       const prepareAssetsAndBundle = (
         id: string,
         fqn: string,
@@ -2268,61 +2251,12 @@ export const LiveWorkerProvider = () =>
         opts: { skipAssetsRead?: boolean; selfUrl?: string } = {},
       ) =>
         Effect.gen(function* () {
-          // Source provider — external (`props.source`) or the built-in
-          // vite source (`props.vite`): the provider is self-contained — it
-          // supplies the bundle, optionally its own assets (framework and
-          // vite builds), and the hash slots it owns. The props-level
-          // `assets` directory is still read here for sources that don't
-          // own assets.
-          if (props.source || props.vite) {
-            const source = yield* resolveSource(props);
-            const ctx = makeSourceContext({
-              dotAlchemy,
-              id,
-              fqn,
-              workerName,
-              props,
-              compatibility: getCompatibility(props),
-              stack: { name: stack.name, stage: stack.stage },
-              selfUrl: opts.selfUrl,
-            });
-            const [output, propsAssets] = yield* Effect.all(
-              [
-                source.build(ctx),
-                source.ownsAssets || opts.skipAssetsRead
-                  ? Effect.undefined
-                  : prepareAssets(props.assets),
-              ],
-              { concurrency: "unbounded" },
-            );
-            return {
-              assets: output.assets ?? propsAssets,
-              bundle: output.bundle,
-              input: output.hash.input,
-              additionalWorkspaces: output.hash.additionalWorkspaces,
-            };
-          }
-          if (props.script !== undefined) {
-            const [assets, bundleHash] = yield* Effect.all(
-              [
-                opts.skipAssetsRead ? Effect.succeed(undefined) : prepareAssets(props.assets),
-                hashScript(props.script),
-              ],
-              { concurrency: "unbounded" },
-            );
-            return {
-              assets,
-              bundle: { files: [{ path: "main.js", content: props.script }], hash: bundleHash },
-              input: undefined,
-              additionalWorkspaces: undefined,
-            };
-          }
           // Assets-only Worker: no entry module at all. The script PUT goes
           // out with no modules and no main_module — Cloudflare's asset
           // layer serves every request and applies `notFoundHandling`
           // (including SPA fallback) itself, exactly like Wrangler's
           // assets-only deploys.
-          if (props.main === undefined) {
+          if (isAssetsOnly(props)) {
             if (!props.assets) {
               return yield* Effect.die(
                 new Error(
@@ -2337,14 +2271,37 @@ export const LiveWorkerProvider = () =>
               additionalWorkspaces: undefined,
             };
           }
-          const [assets, bundle] = yield* Effect.all(
+          // Every other Worker builds through its source provider (see
+          // `resolveSource`): it supplies the bundle, optionally its own
+          // assets (framework and vite builds), and the hash slots it owns.
+          // The props-level `assets` directory is read here for sources
+          // that don't own assets.
+          const source = yield* resolveSource(props);
+          const ctx = makeSourceContext({
+            dotAlchemy,
+            id,
+            fqn,
+            workerName,
+            props,
+            compatibility: getCompatibility(props),
+            stack: { name: stack.name, stage: stack.stage },
+            selfUrl: opts.selfUrl,
+          });
+          const [output, propsAssets] = yield* Effect.all(
             [
-              opts.skipAssetsRead ? Effect.succeed(undefined) : prepareAssets(props.assets),
-              prepareBundle(id, fqn, props),
+              source.build(ctx),
+              source.ownsAssets || opts.skipAssetsRead
+                ? Effect.undefined
+                : prepareAssets(props.assets),
             ],
             { concurrency: "unbounded" },
           );
-          return { assets, bundle, input: undefined, additionalWorkspaces: undefined };
+          return {
+            assets: output.assets ?? propsAssets,
+            bundle: output.bundle,
+            input: output.hash.input,
+            additionalWorkspaces: output.hash.additionalWorkspaces,
+          };
         }).pipe(
           Effect.map(({ assets, bundle, input, additionalWorkspaces }) => ({
             assets,
@@ -2353,7 +2310,7 @@ export const LiveWorkerProvider = () =>
               files: bundle?.files.map(
                 (file) =>
                   new File([file.content as BlobPart], file.path, {
-                    type: contentTypeForModule(file.path),
+                    type: contentTypeForModule(file.path, file.type),
                   }),
               ),
             },
@@ -3001,7 +2958,7 @@ export const LiveWorkerProvider = () =>
           .getPreview({ accountId, workerId: parentName, previewId: previewName })
           .pipe(
             Effect.catchTags({
-              PreviewNotFound: () => Effect.succeed(undefined),
+              PreviewNotFound: () => Effect.undefined,
               WorkerNotFound: () =>
                 Effect.fail(
                   new WorkerPreviewConfigError({
@@ -3113,8 +3070,9 @@ export const LiveWorkerProvider = () =>
               deploymentId: "latest",
             })
             .pipe(
-              Effect.catchTag(["PreviewNotFound", "PreviewDeploymentNotFound"], () =>
-                Effect.succeed(undefined),
+              Effect.catchTag(
+                ["PreviewNotFound", "PreviewDeploymentNotFound"],
+                () => Effect.undefined,
               ),
             );
           const oldTag = latest?.migrationTag ?? undefined;
@@ -4343,8 +4301,9 @@ export const LiveWorkerProvider = () =>
           return assets.hash !== output.hash?.assets;
         }
         const read = yield* prepareAssets(assets).pipe(
-          Effect.catchTag(["PlatformError", "AssetTooLargeError", "TooManyAssetsError"], () =>
-            Effect.succeed(undefined),
+          Effect.catchTag(
+            ["PlatformError", "AssetTooLargeError", "TooManyAssetsError"],
+            () => Effect.undefined,
           ),
         );
         return read === undefined || read.hash !== output.hash?.assets;
@@ -4401,56 +4360,10 @@ export const LiveWorkerProvider = () =>
             return true;
           }
         }
-        // Source provider (external or vite): the source recomputes the
-        // hash slots it owns (without building where it can) and any
-        // defined slot that differs from state means an update.
-        // `additionalWorkspaces` is auxiliary metadata for the input hash,
-        // never a change signal.
-        if (props.source || props.vite) {
-          const source = yield* resolveSource(props);
-          const slots = yield* source.hash(
-            makeSourceContext({
-              dotAlchemy,
-              id,
-              fqn,
-              workerName: output.workerName,
-              props,
-              compatibility: getCompatibility(props),
-              stack: { name: stack.name, stage: stack.stage },
-            }),
-            output.hash,
-          );
-          for (const slot of ["bundle", "input", "assets"] as const) {
-            if (slots[slot] !== undefined && slots[slot] !== output.hash?.[slot]) {
-              return true;
-            }
-          }
-          if (source.ownsAssets) {
-            // Source-owned assets are covered by the `input` hash.
-            return false;
-          }
-          if (!props.assets) {
-            return false;
-          }
-          const assetsHash = Predicate.hasProperty(props.assets, "hash")
-            ? props.assets.hash
-            : undefined;
-          if (assetsHash === undefined) {
-            return true;
-          }
-          return assetsHash !== output.hash?.assets;
-        }
-        if (props.script !== undefined) {
-          const scriptHash = yield* hashScript(props.script);
-          if (scriptHash !== output.hash?.bundle) {
-            return true;
-          }
-          return yield* assetsChanged(props.assets, output);
-        }
         // Assets-only Worker — there is no bundle to hash. A stored bundle
         // hash means the Worker previously had a script and is being
         // converted to assets-only, which must deploy.
-        if (props.main === undefined) {
+        if (isAssetsOnly(props)) {
           if (output.hash?.bundle !== undefined) {
             return true;
           }
@@ -4461,9 +4374,43 @@ export const LiveWorkerProvider = () =>
           }
           return yield* assetsChanged(props.assets, output);
         }
-        const bundleHash = yield* prepareBundle(id, fqn, props).pipe(Effect.map((b) => b.hash));
-        if (bundleHash !== output.hash?.bundle) {
-          return true;
+        // The source recomputes the hash slots it owns (without building
+        // where it can) and any defined slot that differs from state means
+        // an update. `additionalWorkspaces` is auxiliary metadata for the
+        // input hash, never a change signal.
+        const source = yield* resolveSource(props);
+        const slots = yield* source.hash(
+          makeSourceContext({
+            dotAlchemy,
+            id,
+            fqn,
+            workerName: output.workerName,
+            props,
+            compatibility: getCompatibility(props),
+            stack: { name: stack.name, stage: stack.stage },
+          }),
+          output.hash,
+        );
+        for (const slot of ["bundle", "input", "assets"] as const) {
+          if (slots[slot] !== undefined && slots[slot] !== output.hash?.[slot]) {
+            return true;
+          }
+        }
+        if (source.ownsAssets) {
+          // Source-owned assets are covered by the `input` hash.
+          return false;
+        }
+        if (props.source || props.vite) {
+          // An external or vite build may write the `assets` directory
+          // itself, so it can't be read before the build: only a supplied
+          // hash proves it unchanged.
+          if (!props.assets) {
+            return false;
+          }
+          const assetsHash = Predicate.hasProperty(props.assets, "hash")
+            ? props.assets.hash
+            : undefined;
+          return assetsHash === undefined || assetsHash !== output.hash?.assets;
         }
         return yield* assetsChanged(props.assets, output);
       });
@@ -4765,10 +4712,10 @@ export const LiveWorkerProvider = () =>
           }
           const settings = yield* getScriptSettings(accountId, name, namespace).pipe(
             Effect.catchTags({
-              WorkerNotFound: () => Effect.succeed(undefined),
-              WorkerHasNoVersions: () => Effect.succeed(undefined),
-              DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
-              DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+              WorkerNotFound: () => Effect.undefined,
+              WorkerHasNoVersions: () => Effect.undefined,
+              DispatchNamespaceScriptNotFound: () => Effect.undefined,
+              DispatchNamespaceNotFound: () => Effect.undefined,
             }),
           );
           if (settings === undefined) return undefined;
@@ -4900,10 +4847,10 @@ export const LiveWorkerProvider = () =>
             // script as `DispatchNamespaceScriptNotFound` (and a missing
             // namespace as `DispatchNamespaceNotFound`).
             Effect.catchTags({
-              WorkerNotFound: () => Effect.succeed(undefined),
-              WorkerHasNoVersions: () => Effect.succeed(undefined),
-              DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
-              DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+              WorkerNotFound: () => Effect.undefined,
+              WorkerHasNoVersions: () => Effect.undefined,
+              DispatchNamespaceScriptNotFound: () => Effect.undefined,
+              DispatchNamespaceNotFound: () => Effect.undefined,
             }),
           );
           let durableObjectNamespaces = getDurableObjects(existingSettings?.bindings);
@@ -5053,9 +5000,7 @@ export const LiveWorkerProvider = () =>
                 })
                 .pipe(
                   Effect.map(() => output),
-                  Effect.catchTag(["WorkerNotFound", "VersionNotFound"], () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag(["WorkerNotFound", "VersionNotFound"], () => Effect.undefined),
                 );
             }
             if (output?.previewOf !== undefined || olds?.preview?.of != null) {
@@ -5066,9 +5011,7 @@ export const LiveWorkerProvider = () =>
                 .getPreview({ accountId, workerId: output.previewOf, previewId: output.previewId })
                 .pipe(
                   Effect.map(() => output),
-                  Effect.catchTag(["WorkerNotFound", "PreviewNotFound"], () =>
-                    Effect.succeed(undefined),
-                  ),
+                  Effect.catchTag(["WorkerNotFound", "PreviewNotFound"], () => Effect.undefined),
                 );
             }
             if (output !== undefined && isUnscopedStub(output)) {
@@ -5158,7 +5101,7 @@ export const LiveWorkerProvider = () =>
                   })
                   .pipe(
                     Effect.map(() => output.versionId),
-                    Effect.catchTag("VersionNotFound", () => Effect.succeed(undefined)),
+                    Effect.catchTag("VersionNotFound", () => Effect.undefined),
                   )
               : undefined;
             const observeDomains = shouldObserveWorkerDomains(olds, output);
@@ -5203,10 +5146,7 @@ export const LiveWorkerProvider = () =>
             ]);
             const drift = [...observed].filter((h) => !classified.has(h));
             const serving = [...(keptName ? [keptName] : []), ...keptAliases, ...drift];
-            const observedDomain =
-              serving.length > 0
-                ? { name: serving[0], aliases: serving.slice(1), redirects: keptRedirects }
-                : undefined;
+            const observedDomain = resolveObservedWorkerDomain(serving, keptRedirects, declared);
             const urls = [
               ...serving.map((h) => `https://${h}`),
               ...(subdomain.enabled
@@ -5272,10 +5212,10 @@ export const LiveWorkerProvider = () =>
               // The dispatch-namespace endpoints report the same conditions as
               // `DispatchNamespaceScriptNotFound` / `DispatchNamespaceNotFound`.
               Effect.catchTags({
-                WorkerNotFound: () => Effect.succeed(undefined),
-                WorkerHasNoVersions: () => Effect.succeed(undefined),
-                DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
-                DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+                WorkerNotFound: () => Effect.undefined,
+                WorkerHasNoVersions: () => Effect.undefined,
+                DispatchNamespaceScriptNotFound: () => Effect.undefined,
+                DispatchNamespaceNotFound: () => Effect.undefined,
               }),
             ),
         ),
@@ -5336,10 +5276,10 @@ export const LiveWorkerProvider = () =>
               schedule: Schedule.max([Schedule.exponential(250), Schedule.recurs(6)]),
             }),
             Effect.catchTags({
-              WorkerNotFound: () => Effect.succeed(undefined),
-              WorkerHasNoVersions: () => Effect.succeed(undefined),
-              DispatchNamespaceScriptNotFound: () => Effect.succeed(undefined),
-              DispatchNamespaceNotFound: () => Effect.succeed(undefined),
+              WorkerNotFound: () => Effect.undefined,
+              WorkerHasNoVersions: () => Effect.undefined,
+              DispatchNamespaceScriptNotFound: () => Effect.undefined,
+              DispatchNamespaceNotFound: () => Effect.undefined,
             }),
           );
           yield* Effect.logInfo(
@@ -5499,12 +5439,12 @@ export const LiveWorkerProvider = () =>
           // expensive, so trust the persisted route ids (refreshed by
           // `read`) and tolerate already-deleted routes.
           if (output.routes?.length) {
-            yield* Effect.all(
-              output.routes.map((route) =>
+            yield* Effect.forEach(
+              output.routes,
+              (route) =>
                 workers
                   .deleteRoute({ zoneId: route.zoneId, routeId: route.id })
                   .pipe(Effect.catchTag("RouteNotFound", () => Effect.void)),
-              ),
               { concurrency: "unbounded" },
             );
           }
@@ -5531,7 +5471,11 @@ export const LiveWorkerProvider = () =>
     }),
   );
 
-const contentTypeForModule = (filePath: string) => {
+/** @internal Upload content type of a bundled module, by its rule's type or path. */
+export const contentTypeForModule = (filePath: string, type?: string) => {
+  if (type === "Text") return "text/plain";
+  if (type === "Data") return "application/octet-stream";
+  if (type === "CompiledWasm") return "application/wasm";
   // Vendored Python packages upload as opaque data, mirroring Wrangler's
   // vendored-module rules — with one exception: the `workers-runtime-sdk`
   // JS shims under `python_modules/workers/` must be ES modules so the

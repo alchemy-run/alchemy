@@ -270,10 +270,10 @@ export const collectPages = <Page, A, E, R>(
 
 export const getConnectorConfig = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : chromemanagement
         .getCustomersConnectorConfigs({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const listConnectorConfigsAt = (parent: string) =>
   parent.length === 0

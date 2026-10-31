@@ -18,6 +18,13 @@ import type { SecurityGroupId } from "./SecurityGroup.ts";
 import type { SubnetId } from "./Subnet.ts";
 import type { VpcId } from "./Vpc.ts";
 
+export class VpcEndpointUnexpectedResponse extends Data.TaggedError(
+  "VpcEndpointUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
 export type VpcEndpointId<ID extends string = string> = `vpce-${ID}`;
 export const VpcEndpointId = <ID extends string>(id: ID): ID & VpcEndpointId<ID> =>
   `vpce-${id}` as ID & VpcEndpointId<ID>;
@@ -323,7 +330,11 @@ export const VpcEndpointProvider = () =>
           Effect.flatMap((ep) =>
             ep
               ? Effect.succeed(ep)
-              : Effect.fail(new Error(`VPC Endpoint ${vpcEndpointId} not found`)),
+              : Effect.fail(
+                  new VpcEndpointUnexpectedResponse({
+                    message: `VPC Endpoint ${vpcEndpointId} not found`,
+                  }),
+                ),
           ),
         );
 
@@ -763,9 +774,11 @@ const waitForVpcEndpointDeleted = (vpcEndpointId: string, session: ScopedPlanSta
   }).pipe(
     Effect.retry({
       while: (e) => e._tag === "VpcEndpointDeleting",
-      schedule: Schedule.max([Schedule.fixed(3000), Schedule.recurs(60)]).pipe(
+      // Interface endpoints sometimes take well over 3 minutes to leave
+      // `deleting`; budget 10.
+      schedule: Schedule.max([Schedule.fixed(5000), Schedule.recurs(120)]).pipe(
         Schedule.tap(({ attempt }) =>
-          session.note(`Waiting for VPC Endpoint deletion... (${attempt * 3}s)`),
+          session.note(`Waiting for VPC Endpoint deletion... (${attempt * 5}s)`),
         ),
       ),
     }),

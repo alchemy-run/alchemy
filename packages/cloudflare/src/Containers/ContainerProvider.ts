@@ -3,7 +3,7 @@ import { Docker } from "@alchemy.run/docker/Docker";
 import { isInlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import { repositoryFromImageRef } from "@alchemy.run/docker/Registry";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
-import { Unowned, Unresolved } from "alchemy/AdoptPolicy";
+import { Unowned, Unresolved, UnresolvedIdentity } from "alchemy/AdoptPolicy";
 import { AlchemyContext } from "alchemy/AlchemyContext";
 import { getStableContextDir } from "alchemy/Bundle/TempRoot";
 import { deepEqual, isResolved } from "alchemy/Diff";
@@ -12,6 +12,7 @@ import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { type ResourceBinding } from "alchemy/Resource";
 import { sha256Object } from "alchemy/Util/sha256";
 import { normalizeNulls } from "alchemy/Util/stable";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as FileSystem from "effect/FileSystem";
@@ -47,8 +48,27 @@ import {
 } from "./ContainerConfiguration.ts";
 import { waitForContainerImage } from "./ContainerImagePreparation.ts";
 import { ContainerPlatform } from "./ContainerPlatform.ts";
-import { retryContainerPublication } from "./ContainerPublication.ts";
+import { retryContainerBuild, retryContainerPublication } from "./ContainerPublication.ts";
 import { retryNamespacePropagation } from "./DurableObjectApplication.ts";
+
+export class ContainerProviderConflict extends Data.TaggedError("ContainerProviderConflict")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ContainerProviderOperationFailed extends Data.TaggedError(
+  "ContainerProviderOperationFailed",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class ContainerProviderUnexpectedResponse extends Data.TaggedError(
+  "ContainerProviderUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 /**
  * The image source resolved from a {@link ContainerApplicationProps}. Selects
@@ -69,6 +89,8 @@ type ImageBuild =
       readonly kind: "external";
       readonly context: string;
       readonly dockerfile: string;
+      readonly buildArgs?: Record<string, string>;
+      readonly buildSecrets?: Record<string, Redacted.Redacted<string>>;
     }
   | {
       readonly kind: "remote";
@@ -348,7 +370,7 @@ export const LiveContainerProvider = () =>
             imageRef,
           });
         }
-        return yield* Schema.decodeUnknownEffect(RegistryDigest)(
+        return yield* Schema.decodeEffect(RegistryDigest)(
           response.headers["docker-content-digest"],
         ).pipe(
           Effect.mapError((cause) =>
@@ -389,7 +411,7 @@ export const LiveContainerProvider = () =>
         const makeRef = (imageHash: string) =>
           `${registryId}/${accountId}/${repositoryName}:${imageHash}`;
 
-        yield* validateContainerImageProps(props);
+        yield* validateContainerImageProps(id, props);
 
         // Preserve serialized imageName keys so existing publication hashes remain valid.
         // Variant 1 — Effect-native program. Bundle `main` and build a
@@ -486,16 +508,26 @@ export const LiveContainerProvider = () =>
           const { context, dockerfile } = yield* materializeInlineDockerfileContext(id, content);
           const imageHash = (yield* sha256Object({
             dockerfile: content,
+            // Absent rather than `{}` when unset, so existing hashes hold.
+            buildArgs: props.build?.args,
             imageName: props.publish?.repository?.toLowerCase(),
           })).slice(0, 16);
           return {
-            build: { kind: "external" as const, context, dockerfile },
+            build: {
+              kind: "external" as const,
+              context,
+              dockerfile,
+              buildArgs: props.build?.args,
+              buildSecrets: props.build?.secrets,
+            },
             imageRef: makeRef(imageHash),
             imageHash,
             // The local runtime builds the same materialized context.
             dev: {
               context: path.relative(process.cwd(), context),
               dockerfile: "Dockerfile",
+              buildArgs: props.build?.args,
+              buildSecrets: props.build?.secrets,
               env,
             },
           };
@@ -510,7 +542,7 @@ export const LiveContainerProvider = () =>
         // Hash what Docker can consume, including gitignored files and file
         // modes, but excluding ancestor lockfiles outside the build context.
         const contextHash = yield* hashDockerBuildInputs(
-          { context, dockerfile, platform: publicationPlatform },
+          { context, dockerfile, platform: publicationPlatform, buildArgs: props.build?.args },
           "effective",
         );
         const imageHash = (yield* sha256Object({
@@ -518,7 +550,13 @@ export const LiveContainerProvider = () =>
           imageName: props.publish?.repository?.toLowerCase(),
         })).slice(0, 16);
         return {
-          build: { kind: "external" as const, context, dockerfile },
+          build: {
+            kind: "external" as const,
+            context,
+            dockerfile,
+            buildArgs: props.build?.args,
+            buildSecrets: props.build?.secrets,
+          },
           imageRef: makeRef(imageHash),
           imageHash,
           // The local runtime builds the user's Dockerfile against the same
@@ -526,6 +564,8 @@ export const LiveContainerProvider = () =>
           dev: {
             context: path.relative(process.cwd(), context),
             dockerfile: path.relative(context, dockerfile),
+            buildArgs: props.build?.args,
+            buildSecrets: props.build?.secrets,
             env,
           },
         };
@@ -556,7 +596,7 @@ export const LiveContainerProvider = () =>
         if (build.kind !== "remote" || reuseRemotePublication) {
           const digest = yield* resolveRegistryDigest(imageRef, credentials).pipe(
             Effect.catchTag("ContainerRegistryError", (error) =>
-              error.reason === "ImageNotFound" ? Effect.succeed(undefined) : Effect.fail(error),
+              error.reason === "ImageNotFound" ? Effect.undefined : Effect.fail(error),
             ),
           );
           if (digest !== undefined) {
@@ -607,11 +647,13 @@ export const LiveContainerProvider = () =>
                 context: build.context,
                 platform,
                 file: build.dockerfile,
+                "build-arg": build.buildArgs,
+                secrets: build.buildSecrets,
               },
               session,
               credentials,
             )
-            .pipe(retryContainerPublication);
+            .pipe(retryContainerBuild);
         } else {
           // Effect-native program: materialize the generated Dockerfile and
           // bundled chunks into a stable staging dir, then build.
@@ -650,7 +692,7 @@ export const LiveContainerProvider = () =>
               session,
               credentials,
             )
-            .pipe(retryContainerPublication);
+            .pipe(retryContainerBuild);
         }
 
         // Resolve the pushed manifest digest from the registry itself rather
@@ -800,7 +842,7 @@ export const LiveContainerProvider = () =>
 
       /** The build inputs and content hash of a Durable Object Container's image. */
       const computeDurableObjectImage = (id: string, props: DurableObjectContainerProps) =>
-        hasImageSource(props) ? computeImage(id, props, {}) : Effect.succeed(undefined);
+        hasImageSource(props) ? computeImage(id, props, {}) : Effect.undefined;
 
       /**
        * Publish the Container's image to Cloudflare's registry and wait until
@@ -987,11 +1029,9 @@ export const LiveContainerProvider = () =>
           );
           const existing = yield* findApplicationByName(name);
           if (!existing) {
-            return yield* Effect.fail(
-              new Error(
-                `Container application "${name}" already exists but could not be found for adoption.`,
-              ),
-            );
+            return yield* new ContainerProviderUnexpectedResponse({
+              message: `Container application "${name}" already exists but could not be found for adoption.`,
+            });
           }
           return yield* upsertApplication({
             id,
@@ -1023,14 +1063,12 @@ export const LiveContainerProvider = () =>
                     existingName: existing?.name,
                   });
                   if (!recovery.canAdopt) {
-                    return yield* Effect.fail(new Error(recovery.message));
+                    return yield* new ContainerProviderConflict({ message: recovery.message });
                   }
                   if (!existing) {
-                    return yield* Effect.fail(
-                      new Error(
-                        `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
-                      ),
-                    );
+                    return yield* new ContainerProviderUnexpectedResponse({
+                      message: `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
+                    });
                   }
                   return yield* upsertApplication({
                     id,
@@ -1042,9 +1080,10 @@ export const LiveContainerProvider = () =>
                   });
                 })
               : Effect.fail(
-                  new Error(
-                    "Durable Object namespace already has a container application. Set AdoptPolicy to adopt it.",
-                  ),
+                  new ContainerProviderConflict({
+                    message:
+                      "Durable Object namespace already has a container application. Set AdoptPolicy to adopt it.",
+                  }),
                 ),
           ),
           Effect.catchIf(
@@ -1103,9 +1142,10 @@ export const LiveContainerProvider = () =>
             `Cloudflare Container update: ${existing.applicationName} has no effective changes`,
           );
           yield* session.note(`Container application ${existing.applicationName} is unchanged.`);
+          // `existing` is the observed application; keep its configuration,
+          // which `read` reports with Cloudflare's defaults filled in.
           return {
             ...existing,
-            configuration,
             hash: {
               image: imageHash,
               digest: imageDigest,
@@ -1165,10 +1205,32 @@ export const LiveContainerProvider = () =>
             configuration,
             rollout: news.rollout,
           });
+          yield* session.note(`Waiting for the rollout of ${updated.applicationName} to land...`);
+        }
+        // Cloudflare keeps reporting the previous version and configuration
+        // until the rollout lands, then reports the configuration with its
+        // defaults filled in. Save the application as `read` will see it.
+        const observed = yield* retryForContainerApplicationReadiness(
+          "read",
+          updated.applicationId,
+          Containers.getContainerApplication({ accountId, applicationId: updated.applicationId }),
+        ).pipe(
+          Effect.repeat({
+            schedule: Schedule.spaced("2 seconds"),
+            until: (app) => !hasActiveRollout(app),
+            times: 30,
+          }),
+        );
+        if (hasActiveRollout(observed)) {
+          yield* Effect.logInfo(
+            `Cloudflare Container update: rollout of ${updated.applicationName} is still in progress`,
+          );
+          yield* session.note(
+            `Rollout of ${updated.applicationName} is still in progress; saved the application as it was before the rollout.`,
+          );
         }
         return {
-          ...updated,
-          configuration,
+          ...toAttributes(observed),
           hash: {
             image: imageHash,
             digest: imageDigest,
@@ -1190,7 +1252,7 @@ export const LiveContainerProvider = () =>
           (d, i, arr) => arr.findIndex((other) => other.namespaceId === d.namespaceId) === i,
         );
         if (uniqueDos.length === 0) {
-          return Effect.succeed(undefined);
+          return Effect.undefined;
         }
         if (uniqueDos.length === 1) {
           return Effect.succeed(uniqueDos[0]);
@@ -1256,7 +1318,7 @@ export const LiveContainerProvider = () =>
           const application = yield* Containers.getContainerApplication({
             accountId: output.accountId,
             applicationId: output.applicationId,
-          }).pipe(Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)));
+          }).pipe(Effect.catchTag("ContainerApplicationNotFound", () => Effect.undefined));
           if (
             application &&
             (application.id !== output.applicationId ||
@@ -1298,6 +1360,16 @@ export const LiveContainerProvider = () =>
             : Unowned(observed);
         }),
         precreate: Effect.fn(function* ({ id, news = {}, session }) {
+          if (!isResolved(nameOf(news))) {
+            return yield* new UnresolvedIdentity({
+              message:
+                `Container(${id}): its name depends on a resource in this ` +
+                "Container's dependency cycle, so precreate cannot name the application. " +
+                "Use a literal name, or one from outside the cycle.",
+              resourceType: "Cloudflare.Container",
+              logicalId: id,
+            });
+          }
           yield* validateContainerConfiguration(news);
           const name = yield* createApplicationName(id, nameOf(news));
           yield* Effect.logInfo(`Cloudflare Container precreate: starting ${name}`);
@@ -1393,7 +1465,7 @@ export const LiveContainerProvider = () =>
                 ...toAttributes(app),
                 hash: output.hash,
               })),
-              Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+              Effect.catchTag("ContainerApplicationNotFound", () => Effect.undefined),
             );
           }
           if (!existing) {
@@ -1423,11 +1495,9 @@ export const LiveContainerProvider = () =>
           // the same apply and the convergence pass attaches it. A missing
           // application is never created without its attachment.
           if (hasUnresolvedAttachment && durableObjectsForRecovery === undefined && !existing) {
-            return yield* Effect.fail(
-              new Error(
-                `Container application "${name}" has an unresolved Durable Object namespace and no recorded attachment. Reconcile its Worker first.`,
-              ),
-            );
+            return yield* new ContainerProviderOperationFailed({
+              message: `Container application "${name}" has an unresolved Durable Object namespace and no recorded attachment. Reconcile its Worker first.`,
+            });
           }
           const { build, imageRef, imageHash, dev } = yield* computeImage(id, news, env);
 
@@ -1451,11 +1521,9 @@ export const LiveContainerProvider = () =>
               });
               if (recovery.canAdopt) {
                 if (!owner) {
-                  return yield* Effect.fail(
-                    new Error(
-                      `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
-                    ),
-                  );
+                  return yield* new ContainerProviderUnexpectedResponse({
+                    message: `Container application for Durable Object namespace "${durableObjects.namespaceId}" already exists but could not be found for adoption.`,
+                  });
                 }
                 return yield* upsertApplication({
                   id,
@@ -1754,12 +1822,12 @@ const isOwnedApplication = (
   previous: { applicationId: string } | undefined,
 ) => explicitName === undefined || observed.applicationId === previous?.applicationId;
 
+// Durable Object applications have no rollouts.
+const hasActiveRollout = (application: Containers.GetContainerApplicationResponse) =>
+  "activeRolloutId" in application && !!application.activeRolloutId;
+
 const toAttributes = (
-  application:
-    | Containers.CreateContainerApplicationResponse
-    | Containers.UpdateContainerApplicationResponse
-    | Containers.GetContainerApplicationResponse
-    | Containers.ListContainerApplicationsResponse[number],
+  application: Containers.CreateContainerApplicationResponse,
 ): ContainerApplication["Attributes"] => {
   // Durable Object applications have no scaling, affinities or versions.
   const scheduled = "version" in application ? application : undefined;

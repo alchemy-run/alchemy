@@ -202,7 +202,7 @@ const getFilter = (accountId: string, filterId: string) =>
     })
     .pipe(
       Effect.map((filter): ObservedFilter | undefined => filter),
-      Effect.catchTag("TcpFlowProtectionFilterNotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("TcpFlowProtectionFilterNotFound", () => Effect.undefined),
     );
 
 /**

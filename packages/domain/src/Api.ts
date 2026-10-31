@@ -29,14 +29,18 @@ import * as Stream from "effect/Stream";
 import * as Tracer from "effect/Tracer";
 import type * as Aggregate from "./Aggregate.ts";
 import * as Command from "./Command.ts";
-import type * as Event from "./Event.ts";
 import { type Filter, matches } from "./Filter.ts";
-import { captureContext } from "./internal.ts";
 import { decodeEnvelope } from "./Kernel.ts";
 import * as Key from "./Key.ts";
 import * as Middleware from "./Middleware.ts";
 import * as Model from "./Model.ts";
-import type { AggregateStore, StreamStore, Subscription, ViewStore } from "./Platform.ts";
+import {
+  type AggregateStore,
+  captureContext,
+  type StreamStore,
+  type Subscription,
+  type ViewStore,
+} from "./Platform.ts";
 import type * as Read from "./Read.ts";
 import { contractOf, nameOf, readRpcs } from "./ReadRpcs.ts";
 import * as RequestContext from "./RequestContext.ts";
@@ -484,7 +488,9 @@ const withCaughtUp = <A>(
 
 type Handler = (input: never) => unknown;
 
-const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string, Handler>> =>
+const handlersOf = (
+  entries: ReadonlyArray<Entry>,
+): Effect.Effect<Record<string, Handler>, never, Model.Internals> =>
   Effect.gen(function* () {
     const internals = yield* Model.Internals;
     const handlers: Record<string, Handler> = {};
@@ -499,6 +505,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
         // (the session's actor) travels with the command to its aggregate.
         handlers[entry.tag] = ({ target, commandId, input }: CommandPayload) =>
           declared.effect(
+            // oxlint-disable-next-line effecttsgo/new-schema-class -- `make` on a generic command class loses its instance type
             aggregate.send(target, new entry(input), { commandId }).pipe(
               Effect.map((receipt) => ({
                 reply: receipt.reply,
@@ -651,7 +658,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
           rpcs.list!,
           ({ key: id, atLeast, where, order, take, after }) =>
             host.query(refOf(id), { atLeast }).pipe(
-              Effect.flatMap((found) => check("list", refOf(id))(Option.getOrNull(found))),
+              Effect.flatMap((found) => found.pipe(Option.getOrNull, check("list", refOf(id)))),
               Effect.andThen(
                 host.list(refOf(id), {
                   where: where as Filter<unknown> | undefined,
@@ -715,7 +722,7 @@ const handlersOf = (entries: ReadonlyArray<Entry>): Effect.Effect<Record<string,
       });
     }
     return handlers;
-  }) as Effect.Effect<Record<string, Handler>>;
+  });
 
 // ---------------------------------------------------------------- live reads
 
@@ -1067,7 +1074,7 @@ const build = (
  *
  * const BankLive = SessionLive.pipe(
  *   Layer.provideMerge(Bank.layer(BankPolicies)),
- *   Layer.provide(DomainCloudflare.DurableObjects),
+ *   Layer.provide(DomainCloudflare.layerDurableObjects()),
  * );
  *
  * export default class BankWorker extends Cloudflare.Worker<BankWorker>()(
@@ -1240,8 +1247,8 @@ export const protocolWebSocket = (
             if (ended) return;
             // A close without an `Exit` (a deploy, an evicted object) reconnects and resumes.
             if (++failures > RECONNECTS) {
-              return yield* new RpcClientError.RpcClientError({
-                reason: new RpcClientError.RpcClientDefect({
+              return yield* RpcClientError.RpcClientError.make({
+                reason: RpcClientError.RpcClientDefect.make({
                   message: `Live read ${request.tag} lost its connection`,
                   cause: Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined,
                 }),

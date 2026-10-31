@@ -157,7 +157,7 @@ export const NotificationConfigurationProvider = () =>
         return yield* pinNotificationsRegion(
           notifications
             .getNotificationConfiguration({ arn })
-            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined))),
+            .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined)),
         );
       });
 
@@ -219,7 +219,7 @@ export const NotificationConfigurationProvider = () =>
                   aggregationDuration: news.aggregationDuration,
                   tags: news.tags,
                 })
-                .pipe(Effect.catchTag("ConflictException", () => Effect.succeed(undefined))),
+                .pipe(Effect.catchTag("ConflictException", () => Effect.undefined)),
             );
             live = created ? yield* getByArn(created.arn) : yield* findByName(desiredName);
           }

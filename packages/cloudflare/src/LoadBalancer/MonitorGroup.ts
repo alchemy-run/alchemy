@@ -237,7 +237,7 @@ type ObservedMonitorGroup =
 const getMonitorGroup = (accountId: string, monitorGroupId: string) =>
   loadBalancers
     .getMonitorGroup({ accountId, monitorGroupId })
-    .pipe(Effect.catchTag("MonitorGroupNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("MonitorGroupNotFound", () => Effect.undefined));
 
 /**
  * Find a monitor group by exact description. If several carry the same

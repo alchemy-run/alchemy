@@ -5,7 +5,7 @@ description: How a policy reacts to events with commands and calls to outside sy
 
 import DAG from "../../../components/DAG.astro";
 
-A policy is one of the business's standing rules about what to do when something happens. Whenever a customer registers, the bank opens their main account. Whenever an account's withdrawals for the day cross a threshold, the bank has it scored for fraud, and freezes it if the risk is high.
+A policy is one of the business's standing rules about what to do when something happens. In the example bank, whenever a customer registers, their main account is opened, and whenever an account's withdrawals for the day cross a threshold, it's scored for fraud and frozen if the risk is high.
 
 The name comes from business policy, and that's the point: a policy doesn't just react, it decides. It's triggered by an event, works out whether and how to act, and acts by sending commands to aggregates or calling systems outside the model.
 

@@ -5,10 +5,16 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags, hasAlchemyTags } from "alchemy/Tags";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { Providers } from "../Providers.ts";
+
+export class StudioUnexpectedResponse extends Data.TaggedError("StudioUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export interface StudioProps {
   /**
@@ -212,7 +218,7 @@ export const StudioProvider = () =>
       const readStudio = Effect.fn(function* (studioId: string) {
         const response = yield* emr
           .describeStudio({ StudioId: studioId })
-          .pipe(Effect.catchTag("StudioNotFound", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("StudioNotFound", () => Effect.undefined));
         return response?.Studio;
       });
 
@@ -230,9 +236,9 @@ export const StudioProvider = () =>
 
       const toAttrs = Effect.fn(function* (studio: emr.Studio) {
         if (!studio.StudioId || !studio.StudioArn || !studio.Name) {
-          return yield* Effect.fail(
-            new Error(`EMR Studio '${studio.StudioId}' is missing its ARN`),
-          );
+          return yield* new StudioUnexpectedResponse({
+            message: `EMR Studio '${studio.StudioId}' is missing its ARN`,
+          });
         }
         return {
           studioId: studio.StudioId,
@@ -346,15 +352,15 @@ export const StudioProvider = () =>
               }),
             );
             if (!created.StudioId) {
-              return yield* Effect.fail(
-                new Error(`CreateStudio for '${name}' returned no StudioId`),
-              );
+              return yield* new StudioUnexpectedResponse({
+                message: `CreateStudio for '${name}' returned no StudioId`,
+              });
             }
             observed = yield* readStudio(created.StudioId);
             if (observed === undefined) {
-              return yield* Effect.fail(
-                new Error(`EMR Studio '${created.StudioId}' not visible after create`),
-              );
+              return yield* new StudioUnexpectedResponse({
+                message: `EMR Studio '${created.StudioId}' not visible after create`,
+              });
             }
           }
           const studioId = observed.StudioId!;

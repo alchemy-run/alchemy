@@ -256,7 +256,7 @@ const isSystemGroupName = (name: string | null | undefined): boolean =>
 const getResourceGroup = (accountId: string, resourceGroupId: string) =>
   iam.getResourceGroup({ accountId, resourceGroupId }).pipe(
     Effect.map((g): ObservedResourceGroup | undefined => g),
-    Effect.catchTag("ResourceGroupNotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("ResourceGroupNotFound", () => Effect.undefined),
   );
 
 /**

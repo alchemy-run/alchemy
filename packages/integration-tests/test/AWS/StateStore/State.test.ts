@@ -15,6 +15,7 @@ import * as Logger from "effect/Logger";
 import * as Redacted from "effect/Redacted";
 import * as References from "effect/References";
 import * as Schedule from "effect/Schedule";
+import * as Stream from "effect/Stream";
 
 const { test } = Test.make({ providers: AWS.providers() });
 
@@ -794,9 +795,69 @@ test.provider(
   },
 );
 
+// A large deploy can queue its lease refresh behind thousands of state
+// writes until the lease lapses. Nobody else took it, so the deploy keeps
+// going; a deploy that did take it wins.
+test.provider(
+  "a lease that lapsed while still held is taken back unless another deploy took it",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const bucket = yield* stack.deploy(AWS.S3.Bucket("StateBucket", { forceDestroy: true }));
+      const options = { bucketName: bucket.bucketName, prefix: "lease-lapse" };
+      const stage = "lapse";
+      const key = `lease-lapse/${STACK}/${stage}/__lease__.json`;
+      const created = resource("Queue", { queueUrl: "https://example.com/a" });
+      const request = { stack: STACK, stage, fqn: created.fqn, value: created };
+      const lapse = Effect.gen(function* () {
+        const object = yield* s3.getObject({ Bucket: bucket.bucketName, Key: key });
+        const lease = JSON.parse(yield* Stream.mkString(Stream.decodeText(object.Body!)));
+        yield* s3.putObject({
+          Bucket: bucket.bucketName,
+          Key: key,
+          Body: JSON.stringify({ ...lease, expiresAt: 0 }),
+          ContentType: "application/json",
+        });
+      });
+      // Past the store's 5s trust in its last lease check.
+      const pastCheck = Effect.sleep("6 seconds");
+
+      yield* Effect.scoped(
+        Effect.gen(function* () {
+          const held = yield* makeS3State(options);
+          yield* held.set(request);
+          yield* lapse;
+          yield* pastCheck;
+          yield* held.set({ ...request, value: { ...created, attr: { queueUrl: "b" } } });
+          expect(yield* held.get({ stack: STACK, stage, fqn: created.fqn })).toMatchObject({
+            attr: { queueUrl: "b" },
+          });
+
+          // Lapsed again, and this time another deploy takes it.
+          yield* lapse;
+          yield* Effect.scoped(
+            Effect.gen(function* () {
+              const other = yield* makeS3State(options);
+              yield* other.list({ stack: STACK, stage });
+              yield* pastCheck;
+              const lost = yield* held.set(request).pipe(Effect.flip);
+              expect(lost.message).toContain("was lost mid-run");
+              yield* other.deleteStack({ stack: STACK, stage });
+            }),
+          );
+        }),
+      );
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:aws", "provider:aws:s3", "provider:aws:statestore", "live"],
+    timeout: 120_000,
+  },
+);
+
 // Each deploy/destroy of a Stack declaring the S3 state store releases its
 // lease when it finishes, so a file can redeploy and destroy that Stack.
-const s3Stack = { providers: AWS.providers(), state: AWS.state() };
+const s3Stack = { providers: AWS.providers(), state: AWS.state({ backend: "s3" }) };
 const s3Harness = Test.make(s3Stack);
 
 const S3StateStack = Alchemy.Stack(

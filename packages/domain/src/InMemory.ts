@@ -194,7 +194,7 @@ export const make = (
         const instances = new Map<
           string,
           {
-            state: Json | null;
+            state: Json;
             version: number;
             readonly receipts: Map<string, SendResult>;
             /** Ids cancelled and not scheduled again since. */
@@ -631,18 +631,18 @@ export const make = (
           receive: (delivery) =>
             Effect.suspend(() => {
               running++;
-              return Effect.forkDetach(
-                lockFor(delivery.key)
-                  .withPermits(1)(kit.run(delivery))
-                  .pipe(
-                    Effect.catchCause((cause) =>
-                      Effect.sync(() => failures.push(cause)).pipe(
-                        Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
-                      ),
+              return lockFor(delivery.key)
+                .withPermits(1)(kit.run(delivery))
+                .pipe(
+                  Effect.catchCause((cause) =>
+                    Effect.sync(() => failures.push(cause)).pipe(
+                      Effect.andThen(Effect.logError(`policy ${kit.name} failed`, cause)),
                     ),
-                    Effect.ensuring(Effect.sync(() => running--)),
                   ),
-              ).pipe(Effect.asVoid);
+                  Effect.ensuring(Effect.sync(() => running--)),
+                  Effect.forkDetach,
+                  Effect.asVoid,
+                );
             }),
         };
       }),
@@ -660,7 +660,7 @@ export const make = (
 /**
  * Host a domain model in the current process: aggregates, views and policies,
  * with nothing to deploy. Use it in tests and single-process apps; swap it
- * for `DomainCloudflare.DurableObjects` and nothing else changes.
+ * for `DomainCloudflare.layerDurableObjects()` and nothing else changes.
  *
  * ### Hosting in memory
  * **Example:** A model with its policies

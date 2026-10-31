@@ -1,19 +1,32 @@
 import * as ec2 from "@distilled.cloud/aws/ec2";
+import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved, somePropsAreDifferent } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import type { ScopedPlanStatusSession } from "alchemy/Report";
 import { Resource } from "alchemy/Resource";
-import { createInternalTags, createTagsList, diffTags, hasTags } from "alchemy/Tags";
+import {
+  createInternalTags,
+  createTagsList,
+  diffTags,
+  hasAlchemyTags,
+  hasTags,
+} from "alchemy/Tags";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import type { AccountID } from "../Environment.ts";
+import { tagListRecord } from "../internal/Observe.ts";
 import type { Providers } from "../Providers.ts";
 import type { RegionID } from "../Region.ts";
 import { retryWhileLingeringEnis } from "./LingeringEnis.ts";
 import type { VpcId } from "./Vpc.ts";
+
+export class SubnetUnexpectedResponse extends Data.TaggedError("SubnetUnexpectedResponse")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type SubnetId<ID extends string = string> = `subnet-${ID}`;
 export const SubnetId = <ID extends string>(id: ID): ID & SubnetId<ID> =>
@@ -153,11 +166,6 @@ export interface Subnet extends Resource<
     state: ec2.SubnetState;
 
     /**
-     * The number of available IPv4 addresses in the subnet.
-     */
-    availableIpAddressCount: number;
-
-    /**
      * Whether instances launched in the subnet get public IPv4 addresses.
      */
     mapPublicIpOnLaunch: boolean;
@@ -207,6 +215,12 @@ export interface Subnet extends Resource<
       enableResourceNameDnsARecord?: boolean;
       enableResourceNameDnsAAAARecord?: boolean;
     };
+
+    /**
+     * Tags on the subnet, as observed. Lets `alchemy drift` detect
+     * out-of-band changes.
+     */
+    tags?: Record<string, string>;
   },
   never,
   Providers
@@ -367,6 +381,36 @@ export const SubnetProvider = () =>
           ) {
             return { action: "replace" };
           }
+        }),
+
+        read: Effect.fn(function* ({ id, olds, output }) {
+          const alchemyTags = yield* createInternalTags(id);
+          let subnet: ec2.Subnet | undefined;
+          if (output?.subnetId) {
+            subnet = (yield* ec2
+              .describeSubnets({ SubnetIds: [output.subnetId] })
+              .pipe(
+                Effect.catchTag("InvalidSubnetID.NotFound", () => Effect.succeed({ Subnets: [] })),
+              )).Subnets?.[0];
+          } else if (olds?.vpcId && olds.cidrBlock) {
+            // No persisted id (interrupted create): find this stack's subnet
+            // at the VPC + CIDR by its ownership tags.
+            subnet = yield* ec2.describeSubnets
+              .items({
+                Filters: [
+                  { Name: "vpc-id", Values: [olds.vpcId] },
+                  { Name: "cidr-block", Values: [olds.cidrBlock] },
+                ],
+              })
+              .pipe(
+                Stream.filter((s) => hasTags(alchemyTags, tagListRecord(s.Tags))),
+                Stream.runHead,
+                Effect.map(Option.getOrUndefined),
+              );
+          }
+          if (!subnet?.SubnetId) return undefined;
+          const attrs = toSubnetAttributes(subnet);
+          return (yield* hasAlchemyTags(id, attrs.tags)) ? attrs : Unowned(attrs);
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -545,7 +589,9 @@ export const SubnetProvider = () =>
           });
           const final = finalLookup.Subnets?.[0];
           if (!final) {
-            return yield* Effect.fail(new Error(`Subnet ${subnetId} disappeared during reconcile`));
+            return yield* new SubnetUnexpectedResponse({
+              message: `Subnet ${subnetId} disappeared during reconcile`,
+            });
           }
           return toSubnetAttributes(final);
         }),
@@ -618,7 +664,6 @@ const toSubnetAttributes = (subnet: ec2.Subnet): Subnet["Attributes"] => ({
   availabilityZone: subnet.AvailabilityZone!,
   availabilityZoneId: subnet.AvailabilityZoneId,
   state: subnet.State!,
-  availableIpAddressCount: subnet.AvailableIpAddressCount ?? 0,
   mapPublicIpOnLaunch: subnet.MapPublicIpOnLaunch ?? false,
   assignIpv6AddressOnCreation: subnet.AssignIpv6AddressOnCreation ?? false,
   defaultForAz: subnet.DefaultForAz ?? false,
@@ -633,6 +678,7 @@ const toSubnetAttributes = (subnet: ec2.Subnet): Subnet["Attributes"] => ({
   })),
   enableDns64: subnet.EnableDns64,
   ipv6Native: subnet.Ipv6Native,
+  tags: tagListRecord(subnet.Tags),
   privateDnsNameOptionsOnLaunch: subnet.PrivateDnsNameOptionsOnLaunch
     ? {
         hostnameType: subnet.PrivateDnsNameOptionsOnLaunch.HostnameType,
@@ -664,7 +710,7 @@ const waitForSubnetAvailable = (subnetId: string, session?: ScopedPlanStatusSess
     const subnet = result.Subnets?.[0];
 
     if (!subnet) {
-      return yield* Effect.fail(new Error(`Subnet ${subnetId} not found`));
+      return yield* new SubnetUnexpectedResponse({ message: `Subnet ${subnetId} not found` });
     }
 
     if (subnet.State === "available") {

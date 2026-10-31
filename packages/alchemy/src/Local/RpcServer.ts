@@ -7,13 +7,14 @@ import * as Fiber from "effect/Fiber";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import type { HttpClient } from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
-import * as Logger from "effect/Logger";
 import * as Scope from "effect/Scope";
 import { ArtifactStore, createArtifactStore } from "../Artifacts.ts";
 import type { ProviderService } from "../Provider.ts";
 import type { ResourceLike } from "../Resource.ts";
-import { makePlainConsoleSink } from "../Util/ConsoleSink.ts";
+import { childJsonLogLayer, LOG_FORMAT_ENV, LogProcess } from "../Util/LogRecord.ts";
 import { platformLayer, PlatformServices, runMain } from "../Util/PlatformServices.ts";
+import { logShutdown } from "../Util/Shutdown.ts";
+import { processTrace, withTraceParent } from "../Util/TraceParent.ts";
 import * as RpcSerialization from "./RpcSerialization.ts";
 import * as RpcServerEnvironment from "./RpcServerEnvironment.ts";
 import type { SessionEnvironment } from "./RpcServerEnvironment.ts";
@@ -156,7 +157,7 @@ const sessionProviders = (resolve: ProviderGroupLoader) =>
           };
           sessions.set(key, session);
           const current = session;
-          Effect.runSync(
+          Effect.runSyncWith(ambient)(
             Scope.addFinalizer(
               current.scope,
               // Calls drain before provider finalizers and artifact disposal.
@@ -195,7 +196,7 @@ const sessionProviders = (resolve: ProviderGroupLoader) =>
           );
         }
         const groupScope = Scope.forkUnsafe(current.resources);
-        const pending = Effect.runPromise(
+        const pending = Effect.runPromiseWith(ambient)(
           resolve(group).pipe(
             Effect.flatMap((providers) =>
               Layer.buildWithMemoMap(
@@ -265,7 +266,7 @@ const sessionProviders = (resolve: ProviderGroupLoader) =>
           lease.closing =
             session === undefined
               ? Promise.resolve()
-              : Effect.runPromise(Scope.close(session.scope, Exit.void));
+              : Effect.runPromiseWith(ambient)(Scope.close(session.scope, Exit.void));
           return lease.closing;
         },
         get: async (sessionEnv, type, group, lease) => {
@@ -332,14 +333,15 @@ export const launch = (providers: ProviderLayer | ProviderGroupLoader) =>
       sessionProviders(Layer.isLayer(providers) ? () => Effect.succeed(providers) : providers),
     ),
     Layer.provide(Layer.mergeAll(PlatformServices, FetchHttpClient.layer)),
-    // Sidecar stdio is piped, so effect's default pretty logger disables
-    // colors (it only checks `isTTY`, never FORCE_COLOR). The spawner sets
-    // FORCE_COLOR exactly when the destination terminal supports color —
-    // honor it here so sidecar log lines match the rest of the dev output.
-    Layer.provide(
-      process.env.FORCE_COLOR ? Logger.layer([makePlainConsoleSink(true)]) : Layer.empty,
-    ),
     Layer.launch,
+    logShutdown("sidecar"),
+    // Spans outside RPC calls join the `alchemy dev` trace, like its records.
+    withTraceParent(processTrace),
+    // The spawner asks for JSON records: the process that owns the
+    // terminal decodes and renders them, so structure (level, resource,
+    // text as written) survives the pipe.
+    Effect.provide(process.env[LOG_FORMAT_ENV] === "json" ? childJsonLogLayer : Layer.empty),
+    Effect.provideService(LogProcess, "sidecar"),
     Effect.scoped,
     runMain,
   );
@@ -363,15 +365,17 @@ export const layerServer = (
     /** Called when the parent connection, indicated by the `/parent` path, is established. */
     parentConnected: () => void;
     /** Called when the parent disconnects. The server will shut down when this is called. */
-    parentDisconnected: () => void;
+    /** The parent link closed; `detail` says how, when the server knows. */
+    parentDisconnected: (detail?: string) => void;
   }) => Effect.Effect<{ readonly url: string }, never, Scope.Scope>,
 ) =>
   Layer.effect(
     RpcServer,
     Effect.gen(function* () {
       const providers = yield* SessionProviders;
+      const context = yield* Effect.context();
       const connected = yield* Deferred.make<void>();
-      const disconnected = yield* Deferred.make<void>();
+      const disconnected = yield* Deferred.make<string | undefined>();
       const { url } = yield* serve({
         createRpcSession: (ws, sessionEnv) => {
           const lease: SessionLease = { closed: false, calls: new Set() };
@@ -395,18 +399,22 @@ export const layerServer = (
             // deliberately retain their contexts across hot reloads.
             if (testOwned) {
               void providers.release(lease).catch((error) => {
-                Effect.runFork(Effect.logError(error));
+                Effect.runForkWith(context)(Effect.logError(error));
               });
             }
           };
           return session;
         },
         parentConnected: () => Deferred.doneUnsafe(connected, Effect.void),
-        parentDisconnected: () => Deferred.doneUnsafe(disconnected, Effect.void),
+        parentDisconnected: (detail) => Deferred.doneUnsafe(disconnected, Effect.succeed(detail)),
       });
       yield* Console.log(`<ALCHEMY_RPC_ADDRESS>${url}</ALCHEMY_RPC_ADDRESS>`);
       yield* Deferred.await(connected).pipe(Effect.timeout("10 seconds")); // TODO(john): should the timeout be shorter?
-      yield* Deferred.await(disconnected);
+      // The sidecar exits with its parent; record why the link closed.
+      const detail = yield* Deferred.await(disconnected);
+      yield* Effect.logInfo(
+        `parent connection closed${detail === undefined ? "" : ` (${detail})`}; shutting down`,
+      );
       return yield* Effect.interrupt;
     }),
   );

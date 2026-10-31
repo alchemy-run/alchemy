@@ -499,7 +499,7 @@ const getByName = (project: string, region: string, networkEndpointGroup: string
       region,
       networkEndpointGroup,
     })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const requireGroup = (project: string, region: string, networkEndpointGroupName: string) =>
   getByName(project, region, networkEndpointGroupName).pipe(

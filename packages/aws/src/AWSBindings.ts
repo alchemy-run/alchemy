@@ -447,7 +447,8 @@ export const withCredentials: <Op>(
   if (!globalThis.__ALCHEMY_RUNTIME__) {
     const host = yield* Binding.Host;
     if (region !== undefined && host !== undefined && !runsAsRole(host)) {
-      yield* region as Effect.Effect<Effect.Effect<string>>;
+      // Only the outer Effect: it binds attributes onto the host at deploy.
+      yield* Effect.asVoid(region as Effect.Effect<Effect.Effect<string>>);
     }
     return yield* operation as Effect.Effect<Op>;
   }

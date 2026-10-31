@@ -34,7 +34,7 @@ Use a view when a fold describes the read model well. Use a stream when a projec
 
 ## Declare a stream
 
-A stream names its key and the events its entries may be. The bank keeps a card per account, one entry each time the card changes.
+A stream names its key and the events its entries may be. The example keeps a card per account, one entry each time the card changes.
 
 ```typescript title="packages/domain/src/Account/AccountCard.stream.ts"
 export class CardChanged extends Domain.Event("CardChanged", {

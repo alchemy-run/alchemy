@@ -529,7 +529,7 @@ const needsUpdate = (current: compute.HealthCheck, desired: compute.HealthCheck)
 const getByName = (project: string, region: string, healthCheck: string) =>
   compute
     .getRegionHealthChecks({ project, region, healthCheck })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const awaitResource = (project: string, region: string, healthCheckName: string) =>
   getByName(project, region, healthCheckName).pipe(
@@ -630,7 +630,7 @@ export const RegionHealthCheckProvider = () =>
           })
           .pipe(
             Effect.flatMap((operation) => waitRegionOperation(env.project, region, operation)),
-            Effect.catchTag("Conflict", () => Effect.succeed(undefined)),
+            Effect.catchTag("Conflict", () => Effect.undefined),
           );
         current = yield* awaitResource(env.project, region, healthCheckName);
       }
@@ -678,7 +678,7 @@ export const RegionHealthCheckProvider = () =>
             schedule: Schedule.spaced("2 seconds"),
             times: 8,
           }),
-          Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFound", () => Effect.undefined),
         );
       if (operation !== undefined) {
         yield* waitRegionOperation(env.project, region, operation).pipe(

@@ -6,6 +6,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import { createInternalTags, diffTags } from "alchemy/Tags";
 import { toSeconds } from "alchemy/Util/Duration";
+import * as Data from "effect/Data";
 import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
@@ -17,6 +18,18 @@ import type {
   LaunchTemplateName,
   LaunchTemplate as LaunchTemplateResource,
 } from "./LaunchTemplate.ts";
+
+export class AutoScalingGroupUnexpectedResponse extends Data.TaggedError(
+  "AutoScalingGroupUnexpectedResponse",
+)<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
+
+export class AutoScalingGroupNotReady extends Data.TaggedError("AutoScalingGroupNotReady")<{
+  readonly message: string;
+  readonly cause?: unknown;
+}> {}
 
 export type AutoScalingGroupName = string;
 
@@ -88,6 +101,22 @@ export interface AutoScalingGroupProps {
    */
   terminationPolicies?: string[];
   /**
+   * Instance attributes (vCPUs, memory, burstable, generations, …) to launch
+   * by instead of the launch template's instance type. Auto Scaling picks
+   * every instance type that matches.
+   *
+   * When set, the group is configured with a mixed instances policy whose
+   * single override carries these requirements; removing it switches the
+   * group back to the plain launch template.
+   */
+  instanceRequirements?: autoscaling.InstanceRequirements;
+  /**
+   * How capacity is spread across Availability Zones. Removing it resets the
+   * group to the AWS default.
+   * @default { CapacityDistributionStrategy: "balanced-best-effort" }
+   */
+  availabilityZoneDistribution?: autoscaling.AvailabilityZoneDistribution;
+  /**
    * Tags to apply to the Auto Scaling Group itself.
    */
   tags?: Record<string, string>;
@@ -154,6 +183,15 @@ export interface AutoScalingGroup extends Resource<
      * Termination policies applied on scale-in.
      */
     terminationPolicies?: string[];
+    /**
+     * Instance requirements of the group's mixed instances policy, when it
+     * launches by attributes rather than a fixed instance type.
+     */
+    instanceRequirements?: autoscaling.InstanceRequirements;
+    /**
+     * How capacity is spread across Availability Zones.
+     */
+    availabilityZoneDistribution?: autoscaling.AvailabilityZoneDistribution;
     /**
      * Tags on the Auto Scaling Group.
      */
@@ -222,6 +260,26 @@ export interface AutoScalingGroup extends Resource<
  * });
  * ```
  *
+ * ### Choosing Instance Types by Attributes
+ * **Example:** Launch any burstable type with 2 vCPUs and 4–8 GiB
+ * ```typescript
+ * const group = yield* AutoScalingGroup("Fleet", {
+ *   launchTemplate: template,
+ *   subnetIds: [subnetA.subnetId, subnetB.subnetId],
+ *   minSize: 1,
+ *   maxSize: 4,
+ *   instanceRequirements: {
+ *     VCpuCount: { Min: 2, Max: 2 },
+ *     MemoryMiB: { Min: 4096, Max: 8192 },
+ *     BurstablePerformance: "required",
+ *   },
+ *   // keep zones strictly balanced instead of launching elsewhere
+ *   availabilityZoneDistribution: {
+ *     CapacityDistributionStrategy: "balanced-only",
+ *   },
+ * });
+ * ```
+ *
  * ### Scaling
  * **Example:** Track average CPU utilization
  * ```typescript
@@ -237,6 +295,8 @@ export interface AutoScalingGroup extends Resource<
  * @resource
  */
 export const AutoScalingGroup = Resource<AutoScalingGroup>("AWS.AutoScaling.AutoScalingGroup");
+
+const DEFAULT_CAPACITY_DISTRIBUTION_STRATEGY = "balanced-best-effort";
 
 const sortStrings = (values: readonly string[] = []) =>
   [...values].sort((a, b) => a.localeCompare(b));
@@ -292,7 +352,8 @@ export const AutoScalingGroupProvider = () =>
         return {
           LaunchTemplateId: spec.launchTemplateId as string | undefined,
           LaunchTemplateName: spec.launchTemplateName as string | undefined,
-          Version: spec.version === undefined ? "$Default" : String(spec.version),
+          Version:
+            spec.version === undefined ? "$Default" : String(spec.version as string | number),
         };
       };
 
@@ -378,31 +439,40 @@ export const AutoScalingGroupProvider = () =>
 
       const toAttributes = (
         group: autoscaling.AutoScalingGroup,
-      ): AutoScalingGroup["Attributes"] => ({
-        autoScalingGroupArn: group.AutoScalingGroupARN!,
-        autoScalingGroupName: group.AutoScalingGroupName!,
-        launchTemplateId: group.LaunchTemplate?.LaunchTemplateId,
-        launchTemplateName: group.LaunchTemplate?.LaunchTemplateName,
-        launchTemplateVersion: group.LaunchTemplate?.Version,
-        subnetIds: String(group.VPCZoneIdentifier ?? "")
-          .split(",")
-          .filter(Boolean),
-        minSize: group.MinSize ?? 0,
-        maxSize: group.MaxSize ?? 0,
-        desiredCapacity: group.DesiredCapacity ?? 0,
-        targetGroupArns: sortStrings(group.TargetGroupARNs ?? []),
-        healthCheckType: group.HealthCheckType,
-        healthCheckGracePeriod: group.HealthCheckGracePeriod,
-        defaultCooldown: group.DefaultCooldown,
-        terminationPolicies: group.TerminationPolicies ?? [],
-        tags: Object.fromEntries(
-          (group.Tags ?? [])
-            .filter((tag): tag is { Key: string; Value: string } =>
-              Boolean(tag.Key && tag.Value !== undefined),
-            )
-            .map((tag) => [tag.Key, tag.Value]),
-        ),
-      });
+      ): AutoScalingGroup["Attributes"] => {
+        // A group launching by attributes carries its template inside the
+        // mixed instances policy instead of `LaunchTemplate`.
+        const mixed = group.MixedInstancesPolicy?.LaunchTemplate;
+        const launchTemplate = group.LaunchTemplate ?? mixed?.LaunchTemplateSpecification;
+        return {
+          autoScalingGroupArn: group.AutoScalingGroupARN!,
+          autoScalingGroupName: group.AutoScalingGroupName!,
+          launchTemplateId: launchTemplate?.LaunchTemplateId,
+          launchTemplateName: launchTemplate?.LaunchTemplateName,
+          launchTemplateVersion: launchTemplate?.Version,
+          subnetIds: String(group.VPCZoneIdentifier ?? "")
+            .split(",")
+            .filter(Boolean),
+          minSize: group.MinSize ?? 0,
+          maxSize: group.MaxSize ?? 0,
+          desiredCapacity: group.DesiredCapacity ?? 0,
+          targetGroupArns: sortStrings(group.TargetGroupARNs ?? []),
+          healthCheckType: group.HealthCheckType,
+          healthCheckGracePeriod: group.HealthCheckGracePeriod,
+          defaultCooldown: group.DefaultCooldown,
+          terminationPolicies: group.TerminationPolicies ?? [],
+          instanceRequirements: mixed?.Overrides?.find((o) => o.InstanceRequirements)
+            ?.InstanceRequirements,
+          availabilityZoneDistribution: group.AvailabilityZoneDistribution,
+          tags: Object.fromEntries(
+            (group.Tags ?? [])
+              .filter((tag): tag is { Key: string; Value: string } =>
+                Boolean(tag.Key && tag.Value !== undefined),
+              )
+              .map((tag) => [tag.Key, tag.Value]),
+          ),
+        };
+      };
 
       return {
         stables: ["autoScalingGroupArn", "autoScalingGroupName"],
@@ -443,7 +513,22 @@ export const AutoScalingGroupProvider = () =>
             ...news.tags,
           };
           const targetGroupArns = sortStrings((news.targetGroupArns ?? []) as string[]);
-          const launchTemplate = toLaunchTemplateSpec(news.launchTemplate);
+          // With instance requirements the template goes inside a mixed
+          // instances policy; without, it is the plain `LaunchTemplate`.
+          // Either form replaces the other on `updateAutoScalingGroup`.
+          const launchTemplate = news.instanceRequirements
+            ? {
+                MixedInstancesPolicy: {
+                  LaunchTemplate: {
+                    LaunchTemplateSpecification: toLaunchTemplateSpec(news.launchTemplate),
+                    Overrides: [{ InstanceRequirements: news.instanceRequirements }],
+                  },
+                },
+              }
+            : { LaunchTemplate: toLaunchTemplateSpec(news.launchTemplate) };
+          const capacityDistributionStrategy =
+            news.availabilityZoneDistribution?.CapacityDistributionStrategy ??
+            DEFAULT_CAPACITY_DISTRIBUTION_STRATEGY;
           const healthCheckType =
             news.healthCheckType ?? (targetGroupArns.length > 0 ? "ELB" : "EC2");
 
@@ -462,7 +547,10 @@ export const AutoScalingGroupProvider = () =>
                 MinSize: news.minSize,
                 MaxSize: news.maxSize,
                 DesiredCapacity: news.desiredCapacity ?? news.minSize,
-                LaunchTemplate: launchTemplate,
+                ...launchTemplate,
+                AvailabilityZoneDistribution: {
+                  CapacityDistributionStrategy: capacityDistributionStrategy,
+                },
                 VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
                 TargetGroupARNs: targetGroupArns,
                 HealthCheckType: healthCheckType,
@@ -480,9 +568,9 @@ export const AutoScalingGroupProvider = () =>
               Effect.filterOrFail(
                 Boolean,
                 () =>
-                  new Error(
-                    `Auto Scaling Group '${autoScalingGroupName}' was not readable after create`,
-                  ),
+                  new AutoScalingGroupUnexpectedResponse({
+                    message: `Auto Scaling Group '${autoScalingGroupName}' was not readable after create`,
+                  }),
               ),
               Effect.retry({
                 while: () => true,
@@ -494,14 +582,23 @@ export const AutoScalingGroupProvider = () =>
           // Sync core ASG configuration — `updateAutoScalingGroup`
           // overwrites min/max/desired/template/subnets/health-check
           // settings in one call, so we issue it unconditionally
-          // (idempotent for matching values).
+          // (idempotent for matching values). The zone distribution is
+          // diffed against the observed group (absent = the AWS default)
+          // and sent only when it differs.
+          const observedCapacityDistributionStrategy =
+            existing.AvailabilityZoneDistribution?.CapacityDistributionStrategy ??
+            DEFAULT_CAPACITY_DISTRIBUTION_STRATEGY;
           yield* autoscaling
             .updateAutoScalingGroup({
               AutoScalingGroupName: autoScalingGroupName,
               MinSize: news.minSize,
               MaxSize: news.maxSize,
               DesiredCapacity: news.desiredCapacity,
-              LaunchTemplate: launchTemplate,
+              ...launchTemplate,
+              AvailabilityZoneDistribution:
+                observedCapacityDistributionStrategy === capacityDistributionStrategy
+                  ? undefined
+                  : { CapacityDistributionStrategy: capacityDistributionStrategy },
               VPCZoneIdentifier: (news.subnetIds as string[]).join(","),
               HealthCheckType: healthCheckType,
               HealthCheckGracePeriod: toSeconds(news.healthCheckGracePeriod),
@@ -533,9 +630,9 @@ export const AutoScalingGroupProvider = () =>
             Effect.filterOrFail(
               Boolean,
               () =>
-                new Error(
-                  `Auto Scaling Group '${autoScalingGroupName}' was not readable after reconcile`,
-                ),
+                new AutoScalingGroupUnexpectedResponse({
+                  message: `Auto Scaling Group '${autoScalingGroupName}' was not readable after reconcile`,
+                }),
             ),
           );
           yield* session.note(autoScalingGroupName);
@@ -554,10 +651,16 @@ export const AutoScalingGroupProvider = () =>
 
           yield* describeGroup(output.autoScalingGroupName).pipe(
             Effect.flatMap((group) =>
-              group ? Effect.fail(new Error("AutoScalingGroupStillExists")) : Effect.void,
+              group
+                ? Effect.fail(
+                    new AutoScalingGroupNotReady({ message: "AutoScalingGroupStillExists" }),
+                  )
+                : Effect.void,
             ),
             Effect.retry({
-              while: (error) => (error as Error).message === "AutoScalingGroupStillExists",
+              while: (error) =>
+                error._tag === "AutoScalingGroupNotReady" &&
+                error.message === "AutoScalingGroupStillExists",
               schedule: Schedule.max([Schedule.recurs(12), Schedule.exponential("250 millis")]),
             }),
           );

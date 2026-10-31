@@ -139,7 +139,7 @@ export const HostedZoneProvider = () =>
       const observe = Effect.fn(function* (id: string) {
         return yield* route53
           .getHostedZone({ Id: normalizeId(id) })
-          .pipe(Effect.catchTag("NoSuchHostedZone", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("NoSuchHostedZone", () => Effect.undefined));
       });
 
       const observedTags = Effect.fn(function* (id: string) {

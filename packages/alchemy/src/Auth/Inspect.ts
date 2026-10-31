@@ -7,7 +7,7 @@ import {
   type AuthProviders,
   type ProviderDetailLine,
 } from "./AuthProvider.ts";
-import type { ProviderConfig } from "./Profile.ts";
+import { ProfileStore, reloadProviderConfig, type ProviderConfig } from "./Profile.ts";
 
 /**
  * What a connected provider looks like right now. Establishing this means
@@ -93,7 +93,10 @@ export const inspectProvider = Effect.fn("inspectProvider")(function* (
     return broken(name, method, "error", "provider.invalid-config", decoded.failure.message);
   }
 
-  const details = yield* Effect.result(provider.details(profile, decoded.success, updateConfig));
+  const store = yield* ProfileStore;
+  const details = yield* Effect.result(
+    provider.details(profile, reloadProviderConfig(store, provider, profile), updateConfig),
+  );
   if (Result.isSuccess(details)) {
     return {
       name,

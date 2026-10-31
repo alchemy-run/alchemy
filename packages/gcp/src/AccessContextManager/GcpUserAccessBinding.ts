@@ -140,7 +140,7 @@ export const GcpUserAccessBinding = Resource<GcpUserAccessBinding>(
 export class GcpUserAccessBindingNotResolved extends Data.TaggedError(
   "GCP.AccessContextManager.GcpUserAccessBindingNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const toAttrs = (binding: acm.GcpUserAccessBinding): GcpUserAccessBinding["Attributes"] => {
@@ -163,7 +163,7 @@ const toAttrs = (binding: acm.GcpUserAccessBinding): GcpUserAccessBinding["Attri
 const getByName = (name: string) =>
   acm
     .getOrganizationsGcpUserAccessBindings({ name })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const listBindings = (organization: string) =>
   collectPages(
@@ -258,7 +258,7 @@ export const GcpUserAccessBindingProvider = () =>
               restrictedClientApplications: news.restrictedClientApplications,
             },
           })
-          .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (created !== undefined) {
           // ALREADY_EXISTS (6): a concurrent create won the race.
           const settled = yield* waitForOperation(created).pipe(
@@ -287,7 +287,7 @@ export const GcpUserAccessBindingProvider = () =>
 
       if (current === undefined || current.name === undefined) {
         return yield* new GcpUserAccessBindingNotResolved({
-          name: output?.name ?? `${organization}/${news.groupKey}`,
+          resourceName: output?.name ?? `${organization}/${news.groupKey}`,
         });
       }
 
@@ -330,7 +330,7 @@ export const GcpUserAccessBindingProvider = () =>
 
       if (current === undefined) {
         return yield* new GcpUserAccessBindingNotResolved({
-          name: output?.name ?? `${organization}/${news.groupKey}`,
+          resourceName: output?.name ?? `${organization}/${news.groupKey}`,
         });
       }
 
@@ -340,7 +340,7 @@ export const GcpUserAccessBindingProvider = () =>
     delete: Effect.fn(function* ({ output }) {
       const operation = yield* acm
         .deleteOrganizationsGcpUserAccessBindings({ name: output.name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
       if (operation !== undefined) {
         // NOT_FOUND (5): already gone.
         yield* waitForOperation(operation).pipe(

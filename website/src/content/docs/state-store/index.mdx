@@ -102,15 +102,16 @@ Subsequent runs detect the existing Worker and use it.
 
 In CI (`CI=true`) a missing store fails the run instead: a deploy there
 should find its store provisioned, not create one as a side effect.
-Provision it once ahead of time:
+Provision it once ahead of time. Without `--backend`, the command
+provisions the store your `alchemy.run.ts` configures:
 
 ```sh
-alchemy state bootstrap --backend cloudflare --profile <your-ci-profile>
+alchemy state bootstrap --profile <your-ci-profile>
 ```
 
-`AWS.state()` behaves the same way: it creates its S3 bucket on first
-use, except in CI, where `alchemy state bootstrap --backend aws`
-provisions it.
+`AWS.state()` behaves the same way: it creates its DynamoDB table on
+first use, except in CI, where `alchemy state bootstrap --backend aws`
+provisions it. See [AWS state store](#aws-state-store).
 
 `GCP.state()` does the same with a Cloud Storage bucket in your project,
 `alchemy-state-<project>`. In CI, provision it with
@@ -136,16 +137,94 @@ credentials:
 state: Cloudflare.state({ name: "team-a" }), // Worker alchemy-state-store-team-a
 ```
 
-Address it from the CLI with `--name`:
+Pass `workerName` instead to choose the full Worker name yourself:
+
+```typescript
+state: Cloudflare.state({ workerName: "acme-state" }),
+```
+
+Address a named store from the CLI with `--name`:
 
 ```sh
 alchemy state list --backend cloudflare --name team-a
 ```
 
-`AWS.state({ name })` does the same with a separate S3 bucket
-(`alchemy-state-<name>-<account>-<region>-an`). Pass `bucketName` to
-choose the full bucket name yourself. `GCP.state({ name })` uses
-`alchemy-state-<name>-<project>`.
+`AWS.state({ name })` does the same with a separate DynamoDB table,
+`alchemy-state-<name>`; pass `tableName` to choose the full table name
+yourself. `GCP.state({ name })` uses `alchemy-state-<name>-<project>`.
+
+### Pin the account
+
+The store lives in the Cloudflare account your profile resolves. If your
+credentials reach several accounts, pin it, so logging in to a different one
+fails instead of reading or deploying the store there:
+
+```typescript
+state: Cloudflare.state({ accountId: "c8eeff0e..." }),
+```
+
+### Serve it on your own domain
+
+The store answers on its `workers.dev` URL. Some networks can't reach
+`workers.dev`, so give it a hostname in one of your zones instead. Alchemy
+attaches it to the store's Worker as a custom domain and uses it from then on:
+
+```typescript
+state: Cloudflare.state({ domain: "alchemy-state.example.com" }),
+```
+
+## AWS state store
+
+`AWS.state()` keeps state in one on-demand DynamoDB table per account and region, `alchemy-state`. A deploy loads a stage's records with one query instead of reading an object per resource.
+
+```typescript
+Alchemy.Stack(
+  "MyApp",
+  {
+    providers: AWS.providers(),
+    state: AWS.state(),
+  },
+  Effect.gen(function* () {
+    // ...
+  }),
+);
+```
+
+A DynamoDB item holds at most 400 KB. A record larger than `overflowThreshold` (300 KiB by default) is written to an S3 overflow bucket, `alchemy-state-overflow-<account>-<region>-an`, and its item keeps the object's key.
+
+The store creates its table, with deletion protection, and the overflow bucket on first use, except in CI. Provision them ahead of time with:
+
+```sh
+alchemy state bootstrap --backend aws --profile <your-ci-profile>
+```
+
+`AWS.state({ name: "team-a" })` uses a separate table, `alchemy-state-team-a`. `kmsKeyId` encrypts the table and the overflow bucket with your own KMS key.
+
+The credentials that deploy need DynamoDB access to the table and S3 access to the overflow bucket. The first deploy of a stage also lists the old S3 store's bucket, to check the stage isn't still there; `migrateFrom: false` skips that.
+
+### Migrating from the S3 store
+
+Earlier versions kept AWS state in an S3 bucket, `alchemy-state-<account>-<region>-an`. A stage still there fails to deploy until you move it. Run this in the project, so it migrates the store your entrypoint configures:
+
+```sh
+alchemy state migrate --profile <your-profile>
+```
+
+The command moves every stage, or the ones `--stack` and `--stage` select. It closes each moved stage's S3 objects in the bucket policy, so every older alchemy, say in a CI job you haven't upgraded, fails at its first read instead of deploying from the old copy. The S3 objects stay where they are. A stage you create in DynamoDB afterwards is locked in S3 too, so a teammate still on the S3 store can't create it a second time.
+
+A stage another deploy is running is skipped and reported. Run the command again once that deploy finishes; it picks up where it stopped, including after a crash.
+
+To go back to an older alchemy, move the stages back first:
+
+```sh
+alchemy state migrate --rollback
+```
+
+Roll back with the version you migrated with, before downgrading. State written by a newer version may use fields an older one can't read.
+
+### Keeping state in S3
+
+`AWS.state({ backend: "s3" })` keeps using the S3 bucket. So does any config that passes `bucketName`, `prefix` or `encryption`, which only the S3 store takes. Bootstrap it with `--backend aws-s3`.
 
 ## Postgres state store
 
@@ -205,6 +284,42 @@ const state = TestState.state({
 
 The test harness (`@alchemy.run/test/Bun` and `@alchemy.run/test/Vitest`)
 handles state setup automatically.
+
+## Use a store without a stack file
+
+A provider's store is reachable from your profile alone, so scripts, CI jobs
+and one-off tools can read and manage state with no `alchemy.run.ts`. From the
+CLI, pass `--backend` to any `state` command:
+
+```sh
+alchemy state bootstrap --backend cloudflare --profile prod   # create or upgrade it
+alchemy state list --backend cloudflare --profile prod
+alchemy state logs --backend cloudflare --name team-a --tail
+```
+
+From code, use the `provider` source of [`Alchemist.State`](/cli/api#state):
+
+```typescript
+import * as Alchemist from "alchemy/Alchemist";
+import * as Effect from "effect/Effect";
+
+const source = { type: "provider", backend: "cloudflare", profile: "prod" } as const;
+
+const program = Effect.gen(function* () {
+  yield* Alchemist.State.bootstrap(source);
+  const state = yield* Alchemist.State.store(source);
+  return yield* state.listStacks();
+}).pipe(Effect.provide(Alchemist.layer()), Effect.scoped);
+```
+
+`Alchemist.State.layer(source)` provides the same store as a `State` layer.
+The backend is the provider's name: `cloudflare`, `aws` or `gcp`. Pass `name`
+for a [named store](#more-than-one-store-per-account).
+
+Only the profile and `name` pick the store this way. Options set in the stack
+file, such as a [pinned account](#pin-the-account) or a
+[custom domain](#serve-it-on-your-own-domain), aren't read; use the
+`configured` source (the CLI default, without `--backend`) when they matter.
 
 ## Writing your own state store
 

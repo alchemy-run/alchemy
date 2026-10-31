@@ -1,4 +1,7 @@
-import { retryContainerPublication } from "@alchemy.run/cloudflare/Containers/ContainerPublication";
+import {
+  retryContainerBuild,
+  retryContainerPublication,
+} from "@alchemy.run/cloudflare/Containers/ContainerPublication";
 import {
   DockerRegistryBlobUnknown,
   DockerRegistryUnavailable,
@@ -59,6 +62,32 @@ describe(
         { tags: ["provider:docker", "provider:docker:registry"] },
       );
     }
+
+    it.effect("retries a build attempt that stalls past its deadline", () =>
+      Effect.gen(function* () {
+        let attempts = 0;
+        const fiber = yield* Effect.suspend(() =>
+          ++attempts === 1 ? Effect.never : Effect.succeed("published"),
+        ).pipe(retryContainerBuild, Effect.forkChild);
+        yield* TestClock.adjust("3 minutes");
+        yield* TestClock.adjust("3 seconds");
+        expect(yield* Fiber.join(fiber)).toBe("published");
+        expect(attempts).toBe(2);
+      }),
+    );
+
+    it.effect("gives up on a build that keeps stalling", () =>
+      Effect.gen(function* () {
+        let attempts = 0;
+        const fiber = yield* Effect.suspend(() => {
+          attempts++;
+          return Effect.never;
+        }).pipe(retryContainerBuild, Effect.flip, Effect.forkChild);
+        yield* TestClock.adjust("20 minutes");
+        expect((yield* Fiber.join(fiber))._tag).toBe("TimeoutError");
+        expect(attempts).toBe(6);
+      }),
+    );
 
     it.effect("propagates other Docker errors without retrying", () =>
       Effect.gen(function* () {

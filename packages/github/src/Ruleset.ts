@@ -658,7 +658,7 @@ const getRuleset = Effect.fn(
       owner: props.owner,
       repo: props.repository,
       ruleset_id: rulesetId,
-    }).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   },
   (effect, props) => effect.pipe(withBaseUrl(props.baseUrl)),
 );

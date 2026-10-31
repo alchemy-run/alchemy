@@ -182,7 +182,7 @@ export type Feed = Resource<
 export const Feed = Resource<Feed>("GCP.CloudAsset.Feed");
 
 export class FeedNotResolved extends Data.TaggedError("GCP.CloudAsset.FeedNotResolved")<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resourceName = (parent: string, feedId: string) => `${parent}/feeds/${feedId}`;
@@ -235,10 +235,8 @@ const toAttrs = (feed: cloudasset.Feed, project: string) => {
 
 const getByName = (name: string) =>
   name.length === 0
-    ? Effect.succeed(undefined)
-    : cloudasset
-        .getFeeds({ name })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    ? Effect.undefined
+    : cloudasset.getFeeds({ name }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const observe = (project: string, feedId: string, outputName?: string) =>
   Effect.gen(function* () {
@@ -326,7 +324,7 @@ export const FeedProvider = () =>
       }
 
       if (current === undefined) {
-        return yield* new FeedNotResolved({ name });
+        return yield* new FeedNotResolved({ resourceName: name });
       }
 
       const currentName = current.name ?? name;

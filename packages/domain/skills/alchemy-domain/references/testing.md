@@ -75,7 +75,7 @@ Story.succeed("a-2", FraudCheck.score, { risk: 0.1 }),
 Story.succeed("a-1", FraudCheck.score, { risk: 0.95 }),
 ```
 
-Every call needs a `call` step before it's answered; each one matches a single call, earliest first. An untagged `succeed` with several calls waiting fails the story, and so does a call left unanswered at the end.
+An answer is checked against the operation's schemas like an adapter's, so a `succeed` or `fail` value the schema rejects fails the policy. Every call needs a `call` step before it's answered; each one matches a single call, earliest first. An untagged `succeed` with several calls waiting fails the story, and so does a call left unanswered at the end.
 
 `fail` answers a waiting call with the operation's declared `error:`, to test the branch where the vendor refuses. `die` answers it with a defect, as when the transport breaks. Both find the call the way `succeed` does, untagged or by tag, and only a declared error type-checks (any one of them, when the operation lists several):
 
@@ -103,6 +103,26 @@ story(
 ```
 
 More: [Testing models: Assert real calls](https://alchemy.run/domain/testing-models#assert-real-calls).
+
+### Every adapter, same tests
+
+An adapter is a Layer for the system's service. Run one set of tests against each adapter (vendor, in-memory fake, no-op) so a fake never drifts from the vendor:
+
+```ts
+for (const [adapter, layer] of [["Twilio", TwilioSms], ["fake", FakeSms]] as const) {
+  describe(`Sms: ${adapter}`, () => {
+    it.effect("counts the segments", () =>
+      Effect.gen(function* () {
+        const sms = yield* Sms;
+        const sent = yield* sms.send({ to: "+15550100", body: "x".repeat(200) });
+        expect(sent.segments).toBe(2);
+      }).pipe(Effect.provide(layer)),
+    );
+  });
+}
+```
+
+More: [Testing models: Run the same tests against every adapter](https://alchemy.run/domain/testing-models#run-the-same-tests-against-every-adapter).
 
 ### Sagas
 

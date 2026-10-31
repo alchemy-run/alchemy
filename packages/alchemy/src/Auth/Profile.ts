@@ -321,8 +321,7 @@ export const ProfileStoreLive = Layer.effect(
         return V0.mergeSidecar(provider, values, decoded.success);
       });
 
-    /** Expand the released v0 store and preserve every original file. */
-    const migrateCentralManifest = provideLockServices(
+    const migrateCentralManifestLocked = provideLockServices(
       withLock(
         "profiles-migrate",
         Effect.gen(function* () {
@@ -417,6 +416,12 @@ export const ProfileStoreLive = Layer.effect(
         }),
       ),
     );
+
+    /**
+     * Expand the released v0 store and preserve every original file. Checked
+     * once per process, on the first profile read, rather than on every read.
+     */
+    const migrateCentralManifest = yield* Effect.cached(migrateCentralManifestLocked);
 
     const readProviderFile = (profile: string, file: string) =>
       Effect.gen(function* () {
@@ -666,6 +671,29 @@ export const ProfileStoreLive = Layer.effect(
     } satisfies ProfileStoreService;
   }),
 );
+
+/**
+ * Re-read a provider's stored configuration, failing only with
+ * {@link AuthError}. Silent refreshes rotate single-use refresh tokens, so
+ * {@link AuthProvider.read}/{@link AuthProvider.details} take this effect and
+ * run it under the profile's credentials lock instead of a config read before
+ * it.
+ */
+export const reloadProviderConfig = <Config extends { method: string }>(
+  store: ProfileStoreService,
+  auth: AuthProvider<Config>,
+  profileName: string,
+): Effect.Effect<Config, AuthError> =>
+  store.loadProviderConfig(auth, profileName).pipe(
+    Effect.mapError((cause) =>
+      cause._tag === "AuthError"
+        ? cause
+        : AuthError.make({
+            message: `Could not reload ${auth.name} configuration for profile '${profileName}'.`,
+            cause,
+          }),
+    ),
+  );
 
 /** The name of the currently selected profile. */
 export const currentProfileName: Effect.Effect<string, ProfileError | PlatformError, ProfileStore> =

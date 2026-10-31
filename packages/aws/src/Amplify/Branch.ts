@@ -170,7 +170,7 @@ export const BranchProvider = () =>
             schedule: Schedule.exponential("2 seconds"),
             times: 3,
           }),
-          Effect.catchTag("NotFoundException", () => Effect.succeed(undefined)),
+          Effect.catchTag("NotFoundException", () => Effect.undefined),
         );
 
       const syncTags = Effect.fn(function* (

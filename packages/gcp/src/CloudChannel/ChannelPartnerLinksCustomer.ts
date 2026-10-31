@@ -170,7 +170,7 @@ export const ChannelPartnerLinksCustomer = Resource<ChannelPartnerLinksCustomer>
 export class ChannelPartnerLinksCustomerNotResolved extends Data.TaggedError(
   "GCP.CloudChannel.ChannelPartnerLinksCustomerNotResolved",
 )<{
-  name: string;
+  resourceName: string;
 }> {}
 
 const resolveParent = (newsParent: string, account?: string) =>
@@ -252,7 +252,7 @@ export const ChannelPartnerLinksCustomerProvider = () =>
 
       if (current === undefined) {
         return yield* new ChannelPartnerLinksCustomerNotResolved({
-          name: name || `${parent}/customers/${domain}`,
+          resourceName: name || `${parent}/customers/${domain}`,
         });
       }
 
