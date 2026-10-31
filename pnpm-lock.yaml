@@ -10852,6 +10852,9 @@ importers:
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
+      '@alchemy.run/kubernetes':
+        specifier: workspace:*
+        version: link:../kubernetes
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3

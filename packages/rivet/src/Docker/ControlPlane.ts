@@ -100,6 +100,8 @@ export const ControlPlane = (
       return {
         endpoint,
         nodeEndpoint: "http://rivet-engine:6420",
+        // `localhost` is the deploying machine's; callers run on the network.
+        clientEndpoint: "http://rivet-engine:6420",
         network: { kind: "docker", name: network.name },
         token: token.text,
         namespace: namespace.name,

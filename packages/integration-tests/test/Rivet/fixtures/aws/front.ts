@@ -2,7 +2,7 @@
 import * as Lambda from "@alchemy.run/aws/Lambda";
 import * as Effect from "effect/Effect";
 import { conformanceFetch } from "../../../Cloudflare/Workers/conformance/routes.ts";
-import { Counter } from "./counter.ts";
+import { Counter } from "../counter-declaration.ts";
 
 export default class Front extends Lambda.Function<Front>()(
   "RivetAwsFront",

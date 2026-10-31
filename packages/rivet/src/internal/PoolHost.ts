@@ -7,6 +7,7 @@
  * @internal
  */
 import { fileURLToPath } from "node:url";
+import type { Input } from "alchemy/Input";
 import * as Output from "alchemy/Output";
 import type { Provider } from "alchemy/Provider";
 import { Self } from "alchemy/Self";
@@ -14,6 +15,7 @@ import { Stack } from "alchemy/Stack";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
 import { Cluster, type ClusterShape } from "../Cluster.ts";
 import {
   DurableObjectTypeId,
@@ -56,14 +58,14 @@ const durableObjectsPlugin = (objects: ReadonlyArray<PoolDurableObject>) => {
   ];
 };
 
-/** `${stack}-${stage}-${id}`, as a pool name: lowercase DNS label, at most 63 characters. */
-const defaultPoolName = Effect.fn(function* (id: string) {
+/** `${stack}-${stage}-${id}` as a lowercase DNS label of at most `max` characters. */
+export const stackDnsLabel = Effect.fn(function* (id: string, max = 63) {
   const stack = yield* Stack;
   return `${stack.name}-${stack.stage}-${id}`
     .toLowerCase()
     .replace(/[^a-z0-9-]+/g, "-")
     .replace(/^-+|-+$/g, "")
-    .slice(0, 63)
+    .slice(0, max)
     .replace(/-+$/, "");
 });
 
@@ -148,7 +150,7 @@ export const makePoolLayer = <Network, Req>(options: {
       // Named up front, so a class knows its pool without depending on the
       // pool resource — whose bindings carry every class's env, which can
       // name other classes' pools.
-      const name = options.settings.name ?? (yield* defaultPoolName(options.id));
+      const name = options.settings.name ?? (yield* stackDnsLabel(options.id));
       const endpoint = cluster.nodeEndpoint ?? cluster.endpoint;
       yield* object.registerPool((env) =>
         Effect.gen(function* () {
@@ -172,7 +174,7 @@ export const makePoolLayer = <Network, Req>(options: {
           // What callers need to reach the class through the gateway.
           yield* object.bind`Pool`({
             pool: name,
-            endpoint,
+            endpoint: cluster.clientEndpoint ?? cluster.endpoint,
             namespace: cluster.namespace,
             token: cluster.token,
           });
@@ -199,6 +201,35 @@ export const makePoolLayer = <Network, Req>(options: {
         }),
       );
     }),
+  );
+
+/** A cluster value as an Output, whether it is one already or a plain value. */
+const output = <T>(value: Input<T>): Output.Output<T> =>
+  (Output.isOutput(value) ? value : Output.literal(value)) as Output.Output<T>;
+
+/**
+ * Every value a node needs, as plain strings, for hosts whose environments
+ * hold no `Redacted` (AWS task and instance environments, Kubernetes env).
+ * `endpoint` overrides the control plane URL nodes connect to.
+ */
+export const nodeEnvironment = (
+  { pool, environment }: PoolNodes<unknown>,
+  endpoint: Input<string> = environment.RIVET_ENDPOINT,
+) =>
+  Output.all(
+    pool.env,
+    output(endpoint),
+    output(environment.RIVET_TOKEN),
+    output(environment.RIVET_NAMESPACE),
+    environment.RIVET_POOL,
+  ).pipe(
+    Output.map(([env, url, token, namespace, poolName]) => ({
+      ...env,
+      RIVET_ENDPOINT: url,
+      RIVET_TOKEN: Redacted.value(token),
+      RIVET_NAMESPACE: namespace,
+      RIVET_POOL: poolName,
+    })),
   );
 
 /**

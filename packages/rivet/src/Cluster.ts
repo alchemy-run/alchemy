@@ -18,6 +18,13 @@ export type ClusterNetwork =
       readonly name: Input<string>;
     }
   | {
+      /** A Kubernetes cluster; nodes run in its namespace and reach {@link ClusterShape.nodeEndpoint}. */
+      readonly kind: "kubernetes";
+      /** The cluster (a `Kubernetes.ClusterLike`). */
+      readonly cluster: unknown;
+      readonly namespace: string;
+    }
+  | {
       /** An AWS VPC; nodes run in its subnets with its node security group. */
       readonly kind: "aws";
       readonly vpcId: Input<string>;
@@ -39,6 +46,11 @@ export interface ClusterShape {
    * differs from {@link endpoint}: a private address inside {@link network}.
    */
   readonly nodeEndpoint?: Input<string> | undefined;
+  /**
+   * The URL `yield* SomeDurableObject` callers are given, when it differs
+   * from {@link endpoint}.
+   */
+  readonly clientEndpoint?: Input<string> | undefined;
   /** The network nodes must join to reach {@link nodeEndpoint}. */
   readonly network?: ClusterNetwork | undefined;
   /** The control plane's admin token. */
