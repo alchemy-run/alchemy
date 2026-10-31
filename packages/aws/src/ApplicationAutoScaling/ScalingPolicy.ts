@@ -44,16 +44,28 @@ export interface ScalingPolicyProps {
    * (e.g. `ECSServiceAverageCPUUtilization`) or a customized CloudWatch
    * metric specification against a target value.
    *
-   * Exactly one of `targetTracking` or `stepScaling` must be provided.
+   * Exactly one of `targetTracking`, `stepScaling` or `predictiveScaling`
+   * must be provided.
    */
   targetTracking?: aas.TargetTrackingScalingPolicyConfiguration;
   /**
    * Step scaling configuration — apply step adjustments in response to a
    * CloudWatch alarm you manage.
    *
-   * Exactly one of `targetTracking` or `stepScaling` must be provided.
+   * Exactly one of `targetTracking`, `stepScaling` or `predictiveScaling`
+   * must be provided.
    */
   stepScaling?: aas.StepScalingPolicyConfiguration;
+  /**
+   * Predictive scaling configuration — forecast load from up to 14 days of
+   * metric history and scale out ahead of it. It never scales in, so pair it
+   * with a target tracking policy. `Mode: "ForecastOnly"` forecasts without
+   * scaling.
+   *
+   * Exactly one of `targetTracking`, `stepScaling` or `predictiveScaling`
+   * must be provided.
+   */
+  predictiveScaling?: aas.PredictiveScalingPolicyConfiguration;
 }
 
 export interface ScalingPolicy extends Resource<
@@ -81,7 +93,7 @@ export interface ScalingPolicy extends Resource<
      */
     scalableDimension: aas.ScalableDimension;
     /**
-     * Policy type (`TargetTrackingScaling` or `StepScaling`).
+     * Policy type (`TargetTrackingScaling`, `StepScaling` or `PredictiveScaling`).
      */
     policyType: aas.PolicyType;
     /**
@@ -99,6 +111,11 @@ export interface ScalingPolicy extends Resource<
      * out-of-band changes.
      */
     stepScaling?: unknown;
+    /**
+     * Predictive scaling configuration, as observed. Lets `alchemy drift`
+     * detect out-of-band changes.
+     */
+    predictiveScaling?: unknown;
   },
   never,
   Providers
@@ -108,8 +125,9 @@ export interface ScalingPolicy extends Resource<
  * An Application Auto Scaling scaling policy attached to a scalable target.
  *
  * Supports `TargetTrackingScaling` (Application Auto Scaling creates and
- * manages the CloudWatch alarms) and `StepScaling` (you attach the policy to
- * your own alarm). The policy applies to the scalable target identified by
+ * manages the CloudWatch alarms), `StepScaling` (you attach the policy to
+ * your own alarm) and `PredictiveScaling` (forecasts load from metric history
+ * and scales out ahead of it). The policy applies to the scalable target identified by
  * the (`serviceNamespace`, `resourceId`, `scalableDimension`) triple, which
  * must be registered (see {@link ScalableTarget}) before the policy is
  * created — pass the target's outputs so deployment orders correctly.
@@ -175,14 +193,54 @@ export interface ScalingPolicy extends Resource<
  * });
  * ```
  *
+ * ### Predictive Scaling
+ * **Example:** Forecast a Customized Metric
+ * ```typescript
+ * yield* ScalingPolicy("ApiPredictivePolicy", {
+ *   serviceNamespace: target.serviceNamespace,
+ *   resourceId: target.resourceId,
+ *   scalableDimension: target.scalableDimension,
+ *   predictiveScaling: {
+ *     Mode: "ForecastOnly",
+ *     MetricSpecifications: [
+ *       {
+ *         TargetValue: 100,
+ *         CustomizedLoadMetricSpecification: {
+ *           MetricDataQueries: [
+ *             {
+ *               Id: "load",
+ *               MetricStat: {
+ *                 Metric: { MetricName: "Requests", Namespace: "MyApp" },
+ *                 Stat: "Sum",
+ *               },
+ *             },
+ *           ],
+ *         },
+ *         CustomizedScalingMetricSpecification: {
+ *           MetricDataQueries: [
+ *             {
+ *               Id: "scaling",
+ *               MetricStat: {
+ *                 Metric: { MetricName: "Requests", Namespace: "MyApp" },
+ *                 Stat: "Average",
+ *               },
+ *             },
+ *           ],
+ *         },
+ *       },
+ *     ],
+ *   },
+ * });
+ * ```
+ *
  * @resource
  */
 export const ScalingPolicy = Resource<ScalingPolicy>("AWS.ApplicationAutoScaling.ScalingPolicy");
 
 /**
- * Raised before any AWS call when a `ScalingPolicy` declares both or neither
- * of `targetTracking` / `stepScaling` — the two configurations are mutually
- * exclusive and exactly one is required.
+ * Raised before any AWS call when a `ScalingPolicy` declares more or fewer than
+ * one of `targetTracking` / `stepScaling` / `predictiveScaling` — the
+ * configurations are mutually exclusive and exactly one is required.
  */
 export class ScalingPolicyConfigurationConflict extends Data.TaggedError(
   "ScalingPolicyConfigurationConflict",
@@ -191,11 +249,15 @@ export class ScalingPolicyConfigurationConflict extends Data.TaggedError(
 const validateConfiguration = (props: {
   targetTracking?: aas.TargetTrackingScalingPolicyConfiguration;
   stepScaling?: aas.StepScalingPolicyConfiguration;
+  predictiveScaling?: aas.PredictiveScalingPolicyConfiguration;
 }) =>
-  (props.targetTracking === undefined) === (props.stepScaling === undefined)
+  [props.targetTracking, props.stepScaling, props.predictiveScaling].filter(
+    (config) => config !== undefined,
+  ).length !== 1
     ? Effect.fail(
         new ScalingPolicyConfigurationConflict({
-          message: "Exactly one of targetTracking or stepScaling must be provided.",
+          message:
+            "Exactly one of targetTracking, stepScaling or predictiveScaling must be provided.",
         }),
       )
     : Effect.void;
@@ -250,6 +312,7 @@ export const ScalingPolicyProvider = () =>
         })),
         targetTracking: plainJson(policy.TargetTrackingScalingPolicyConfiguration),
         stepScaling: plainJson(policy.StepScalingPolicyConfiguration),
+        predictiveScaling: plainJson(policy.PredictiveScalingPolicyConfiguration),
       });
 
       return {
@@ -308,7 +371,9 @@ export const ScalingPolicyProvider = () =>
           const policyName = yield* toName(id, news);
           const policyType: aas.PolicyType = news.targetTracking
             ? "TargetTrackingScaling"
-            : "StepScaling";
+            : news.predictiveScaling
+              ? "PredictiveScaling"
+              : "StepScaling";
 
           // Ensure + sync — `putScalingPolicy` is the single
           // create-or-update API, keyed by (name, target triple); it
@@ -325,6 +390,7 @@ export const ScalingPolicyProvider = () =>
               PolicyType: policyType,
               TargetTrackingScalingPolicyConfiguration: news.targetTracking,
               StepScalingPolicyConfiguration: news.stepScaling,
+              PredictiveScalingPolicyConfiguration: news.predictiveScaling,
             }),
           );
 
