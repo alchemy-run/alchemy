@@ -1616,6 +1616,9 @@ export const RELAY_FANOUT = 6;
 /** How long a key works on its history before it answers a relay that is waiting for it. */
 const RELAY_KEY_WAIT_MS = 10_000;
 
+/** How many subtrees a run's root lists the directory into, at least: see `makeRelay`. */
+const FRONTIER_SIZE = 512;
+
 /** A relay's count of the calls the account's load refused. */
 interface Tally {
   refused: number;
@@ -1824,15 +1827,15 @@ export const makeRelay = (net: Network) => {
     });
 
   /**
-   * The subtrees a run's root paces its passes over: the directory listed two
-   * levels below each source's subtree (256 nodes per source at scale), with
-   * any instances listed above them.
+   * The subtrees a run's root paces its passes over: the directory listed level
+   * by level until there are at least {@link FRONTIER_SIZE} of them (or nothing
+   * left to list), with any instances listed above them. Many small subtrees
+   * let the root steer its load finely.
    */
   const frontier = (run: RelayRun, until: number) =>
     Effect.gen(function* () {
       let level: ReadonlyArray<RelayItem> = [{ path: "" }];
-      // The root, each source's subtree, then two levels of its nodes.
-      for (let depth = 0; depth < 3; depth++) {
+      while (level.length < FRONTIER_SIZE && level.some((item) => "path" in item)) {
         const next: Array<RelayItem> = [];
         const listings = yield* Effect.forEach(
           level,
@@ -1867,7 +1870,7 @@ interface RunState {
 }
 
 /** Subtrees a run's root starts with at once, and the most it grows to. */
-const RUN_WINDOW = 8;
+const RUN_WINDOW = 16;
 const RUN_WINDOW_MAX = 1024;
 
 /**
