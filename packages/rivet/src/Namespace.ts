@@ -5,6 +5,7 @@ import { createPhysicalName } from "alchemy/PhysicalName";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Data from "effect/Data";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClientError from "effect/http/HttpClientError";
 import { withConnection, type ConnectionProps } from "./internal/Connection.ts";
@@ -66,10 +67,10 @@ export const NamespaceProvider = () =>
   Provider.effect(
     Namespace,
     Effect.gen(function* () {
-      const observe = (connection: ConnectionProps, name: string, attempts?: number) =>
+      const observe = (connection: ConnectionProps, name: string, wait?: Duration.Input) =>
         Rivet.namespaces.listNamespaces({ name }).pipe(
           Effect.map((res) => res.namespaces.find((ns) => ns.name === name)),
-          withConnection(connection, { attempts }),
+          withConnection(connection, wait === undefined ? {} : { wait }),
         );
 
       const toAttrs = (connection: ConnectionProps, ns: Rivet.namespaces.Namespace) => ({
@@ -95,7 +96,7 @@ export const NamespaceProvider = () =>
           // A control plane that never came up (or is gone) has no namespace
           // to find, and deleting one is a no-op: let it go with its stack
           // after a short wait rather than the full startup budget.
-          const ns = yield* observe(olds, name, 6).pipe(
+          const ns = yield* observe(olds, name, "30 seconds").pipe(
             Effect.catchTag(
               ["BadGateway", "ServiceUnavailable", "GatewayTimeout", "TimeoutError"],
               () => Effect.undefined,

@@ -6,6 +6,7 @@
  * @internal not exported from the Rivet barrel.
  */
 import * as Rivet from "@distilled.cloud/rivet";
+import type * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as HttpClientError from "effect/http/HttpClientError";
 import type * as Redacted from "effect/Redacted";
@@ -32,11 +33,11 @@ export const withConnection =
     connection: ConnectionProps,
     options: {
       /**
-       * Attempts before giving up on a control plane that is still starting,
-       * each bounded at 20 seconds and 5 seconds apart.
-       * @default 15 (about 6 minutes)
+       * How long to wait out a control plane that is still starting. Each
+       * attempt is bounded at 20 seconds, 5 seconds apart.
+       * @default "6 minutes"
        */
-      readonly attempts?: number;
+      readonly wait?: Duration.Input;
     } = {},
   ) =>
   <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
@@ -53,8 +54,9 @@ export const withConnection =
           error._tag === "GatewayTimeout" ||
           error._tag === "TimeoutError" ||
           (HttpClientError.isHttpClientError(error) && error.reason._tag === "TransportError"),
-        schedule: Schedule.spaced("5 seconds"),
-        times: options.attempts ?? 15,
+        schedule: Schedule.spaced("5 seconds").pipe(
+          Schedule.upTo({ duration: options.wait ?? "6 minutes" }),
+        ),
       }),
       // This retry owns the whole wait: the SDK's own retry of the same
       // errors would multiply it.
