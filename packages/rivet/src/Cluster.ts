@@ -25,6 +25,13 @@ export type ClusterNetwork =
       readonly namespace: string;
     }
   | {
+      /** A GCP VPC network; nodes on Compute Engine run in its subnetwork. */
+      readonly kind: "gcp";
+      readonly network: Input<string>;
+      readonly subnetwork: Input<string>;
+      readonly region: string;
+    }
+  | {
       /** An AWS VPC; nodes run in its subnets with its node security group. */
       readonly kind: "aws";
       readonly vpcId: Input<string>;

@@ -30,6 +30,9 @@
     },
     {
       "path": "../kubernetes/tsconfig.json"
+    },
+    {
+      "path": "../gcp/tsconfig.json"
     }
   ]
 }

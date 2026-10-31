@@ -10852,6 +10852,9 @@ importers:
       '@alchemy.run/docker':
         specifier: workspace:*
         version: link:../docker
+      '@alchemy.run/gcp':
+        specifier: workspace:*
+        version: link:../gcp
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../kubernetes

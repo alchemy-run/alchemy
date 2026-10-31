@@ -33,6 +33,7 @@
     "./AWS": "./src/AWS/index.ts",
     "./Cloud": "./src/Cloud/index.ts",
     "./Docker": "./src/Docker/index.ts",
+    "./GCP": "./src/GCP/index.ts",
     "./Kubernetes": "./src/Kubernetes/index.ts",
     "./*": "./src/*.ts",
     "./package.json": "./package.json"
@@ -62,6 +63,12 @@
         "bun": "./src/Docker/index.ts",
         "worker": "./src/Docker/index.ts",
         "default": "./lib/Docker/index.js"
+      },
+      "./GCP": {
+        "types": "./lib/GCP/index.d.ts",
+        "bun": "./src/GCP/index.ts",
+        "worker": "./src/GCP/index.ts",
+        "default": "./lib/GCP/index.js"
       },
       "./Kubernetes": {
         "types": "./lib/Kubernetes/index.d.ts",
@@ -94,6 +101,7 @@
   "devDependencies": {
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
@@ -103,6 +111,7 @@
   "peerDependencies": {
     "@alchemy.run/aws": "workspace:*",
     "@alchemy.run/docker": "workspace:*",
+    "@alchemy.run/gcp": "workspace:*",
     "@alchemy.run/kubernetes": "workspace:*",
     "alchemy": "workspace:*",
     "effect": "catalog:"
@@ -112,6 +121,9 @@
       "optional": true
     },
     "@alchemy.run/docker": {
+      "optional": true
+    },
+    "@alchemy.run/gcp": {
       "optional": true
     },
     "@alchemy.run/kubernetes": {
