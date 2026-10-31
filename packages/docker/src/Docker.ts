@@ -85,6 +85,42 @@ export class Docker extends Context.Service<
         network?: string | undefined;
         /** Linux capabilities to add. */
         "cap-add"?: Array<string> | undefined;
+        /** Linux capabilities to drop. */
+        "cap-drop"?: Array<string> | undefined;
+        /** Hard memory limit in Docker's byte-suffix format. */
+        memory?: string | undefined;
+        /** Combined memory-and-swap limit in Docker's byte-suffix format. */
+        "memory-swap"?: string | undefined;
+        /** Soft memory reservation for memory contention. */
+        "memory-reservation"?: string | undefined;
+        /** CPU quota, in cores. */
+        cpus?: number | undefined;
+        /** Per-container process and thread limit. */
+        "pids-limit"?: number | undefined;
+        /** Mount the root filesystem read-only. */
+        "read-only"?: boolean | undefined;
+        /** Disable privilege escalation through exec. */
+        "security-opt"?: Array<string> | undefined;
+        /** Per-container user namespace; "host" disables daemon user remapping. */
+        userns?: string | undefined;
+        /** Supplemental Linux groups. */
+        "group-add"?: Array<string> | undefined;
+        /** Per-process soft/hard resource limits. */
+        ulimit?: Array<string> | undefined;
+        /** Docker log driver. */
+        "log-driver"?: string | undefined;
+        /** Driver-specific Docker logging options. */
+        "log-opt"?: Array<string> | undefined;
+        /** Kernel OOM score adjustment. */
+        "oom-score-adj"?: number | undefined;
+        /** Signal used on container stop. */
+        "stop-signal"?: string | undefined;
+        /** Run Docker's tiny init process. */
+        init?: boolean | undefined;
+        /** Runtime UID/GID or named user. */
+        user?: string | undefined;
+        /** Docker tmpfs mount expressions (target[:options]). */
+        tmpfs?: Array<string> | undefined;
         /** Host devices in Docker's `host:container[:permissions]` form. */
         device?: Array<string> | undefined;
         command: Array<string> | undefined;
@@ -441,6 +477,8 @@ export declare namespace Docker {
       Image: string;
       Cmd: string[] | null;
       Env: string[] | null;
+      User?: string;
+      StopSignal?: string;
       Labels: Record<string, string> | null;
       StopTimeout?: number;
       Healthcheck?: {
@@ -460,12 +498,28 @@ export declare namespace Docker {
       AutoRemove: boolean;
       NetworkMode?: string;
       CapAdd?: string[] | null;
+      CapDrop?: string[] | null;
+      Memory?: number;
+      MemorySwap?: number;
+      MemoryReservation?: number;
+      NanoCpus?: number;
+      PidsLimit?: number;
+      ReadonlyRootfs?: boolean;
+      SecurityOpt?: string[] | null;
+      UsernsMode?: string;
+      GroupAdd?: string[] | null;
+      Ulimits?: Array<{ Name: string; Soft: number; Hard: number }> | null;
+      LogConfig?: { Type: string; Config: Record<string, string> | null };
+      OomScoreAdj?: number;
+      Init?: boolean | null;
+      Tmpfs?: Record<string, string> | null;
       Devices?: Array<{
         PathOnHost: string;
         PathInContainer: string;
         CgroupPermissions: string;
       }> | null;
     };
+    AppArmorProfile?: string;
     NetworkSettings: {
       Networks: Record<string, { NetworkID: string; Aliases: string[] | null }> | null;
       Ports?: Record<string, Array<{ HostIp: string; HostPort: string }> | null> | null;
