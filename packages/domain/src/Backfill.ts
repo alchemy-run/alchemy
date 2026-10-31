@@ -2,7 +2,6 @@ import * as Cause from "effect/Cause";
 import * as Clock from "effect/Clock";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
-import * as Queue from "effect/Queue";
 import * as Random from "effect/Random";
 import * as Semaphore from "effect/Semaphore";
 import {
@@ -1923,57 +1922,35 @@ export const makeRun = (
       const todo: Array<RelayItem> = [];
       for (const item of items ?? [])
         if ((yield* storage.get(doneKey(target, state.phase, item))) === undefined) todo.push(item);
-      // Up to `window` subtrees at once, a new one as each finishes. Like TCP's congestion
-      // window, it doubles while the account takes the load, grows by one once it has been
-      // refused, and halves when Cloudflare refuses calls: a wide run stays under the
+      // Rounds of `window` subtrees, each handed to the relay tree in one call: one object
+      // runs at most six calls at once, so the tree, not this root, fans them out. Like TCP's
+      // congestion window, it doubles while the account takes the load, then grows by a
+      // quarter, and halves when Cloudflare refuses calls: a wide run stays under the
       // account's limit rather than hit it all at once and wait it out.
       let window = state.window ?? RUN_WINDOW;
       let growing = state.window === undefined;
       let next = 0;
-      let active = 0;
       let refused = 0;
       let done = items !== undefined;
-      const finished = yield* Queue.unbounded<{
-        readonly item: RelayItem;
-        readonly result: RelayResult;
-        readonly launched: number;
-      }>();
-      // Halve once per window, like TCP: only for a refusal on a subtree launched after
-      // the last cut, not for every subtree that was already out when the account pushed back.
-      let cutAt = 0;
-      const launch = (index: number) =>
-        Effect.gen(function* () {
-          const launched = yield* Clock.currentTimeMillis;
-          yield* Effect.forkChild(
-            relay
-              .run(`${state.phase}-${state.misses ?? 0}/${index}`, relayRun, [todo[index]!])
-              .pipe(
-                Effect.flatMap((result) =>
-                  Queue.offer(finished, { item: todo[index]!, result, launched }),
-                ),
-              ),
-          );
-        });
-      while (next < todo.length || active > 0) {
-        const open = quiet || (yield* Clock.currentTimeMillis) < deadline;
-        while (open && active < window && next < todo.length) {
-          yield* launch(next);
-          next += 1;
-          active += 1;
-        }
-        if (active === 0) break;
-        const { item, result, launched } = yield* Queue.take(finished);
-        active -= 1;
-        if (result.done) yield* storage.put({ [doneKey(target, state.phase, item)]: true });
-        else done = false;
+      for (let round = 0; next < todo.length; round++) {
+        if (!quiet && round > 0 && (yield* Clock.currentTimeMillis) >= deadline) break;
+        const batch = todo.slice(next, next + Math.max(1, Math.round(window)));
+        next += batch.length;
+        const result = yield* relay.run(
+          `${state.phase}-${state.misses ?? 0}/${round}`,
+          relayRun,
+          batch,
+        );
         refused += result.refused;
+        if (result.done)
+          yield* storage.put(
+            Object.fromEntries(batch.map((item) => [doneKey(target, state.phase, item), true])),
+          );
+        else done = false;
         if (result.refused > 0) {
           growing = false;
-          if (launched >= cutAt) {
-            window = Math.max(1, Math.floor(window / 2));
-            cutAt = yield* Clock.currentTimeMillis;
-          }
-        } else window = Math.min(todo.length, growing ? window + 1 : window + 1 / window);
+          window = Math.max(1, window / 2);
+        } else window = Math.min(todo.length, growing ? window * 2 : window * 1.25);
       }
       window = Math.max(1, Math.round(window));
       if (next < todo.length) done = false;
