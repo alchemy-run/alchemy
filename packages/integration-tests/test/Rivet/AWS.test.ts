@@ -20,7 +20,7 @@ let baseUrl = "";
 // The engine conformance spec, run against Rivet Durable Objects on a
 // control plane on EC2 and a pool on ECS Fargate, called from a Lambda.
 describe.skipIf(!!process.env.FAST)(
-  "Rivet on AWS",
+  "Rivet on AWS (EC2 control plane, ECS pool)",
   { tags: ["provider:rivet", "provider:aws", "live"] },
   () => {
     beforeAll(
