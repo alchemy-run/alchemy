@@ -3,7 +3,9 @@ import type { RuntimeContext } from "alchemy/RuntimeContext";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import { fromCloudflareFetcher, type Fetcher } from "../Fetcher.ts";
+import { BackgroundWork } from "./internal/BackgroundWork.ts";
 import { resolveAccessContext, type WorkerExecutionContextAccess } from "./WorkerAccess.ts";
 
 export const WorkerTypeId = "Cloudflare.Worker";
@@ -209,7 +211,12 @@ export const fromExecutionContext = (
       const context = yield* Effect.context<R>();
       // Register the promise with workerd un-awaited — waitUntil extends the
       // invocation's lifetime without blocking the response.
-      yield* Effect.sync(() => ctx.waitUntil(Effect.runPromiseWith(context)(effect)));
+      const track = yield* Effect.serviceOption(BackgroundWork);
+      yield* Effect.sync(() => {
+        const promise = Effect.runPromiseWith(context)(effect);
+        if (Option.isSome(track)) track.value(promise);
+        ctx.waitUntil(promise);
+      });
     }),
   passThroughOnException: () => Effect.sync(() => ctx.passThroughOnException()),
   cache: {

@@ -2598,7 +2598,9 @@ const withDeclarationRef = <P extends Pick<ResourceClass<Worker>, "ref">>(platfo
  * For ad-hoc background work, `Cloudflare.waitUntil(effect)` forks an
  * Effect with the caller's full context and keeps the invocation alive
  * until it settles. It is `RuntimeContext`-colored, so it can only run
- * inside a handler.
+ * inside a handler. Spans and logs it records export with the event's
+ * telemetry once it settles, if it settles within the `waitUntil` time
+ * limit.
  *
  * The constructor is evaluated once per isolate: the bridge builds the
  * Worker's layer stack on the first event and every later event reuses the

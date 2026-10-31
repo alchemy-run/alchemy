@@ -4,6 +4,7 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import { fromDurableObjectStorage, type DurableObjectStorage } from "./DurableObjectStorage.ts";
+import { BackgroundWork } from "./internal/BackgroundWork.ts";
 import { fromWebSocket, type WebSocket } from "./WebSocket.ts";
 import {
   getLoopbackEntrypoint,
@@ -90,19 +91,6 @@ export class DurableObjectState extends Context.Service<
     ): Effect.Effect<void, never, RuntimeContext>;
   }
 >()("Cloudflare.DurableObjectState") {}
-
-/**
- * Told of every promise the current event hands to `waitUntil`, so the event
- * keeps its telemetry open until that work settles. Provided per event by
- * the bridge, and read from the calling fiber, so it works for state
- * captured when the object was constructed too.
- *
- * @internal
- */
-export class BackgroundWork extends Context.Service<
-  BackgroundWork,
-  (promise: Promise<unknown>) => void
->()("Cloudflare.DurableObjectState/BackgroundWork") {}
 
 export const fromDurableObjectState = (
   state: cf.DurableObjectState,
