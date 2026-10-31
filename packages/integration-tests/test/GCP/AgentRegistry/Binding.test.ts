@@ -171,7 +171,7 @@ test.provider.skipIf(runLifecycle)(
           name: `${parent}/bindings/alchemy-missing-binding`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),

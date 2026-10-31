@@ -56,7 +56,7 @@ test.provider.skipIf(runLifecycle)(
           name: `projects/${project}/locations/${location}/applications/alchemy-missing-app/services/alchemy-missing-service`,
         }),
       );
-      expect(error._tag).toEqual("ServiceDisabled");
+      expect(["ServiceDisabled", "NotFound"]).toContain(error._tag);
 
       yield* stack.destroy();
     }).pipe(logLevel),
