@@ -308,7 +308,14 @@ export const materializeRuntimeBindings = Effect.fn(function* (
   },
   options: {
     accountId: string;
+    /** The Worker's own URL for `Worker.URL`: its dev ingress origin when it has one. */
     selfUrl: string | undefined;
+    /**
+     * The Worker's local listener, which the R2 S3 credentials endpoint dials.
+     * Unlike `selfUrl` it is never an ingress origin: a self-fetch over a
+     * routed HTTPS name needs outbound CA trust that workerd doesn't have.
+     */
+    listenerUrl: string | undefined;
     stack: { name: string; stage: string };
   },
 ) {
@@ -349,7 +356,7 @@ export const materializeRuntimeBindings = Effect.fn(function* (
         Text.local(
           descriptor.name,
           JSON.stringify({
-            endpoint: `${options.selfUrl!}${LOCAL_R2_S3_PATH}`,
+            endpoint: `${options.listenerUrl!}${LOCAL_R2_S3_PATH}`,
             bucketName: descriptor.bucketName,
             region: "auto",
             ...LOCAL_R2_S3_CREDENTIALS,
