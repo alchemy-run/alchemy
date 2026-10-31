@@ -94,23 +94,31 @@ export const readState = Effect.fn(function* (stateDirectory: string) {
 
 /**
  * What differs between the running proxy and the one this stack needs: HTTPS
- * on the settings' port, the `localhost` TLD only, not LAN, and Portless's own
- * certificate authority. How the proxy was started doesn't matter: unprivileged
- * mode only decides how a low port was bound and that peers other than this
- * machine are refused, and a proxy started another way serves the same routes.
+ * on the settings' port, the TLD of its mode (`localhost`, or `local` in LAN
+ * mode, which is also the only mode that serves other machines), and Portless's
+ * own certificate authority. How the proxy was started doesn't matter:
+ * unprivileged mode only decides how a low port was bound and that peers other
+ * than this machine are refused, and a proxy started another way serves the same
+ * routes.
  */
-export const mismatches = (state: ProxyState, port: number) => {
+export const mismatches = (state: ProxyState, port: number, lan = false) => {
   const found: Array<string> = [];
+  const tld = lan ? "local" : "localhost";
   if (state.port !== port) {
     found.push(`it listens on port ${state.port ?? "unknown"}, this stack needs ${port}`);
   }
   if (!state.tls) found.push("it serves plain HTTP, this stack needs HTTPS");
-  if (state.tlds.length !== 1 || state.tlds[0] !== "localhost") {
+  if (state.tlds.length !== 1 || state.tlds[0] !== tld) {
     found.push(
-      `it serves ${state.tlds.map((tld) => `.${tld}`).join(", ")}, this stack needs .localhost only`,
+      `it serves ${state.tlds.map((name) => `.${name}`).join(", ")}, this stack needs .${tld} only`,
     );
   }
-  if (state.lan) found.push("it runs in LAN mode, which serves .local names");
+  if (lan && !state.lan) {
+    found.push(
+      "it isn't in LAN mode, which this stack needs for .local names reachable from other machines",
+    );
+  }
+  if (!lan && state.lan) found.push("it runs in LAN mode, which serves .local names");
   // Without TLS there is no CA to speak of; the line above already says so.
   if (state.tls && state.customCertificate) {
     found.push("it serves a custom certificate, this stack needs Portless's own CA");
@@ -123,3 +131,12 @@ export const mismatches = (state: ProxyState, port: number) => {
 /** Whether the state directory records a proxy process that is still alive. */
 export const recordsLiveProxy = (state: ProxyState) =>
   state.pid !== undefined && isProcessAlive(state.pid);
+
+/**
+ * The address `PORTLESS_LAN_IP` pins for LAN mode, which Portless itself reads
+ * to use that address and stop following the network.
+ */
+export const pinnedLanAddress = Config.String("PORTLESS_LAN_IP").pipe(
+  Config.option,
+  Config.map((value) => Option.getOrUndefined(Option.filter(value, (text) => text !== ""))),
+);

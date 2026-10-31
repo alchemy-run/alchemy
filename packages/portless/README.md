@@ -51,6 +51,8 @@ export default Alchemy.Stack(
 
 `alchemy dev` starts the proxy when it isn't running, reuses it when it is, and never stops it. The first run asks the operating system once to trust the proxy's certificate authority; later runs, stages and worktrees prompt for nothing. `alchemy deploy` ignores these resources, and `PORTLESS=0` skips the proxy: `Dev` then serves `http://localhost:<port>`.
 
+`Portless.providers({ lan: true })` serves `.local` names to containers and other machines instead of `.localhost` names to this one. It needs a network address and mDNS tooling (`dns-sd` on macOS, `avahi-publish-address` on Linux), and the error says what is missing.
+
 ## Learn more
 
 - [Portless on alchemy.run](https://alchemy.run/portless)

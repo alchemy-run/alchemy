@@ -15,7 +15,7 @@ import type { Proxy } from "./Proxy.ts";
  * depends on the stage, the service's id and the proxy.
  *
  * It is the same string the service's own `origin` attribute resolves to:
- * `<stage>.<id>.<domain>.localhost` on HTTPS. With a `proxy` resource it is an
+ * `<stage>.<id>.<domain>.localhost` on HTTPS (`.local` in LAN mode). With a `proxy` resource it is an
  * Output that resolves once the proxy has; with a plain `{ domain }` it is the
  * string itself. With `PORTLESS=0` there is no proxy to name it, so the origin
  * is `http://localhost:<port>` and `port` is required.
@@ -42,14 +42,19 @@ export function Origin(
   input: {
     /** The port the service listens on with `PORTLESS=0`, where it is served on `http://localhost`. */
     readonly port?: number | undefined;
-    readonly proxy: { readonly domain: string; readonly port?: number | undefined };
+    readonly proxy: {
+      readonly domain: string;
+      readonly port?: number | undefined;
+      /** The proxy's TLD: `localhost`, or `local` in LAN mode. */
+      readonly tld?: string | undefined;
+    };
   },
 ): Effect.Effect<string, Config.ConfigError | OriginPortRequired | HostnameInvalid, Stage>;
 export function Origin(
   id: string,
   input: {
     readonly port?: number | undefined;
-    readonly proxy: Pick<Proxy, "domain" | "port">;
+    readonly proxy: Pick<Proxy, "domain" | "port" | "tld">;
   },
 ): Effect.Effect<Output.Output<string>, Config.ConfigError | OriginPortRequired, Stage>;
 export function Origin(
@@ -62,6 +67,7 @@ export function Origin(
     readonly proxy: {
       readonly domain: string | Output.Output<string>;
       readonly port?: number | Output.Output<number> | undefined;
+      readonly tld?: string | Output.Output<string> | undefined;
     };
   },
 ) {
@@ -79,13 +85,18 @@ export function Origin(
     }
 
     if (typeof domain === "string") {
-      const hostname = yield* hostnameOf(routedName(id, stage, domain));
+      const tld = typeof proxy.tld === "string" ? proxy.tld : undefined;
+      const hostname = yield* hostnameOf(routedName(id, stage, domain), tld);
       return originOf(hostname, typeof proxy.port === "number" ? proxy.port : DEFAULT_PORT);
     }
-    return Output.all(domain, Output.asOutput(proxy.port ?? DEFAULT_PORT)).pipe(
+    return Output.all(
+      domain,
+      Output.asOutput(proxy.port ?? DEFAULT_PORT),
+      Output.asOutput(proxy.tld ?? "localhost"),
+    ).pipe(
       // An Output maps with a pure function, so an invalid name is thrown, not failed.
-      Output.map(([name, proxyPort]) =>
-        originOf(hostnameOrThrow(routedName(id, stage, name)), proxyPort),
+      Output.map(([name, proxyPort, tld]) =>
+        originOf(hostnameOrThrow(routedName(id, stage, name), tld), proxyPort),
       ),
     );
   });
