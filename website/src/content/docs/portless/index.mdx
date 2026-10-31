@@ -116,6 +116,42 @@ starts a proxy. `PORTLESS=0 alchemy dev` skips the proxy: `Dev` serves
 `http://localhost:<port>`, `Alias` returns its `url`, and `Origin` returns
 `http://localhost:<port>`.
 
+## Calling a service from a Worker
+
+`Portless.Fetch` binds a `Dev` to a Worker, a Lambda function or any other
+host. A relative URL resolves against the service's `origin`, which reaches
+the host as an env value, and the call goes through the host's `HttpClient`:
+
+```typescript
+export default class Builder extends Cloudflare.Worker<Builder>()(
+  "Builder",
+  { main: import.meta.url },
+  Effect.gen(function* () {
+    const api = yield* Portless.Fetch(Api); // Api is a Portless.Dev
+    return {
+      fetch: Effect.gen(function* () {
+        const response = yield* api(HttpClientRequest.get("/health"));
+        return HttpServerResponse.text(yield* response.text);
+      }),
+    };
+  }).pipe(Effect.provide(Portless.FetchHttp)),
+) {}
+```
+
+A Worker written as a plain `fetch` handler takes the origin as an env value
+and calls it with `fetch`:
+
+```typescript
+const worker = yield* Cloudflare.Worker("Builder", {
+  main: "./src/worker.ts",
+  env: { API_URL: api.origin },
+});
+```
+
+During `alchemy dev` a local Worker trusts the Portless CA, so both verify the
+certificate as written. Portless is dev-only: binding `Portless.Fetch` where
+the host is deployed fails with `FetchDevOnly`.
+
 ## Routes
 
 A `Dev` or `Alias` route belongs to the dev sidecar, the process that outlives
@@ -131,3 +167,4 @@ already routes is rejected, not taken over.
 - [`Dev`](/providers/portless/dev)
 - [`Alias`](/providers/portless/alias)
 - [`Origin`](/providers/portless/origin)
+- [`Fetch`](/providers/portless/fetch)

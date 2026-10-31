@@ -57,5 +57,5 @@ test.provider(
 
       yield* stack.destroy();
     }),
-  { tags: ["local"], timeout: 120_000 },
+  { tags: ["local"], timeout: 120_000, exclusive: true },
 );

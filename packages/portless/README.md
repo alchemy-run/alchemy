@@ -51,6 +51,15 @@ export default Alchemy.Stack(
 
 `alchemy dev` starts the proxy when it isn't running, reuses it when it is, and never stops it. The first run asks the operating system once to trust the proxy's certificate authority; later runs, stages and worktrees prompt for nothing. `alchemy deploy` ignores these resources, and `PORTLESS=0` skips the proxy: `Dev` then serves `http://localhost:<port>`.
 
+A Worker or any other host calls a `Dev` with `Portless.Fetch`, which resolves relative URLs against the service's origin and is dev-only:
+
+```ts
+const api = yield* Portless.Fetch(Api); // Api is a Portless.Dev
+const response = yield* api(HttpClientRequest.get("/health"));
+```
+
+Provide `Portless.FetchHttp` on the Worker's Effect.
+
 ## Learn more
 
 - [Portless on alchemy.run](https://alchemy.run/portless)

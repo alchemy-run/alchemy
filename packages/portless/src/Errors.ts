@@ -263,3 +263,16 @@ export class OriginPortRequired extends Data.TaggedError("OriginPortRequired")<{
     return `Portless.Origin("${this.id}") needs a \`port\` when PORTLESS=0, because the origin is then http://localhost:<port>.`;
   }
 }
+
+/** `Portless.Fetch` was bound where the host runs on real infrastructure. */
+export class FetchDevOnly extends Data.TaggedError("FetchDevOnly")<{
+  /** The id of the `Portless.Dev` being bound. */
+  readonly service: string;
+  /** The id of the Worker, function or process binding it, when there is one. */
+  readonly host: string | undefined;
+}> {
+  override get message() {
+    const by = this.host === undefined ? "" : ` by ${this.host}`;
+    return `Portless.Fetch(${this.service}) can't be bound${by} outside \`alchemy dev\`: Portless is dev-only, and a deployed runtime can't reach a name that exists on a developer's machine. Bind it where \`alchemy dev\` runs the host, or hand the deployed runtime the real URL of the service as an env value.`;
+  }
+}
