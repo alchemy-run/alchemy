@@ -13,6 +13,8 @@ import {
   type Accepted,
   type Delivery,
   emptySnapshot,
+  outdated,
+  recomputeKey,
   emptyStreamMeta,
   hostedModels,
   Platform,
@@ -648,10 +650,30 @@ export const make = (
             keys.clear();
             stash.generation = kit.generation;
           }
+          /** Built at an earlier recompute of this generation: re-fold its inputs first. */
+          const refresh = (
+            key: string,
+            found: {
+              readonly snapshot: SubscriptionRef.SubscriptionRef<ViewSnapshot>;
+              readonly entries: SubscriptionRef.SubscriptionRef<ReadonlyArray<ViewEntry>>;
+              readonly inputs: Array<Delivery>;
+              routed: Routed | undefined;
+            },
+          ) =>
+            Effect.gen(function* () {
+              if (!outdated(kit, yield* SubscriptionRef.get(found.snapshot))) return found;
+              const { snapshot, entries } = yield* recomputeKey(kit, key, found.inputs);
+              yield* SubscriptionRef.set(found.entries, entries);
+              // Every reader of a recomputed view is a new generation, sent nothing yet:
+              // it reads the new entries from the log.
+              found.routed = {};
+              yield* SubscriptionRef.set(found.snapshot, snapshot);
+              return found;
+            });
           const get = (key: string) =>
             Effect.suspend(() => {
               const found = keys.get(key);
-              if (found) return Effect.succeed(found);
+              if (found) return refresh(key, found);
               return Effect.all({
                 snapshot: SubscriptionRef.make(emptySnapshot),
                 entries: SubscriptionRef.make<ReadonlyArray<ViewEntry>>([]),

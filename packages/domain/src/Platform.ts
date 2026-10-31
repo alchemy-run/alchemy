@@ -320,10 +320,41 @@ export interface ViewSnapshot {
   readonly seq: number;
   /** The view's generation the key was built by: an earlier one is stale and starts over. */
   readonly generation?: number;
+  /** How often the view was recomputed when the key was built: an earlier count re-folds its inputs. */
+  readonly recompute?: number;
 }
 
 /** The snapshot of a key that has never received a delivery. */
 export const emptySnapshot: ViewSnapshot = { state: null, version: 0, checkpoints: {}, seq: 0 };
+
+/**
+ * Whether a stored key was built at an earlier recompute of the view's
+ * current generation: it re-folds its input log before it is used.
+ */
+export const outdated = (kit: Pick<ViewKit, "generation" | "recompute">, snapshot: ViewSnapshot) =>
+  snapshot.version > 0 &&
+  (snapshot.generation ?? 0) === kit.generation &&
+  (snapshot.recompute ?? 0) < kit.recompute;
+
+/**
+ * Re-fold a key's input log (every delivery it applied, in order) through the
+ * view's current `evolve`: the snapshot and entries the key holds now. What it
+ * would send downstream is dropped, since the views and projections that read
+ * it are rebuilt from its new entries.
+ */
+export const recomputeKey = (
+  kit: Pick<ViewKit, "apply" | "generation" | "recompute">,
+  key: string,
+  inputs: ReadonlyArray<Delivery>,
+): Effect.Effect<{ readonly snapshot: ViewSnapshot; readonly entries: ReadonlyArray<ViewEntry> }> =>
+  Effect.map(kit.apply(key, emptySnapshot, inputs), ({ snapshot, entries }) => ({
+    snapshot: {
+      ...snapshot,
+      ...(kit.generation > 0 ? { generation: kit.generation } : {}),
+      ...(kit.recompute > 0 ? { recompute: kit.recompute } : {}),
+    },
+    entries,
+  }));
 
 /**
  * One event a view key emitted, with the key's state after it.
@@ -367,6 +398,12 @@ export interface ViewKit {
    * (state, entries, input log and cursors) before it is read or applied to.
    */
   readonly generation: number;
+  /**
+   * How often this view was recomputed. A stored key built at an earlier count
+   * (of this generation) re-folds its input log through the current `evolve`
+   * before it is read or applied to: see {@link recomputeKey}.
+   */
+  readonly recompute: number;
   /** Whether each key hears only from the source instance with its own id (see `Kernel.singleSource`). */
   readonly singleSource: boolean;
   /**

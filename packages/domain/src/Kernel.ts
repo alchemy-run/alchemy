@@ -203,6 +203,12 @@ export interface Kernel {
    * it, from the history. Set every version before the platform starts.
    */
   readonly setVersion: (consumer: string, version: number) => void;
+  /**
+   * Set how many times a view was recomputed. Bumping it re-folds each key's
+   * own inputs through the view's current `evolve`, in place, and rebuilds the
+   * views and projections that read it. Set it before the platform starts.
+   */
+  readonly setRecompute: (view: string, recompute: number) => void;
   /** A consumer's generation: its version plus those of the views it reads. */
   readonly generationOf: (kind: "view" | "projection", name: string) => number;
   /** The projection that writes a stream, if any. */
@@ -658,12 +664,14 @@ const build = (
 
   // ------------------------------------------------------------ generations
   const versions = new Map<string, number>();
+  const recomputes = new Map<string, number>();
   const generations = new Map<string, number>();
   const viewSources = (from: ReadonlyArray<View.Source>) =>
     from.flatMap((source) => (source.kind === "Aggregate" ? [] : [(source as View.Any).viewName]));
   /**
    * A consumer's generation: its own version plus the generations of the
-   * views it reads, so rebuilding a view rebuilds everything built on it.
+   * views it reads, and how often each was recomputed, so rebuilding or
+   * recomputing a view rebuilds everything built on it.
    */
   const generationOf = (kind: "view" | "projection" | "policy", name: string): number => {
     if (kind === "policy") return 0;
@@ -676,7 +684,10 @@ const build = (
         : projectionByName.get(name)?.definition.from;
     const generation =
       (versions.get(id) ?? 0) +
-      viewSources(from ?? []).reduce((sum, view) => sum + generationOf("view", view), 0);
+      viewSources(from ?? []).reduce(
+        (sum, view) => sum + generationOf("view", view) + (recomputes.get(view) ?? 0),
+        0,
+      );
     generations.set(id, generation);
     return generation;
   };
@@ -1170,6 +1181,9 @@ const build = (
       get generation() {
         return generationOf("view", view.viewName);
       },
+      get recompute() {
+        return recomputes.get(view.viewName) ?? 0;
+      },
       get singleSource() {
         return singleSource(`view:${view.viewName}`);
       },
@@ -1331,12 +1345,14 @@ const build = (
             }
           }
         }
+        const recompute = recomputes.get(view.viewName) ?? 0;
         const next: ViewSnapshot = {
           state: encodeState(current),
           version,
           checkpoints,
           seq,
           ...(generation > 0 ? { generation } : {}),
+          ...(recompute > 0 ? { recompute } : {}),
         };
         return { snapshot: next, changed, entries, downstream };
       }),
@@ -1496,6 +1512,10 @@ const build = (
     history,
     setVersion: (consumer, version) => {
       versions.set(consumer, version);
+      generations.clear();
+    },
+    setRecompute: (view, recompute) => {
+      recomputes.set(view, recompute);
       generations.clear();
     },
     generationOf,

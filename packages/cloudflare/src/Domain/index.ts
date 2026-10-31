@@ -12,6 +12,8 @@ import {
   emptyStreamMeta,
   type HostedModel,
   hostedModels,
+  outdated,
+  recomputeKey,
   type ModelHost,
   Platform,
   type Json,
@@ -901,6 +903,26 @@ const viewObject = (
         yield* clearPrefixes(["entry:", "in:"]);
         yield* state.storage.delete(["snapshot", "routed", "in-seq"]);
       });
+      // Built at an earlier recompute of this generation: re-fold the key's input
+      // log through the current `evolve`, in place, before anything reads it.
+      // Construction holds every event back until it is done.
+      if (outdated(kit, yield* stored)) {
+        const inputs = [...(yield* state.storage.list<Delivery>({ prefix: "in:" })).values()];
+        if (inputs.length > 0) {
+          const { snapshot, entries } = yield* recomputeKey(kit, inputs[0]!.key, inputs);
+          yield* clearPrefixes(["entry:"]);
+          for (let start = 0; start < entries.length; start += 128) {
+            const rows: Record<string, ViewEntry> = {};
+            for (const entry of entries.slice(start, start + 128))
+              rows[`entry:${pad(entry.seq)}`] = entry;
+            yield* state.storage.put(rows);
+          }
+          yield* state.storage.put("snapshot", snapshot);
+          // Every reader of a recomputed view is a new generation, sent nothing yet:
+          // it reads the new entries from the log.
+          yield* state.storage.put("routed", {});
+        }
+      }
       const entriesAfter = (after: number) =>
         stored.pipe(
           Effect.flatMap((snapshot) =>
