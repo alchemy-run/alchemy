@@ -34,9 +34,23 @@ long runs with `t3_background_wait`, never with `sleep` or a polling loop.
 
 ## 1. Preflight and durable state
 
-Run [prepare-release §0](../prepare-release/SKILL.md#0-preflight) (clean
-`main`, pinned bun/node in `/tmp/release/env.sh`, `.env`, `aws sso login`,
-`pnpm exec tsrs -b`), on branch `release/overnight-$(date +%Y-%m-%d)`.
+Start from the latest `origin/main`, on a fresh branch:
+
+```sh
+git status                      # must be clean; never git stash
+git fetch origin main
+git checkout -b release/overnight-$(date +%Y-%m-%d) origin/main
+git log -1 --format='%H %s' origin/main   # record as "Base" in STATE.md
+git submodule update --init -- submodules/distilled
+```
+
+Then run the rest of
+[prepare-release §0](../prepare-release/SKILL.md#0-preflight): `pnpm install`,
+pinned bun/node in `/tmp/release/env.sh`, `.env`, `aws sso login`, and
+`pnpm exec tsrs -b`.
+
+Don't merge `main` into the branch mid-run. A moving base would make every
+`Passed at` meaningless. §6 picks up whatever landed overnight.
 
 Keep the run's state in `/tmp/release/STATE.md` and update it after every
 event. Context will be compacted many times overnight, and this file is how
@@ -44,7 +58,7 @@ you resume:
 
 ```md
 # Release overnight 2026-10-31 — branch release/overnight-2026-10-31
-Scope: all · opt-in: none · nuke authorized: yes
+Base: origin/main <sha> · Scope: all · opt-in: none · nuke authorized: yes
 PRs: alchemy #— · distilled #— · floci #—
 
 | # | Step | Command | Status | Passed at | Notes |
@@ -163,8 +177,12 @@ distilled/floci clones, titles and bodies. On top of that:
 
 ## 6. Finish
 
-After step 10 is done and no step is stale, nuke one last time and take a
-final census. It must show residue only. Then, and only then, end the
+After step 10 is done and no step is stale, `git fetch origin main`. If
+`main` has moved past `Base`, merge it, resolve any conflicts, run
+`pnpm exec tsrs -b`, and apply §4 to the merged changes. Re-run every step it
+marks stale, and step 10 if any step re-ran. Repeat until a fetch finds
+nothing new. The PR must be mergeable at a head that already contains the
+latest `main`. Then nuke one last time and take a final census. It must show residue only. Then, and only then, end the
 turn with the report:
 
 ```md
