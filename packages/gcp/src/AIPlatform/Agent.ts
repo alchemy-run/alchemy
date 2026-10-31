@@ -313,7 +313,6 @@ export const AgentProvider = () =>
     stables: ["name", "agentId", "project", "location", "created"],
 
     diff: Effect.fn(function* ({ news, olds, output }) {
-      const env = yield* GcpEnvironment.current;
       if (!isResolved(news)) return undefined;
       const previousId = olds?.agentId ?? output?.agentId;
       const nextId = news.agentId ?? previousId;

@@ -151,16 +151,17 @@ export const toAuditLogEvent = ({ message }: TopicMessage) =>
       entry = {};
     }
     const payload = (entry.protoPayload ?? {}) as Record<string, unknown>;
+    const text = (value: unknown) => (typeof value === "string" ? value : "");
     const auth = (payload.authenticationInfo ?? {}) as { principalEmail?: string };
     return {
-      serviceName: String(payload.serviceName ?? ""),
-      methodName: String(payload.methodName ?? ""),
-      resourceName: String(payload.resourceName ?? ""),
+      serviceName: text(payload.serviceName),
+      methodName: text(payload.methodName),
+      resourceName: text(payload.resourceName),
       principalEmail: auth.principalEmail,
       status: payload.status as AuditLogEvent["status"],
-      timestamp: String(entry.timestamp ?? message.publishTime ?? ""),
-      logName: String(entry.logName ?? ""),
-      insertId: String(entry.insertId ?? ""),
+      timestamp: text(entry.timestamp) || text(message.publishTime),
+      logName: text(entry.logName),
+      insertId: text(entry.insertId),
       entry,
     };
   });

@@ -1471,7 +1471,7 @@ const PLACEHOLDER = "alchemy-missing";
 
 /** A placeholder for a required request field: valid where the name says what it is. */
 const placeholder = (field: string, type: string, location = "us-central1") => {
-  if (/^"/.test(type)) return type.split("|")[0]!.trim();
+  if (type.startsWith('"')) return type.split("|")[0]!.trim();
   if (type === "string") {
     if (field === "zone") return `"us-central1-a"`;
     if (field === "region") return `"us-central1"`;

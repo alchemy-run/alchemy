@@ -238,7 +238,7 @@ const grantNotificationPublisher = (project: string, topics: SecretTopic[]) =>
       .generateServiceIdentityServices({
         parent: `projects/${number}/services/secretmanager.googleapis.com`,
       })
-      .pipe(Effect.catchTag("Conflict", () => Effect.succeed(undefined)));
+      .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
     if (operation !== undefined) {
       yield* waitForOperation(operation, (name) => serviceusage.getOperations({ name }), {
         budget: "2 minutes",

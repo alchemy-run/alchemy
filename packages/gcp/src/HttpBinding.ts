@@ -202,12 +202,14 @@ export const makeGcpBinding = <Shape>(options: {
         for (const [collection, field] of variant.children ?? []) {
           // A trailing singleton (`…/certificateAuthority`) has no field.
           target =
-            field === "" ? `${target}/${collection}` : `${target}/${collection}/${input[field]}`;
+            field === ""
+              ? `${target}/${collection}`
+              : `${target}/${collection}/${String(input[field])}`;
           delete input[field];
         }
         if (variant.suffix) {
           const [separator, field] = variant.suffix;
-          target = `${target}${separator}${input[field]}`;
+          target = `${target}${separator}${String(input[field])}`;
           delete input[field];
         }
         if (variant.param !== undefined) input[variant.param] = target;
@@ -313,7 +315,9 @@ export const makeGcpProjectBinding = <Shape>(options: {
             : `projects/${project}`;
           for (const [collection, field] of variant.children ?? []) {
             target =
-              field === "" ? `${target}/${collection}` : `${target}/${collection}/${input[field]}`;
+              field === ""
+                ? `${target}/${collection}`
+                : `${target}/${collection}/${String(input[field])}`;
             delete input[field];
           }
           input[variant.param] = target;
