@@ -100,6 +100,22 @@ const unwrapDefects = <A>(call: Effect.Effect<unknown, unknown>): Effect.Effect<
     ),
   );
 
+/**
+ * Call a Durable Object once, for the backfill protocol: it retries for itself,
+ * backing off when Cloudflare refuses the account's load. Retrying here too (as
+ * `unwrapDefects` does) would hold each level of a run for a minute, and keep
+ * the account overloaded with calls every 2 seconds from every waiting caller.
+ */
+const callOnce = <A>(call: Effect.Effect<unknown, unknown>): Effect.Effect<A> =>
+  call.pipe(
+    Effect.orDie,
+    Effect.flatMap((value) =>
+      value !== null && typeof value === "object" && DefectTag in value
+        ? Effect.die(new Error(String((value as Record<string, unknown>)[DefectTag])))
+        : Effect.succeed(value as A),
+    ),
+  );
+
 /** A Durable Object stub: every method is an RPC returning an Effect. */
 interface Stub {
   readonly [method: string]: (...args: ReadonlyArray<unknown>) => Effect.Effect<unknown, unknown>;
@@ -1489,26 +1505,26 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       node: {
         register: (path, ref) => unwrapDefects(nodeStub(path).register(path, ref)),
         child: (path, child) => unwrapDefects(nodeStub(path).child(path, child)),
-        list: (path, after) => unwrapDefects(nodeStub(path).list(path, after)),
+        list: (path, after) => callOnce(nodeStub(path).list(path, after)),
       },
       source: {
         // A source no longer in the model has nothing to give.
         cursor: (ref, target) => {
           const namespace = sourceNamespace(ref);
           return namespace
-            ? unwrapDefects<number>(sourceObject(namespace, ref).bfCursor(ref.id, target))
+            ? callOnce<number>(sourceObject(namespace, ref).bfCursor(ref.id, target))
             : Effect.succeed(0);
         },
         log: (ref, after, limit) => {
           const namespace = sourceNamespace(ref);
           return namespace
-            ? unwrapDefects(sourceObject(namespace, ref).bfLog(ref.id, after, limit))
+            ? callOnce(sourceObject(namespace, ref).bfLog(ref.id, after, limit))
             : Effect.succeed([]);
         },
         handoff: (ref, target, key, through) => {
           const namespace = sourceNamespace(ref);
           return namespace
-            ? unwrapDefects(sourceObject(namespace, ref).bfHandoff(ref.id, target, key, through))
+            ? callOnce(sourceObject(namespace, ref).bfHandoff(ref.id, target, key, through))
             : Effect.succeed("live" as const);
         },
       },
@@ -1517,48 +1533,48 @@ const DurableObjectPlatform: Layer.Layer<Platform, never, Worker> = Layer.effect
       consumer: {
         push: (target, key, deliveries) =>
           Effect.flatMap(consumerOf(target, key), (stub) =>
-            unwrapDefects(stub.bfPush(key, target, deliveries)),
+            callOnce(stub.bfPush(key, target, deliveries)),
           ),
         ready: (target, key, waitMillis) =>
           Effect.flatMap(consumerOf(target, key), (stub) =>
-            unwrapDefects(stub.bfConsumerReady(key, target, waitMillis)),
+            callOnce(stub.bfConsumerReady(key, target, waitMillis)),
           ),
         start: (target, key, ref, waitMillis) =>
           Effect.flatMap(consumerOf(target, key), (stub) =>
-            unwrapDefects(stub.bfStart(key, target, ref, waitMillis)),
+            callOnce(stub.bfStart(key, target, ref, waitMillis)),
           ),
       },
       // A source instance's scanner is an object of the consumer's own class: it has its routing.
       scanner: {
         scan: (target, ref, waitMillis) =>
           Effect.flatMap(consumerOf(target, scannerName(ref)), (stub) =>
-            unwrapDefects(stub.bfScannerScan(target, ref, waitMillis)),
+            callOnce(stub.bfScannerScan(target, ref, waitMillis)),
           ),
         ready: (target, ref, waitMillis) =>
           Effect.flatMap(consumerOf(target, scannerName(ref)), (stub) =>
-            unwrapDefects(stub.bfScannerReady(target, waitMillis)),
+            callOnce(stub.bfScannerReady(target, waitMillis)),
           ),
         kick: (target, ref) =>
           Effect.flatMap(consumerOf(target, scannerName(ref)), (stub) =>
-            unwrapDefects(stub.bfScannerKick(target, ref)),
+            callOnce(stub.bfScannerKick(target, ref)),
           ),
       },
       relay: {
         run: (name, run, items) =>
           Effect.flatMap(consumerOf(run.target, relayName(run.target, name)), (stub) =>
-            unwrapDefects<boolean>(stub.bfRelayRun(name, run, items)),
+            callOnce<boolean>(stub.bfRelayRun(name, run, items)),
           ),
       },
       run: {
         begin: (target, plan) =>
           Effect.flatMap(consumerOf(target, RUN_ROOT), (stub) =>
-            unwrapDefects<boolean>(stub.bfRunBegin(target, plan)),
+            callOnce<boolean>(stub.bfRunBegin(target, plan)),
           ),
         phase: (target) =>
           complete.has(target)
             ? Effect.succeed("complete" as const)
             : Effect.flatMap(consumerOf(target, RUN_ROOT), (stub) =>
-                unwrapDefects<Backfill.Phase>(stub.bfRunPhase(target)),
+                callOnce<Backfill.Phase>(stub.bfRunPhase(target)),
               ).pipe(
                 Effect.tap((phase) =>
                   Effect.sync(() => {
