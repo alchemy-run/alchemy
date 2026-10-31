@@ -4,6 +4,7 @@ import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import { HttpServerRequest } from "effect/http/HttpServerRequest";
 import * as HttpServerResponse from "effect/http/HttpServerResponse";
+import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 
 /**
@@ -35,6 +36,13 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
       // Config declared statically on `env` — Alchemy resolves at deploy
       // time and binds it as `secret_text` on the Worker.
       CONFIG_REDACTED: Config.Redacted("CONFIG_REDACTED"),
+      // Strings that `JSON.parse` would reinterpret (#2847) — they must
+      // still read back as strings.
+      JSON_FALSE: "false",
+      JSON_NUM: "42",
+      JSON_NULL: "null",
+      JSON_OBJ: '{"a":1}',
+      PLAIN: "my-queue",
     },
   },
   Effect.gen(function* () {
@@ -56,6 +64,16 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
     ]);
     // Nested prefix — bound under the flattened `CONFIG_NESTED_HOST` key.
     const configNested = yield* Config.String("HOST").pipe(Config.nested("CONFIG_NESTED"));
+    // `env` strings that parse as JSON (#2847). Optional so plan passes:
+    // these are bound from `env`, not from the deploy-time ConfigProvider.
+    const jsonStrings = yield* Config.all({
+      JSON_FALSE: Config.String("JSON_FALSE").pipe(Config.option),
+      JSON_FALSE_BOOL: Config.Boolean("JSON_FALSE").pipe(Config.option),
+      JSON_NUM: Config.String("JSON_NUM").pipe(Config.option),
+      JSON_NULL: Config.String("JSON_NULL").pipe(Config.option),
+      JSON_OBJ: Config.String("JSON_OBJ").pipe(Config.option),
+      PLAIN: Config.String("PLAIN").pipe(Config.option),
+    });
 
     // Yieldable binding form — attaches the `version_metadata` binding to
     // this Worker and returns a deferred accessor resolved at runtime.
@@ -79,6 +97,30 @@ export default class EnvEffectWorker extends Cloudflare.Worker<EnvEffectWorker>(
             SECRET_STR: env.SECRET_STR,
             SECRET_JSON:
               typeof env.SECRET_JSON === "string" ? JSON.parse(env.SECRET_JSON) : env.SECRET_JSON,
+          });
+        }
+
+        if (pathname === "/json-strings") {
+          const runtime = yield* Config.all({
+            JSON_FALSE: Config.String("JSON_FALSE"),
+            JSON_FALSE_BOOL: Config.Boolean("JSON_FALSE"),
+            JSON_NUM: Config.String("JSON_NUM"),
+            JSON_NULL: Config.String("JSON_NULL"),
+            JSON_OBJ: Config.String("JSON_OBJ"),
+            PLAIN: Config.String("PLAIN"),
+          });
+          return yield* HttpServerResponse.json({
+            init: Object.fromEntries(
+              Object.entries(jsonStrings).map(([k, v]) => [k, Option.getOrNull(v)]),
+            ),
+            runtime,
+            env: {
+              JSON_FALSE: env.JSON_FALSE,
+              JSON_NUM: env.JSON_NUM,
+              JSON_NULL: env.JSON_NULL,
+              JSON_OBJ: env.JSON_OBJ,
+              PLAIN: env.PLAIN,
+            },
           });
         }
 
